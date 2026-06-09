@@ -644,6 +644,9 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
   const [gender, setGender] = useState<Gender>("male");
   const [isNew, setIsNew] = useState(true);
   const [isOrganizer, setIsOrganizer] = useState(false);
+  const [addProfilePhoto, setAddProfilePhoto] = useState<string | undefined>(undefined);
+  const addPhotoCameraInput = useRef<HTMLInputElement | null>(null);
+  const addPhotoGalleryInput = useRef<HTMLInputElement | null>(null);
   const [addDetails, setAddDetails] = useState<AddPlayerDetails>(() => createDefaultAddPlayerDetails());
   const addOverall = calculateOverall(addDetails);
   const updateAddDetails = (data: Partial<AddPlayerDetails>) => setAddDetails(prev => ({ ...prev, ...data }));
@@ -682,6 +685,7 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
       gender,
       skill: calculateOverall(profileDetails),
       ...profileDetails,
+      profilePhoto: isNew ? undefined : addProfilePhoto,
       isOrganizer,
       isNew,
       attending: false,
@@ -693,6 +697,7 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
     setAka("");
     setIsNew(true);
     setAddDetails(createDefaultAddPlayerDetails());
+    setAddProfilePhoto(undefined);
     setIsOrganizer(false);
     setAddPlayerOpen(false);
   };
@@ -709,6 +714,7 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
           if (next) {
             setIsNew(true);
             setAddDetails(createDefaultAddPlayerDetails());
+            setAddProfilePhoto(undefined);
           }
         }}>
           <DialogTrigger asChild>
@@ -801,6 +807,60 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
                       <div className="text-[8px] uppercase font-black opacity-75 leading-none">OVR</div>
                       <div className="text-lg font-black leading-none">{addOverall}</div>
                     </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-border/70 bg-background/75 p-2.5">
+                    <div className="mb-2 text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Photo</div>
+                    <div className="flex items-center gap-2.5">
+                      <button
+                        type="button"
+                        onClick={() => addPhotoGalleryInput.current?.click()}
+                        className="h-12 w-12 shrink-0 overflow-hidden rounded-full border border-primary/20 bg-primary/10 text-sm font-black text-primary flex items-center justify-center"
+                        title="Choose photo"
+                      >
+                        {addProfilePhoto ? <img src={addProfilePhoto} alt="" className="h-full w-full object-cover" /> : (name.trim() ? initials(name.trim()) : <Camera className="h-4 w-4" />)}
+                      </button>
+                      <div className="grid flex-1 grid-cols-2 gap-1.5">
+                        <Button type="button" variant="outline" size="sm" className="h-8 rounded-xl px-2 text-[10px] font-bold" onClick={() => addPhotoCameraInput.current?.click()}>
+                          <Camera className="mr-1 h-3 w-3" /> Camera
+                        </Button>
+                        <Button type="button" variant="outline" size="sm" className="h-8 rounded-xl px-2 text-[10px] font-bold" onClick={() => addPhotoGalleryInput.current?.click()}>
+                          <ImageIcon className="mr-1 h-3 w-3" /> Import
+                        </Button>
+                      </div>
+                      {addProfilePhoto && (
+                        <Button type="button" variant="ghost" size="icon" className="h-8 w-8 rounded-xl text-muted-foreground" onClick={() => setAddProfilePhoto(undefined)} title="Remove photo">
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                    </div>
+                    <input
+                      ref={addPhotoCameraInput}
+                      type="file"
+                      accept="image/*"
+                      capture="user"
+                      className="sr-only"
+                      onChange={async e => {
+                        const file = e.target.files?.[0];
+                        e.target.value = "";
+                        if (!file) return;
+                        try { setAddProfilePhoto(await fileToSmallDataUrl(file)); }
+                        catch { alert("Could not load that photo."); }
+                      }}
+                    />
+                    <input
+                      ref={addPhotoGalleryInput}
+                      type="file"
+                      accept="image/*"
+                      className="sr-only"
+                      onChange={async e => {
+                        const file = e.target.files?.[0];
+                        e.target.value = "";
+                        if (!file) return;
+                        try { setAddProfilePhoto(await fileToSmallDataUrl(file)); }
+                        catch { alert("Could not load that photo."); }
+                      }}
+                    />
                   </div>
 
                   <div className="space-y-1.5">

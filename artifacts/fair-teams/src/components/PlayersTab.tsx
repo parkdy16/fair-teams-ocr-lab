@@ -116,6 +116,33 @@ function createPlayerId() {
   return `player-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+type AddPlayerDetails = Pick<RoomPlayer,
+  "attack" | "defense" | "speed" | "passing" | "stamina" | "physical" | "teamPlay" |
+  "funBadge" | "isGoalkeeper" | "isPlaymaker" | "isFinisher" | "isDribbler" |
+  "isSentinel" | "isEngine" | "isVersatile" | "isSpaceFinder"
+>;
+
+function createDefaultAddPlayerDetails(): AddPlayerDetails {
+  return {
+    attack: 5,
+    defense: 5,
+    speed: 5,
+    passing: 5,
+    stamina: 5,
+    physical: 5,
+    teamPlay: 2,
+    funBadge: undefined,
+    isGoalkeeper: false,
+    isPlaymaker: false,
+    isFinisher: false,
+    isDribbler: false,
+    isSentinel: false,
+    isEngine: false,
+    isVersatile: false,
+    isSpaceFinder: false,
+  };
+}
+
 async function fileToSmallDataUrl(file: File) {
   const dataUrl = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -605,7 +632,9 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
   const [gender, setGender] = useState<Gender>("male");
   const [isNew, setIsNew] = useState(true);
   const [isOrganizer, setIsOrganizer] = useState(false);
-  const [editAfterAdd, setEditAfterAdd] = useState(false);
+  const [addDetails, setAddDetails] = useState<AddPlayerDetails>(() => createDefaultAddPlayerDetails());
+  const addOverall = calculateOverall(addDetails);
+  const updateAddDetails = (data: Partial<AddPlayerDetails>) => setAddDetails(prev => ({ ...prev, ...data }));
   const [autoEditPlayerId, setAutoEditPlayerId] = useState<string | null>(null);
   const [flippedPlayerIds, setFlippedPlayerIds] = useState<Record<string, boolean>>({});
   const [search, setSearch] = useState("");
@@ -632,20 +661,15 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
     e.preventDefault();
     if (!name.trim()) return;
     const now = new Date().toISOString();
+    const profileDetails = isNew ? createDefaultAddPlayerDetails() : addDetails;
     const newPlayer = normalizePlayer({
       id: createPlayerId(),
       roomId: 1,
       name: name.trim(),
       aka: aka.trim() || undefined,
       gender,
-      skill: 5,
-      attack: 5,
-      defense: 5,
-      speed: 5,
-      passing: 5,
-      stamina: 5,
-      physical: 5,
-      teamPlay: 2,
+      skill: calculateOverall(profileDetails),
+      ...profileDetails,
       isOrganizer,
       isNew,
       attending: false,
@@ -653,14 +677,11 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
       updatedAt: now,
     });
     setPlayers([...players, newPlayer]);
-    if (editAfterAdd && !isNew) {
-      setAutoEditPlayerId(newPlayer.id);
-    }
     setName("");
     setAka("");
     setIsNew(true);
+    setAddDetails(createDefaultAddPlayerDetails());
     setIsOrganizer(false);
-    setEditAfterAdd(false);
     setAddPlayerOpen(false);
   };
 
@@ -675,7 +696,7 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
           setAddPlayerOpen(next);
           if (next) {
             setIsNew(true);
-            setEditAfterAdd(false);
+            setAddDetails(createDefaultAddPlayerDetails());
           }
         }}>
           <DialogTrigger asChild>
@@ -690,7 +711,7 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
           </DialogTrigger>
           <DialogContent
             onOpenAutoFocus={(event) => event.preventDefault()}
-            className="max-w-sm rounded-3xl !top-[18dvh] !translate-y-0 sm:!top-[50%] sm:!-translate-y-1/2"
+            className="max-w-sm rounded-3xl !top-[10dvh] !translate-y-0 max-h-[82dvh] overflow-y-auto sm:!top-[50%] sm:!-translate-y-1/2"
           >
             <DialogHeader>
               <DialogTitle>Add player</DialogTitle>
@@ -732,7 +753,15 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
                     <SelectItem value="other">Other</SelectItem>
                   </SelectContent>
                 </Select>
-                <TogglePill active={isNew} onClick={() => { const next = !isNew; setIsNew(next); if (next) setEditAfterAdd(false); }} testId="checkbox-new-player">
+                <TogglePill
+                  active={isNew}
+                  onClick={() => setIsNew(prev => {
+                    const next = !prev;
+                    if (next) setAddDetails(createDefaultAddPlayerDetails());
+                    return next;
+                  })}
+                  testId="checkbox-new-player"
+                >
                   New
                 </TogglePill>
                 <TogglePill active={isOrganizer} onClick={() => setIsOrganizer(!isOrganizer)} testId="checkbox-organizer">
@@ -742,18 +771,64 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
 
               <div className="rounded-2xl border border-border/70 bg-muted/25 p-2.5 text-[11px] font-semibold text-muted-foreground leading-snug">
                 {isNew ? (
-                  <span>New player is selected by default. Add now, rate later when you know the player.</span>
+                  <span>New player: quick add now, rate later.</span>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={() => setEditAfterAdd(prev => !prev)}
-                    className={`flex w-full items-center justify-between gap-3 text-left ${editAfterAdd ? "text-primary" : "text-muted-foreground"}`}
-                  >
-                    <span>Open full edit after adding</span>
-                    <span className={`h-5 rounded-full border px-2 text-[9px] font-black leading-5 ${editAfterAdd ? "border-primary bg-primary/10 text-primary" : "border-border bg-background text-muted-foreground"}`}>{editAfterAdd ? "ON" : "OFF"}</span>
-                  </button>
+                  <span>Known player: full edit expands below before adding.</span>
                 )}
               </div>
+
+              {!isNew && (
+                <div className="rounded-2xl border border-primary/15 bg-primary/5 p-3 space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <div className="text-[11px] font-black uppercase tracking-wide text-primary">Full edit</div>
+                      <div className="text-[10px] font-semibold text-muted-foreground">Set known player details now</div>
+                    </div>
+                    <div className="rounded-xl bg-primary text-primary-foreground px-2.5 py-1 text-right shadow-sm">
+                      <div className="text-[8px] uppercase font-black opacity-75 leading-none">OVR</div>
+                      <div className="text-lg font-black leading-none">{addOverall}</div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Player Vibe</Label>
+                    <VibePicker value={addDetails.funBadge} onChange={funBadge => updateAddDetails({ funBadge })} />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    {STAT_FIELDS.map(({ key, label }) => (
+                      <StatControl key={key} label={label} value={addDetails[key]} onChange={value => updateAddDetails({ [key]: value } as Partial<AddPlayerDetails>)} />
+                    ))}
+                    <StatControl label="Team Play" value={addDetails.teamPlay} max={3} onChange={value => updateAddDetails({ teamPlay: value })} />
+                    <div />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider flex items-center gap-1"><Star className="w-3 h-3" /> Special abilities</Label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {SPECIAL_ABILITIES.map(ability => {
+                        const selected = Boolean(addDetails[ability.key]);
+                        const Icon = ability.icon ?? Star;
+                        return (
+                          <button
+                            key={ability.key}
+                            type="button"
+                            onClick={() => updateAddDetails({ [ability.key]: !selected } as Partial<AddPlayerDetails>)}
+                            className={`flex h-8 items-center gap-1.5 rounded-xl border px-2 text-left transition-colors ${selected ? "border-amber-400 bg-amber-50 text-amber-900" : "border-border bg-background/70 text-foreground"}`}
+                          >
+                            {ability.badge === "GK" ? (
+                              <span className="text-[10px] font-semibold text-amber-700 w-5 text-center">GK</span>
+                            ) : (
+                              <Icon className="w-3.5 h-3.5 shrink-0 text-amber-700" />
+                            )}
+                            <span className="text-[11px] font-semibold leading-tight truncate">{ability.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <Button
                 type="submit"

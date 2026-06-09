@@ -603,8 +603,9 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
   const [name, setName] = useState("");
   const [aka, setAka] = useState("");
   const [gender, setGender] = useState<Gender>("male");
-  const [isNew, setIsNew] = useState(false);
+  const [isNew, setIsNew] = useState(true);
   const [isOrganizer, setIsOrganizer] = useState(false);
+  const [editAfterAdd, setEditAfterAdd] = useState(false);
   const [autoEditPlayerId, setAutoEditPlayerId] = useState<string | null>(null);
   const [flippedPlayerIds, setFlippedPlayerIds] = useState<Record<string, boolean>>({});
   const [search, setSearch] = useState("");
@@ -652,11 +653,14 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
       updatedAt: now,
     });
     setPlayers([...players, newPlayer]);
-    setAutoEditPlayerId(newPlayer.id);
+    if (editAfterAdd && !isNew) {
+      setAutoEditPlayerId(newPlayer.id);
+    }
     setName("");
     setAka("");
-    setIsNew(false);
+    setIsNew(true);
     setIsOrganizer(false);
+    setEditAfterAdd(false);
     setAddPlayerOpen(false);
   };
 
@@ -667,7 +671,13 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-2">
-        <Dialog open={addPlayerOpen} onOpenChange={setAddPlayerOpen}>
+        <Dialog open={addPlayerOpen} onOpenChange={(next) => {
+          setAddPlayerOpen(next);
+          if (next) {
+            setIsNew(true);
+            setEditAfterAdd(false);
+          }
+        }}>
           <DialogTrigger asChild>
             <Button
               type="button"
@@ -678,7 +688,10 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
               <Plus className="mr-1.5 h-3.5 w-3.5" /> Add Player
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-sm rounded-3xl">
+          <DialogContent
+            onOpenAutoFocus={(event) => event.preventDefault()}
+            className="max-w-sm rounded-3xl !top-[18dvh] !translate-y-0 sm:!top-[50%] sm:!-translate-y-1/2"
+          >
             <DialogHeader>
               <DialogTitle>Add player</DialogTitle>
             </DialogHeader>
@@ -719,12 +732,27 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
                     <SelectItem value="other">Other</SelectItem>
                   </SelectContent>
                 </Select>
-                <TogglePill active={isNew} onClick={() => setIsNew(!isNew)} testId="checkbox-new-player">
+                <TogglePill active={isNew} onClick={() => { const next = !isNew; setIsNew(next); if (next) setEditAfterAdd(false); }} testId="checkbox-new-player">
                   New
                 </TogglePill>
                 <TogglePill active={isOrganizer} onClick={() => setIsOrganizer(!isOrganizer)} testId="checkbox-organizer">
                   Organizer
                 </TogglePill>
+              </div>
+
+              <div className="rounded-2xl border border-border/70 bg-muted/25 p-2.5 text-[11px] font-semibold text-muted-foreground leading-snug">
+                {isNew ? (
+                  <span>New player is selected by default. Add now, rate later when you know the player.</span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setEditAfterAdd(prev => !prev)}
+                    className={`flex w-full items-center justify-between gap-3 text-left ${editAfterAdd ? "text-primary" : "text-muted-foreground"}`}
+                  >
+                    <span>Open full edit after adding</span>
+                    <span className={`h-5 rounded-full border px-2 text-[9px] font-black leading-5 ${editAfterAdd ? "border-primary bg-primary/10 text-primary" : "border-border bg-background text-muted-foreground"}`}>{editAfterAdd ? "ON" : "OFF"}</span>
+                  </button>
+                )}
               </div>
 
               <Button

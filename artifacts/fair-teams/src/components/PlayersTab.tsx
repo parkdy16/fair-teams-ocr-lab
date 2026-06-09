@@ -215,10 +215,25 @@ function AbilityBadge({
   );
 }
 
-function PlayerTags({ player, includeVibe = false }: { player: RoomPlayer; includeVibe?: boolean }) {
+function SpecialAbilityCountBadge({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <span title={`${count} special ${count === 1 ? "ability" : "abilities"}`} className="inline-flex items-center gap-0.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-black text-amber-800 border border-amber-200">
+      <Star className="w-2.5 h-2.5 fill-current" />{count}
+    </span>
+  );
+}
+
+function getSpecialAbilityCount(player: RoomPlayer) {
+  return SPECIAL_ABILITIES.reduce((count, ability) => count + (player[ability.key] ? 1 : 0), 0);
+}
+
+function PlayerTags({ player, includeVibe = false, includeAbilityCount = false }: { player: RoomPlayer; includeVibe?: boolean; includeAbilityCount?: boolean }) {
+  const abilityCount = includeAbilityCount ? getSpecialAbilityCount(player) : 0;
   return (
     <div className="mt-1 flex flex-wrap gap-1 min-h-5 items-center">
       {includeVibe && player.funBadge ? <FunBadgePill value={player.funBadge} /> : null}
+      <SpecialAbilityCountBadge count={abilityCount} />
       {player.isNew && <NewBadge />}
       {player.isOrganizer && <ORGBadge />}
     </div>
@@ -386,7 +401,7 @@ function ProfileDialog({
                   <SelectTrigger className="h-10 rounded-xl bg-background/70">
                     <SelectValue placeholder="None" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="max-h-[45dvh] overflow-y-auto">
                     <SelectItem value="none">None</SelectItem>
                     {FUN_BADGES.map(badge => (
                       <SelectItem key={badge.value} value={badge.value}>{badge.emoji} {badge.label}</SelectItem>
@@ -675,7 +690,7 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
                     <PlayerAvatar player={player} size="xl" />
                     <div className="min-w-0 flex-1">
                       <div className="font-black leading-tight text-base break-words">{displayName(player)}</div>
-                      <PlayerTags player={player} includeVibe={isFlipped} />
+                      <PlayerTags player={player} includeVibe includeAbilityCount={!isFlipped} />
                     </div>
                     <OverallBadge player={player} />
                   </div>

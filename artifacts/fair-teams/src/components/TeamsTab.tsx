@@ -3,8 +3,10 @@ import type { RoomPlayer } from "@/lib/localRoster";
 import { FieldSize, Player, Team, TeamColor } from "@/lib/types";
 import { generateTeams, recomputeStats } from "@/lib/teamGenerator";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Shuffle, ArrowLeftRight, Download, HelpCircle, Clock, Pencil, Zap, Sparkles } from "lucide-react";
 import fairTeamsLogo from "@/assets/fairteams-logo.png";
 
@@ -102,8 +104,8 @@ function toLocalPlayer(p: RoomPlayer): Player {
     id: p.id, name: p.name, aka: p.aka, gender: p.gender as Player["gender"], skill: p.skill,
     attack: p.attack, defense: p.defense, speed: p.speed, passing: p.passing, stamina: p.stamina, physical: p.physical,
     teamPlay: p.teamPlay, profilePhoto: p.profilePhoto, isGoalkeeper: p.isGoalkeeper,
-    isPlaymaker: p.isPlaymaker, isFinisher: p.isFinisher, isDribbler: p.isDribbler, isSentinel: p.isSentinel, isEngine: p.isEngine, isVersatile: p.isVersatile,
-    isOrganizer: p.isOrganizer, isNew: p.isNew,
+    isPlaymaker: p.isPlaymaker, isFinisher: p.isFinisher, isDribbler: p.isDribbler, isSentinel: p.isSentinel, isEngine: p.isEngine, isVersatile: p.isVersatile, isSpaceFinder: p.isSpaceFinder,
+    isOrganizer: p.isOrganizer, isNew: p.isNew, funBadge: p.funBadge,
   };
 }
 
@@ -311,6 +313,8 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
   const [teams, setTeams] = useState<Team[]>([]);
   const [history, setHistory] = useState<TeamHistoryEntry[]>(() => loadTeamHistory());
   const [swap, setSwap] = useState<SwapSelection | null>(null);
+  const [renameTeamId, setRenameTeamId] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [drawStep, setDrawStep] = useState(0);
   const [justGenerated, setJustGenerated] = useState(false);
@@ -372,12 +376,17 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
     setTeams(prev => prev.map(t => t.id === teamId ? { ...t, color, name: label } : t));
   };
 
-  const handleRenameTeam = (teamId: string, currentName: string) => {
-    const nextName = window.prompt("Team name", currentName);
-    if (nextName === null) return;
-    const trimmed = nextName.trim();
-    if (!trimmed) return;
-    setTeams(prev => prev.map(t => t.id === teamId ? { ...t, name: trimmed } : t));
+  const openRenameTeam = (teamId: string, currentName: string) => {
+    setRenameTeamId(teamId);
+    setRenameDraft(currentName);
+  };
+
+  const saveRenameTeam = () => {
+    const trimmed = renameDraft.trim();
+    if (!renameTeamId || !trimmed) return;
+    setTeams(prev => prev.map(t => t.id === renameTeamId ? { ...t, name: trimmed } : t));
+    setRenameTeamId(null);
+    setRenameDraft("");
   };
 
   const handleSelectPlayer = (playerId: string, fromTeamId: string) => {
@@ -535,7 +544,7 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
                       <span className="text-xs font-black uppercase tracking-wide leading-tight truncate" style={{ color: col.textHex }}>{team.name}</span>
                       <button
                         type="button"
-                        onClick={() => handleRenameTeam(team.id, team.name)}
+                        onClick={() => openRenameTeam(team.id, team.name)}
                         className="h-5 w-5 inline-flex items-center justify-center rounded-full shrink-0"
                         style={{ color: col.textHex, backgroundColor: col.textHex === "#fff" ? "rgba(255,255,255,0.16)" : "rgba(0,0,0,0.08)" }}
                         title="Rename team"
@@ -656,6 +665,39 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
           </div>
         </div>
       )}
+
+      <Dialog open={Boolean(renameTeamId)} onOpenChange={(open) => { if (!open) { setRenameTeamId(null); setRenameDraft(""); } }}>
+        <DialogContent className="max-w-xs rounded-2xl border-2 p-0 overflow-hidden shadow-2xl">
+          <div className="bg-gradient-to-br from-primary/10 via-background to-emerald-50 px-5 pt-5 pb-4">
+            <DialogHeader className="space-y-1.5 text-left">
+              <DialogTitle className="text-lg font-black tracking-tight">Rename team</DialogTitle>
+              <DialogDescription className="text-xs font-semibold text-muted-foreground">
+                Give this team a clear match-day name.
+              </DialogDescription>
+            </DialogHeader>
+          </div>
+          <div className="px-5 pb-5 space-y-4">
+            <div className="space-y-1.5">
+              <Label className="text-[10px] uppercase font-black tracking-wider text-muted-foreground">Team name</Label>
+              <Input
+                value={renameDraft}
+                onChange={e => setRenameDraft(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === "Enter") saveRenameTeam();
+                }}
+                className="h-11 rounded-xl text-sm font-bold"
+                autoFocus
+                data-testid="input-rename-team"
+              />
+            </div>
+            <DialogFooter className="grid grid-cols-2 gap-2 sm:flex sm:justify-end">
+              <Button type="button" variant="outline" className="h-10 rounded-xl font-bold" onClick={() => { setRenameTeamId(null); setRenameDraft(""); }}>Cancel</Button>
+              <Button type="button" className="h-10 rounded-xl font-black" onClick={saveRenameTeam} disabled={!renameDraft.trim()}>Save</Button>
+            </DialogFooter>
+          </div>
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }

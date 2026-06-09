@@ -80,6 +80,17 @@ const FUN_BADGES: { value: FunBadge; label: string; emoji: string; description: 
   { value: "club-ambassador", label: "Club Ambassador", emoji: "🤝", description: "Welcomes people and keeps the group friendly." },
   { value: "cfo", label: "CFO", emoji: "💳", description: "Tracks payments and reminds everyone." },
   { value: "club-chef", label: "Club Chef", emoji: "🔪", description: "Keeps the group fed." },
+  { value: "the-wall", label: "The Wall", emoji: "🧱", description: "Reliable, always present, hard to get past." },
+  { value: "faith-leader", label: "Faith Leader", emoji: "🙏", description: "Brings players together through faith or community groups." },
+  { value: "fashion-icon", label: "Fashion Icon", emoji: "✨", description: "Best dressed on and off the pitch." },
+  { value: "goofball", label: "Goofball", emoji: "🤡", description: "Always joking around and keeping things light." },
+  { value: "social-butterfly", label: "Social Butterfly", emoji: "🦋", description: "Talks to everyone and makes new players feel welcome." },
+  { value: "club-legend", label: "Club Legend", emoji: "🏆", description: "Long-time member with legendary status." },
+  { value: "walking-yellow-card", label: "Walking Yellow Card", emoji: "🟨", description: "Always one tackle or complaint away from trouble." },
+  { value: "referee-consultant", label: "Referee Consultant", emoji: "🗣️", description: "Has strong opinions about every decision." },
+  { value: "shoe-collector", label: "Shoe Collector", emoji: "👟", description: "Always has a new pair or strong boot opinions." },
+  { value: "kit-collector", label: "Kit Collector", emoji: "👕", description: "Owns too many shirts and knows every kit." },
+  { value: "venom-tongue", label: "Venom Tongue", emoji: "🐍", description: "Friendly guy, poisonous comments." },
 ];
 
 function getFunBadge(value?: FunBadge) {
@@ -402,10 +413,10 @@ function ProfileDialog({
                   <SelectTrigger className="h-10 rounded-xl bg-background/70">
                     <SelectValue placeholder="None" />
                   </SelectTrigger>
-                  <SelectContent className="max-h-[45dvh] overflow-y-auto">
+                  <SelectContent className="z-[80] max-h-[min(65dvh,28rem)] overflow-y-auto">
                     <SelectItem value="none">None</SelectItem>
                     {FUN_BADGES.map(badge => (
-                      <SelectItem key={badge.value} value={badge.value}>{badge.emoji} {badge.label}</SelectItem>
+                      <SelectItem key={badge.value} value={badge.value} title={badge.description}>{badge.emoji} {badge.label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>

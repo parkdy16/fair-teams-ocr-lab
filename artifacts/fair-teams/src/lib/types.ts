@@ -1,6 +1,6 @@
 export type Gender = "male" | "female" | "other";
 
-export type FunBadge = "loudmouth" | "warrior" | "samba" | "maradoner" | "reluctant-gk" | "first-10" | "always-late" | "unbothered" | "wildcard" | "third-half" | "club-ambassador" | "cfo" | "club-chef";
+export type FunBadge = "loudmouth" | "warrior" | "samba" | "maradoner" | "reluctant-gk" | "first-10" | "always-late" | "unbothered" | "wildcard" | "third-half" | "club-ambassador" | "cfo" | "club-chef" | "the-wall" | "faith-leader" | "fashion-icon" | "goofball" | "social-butterfly" | "club-legend" | "walking-yellow-card" | "referee-consultant" | "shoe-collector" | "kit-collector" | "venom-tongue";
 
 export interface Player {
   id: string;

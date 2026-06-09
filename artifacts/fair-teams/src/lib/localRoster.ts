@@ -83,7 +83,7 @@ export function calculateOverall(player: Partial<RoomPlayer>) {
 }
 
 function isFunBadge(value: unknown): value is FunBadge {
-  return value === "loudmouth" || value === "warrior" || value === "samba" || value === "maradoner" || value === "reluctant-gk" || value === "first-10" || value === "always-late" || value === "unbothered" || value === "wildcard" || value === "third-half" || value === "club-ambassador" || value === "cfo" || value === "club-chef";
+  return value === "loudmouth" || value === "warrior" || value === "samba" || value === "maradoner" || value === "reluctant-gk" || value === "first-10" || value === "always-late" || value === "unbothered" || value === "wildcard" || value === "third-half" || value === "club-ambassador" || value === "cfo" || value === "club-chef" || value === "the-wall" || value === "faith-leader" || value === "fashion-icon" || value === "goofball" || value === "social-butterfly" || value === "club-legend" || value === "walking-yellow-card" || value === "referee-consultant" || value === "shoe-collector" || value === "kit-collector" || value === "venom-tongue";
 }
 
 export function normalizePlayer(player: Partial<RoomPlayer> & { name?: string }, index = 0): RoomPlayer {

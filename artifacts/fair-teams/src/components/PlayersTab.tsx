@@ -201,13 +201,25 @@ function NewBadge() {
 function ORGBadge() {
   return <span className="inline-flex items-center rounded-full bg-violet-100 px-1.5 py-0.5 text-[8px] font-black text-violet-800 border border-violet-200 leading-none">ORG</span>;
 }
-function TogglePill({ active, onClick, children, testId }: { active: boolean; onClick: () => void; children: React.ReactNode; testId?: string }) {
+function TogglePill({
+  active,
+  onClick,
+  children,
+  testId,
+  activeClassName = "border-primary bg-primary/10 text-primary",
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+  testId?: string;
+  activeClassName?: string;
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
       data-testid={testId}
-      className={`h-10 rounded-xl border px-3 text-xs font-semibold transition-colors ${active ? "border-primary bg-primary/10 text-primary" : "border-border bg-muted/30 text-muted-foreground"}`}
+      className={`h-10 rounded-xl border px-3 text-xs font-semibold transition-colors ${active ? activeClassName : "border-border bg-muted/30 text-muted-foreground"}`}
     >
       {children}
     </button>
@@ -761,6 +773,7 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
                     return next;
                   })}
                   testId="checkbox-new-player"
+                  activeClassName="border-sky-300 bg-sky-100 text-sky-800 shadow-sm"
                 >
                   New
                 </TogglePill>

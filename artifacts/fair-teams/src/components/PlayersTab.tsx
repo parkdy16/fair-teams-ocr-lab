@@ -305,24 +305,16 @@ function PlayerRadar({ player, compact = false }: { player: RoomPlayer; compact?
 
 function VibePicker({ value, onChange }: { value?: FunBadge; onChange: (value?: FunBadge) => void }) {
   const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState("");
   const selected = getFunBadge(value);
-  const normalizedQuery = query.trim().toLowerCase();
-
-  const matches = (badge: (typeof FUN_BADGES)[number]) => {
-    if (!normalizedQuery) return true;
-    return `${badge.label} ${badge.description}`.toLowerCase().includes(normalizedQuery);
-  };
 
   const choose = (next?: FunBadge) => {
     onChange(next);
     setOpen(false);
-    setQuery("");
   };
 
-  const filteredCategories = FUN_BADGE_CATEGORIES.map(category => ({
+  const categories = FUN_BADGE_CATEGORIES.map(category => ({
     ...category,
-    badges: category.values.map(v => getFunBadge(v)).filter((badge): badge is (typeof FUN_BADGES)[number] => Boolean(badge) && matches(badge)),
+    badges: category.values.map(v => getFunBadge(v)).filter((badge): badge is (typeof FUN_BADGES)[number] => Boolean(badge)),
   })).filter(category => category.badges.length > 0);
 
   return (
@@ -346,57 +338,40 @@ function VibePicker({ value, onChange }: { value?: FunBadge; onChange: (value?: 
         <DialogContent className="max-w-md max-h-[88dvh] overflow-hidden rounded-3xl p-0 gap-0">
           <DialogHeader className="px-5 pt-5 pb-3 text-left border-b border-border/70">
             <DialogTitle>Choose player vibe</DialogTitle>
-            <div className="relative pt-2">
-              <Search className="absolute left-3 top-[1.15rem] h-4 w-4 text-muted-foreground" />
-              <Input
-                value={query}
-                onChange={e => setQuery(e.target.value)}
-                placeholder="Search vibe..."
-                className="h-10 rounded-xl pl-9 pr-9"
-                autoFocus
-              />
-              {query ? (
-                <button type="button" onClick={() => setQuery("")} className="absolute right-3 top-[1.15rem] text-muted-foreground hover:text-foreground">
-                  <X className="h-4 w-4" />
-                </button>
-              ) : null}
-            </div>
             {selected ? (
               <div className="pt-2 text-xs text-muted-foreground">
                 Current: <span className="font-bold text-foreground">{selected.emoji} {selected.label}</span>
               </div>
-            ) : null}
+            ) : (
+              <div className="pt-2 text-xs text-muted-foreground">Pick one compact vibe badge.</div>
+            )}
           </DialogHeader>
 
-          <div className="overflow-y-auto px-4 py-4 space-y-4 max-h-[62dvh]">
-            {filteredCategories.length ? filteredCategories.map(category => (
+          <div className="overflow-y-auto px-4 py-4 space-y-4 max-h-[64dvh]">
+            {categories.map(category => (
               <section key={category.label} className="space-y-2">
                 <h4 className="px-1 text-[10px] font-black uppercase tracking-[0.16em] text-muted-foreground">{category.label}</h4>
-                <div className="grid grid-cols-1 gap-2">
+                <div className="grid grid-cols-2 gap-2">
                   {category.badges.map(badge => {
                     const active = badge.value === value;
                     return (
                       <button
                         key={badge.value}
                         type="button"
+                        title={badge.description}
                         onClick={() => choose(badge.value)}
-                        className={`rounded-2xl border px-3 py-2.5 text-left transition-all ${active ? "border-primary bg-primary/10 ring-1 ring-primary/30" : "border-border bg-card hover:border-primary/40 hover:bg-accent/60"}`}
+                        className={`min-h-[3.25rem] rounded-2xl border px-2.5 py-2 text-left transition-all ${active ? "border-primary bg-primary/10 ring-1 ring-primary/30" : "border-border bg-card hover:border-primary/40 hover:bg-accent/60"}`}
                       >
-                        <span className="flex items-start gap-3">
-                          <span className="pt-0.5 text-xl leading-none">{badge.emoji}</span>
-                          <span className="min-w-0 flex-1">
-                            <span className="block text-sm font-black leading-tight">{badge.label}</span>
-                            <span className="mt-0.5 block text-xs leading-snug text-muted-foreground">{badge.description}</span>
-                          </span>
+                        <span className="flex min-w-0 items-center gap-2">
+                          <span className="text-xl leading-none">{badge.emoji}</span>
+                          <span className="min-w-0 truncate text-xs font-black leading-tight sm:text-sm">{badge.label}</span>
                         </span>
                       </button>
                     );
                   })}
                 </div>
               </section>
-            )) : (
-              <div className="rounded-2xl border border-dashed border-border p-5 text-center text-sm text-muted-foreground">No vibe found.</div>
-            )}
+            ))}
           </div>
 
           <div className="flex gap-2 border-t border-border/70 p-4">

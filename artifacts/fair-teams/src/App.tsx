@@ -278,7 +278,6 @@ function App() {
       </Tabs>
     </div>
   );
-  );
 }
 
 export default App;

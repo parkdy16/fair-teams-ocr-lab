@@ -170,10 +170,10 @@ function formatDateTime(value?: string) {
 }
 
 function NewBadge() {
-  return <span className="inline-flex items-center rounded-full bg-sky-100 px-1.5 py-0.5 text-[9px] font-black text-sky-800 border border-sky-200">NEW</span>;
+  return <span className="inline-flex items-center rounded-full bg-sky-100 px-1.5 py-0.5 text-[8px] font-black text-sky-800 border border-sky-200 leading-none">NEW</span>;
 }
 function ORGBadge() {
-  return <span className="inline-flex items-center rounded-full bg-violet-100 px-1.5 py-0.5 text-[9px] font-black text-violet-800 border border-violet-200">ORG</span>;
+  return <span className="inline-flex items-center rounded-full bg-violet-100 px-1.5 py-0.5 text-[8px] font-black text-violet-800 border border-violet-200 leading-none">ORG</span>;
 }
 function TogglePill({ active, onClick, children, testId }: { active: boolean; onClick: () => void; children: React.ReactNode; testId?: string }) {
   return (
@@ -190,7 +190,7 @@ function TogglePill({ active, onClick, children, testId }: { active: boolean; on
 function FunBadgePill({ value }: { value?: FunBadge }) {
   const badge = getFunBadge(value);
   if (!badge) return null;
-  return <span title={badge.description} className="inline-flex items-center px-0.5 py-0 text-[10px] font-semibold text-muted-foreground">{badge.emoji} {badge.label}</span>;
+  return <span title={badge.description} className="inline-flex items-center px-0.5 py-0 text-[9px] font-semibold text-muted-foreground leading-tight">{badge.emoji} {badge.label}</span>;
 }
 function AbilityBadge({
   ability,
@@ -237,8 +237,8 @@ function AbilityBadge({
 function SpecialAbilityCountBadge({ count }: { count: number }) {
   if (count <= 0) return null;
   return (
-    <span title={`${count} special ${count === 1 ? "ability" : "abilities"}`} className="inline-flex items-center gap-0.5 text-[9px] font-extrabold leading-none text-yellow-500/90">
-      <Star className="w-3 h-3 fill-current stroke-[3]" />
+    <span title={`${count} special ${count === 1 ? "ability" : "abilities"}`} className="inline-flex items-center gap-0.5 text-[8px] font-extrabold leading-none text-yellow-500/90">
+      <Star className="w-2.5 h-2.5 fill-current stroke-[3]" />
       <span>{count}</span>
     </span>
   );
@@ -251,7 +251,7 @@ function getSpecialAbilityCount(player: RoomPlayer) {
 function PlayerTags({ player, includeVibe = false, includeAbilityCount = false }: { player: RoomPlayer; includeVibe?: boolean; includeAbilityCount?: boolean }) {
   const abilityCount = includeAbilityCount ? getSpecialAbilityCount(player) : 0;
   return (
-    <div className="mt-1 flex flex-wrap gap-1 min-h-5 items-center">
+    <div className="mt-0.5 flex flex-wrap gap-x-1 gap-y-0.5 min-h-4 items-center">
       {includeVibe && player.funBadge ? <FunBadgePill value={player.funBadge} /> : null}
       <SpecialAbilityCountBadge count={abilityCount} />
       {player.isNew && <NewBadge />}
@@ -712,8 +712,13 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
               </TogglePill>
             </div>
 
-            <Button type="submit" className="w-full h-12 mt-1 font-bold uppercase tracking-wide" data-testid="button-add-player">
-              <Plus className="w-4 h-4 mr-2" /> Add Player
+            <Button
+              type="submit"
+              variant="outline"
+              className="w-full h-10 mt-1 rounded-xl border-primary/20 bg-primary/5 text-primary hover:bg-primary/10 hover:text-primary font-black uppercase tracking-wide shadow-none"
+              data-testid="button-add-player"
+            >
+              <Plus className="w-3.5 h-3.5 mr-1.5" /> Add Player
             </Button>
           </form>
         </CardContent>
@@ -787,13 +792,13 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
                       setFlippedPlayerIds(prev => ({ ...prev, [player.id]: !prev[player.id] }));
                     }
                   }}
-                  className="p-3 bg-card border border-border rounded-xl shadow-sm active:scale-[0.99] transition-transform cursor-pointer"
+                  className="p-2.5 bg-card border border-border rounded-xl shadow-sm active:scale-[0.99] transition-transform cursor-pointer"
                   data-testid={`player-row-${player.id}`}
                 >
-                  <div className="flex items-center gap-3">
-                    <PlayerAvatar player={player} size="xl" />
+                  <div className="flex items-center gap-2.5">
+                    <PlayerAvatar player={player} size="sm" />
                     <div className="min-w-0 flex-1">
-                      <div className="font-black leading-tight text-base break-words">{displayName(player)}</div>
+                      <div className="font-black leading-tight text-[15px] break-words">{displayName(player)}</div>
                       <PlayerTags player={player} includeVibe includeAbilityCount={!isFlipped} />
                     </div>
                     {!hideOverall ? <OverallBadge player={player} /> : null}
@@ -801,7 +806,7 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
 
                   {isFlipped ? <PlayerCardBack player={player} /> : null}
 
-                  <div className="mt-3 flex items-center justify-between gap-2 border-t border-border/70 pt-2">
+                  <div className="mt-2 flex items-center justify-between gap-2 border-t border-border/60 pt-1.5">
                     <div className="text-[10px] text-muted-foreground font-bold tracking-wide">
                       {isFlipped ? "Tap card to hide details" : "Tap card for stats"}
                     </div>
@@ -809,8 +814,8 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
                       <ProfileDialog player={player} onUpdate={(data) => updatePlayer(player.id, data)} autoOpen={autoEditPlayerId === player.id} onAutoOpenHandled={() => setAutoEditPlayerId(null)} />
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
-                          <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive w-8 h-8 rounded-full" data-testid={`button-remove-${player.id}`}>
-                            <UserMinus className="w-4 h-4" />
+                          <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive w-7 h-7 rounded-full" data-testid={`button-remove-${player.id}`}>
+                            <UserMinus className="w-3.5 h-3.5" />
                           </Button>
                         </AlertDialogTrigger>
                         <AlertDialogContent className="max-w-xs rounded-xl">

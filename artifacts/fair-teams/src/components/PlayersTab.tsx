@@ -218,8 +218,9 @@ function AbilityBadge({
 function SpecialAbilityCountBadge({ count }: { count: number }) {
   if (count <= 0) return null;
   return (
-    <span title={`${count} special ${count === 1 ? "ability" : "abilities"}`} className="inline-flex items-center gap-0.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-black text-amber-800 border border-amber-200">
-      <Star className="w-2.5 h-2.5 fill-current" />{count}
+    <span title={`${count} special ${count === 1 ? "ability" : "abilities"}`} className="inline-flex items-center gap-0.5 text-[10px] font-black leading-none text-amber-700">
+      <Star className="w-3 h-3 fill-current stroke-[3]" />
+      <span>{count}</span>
     </span>
   );
 }

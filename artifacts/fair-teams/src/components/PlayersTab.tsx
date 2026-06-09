@@ -93,6 +93,14 @@ const FUN_BADGES: { value: FunBadge; label: string; emoji: string; description: 
   { value: "venom-tongue", label: "Venom Tongue", emoji: "🐍", description: "Friendly guy, poisonous comments." },
 ];
 
+
+const FUN_BADGE_CATEGORIES: { label: string; values: FunBadge[] }[] = [
+  { label: "Classic", values: ["loudmouth", "warrior", "samba", "maradoner", "reluctant-gk", "first-10", "always-late", "unbothered", "wildcard", "third-half"] },
+  { label: "Social", values: ["club-ambassador", "faith-leader", "goofball", "social-butterfly", "venom-tongue"] },
+  { label: "Club Culture", values: ["the-wall", "club-legend", "fashion-icon", "shoe-collector", "kit-collector", "cfo", "club-chef"] },
+  { label: "Chaos", values: ["walking-yellow-card", "referee-consultant"] },
+];
+
 function getFunBadge(value?: FunBadge) {
   return FUN_BADGES.find(badge => badge.value === value);
 }
@@ -295,6 +303,112 @@ function PlayerRadar({ player, compact = false }: { player: RoomPlayer; compact?
   );
 }
 
+function VibePicker({ value, onChange }: { value?: FunBadge; onChange: (value?: FunBadge) => void }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const selected = getFunBadge(value);
+  const normalizedQuery = query.trim().toLowerCase();
+
+  const matches = (badge: (typeof FUN_BADGES)[number]) => {
+    if (!normalizedQuery) return true;
+    return `${badge.label} ${badge.description}`.toLowerCase().includes(normalizedQuery);
+  };
+
+  const choose = (next?: FunBadge) => {
+    onChange(next);
+    setOpen(false);
+    setQuery("");
+  };
+
+  const filteredCategories = FUN_BADGE_CATEGORIES.map(category => ({
+    ...category,
+    badges: category.values.map(v => getFunBadge(v)).filter((badge): badge is (typeof FUN_BADGES)[number] => Boolean(badge) && matches(badge)),
+  })).filter(category => category.badges.length > 0);
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="h-10 w-full rounded-xl border border-input bg-background/70 px-3 text-left shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+      >
+        {selected ? (
+          <span className="flex min-w-0 items-center gap-2">
+            <span className="text-base leading-none">{selected.emoji}</span>
+            <span className="min-w-0 truncate text-sm font-semibold">{selected.label}</span>
+          </span>
+        ) : (
+          <span className="text-sm text-muted-foreground">None</span>
+        )}
+      </button>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-md max-h-[88dvh] overflow-hidden rounded-3xl p-0 gap-0">
+          <DialogHeader className="px-5 pt-5 pb-3 text-left border-b border-border/70">
+            <DialogTitle>Choose player vibe</DialogTitle>
+            <div className="relative pt-2">
+              <Search className="absolute left-3 top-[1.15rem] h-4 w-4 text-muted-foreground" />
+              <Input
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                placeholder="Search vibe..."
+                className="h-10 rounded-xl pl-9 pr-9"
+                autoFocus
+              />
+              {query ? (
+                <button type="button" onClick={() => setQuery("")} className="absolute right-3 top-[1.15rem] text-muted-foreground hover:text-foreground">
+                  <X className="h-4 w-4" />
+                </button>
+              ) : null}
+            </div>
+            {selected ? (
+              <div className="pt-2 text-xs text-muted-foreground">
+                Current: <span className="font-bold text-foreground">{selected.emoji} {selected.label}</span>
+              </div>
+            ) : null}
+          </DialogHeader>
+
+          <div className="overflow-y-auto px-4 py-4 space-y-4 max-h-[62dvh]">
+            {filteredCategories.length ? filteredCategories.map(category => (
+              <section key={category.label} className="space-y-2">
+                <h4 className="px-1 text-[10px] font-black uppercase tracking-[0.16em] text-muted-foreground">{category.label}</h4>
+                <div className="grid grid-cols-1 gap-2">
+                  {category.badges.map(badge => {
+                    const active = badge.value === value;
+                    return (
+                      <button
+                        key={badge.value}
+                        type="button"
+                        onClick={() => choose(badge.value)}
+                        className={`rounded-2xl border px-3 py-2.5 text-left transition-all ${active ? "border-primary bg-primary/10 ring-1 ring-primary/30" : "border-border bg-card hover:border-primary/40 hover:bg-accent/60"}`}
+                      >
+                        <span className="flex items-start gap-3">
+                          <span className="pt-0.5 text-xl leading-none">{badge.emoji}</span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-sm font-black leading-tight">{badge.label}</span>
+                            <span className="mt-0.5 block text-xs leading-snug text-muted-foreground">{badge.description}</span>
+                          </span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+            )) : (
+              <div className="rounded-2xl border border-dashed border-border p-5 text-center text-sm text-muted-foreground">No vibe found.</div>
+            )}
+          </div>
+
+          <div className="flex gap-2 border-t border-border/70 p-4">
+            <Button type="button" variant="outline" className="flex-1 rounded-xl" onClick={() => choose(undefined)}>Clear vibe</Button>
+            <Button type="button" className="flex-1 rounded-xl" onClick={() => setOpen(false)}>Cancel</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 function ProfileDialog({
   player,
   onUpdate,
@@ -409,17 +523,7 @@ function ProfileDialog({
               </div>
               <div className="space-y-1.5">
                 <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Player Vibe</Label>
-                <Select value={draft.funBadge ?? "none"} onValueChange={value => updateDraft({ funBadge: value === "none" ? undefined : value as FunBadge })}>
-                  <SelectTrigger className="h-10 rounded-xl bg-background/70">
-                    <SelectValue placeholder="None" />
-                  </SelectTrigger>
-                  <SelectContent className="z-[80] max-h-[min(65dvh,28rem)] overflow-y-auto">
-                    <SelectItem value="none">None</SelectItem>
-                    {FUN_BADGES.map(badge => (
-                      <SelectItem key={badge.value} value={badge.value} title={badge.description}>{badge.emoji} {badge.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <VibePicker value={draft.funBadge} onChange={funBadge => updateDraft({ funBadge })} />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-2">

@@ -1,0 +1,11 @@
+{
+  "buildCommand": "pnpm --filter @workspace/fair-teams build",
+  "outputDirectory": "artifacts/fair-teams/dist/public",
+  "installCommand": "corepack enable && pnpm install",
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}

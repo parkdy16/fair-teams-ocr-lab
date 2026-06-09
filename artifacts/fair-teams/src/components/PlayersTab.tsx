@@ -312,11 +312,6 @@ function VibePicker({ value, onChange }: { value?: FunBadge; onChange: (value?: 
     setOpen(false);
   };
 
-  const categories = FUN_BADGE_CATEGORIES.map(category => ({
-    ...category,
-    badges: category.values.map(v => getFunBadge(v)).filter((badge): badge is (typeof FUN_BADGES)[number] => Boolean(badge)),
-  })).filter(category => category.badges.length > 0);
-
   return (
     <>
       <button
@@ -347,31 +342,26 @@ function VibePicker({ value, onChange }: { value?: FunBadge; onChange: (value?: 
             )}
           </DialogHeader>
 
-          <div className="overflow-y-auto px-4 py-4 space-y-4 max-h-[64dvh]">
-            {categories.map(category => (
-              <section key={category.label} className="space-y-2">
-                <h4 className="px-1 text-[10px] font-black uppercase tracking-[0.16em] text-muted-foreground">{category.label}</h4>
-                <div className="grid grid-cols-2 gap-2">
-                  {category.badges.map(badge => {
-                    const active = badge.value === value;
-                    return (
-                      <button
-                        key={badge.value}
-                        type="button"
-                        title={badge.description}
-                        onClick={() => choose(badge.value)}
-                        className={`min-h-[3.25rem] rounded-2xl border px-2.5 py-2 text-left transition-all ${active ? "border-primary bg-primary/10 ring-1 ring-primary/30" : "border-border bg-card hover:border-primary/40 hover:bg-accent/60"}`}
-                      >
-                        <span className="flex min-w-0 items-center gap-2">
-                          <span className="text-xl leading-none">{badge.emoji}</span>
-                          <span className="min-w-0 truncate text-xs font-black leading-tight sm:text-sm">{badge.label}</span>
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </section>
-            ))}
+          <div className="overflow-y-auto px-4 py-4 max-h-[64dvh]">
+            <div className="grid grid-cols-3 gap-2">
+              {FUN_BADGES.map(badge => {
+                const active = badge.value === value;
+                return (
+                  <button
+                    key={badge.value}
+                    type="button"
+                    title={badge.description}
+                    onClick={() => choose(badge.value)}
+                    className={`min-h-[3rem] rounded-2xl border px-2 py-2 text-center transition-all active:scale-[0.98] ${active ? "border-primary bg-primary/10 ring-1 ring-primary/30" : "border-border bg-card hover:border-primary/40 hover:bg-accent/60"}`}
+                  >
+                    <span className="flex min-w-0 flex-col items-center justify-center gap-1">
+                      <span className="text-lg leading-none">{badge.emoji}</span>
+                      <span className="max-w-full truncate text-[10px] font-black leading-none text-foreground/90">{badge.label}</span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           <div className="flex gap-2 border-t border-border/70 p-4">

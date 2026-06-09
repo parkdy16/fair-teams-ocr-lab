@@ -1,10 +1,18 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import Tesseract from "tesseract.js";
 import type { RoomPlayer } from "@/lib/localRoster";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Search, X } from "lucide-react";
-
+import { Camera, Mic, Search, Upload, X } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 function displayName(player: Pick<RoomPlayer, "name" | "aka">) {
   const aka = player.aka?.trim();
@@ -12,34 +20,625 @@ function displayName(player: Pick<RoomPlayer, "name" | "aka">) {
 }
 
 function NewBadge() {
-  return <span className="inline-flex items-center rounded-full bg-sky-100 px-1.5 py-0.5 text-[9px] font-black text-sky-800 border border-sky-200">NEW</span>;
+  return (
+    <span className="inline-flex items-center rounded-full bg-sky-100 px-1.5 py-0.5 text-[9px] font-black text-sky-800 border border-sky-200">
+      NEW
+    </span>
+  );
 }
 function GKBadge() {
-  return <span className="inline-flex items-center rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-black text-emerald-800 border border-emerald-200">GK</span>;
+  return (
+    <span className="inline-flex items-center rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-black text-emerald-800 border border-emerald-200">
+      GK
+    </span>
+  );
 }
 
 function ORGBadge() {
-  return <span className="inline-flex items-center rounded-full bg-orange-100 px-1.5 py-0.5 text-[9px] font-black text-orange-800 border border-orange-200">ORG</span>;
+  return (
+    <span className="inline-flex items-center rounded-full bg-orange-100 px-1.5 py-0.5 text-[9px] font-black text-orange-800 border border-orange-200">
+      ORG
+    </span>
+  );
 }
 
-export function TodayTab({ players, setPlayers }: { players: RoomPlayer[]; setPlayers: (players: RoomPlayer[]) => void }) {
+type OcrMatchStatus = "match" | "suggest" | "new";
+
+type OcrNameCandidate = {
+  name: string;
+  status: OcrMatchStatus;
+  bestMatch?: RoomPlayer;
+  score?: number;
+  suggestions: Array<{ player: RoomPlayer; score: number }>;
+};
+
+function ocrCandidateKey(candidate: OcrNameCandidate) {
+  return candidate.bestMatch
+    ? `roster:${candidate.bestMatch.id}`
+    : `new:${normalizeForMatch(candidate.name)}`;
+}
+
+function createOcrPlayerId() {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return `ocr-player-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+const OCR_JUNK_WORDS = new Set([
+  "attendees",
+  "attendee",
+  "checked",
+  "check",
+  "not checked",
+  "checked in",
+  "member",
+  "members",
+  "event host",
+  "host",
+  "detailed list",
+  "event question",
+  "search attendees",
+  "search",
+  "rsvp",
+  "yes",
+  "no",
+  "maybe",
+  "not sure",
+  "sure",
+  "where",
+  "profile",
+  "view profile",
+  "see more",
+  "going",
+  "share",
+  "message",
+  "organizer",
+  "today",
+  "saturday",
+  "sunday",
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "first event",
+  "cannot join",
+  "coming soon",
+  "jpg",
+  "jpeg",
+  "png",
+  "mo be en",
+  "nesw",
+  "x attendees",
+  "first event ooo",
+  "member first event ooo",
+  "i could",
+  "na",
+  "where s the rsvp question",
+  "i thought it was moved to august",
+  "have no idea",
+  "i have no idea",
+  "cannot join",
+  "can not join",
+]);
+
+function stripDiacritics(value: string) {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+function normalizeForMatch(value: string) {
+  return stripDiacritics(value)
+    .toLowerCase()
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/[^a-z\s'-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function cleanOcrLine(value: string) {
+  return value
+    .replace(/---.*?\.(jpg|jpeg|png).*?---/gi, " ")
+    .replace(/[•●▪︎◆◇▶︎►=_%#¥§¢\[\]{}<>]/g, " ")
+    .replace(/^[^A-Za-zÀ-ÖØ-öø-ÿ]+/, "")
+    .replace(/[^A-Za-zÀ-ÖØ-öø-ÿ .'-]/g, " ")
+    .replace(/\s+\.\s+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function hasRosterSignal(value: string, roster: RoomPlayer[]) {
+  const normalized = normalizeForMatch(value);
+  if (!normalized) return false;
+  return roster.some((player) => {
+    const rankedScore = scorePlayerMatch(value, player);
+    return (
+      playerSearchNames(player).includes(normalized) ||
+      rankedScore >= (normalized.split(" ").length === 1 ? 95 : 88)
+    );
+  });
+}
+
+function isProbablyName(value: string) {
+  const clean = cleanOcrLine(value);
+  const normalized = normalizeForMatch(clean);
+  if (!normalized) return false;
+  if (OCR_JUNK_WORDS.has(normalized)) return false;
+  if (
+    [...OCR_JUNK_WORDS].some(
+      (word) =>
+        normalized.includes(word) && normalized.length <= word.length + 8,
+    )
+  )
+    return false;
+  if (/\d/.test(clean)) return false;
+  if (clean.length < 3 || clean.length > 36) return false;
+  if (
+    /\b(i|we|you|he|she|they|it|this|that|but|would|like|come|join|plan|moved|time|thing|attend|club|anymore|gathering|question|list|event|search|checked|attendees?)\b/i.test(
+      clean,
+    )
+  )
+    return false;
+  if (/^[A-Z\s]{4,}$/.test(clean) && clean.split(/\s+/).length > 1)
+    return false;
+  const words = normalized.split(" ").filter(Boolean);
+  if (words.length < 1 || words.length > 4) return false;
+  if (words.some((word) => word.length === 1 && words.length > 1)) return false;
+  return true;
+}
+
+function levenshtein(a: string, b: string) {
+  const matrix = Array.from({ length: a.length + 1 }, (_, i) => [i]);
+  for (let j = 1; j <= b.length; j += 1) matrix[0][j] = j;
+  for (let i = 1; i <= a.length; i += 1) {
+    for (let j = 1; j <= b.length; j += 1) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      matrix[i][j] = Math.min(
+        matrix[i - 1][j] + 1,
+        matrix[i][j - 1] + 1,
+        matrix[i - 1][j - 1] + cost,
+      );
+    }
+  }
+  return matrix[a.length][b.length];
+}
+
+function similarity(a: string, b: string) {
+  if (!a || !b) return 0;
+  if (a === b) return 100;
+  const maxLength = Math.max(a.length, b.length);
+  return Math.round((1 - levenshtein(a, b) / maxLength) * 100);
+}
+
+function playerSearchNames(player: RoomPlayer) {
+  return [player.name, player.aka, displayName(player)]
+    .filter(Boolean)
+    .map((value) => normalizeForMatch(String(value)));
+}
+
+function scorePlayerMatch(ocrName: string, player: RoomPlayer) {
+  const normalizedOcr = normalizeForMatch(ocrName);
+  const ocrFirst = normalizedOcr[0];
+  if (!ocrFirst) return 0;
+  return Math.max(
+    ...playerSearchNames(player).map((candidate) => {
+      if (!candidate) return 0;
+      const ocrWords = normalizedOcr.split(" ").filter(Boolean);
+      const candidateWords = candidate.split(" ").filter(Boolean);
+      const ocrFirstName = ocrWords[0] ?? "";
+      const candidateFirstName = candidateWords[0] ?? "";
+
+      // Meetup screenshots often show full public names while the Fair Teams
+      // roster may store nicknames/first names such as "Abou", "Luca", or
+      // "Andrew (Daniel)". If the first name is an exact match, treat it as a
+      // strong safe match even when the OCR name has extra surname words.
+      if (ocrFirstName && ocrFirstName === candidateFirstName) {
+        if (normalizedOcr === candidate) return 100;
+        return candidateWords.length === 1 ? 96 : 94;
+      }
+
+      // Also support last-name / nickname matches. Example: OCR reads
+      // "ray Brijesh" but the roster player is saved simply as "Brijesh".
+      // Keep this exact-token only, so fuzzy matching does not become too loose.
+      if (
+        candidateWords.length === 1 &&
+        candidateWords[0].length >= 3 &&
+        ocrWords.includes(candidateWords[0])
+      ) {
+        return 95;
+      }
+
+      // For normal fuzzy matching, keep the original first-letter guard so
+      // unrelated names cannot jump to high scores.
+      if (candidate[0] !== ocrFirst) return 0;
+
+      const rawScore = similarity(normalizedOcr, candidate);
+      const firstWordScore = similarity(ocrFirstName, candidateFirstName);
+      if (firstWordScore < 70) return 0;
+      return rawScore;
+    }),
+  );
+}
+
+function extractOcrNames(
+  text: string,
+  roster: RoomPlayer[],
+): OcrNameCandidate[] {
+  const lines = text.split(/\r?\n/).map(cleanOcrLine).filter(Boolean);
+  const names: string[] = [];
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const current = normalizeForMatch(lines[index]);
+    if (
+      current === "member" ||
+      current === "event host" ||
+      current.includes("member")
+    ) {
+      for (let back = index - 1; back >= Math.max(0, index - 3); back -= 1) {
+        if (isProbablyName(lines[back])) {
+          names.push(cleanOcrLine(lines[back]));
+          break;
+        }
+      }
+    }
+  }
+
+  // Conservative fallback: only keep standalone lines when they strongly match
+  // someone already in the roster. This avoids OCR status-bar/UI junk such as
+  // "MO BE EN", "NESW", filenames, and free-text RSVP comments.
+  for (const line of lines) {
+    if (isProbablyName(line) && hasRosterSignal(line, roster)) {
+      names.push(cleanOcrLine(line));
+    }
+  }
+
+  // Roster rescue pass: if OCR clearly contains a saved roster name anywhere
+  // in the full text, add that player even when the Meetup line structure was
+  // missed. This catches short names like "Joon" that are visible in raw OCR
+  // but can be skipped by the Member/Event host pattern.
+  const normalizedFullText = ` ${normalizeForMatch(text)} `;
+  for (const player of roster) {
+    const searchNames = playerSearchNames(player).filter(Boolean);
+    for (const searchName of searchNames) {
+      if (searchName.length < 3) continue;
+      const safePattern = new RegExp(
+        `(^|\\s)${searchName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?=\\s|$)`,
+      );
+      if (safePattern.test(normalizedFullText)) {
+        names.push(player.name);
+        break;
+      }
+    }
+  }
+
+  const uniqueNames = Array.from(
+    new Map(names.map((name) => [normalizeForMatch(name), name])).values(),
+  );
+
+  const candidates = uniqueNames.map((name) => {
+    const normalized = normalizeForMatch(name);
+    const wordCount = normalized.split(" ").filter(Boolean).length;
+    const ranked = roster
+      .map((player) => ({ player, score: scorePlayerMatch(name, player) }))
+      .filter((match) => match.score > 0)
+      .sort((a, b) => b.score - a.score);
+
+    const best = ranked[0];
+    const exact = ranked.find((match) =>
+      playerSearchNames(match.player).includes(normalized),
+    );
+    const matchThreshold = wordCount === 1 ? 95 : 88;
+    const suggestThreshold = wordCount === 1 ? 78 : 72;
+
+    if (exact) {
+      return {
+        name,
+        status: "match" as const,
+        bestMatch: exact.player,
+        score: 100,
+        suggestions: ranked.slice(0, 3),
+      };
+    }
+
+    if (best && best.score >= matchThreshold) {
+      return {
+        name,
+        status: "match" as const,
+        bestMatch: best.player,
+        score: best.score,
+        suggestions: ranked.slice(0, 3),
+      };
+    }
+
+    if (best && best.score >= suggestThreshold) {
+      return {
+        name,
+        status: "suggest" as const,
+        bestMatch: best.player,
+        score: best.score,
+        suggestions: ranked.slice(0, 3),
+      };
+    }
+
+    return { name, status: "new" as const, suggestions: ranked.slice(0, 3) };
+  });
+
+  // Screenshots often overlap. Dedupe after matching, not just by OCR text:
+  // several different OCR strings can point to the same roster player.
+  const byFinalIdentity = new Map<string, OcrNameCandidate>();
+  const statusRank: Record<OcrMatchStatus, number> = {
+    match: 3,
+    suggest: 2,
+    new: 1,
+  };
+
+  for (const candidate of candidates) {
+    const key = candidate.bestMatch
+      ? `roster:${candidate.bestMatch.id}`
+      : `new:${normalizeForMatch(candidate.name)}`;
+    const existing = byFinalIdentity.get(key);
+
+    if (!existing) {
+      byFinalIdentity.set(key, candidate);
+      continue;
+    }
+
+    const candidateScore = candidate.score ?? 0;
+    const existingScore = existing.score ?? 0;
+    const candidateRank = statusRank[candidate.status];
+    const existingRank = statusRank[existing.status];
+
+    // Keep the safest/best version of duplicate findings. Prefer MATCH over
+    // CHECK, then higher score, then the cleaner/shorter displayed OCR name.
+    if (
+      candidateRank > existingRank ||
+      (candidateRank === existingRank && candidateScore > existingScore) ||
+      (candidateRank === existingRank &&
+        candidateScore === existingScore &&
+        candidate.name.length < existing.name.length)
+    ) {
+      byFinalIdentity.set(key, candidate);
+    }
+  }
+
+  return Array.from(byFinalIdentity.values());
+}
+
+export function TodayTab({
+  players,
+  setPlayers,
+}: {
+  players: RoomPlayer[];
+  setPlayers: (players: RoomPlayer[]) => void;
+}) {
   const [search, setSearch] = useState("");
+  const [ocrOpen, setOcrOpen] = useState(false);
+  const [voiceOpen, setVoiceOpen] = useState(false);
+  const [selectedScreenshots, setSelectedScreenshots] = useState<File[]>([]);
+  const [ocrText, setOcrText] = useState("");
+  const [ocrRunning, setOcrRunning] = useState(false);
+  const [ocrProgress, setOcrProgress] = useState(0);
+  const [ocrStatus, setOcrStatus] = useState("");
+  const [confirmNewPlayersOpen, setConfirmNewPlayersOpen] = useState(false);
+  const [confirmAddAllOpen, setConfirmAddAllOpen] = useState(false);
 
   const sorted = [...players].sort((a, b) => a.name.localeCompare(b.name));
   const filtered = search.trim()
-    ? sorted.filter(p => displayName(p).toLowerCase().includes(search.toLowerCase()))
+    ? sorted.filter((p) =>
+        displayName(p).toLowerCase().includes(search.toLowerCase()),
+      )
     : sorted;
 
-  const selectedCount = players.filter(p => p.attending).length;
+  const selectedCount = players.filter((p) => p.attending).length;
+
+  const selectedScreenshotNames = selectedScreenshots.map((file) => file.name);
+  const possibleNames = useMemo(
+    () => (ocrText ? extractOcrNames(ocrText, players) : []),
+    [ocrText, players],
+  );
+  const [selectedOcrCandidateKeys, setSelectedOcrCandidateKeys] = useState<
+    string[]
+  >([]);
+  const selectedOcrCandidateKeySet = new Set(selectedOcrCandidateKeys);
+  const safeMatches = possibleNames.filter(
+    (candidate) => candidate.status === "match",
+  ).length;
+  const suggestions = possibleNames.filter(
+    (candidate) => candidate.status === "suggest",
+  ).length;
+  const newNames = possibleNames.filter(
+    (candidate) => candidate.status === "new",
+  ).length;
+  const selectedOcrCandidates = possibleNames.filter((candidate) =>
+    selectedOcrCandidateKeySet.has(ocrCandidateKey(candidate)),
+  );
+  const selectedRosterMatches = selectedOcrCandidates.filter(
+    (candidate) => candidate.bestMatch,
+  );
+  const selectedNewCandidates = selectedOcrCandidates.filter(
+    (candidate) => candidate.status === "new" && !candidate.bestMatch,
+  );
+  const selectedOcrTotal = selectedRosterMatches.length + selectedNewCandidates.length;
+  const allRosterCandidates = possibleNames.filter((candidate) => candidate.bestMatch);
+  const allNewCandidates = possibleNames.filter(
+    (candidate) => candidate.status === "new" && !candidate.bestMatch,
+  );
+  const allOcrTotal = allRosterCandidates.length + allNewCandidates.length;
+  const allCheckCandidates = possibleNames.filter(
+    (candidate) => candidate.status === "suggest",
+  );
+
+  const openOcrImport = () => {
+    // OCR import is a fresh attendance workflow, so start Today from empty
+    // instead of accidentally keeping last week's selected players.
+    setPlayers(players.map((player) => ({ ...player, attending: false })));
+    setOcrOpen(true);
+  };
+
+  useEffect(() => {
+    setSelectedOcrCandidateKeys(
+      possibleNames
+        .filter(
+          (candidate) => candidate.status === "match" && candidate.bestMatch,
+        )
+        .map(ocrCandidateKey),
+    );
+  }, [possibleNames]);
+
+  const clearOcrSelection = () => {
+    setSelectedScreenshots([]);
+    setOcrText("");
+    setOcrProgress(0);
+    setOcrStatus("");
+    setSelectedOcrCandidateKeys([]);
+  };
+
+  const runOcr = async () => {
+    if (selectedScreenshots.length === 0 || ocrRunning) return;
+
+    setOcrRunning(true);
+    setOcrText("");
+    setOcrProgress(0);
+    setOcrStatus("Starting OCR…");
+
+    const chunks: string[] = [];
+
+    try {
+      for (let index = 0; index < selectedScreenshots.length; index += 1) {
+        const file = selectedScreenshots[index];
+        setOcrStatus(
+          `Reading ${index + 1} of ${selectedScreenshots.length}: ${file.name}`,
+        );
+
+        const result = await Tesseract.recognize(file, "eng", {
+          logger: (message) => {
+            if (message.status)
+              setOcrStatus(
+                `${message.status} (${index + 1}/${selectedScreenshots.length})`,
+              );
+            if (typeof message.progress === "number") {
+              const imageShare = 1 / selectedScreenshots.length;
+              const completedShare = index / selectedScreenshots.length;
+              setOcrProgress(
+                Math.round(
+                  (completedShare + message.progress * imageShare) * 100,
+                ),
+              );
+            }
+          },
+        });
+
+        chunks.push(`--- ${file.name} ---\n${result.data.text.trim()}`);
+      }
+
+      setOcrText(chunks.join("\n\n"));
+      setOcrProgress(100);
+      setOcrStatus("OCR complete. Raw text shown below.");
+    } catch (error) {
+      console.error(error);
+      setOcrStatus("OCR failed. Try a clearer screenshot or fewer images.");
+    } finally {
+      setOcrRunning(false);
+    }
+  };
+
+  const toggleOcrCandidate = (candidate: OcrNameCandidate) => {
+    const key = ocrCandidateKey(candidate);
+    setSelectedOcrCandidateKeys((current) =>
+      current.includes(key)
+        ? current.filter((candidateKey) => candidateKey !== key)
+        : [...current, key],
+    );
+  };
+
+  const finalizeOcrCandidates = (candidatesToAdd: OcrNameCandidate[]) => {
+    const currentRosterMatches = candidatesToAdd.filter(
+      (candidate) => candidate.bestMatch,
+    );
+    const currentNewCandidates = candidatesToAdd.filter(
+      (candidate) => candidate.status === "new" && !candidate.bestMatch,
+    );
+
+    const playerIds = new Set(
+      currentRosterMatches
+        .map((candidate) => candidate.bestMatch?.id)
+        .filter(Boolean) as string[],
+    );
+
+    if (playerIds.size === 0 && currentNewCandidates.length === 0) return;
+
+    const now = new Date().toISOString();
+    const newPlayers: RoomPlayer[] = currentNewCandidates.map((candidate) => ({
+      id: createOcrPlayerId(),
+      roomId: 1,
+      name: candidate.name.trim(),
+      gender: "male",
+      skill: 5,
+      attack: 5,
+      defense: 5,
+      speed: 5,
+      passing: 5,
+      stamina: 5,
+      physical: 5,
+      teamPlay: 2,
+      isNew: true,
+      attending: true,
+      createdAt: now,
+      updatedAt: now,
+    }));
+
+    const nextPlayers = [
+      ...players.map((player) =>
+        playerIds.has(player.id) ? { ...player, attending: true } : player,
+      ),
+      ...newPlayers,
+    ].sort((a, b) => displayName(a).localeCompare(displayName(b)));
+
+    setPlayers(nextPlayers);
+    setOcrStatus(
+      `Added ${playerIds.size} existing player${playerIds.size === 1 ? "" : "s"} and created ${newPlayers.length} new player${newPlayers.length === 1 ? "" : "s"}.`,
+    );
+    setConfirmNewPlayersOpen(false);
+    setConfirmAddAllOpen(false);
+    setOcrOpen(false);
+  };
+
+  const finalizeAddSelectedOcrMatches = () => {
+    finalizeOcrCandidates(selectedOcrCandidates);
+  };
+
+  const finalizeAddAllOcrMatches = () => {
+    finalizeOcrCandidates(possibleNames);
+  };
+
+  const addSelectedOcrMatches = () => {
+    if (selectedOcrTotal === 0) return;
+    if (selectedNewCandidates.length > 0) {
+      setConfirmNewPlayersOpen(true);
+      return;
+    }
+    finalizeAddSelectedOcrMatches();
+  };
+
+  const addAllOcrMatches = () => {
+    if (allOcrTotal === 0) return;
+    setConfirmAddAllOpen(true);
+  };
 
   const togglePlayer = (player: RoomPlayer) => {
-    setPlayers(players.map(p => p.id === player.id ? { ...p, attending: !p.attending } : p));
+    setPlayers(
+      players.map((p) =>
+        p.id === player.id ? { ...p, attending: !p.attending } : p,
+      ),
+    );
   };
 
   if (players.length === 0) {
     return (
       <div className="text-center py-10">
-        <p className="text-muted-foreground font-medium">Add players in the Roster tab first.</p>
+        <p className="text-muted-foreground font-medium">
+          Add players in the Roster tab first.
+        </p>
       </div>
     );
   }
@@ -48,25 +647,456 @@ export function TodayTab({ players, setPlayers }: { players: RoomPlayer[]; setPl
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between bg-primary text-primary-foreground p-3 rounded-xl shadow-sm">
         <div className="flex flex-col">
-          <span className="text-[10px] uppercase font-bold tracking-wider opacity-80">Attending Today</span>
-          <span className="text-xl font-black leading-tight">{selectedCount} <span className="text-xs font-medium opacity-80">/ {players.length}</span></span>
+          <span className="text-[10px] uppercase font-bold tracking-wider opacity-80">
+            Attending Today
+          </span>
+          <span className="text-xl font-black leading-tight">
+            {selectedCount}{" "}
+            <span className="text-xs font-medium opacity-80">
+              / {players.length}
+            </span>
+          </span>
         </div>
         <div className="flex gap-2">
-          <Button variant="secondary" size="sm" onClick={() => setPlayers(players.map(p => ({ ...p, attending: true })))} className="h-7 text-[10px] font-bold uppercase px-2" >
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() =>
+              setPlayers(players.map((p) => ({ ...p, attending: true })))
+            }
+            className="h-7 text-[10px] font-bold uppercase px-2"
+          >
             All
           </Button>
-          <Button variant="secondary" size="sm" onClick={() => setPlayers(players.map(p => ({ ...p, attending: false })))} className="h-7 text-[10px] font-bold uppercase px-2 opacity-80 hover:opacity-100 bg-slate-900/10 hover:bg-slate-900/20 text-white border-transparent" >
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() =>
+              setPlayers(players.map((p) => ({ ...p, attending: false })))
+            }
+            className="h-7 text-[10px] font-bold uppercase px-2 opacity-80 hover:opacity-100 bg-slate-900/10 hover:bg-slate-900/20 text-white border-transparent"
+          >
             Clear
           </Button>
         </div>
       </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={openOcrImport}
+          className="h-9 rounded-xl text-xs font-black"
+          data-testid="ocr-import-button"
+        >
+          <Camera className="mr-1.5 h-3.5 w-3.5" />
+          OCR Import
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => setVoiceOpen(true)}
+          className="h-9 rounded-xl text-xs font-black"
+          data-testid="voice-import-button"
+        >
+          <Mic className="mr-1.5 h-3.5 w-3.5" />
+          Voice Import
+        </Button>
+      </div>
+
+      <Dialog open={ocrOpen} onOpenChange={setOcrOpen}>
+        <DialogContent className="flex h-[90dvh] max-h-[90dvh] w-[94vw] max-w-lg flex-col overflow-hidden rounded-2xl p-4 sm:p-6">
+          <DialogHeader>
+            <DialogTitle className="text-base font-black">
+              OCR Import
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Import today's attendees from a Meetup, WhatsApp, Telegram, or
+              list screenshot.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain pr-1 pb-2">
+            <label className="flex min-h-28 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-muted/40 p-4 text-center transition-colors hover:bg-muted/70">
+              <Upload className="h-6 w-6 text-muted-foreground" />
+              <div className="text-xs font-black text-foreground">
+                {selectedScreenshotNames.length > 0
+                  ? `${selectedScreenshotNames.length} screenshot${selectedScreenshotNames.length === 1 ? "" : "s"} selected`
+                  : "Choose Screenshot(s)"}
+              </div>
+              <div className="text-[10px] font-medium text-muted-foreground">
+                Select all screenshots for one attendee list. You can select
+                multiple screenshots from one attendee list.
+              </div>
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={(event) => {
+                  setSelectedScreenshots(Array.from(event.target.files ?? []));
+                  setOcrText("");
+                  setOcrProgress(0);
+                  setOcrStatus("");
+                  setSelectedOcrCandidateKeys([]);
+                }}
+                data-testid="ocr-file-input"
+              />
+            </label>
+
+            {selectedScreenshotNames.length > 0 && (
+              <div className="rounded-xl border bg-card p-3">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <div className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
+                    Selected Screenshots
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={clearOcrSelection}
+                    className="h-7 px-2 text-[10px] font-black"
+                  >
+                    Clear
+                  </Button>
+                </div>
+                <div className="max-h-28 space-y-1 overflow-y-auto pr-1">
+                  {selectedScreenshotNames.map((name, index) => (
+                    <div
+                      key={`${name}-${index}`}
+                      className="truncate rounded-lg bg-muted/50 px-2.5 py-1.5 text-[11px] font-medium text-foreground"
+                    >
+                      {index + 1}. {name}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {selectedScreenshots.length > 0 && (
+              <Button
+                type="button"
+                onClick={runOcr}
+                disabled={ocrRunning}
+                className="h-9 w-full rounded-xl text-xs font-black"
+              >
+                {ocrRunning ? "Reading screenshots…" : "Run OCR"}
+              </Button>
+            )}
+
+            {(ocrRunning || ocrStatus) && (
+              <div className="rounded-xl border bg-card p-3">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <div className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
+                    OCR Status
+                  </div>
+                  <div className="text-[10px] font-black text-muted-foreground">
+                    {ocrProgress}%
+                  </div>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full bg-primary transition-all"
+                    style={{ width: `${ocrProgress}%` }}
+                  />
+                </div>
+                <div className="mt-2 text-[11px] font-medium text-muted-foreground">
+                  {ocrStatus}
+                </div>
+              </div>
+            )}
+
+            <div className="rounded-xl border bg-card p-3">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <div className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
+                  Possible Names
+                </div>
+                {possibleNames.length > 0 && (
+                  <div className="text-[10px] font-black text-muted-foreground">
+                    {safeMatches} match · {suggestions} check · {newNames} new
+                  </div>
+                )}
+              </div>
+              {possibleNames.length > 0 ? (
+                <div className="space-y-2 pr-1">
+                  {possibleNames.map((candidate, index) => {
+                    const candidateKey = ocrCandidateKey(candidate);
+                    const isSelectedMatch =
+                      selectedOcrCandidateKeySet.has(candidateKey);
+
+                    return (
+                      <div
+                        key={`${candidate.name}-${index}`}
+                        className={`rounded-lg p-2.5 text-[11px] ${
+                          isSelectedMatch
+                            ? "bg-primary/10 ring-1 ring-primary/20"
+                            : "bg-muted/50"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex min-w-0 gap-2">
+                            <Checkbox
+                              checked={isSelectedMatch}
+                              onCheckedChange={() =>
+                                toggleOcrCandidate(candidate)
+                              }
+                              className="mt-0.5 h-4 w-4 shrink-0 rounded-full"
+                            />
+                            <div className="min-w-0">
+                              <div className="font-black text-foreground">
+                                {candidate.name}
+                              </div>
+                              {candidate.status === "match" &&
+                                candidate.bestMatch && (
+                                  <div className="mt-0.5 font-medium text-emerald-700">
+                                    MATCH: {displayName(candidate.bestMatch)} ·{" "}
+                                    {candidate.score}%
+                                  </div>
+                                )}
+                              {candidate.status === "suggest" &&
+                                candidate.bestMatch && (
+                                  <div className="mt-0.5 font-medium text-amber-700">
+                                    SUGGEST: {displayName(candidate.bestMatch)}{" "}
+                                    · {candidate.score}%
+                                  </div>
+                                )}
+                              {candidate.status === "new" && (
+                                <div className="mt-0.5 font-medium text-sky-700">
+                                  NEW: Will create roster player if selected
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <div
+                            className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-black ${
+                              candidate.status === "match"
+                                ? "bg-emerald-100 text-emerald-800"
+                                : candidate.status === "suggest"
+                                  ? "bg-amber-100 text-amber-800"
+                                  : "bg-sky-100 text-sky-800"
+                            }`}
+                          >
+                            {candidate.status === "match"
+                              ? "MATCH"
+                              : candidate.status === "suggest"
+                                ? "CHECK"
+                                : "NEW"}
+                          </div>
+                        </div>
+                        {candidate.status !== "match" &&
+                          candidate.suggestions.length > 0 && (
+                            <div className="mt-2 flex flex-wrap gap-1">
+                              {candidate.suggestions
+                                .slice(0, 3)
+                                .map(({ player, score }) => (
+                                  <span
+                                    key={player.id}
+                                    className="rounded-full border bg-card px-2 py-0.5 text-[10px] font-bold text-muted-foreground"
+                                  >
+                                    {displayName(player)} {score}%
+                                  </span>
+                                ))}
+                            </div>
+                          )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="rounded-lg bg-muted/50 p-3 text-center text-xs font-medium text-muted-foreground">
+                  Run OCR to show filtered possible names here.
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-xl border bg-card p-3">
+              <div className="mb-2 text-[10px] font-black uppercase tracking-wider text-muted-foreground">
+                Raw OCR Text
+              </div>
+              {ocrText ? (
+                <pre className="max-h-48 whitespace-pre-wrap overflow-y-auto rounded-lg bg-muted/50 p-3 text-[11px] leading-relaxed text-foreground">
+                  {ocrText}
+                </pre>
+              ) : (
+                <div className="rounded-lg bg-muted/50 p-3 text-center text-xs font-medium text-muted-foreground">
+                  Run OCR to show raw detected text here. Name filtering comes
+                  next.
+                </div>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter className="shrink-0 gap-2 border-t pt-3 sm:gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setOcrOpen(false)}
+              className="h-9 text-xs font-bold"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={addAllOcrMatches}
+              disabled={allOcrTotal === 0}
+              className="h-9 text-xs font-black"
+            >
+              Add All ({allOcrTotal})
+            </Button>
+            <Button
+              type="button"
+              onClick={addSelectedOcrMatches}
+              disabled={selectedOcrTotal === 0}
+              className="h-9 text-xs font-black"
+            >
+              Add Selected ({selectedOcrTotal})
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={confirmNewPlayersOpen} onOpenChange={setConfirmNewPlayersOpen}>
+        <DialogContent className="w-[92vw] max-w-md rounded-2xl p-4 sm:p-6">
+          <DialogHeader>
+            <DialogTitle className="text-base font-black">
+              Create New Players?
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              These OCR names are not in your roster yet. Create them with default ratings and add them to Today?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-56 space-y-1 overflow-y-auto rounded-xl border bg-muted/40 p-3">
+            {selectedNewCandidates.map((candidate) => (
+              <div
+                key={ocrCandidateKey(candidate)}
+                className="rounded-lg bg-card px-3 py-2 text-xs font-black text-foreground"
+              >
+                {candidate.name}
+              </div>
+            ))}
+          </div>
+          <div className="rounded-xl bg-sky-50 p-3 text-[11px] font-medium text-sky-800 border border-sky-100">
+            New players will start with OVR 5, TP 2, and the NEW badge. You can edit them later in the Roster tab.
+          </div>
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setConfirmNewPlayersOpen(false)}
+              className="h-9 text-xs font-bold"
+            >
+              No, go back
+            </Button>
+            <Button
+              type="button"
+              onClick={finalizeAddSelectedOcrMatches}
+              className="h-9 text-xs font-black"
+            >
+              Yes, create and add
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={confirmAddAllOpen} onOpenChange={setConfirmAddAllOpen}>
+        <DialogContent className="w-[92vw] max-w-md rounded-2xl p-4 sm:p-6">
+          <DialogHeader>
+            <DialogTitle className="text-base font-black">
+              Add All OCR Results?
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              This will add every detected OCR result, including unchecked CHECK suggestions and NEW players.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 rounded-xl border bg-muted/40 p-3 text-xs">
+            <div className="flex justify-between gap-3 font-bold">
+              <span>Safe matches</span>
+              <span>{safeMatches}</span>
+            </div>
+            <div className="flex justify-between gap-3 font-bold text-amber-700">
+              <span>CHECK suggestions</span>
+              <span>{allCheckCandidates.length}</span>
+            </div>
+            <div className="flex justify-between gap-3 font-bold text-sky-700">
+              <span>New players to create</span>
+              <span>{allNewCandidates.length}</span>
+            </div>
+          </div>
+          {(allCheckCandidates.length > 0 || allNewCandidates.length > 0) && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[11px] font-medium text-amber-800">
+              Review carefully: CHECK names use the suggested roster match, and NEW names will be created with default ratings.
+            </div>
+          )}
+          {allNewCandidates.length > 0 && (
+            <div className="max-h-40 space-y-1 overflow-y-auto rounded-xl border bg-muted/40 p-3">
+              <div className="mb-1 text-[10px] font-black uppercase tracking-wider text-muted-foreground">
+                New Players
+              </div>
+              {allNewCandidates.map((candidate) => (
+                <div
+                  key={ocrCandidateKey(candidate)}
+                  className="rounded-lg bg-card px-3 py-2 text-xs font-black text-foreground"
+                >
+                  {candidate.name}
+                </div>
+              ))}
+            </div>
+          )}
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setConfirmAddAllOpen(false)}
+              className="h-9 text-xs font-bold"
+            >
+              No, go back
+            </Button>
+            <Button
+              type="button"
+              onClick={finalizeAddAllOcrMatches}
+              className="h-9 text-xs font-black"
+            >
+              Yes, add all
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={voiceOpen} onOpenChange={setVoiceOpen}>
+        <DialogContent className="w-[92vw] max-w-md rounded-2xl p-4 sm:p-6">
+          <DialogHeader>
+            <DialogTitle className="text-base font-black">
+              Voice Import
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Voice roll call will come later. OCR screenshot import comes
+              first.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-xl border bg-muted/50 p-4 text-center text-xs font-medium text-muted-foreground">
+            Coming soon.
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              onClick={() => setVoiceOpen(false)}
+              className="h-9 text-xs font-black"
+            >
+              OK
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
         <Input
           placeholder="Search players…"
           value={search}
-          onChange={e => setSearch(e.target.value)}
+          onChange={(e) => setSearch(e.target.value)}
           className="h-9 pl-8 pr-8 text-xs"
           data-testid="today-search"
         />
@@ -82,11 +1112,13 @@ export function TodayTab({ players, setPlayers }: { players: RoomPlayer[]; setPl
 
       {filtered.length === 0 ? (
         <div className="text-center py-8 bg-muted/50 rounded-xl border border-dashed border-border">
-          <p className="text-muted-foreground font-medium text-xs">No players match "{search}"</p>
+          <p className="text-muted-foreground font-medium text-xs">
+            No players match "{search}"
+          </p>
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-1.5">
-          {filtered.map(player => (
+          {filtered.map((player) => (
             <label
               key={player.id}
               className={`flex items-center gap-2 px-2.5 py-2 border rounded-lg cursor-pointer transition-colors ${player.attending ? "border-primary bg-primary/5" : "border-border bg-card"}`}
@@ -99,12 +1131,21 @@ export function TodayTab({ players, setPlayers }: { players: RoomPlayer[]; setPl
                 data-testid={`attendance-check-${player.id}`}
               />
               <div className="flex flex-col min-w-0 flex-1">
-                <div className={`font-bold text-xs truncate leading-tight ${player.attending ? "text-primary" : "text-foreground"}`}>{displayName(player)}</div>
+                <div
+                  className={`font-bold text-xs truncate leading-tight ${player.attending ? "text-primary" : "text-foreground"}`}
+                >
+                  {displayName(player)}
+                </div>
                 <div className="mt-0.5 flex items-center gap-1 min-w-0">
-                  <span className="text-[10px] text-muted-foreground font-medium shrink-0">OVR {player.skill} · TP {player.teamPlay ?? 2}</span>
-                  {(player.isNew || player.isGoalkeeper || player.isOrganizer) && (
+                  <span className="text-[10px] text-muted-foreground font-medium shrink-0">
+                    OVR {player.skill} · TP {player.teamPlay ?? 2}
+                  </span>
+                  {(player.isNew ||
+                    player.isGoalkeeper ||
+                    player.isOrganizer) && (
                     <div className="flex flex-wrap gap-1 min-w-0">
-                      {player.isNew && <NewBadge />}{player.isGoalkeeper && <GKBadge />}
+                      {player.isNew && <NewBadge />}
+                      {player.isGoalkeeper && <GKBadge />}
                       {player.isOrganizer && <ORGBadge />}
                     </div>
                   )}

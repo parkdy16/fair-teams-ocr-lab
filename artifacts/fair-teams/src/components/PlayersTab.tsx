@@ -726,9 +726,9 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
 
       <div className="space-y-3">
         <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <h3 className="text-lg font-black uppercase tracking-tight text-foreground leading-none">Roster</h3>
-            <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Player list</p>
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="h-3.5 w-1 rounded-full bg-primary/70" aria-hidden="true" />
+            <h3 className="text-[13px] font-black uppercase tracking-[0.16em] text-foreground/90 leading-none">Roster</h3>
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
             <Button
@@ -736,14 +736,14 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
               variant="outline"
               size="sm"
               onClick={() => setHideOverall(prev => !prev)}
-              className={`h-8 rounded-xl px-2.5 text-[11px] font-black uppercase tracking-wide shadow-none ${hideOverall ? "border-border bg-muted/40 text-muted-foreground" : "border-primary/20 bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary"}`}
+              className={`h-7 rounded-lg px-2 text-[10px] font-black uppercase tracking-wide shadow-none ${hideOverall ? "border-border bg-muted/35 text-muted-foreground" : "border-primary/20 bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary"}`}
               title={hideOverall ? "Show roster OVR" : "Hide roster OVR"}
               data-testid="button-toggle-roster-ovr"
             >
-              {hideOverall ? <EyeOff className="mr-1 h-3.5 w-3.5" /> : <Eye className="mr-1 h-3.5 w-3.5" />}
+              {hideOverall ? <EyeOff className="mr-1 h-3 w-3" /> : <Eye className="mr-1 h-3 w-3" />}
               OVR
             </Button>
-            <span className="inline-flex h-8 min-w-8 items-center justify-center rounded-xl border border-primary/15 bg-primary/10 px-2.5 text-[11px] font-black text-primary shadow-none">
+            <span className="inline-flex h-7 min-w-7 items-center justify-center rounded-lg border border-primary/15 bg-primary/10 px-2 text-[10px] font-black text-primary shadow-none">
               {search ? `${filtered.length}/${players.length}` : players.length}
             </span>
           </div>

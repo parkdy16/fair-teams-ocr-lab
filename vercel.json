@@ -1,4 +1,7 @@
 {
+  "buildCommand": "corepack enable && pnpm --filter @workspace/fair-teams build",
+  "outputDirectory": "artifacts/fair-teams/dist",
+  "installCommand": "corepack enable && pnpm install --frozen-lockfile",
   "rewrites": [
     {
       "source": "/(.*)",

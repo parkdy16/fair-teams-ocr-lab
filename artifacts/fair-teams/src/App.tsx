@@ -269,7 +269,7 @@ function App() {
           <TabsList className="w-full h-11 bg-slate-100/90 grid grid-cols-3 rounded-2xl p-1 gap-1.5 border border-border/70 shadow-inner">
             <TabsTrigger value="players" className="rounded-xl flex items-center justify-center gap-1.5 h-full text-muted-foreground transition-all data-[state=active]:bg-[#102A43] data-[state=active]:text-white data-[state=active]:shadow-sm">
               <Users className="w-4 h-4" />
-              <span className="text-[10px] font-black uppercase tracking-wider">Players</span>
+              <span className="text-[10px] font-black uppercase tracking-wider">Roster</span>
             </TabsTrigger>
             <TabsTrigger value="today" className="rounded-xl flex items-center justify-center gap-1.5 h-full text-muted-foreground transition-all data-[state=active]:bg-[#102A43] data-[state=active]:text-white data-[state=active]:shadow-sm">
               <CalendarCheck className="w-4 h-4" />

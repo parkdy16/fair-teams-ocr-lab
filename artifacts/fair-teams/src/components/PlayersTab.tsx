@@ -5,7 +5,6 @@ import { FunBadge, Gender } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { UserMinus, Plus, Star, Zap, Search, X, Camera, Image as ImageIcon, Trash2, Pencil, Shield, Activity, Dumbbell, Target, Share2, Eye, EyeOff } from "lucide-react";
@@ -609,6 +608,7 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
   const [autoEditPlayerId, setAutoEditPlayerId] = useState<string | null>(null);
   const [flippedPlayerIds, setFlippedPlayerIds] = useState<Record<string, boolean>>({});
   const [search, setSearch] = useState("");
+  const [addPlayerOpen, setAddPlayerOpen] = useState(false);
   const [hideOverall, setHideOverall] = useState(() => {
     try { return window.localStorage.getItem("fair-teams-hide-roster-ovr") === "true"; }
     catch { return false; }
@@ -657,6 +657,7 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
     setAka("");
     setIsNew(false);
     setIsOrganizer(false);
+    setAddPlayerOpen(false);
   };
 
   const filtered = search.trim()
@@ -664,91 +665,99 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
     : players;
 
   return (
-    <div className="flex flex-col gap-6">
-      <Card className="border-border shadow-sm">
-        <CardContent className="pt-5">
-          <form onSubmit={handleAdd} className="flex flex-col gap-3.5">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="name" className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider">Player Name</Label>
-                <Input
-                  id="name"
-                  placeholder="e.g. Paul"
-                  value={name}
-                  onChange={e => setName(e.target.value)}
-                  className="h-11 text-sm font-semibold"
-                  data-testid="input-player-name"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="aka" className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider">AKA</Label>
-                <Input
-                  id="aka"
-                  placeholder="Optional"
-                  value={aka}
-                  onChange={e => setAka(e.target.value)}
-                  className="h-11 text-sm font-semibold"
-                  data-testid="input-player-aka"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-[1.15fr_0.9fr_1fr] gap-2">
-              <Select value={gender} onValueChange={v => setGender(v as Gender)}>
-                <SelectTrigger className="h-10 rounded-xl border-border bg-muted/30 text-xs font-bold px-2" id="gender" data-testid="select-gender">
-                  <SelectValue placeholder="Gender" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="male">Male</SelectItem>
-                  <SelectItem value="female">Female</SelectItem>
-                  <SelectItem value="other">Other</SelectItem>
-                </SelectContent>
-              </Select>
-              <TogglePill active={isNew} onClick={() => setIsNew(!isNew)} testId="checkbox-new-player">
-                New
-              </TogglePill>
-              <TogglePill active={isOrganizer} onClick={() => setIsOrganizer(!isOrganizer)} testId="checkbox-organizer">
-                Organizer
-              </TogglePill>
-            </div>
-
-            <Button
-              type="submit"
-              variant="outline"
-              className="w-full h-10 mt-1 rounded-xl border-primary/20 bg-primary/5 text-primary hover:bg-primary/10 hover:text-primary font-black uppercase tracking-wide shadow-none"
-              data-testid="button-add-player"
-            >
-              <Plus className="w-3.5 h-3.5 mr-1.5" /> Add Player
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
-
-      <div className="space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="h-3.5 w-1 rounded-full bg-primary/70" aria-hidden="true" />
-            <h3 className="text-[13px] font-black uppercase tracking-[0.16em] text-foreground/90 leading-none">Roster</h3>
-          </div>
-          <div className="flex items-center gap-1.5 shrink-0">
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between gap-2">
+        <Dialog open={addPlayerOpen} onOpenChange={setAddPlayerOpen}>
+          <DialogTrigger asChild>
             <Button
               type="button"
               variant="outline"
-              size="sm"
-              onClick={() => setHideOverall(prev => !prev)}
-              className={`h-7 rounded-lg px-2 text-[10px] font-black uppercase tracking-wide shadow-none ${hideOverall ? "border-border bg-muted/35 text-muted-foreground" : "border-primary/20 bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary"}`}
-              title={hideOverall ? "Show roster OVR" : "Hide roster OVR"}
-              data-testid="button-toggle-roster-ovr"
+              className="h-9 rounded-xl border-primary/20 bg-primary/5 px-3 text-[11px] font-black uppercase tracking-wide text-primary shadow-none hover:bg-primary/10 hover:text-primary"
+              data-testid="button-open-add-player"
             >
-              {hideOverall ? <EyeOff className="mr-1 h-3 w-3" /> : <Eye className="mr-1 h-3 w-3" />}
-              OVR
+              <Plus className="mr-1.5 h-3.5 w-3.5" /> Add Player
             </Button>
-            <span className="inline-flex h-7 min-w-7 items-center justify-center rounded-lg border border-primary/15 bg-primary/10 px-2 text-[10px] font-black text-primary shadow-none">
-              {search ? `${filtered.length}/${players.length}` : players.length}
-            </span>
-          </div>
-        </div>
+          </DialogTrigger>
+          <DialogContent className="max-w-sm rounded-3xl">
+            <DialogHeader>
+              <DialogTitle>Add player</DialogTitle>
+            </DialogHeader>
+            <form onSubmit={handleAdd} className="flex flex-col gap-3.5 pt-1">
+              <div className="grid grid-cols-1 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="name" className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider">Player Name</Label>
+                  <Input
+                    id="name"
+                    placeholder="e.g. Paul"
+                    value={name}
+                    onChange={e => setName(e.target.value)}
+                    className="h-11 text-sm font-semibold"
+                    data-testid="input-player-name"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="aka" className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider">AKA</Label>
+                  <Input
+                    id="aka"
+                    placeholder="Optional"
+                    value={aka}
+                    onChange={e => setAka(e.target.value)}
+                    className="h-11 text-sm font-semibold"
+                    data-testid="input-player-aka"
+                  />
+                </div>
+              </div>
 
+              <div className="grid grid-cols-[1.15fr_0.9fr_1fr] gap-2">
+                <Select value={gender} onValueChange={v => setGender(v as Gender)}>
+                  <SelectTrigger className="h-10 rounded-xl border-border bg-muted/30 text-xs font-bold px-2" id="gender" data-testid="select-gender">
+                    <SelectValue placeholder="Gender" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="male">Male</SelectItem>
+                    <SelectItem value="female">Female</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+                <TogglePill active={isNew} onClick={() => setIsNew(!isNew)} testId="checkbox-new-player">
+                  New
+                </TogglePill>
+                <TogglePill active={isOrganizer} onClick={() => setIsOrganizer(!isOrganizer)} testId="checkbox-organizer">
+                  Organizer
+                </TogglePill>
+              </div>
+
+              <Button
+                type="submit"
+                className="h-10 rounded-xl font-black uppercase tracking-wide"
+                data-testid="button-add-player"
+              >
+                <Plus className="w-3.5 h-3.5 mr-1.5" /> Add Player
+              </Button>
+            </form>
+          </DialogContent>
+        </Dialog>
+
+        <div className="flex items-center gap-1.5 shrink-0">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setHideOverall(prev => !prev)}
+            className={`h-8 rounded-xl px-2.5 text-[10px] font-black uppercase tracking-wide shadow-none ${hideOverall ? "border-border bg-muted/35 text-muted-foreground" : "border-primary/20 bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary"}`}
+            title={hideOverall ? "Show roster OVR" : "Hide roster OVR"}
+            data-testid="button-toggle-roster-ovr"
+          >
+            {hideOverall ? <EyeOff className="mr-1 h-3 w-3" /> : <Eye className="mr-1 h-3 w-3" />}
+            OVR
+          </Button>
+          <span className="inline-flex h-8 min-w-8 items-center justify-center rounded-xl border border-primary/15 bg-primary/10 px-2 text-[10px] font-black text-primary shadow-none" title="Roster count">
+            {search ? `${filtered.length}/${players.length}` : players.length}
+          </span>
+        </div>
+      </div>
+
+      <div className="space-y-3">
         {players.length > 0 && (
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />

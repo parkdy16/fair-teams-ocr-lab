@@ -42,6 +42,7 @@ function ORGBadge() {
   );
 }
 
+
 type OcrMatchStatus = "match" | "suggest" | "new";
 
 type OcrNameCandidate = {

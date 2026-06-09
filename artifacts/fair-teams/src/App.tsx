@@ -18,7 +18,7 @@ import {
 
 const GROUP_NAME_STORAGE_KEY = "fair-teams-group-name";
 const HEADER_COLOR_STORAGE_KEY = "fair-teams-header-color-v2";
-const DEFAULT_GROUP_NAME = "Fair Teams";
+const DEFAULT_GROUP_NAME = "My Group";
 const DEFAULT_HEADER_COLOR = "#FFFFFF";
 
 function hexToRgba(hex: string, alpha: number) {
@@ -113,17 +113,7 @@ function App() {
   };
 
   const isDefaultHeaderColor = headerColor.toUpperCase() === DEFAULT_HEADER_COLOR;
-  const canEditHeader = activeTab === "players";
-
-  const headerStyle: React.CSSProperties = isDefaultHeaderColor
-    ? {
-        background: "rgba(255,255,255,0.98)",
-        boxShadow: "0 4px 14px rgba(15, 42, 67, 0.08)",
-      }
-    : {
-        background: `linear-gradient(90deg, ${hexToRgba(headerColor, 0.14)} 0%, ${hexToRgba(headerColor, 0.06)} 18%, rgba(255,255,255,0.98) 48%, rgba(255,255,255,0.98) 100%)`,
-        boxShadow: `0 4px 14px rgba(15, 42, 67, 0.10), inset 5px 0 0 ${headerColor}`,
-      };
+  const canEditHeader = true;
 
   const replacePlayers = (nextPlayers: RoomPlayer[]) => {
     setPlayers(nextPlayers);
@@ -179,93 +169,84 @@ function App() {
 
   return (
     <div className="flex flex-col min-h-[100dvh] bg-background w-full max-w-md mx-auto relative shadow-2xl overflow-hidden">
-      <header className="px-5 pt-3 pb-2 bg-background">
-        <div className="relative rounded-[1.15rem] border border-slate-200 text-[#102A43] px-3.5 py-2.5 flex items-center gap-2.5" style={headerStyle}>
-          <div className="relative z-10 min-w-0 flex-1">
-            {isEditingGroupName ? (
-              <div className="flex items-center gap-1.5">
-                <input
-                  value={draftGroupName}
-                  onChange={e => setDraftGroupName(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === "Enter") saveGroupName();
-                    if (e.key === "Escape") cancelGroupNameEdit();
-                  }}
-                  autoFocus
-                  maxLength={32}
-                  className="min-w-0 flex-1 h-9 rounded-xl bg-white/95 text-[#102A43] px-3 text-sm font-extrabold outline-none border border-white/30 shadow-sm"
-                  placeholder="Group name"
-                />
-                <Button variant="secondary" size="icon" className="h-9 w-9 rounded-xl" onClick={saveGroupName} title="Save group name">
-                  <Check className="w-4 h-4" />
-                </Button>
-                <Button variant="secondary" size="icon" className="h-9 w-9 rounded-xl" onClick={cancelGroupNameEdit} title="Cancel">
-                  <X className="w-4 h-4" />
-                </Button>
-              </div>
-            ) : canEditHeader ? (
-              <button type="button" onClick={startGroupNameEdit} className="group text-left min-w-0 max-w-full">
-                <div className="flex items-center gap-1.5 min-w-0">
-                  <h1 className="text-[15px] font-black leading-tight truncate tracking-tight">{groupName}</h1>
-                  <Pencil className="w-3.5 h-3.5 text-[#102A43]/55 opacity-90 group-active:scale-95 shrink-0" />
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
+        <header className="sticky top-0 z-30 bg-background/95 backdrop-blur border-b border-border px-4 pt-3 pb-2 shadow-sm">
+          <div className="flex items-center justify-between gap-3 px-1 pb-2">
+            <div className="min-w-0 flex-1">
+              {isEditingGroupName ? (
+                <div className="flex items-center gap-1.5">
+                  <input
+                    value={draftGroupName}
+                    onChange={e => setDraftGroupName(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === "Enter") saveGroupName();
+                      if (e.key === "Escape") cancelGroupNameEdit();
+                    }}
+                    autoFocus
+                    maxLength={32}
+                    className="min-w-0 flex-1 h-9 rounded-xl bg-white text-[#102A43] px-3 text-sm font-extrabold outline-none border border-slate-200 shadow-sm"
+                    placeholder="Group name"
+                  />
+                  <Button variant="secondary" size="icon" className="h-9 w-9 rounded-xl bg-slate-100 border border-slate-200" onClick={saveGroupName} title="Save group name">
+                    <Check className="w-4 h-4" />
+                  </Button>
+                  <Button variant="secondary" size="icon" className="h-9 w-9 rounded-xl bg-slate-100 border border-slate-200" onClick={cancelGroupNameEdit} title="Cancel">
+                    <X className="w-4 h-4" />
+                  </Button>
                 </div>
-              </button>
-            ) : (
-              <div className="text-left min-w-0 max-w-full">
-                <h1 className="text-[15px] font-black leading-tight truncate tracking-tight">{groupName}</h1>
+              ) : (
+                <button type="button" onClick={startGroupNameEdit} className="group flex items-center gap-1.5 text-left min-w-0 max-w-full active:scale-[0.99] transition-transform">
+                  <span className="h-2 w-2 rounded-full shrink-0 shadow-sm" style={{ backgroundColor: headerColor }} />
+                  <h1 className="text-[15px] font-black leading-tight truncate tracking-tight text-[#102A43]">{groupName}</h1>
+                  <Pencil className="w-3.5 h-3.5 text-[#102A43]/45 opacity-90 shrink-0" />
+                </button>
+              )}
+            </div>
+
+            {!isEditingGroupName && (
+              <div className="flex items-center gap-1.5 shrink-0">
+                {activeTab === "players" && (
+                  <>
+                    <label className="relative h-7 w-7 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center cursor-pointer active:scale-95 transition-transform" title="Pick group color">
+                      <Palette className="w-3.5 h-3.5 text-[#102A43]/80" />
+                      <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border border-white shadow-sm" style={{ backgroundColor: headerColor }} />
+                      <input
+                        type="color"
+                        value={headerColor}
+                        onChange={e => setHeaderColor(e.target.value)}
+                        className="absolute inset-0 opacity-0 cursor-pointer"
+                        aria-label="Pick group color"
+                      />
+                    </label>
+                    <Button variant="secondary" size="icon" className="h-7 w-7 rounded-lg bg-slate-100 border border-slate-200" onClick={exportCsv} title="Export Roster" disabled={players.length === 0}>
+                      <Download className="w-3.5 h-3.5" />
+                    </Button>
+                    <Button variant="secondary" size="icon" className="h-7 w-7 rounded-lg bg-slate-100 border border-slate-200" onClick={() => fileInputRef.current?.click()} title="Import Roster">
+                      <Upload className="w-3.5 h-3.5" />
+                    </Button>
+                  </>
+                )}
+                {activeTab !== "players" && <span className="text-[11px] font-extrabold text-slate-400 tracking-tight whitespace-nowrap">Better games.</span>}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".csv,.json,text/csv,application/json"
+                  className="hidden"
+                  onChange={async e => {
+                    const file = e.target.files?.[0];
+                    e.target.value = "";
+                    if (!file) return;
+                    try {
+                      await importFile(file);
+                    } catch (error) {
+                      alert(error instanceof Error ? error.message : "Import failed.");
+                    }
+                  }}
+                />
               </div>
             )}
           </div>
 
-          {!isEditingGroupName && (
-            <div className="relative z-10 flex gap-1 shrink-0 items-center">
-              {canEditHeader && (
-                <label className="relative h-7 w-7 rounded-lg bg-slate-100 shadow-sm border border-slate-200 flex items-center justify-center cursor-pointer active:scale-95 transition-transform" title="Pick header team color">
-                  <Palette className="w-3.5 h-3.5 text-[#102A43]" />
-                  <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border border-white shadow-sm" style={{ backgroundColor: headerColor }} />
-                  <input
-                    type="color"
-                    value={headerColor}
-                    onChange={e => setHeaderColor(e.target.value)}
-                    className="absolute inset-0 opacity-0 cursor-pointer"
-                    aria-label="Pick header team color"
-                  />
-                </label>
-              )}
-
-              {activeTab === "players" && (
-                <>
-                  <Button variant="secondary" size="icon" className="h-7 w-7 rounded-lg bg-slate-100 border border-slate-200" onClick={exportCsv} title="Export Roster" disabled={players.length === 0}>
-                    <Download className="w-3.5 h-3.5" />
-                  </Button>
-                  <Button variant="secondary" size="icon" className="h-7 w-7 rounded-lg bg-slate-100 border border-slate-200" onClick={() => fileInputRef.current?.click()} title="Import Roster">
-                    <Upload className="w-3.5 h-3.5" />
-                  </Button>
-                </>
-              )}
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".csv,.json,text/csv,application/json"
-                className="hidden"
-                onChange={async e => {
-                  const file = e.target.files?.[0];
-                  e.target.value = "";
-                  if (!file) return;
-                  try {
-                    await importFile(file);
-                  } catch (error) {
-                    alert(error instanceof Error ? error.message : "Import failed.");
-                  }
-                }}
-              />
-            </div>
-          )}
-        </div>
-      </header>
-
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
-        <div className="sticky top-0 z-20 bg-background/95 backdrop-blur border-b border-border px-4 py-2 shadow-sm">
           <TabsList className="w-full h-11 bg-slate-100/90 grid grid-cols-3 rounded-2xl p-1 gap-1.5 border border-border/70 shadow-inner">
             <TabsTrigger value="players" className="rounded-xl flex items-center justify-center gap-1.5 h-full text-muted-foreground transition-all data-[state=active]:bg-[#102A43] data-[state=active]:text-white data-[state=active]:shadow-sm">
               <Users className="w-4 h-4" />
@@ -280,7 +261,7 @@ function App() {
               <span className="text-[10px] font-black uppercase tracking-wider">Teams</span>
             </TabsTrigger>
           </TabsList>
-        </div>
+        </header>
 
         <div className="flex-1 overflow-y-auto p-4">
           <TabsContent value="players" className="m-0 data-[state=active]:animate-in data-[state=active]:fade-in-50">
@@ -296,6 +277,7 @@ function App() {
         </div>
       </Tabs>
     </div>
+  );
   );
 }
 

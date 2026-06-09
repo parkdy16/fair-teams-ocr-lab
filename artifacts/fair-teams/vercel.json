@@ -1,6 +1,6 @@
 {
   "buildCommand": "corepack enable && pnpm build",
-  "outputDirectory": "dist",
+  "outputDirectory": "dist/public",
   "installCommand": "corepack enable && pnpm install --frozen-lockfile",
   "rewrites": [
     {

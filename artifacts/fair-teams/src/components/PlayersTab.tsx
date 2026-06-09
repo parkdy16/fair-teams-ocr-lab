@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { UserMinus, Plus, Star, Zap, Search, X, Camera, Image as ImageIcon, Trash2, Pencil, Shield, Activity, Dumbbell, Target, Share2 } from "lucide-react";
+import { UserMinus, Plus, Star, Zap, Search, X, Camera, Image as ImageIcon, Trash2, Pencil, Shield, Activity, Dumbbell, Target, Share2, Eye, EyeOff } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart, ResponsiveContainer } from "recharts";
 
@@ -343,7 +343,7 @@ function VibePicker({ value, onChange }: { value?: FunBadge; onChange: (value?: 
           </DialogHeader>
 
           <div className="overflow-y-auto px-4 py-4 max-h-[64dvh]">
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-3 gap-1.5">
               {FUN_BADGES.map(badge => {
                 const active = badge.value === value;
                 return (
@@ -352,11 +352,11 @@ function VibePicker({ value, onChange }: { value?: FunBadge; onChange: (value?: 
                     type="button"
                     title={badge.description}
                     onClick={() => choose(badge.value)}
-                    className={`min-h-[3rem] rounded-2xl border px-2 py-2 text-center transition-all active:scale-[0.98] ${active ? "border-primary bg-primary/10 ring-1 ring-primary/30" : "border-border bg-card hover:border-primary/40 hover:bg-accent/60"}`}
+                    className={`min-h-[2.65rem] rounded-xl border px-1.5 py-1.5 text-center transition-all active:scale-[0.98] ${active ? "border-primary bg-primary/10 ring-1 ring-primary/30" : "border-border bg-card hover:border-primary/40 hover:bg-accent/60"}`}
                   >
-                    <span className="flex min-w-0 flex-col items-center justify-center gap-1">
-                      <span className="text-lg leading-none">{badge.emoji}</span>
-                      <span className="max-w-full truncate text-[10px] font-black leading-none text-foreground/90">{badge.label}</span>
+                    <span className="flex min-w-0 flex-col items-center justify-center gap-0.5">
+                      <span className="text-base leading-none">{badge.emoji}</span>
+                      <span className="max-w-full truncate text-[9px] font-extrabold leading-none text-foreground/90">{badge.label}</span>
                     </span>
                   </button>
                 );
@@ -609,6 +609,15 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
   const [autoEditPlayerId, setAutoEditPlayerId] = useState<string | null>(null);
   const [flippedPlayerIds, setFlippedPlayerIds] = useState<Record<string, boolean>>({});
   const [search, setSearch] = useState("");
+  const [hideOverall, setHideOverall] = useState(() => {
+    try { return window.localStorage.getItem("fair-teams-hide-roster-ovr") === "true"; }
+    catch { return false; }
+  });
+
+  useEffect(() => {
+    try { window.localStorage.setItem("fair-teams-hide-roster-ovr", hideOverall ? "true" : "false"); }
+    catch {}
+  }, [hideOverall]);
 
   const updatePlayer = (playerId: string, data: Partial<RoomPlayer>) => {
     setPlayers(players.map(player => player.id === playerId ? normalizePlayer({ ...player, ...data, updatedAt: data.updatedAt || new Date().toISOString() }) : player));
@@ -711,11 +720,25 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
       </Card>
 
       <div className="space-y-3">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2">
           <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Roster</h3>
-          <span className="bg-primary/10 text-primary px-2 py-0.5 rounded-full text-xs font-bold">
-            {search ? `${filtered.length} / ${players.length}` : players.length}
-          </span>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setHideOverall(prev => !prev)}
+              className={`h-7 rounded-full px-2 text-[10px] font-black uppercase tracking-wide ${hideOverall ? "bg-muted text-muted-foreground" : "bg-primary/10 text-primary border-primary/20"}`}
+              title={hideOverall ? "Show roster OVR" : "Hide roster OVR"}
+              data-testid="button-toggle-roster-ovr"
+            >
+              {hideOverall ? <EyeOff className="mr-1 h-3 w-3" /> : <Eye className="mr-1 h-3 w-3" />}
+              OVR
+            </Button>
+            <span className="bg-primary/10 text-primary px-2 py-0.5 rounded-full text-xs font-bold">
+              {search ? `${filtered.length} / ${players.length}` : players.length}
+            </span>
+          </div>
         </div>
 
         {players.length > 0 && (
@@ -773,7 +796,7 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
                       <div className="font-black leading-tight text-base break-words">{displayName(player)}</div>
                       <PlayerTags player={player} includeVibe includeAbilityCount={!isFlipped} />
                     </div>
-                    <OverallBadge player={player} />
+                    {!hideOverall ? <OverallBadge player={player} /> : null}
                   </div>
 
                   {isFlipped ? <PlayerCardBack player={player} /> : null}

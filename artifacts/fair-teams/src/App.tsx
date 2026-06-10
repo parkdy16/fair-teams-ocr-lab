@@ -161,7 +161,7 @@ function App() {
         <h1 className="text-4xl font-black tracking-tight leading-none">
           <span className="text-[#102A43]">FAIR</span><span className="text-[#16A34A]"> TEAMS</span>
         </h1>
-        <p className="mt-3 text-sm font-semibold text-slate-500">Balanced teams. Better games.</p>
+        <p className="mt-3 text-sm font-semibold text-slate-500">Fair teams. Fun games.</p>
         <div className="mt-6 h-1 w-20 rounded-full bg-[#22C55E]" />
       </div>
     );
@@ -226,7 +226,7 @@ function App() {
                     </Button>
                   </>
                 )}
-                {activeTab !== "players" && <span className="text-[11px] font-extrabold text-slate-400 tracking-tight whitespace-nowrap">Better games.</span>}
+                {activeTab !== "players" && <span className="text-[11px] font-extrabold text-slate-400 tracking-tight whitespace-nowrap">Fair teams. Fun games.</span>}
                 <input
                   ref={fileInputRef}
                   type="file"

@@ -731,6 +731,10 @@ export function TodayTab({
   const [confirmNewPlayersOpen, setConfirmNewPlayersOpen] = useState(false);
   const [confirmAddAllOpen, setConfirmAddAllOpen] = useState(false);
   const [expectedAttendeeCount, setExpectedAttendeeCount] = useState("");
+  const [showRawOcrText, setShowRawOcrText] = useState(false);
+  const [selectedScreenshotPreviews, setSelectedScreenshotPreviews] = useState<
+    Array<{ name: string; url: string }>
+  >([]);
 
   const sorted = [...players].sort((a, b) => a.name.localeCompare(b.name));
   const filtered = search.trim()
@@ -742,6 +746,18 @@ export function TodayTab({
   const selectedCount = players.filter((p) => p.attending).length;
 
   const selectedScreenshotNames = selectedScreenshots.map((file) => file.name);
+
+  useEffect(() => {
+    const previews = selectedScreenshots.map((file) => ({
+      name: file.name,
+      url: URL.createObjectURL(file),
+    }));
+    setSelectedScreenshotPreviews(previews);
+
+    return () => {
+      previews.forEach((preview) => URL.revokeObjectURL(preview.url));
+    };
+  }, [selectedScreenshots]);
   const possibleNames = useMemo(
     () => (ocrText ? extractOcrNames(ocrText, players) : []),
     [ocrText, players],
@@ -806,7 +822,7 @@ export function TodayTab({
     : 0;
 
   const openOcrImport = () => {
-    // OCR import is a fresh attendance workflow, so start Today from empty
+    // Screenshot scan is a fresh attendance workflow, so start Today from empty
     // instead of accidentally keeping last week's selected players.
     setPlayers(players.map((player) => ({ ...player, attending: false })));
     setOcrOpen(true);
@@ -830,6 +846,7 @@ export function TodayTab({
     setSelectedOcrCandidateKeys([]);
     setChosenOcrMatchIds({});
     setExpectedAttendeeCount("");
+    setShowRawOcrText(false);
   };
 
   const runOcr = async () => {
@@ -838,7 +855,7 @@ export function TodayTab({
     setOcrRunning(true);
     setOcrText("");
     setOcrProgress(0);
-    setOcrStatus("Starting OCR…");
+    setOcrStatus("Starting scan…");
 
     const chunks: string[] = [];
 
@@ -872,10 +889,10 @@ export function TodayTab({
 
       setOcrText(chunks.join("\n\n"));
       setOcrProgress(100);
-      setOcrStatus("OCR complete. Raw text shown below.");
+      setOcrStatus("Scan complete. Review names below.");
     } catch (error) {
       console.error(error);
-      setOcrStatus("OCR failed. Try a clearer screenshot or fewer images.");
+      setOcrStatus("Scan failed. Try a clearer screenshot or fewer images.");
     } finally {
       setOcrRunning(false);
     }
@@ -1034,7 +1051,7 @@ export function TodayTab({
           data-testid="ocr-import-button"
         >
           <Camera className="mr-1.5 h-3.5 w-3.5" />
-          OCR Import
+          Scan Attendees
         </Button>
         <Button
           type="button"
@@ -1053,7 +1070,7 @@ export function TodayTab({
         <DialogContent className="flex h-[90dvh] max-h-[90dvh] w-[94vw] max-w-lg flex-col overflow-hidden rounded-2xl p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle className="text-base font-black">
-              OCR Import
+              Scan Attendees
             </DialogTitle>
             <DialogDescription className="text-xs">
               Import today's attendees from a Meetup, WhatsApp, Telegram, or
@@ -1067,7 +1084,7 @@ export function TodayTab({
               <div className="text-xs font-black text-foreground">
                 {selectedScreenshotNames.length > 0
                   ? `${selectedScreenshotNames.length} screenshot${selectedScreenshotNames.length === 1 ? "" : "s"} selected`
-                  : "Choose Screenshot(s)"}
+                  : "Upload Screenshot(s)"}
               </div>
               <div className="text-[10px] font-medium text-muted-foreground">
                 Select all screenshots for one attendee list. You can select
@@ -1084,16 +1101,23 @@ export function TodayTab({
                   setOcrProgress(0);
                   setOcrStatus("");
                   setSelectedOcrCandidateKeys([]);
+                  setChosenOcrMatchIds({});
+                  setShowRawOcrText(false);
                 }}
                 data-testid="ocr-file-input"
               />
             </label>
 
-            {selectedScreenshotNames.length > 0 && (
+            {selectedScreenshotPreviews.length > 0 && (
               <div className="rounded-xl border bg-card p-3">
                 <div className="mb-2 flex items-center justify-between gap-2">
-                  <div className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
-                    Selected Screenshots
+                  <div>
+                    <div className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
+                      Uploaded screenshots
+                    </div>
+                    <div className="text-[10px] font-medium text-muted-foreground">
+                      Check these before scanning.
+                    </div>
                   </div>
                   <Button
                     type="button"
@@ -1105,13 +1129,20 @@ export function TodayTab({
                     Clear
                   </Button>
                 </div>
-                <div className="max-h-28 space-y-1 overflow-y-auto pr-1">
-                  {selectedScreenshotNames.map((name, index) => (
+                <div className="grid grid-cols-3 gap-2">
+                  {selectedScreenshotPreviews.map((preview, index) => (
                     <div
-                      key={`${name}-${index}`}
-                      className="truncate rounded-lg bg-muted/50 px-2.5 py-1.5 text-[11px] font-medium text-foreground"
+                      key={`${preview.name}-${index}`}
+                      className="overflow-hidden rounded-lg border bg-muted/40"
                     >
-                      {index + 1}. {name}
+                      <img
+                        src={preview.url}
+                        alt={`Screenshot ${index + 1}`}
+                        className="h-24 w-full object-cover object-top"
+                      />
+                      <div className="truncate px-1.5 py-1 text-[9px] font-bold text-muted-foreground">
+                        {index + 1}. {preview.name}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -1139,7 +1170,7 @@ export function TodayTab({
                   className="h-9 rounded-xl text-sm font-bold"
                 />
                 <div className="mt-1.5 text-[10px] font-medium text-muted-foreground">
-                  Used only for the scan audit, so you can see if OCR missed
+                  Used only for the scan audit, so you can see if the scan missed
                   anyone.
                 </div>
               </div>
@@ -1152,7 +1183,7 @@ export function TodayTab({
                 disabled={ocrRunning}
                 className="h-9 w-full rounded-xl text-xs font-black"
               >
-                {ocrRunning ? "Reading screenshots…" : "Run OCR"}
+                {ocrRunning ? "Scanning screenshots…" : "Scan Attendees"}
               </Button>
             )}
 
@@ -1160,7 +1191,7 @@ export function TodayTab({
               <div className="rounded-xl border bg-card p-3">
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <div className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
-                    OCR Status
+                    Scan Status
                   </div>
                   <div className="text-[10px] font-black text-muted-foreground">
                     {ocrProgress}%
@@ -1238,7 +1269,7 @@ export function TodayTab({
 
                 {hasExpectedAttendeeNumber && missingFromScan > 0 && (
                   <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2 text-[11px] font-bold text-amber-800">
-                    OCR scanned {scannedNameCount} name
+                    Scan found {scannedNameCount} name
                     {scannedNameCount === 1 ? "" : "s"}, but you expected {" "}
                     {Math.round(expectedAttendeeNumber)}. Check the screenshot
                     or add {missingFromScan} missing player
@@ -1266,10 +1297,11 @@ export function TodayTab({
               </div>
             )}
 
-            <div className="rounded-xl border bg-card p-3">
+            {ocrText && (
+              <div className="rounded-xl border bg-card p-3">
               <div className="mb-2 flex items-center justify-between gap-2">
                 <div className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
-                  Possible Names
+                  Review Names
                 </div>
                 {possibleNames.length > 0 && (
                   <div className="text-[10px] font-black text-muted-foreground">
@@ -1377,26 +1409,40 @@ export function TodayTab({
                 </div>
               ) : (
                 <div className="rounded-lg bg-muted/50 p-3 text-center text-xs font-medium text-muted-foreground">
-                  Run OCR to show filtered possible names here.
+                  Scan Attendees to show filtered possible names here.
                 </div>
               )}
-            </div>
-
-            <div className="rounded-xl border bg-card p-3">
-              <div className="mb-2 text-[10px] font-black uppercase tracking-wider text-muted-foreground">
-                Raw OCR Text
               </div>
-              {ocrText ? (
-                <pre className="max-h-48 whitespace-pre-wrap overflow-y-auto rounded-lg bg-muted/50 p-3 text-[11px] leading-relaxed text-foreground">
-                  {ocrText}
-                </pre>
-              ) : (
-                <div className="rounded-lg bg-muted/50 p-3 text-center text-xs font-medium text-muted-foreground">
-                  Run OCR to show raw detected text here. Name filtering comes
-                  next.
+            )}
+
+            {ocrText && (
+              <div className="rounded-xl border bg-card p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <div className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
+                      Advanced
+                    </div>
+                    <div className="text-[10px] font-medium text-muted-foreground">
+                      Raw scan text is mainly for troubleshooting.
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowRawOcrText((value) => !value)}
+                    className="h-7 px-2 text-[10px] font-black"
+                  >
+                    {showRawOcrText ? "Hide raw text" : "Show raw text"}
+                  </Button>
                 </div>
-              )}
-            </div>
+                {showRawOcrText && (
+                  <pre className="mt-2 max-h-48 whitespace-pre-wrap overflow-y-auto rounded-lg bg-muted/50 p-3 text-[11px] leading-relaxed text-foreground">
+                    {ocrText}
+                  </pre>
+                )}
+              </div>
+            )}
           </div>
 
           <DialogFooter className="shrink-0 gap-2 border-t pt-3 sm:gap-2">
@@ -1439,7 +1485,7 @@ export function TodayTab({
               Create New Players?
             </DialogTitle>
             <DialogDescription className="text-xs">
-              These OCR names are not in your roster yet. Create them with
+              These scan names are not in your roster yet. Create them with
               default ratings and add them to Today?
             </DialogDescription>
           </DialogHeader>
@@ -1481,10 +1527,10 @@ export function TodayTab({
         <DialogContent className="w-[92vw] max-w-md rounded-2xl p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle className="text-base font-black">
-              Add All OCR Results?
+              Add All Scan Results?
             </DialogTitle>
             <DialogDescription className="text-xs">
-              This will add every detected OCR result, including unchecked CHECK
+              This will add every detected scan result, including unchecked CHECK
               suggestions and NEW players.
             </DialogDescription>
           </DialogHeader>
@@ -1556,7 +1602,7 @@ export function TodayTab({
               Voice Import
             </DialogTitle>
             <DialogDescription className="text-xs">
-              Voice roll call will come later. OCR screenshot import comes
+              Voice roll call will come later. Screenshot scan comes
               first.
             </DialogDescription>
           </DialogHeader>

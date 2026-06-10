@@ -74,6 +74,7 @@ function App() {
   const [isEditingGroupName, setIsEditingGroupName] = useState(false);
   const [draftGroupName, setDraftGroupName] = useState(groupName);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [rosterFilesOpen, setRosterFilesOpen] = useState(false);
   const [clearRosterOpen, setClearRosterOpen] = useState(false);
   const [clearRosterSlide, setClearRosterSlide] = useState(0);
 
@@ -122,14 +123,21 @@ function App() {
   };
 
   const exportCsv = () => {
+    setRosterFilesOpen(false);
     downloadText("fair-teams-roster.csv", playersToCsv(players), "text/csv;charset=utf-8");
   };
 
 
 
   const openClearRoster = () => {
+    setRosterFilesOpen(false);
     setClearRosterSlide(0);
     setClearRosterOpen(true);
+  };
+
+  const openImportPicker = () => {
+    setRosterFilesOpen(false);
+    window.setTimeout(() => fileInputRef.current?.click(), 0);
   };
 
   const closeClearRoster = () => {
@@ -230,21 +238,14 @@ function App() {
                         aria-label="Pick group color"
                       />
                     </label>
-                    <Button variant="secondary" size="icon" className="h-7 w-7 rounded-lg bg-slate-100 border border-slate-200" onClick={exportCsv} title="Export Roster" disabled={players.length === 0}>
-                      <Download className="w-3.5 h-3.5" />
-                    </Button>
                     <Button
                       type="button"
                       variant="secondary"
                       size="icon"
-                      className="h-7 w-7 rounded-lg bg-red-50 border border-red-100 text-red-600 hover:bg-red-100 hover:text-red-700"
-                      onClick={openClearRoster}
-                      title="Clear roster"
-                      disabled={players.length === 0}
+                      className="h-7 w-7 rounded-lg bg-slate-100 border border-slate-200"
+                      onClick={() => setRosterFilesOpen(true)}
+                      title="Roster files"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </Button>
-                    <Button variant="secondary" size="icon" className="h-7 w-7 rounded-lg bg-slate-100 border border-slate-200" onClick={() => fileInputRef.current?.click()} title="Import Roster">
                       <Upload className="w-3.5 h-3.5" />
                     </Button>
                   </>
@@ -299,6 +300,46 @@ function App() {
           <PoweredByFairTeams />
         </div>
       </Tabs>
+
+
+      {rosterFilesOpen && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/45 p-4 sm:items-center" role="dialog" aria-modal="true">
+          <div className="w-full max-w-sm rounded-3xl border border-slate-200 bg-white p-4 shadow-2xl">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-base font-black tracking-tight text-[#102A43]">Roster files</h2>
+                <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
+                  Import, export, or clear the roster on this device.
+                </p>
+              </div>
+              <Button type="button" variant="ghost" size="icon" className="h-8 w-8 rounded-xl" onClick={() => setRosterFilesOpen(false)} title="Close">
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+
+            <div className="mt-4 grid gap-2">
+              <Button type="button" variant="outline" className="h-12 justify-start rounded-2xl gap-3" onClick={openImportPicker}>
+                <Upload className="h-4 w-4" />
+                <span className="font-black">Import roster</span>
+              </Button>
+              <Button type="button" variant="outline" className="h-12 justify-start rounded-2xl gap-3" onClick={exportCsv} disabled={players.length === 0}>
+                <Download className="h-4 w-4" />
+                <span className="font-black">Export CSV</span>
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-12 justify-start rounded-2xl gap-3 border-red-100 bg-red-50/70 text-red-700 hover:bg-red-100 hover:text-red-800"
+                onClick={openClearRoster}
+                disabled={players.length === 0}
+              >
+                <Trash2 className="h-4 w-4" />
+                <span className="font-black">Clear roster</span>
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {clearRosterOpen && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/45 p-4 sm:items-center" role="dialog" aria-modal="true">

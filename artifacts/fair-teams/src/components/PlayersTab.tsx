@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { UserMinus, Plus, Star, Zap, Search, X, Camera, Image as ImageIcon, Trash2, Pencil, Shield, Activity, Dumbbell, Target, Share2, Eye, EyeOff } from "lucide-react";
+import { UserMinus, Plus, Star, Zap, Search, X, Camera, Image as ImageIcon, Trash2, Pencil, Shield, Activity, Dumbbell, Target, Share2, Eye, EyeOff, ArrowDownAZ, Clock3 } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart, ResponsiveContainer } from "recharts";
 
@@ -658,11 +658,20 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
     try { return window.localStorage.getItem("fair-teams-hide-roster-ovr") === "true"; }
     catch { return false; }
   });
+  const [sortMode, setSortMode] = useState<"recent" | "alpha">(() => {
+    try { return window.localStorage.getItem("fair-teams-roster-sort") === "alpha" ? "alpha" : "recent"; }
+    catch { return "recent"; }
+  });
 
   useEffect(() => {
     try { window.localStorage.setItem("fair-teams-hide-roster-ovr", hideOverall ? "true" : "false"); }
     catch {}
   }, [hideOverall]);
+
+  useEffect(() => {
+    try { window.localStorage.setItem("fair-teams-roster-sort", sortMode); }
+    catch {}
+  }, [sortMode]);
 
   const updatePlayer = (playerId: string, data: Partial<RoomPlayer>) => {
     setPlayers(players.map(player => player.id === playerId ? normalizePlayer({ ...player, ...data, updatedAt: data.updatedAt || new Date().toISOString() }) : player));
@@ -702,9 +711,20 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
     setAddPlayerOpen(false);
   };
 
+  const sortedPlayers = [...players].sort((a, b) => {
+    if (sortMode === "alpha") {
+      return displayName(a).localeCompare(displayName(b));
+    }
+
+    const aTime = new Date(a.updatedAt || a.createdAt || 0).getTime() || 0;
+    const bTime = new Date(b.updatedAt || b.createdAt || 0).getTime() || 0;
+    if (bTime !== aTime) return bTime - aTime;
+    return displayName(a).localeCompare(displayName(b));
+  });
+
   const filtered = search.trim()
-    ? players.filter(p => displayName(p).toLowerCase().includes(search.toLowerCase()))
-    : players;
+    ? sortedPlayers.filter(p => displayName(p).toLowerCase().includes(search.toLowerCase()))
+    : sortedPlayers;
 
   return (
     <div className="flex flex-col gap-4">
@@ -915,6 +935,18 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
         </Dialog>
 
         <div className="flex items-center gap-1.5 shrink-0">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setSortMode(prev => prev === "recent" ? "alpha" : "recent")}
+            className="h-8 rounded-xl px-2.5 text-[10px] font-black uppercase tracking-wide shadow-none border-primary/20 bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary"
+            title={sortMode === "recent" ? "Roster sorted by last edited / added. Tap for A-Z." : "Roster sorted A-Z. Tap for last edited / added."}
+            data-testid="button-toggle-roster-sort"
+          >
+            {sortMode === "recent" ? <Clock3 className="mr-1 h-3 w-3" /> : <ArrowDownAZ className="mr-1 h-3 w-3" />}
+            {sortMode === "recent" ? "Recent" : "A-Z"}
+          </Button>
           <Button
             type="button"
             variant="outline"

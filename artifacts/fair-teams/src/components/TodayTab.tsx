@@ -732,11 +732,17 @@ export function TodayTab({
   const [confirmAddAllOpen, setConfirmAddAllOpen] = useState(false);
   const [expectedAttendeeCount, setExpectedAttendeeCount] = useState("");
   const [showRawOcrText, setShowRawOcrText] = useState(false);
+  const [prioritizeScannedPlayers, setPrioritizeScannedPlayers] = useState(false);
   const [selectedScreenshotPreviews, setSelectedScreenshotPreviews] = useState<
     Array<{ name: string; url: string }>
   >([]);
 
-  const sorted = [...players].sort((a, b) => a.name.localeCompare(b.name));
+  const sorted = [...players].sort((a, b) => {
+    if (prioritizeScannedPlayers && Boolean(a.attending) !== Boolean(b.attending)) {
+      return a.attending ? -1 : 1;
+    }
+    return displayName(a).localeCompare(displayName(b));
+  });
   const filtered = search.trim()
     ? sorted.filter((p) =>
         displayName(p).toLowerCase().includes(search.toLowerCase()),
@@ -824,6 +830,7 @@ export function TodayTab({
   const openOcrImport = () => {
     // Screenshot scan is a fresh attendance workflow, so start Today from empty
     // instead of accidentally keeping last week's selected players.
+    setPrioritizeScannedPlayers(false);
     setPlayers(players.map((player) => ({ ...player, attending: false })));
     setOcrOpen(true);
   };
@@ -954,6 +961,7 @@ export function TodayTab({
       ...newPlayers,
     ].sort((a, b) => displayName(a).localeCompare(displayName(b)));
 
+    setPrioritizeScannedPlayers(true);
     setPlayers(nextPlayers);
     setOcrStatus(
       `Added ${playerIds.size} existing player${playerIds.size === 1 ? "" : "s"} and created ${newPlayers.length} new player${newPlayers.length === 1 ? "" : "s"}.`,
@@ -1021,9 +1029,10 @@ export function TodayTab({
           <Button
             variant="secondary"
             size="sm"
-            onClick={() =>
-              setPlayers(players.map((p) => ({ ...p, attending: true })))
-            }
+            onClick={() => {
+              setPrioritizeScannedPlayers(false);
+              setPlayers(players.map((p) => ({ ...p, attending: true })));
+            }}
             className="h-7 text-[10px] font-bold uppercase px-2"
           >
             All
@@ -1031,9 +1040,10 @@ export function TodayTab({
           <Button
             variant="secondary"
             size="sm"
-            onClick={() =>
-              setPlayers(players.map((p) => ({ ...p, attending: false })))
-            }
+            onClick={() => {
+              setPrioritizeScannedPlayers(false);
+              setPlayers(players.map((p) => ({ ...p, attending: false })));
+            }}
             className="h-7 text-[10px] font-bold uppercase px-2 opacity-80 hover:opacity-100 bg-slate-900/10 hover:bg-slate-900/20 text-white border-transparent"
           >
             Clear

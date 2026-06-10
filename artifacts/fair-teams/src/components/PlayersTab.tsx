@@ -289,7 +289,7 @@ function getSpecialAbilityCount(player: RoomPlayer) {
 function PlayerTags({ player, includeVibe = false, includeAbilityCount = false }: { player: RoomPlayer; includeVibe?: boolean; includeAbilityCount?: boolean }) {
   const abilityCount = includeAbilityCount ? getSpecialAbilityCount(player) : 0;
   return (
-    <div className="mt-0.5 flex flex-wrap gap-x-1 gap-y-0.5 min-h-4 items-center">
+    <div className="mt-0.5 flex flex-wrap gap-x-1 gap-y-0.5 min-h-3 items-center">
       {includeVibe && player.funBadge ? <FunBadgePill value={player.funBadge} /> : null}
       <SpecialAbilityCountBadge count={abilityCount} />
       {player.isNew && <NewBadge />}
@@ -597,9 +597,9 @@ function ProfileDialog({
 
 function OverallBadge({ player }: { player: RoomPlayer }) {
   return (
-    <div className="w-12 h-10 rounded-xl bg-primary/10 text-primary border border-primary/15 flex flex-col items-center justify-center shrink-0 shadow-sm">
-      <span className="text-[7px] font-bold uppercase opacity-70 leading-none">OVR</span>
-      <span className="text-lg font-black leading-none">{player.skill}</span>
+    <div className="w-10 h-9 rounded-xl bg-primary/10 text-primary border border-primary/15 flex flex-col items-center justify-center shrink-0 shadow-sm">
+      <span className="text-[6px] font-bold uppercase opacity-70 leading-none">OVR</span>
+      <span className="text-base font-black leading-none">{player.skill}</span>
     </div>
   );
 }
@@ -831,7 +831,7 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
 
                   <div className="rounded-2xl border border-border/70 bg-background/75 p-2.5">
                     <div className="mb-2 text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Photo</div>
-                    <div className="flex items-center gap-2.5">
+                    <div className="flex items-center gap-2">
                       <button
                         type="button"
                         onClick={() => addPhotoGalleryInput.current?.click()}
@@ -1012,13 +1012,13 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
                       setFlippedPlayerIds(prev => ({ ...prev, [player.id]: !prev[player.id] }));
                     }
                   }}
-                  className="p-2.5 bg-card border border-border rounded-xl shadow-sm active:scale-[0.99] transition-transform cursor-pointer"
+                  className="p-2 bg-card border border-border rounded-xl shadow-sm active:scale-[0.99] transition-transform cursor-pointer"
                   data-testid={`player-row-${player.id}`}
                 >
-                  <div className="flex items-center gap-2.5">
+                  <div className="flex items-center gap-2">
                     <PlayerAvatar player={player} size="sm" />
                     <div className="min-w-0 flex-1">
-                      <div className="font-black leading-tight text-[15px] break-words">{displayName(player)}</div>
+                      <div className="font-black leading-tight text-[14px] break-words">{displayName(player)}</div>
                       <PlayerTags player={player} includeVibe includeAbilityCount={!isFlipped} />
                     </div>
                     {!hideOverall ? <OverallBadge player={player} /> : null}
@@ -1026,16 +1026,16 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
 
                   {isFlipped ? <PlayerCardBack player={player} /> : null}
 
-                  <div className="mt-2 flex items-center justify-between gap-2 border-t border-border/60 pt-1.5">
-                    <div className="text-[10px] text-muted-foreground font-bold tracking-wide">
+                  <div className="mt-1.5 flex items-center justify-between gap-2 border-t border-border/60 pt-1">
+                    <div className="text-[9px] text-muted-foreground font-bold tracking-wide">
                       {isFlipped ? "Tap card to hide details" : "Tap card for stats"}
                     </div>
                     <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
                       <ProfileDialog player={player} onUpdate={(data) => updatePlayer(player.id, data)} autoOpen={autoEditPlayerId === player.id} onAutoOpenHandled={() => setAutoEditPlayerId(null)} />
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
-                          <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive w-7 h-7 rounded-full" data-testid={`button-remove-${player.id}`}>
-                            <UserMinus className="w-3.5 h-3.5" />
+                          <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive w-6 h-6 rounded-full" data-testid={`button-remove-${player.id}`}>
+                            <UserMinus className="w-3 h-3" />
                           </Button>
                         </AlertDialogTrigger>
                         <AlertDialogContent className="max-w-xs rounded-xl">

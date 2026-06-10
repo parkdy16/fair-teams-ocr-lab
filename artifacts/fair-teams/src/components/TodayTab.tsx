@@ -42,7 +42,6 @@ function ORGBadge() {
   );
 }
 
-
 type OcrMatchStatus = "match" | "suggest" | "new";
 
 type OcrNameCandidate = {
@@ -148,23 +147,154 @@ function cleanOcrLine(value: string) {
     .trim();
 }
 
-function cleanMeetupNamePrefix(value: string) {
-  const words = cleanOcrLine(value).split(/\s+/).filter(Boolean);
-  if (words.length >= 2) {
-    const last = words[words.length - 1];
-    const lettersOnly = stripDiacritics(last).toLowerCase().replace(/[^a-z]/g, "");
-    const looksLikeAvatarNoise =
-      lettersOnly.length <= 2 && new Set(lettersOnly.split("")).size <= 1;
+const MEETUP_MARKER_PATTERN = /\b(?:member|event host)\b/i;
+const MEETUP_SPLIT_PATTERN = /\b(?:member|event host)\b/gi;
 
-    if (looksLikeAvatarNoise) words.pop();
-  }
-  return words.join(" ").trim();
+const MEETUP_STOP_WORDS = new Set([
+  "checked",
+  "check",
+  "in",
+  "not",
+  "attendee",
+  "attendees",
+  "list",
+  "scan",
+  "search",
+  "event",
+  "question",
+  "detailed",
+  "yes",
+  "no",
+  "maybe",
+  "ok",
+  "okay",
+  "understood",
+  "of",
+  "course",
+  "i",
+  "im",
+  "i'm",
+  "m",
+  "both",
+  "think",
+  "got",
+  "well",
+  "into",
+  "categories",
+  "good",
+  "vibes",
+  "guaranteed",
+  "goals",
+  "so",
+  "much",
+  "you",
+  "know",
+  "me",
+  "the",
+  "to",
+  "at",
+  "and",
+  "or",
+]);
+
+const MEETUP_NOISE_WORDS = new Set([
+  "ee",
+  "oe",
+  "eee",
+  "oes",
+  "coe",
+  "ooo",
+  "na",
+  "hh",
+  "cr",
+  "el",
+  "jh",
+  "yg",
+  "xt",
+  "ed",
+  "fo",
+  "ja",
+  "tz",
+  "ember",
+]);
+
+function tokenKey(value: string) {
+  return normalizeForMatch(value).replace(/\s+/g, "");
 }
 
-function extractMeetupNameFromMemberLine(value: string) {
-  const beforeRole = value.split(/\b(?:event\s+host|member|host)\b/i)[0] ?? "";
-  const possibleName = cleanMeetupNamePrefix(beforeRole);
-  return isProbablyName(possibleName) ? possibleName : "";
+function isMeetupNoiseToken(value: string) {
+  const key = tokenKey(value);
+  return !key || MEETUP_NOISE_WORDS.has(key) || /^[a-z]$/i.test(key);
+}
+
+function isProbablySingleUsername(value: string) {
+  const clean = cleanOcrLine(value);
+  return /^[A-Za-z][A-Za-z._'-]{2,24}$/.test(clean) && !clean.includes(" ");
+}
+
+function extractMeetupNameBeforeMarker(chunk: string) {
+  const cleaned = cleanOcrLine(chunk);
+  if (!cleaned) return null;
+
+  let tokens = cleaned.split(/\s+/).filter(Boolean);
+  if (!tokens.length) return null;
+
+  while (tokens.length && isMeetupNoiseToken(tokens[tokens.length - 1])) {
+    tokens = tokens.slice(0, -1);
+  }
+  if (!tokens.length) return null;
+
+  let startAfter = -1;
+  tokens.forEach((token, index) => {
+    const key = tokenKey(token);
+    if (MEETUP_STOP_WORDS.has(key) || MEETUP_NOISE_WORDS.has(key)) {
+      startAfter = index;
+    }
+  });
+
+  tokens = tokens.slice(startAfter + 1);
+  while (tokens.length && isMeetupNoiseToken(tokens[0])) {
+    tokens = tokens.slice(1);
+  }
+  while (tokens.length && isMeetupNoiseToken(tokens[tokens.length - 1])) {
+    tokens = tokens.slice(0, -1);
+  }
+  if (!tokens.length) return null;
+
+  const maxWords = Math.min(4, tokens.length);
+  for (let length = maxWords; length >= 1; length -= 1) {
+    const candidate = tokens.slice(tokens.length - length).join(" ");
+    const normalizedWords = normalizeForMatch(candidate)
+      .split(" ")
+      .filter(Boolean);
+    if (normalizedWords.some((word) => MEETUP_STOP_WORDS.has(word))) continue;
+    if (isProbablyName(candidate) || isProbablySingleUsername(candidate)) {
+      return cleanOcrLine(candidate);
+    }
+  }
+
+  return null;
+}
+
+function extractInlineMeetupNames(text: string) {
+  const oneLineText = text
+    .replace(/---.*?\.(jpg|jpeg|png).*?---/gi, " ")
+    .replace(/\r?\n/g, " ");
+  const cleaned = cleanOcrLine(oneLineText);
+  if (!MEETUP_MARKER_PATTERN.test(cleaned)) return [];
+
+  const parts = cleaned.split(MEETUP_SPLIT_PATTERN);
+  const names: string[] = [];
+
+  // Every part except the final tail is the text immediately before a
+  // Meetup marker. In collapsed OCR, this is where names like
+  // "I'm both Alex Member" or "... not checked in Ayeshni Hh Member" live.
+  for (let index = 0; index < parts.length - 1; index += 1) {
+    const name = extractMeetupNameBeforeMarker(parts[index]);
+    if (name) names.push(name);
+  }
+
+  return names;
 }
 
 function hasRosterSignal(value: string, roster: RoomPlayer[]) {
@@ -287,24 +417,18 @@ function extractOcrNames(
   const lines = text.split(/\r?\n/).map(cleanOcrLine).filter(Boolean);
   const names: string[] = [];
 
+  names.push(...extractInlineMeetupNames(text));
+
   for (let index = 0; index < lines.length; index += 1) {
     const current = normalizeForMatch(lines[index]);
     if (
       current === "member" ||
       current === "event host" ||
-      current.includes("member") ||
-      current.includes("event host")
+      current.includes("member")
     ) {
-      const sameLineName = extractMeetupNameFromMemberLine(lines[index]);
-      if (sameLineName) {
-        names.push(sameLineName);
-        continue;
-      }
-
       for (let back = index - 1; back >= Math.max(0, index - 3); back -= 1) {
-        const previousLineName = cleanMeetupNamePrefix(lines[back]);
-        if (isProbablyName(previousLineName)) {
-          names.push(previousLineName);
+        if (isProbablyName(lines[back])) {
+          names.push(cleanOcrLine(lines[back]));
           break;
         }
       }
@@ -447,7 +571,6 @@ export function TodayTab({
   const [ocrRunning, setOcrRunning] = useState(false);
   const [ocrProgress, setOcrProgress] = useState(0);
   const [ocrStatus, setOcrStatus] = useState("");
-  const [expectedAttendeeCount, setExpectedAttendeeCount] = useState("");
   const [confirmNewPlayersOpen, setConfirmNewPlayersOpen] = useState(false);
   const [confirmAddAllOpen, setConfirmAddAllOpen] = useState(false);
 
@@ -487,22 +610,15 @@ export function TodayTab({
   const selectedNewCandidates = selectedOcrCandidates.filter(
     (candidate) => candidate.status === "new" && !candidate.bestMatch,
   );
-  const selectedOcrTotal = selectedRosterMatches.length + selectedNewCandidates.length;
-  const allRosterCandidates = possibleNames.filter((candidate) => candidate.bestMatch);
+  const selectedOcrTotal =
+    selectedRosterMatches.length + selectedNewCandidates.length;
+  const allRosterCandidates = possibleNames.filter(
+    (candidate) => candidate.bestMatch,
+  );
   const allNewCandidates = possibleNames.filter(
     (candidate) => candidate.status === "new" && !candidate.bestMatch,
   );
   const allOcrTotal = allRosterCandidates.length + allNewCandidates.length;
-  const expectedAttendeeTotal = Number.parseInt(expectedAttendeeCount, 10);
-  const hasExpectedAttendeeTotal =
-    Number.isFinite(expectedAttendeeTotal) && expectedAttendeeTotal > 0;
-  const detectedAttendeeTotal = possibleNames.length;
-  const missingAttendeeTotal = hasExpectedAttendeeTotal
-    ? Math.max(expectedAttendeeTotal - detectedAttendeeTotal, 0)
-    : 0;
-  const extraAttendeeTotal = hasExpectedAttendeeTotal
-    ? Math.max(detectedAttendeeTotal - expectedAttendeeTotal, 0)
-    : 0;
   const allCheckCandidates = possibleNames.filter(
     (candidate) => candidate.status === "suggest",
   );
@@ -758,25 +874,6 @@ export function TodayTab({
           </DialogHeader>
 
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain pr-1 pb-2">
-            <div className="rounded-xl border bg-card p-3">
-              <label className="mb-1 block text-[10px] font-black uppercase tracking-wider text-muted-foreground">
-                Expected attendees today optional
-              </label>
-              <Input
-                type="number"
-                inputMode="numeric"
-                min="1"
-                placeholder="Example: 21"
-                value={expectedAttendeeCount}
-                onChange={(event) => setExpectedAttendeeCount(event.target.value)}
-                className="h-9 text-xs font-bold"
-                data-testid="expected-attendee-count"
-              />
-              <div className="mt-1.5 text-[10px] font-medium text-muted-foreground">
-                Used only to show how many names may be missing after OCR.
-              </div>
-            </div>
-
             <label className="flex min-h-28 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-muted/40 p-4 text-center transition-colors hover:bg-muted/70">
               <Upload className="h-6 w-6 text-muted-foreground" />
               <div className="text-xs font-black text-foreground">
@@ -863,37 +960,6 @@ export function TodayTab({
                 <div className="mt-2 text-[11px] font-medium text-muted-foreground">
                   {ocrStatus}
                 </div>
-              </div>
-            )}
-
-            {hasExpectedAttendeeTotal && ocrText && (
-              <div className="rounded-xl border bg-card p-3">
-                <div className="mb-2 text-[10px] font-black uppercase tracking-wider text-muted-foreground">
-                  Scan Count Check
-                </div>
-                <div className="grid grid-cols-3 gap-2 text-center text-[11px] font-black">
-                  <div className="rounded-lg bg-muted/50 p-2">
-                    <div className="text-[10px] text-muted-foreground">Expected</div>
-                    <div className="text-base">{expectedAttendeeTotal}</div>
-                  </div>
-                  <div className="rounded-lg bg-muted/50 p-2">
-                    <div className="text-[10px] text-muted-foreground">Scanned</div>
-                    <div className="text-base">{detectedAttendeeTotal}</div>
-                  </div>
-                  <div className={`rounded-lg p-2 ${missingAttendeeTotal > 0 ? "bg-amber-50 text-amber-800" : "bg-emerald-50 text-emerald-800"}`}>
-                    <div className="text-[10px] opacity-75">
-                      {extraAttendeeTotal > 0 ? "Extra" : "Missing"}
-                    </div>
-                    <div className="text-base">
-                      {extraAttendeeTotal > 0 ? extraAttendeeTotal : missingAttendeeTotal}
-                    </div>
-                  </div>
-                </div>
-                {missingAttendeeTotal > 0 && (
-                  <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2 text-[11px] font-medium text-amber-800">
-                    {missingAttendeeTotal} attendee{missingAttendeeTotal === 1 ? "" : "s"} may be missing from the scan or not visible in the screenshots.
-                  </div>
-                )}
               </div>
             )}
 
@@ -1047,14 +1113,18 @@ export function TodayTab({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={confirmNewPlayersOpen} onOpenChange={setConfirmNewPlayersOpen}>
+      <Dialog
+        open={confirmNewPlayersOpen}
+        onOpenChange={setConfirmNewPlayersOpen}
+      >
         <DialogContent className="w-[92vw] max-w-md rounded-2xl p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle className="text-base font-black">
               Create New Players?
             </DialogTitle>
             <DialogDescription className="text-xs">
-              These OCR names are not in your roster yet. Create them with default ratings and add them to Today?
+              These OCR names are not in your roster yet. Create them with
+              default ratings and add them to Today?
             </DialogDescription>
           </DialogHeader>
           <div className="max-h-56 space-y-1 overflow-y-auto rounded-xl border bg-muted/40 p-3">
@@ -1068,7 +1138,8 @@ export function TodayTab({
             ))}
           </div>
           <div className="rounded-xl bg-sky-50 p-3 text-[11px] font-medium text-sky-800 border border-sky-100">
-            New players will start with OVR 5, TP 2, and the NEW badge. You can edit them later in the Roster tab.
+            New players will start with OVR 5, TP 2, and the NEW badge. You can
+            edit them later in the Roster tab.
           </div>
           <DialogFooter className="gap-2 sm:gap-2">
             <Button
@@ -1097,26 +1168,11 @@ export function TodayTab({
               Add All OCR Results?
             </DialogTitle>
             <DialogDescription className="text-xs">
-              This will add every detected OCR result, including unchecked CHECK suggestions and NEW players.
+              This will add every detected OCR result, including unchecked CHECK
+              suggestions and NEW players.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2 rounded-xl border bg-muted/40 p-3 text-xs">
-            {hasExpectedAttendeeTotal && (
-              <>
-                <div className="flex justify-between gap-3 font-bold">
-                  <span>Expected attendees</span>
-                  <span>{expectedAttendeeTotal}</span>
-                </div>
-                <div className="flex justify-between gap-3 font-bold">
-                  <span>Scanned names</span>
-                  <span>{detectedAttendeeTotal}</span>
-                </div>
-                <div className={`flex justify-between gap-3 font-bold ${missingAttendeeTotal > 0 ? "text-amber-700" : "text-emerald-700"}`}>
-                  <span>{extraAttendeeTotal > 0 ? "Extra scanned" : "Missing from scan"}</span>
-                  <span>{extraAttendeeTotal > 0 ? extraAttendeeTotal : missingAttendeeTotal}</span>
-                </div>
-              </>
-            )}
             <div className="flex justify-between gap-3 font-bold">
               <span>Safe matches</span>
               <span>{safeMatches}</span>
@@ -1132,7 +1188,8 @@ export function TodayTab({
           </div>
           {(allCheckCandidates.length > 0 || allNewCandidates.length > 0) && (
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[11px] font-medium text-amber-800">
-              Review carefully: CHECK names use the suggested roster match, and NEW names will be created with default ratings.
+              Review carefully: CHECK names use the suggested roster match, and
+              NEW names will be created with default ratings.
             </div>
           )}
           {allNewCandidates.length > 0 && (

@@ -638,7 +638,7 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
                       return (
                         <button
                           key={player.id}
-                          className="w-full flex items-center gap-1.5 px-2.5 py-1.5 text-left transition-colors"
+                          className="relative w-full flex items-center gap-1.5 px-2.5 py-1.5 text-left transition-colors"
                           style={{
                             backgroundColor: isSelected ? `${col.hex}20` : undefined,
                             borderLeft: isSelected ? `3px solid ${col.hex}` : "3px solid transparent",
@@ -646,9 +646,11 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
                           onClick={() => handleSelectPlayer(player.id, team.id)}
                           data-testid={`player-row-${player.id}-team-${team.id}`}
                         >
-                          <ArrowLeftRight className="w-2.5 h-2.5 shrink-0" style={{ color: isSelected ? col.hex : "transparent" }} />
-                          <div className="min-w-0 flex-1">
-                            <div className="font-bold text-xs truncate">{displayName(player)}</div>
+                          {isSelected && (
+                            <ArrowLeftRight className="absolute left-1 top-1/2 w-2.5 h-2.5 -translate-y-1/2" style={{ color: col.hex }} />
+                          )}
+                          <div className={`min-w-0 flex-1 ${isSelected ? "pl-3" : ""}`}>
+                            <div className="font-bold text-xs truncate text-left">{displayName(player)}</div>
                             {(player.isNew || player.isGoalkeeper || player.isOrganizer) && (
                               <div className="mt-0.5 flex flex-wrap gap-1">
                                 {player.isNew && <NewBadge />}

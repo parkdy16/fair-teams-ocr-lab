@@ -271,35 +271,7 @@ export function playersToCsv(players: RoomPlayer[]) {
   return [headers, ...rows].map(row => row.map(escapeCsv).join(",")).join("\n");
 }
 
-function detectRosterDelimiter(sampleLine: string) {
-  const candidates = [",", "\t", ";"];
-  let best = ",";
-  let bestCount = -1;
-
-  for (const candidate of candidates) {
-    let count = 0;
-    let inQuotes = false;
-    for (let i = 0; i < sampleLine.length; i++) {
-      const char = sampleLine[i];
-      const next = sampleLine[i + 1];
-      if (char === '"' && inQuotes && next === '"') {
-        i++;
-      } else if (char === '"') {
-        inQuotes = !inQuotes;
-      } else if (char === candidate && !inQuotes) {
-        count++;
-      }
-    }
-    if (count > bestCount) {
-      bestCount = count;
-      best = candidate;
-    }
-  }
-
-  return best;
-}
-
-function parseCsvLine(line: string, delimiter = ",") {
+function parseCsvLine(line: string) {
   const cells: string[] = [];
   let current = "";
   let inQuotes = false;
@@ -311,7 +283,7 @@ function parseCsvLine(line: string, delimiter = ",") {
       i++;
     } else if (char === '"') {
       inQuotes = !inQuotes;
-    } else if (char === delimiter && !inQuotes) {
+    } else if (char === "," && !inQuotes) {
       cells.push(current.trim());
       current = "";
     } else {
@@ -331,14 +303,13 @@ export function csvToPlayers(csvText: string): RoomPlayer[] {
   const lines = csvText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
   if (lines.length === 0) return [];
 
-  const delimiter = detectRosterDelimiter(lines[0]);
-  const first = parseCsvLine(lines[0], delimiter).map(h => h.toLowerCase());
+  const first = parseCsvLine(lines[0]).map(h => h.toLowerCase());
   const hasHeader = first.includes("name") || first.includes("skill") || first.includes("gender") || first.includes("attack");
   const headers = hasHeader ? first : ["name", "gender", "skill", "speed", "attending"];
   const dataLines = hasHeader ? lines.slice(1) : lines;
 
   return dataLines.map((line, index) => {
-    const cells = parseCsvLine(line, delimiter);
+    const cells = parseCsvLine(line);
     const get = (key: string) => cells[headers.indexOf(key.toLowerCase())] ?? "";
     const skill = Number(get("overall") || get("skill") || 5);
     return normalizePlayer({

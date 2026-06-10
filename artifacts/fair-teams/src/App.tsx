@@ -1,12 +1,10 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Users, CalendarCheck, Shield, Download, Upload, Pencil, Check, X, Palette } from "lucide-react";
+import { Users, CalendarCheck, Shield, Download, Upload, Pencil, Check, X, Palette, Trash2, AlertTriangle } from "lucide-react";
 import { PlayersTab } from "@/components/PlayersTab";
 import { TodayTab } from "@/components/TodayTab";
 import { TeamsTab } from "@/components/TeamsTab";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Textarea } from "@/components/ui/textarea";
 import fairTeamsLogo from "@/assets/fairteams-logo.png";
 import {
   RoomPlayer,
@@ -75,10 +73,9 @@ function App() {
   });
   const [isEditingGroupName, setIsEditingGroupName] = useState(false);
   const [draftGroupName, setDraftGroupName] = useState(groupName);
-  const [showRosterImportDialog, setShowRosterImportDialog] = useState(false);
-  const [pastedRosterText, setPastedRosterText] = useState("");
-  const [importStatus, setImportStatus] = useState("");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [clearRosterOpen, setClearRosterOpen] = useState(false);
+  const [clearRosterSlide, setClearRosterSlide] = useState(0);
 
   useEffect(() => {
     savePlayers(players);
@@ -128,75 +125,45 @@ function App() {
     downloadText("fair-teams-roster.csv", playersToCsv(players), "text/csv;charset=utf-8");
   };
 
-  const exportJson = () => {
-    downloadText(
-      "fair-teams-roster-backup.json",
-      JSON.stringify(players, null, 2),
-      "application/json;charset=utf-8",
-    );
+
+
+  const openClearRoster = () => {
+    setClearRosterSlide(0);
+    setClearRosterOpen(true);
   };
 
-  const readImportFileAsText = (file: File) => {
-    return new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
-      reader.onerror = () => reject(new Error("Could not read the selected roster file."));
-      reader.readAsText(file);
-    });
+  const closeClearRoster = () => {
+    setClearRosterOpen(false);
+    setClearRosterSlide(0);
   };
 
-  const importRosterText = async (text: string, sourceName = "pasted.csv") => {
-    const lowerName = sourceName.toLowerCase();
-    const trimmedText = text.trim();
+  const confirmClearRoster = () => {
+    if (clearRosterSlide < 95) return;
+    setPlayers([]);
+    closeClearRoster();
+  };
 
-    if (!trimmedText) {
-      throw new Error("No roster data found.");
-    }
-
-    setImportStatus("Parsing roster…");
-    const imported = lowerName.endsWith(".json")
-      ? JSON.parse(trimmedText)
-      : csvToPlayers(trimmedText);
+  const importFile = async (file: File) => {
+    const text = await file.text();
+    const imported = file.name.toLowerCase().endsWith(".json")
+      ? JSON.parse(text)
+      : csvToPlayers(text);
 
     if (!Array.isArray(imported)) {
       throw new Error("Import file does not contain a roster list.");
     }
 
-    const normalized = lowerName.endsWith(".json")
+    const normalized = file.name.toLowerCase().endsWith(".json")
       ? imported.map((p, index) => normalizePlayer(p, index)).filter(p => p.name)
       : imported;
 
     if (normalized.length === 0) {
-      throw new Error("No players found in that roster.");
-    }
-
-    const ok = window.confirm(`Import ${normalized.length} players? This replaces the current roster on this device.`);
-    if (!ok) {
-      setImportStatus("Import cancelled.");
+      alert("No players found in that file.");
       return;
     }
 
-    setImportStatus("Importing roster…");
-    setPlayers(normalized);
-    setPastedRosterText("");
-    setShowRosterImportDialog(false);
-    setImportStatus("");
-  };
-
-  const importFile = async (file: File) => {
-    setImportStatus(`Reading ${file.name}…`);
-    const text = await readImportFileAsText(file);
-    await importRosterText(text, file.name);
-  };
-
-  const importPastedRoster = async () => {
-    try {
-      await importRosterText(pastedRosterText, "pasted.csv");
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Import failed.";
-      setImportStatus(message);
-      alert(message);
-    }
+    const ok = window.confirm(`Import ${normalized.length} players? This replaces the current roster on this device.`);
+    if (ok) setPlayers(normalized);
   };
 
   if (showSplash) {
@@ -232,10 +199,10 @@ function App() {
                     className="min-w-0 flex-1 h-9 rounded-xl bg-white text-[#102A43] px-3 text-sm font-extrabold outline-none border border-slate-200 shadow-sm"
                     placeholder="Group name"
                   />
-                  <Button type="button" variant="secondary" size="icon" className="h-9 w-9 rounded-xl bg-slate-100 border border-slate-200" onClick={saveGroupName} title="Save group name">
+                  <Button variant="secondary" size="icon" className="h-9 w-9 rounded-xl bg-slate-100 border border-slate-200" onClick={saveGroupName} title="Save group name">
                     <Check className="w-4 h-4" />
                   </Button>
-                  <Button type="button" variant="secondary" size="icon" className="h-9 w-9 rounded-xl bg-slate-100 border border-slate-200" onClick={cancelGroupNameEdit} title="Cancel">
+                  <Button variant="secondary" size="icon" className="h-9 w-9 rounded-xl bg-slate-100 border border-slate-200" onClick={cancelGroupNameEdit} title="Cancel">
                     <X className="w-4 h-4" />
                   </Button>
                 </div>
@@ -263,10 +230,21 @@ function App() {
                         aria-label="Pick group color"
                       />
                     </label>
-                    <Button type="button" variant="secondary" size="icon" className="h-7 w-7 rounded-lg bg-slate-100 border border-slate-200" onClick={exportCsv} title="Export Roster" disabled={players.length === 0}>
+                    <Button variant="secondary" size="icon" className="h-7 w-7 rounded-lg bg-slate-100 border border-slate-200" onClick={exportCsv} title="Export Roster" disabled={players.length === 0}>
                       <Download className="w-3.5 h-3.5" />
                     </Button>
-                    <Button type="button" variant="secondary" size="icon" className="h-7 w-7 rounded-lg bg-slate-100 border border-slate-200" onClick={(event) => { event.preventDefault(); event.stopPropagation(); setImportStatus(""); setShowRosterImportDialog(true); }} title="Import Roster">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="icon"
+                      className="h-7 w-7 rounded-lg bg-red-50 border border-red-100 text-red-600 hover:bg-red-100 hover:text-red-700"
+                      onClick={openClearRoster}
+                      title="Clear roster"
+                      disabled={players.length === 0}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                    <Button variant="secondary" size="icon" className="h-7 w-7 rounded-lg bg-slate-100 border border-slate-200" onClick={() => fileInputRef.current?.click()} title="Import Roster">
                       <Upload className="w-3.5 h-3.5" />
                     </Button>
                   </>
@@ -277,65 +255,17 @@ function App() {
                   type="file"
                   accept=".csv,.json,text/csv,application/json"
                   className="hidden"
-                  onClick={e => e.stopPropagation()}
                   onChange={async e => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    const input = e.currentTarget;
-                    const file = input.files?.[0];
-                    input.value = "";
+                    const file = e.target.files?.[0];
+                    e.target.value = "";
                     if (!file) return;
                     try {
                       await importFile(file);
                     } catch (error) {
-                      const message = error instanceof Error ? error.message : "Import failed.";
-                      setImportStatus(message);
-                      alert(message);
+                      alert(error instanceof Error ? error.message : "Import failed.");
                     }
                   }}
                 />
-                <Dialog open={showRosterImportDialog} onOpenChange={setShowRosterImportDialog}>
-                  <DialogContent className="w-[calc(100vw-2rem)] max-w-md rounded-3xl p-5">
-                    <DialogHeader>
-                      <DialogTitle>Import roster</DialogTitle>
-                      <DialogDescription>
-                        Choose a CSV/JSON roster file, or paste CSV text if your tablet has trouble opening files.
-                      </DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-4">
-                      <Button
-                        type="button"
-                        className="w-full rounded-2xl bg-[#102A43] text-white"
-                        onClick={(event) => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          setImportStatus("");
-                          fileInputRef.current?.click();
-                        }}
-                      >
-                        <Upload className="mr-2 h-4 w-4" /> Choose CSV file
-                      </Button>
-
-                      <div className="space-y-2">
-                        <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Paste CSV text</p>
-                        <Textarea
-                          value={pastedRosterText}
-                          onChange={e => setPastedRosterText(e.target.value)}
-                          placeholder="name,attack,defense,..."
-                          className="min-h-32 rounded-2xl text-sm"
-                        />
-                      </div>
-
-                      {importStatus && (
-                        <p className="rounded-2xl bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-600">{importStatus}</p>
-                      )}
-                    </div>
-                    <DialogFooter className="gap-2 sm:gap-2">
-                      <Button type="button" variant="secondary" className="rounded-2xl" onClick={() => setShowRosterImportDialog(false)}>Cancel</Button>
-                      <Button type="button" className="rounded-2xl bg-[#16A34A] text-white" onClick={importPastedRoster} disabled={!pastedRosterText.trim()}>Import pasted</Button>
-                    </DialogFooter>
-                  </DialogContent>
-                </Dialog>
               </div>
             )}
           </div>
@@ -369,6 +299,55 @@ function App() {
           <PoweredByFairTeams />
         </div>
       </Tabs>
+
+      {clearRosterOpen && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/45 p-4 sm:items-center" role="dialog" aria-modal="true">
+          <div className="w-full max-w-sm rounded-3xl border border-red-100 bg-white p-4 shadow-2xl">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-red-50 text-red-600">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h2 className="text-base font-black tracking-tight text-[#102A43]">Clear entire roster?</h2>
+                <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
+                  This removes all {players.length} player profiles from this device. Export a backup first if you need one.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-red-100 bg-red-50/70 p-3">
+              <div className="mb-2 flex items-center justify-between gap-2 text-[11px] font-black uppercase tracking-wide text-red-700">
+                <span>Slide to confirm</span>
+                <span>{clearRosterSlide >= 95 ? "Ready" : `${clearRosterSlide}%`}</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={clearRosterSlide}
+                onChange={e => setClearRosterSlide(Number(e.target.value))}
+                className="w-full accent-red-600"
+                aria-label="Slide to confirm clearing roster"
+              />
+              <p className="mt-2 text-[11px] font-semibold text-red-700/80">
+                Move the slider all the way right, then press Clear roster.
+              </p>
+            </div>
+
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <Button type="button" variant="outline" className="rounded-xl" onClick={closeClearRoster}>Cancel</Button>
+              <Button
+                type="button"
+                className="rounded-xl bg-red-600 text-white hover:bg-red-700"
+                onClick={confirmClearRoster}
+                disabled={clearRosterSlide < 95}
+              >
+                Clear roster
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

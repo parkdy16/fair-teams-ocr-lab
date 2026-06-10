@@ -131,23 +131,68 @@ function App() {
     );
   };
 
+  const readRosterFileText = async (file: File) => {
+    try {
+      return await file.text();
+    } catch (error) {
+      // Some tablet browsers throw a vague “low memory” file-read error.
+      // FileReader is a small fallback for tiny CSV rosters.
+      return await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(reader.error || error);
+        reader.readAsText(file);
+      });
+    }
+  };
+
   const importFile = async (file: File) => {
-    const text = await file.text();
-    const imported = file.name.toLowerCase().endsWith(".json")
-      ? JSON.parse(text)
-      : csvToPlayers(text);
+    const lowerName = file.name.toLowerCase();
+    const isJson = lowerName.endsWith(".json");
+    const isCsv = lowerName.endsWith(".csv") || file.type === "text/csv" || file.type === "application/vnd.ms-excel";
+
+    if (!isJson && !isCsv) {
+      throw new Error("Please choose a Fair Teams CSV roster file.");
+    }
+
+    if (file.size > 1024 * 1024) {
+      throw new Error("That roster file is unusually large. Please export/import a CSV roster under 1 MB.");
+    }
+
+    let text = "";
+    try {
+      text = await readRosterFileText(file);
+    } catch (error) {
+      throw new Error("Could not read this roster file on this device. Please try renaming it with .csv, or export a fresh CSV roster and try again.");
+    }
+
+    let imported: unknown;
+    try {
+      imported = isJson ? JSON.parse(text) : csvToPlayers(text);
+    } catch (error) {
+      throw new Error("The roster file was read, but it could not be parsed. Please check that it is a Fair Teams CSV export.");
+    }
 
     if (!Array.isArray(imported)) {
       throw new Error("Import file does not contain a roster list.");
     }
 
-    const normalized = file.name.toLowerCase().endsWith(".json")
+    const normalized = isJson
       ? imported.map((p, index) => normalizePlayer(p, index)).filter(p => p.name)
       : imported;
 
     if (normalized.length === 0) {
       alert("No players found in that file.");
       return;
+    }
+
+    // Test the exact saved roster size before replacing the on-screen roster.
+    // This gives a useful error instead of a vague tablet/browser “low memory” message.
+    try {
+      window.localStorage.setItem("fair-teams-import-test", JSON.stringify(normalized));
+      window.localStorage.removeItem("fair-teams-import-test");
+    } catch {
+      throw new Error("This device/browser cannot save the imported roster right now. Try clearing site data for this app, then import the CSV again.");
     }
 
     const ok = window.confirm(`Import ${normalized.length} players? This replaces the current roster on this device.`);
@@ -230,7 +275,7 @@ function App() {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept=".csv,.json,text/csv,application/json"
+                  accept=".csv,text/csv,.json,application/json"
                   className="hidden"
                   onChange={async e => {
                     const file = e.target.files?.[0];

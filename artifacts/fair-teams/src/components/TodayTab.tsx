@@ -1099,7 +1099,9 @@ export function TodayTab({
       </div>
 
       <Dialog open={ocrOpen} onOpenChange={setOcrOpen}>
-        <DialogContent className="flex h-[90dvh] max-h-[90dvh] w-[94vw] max-w-lg md:max-w-3xl flex-col overflow-hidden rounded-2xl p-4 sm:p-6">
+        <DialogContent
+          onOpenAutoFocus={(e) => e.preventDefault()}
+          className="flex h-[90dvh] max-h-[90dvh] w-[94vw] max-w-lg md:max-w-3xl flex-col overflow-hidden rounded-2xl p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle className="text-base font-black">
               Screenshot Import

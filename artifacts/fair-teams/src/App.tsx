@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Users, CalendarCheck, Shield, Download, Upload, Pencil, Check, X, Palette, Trash2, AlertTriangle } from "lucide-react";
+import { Users, CalendarCheck, Shield, Download, Upload, Pencil, Check, X, Palette, Trash2, AlertTriangle, Package } from "lucide-react";
 import { PlayersTab } from "@/components/PlayersTab";
 import { TodayTab } from "@/components/TodayTab";
 import { TeamsTab } from "@/components/TeamsTab";
@@ -207,6 +207,17 @@ function App() {
                     className="min-w-0 flex-1 h-9 rounded-xl bg-white text-[#102A43] px-3 text-sm font-extrabold outline-none border border-slate-200 shadow-sm"
                     placeholder="Group name"
                   />
+                  <label className="relative h-9 w-9 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center cursor-pointer active:scale-95 transition-transform" title="Pick group color">
+                    <Palette className="w-4 h-4 text-[#102A43]/80" />
+                    <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border border-white shadow-sm" style={{ backgroundColor: headerColor }} />
+                    <input
+                      type="color"
+                      value={headerColor}
+                      onChange={e => setHeaderColor(e.target.value)}
+                      className="absolute inset-0 opacity-0 cursor-pointer"
+                      aria-label="Pick group color"
+                    />
+                  </label>
                   <Button variant="secondary" size="icon" className="h-9 w-9 rounded-xl bg-slate-100 border border-slate-200" onClick={saveGroupName} title="Save group name">
                     <Check className="w-4 h-4" />
                   </Button>
@@ -215,10 +226,16 @@ function App() {
                   </Button>
                 </div>
               ) : (
-                <button type="button" onClick={startGroupNameEdit} className="group flex items-center gap-1.5 text-left min-w-0 max-w-full active:scale-[0.99] transition-transform">
-                  <span className="h-2 w-2 rounded-full shrink-0 shadow-sm" style={{ backgroundColor: headerColor }} />
-                  <h1 className="text-[15px] font-black leading-tight truncate tracking-tight text-[#102A43]">{groupName}</h1>
-                  <Pencil className="w-3.5 h-3.5 text-[#102A43]/45 opacity-90 shrink-0" />
+                <button type="button" onClick={startGroupNameEdit} className="group flex flex-col items-start text-left min-w-0 max-w-full active:scale-[0.99] transition-transform">
+                  <span className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-[#16A34A] leading-none">
+                    <img src={fairTeamsLogo} alt="" className="h-3.5 w-3.5 object-contain" />
+                    Fair Teams
+                  </span>
+                  <span className="mt-1 flex items-center gap-1.5 min-w-0 max-w-full">
+                    <span className="h-2 w-2 rounded-full shrink-0 shadow-sm" style={{ backgroundColor: headerColor }} />
+                    <h1 className="text-[15px] font-black leading-tight truncate tracking-tight text-[#102A43]">{groupName}</h1>
+                    <Pencil className="w-3.5 h-3.5 text-[#102A43]/45 opacity-90 shrink-0" />
+                  </span>
                 </button>
               )}
             </div>
@@ -226,29 +243,16 @@ function App() {
             {!isEditingGroupName && (
               <div className="flex items-center gap-1.5 shrink-0">
                 {activeTab === "players" && (
-                  <>
-                    <label className="relative h-7 w-7 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center cursor-pointer active:scale-95 transition-transform" title="Pick group color">
-                      <Palette className="w-3.5 h-3.5 text-[#102A43]/80" />
-                      <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border border-white shadow-sm" style={{ backgroundColor: headerColor }} />
-                      <input
-                        type="color"
-                        value={headerColor}
-                        onChange={e => setHeaderColor(e.target.value)}
-                        className="absolute inset-0 opacity-0 cursor-pointer"
-                        aria-label="Pick group color"
-                      />
-                    </label>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="icon"
-                      className="h-7 w-7 rounded-lg bg-slate-100 border border-slate-200"
-                      onClick={() => setRosterFilesOpen(true)}
-                      title="Roster files"
-                    >
-                      <Upload className="w-3.5 h-3.5" />
-                    </Button>
-                  </>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="h-8 rounded-xl bg-slate-100 border border-slate-200 px-2.5 gap-1.5 text-[11px] font-black text-[#102A43]"
+                    onClick={() => setRosterFilesOpen(true)}
+                    title="Roster files"
+                  >
+                    <Package className="w-3.5 h-3.5" />
+                    <span>Files</span>
+                  </Button>
                 )}
                 {activeTab !== "players" && <span className="text-[11px] font-extrabold text-slate-400 tracking-tight whitespace-nowrap">Fair teams. Fun games.</span>}
                 <input
@@ -307,9 +311,9 @@ function App() {
           <div className="w-full max-w-sm rounded-3xl border border-slate-200 bg-white p-4 shadow-2xl">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h2 className="text-base font-black tracking-tight text-[#102A43]">Roster files</h2>
+                <h2 className="text-base font-black tracking-tight text-[#102A43]">Files</h2>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  Import, export, or clear the roster on this device.
+                  Import, export, or clear your roster on this device.
                 </p>
               </div>
               <Button type="button" variant="ghost" size="icon" className="h-8 w-8 rounded-xl" onClick={() => setRosterFilesOpen(false)} title="Close">

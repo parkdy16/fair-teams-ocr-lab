@@ -403,26 +403,39 @@ function AbilityBadge({
   );
 }
 
-function SpecialAbilityCountBadge({ count }: { count: number }) {
-  if (count <= 0) return null;
+function SpecialAbilityIconRow({ player, max = 4 }: { player: RoomPlayer; max?: number }) {
+  const abilities = SPECIAL_ABILITIES.filter(ability => Boolean(player[ability.key]));
+  if (abilities.length <= 0) return null;
+
+  const visible = abilities.slice(0, max);
+  const hiddenCount = abilities.length - visible.length;
+  const title = abilities.map(ability => ability.label).join(", ");
+
   return (
-    <span title={`${count} special ${count === 1 ? "ability" : "abilities"}`} className="inline-flex items-center gap-0.5 text-[8px] font-extrabold leading-none text-yellow-500/90">
-      <Star className="w-2.5 h-2.5 fill-current stroke-[3]" />
-      <span>{count}</span>
+    <span title={title} className="inline-flex items-center gap-1 text-primary/80 leading-none">
+      {visible.map(ability => {
+        if (ability.badge === "GK") {
+          return (
+            <span key={ability.key} aria-label={ability.label} className="text-[8px] font-black tracking-tight text-primary/80 leading-none">
+              GK
+            </span>
+          );
+        }
+        const Icon = ability.icon ?? Star;
+        return <Icon key={ability.key} aria-label={ability.label} className="w-3 h-3 stroke-[2.8] shrink-0" />;
+      })}
+      {hiddenCount > 0 ? (
+        <span className="text-[8px] font-black text-primary/70 leading-none">+{hiddenCount}</span>
+      ) : null}
     </span>
   );
 }
 
-function getSpecialAbilityCount(player: RoomPlayer) {
-  return SPECIAL_ABILITIES.reduce((count, ability) => count + (player[ability.key] ? 1 : 0), 0);
-}
-
 function PlayerTags({ player, includeVibe = false, includeAbilityCount = false }: { player: RoomPlayer; includeVibe?: boolean; includeAbilityCount?: boolean }) {
-  const abilityCount = includeAbilityCount ? getSpecialAbilityCount(player) : 0;
   return (
-    <div className="mt-0.5 flex flex-wrap gap-x-1 gap-y-0.5 min-h-3 items-center">
+    <div className="mt-0.5 flex flex-wrap gap-x-1.5 gap-y-0.5 min-h-3 items-center">
       {includeVibe && player.funBadge ? <FunBadgePill value={player.funBadge} /> : null}
-      <SpecialAbilityCountBadge count={abilityCount} />
+      {includeAbilityCount ? <SpecialAbilityIconRow player={player} /> : null}
       {player.isNew && <NewBadge />}
       {player.isOrganizer && <ORGBadge />}
     </div>

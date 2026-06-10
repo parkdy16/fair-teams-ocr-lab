@@ -1003,8 +1003,8 @@ export function TodayTab({
 
   if (players.length === 0) {
     return (
-      <div className="text-center py-10">
-        <p className="text-muted-foreground font-medium">
+      <div className="flex min-h-[calc(100dvh-250px)] items-center justify-center px-6 text-center">
+        <p className="text-sm text-muted-foreground font-medium">
           Add players in the Roster tab first.
         </p>
       </div>

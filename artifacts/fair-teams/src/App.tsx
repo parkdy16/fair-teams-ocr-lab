@@ -281,7 +281,7 @@ function App() {
           <span className="text-[#16A34A]"> TEAMS</span>
         </h1>
         <p className="mt-3 text-sm font-semibold text-slate-500">
-          Fair teams. Fun games.
+          Balanced teams. Better games.
         </p>
         <div className="mt-6 h-1 w-20 rounded-full bg-[#22C55E]" />
       </div>
@@ -337,7 +337,7 @@ function App() {
               )}
               {activeTab !== "players" && (
                 <span className="text-[11px] font-extrabold text-slate-400 tracking-tight whitespace-nowrap">
-                  Fair teams. Fun games.
+                  Balanced teams. Better games.
                 </span>
               )}
               <input
@@ -393,7 +393,7 @@ function App() {
         </header>
 
         <div className="flex-1 overflow-y-auto p-4 md:p-5">
-          <div className="flex min-h-full flex-col">
+          <div className="flex min-h-[calc(100dvh-168px)] flex-col">
           <TabsContent
             value="players"
             className="m-0 data-[state=active]:animate-in data-[state=active]:fade-in-50"

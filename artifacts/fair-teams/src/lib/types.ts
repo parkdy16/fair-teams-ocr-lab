@@ -1,6 +1,6 @@
 export type Gender = "male" | "female" | "other";
 
-export type FunBadge = "loudmouth" | "warrior" | "samba" | "maradoner" | "reluctant-gk" | "first-10" | "always-late" | "unbothered" | "wildcard" | "third-half" | "club-ambassador" | "cfo" | "club-chef" | "the-wall" | "faith-leader" | "fashion-icon" | "goofball" | "social-butterfly" | "club-legend" | "walking-yellow-card" | "referee-consultant" | "shoe-collector" | "kit-collector" | "venom-tongue";
+export type FunBadge = "cool-head" | "unbothered" | "wildcard" | "silent-mode" | "smooth-talker" | "no-filter" | "human-alarm" | "influencer" | "main-character" | "old-school" | "always-late" | "early-exit" | "first-5" | "eighty-minute-warmup" | "third-half" | "yellow-card" | "var-caller" | "kit-collector" | "shoe-collector" | "fashion-icon" | "club-legend" | "snack-captain" | "cameo" | "mastermind";
 
 export interface Player {
   id: string;
@@ -24,6 +24,12 @@ export interface Player {
   isEngine?: boolean;
   isVersatile?: boolean;
   isSpaceFinder?: boolean;
+  isLongPass?: boolean;
+  isTikiTaka?: boolean;
+  isCrossing?: boolean;
+  isAerial?: boolean;
+  isPowerShot?: boolean;
+  isBulldog?: boolean;
   isOrganizer?: boolean;
   isNew?: boolean;
   funBadge?: FunBadge;
@@ -31,7 +37,7 @@ export interface Player {
 
 export type AttendanceMap = Record<string, boolean>;
 
-export type TeamColor = "red" | "blue" | "lime" | "yellow" | "orange" | "black";
+export type TeamColor = "red" | "blue" | "lime" | "yellow" | "orange" | "black" | "white";
 
 export type FieldSize = "small" | "medium" | "large";
 

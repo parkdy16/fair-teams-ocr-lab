@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { UserMinus, Plus, Star, Zap, Search, X, Camera, Image as ImageIcon, Trash2, Pencil, Shield, Activity, Dumbbell, Target, Share2, Eye, EyeOff } from "lucide-react";
+import { UserMinus, Plus, Star, Zap, Search, X, Camera, Image as ImageIcon, Trash2, Pencil, Shield, Activity, Dumbbell, Target, Share2, Eye, EyeOff, ArrowDownAZ, Clock3 } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart, ResponsiveContainer } from "recharts";
 
@@ -23,13 +23,12 @@ const STAT_FIELDS = [
 
 function EngineBadgeIcon({ className }: { className?: string }) {
   return (
-    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M7 9h7l2 2h2v5h-2l-1.4 2H8l-1.5-2H4v-5h3z" />
-      <path d="M9 9V6h5" />
-      <path d="M10 6V4" />
-      <path d="M13 6V4" />
-      <path d="M18 12h2" />
-      <path d="M4 13H2" />
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="4" y="8" width="14" height="9" rx="2" />
+      <path d="M18 11h2v3h-2" />
+      <path d="M7 11v3" />
+      <path d="M10 11v3" />
+      <path d="M13 11v3" />
     </svg>
   );
 }
@@ -51,53 +50,180 @@ function VersatileBadgeIcon({ className }: { className?: string }) {
   );
 }
 
-type AbilityKey = "isGoalkeeper" | "isPlaymaker" | "isFinisher" | "isDribbler" | "isSentinel" | "isEngine" | "isVersatile" | "isSpaceFinder";
+
+
+function MagicWandBadgeIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M15 4l5 5" />
+      <path d="M13.5 10.5l-9 9" />
+      <path d="M12.5 5.5l6 6" />
+      <path d="M5 4v3" />
+      <path d="M3.5 5.5h3" />
+      <path d="M20 16v3" />
+      <path d="M18.5 17.5h3" />
+      <path d="M9 3l.8 1.6L11.5 5l-1.7.4L9 7l-.8-1.6L6.5 5l1.7-.4z" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+function FinisherBadgeIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="10" cy="13" r="6" />
+      <circle cx="10" cy="13" r="2" />
+      <path d="M14.5 8.5L20 3" />
+      <path d="M17.5 3H20v2.5" />
+      <path d="M14.2 8.8L10 13" />
+    </svg>
+  );
+}
+
+function DribblerBadgeIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 18l4-4-4-4 4-4" />
+      <path d="M10 18l4-4-4-4 4-4" />
+      <circle cx="19" cy="18" r="2" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+function LongPassBadgeIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 19L19 4" />
+      <path d="M12 4h7v7" />
+      <path d="M5 13c2-1.5 4.5-1.5 7.5 0" />
+    </svg>
+  );
+}
+
+function TikiTakaBadgeIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="6" cy="8" r="2" fill="currentColor" stroke="none" />
+      <circle cx="17" cy="7" r="2" fill="currentColor" stroke="none" />
+      <circle cx="18" cy="17" r="2" fill="currentColor" stroke="none" />
+      <circle cx="7" cy="16" r="2" fill="currentColor" stroke="none" />
+      <path d="M8 8h7" />
+      <path d="M17 9l1 6" />
+      <path d="M16 17H9" />
+      <path d="M7 14L6 10" />
+    </svg>
+  );
+}
+
+function TechnicianBadgeIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="8" cy="14" r="2.3" />
+      <path d="M12 10c1.5-1.6 3.5-1.6 5 0" />
+      <path d="M12 14c1.5 1.6 3.5 1.6 5 0" />
+      <path d="M18 5l.7 1.6L20.5 7l-1.8.4L18 9l-.7-1.6L15.5 7l1.8-.4z" fill="currentColor" stroke="none" />
+      <path d="M5 5l.6 1.3L7 7l-1.4.4L5 8.7l-.6-1.3L3 7l1.4-.7z" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+function HeaderBadgeIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="5" r="2.4" />
+      <path d="M8 12c1-2 2.3-3 4-3s3 1 4 3" />
+      <path d="M9 17c1.5 1.2 4.5 1.2 6 0" />
+      <path d="M12 9v5" />
+      <path d="M7 7l-2 2" />
+      <path d="M17 7l2 2" />
+    </svg>
+  );
+}
+
+function PowerShotBadgeIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="7" cy="15" r="2.8" />
+      <path d="M12 15h7" />
+      <path d="M16 11l3 4-3 4" />
+      <path d="M10 8l2-3" />
+      <path d="M13 9l4-3" />
+      <path d="M13 21l4-3" />
+    </svg>
+  );
+}
+
+function BulldogBadgeIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M5 9L3 5l5 2" />
+      <path d="M19 9l2-4-5 2" />
+      <path d="M5 10c0-3 3-5 7-5s7 2 7 5v3c0 4-3 7-7 7s-7-3-7-7z" />
+      <path d="M8 12h.01" />
+      <path d="M16 12h.01" />
+      <path d="M10 15h4" />
+      <path d="M9 17c2 1 4 1 6 0" />
+      <path d="M12 13v2" />
+    </svg>
+  );
+}
+
+type AbilityKey = "isGoalkeeper" | "isPlaymaker" | "isFinisher" | "isDribbler" | "isSentinel" | "isEngine" | "isVersatile" | "isSpaceFinder" | "isLongPass" | "isTikiTaka" | "isCrossing" | "isAerial" | "isPowerShot" | "isBulldog";
 
 const SPECIAL_ABILITIES: { key: AbilityKey; label: string; badge: string; description: string; icon?: React.ComponentType<{ className?: string }> }[] = [
   { key: "isGoalkeeper", label: "Goalkeeper", badge: "GK", description: "Comfortable in goal; helps spread keeper options across teams." },
-  { key: "isPlaymaker", label: "Playmaker", badge: "PM", description: "Controls passing and creates chances for teammates.", icon: Share2 },
-  { key: "isFinisher", label: "Finisher", badge: "FIN", description: "Reliable scorer who turns chances into goals.", icon: Target },
-  { key: "isDribbler", label: "Dribbler", badge: "DRB", description: "Strong 1v1 player; keeps the ball under pressure.", icon: Zap },
-  { key: "isSentinel", label: "Sentinel", badge: "SEN", description: "Defensive stopper; tackles, marks, and protects space.", icon: Shield },
-  { key: "isEngine", label: "Engine", badge: "ENG", description: "High work rate; keeps running, pressing, and covering.", icon: EngineBadgeIcon },
-  { key: "isVersatile", label: "Versatile", badge: "ALL", description: "All-rounder who can fill weak spots in a team.", icon: VersatileBadgeIcon },
+
+  // Attack-first traits
+  { key: "isFinisher", label: "Finisher", badge: "FIN", description: "Reliable scorer who turns chances into goals.", icon: FinisherBadgeIcon },
+  { key: "isPowerShot", label: "Power Shot", badge: "PWR", description: "Boosts Attack +2 and Strength +1. Dangerous hard shooter.", icon: PowerShotBadgeIcon },
+  { key: "isDribbler", label: "Dribbler", badge: "DRB", description: "Strong 1v1 player; keeps the ball under pressure.", icon: DribblerBadgeIcon },
   { key: "isSpaceFinder", label: "Space Finder", badge: "SPC", description: "Finds smart spaces in attack and defense.", icon: Search },
+
+  // Midfield / control traits
+  { key: "isPlaymaker", label: "Playmaker", badge: "PM", description: "Controls passing and creates chances for teammates.", icon: MagicWandBadgeIcon },
+  { key: "isCrossing", label: "Technician", badge: "TECH", description: "Boosts Team Play and Passing. Clean touch, control, and technical skill.", icon: TechnicianBadgeIcon },
+  { key: "isTikiTaka", label: "Tiki-Taka", badge: "TIKI", description: "Boosts Passing +2, Attack +1, and a tiny Stamina bonus. Quick short passing and combinations.", icon: TikiTakaBadgeIcon },
+  { key: "isVersatile", label: "Versatile", badge: "ALL", description: "All-rounder who can fill weak spots in a team.", icon: VersatileBadgeIcon },
+  { key: "isLongPass", label: "Long Pass", badge: "L-PAS", description: "Boosts Passing +2 and Attack +1. Good for switching play and longer through balls.", icon: LongPassBadgeIcon },
+  { key: "isEngine", label: "Engine", badge: "ENG", description: "High work rate; keeps running, pressing, and covering.", icon: EngineBadgeIcon },
+
+  // Defense-first traits
+  { key: "isAerial", label: "Header", badge: "HEAD", description: "Boosts Strength +2, Defense +1, and Attack +1. Strong with headers and clearances.", icon: HeaderBadgeIcon },
+  { key: "isSentinel", label: "Sentinel", badge: "SEN", description: "Defensive guardian; holds shape, marks, and protects space.", icon: Shield },
+  { key: "isBulldog", label: "Bulldog", badge: "DOG", description: "Boosts Stamina +2 and Defense +1. Relentless presser who hounds opponents and fights for loose balls.", icon: BulldogBadgeIcon },
 ];
 
 
 const FUN_BADGES: { value: FunBadge; label: string; emoji: string; description: string }[] = [
-  { value: "loudmouth", label: "Loudmouth", emoji: "📢", description: "Always talking." },
-  { value: "warrior", label: "Warrior", emoji: "😤", description: "Maximum effort, every ball." },
-  { value: "samba", label: "Samba", emoji: "🇧🇷", description: "Flair and creative skills." },
-  { value: "maradoner", label: "Maradoner", emoji: "🥙", description: "Believes every defender can be beaten." },
-  { value: "reluctant-gk", label: "Reluctant GK", emoji: "🧤", description: "Needs convincing to play in goal." },
-  { value: "first-10", label: "First 10 Minutes", emoji: "🚀", description: "Starts fast, fades later." },
-  { value: "always-late", label: "Always Late", emoji: "⏰", description: "Arrives after kickoff." },
-  { value: "unbothered", label: "Unbothered", emoji: "😐", description: "Nothing seems to bother them." },
+  { value: "cool-head", label: "Cool Head", emoji: "🧊", description: "Stays composed when things get noisy." },
+  { value: "unbothered", label: "Unbothered", emoji: "😐", description: "Nothing seems to shake them." },
   { value: "wildcard", label: "Wildcard", emoji: "🎲", description: "You never know which version shows up." },
-  { value: "third-half", label: "Third Half Specialist", emoji: "🍺", description: "Peak performance after the match." },
-  { value: "club-ambassador", label: "Club Ambassador", emoji: "🤝", description: "Welcomes people and keeps the group friendly." },
-  { value: "cfo", label: "CFO", emoji: "💳", description: "Tracks payments and reminds everyone." },
-  { value: "club-chef", label: "Club Chef", emoji: "🔪", description: "Keeps the group fed." },
-  { value: "the-wall", label: "The Wall", emoji: "🧱", description: "Reliable, always present, hard to get past." },
-  { value: "faith-leader", label: "Faith Leader", emoji: "🙏", description: "Brings players together through faith or community groups." },
-  { value: "fashion-icon", label: "Fashion Icon", emoji: "✨", description: "Best dressed on and off the pitch." },
-  { value: "goofball", label: "Goofball", emoji: "🤡", description: "Always joking around and keeping things light." },
-  { value: "social-butterfly", label: "Social Butterfly", emoji: "🦋", description: "Talks to everyone and makes new players feel welcome." },
-  { value: "club-legend", label: "Club Legend", emoji: "🏆", description: "Long-time member with legendary status." },
-  { value: "walking-yellow-card", label: "Walking Yellow Card", emoji: "🟨", description: "Always one tackle or complaint away from trouble." },
-  { value: "referee-consultant", label: "Referee Consultant", emoji: "🗣️", description: "Has strong opinions about every decision." },
-  { value: "shoe-collector", label: "Shoe Collector", emoji: "👟", description: "Always has a new pair or strong boot opinions." },
+  { value: "silent-mode", label: "Silent Mode", emoji: "🔇", description: "Low volume, still fully present." },
+  { value: "smooth-talker", label: "Smooth Talker", emoji: "🗣️", description: "Can talk their way through anything." },
+  { value: "no-filter", label: "No Filter", emoji: "📣", description: "Says the thing everyone else was thinking." },
+  { value: "human-alarm", label: "Human Alarm", emoji: "🚨", description: "Maximum volume, usually for a good reason." },
+  { value: "influencer", label: "Influencer", emoji: "🤳", description: "The camera is probably already rolling." },
+  { value: "main-character", label: "Main Character", emoji: "🎬", description: "Somehow always becomes part of the story." },
+  { value: "old-school", label: "Old School", emoji: "📼", description: "Classic style, classic habits." },
+  { value: "always-late", label: "Always Late", emoji: "⏰", description: "Arrival time is more of a concept." },
+  { value: "early-exit", label: "Early Exit", emoji: "🚪", description: "Here now, gone suddenly." },
+  { value: "first-5", label: "First 5 Minutes", emoji: "🚀", description: "Starts like a storm, then negotiates with gravity." },
+  { value: "eighty-minute-warmup", label: "80-Minute Warmup", emoji: "🐢", description: "Gets going eventually, usually near the end." },
+  { value: "third-half", label: "Third Half", emoji: "🍺", description: "Shines brightest after the game." },
+  { value: "yellow-card", label: "Yellow Card", emoji: "🟨", description: "Lives one warning away from trouble." },
+  { value: "var-caller", label: "VAR Caller", emoji: "📺", description: "Would like that decision reviewed immediately." },
   { value: "kit-collector", label: "Kit Collector", emoji: "👕", description: "Owns too many shirts and knows every kit." },
-  { value: "venom-tongue", label: "Venom Tongue", emoji: "🐍", description: "Friendly guy, poisonous comments." },
+  { value: "shoe-collector", label: "Shoe Collector", emoji: "👟", description: "Boot choice is part of the performance." },
+  { value: "fashion-icon", label: "Fashion Icon", emoji: "✨", description: "Turns the sideline into a runway." },
+  { value: "club-legend", label: "Club Legend", emoji: "🏆", description: "The history book has a chapter." },
+  { value: "snack-captain", label: "Snack Captain", emoji: "🍪", description: "Arrives with supplies, saves morale." },
+  { value: "cameo", label: "Cameo", emoji: "🎭", description: "Rare appearance, memorable impact." },
+  { value: "mastermind", label: "Mastermind", emoji: "♟️", description: "Quietly has a plan." },
 ];
 
-
 const FUN_BADGE_CATEGORIES: { label: string; values: FunBadge[] }[] = [
-  { label: "Classic", values: ["loudmouth", "warrior", "samba", "maradoner", "reluctant-gk", "first-10", "always-late", "unbothered", "wildcard", "third-half"] },
-  { label: "Social", values: ["club-ambassador", "faith-leader", "goofball", "social-butterfly", "venom-tongue"] },
-  { label: "Club Culture", values: ["the-wall", "club-legend", "fashion-icon", "shoe-collector", "kit-collector", "cfo", "club-chef"] },
-  { label: "Chaos", values: ["walking-yellow-card", "referee-consultant"] },
+  { label: "Personality", values: ["cool-head", "unbothered", "wildcard", "silent-mode", "smooth-talker", "no-filter", "human-alarm", "influencer", "main-character", "old-school"] },
+  { label: "Matchday", values: ["always-late", "early-exit", "first-5", "eighty-minute-warmup", "third-half", "yellow-card", "var-caller"] },
+  { label: "Club Culture", values: ["kit-collector", "shoe-collector", "fashion-icon", "club-legend", "snack-captain", "cameo", "mastermind"] },
 ];
 
 function getFunBadge(value?: FunBadge) {
@@ -119,7 +245,8 @@ function createPlayerId() {
 type AddPlayerDetails = Pick<RoomPlayer,
   "attack" | "defense" | "speed" | "passing" | "stamina" | "physical" | "teamPlay" |
   "funBadge" | "isGoalkeeper" | "isPlaymaker" | "isFinisher" | "isDribbler" |
-  "isSentinel" | "isEngine" | "isVersatile" | "isSpaceFinder"
+  "isSentinel" | "isEngine" | "isVersatile" | "isSpaceFinder" |
+  "isLongPass" | "isTikiTaka" | "isCrossing" | "isAerial" | "isPowerShot" | "isBulldog"
 >;
 
 function createDefaultAddPlayerDetails(): AddPlayerDetails {
@@ -140,6 +267,12 @@ function createDefaultAddPlayerDetails(): AddPlayerDetails {
     isEngine: false,
     isVersatile: false,
     isSpaceFinder: false,
+    isLongPass: false,
+    isTikiTaka: false,
+    isCrossing: false,
+    isAerial: false,
+    isPowerShot: false,
+    isBulldog: false,
   };
 }
 
@@ -272,26 +405,39 @@ function AbilityBadge({
   );
 }
 
-function SpecialAbilityCountBadge({ count }: { count: number }) {
-  if (count <= 0) return null;
+function SpecialAbilityIconRow({ player, max = 4 }: { player: RoomPlayer; max?: number }) {
+  const abilities = SPECIAL_ABILITIES.filter(ability => Boolean(player[ability.key]));
+  if (abilities.length <= 0) return null;
+
+  const visible = abilities.slice(0, max);
+  const hiddenCount = abilities.length - visible.length;
+  const title = abilities.map(ability => ability.label).join(", ");
+
   return (
-    <span title={`${count} special ${count === 1 ? "ability" : "abilities"}`} className="inline-flex items-center gap-0.5 text-[8px] font-extrabold leading-none text-yellow-500/90">
-      <Star className="w-2.5 h-2.5 fill-current stroke-[3]" />
-      <span>{count}</span>
+    <span title={title} className="inline-flex items-center gap-1 text-primary/80 leading-none">
+      {visible.map(ability => {
+        if (ability.badge === "GK") {
+          return (
+            <span key={ability.key} aria-label={ability.label} className="text-[8px] font-black tracking-tight text-primary/80 leading-none">
+              GK
+            </span>
+          );
+        }
+        const Icon = ability.icon ?? Star;
+        return <Icon key={ability.key} aria-label={ability.label} className="w-3 h-3 stroke-[2.8] shrink-0" />;
+      })}
+      {hiddenCount > 0 ? (
+        <span className="text-[8px] font-black text-primary/70 leading-none">+{hiddenCount}</span>
+      ) : null}
     </span>
   );
 }
 
-function getSpecialAbilityCount(player: RoomPlayer) {
-  return SPECIAL_ABILITIES.reduce((count, ability) => count + (player[ability.key] ? 1 : 0), 0);
-}
-
 function PlayerTags({ player, includeVibe = false, includeAbilityCount = false }: { player: RoomPlayer; includeVibe?: boolean; includeAbilityCount?: boolean }) {
-  const abilityCount = includeAbilityCount ? getSpecialAbilityCount(player) : 0;
   return (
-    <div className="mt-0.5 flex flex-wrap gap-x-1 gap-y-0.5 min-h-4 items-center">
+    <div className="mt-0.5 flex flex-wrap gap-x-1.5 gap-y-0.5 min-h-3 items-center">
       {includeVibe && player.funBadge ? <FunBadgePill value={player.funBadge} /> : null}
-      <SpecialAbilityCountBadge count={abilityCount} />
+      {includeAbilityCount ? <SpecialAbilityIconRow player={player} /> : null}
       {player.isNew && <NewBadge />}
       {player.isOrganizer && <ORGBadge />}
     </div>
@@ -452,7 +598,7 @@ function ProfileDialog({
           <Pencil className="w-4 h-4" />
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-sm max-h-[90dvh] overflow-y-auto rounded-2xl">
+      <DialogContent className="max-w-sm md:max-w-xl max-h-[90dvh] overflow-y-auto rounded-2xl">
         <DialogHeader>
           <DialogTitle>Edit player profile</DialogTitle>
         </DialogHeader>
@@ -597,9 +743,9 @@ function ProfileDialog({
 
 function OverallBadge({ player }: { player: RoomPlayer }) {
   return (
-    <div className="w-12 h-10 rounded-xl bg-primary/10 text-primary border border-primary/15 flex flex-col items-center justify-center shrink-0 shadow-sm">
-      <span className="text-[7px] font-bold uppercase opacity-70 leading-none">OVR</span>
-      <span className="text-lg font-black leading-none">{player.skill}</span>
+    <div className="w-10 h-9 rounded-xl bg-primary/10 text-primary border border-primary/15 flex flex-col items-center justify-center shrink-0 shadow-sm">
+      <span className="text-[6px] font-bold uppercase opacity-70 leading-none">OVR</span>
+      <span className="text-base font-black leading-none">{player.skill}</span>
     </div>
   );
 }
@@ -658,11 +804,20 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
     try { return window.localStorage.getItem("fair-teams-hide-roster-ovr") === "true"; }
     catch { return false; }
   });
+  const [sortMode, setSortMode] = useState<"recent" | "alpha">(() => {
+    try { return window.localStorage.getItem("fair-teams-roster-sort") === "alpha" ? "alpha" : "recent"; }
+    catch { return "recent"; }
+  });
 
   useEffect(() => {
     try { window.localStorage.setItem("fair-teams-hide-roster-ovr", hideOverall ? "true" : "false"); }
     catch {}
   }, [hideOverall]);
+
+  useEffect(() => {
+    try { window.localStorage.setItem("fair-teams-roster-sort", sortMode); }
+    catch {}
+  }, [sortMode]);
 
   const updatePlayer = (playerId: string, data: Partial<RoomPlayer>) => {
     setPlayers(players.map(player => player.id === playerId ? normalizePlayer({ ...player, ...data, updatedAt: data.updatedAt || new Date().toISOString() }) : player));
@@ -702,9 +857,20 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
     setAddPlayerOpen(false);
   };
 
+  const sortedPlayers = [...players].sort((a, b) => {
+    if (sortMode === "alpha") {
+      return displayName(a).localeCompare(displayName(b));
+    }
+
+    const aTime = new Date(a.updatedAt || a.createdAt || 0).getTime() || 0;
+    const bTime = new Date(b.updatedAt || b.createdAt || 0).getTime() || 0;
+    if (bTime !== aTime) return bTime - aTime;
+    return displayName(a).localeCompare(displayName(b));
+  });
+
   const filtered = search.trim()
-    ? players.filter(p => displayName(p).toLowerCase().includes(search.toLowerCase()))
-    : players;
+    ? sortedPlayers.filter(p => displayName(p).toLowerCase().includes(search.toLowerCase()))
+    : sortedPlayers;
 
   return (
     <div className="flex flex-col gap-4">
@@ -729,7 +895,7 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
           </DialogTrigger>
           <DialogContent
             onOpenAutoFocus={(event) => event.preventDefault()}
-            className="max-w-sm rounded-3xl !top-[10dvh] !translate-y-0 max-h-[82dvh] overflow-y-auto sm:!top-[50%] sm:!-translate-y-1/2"
+            className="max-w-sm md:max-w-xl rounded-3xl !top-[10dvh] !translate-y-0 max-h-[82dvh] overflow-y-auto sm:!top-[50%] sm:!-translate-y-1/2"
           >
             <DialogHeader>
               <DialogTitle>Add player</DialogTitle>
@@ -811,7 +977,7 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
 
                   <div className="rounded-2xl border border-border/70 bg-background/75 p-2.5">
                     <div className="mb-2 text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Photo</div>
-                    <div className="flex items-center gap-2.5">
+                    <div className="flex items-center gap-2">
                       <button
                         type="button"
                         onClick={() => addPhotoGalleryInput.current?.click()}
@@ -919,6 +1085,18 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
             type="button"
             variant="outline"
             size="sm"
+            onClick={() => setSortMode(prev => prev === "recent" ? "alpha" : "recent")}
+            className="h-8 rounded-xl px-2.5 text-[10px] font-black uppercase tracking-wide shadow-none border-primary/20 bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary"
+            title={sortMode === "recent" ? "Roster sorted by last edited / added. Tap for A-Z." : "Roster sorted A-Z. Tap for last edited / added."}
+            data-testid="button-toggle-roster-sort"
+          >
+            {sortMode === "recent" ? <Clock3 className="mr-1 h-3 w-3" /> : <ArrowDownAZ className="mr-1 h-3 w-3" />}
+            {sortMode === "recent" ? "Recent" : "A-Z"}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
             onClick={() => setHideOverall(prev => !prev)}
             className={`h-8 rounded-xl px-2.5 text-[10px] font-black uppercase tracking-wide shadow-none ${hideOverall ? "border-border bg-muted/35 text-muted-foreground" : "border-primary/20 bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary"}`}
             title={hideOverall ? "Show roster OVR" : "Hide roster OVR"}
@@ -965,7 +1143,7 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
             <p className="text-muted-foreground font-medium text-sm">No players match \"{search}\"</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
             {filtered.map(player => {
               const isFlipped = Boolean(flippedPlayerIds[player.id]);
               return (
@@ -980,13 +1158,13 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
                       setFlippedPlayerIds(prev => ({ ...prev, [player.id]: !prev[player.id] }));
                     }
                   }}
-                  className="p-2.5 bg-card border border-border rounded-xl shadow-sm active:scale-[0.99] transition-transform cursor-pointer"
+                  className="p-2 bg-card border border-border rounded-xl shadow-sm active:scale-[0.99] transition-transform cursor-pointer"
                   data-testid={`player-row-${player.id}`}
                 >
-                  <div className="flex items-center gap-2.5">
+                  <div className="flex items-center gap-2">
                     <PlayerAvatar player={player} size="sm" />
                     <div className="min-w-0 flex-1">
-                      <div className="font-black leading-tight text-[15px] break-words">{displayName(player)}</div>
+                      <div className="font-black leading-tight text-[14px] break-words">{displayName(player)}</div>
                       <PlayerTags player={player} includeVibe includeAbilityCount={!isFlipped} />
                     </div>
                     {!hideOverall ? <OverallBadge player={player} /> : null}
@@ -994,16 +1172,16 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
 
                   {isFlipped ? <PlayerCardBack player={player} /> : null}
 
-                  <div className="mt-2 flex items-center justify-between gap-2 border-t border-border/60 pt-1.5">
-                    <div className="text-[10px] text-muted-foreground font-bold tracking-wide">
+                  <div className="mt-1.5 flex items-center justify-between gap-2 border-t border-border/60 pt-1">
+                    <div className="text-[9px] text-muted-foreground font-bold tracking-wide">
                       {isFlipped ? "Tap card to hide details" : "Tap card for stats"}
                     </div>
                     <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
                       <ProfileDialog player={player} onUpdate={(data) => updatePlayer(player.id, data)} autoOpen={autoEditPlayerId === player.id} onAutoOpenHandled={() => setAutoEditPlayerId(null)} />
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
-                          <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive w-7 h-7 rounded-full" data-testid={`button-remove-${player.id}`}>
-                            <UserMinus className="w-3.5 h-3.5" />
+                          <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive w-6 h-6 rounded-full" data-testid={`button-remove-${player.id}`}>
+                            <UserMinus className="w-3 h-3" />
                           </Button>
                         </AlertDialogTrigger>
                         <AlertDialogContent className="max-w-xs rounded-xl">

@@ -139,8 +139,60 @@ export function calculateOverall(player: Partial<RoomPlayer>) {
   return Math.round(Math.min(10, overall) * 10) / 10;
 }
 
+const FUN_BADGE_VALUES: FunBadge[] = [
+  "cool-head",
+  "unbothered",
+  "wildcard",
+  "silent-mode",
+  "smooth-talker",
+  "no-filter",
+  "main-character",
+  "old-school",
+  "always-late",
+  "early-exit",
+  "first-5",
+  "eighty-minute-warmup",
+  "third-half",
+  "yellow-card",
+  "var-caller",
+  "kit-collector",
+  "shoe-collector",
+  "fashion-icon",
+  "club-legend",
+  "snack-captain",
+  "cameo",
+  "mastermind",
+];
+
+function normalizeFunBadge(value: unknown): FunBadge | undefined {
+  if (typeof value !== "string") return undefined;
+  if ((FUN_BADGE_VALUES as string[]).includes(value)) return value as FunBadge;
+
+  // Compatibility for older saved rosters / CSV imports.
+  const legacyMap: Record<string, FunBadge> = {
+    loudmouth: "no-filter",
+    warrior: "old-school",
+    samba: "fashion-icon",
+    maradoner: "main-character",
+    "reluctant-gk": "first-5",
+    "first-10": "first-5",
+    "club-ambassador": "smooth-talker",
+    cfo: "mastermind",
+    "club-chef": "snack-captain",
+    "the-wall": "club-legend",
+    "faith-leader": "club-legend",
+    goofball: "wildcard",
+    "social-butterfly": "smooth-talker",
+    "walking-yellow-card": "yellow-card",
+    "referee-consultant": "var-caller",
+    "venom-tongue": "no-filter",
+  };
+
+  return legacyMap[value];
+}
+
 function isFunBadge(value: unknown): value is FunBadge {
-  return value === "loudmouth" || value === "warrior" || value === "samba" || value === "maradoner" || value === "reluctant-gk" || value === "first-10" || value === "always-late" || value === "unbothered" || value === "wildcard" || value === "third-half" || value === "club-ambassador" || value === "cfo" || value === "club-chef" || value === "the-wall" || value === "faith-leader" || value === "fashion-icon" || value === "goofball" || value === "social-butterfly" || value === "club-legend" || value === "walking-yellow-card" || value === "referee-consultant" || value === "shoe-collector" || value === "kit-collector" || value === "venom-tongue";
+  return Boolean(normalizeFunBadge(value));
 }
 
 export function normalizePlayer(player: Partial<RoomPlayer> & { name?: string }, index = 0): RoomPlayer {
@@ -176,7 +228,7 @@ export function normalizePlayer(player: Partial<RoomPlayer> & { name?: string },
     isBulldog: Boolean(player.isBulldog ?? false),
     isOrganizer: Boolean(player.isOrganizer ?? false),
     isNew: Boolean(player.isNew ?? false),
-    funBadge: isFunBadge(player.funBadge) ? player.funBadge : undefined,
+    funBadge: normalizeFunBadge(player.funBadge),
     attending: Boolean(player.attending ?? false),
     createdAt: player.createdAt || new Date().toISOString(),
     updatedAt: player.updatedAt || player.createdAt || new Date().toISOString(),
@@ -286,7 +338,7 @@ export function csvToPlayers(csvText: string): RoomPlayer[] {
       isBulldog: parseBoolean(get("isbulldog") || get("bulldog") || get("dog")),
       isOrganizer: parseBoolean(get("isorganizer") || get("organizer") || get("org")),
       isNew: parseBoolean(get("isnew") || get("new")),
-      funBadge: isFunBadge(get("funbadge") || get("funBadge") || get("badge")) ? (get("funbadge") || get("funBadge") || get("badge")) as FunBadge : undefined,
+      funBadge: normalizeFunBadge(get("funbadge") || get("funBadge") || get("badge")),
       attending: parseBoolean(get("attending")),
       createdAt: get("createdat") || undefined,
       updatedAt: get("updatedat") || undefined,

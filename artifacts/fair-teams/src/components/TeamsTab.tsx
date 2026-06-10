@@ -15,6 +15,7 @@ const COLOR_OPTIONS: { value: TeamColor; label: string; hex: string; textHex: st
   { value: "yellow", label: "Yellow", hex: "#facc15", textHex: "#1a1a1a" },
   { value: "orange", label: "Orange", hex: "#f97316", textHex: "#fff"    },
   { value: "black",  label: "Black",  hex: "#102A43", textHex: "#fff"    },
+  { value: "white",  label: "White",  hex: "#FFFFFF", textHex: "#102A43" },
 ];
 
 function colorFor(color: TeamColor) {
@@ -341,6 +342,40 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
 
   const attendingPlayers = players.filter(p => p.attending).map(toLocalPlayer);
 
+  const historyPanel = history.length > 0 ? (
+    <div className="bg-card border border-border rounded-xl p-3 shadow-sm">
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <div className="flex items-center gap-2">
+          <Clock className="w-4 h-4 text-muted-foreground" />
+          <h3 className="text-xs font-black uppercase tracking-wider text-muted-foreground">Team History</h3>
+        </div>
+        <button
+          type="button"
+          className="text-[10px] font-bold text-muted-foreground underline"
+          onClick={() => setHistory([])}
+          data-testid="button-clear-history"
+        >
+          Clear
+        </button>
+      </div>
+      <div className="flex gap-2 overflow-x-auto pb-1">
+        {history.slice(0, 6).map(entry => (
+          <button
+            key={entry.id}
+            type="button"
+            onClick={() => { setTeams(entry.teams); setFieldSize(entry.fieldSize); setNumTeams(entry.numTeams); setSwap(null); }}
+            className="min-w-[142px] rounded-lg border border-border bg-muted/30 px-3 py-2 text-left active:scale-[0.98] transition-transform"
+            data-testid={`button-history-${entry.id}`}
+          >
+            <p className="text-[11px] font-black text-foreground truncate">{shortDateTime(entry.createdAt)}</p>
+            <p className="text-[10px] font-bold text-muted-foreground capitalize">{entry.fieldSize} · {entry.numTeams} teams</p>
+            <p className="text-[10px] text-muted-foreground">{entry.totalPlayers} players</p>
+          </button>
+        ))}
+      </div>
+    </div>
+  ) : null;
+
   const handleGenerate = (shuffleEquals = false) => {
     if (attendingPlayers.length < 2 || isGenerating) return;
     setSwap(null);
@@ -406,13 +441,16 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
 
   if (attendingPlayers.length < 2) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 px-6 text-center gap-3">
-        <div className="w-12 h-12 bg-muted rounded-full flex items-center justify-center">
-          <Zap className="w-6 h-6 text-muted-foreground opacity-40" />
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-col items-center justify-center py-16 px-6 text-center gap-3">
+          <div className="w-12 h-12 bg-muted rounded-full flex items-center justify-center">
+            <Zap className="w-6 h-6 text-muted-foreground opacity-40" />
+          </div>
+          <p className="text-sm text-muted-foreground font-medium">
+            Select at least 2 players in the Today tab to generate teams.
+          </p>
         </div>
-        <p className="text-sm text-muted-foreground font-medium">
-          Select at least 2 players in the Today tab to generate teams.
-        </p>
+        {historyPanel}
       </div>
     );
   }
@@ -546,22 +584,28 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
                       </button>
                     </div>
                   </div>
-                  {/* Color swatches */}
-                  <div className="flex gap-1 mb-1">
-                    {COLOR_OPTIONS.map(c => (
-                      <button
-                        key={c.value}
-                        onClick={() => handleColorChange(team.id, c.value)}
-                        title={c.label}
-                        data-testid={`color-${team.id}-${c.value}`}
-                        className="rounded-full transition-transform hover:scale-110 active:scale-95 shrink-0"
+                  {/* Team color selector */}
+                  <div className="mb-1">
+                    <Select value={team.color} onValueChange={v => handleColorChange(team.id, v as TeamColor)}>
+                      <SelectTrigger
+                        className="h-7 w-full rounded-md border px-2 py-0 text-[10px] font-black shadow-none"
                         style={{
-                          width: 13, height: 13,
-                          backgroundColor: c.hex,
-                          border: team.color === c.value ? `2px solid ${col.textHex}` : "1.5px solid rgba(255,255,255,0.3)",
+                          backgroundColor: col.textHex === "#fff" ? "rgba(255,255,255,0.16)" : "rgba(0,0,0,0.06)",
+                          borderColor: col.textHex === "#fff" ? "rgba(255,255,255,0.35)" : "rgba(15,42,67,0.18)",
+                          color: col.textHex,
                         }}
-                      />
-                    ))}
+                        data-testid={`select-team-color-${team.id}`}
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {COLOR_OPTIONS.map(c => (
+                          <SelectItem key={c.value} value={c.value} data-testid={`color-${team.id}-${c.value}`}>
+                            {c.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="text-[9px] font-bold opacity-85 leading-tight" style={{ color: col.textHex }}>
                     {team.players.length}p · Total {team.totalSkill} · Avg {team.averageSkill}
@@ -624,39 +668,7 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
         </div>
       )}
 
-      {history.length > 0 && (
-        <div className="bg-card border border-border rounded-xl p-3 shadow-sm">
-          <div className="flex items-center justify-between gap-2 mb-2">
-            <div className="flex items-center gap-2">
-              <Clock className="w-4 h-4 text-muted-foreground" />
-              <h3 className="text-xs font-black uppercase tracking-wider text-muted-foreground">Team History</h3>
-            </div>
-            <button
-              type="button"
-              className="text-[10px] font-bold text-muted-foreground underline"
-              onClick={() => setHistory([])}
-              data-testid="button-clear-history"
-            >
-              Clear
-            </button>
-          </div>
-          <div className="flex gap-2 overflow-x-auto pb-1">
-            {history.slice(0, 6).map(entry => (
-              <button
-                key={entry.id}
-                type="button"
-                onClick={() => { setTeams(entry.teams); setFieldSize(entry.fieldSize); setNumTeams(entry.numTeams); setSwap(null); }}
-                className="min-w-[142px] rounded-lg border border-border bg-muted/30 px-3 py-2 text-left active:scale-[0.98] transition-transform"
-                data-testid={`button-history-${entry.id}`}
-              >
-                <p className="text-[11px] font-black text-foreground truncate">{shortDateTime(entry.createdAt)}</p>
-                <p className="text-[10px] font-bold text-muted-foreground capitalize">{entry.fieldSize} · {entry.numTeams} teams</p>
-                <p className="text-[10px] text-muted-foreground">{entry.totalPlayers} players</p>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+      {historyPanel}
     </div>
   );
 }

@@ -200,6 +200,8 @@ const FUN_BADGES: { value: FunBadge; label: string; emoji: string; description: 
   { value: "silent-mode", label: "Silent Mode", emoji: "🔇", description: "Low volume, still fully present." },
   { value: "smooth-talker", label: "Smooth Talker", emoji: "🗣️", description: "Can talk their way through anything." },
   { value: "no-filter", label: "No Filter", emoji: "📣", description: "Says the thing everyone else was thinking." },
+  { value: "human-alarm", label: "Human Alarm", emoji: "🚨", description: "Maximum volume, usually for a good reason." },
+  { value: "influencer", label: "Influencer", emoji: "🤳", description: "The camera is probably already rolling." },
   { value: "main-character", label: "Main Character", emoji: "🎬", description: "Somehow always becomes part of the story." },
   { value: "old-school", label: "Old School", emoji: "📼", description: "Classic style, classic habits." },
   { value: "always-late", label: "Always Late", emoji: "⏰", description: "Arrival time is more of a concept." },
@@ -219,7 +221,7 @@ const FUN_BADGES: { value: FunBadge; label: string; emoji: string; description: 
 ];
 
 const FUN_BADGE_CATEGORIES: { label: string; values: FunBadge[] }[] = [
-  { label: "Personality", values: ["cool-head", "unbothered", "wildcard", "silent-mode", "smooth-talker", "no-filter", "main-character", "old-school"] },
+  { label: "Personality", values: ["cool-head", "unbothered", "wildcard", "silent-mode", "smooth-talker", "no-filter", "human-alarm", "influencer", "main-character", "old-school"] },
   { label: "Matchday", values: ["always-late", "early-exit", "first-5", "eighty-minute-warmup", "third-half", "yellow-card", "var-caller"] },
   { label: "Club Culture", values: ["kit-collector", "shoe-collector", "fashion-icon", "club-legend", "snack-captain", "cameo", "mastermind"] },
 ];

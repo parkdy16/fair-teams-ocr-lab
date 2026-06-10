@@ -146,6 +146,8 @@ const FUN_BADGE_VALUES: FunBadge[] = [
   "silent-mode",
   "smooth-talker",
   "no-filter",
+  "human-alarm",
+  "influencer",
   "main-character",
   "old-school",
   "always-late",

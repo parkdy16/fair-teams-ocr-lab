@@ -716,11 +716,9 @@ function extractOcrNames(
 export function TodayTab({
   players,
   setPlayers,
-  themeColor = "#3B82F6",
 }: {
   players: RoomPlayer[];
   setPlayers: (players: RoomPlayer[]) => void;
-  themeColor?: string;
 }) {
   const [search, setSearch] = useState("");
   const [ocrOpen, setOcrOpen] = useState(false);
@@ -735,20 +733,6 @@ export function TodayTab({
   const [expectedAttendeeCount, setExpectedAttendeeCount] = useState("");
   const [showRawOcrText, setShowRawOcrText] = useState(false);
   const [prioritizeScannedPlayers, setPrioritizeScannedPlayers] = useState(false);
-
-  const safeThemeColor = /^#[0-9A-Fa-f]{6}$/.test(themeColor)
-    ? themeColor
-    : "#3B82F6";
-  const hexToRgba = (hex: string, alpha: number) => {
-    const r = Number.parseInt(hex.slice(1, 3), 16);
-    const g = Number.parseInt(hex.slice(3, 5), 16);
-    const b = Number.parseInt(hex.slice(5, 7), 16);
-    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-  };
-  const attendingSummaryStyle = {
-    background: '#ffffff',
-    borderColor: 'rgba(148,163,184,0.25)',
-  } as React.CSSProperties;
   const [selectedScreenshotPreviews, setSelectedScreenshotPreviews] = useState<
     Array<{ name: string; url: string }>
   >([]);
@@ -1019,8 +1003,8 @@ export function TodayTab({
 
   if (players.length === 0) {
     return (
-      <div className="flex min-h-[calc(100dvh-250px)] items-center justify-center px-6 text-center">
-        <p className="text-sm text-muted-foreground font-medium">
+      <div className="text-center py-10">
+        <p className="text-muted-foreground font-medium">
           Add players in the Roster tab first.
         </p>
       </div>
@@ -1029,41 +1013,38 @@ export function TodayTab({
 
   return (
     <div className="flex flex-col gap-4">
-      <div
-        className="flex items-center justify-between rounded-xl border p-3 shadow-sm"
-        style={attendingSummaryStyle}
-      >
+      <div className="flex items-center justify-between bg-muted/30 border border-border p-3 rounded-xl shadow-sm">
         <div className="flex flex-col">
-          <span className="text-[10px] uppercase font-black tracking-wider text-slate-500">
+          <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
             Attending Today
           </span>
-          <span className="text-lg font-black leading-tight text-slate-900">
+          <span className="text-xl font-black leading-tight">
             {selectedCount}{" "}
-            <span className="text-xs font-semibold text-slate-500">
+            <span className="text-xs font-medium text-muted-foreground">
               / {players.length}
             </span>
           </span>
         </div>
         <div className="flex gap-2">
           <Button
-            variant="outline"
+            variant="secondary"
             size="sm"
             onClick={() => {
               setPrioritizeScannedPlayers(false);
               setPlayers(players.map((p) => ({ ...p, attending: true })));
             }}
-            className="h-7 bg-white/75 px-2 text-[10px] font-black uppercase text-slate-700 hover:bg-white"
+            className="h-7 text-[10px] font-bold uppercase px-2"
           >
             All
           </Button>
           <Button
-            variant="outline"
+            variant="secondary"
             size="sm"
             onClick={() => {
               setPrioritizeScannedPlayers(false);
               setPlayers(players.map((p) => ({ ...p, attending: false })));
             }}
-            className="h-7 bg-white/60 px-2 text-[10px] font-black uppercase text-slate-500 hover:bg-white hover:text-slate-700"
+            className="h-7 text-[10px] font-bold uppercase px-2 text-muted-foreground hover:opacity-100 bg-slate-900/10 hover:bg-slate-900/20 text-white border-transparent"
           >
             Clear
           </Button>
@@ -1534,7 +1515,7 @@ export function TodayTab({
             ))}
           </div>
           <div className="rounded-xl bg-sky-50 p-3 text-[11px] font-medium text-sky-800 border border-sky-100">
-            New players will start with default ratings and the NEW badge. You can
+            New players will start with OVR 5, TP 2, and the NEW badge. You can
             edit them later in the Roster tab.
           </div>
           <DialogFooter className="gap-2 sm:gap-2">
@@ -1702,7 +1683,7 @@ export function TodayTab({
                 </div>
                 <div className="mt-0.5 flex items-center gap-1 min-w-0">
                   <span className="text-[10px] text-muted-foreground font-medium shrink-0">
-                    OVR {player.skill}
+                    OVR {player.skill} · TP {player.teamPlay ?? 2}
                   </span>
                   {(player.isNew ||
                     player.isGoalkeeper ||

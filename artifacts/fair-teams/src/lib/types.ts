@@ -29,6 +29,7 @@ export interface Player {
   isCrossing?: boolean;
   isAerial?: boolean;
   isPowerShot?: boolean;
+  isBulldog?: boolean;
   isOrganizer?: boolean;
   isNew?: boolean;
   funBadge?: FunBadge;

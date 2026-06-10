@@ -28,6 +28,7 @@ export interface RoomPlayer {
   isCrossing?: boolean;
   isAerial?: boolean;
   isPowerShot?: boolean;
+  isBulldog?: boolean;
   isOrganizer?: boolean;
   isNew?: boolean;
   funBadge?: FunBadge;
@@ -78,6 +79,10 @@ function getSpecialSkillStatBoosts(player: Partial<RoomPlayer>) {
     boosts.attack += 2;
     boosts.physical += 1;
   }
+  if (player.isBulldog) {
+    boosts.stamina += 2;
+    boosts.defense += 1;
+  }
 
   return boosts;
 }
@@ -96,6 +101,7 @@ function specialAbilityBonus(player: Partial<RoomPlayer>) {
   if (player.isCrossing) bonus += 0.2;
   if (player.isAerial) bonus += 0.2;
   if (player.isPowerShot) bonus += 0.2;
+  if (player.isBulldog) bonus += 0.2;
   return Math.min(0.9, bonus);
 }
 
@@ -162,6 +168,7 @@ export function normalizePlayer(player: Partial<RoomPlayer> & { name?: string },
     isCrossing: Boolean(player.isCrossing ?? false),
     isAerial: Boolean(player.isAerial ?? false),
     isPowerShot: Boolean(player.isPowerShot ?? false),
+    isBulldog: Boolean(player.isBulldog ?? false),
     isOrganizer: Boolean(player.isOrganizer ?? false),
     isNew: Boolean(player.isNew ?? false),
     funBadge: isFunBadge(player.funBadge) ? player.funBadge : undefined,
@@ -200,8 +207,8 @@ export function escapeCsv(value: unknown) {
 }
 
 export function playersToCsv(players: RoomPlayer[]) {
-  const headers = ["name", "aka", "gender", "overall", "attack", "defense", "speed", "passing", "stamina", "strength", "teamPlay", "isGoalkeeper", "isPlaymaker", "isFinisher", "isDribbler", "isSentinel", "isEngine", "isVersatile", "isSpaceFinder", "isLongPass", "isTikiTaka", "isCrossing", "isAerial", "isPowerShot", "isOrganizer", "isNew", "funBadge", "attending", "createdAt", "updatedAt"];
-  const rows = players.map(p => [p.name, p.aka || "", p.gender, p.skill, p.attack, p.defense, p.speed, p.passing, p.stamina, p.physical, p.teamPlay, p.isGoalkeeper ? "yes" : "no", p.isPlaymaker ? "yes" : "no", p.isFinisher ? "yes" : "no", p.isDribbler ? "yes" : "no", p.isSentinel ? "yes" : "no", p.isEngine ? "yes" : "no", p.isVersatile ? "yes" : "no", p.isSpaceFinder ? "yes" : "no", p.isLongPass ? "yes" : "no", p.isTikiTaka ? "yes" : "no", p.isCrossing ? "yes" : "no", p.isAerial ? "yes" : "no", p.isPowerShot ? "yes" : "no", p.isOrganizer ? "yes" : "no", p.isNew ? "yes" : "no", p.funBadge || "", p.attending ? "yes" : "no", p.createdAt, p.updatedAt || ""]);
+  const headers = ["name", "aka", "gender", "overall", "attack", "defense", "speed", "passing", "stamina", "strength", "teamPlay", "isGoalkeeper", "isPlaymaker", "isFinisher", "isDribbler", "isSentinel", "isEngine", "isVersatile", "isSpaceFinder", "isLongPass", "isTikiTaka", "isCrossing", "isAerial", "isPowerShot", "isBulldog", "isOrganizer", "isNew", "funBadge", "attending", "createdAt", "updatedAt"];
+  const rows = players.map(p => [p.name, p.aka || "", p.gender, p.skill, p.attack, p.defense, p.speed, p.passing, p.stamina, p.physical, p.teamPlay, p.isGoalkeeper ? "yes" : "no", p.isPlaymaker ? "yes" : "no", p.isFinisher ? "yes" : "no", p.isDribbler ? "yes" : "no", p.isSentinel ? "yes" : "no", p.isEngine ? "yes" : "no", p.isVersatile ? "yes" : "no", p.isSpaceFinder ? "yes" : "no", p.isLongPass ? "yes" : "no", p.isTikiTaka ? "yes" : "no", p.isCrossing ? "yes" : "no", p.isAerial ? "yes" : "no", p.isPowerShot ? "yes" : "no", p.isBulldog ? "yes" : "no", p.isOrganizer ? "yes" : "no", p.isNew ? "yes" : "no", p.funBadge || "", p.attending ? "yes" : "no", p.createdAt, p.updatedAt || ""]);
   return [headers, ...rows].map(row => row.map(escapeCsv).join(",")).join("\n");
 }
 
@@ -271,6 +278,7 @@ export function csvToPlayers(csvText: string): RoomPlayer[] {
       isCrossing: parseBoolean(get("iscrossing") || get("crossing")),
       isAerial: parseBoolean(get("isaerial") || get("aerial")),
       isPowerShot: parseBoolean(get("ispowershot") || get("powershot") || get("power shot")),
+      isBulldog: parseBoolean(get("isbulldog") || get("bulldog") || get("dog")),
       isOrganizer: parseBoolean(get("isorganizer") || get("organizer") || get("org")),
       isNew: parseBoolean(get("isnew") || get("new")),
       funBadge: isFunBadge(get("funbadge") || get("funBadge") || get("badge")) ? (get("funbadge") || get("funBadge") || get("badge")) as FunBadge : undefined,

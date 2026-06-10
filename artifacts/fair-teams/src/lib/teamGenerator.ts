@@ -10,9 +10,9 @@ export function getWeightedSkill(player: Player, fieldSize: FieldSize = "medium"
       : { attack: 0.20, passing: 0.20, defense: 0.20, speed: 0.20, stamina: 0.20 };
 
   const attackBoost = (player.isSpaceFinder ? 0.3 : 0) + (player.isLongPass ? 1 : 0) + (player.isTikiTaka ? 1 : 0) + (player.isCrossing ? 1 : 0) + (player.isAerial ? 1 : 0) + (player.isPowerShot ? 2 : 0);
-  const defenseBoost = (player.isSpaceFinder ? 0.3 : 0) + (player.isAerial ? 1 : 0);
+  const defenseBoost = (player.isSpaceFinder ? 0.3 : 0) + (player.isAerial ? 1 : 0) + (player.isBulldog ? 1 : 0);
   const passingBoost = (player.isLongPass ? 2 : 0) + (player.isTikiTaka ? 2 : 0) + (player.isCrossing ? 2 : 0);
-  const staminaBoost = player.isTikiTaka ? 0.5 : 0;
+  const staminaBoost = (player.isTikiTaka ? 0.5 : 0) + (player.isBulldog ? 2 : 0);
 
   const attack = Math.min(10, player.attack + attackBoost);
   const defense = Math.min(10, player.defense + defenseBoost);

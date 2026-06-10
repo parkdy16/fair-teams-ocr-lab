@@ -51,22 +51,138 @@ function VersatileBadgeIcon({ className }: { className?: string }) {
   );
 }
 
-type AbilityKey = "isGoalkeeper" | "isPlaymaker" | "isFinisher" | "isDribbler" | "isSentinel" | "isEngine" | "isVersatile" | "isSpaceFinder" | "isLongPass" | "isTikiTaka" | "isCrossing" | "isAerial" | "isPowerShot";
+
+
+function MagicWandBadgeIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M15 4l5 5" />
+      <path d="M13.5 10.5l-9 9" />
+      <path d="M12.5 5.5l6 6" />
+      <path d="M5 4v3" />
+      <path d="M3.5 5.5h3" />
+      <path d="M20 16v3" />
+      <path d="M18.5 17.5h3" />
+      <path d="M9 3l.8 1.6L11.5 5l-1.7.4L9 7l-.8-1.6L6.5 5l1.7-.4z" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+function FinisherBadgeIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="10" cy="13" r="6" />
+      <circle cx="10" cy="13" r="2" />
+      <path d="M14.5 8.5L20 3" />
+      <path d="M17.5 3H20v2.5" />
+      <path d="M14.2 8.8L10 13" />
+    </svg>
+  );
+}
+
+function DribblerBadgeIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 18l4-4-4-4 4-4" />
+      <path d="M10 18l4-4-4-4 4-4" />
+      <circle cx="19" cy="18" r="2" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+function LongPassBadgeIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 19L19 4" />
+      <path d="M12 4h7v7" />
+      <path d="M5 13c2-1.5 4.5-1.5 7.5 0" />
+    </svg>
+  );
+}
+
+function TikiTakaBadgeIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="6" cy="8" r="2" fill="currentColor" stroke="none" />
+      <circle cx="17" cy="7" r="2" fill="currentColor" stroke="none" />
+      <circle cx="18" cy="17" r="2" fill="currentColor" stroke="none" />
+      <circle cx="7" cy="16" r="2" fill="currentColor" stroke="none" />
+      <path d="M8 8h7" />
+      <path d="M17 9l1 6" />
+      <path d="M16 17H9" />
+      <path d="M7 14L6 10" />
+    </svg>
+  );
+}
+
+function CrossingBadgeIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 18c7-9 12-10 16-6" />
+      <path d="M16 8l4 4-5 2" />
+      <path d="M5 6v14" />
+      <path d="M5 6h5" />
+    </svg>
+  );
+}
+
+function EagleBadgeIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M3 12c3-5 6-6 9-2 3-4 6-3 9 2" />
+      <path d="M6 12l4 5" />
+      <path d="M18 12l-4 5" />
+      <path d="M12 10v8" />
+      <path d="M10 7l2-2 2 2" />
+    </svg>
+  );
+}
+
+function PowerShotBadgeIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="8" cy="15" r="3" />
+      <path d="M13 15h7" />
+      <path d="M17 11l3 4-3 4" />
+      <path d="M5 5l1.2 3" />
+      <path d="M11 4l-1 3" />
+      <path d="M16 6l-2 2" />
+    </svg>
+  );
+}
+
+function BulldogBadgeIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M5 9L3 5l5 2" />
+      <path d="M19 9l2-4-5 2" />
+      <path d="M5 10c0-3 3-5 7-5s7 2 7 5v3c0 4-3 7-7 7s-7-3-7-7z" />
+      <path d="M8 12h.01" />
+      <path d="M16 12h.01" />
+      <path d="M10 15h4" />
+      <path d="M9 17c2 1 4 1 6 0" />
+      <path d="M12 13v2" />
+    </svg>
+  );
+}
+
+type AbilityKey = "isGoalkeeper" | "isPlaymaker" | "isFinisher" | "isDribbler" | "isSentinel" | "isEngine" | "isVersatile" | "isSpaceFinder" | "isLongPass" | "isTikiTaka" | "isCrossing" | "isAerial" | "isPowerShot" | "isBulldog";
 
 const SPECIAL_ABILITIES: { key: AbilityKey; label: string; badge: string; description: string; icon?: React.ComponentType<{ className?: string }> }[] = [
   { key: "isGoalkeeper", label: "Goalkeeper", badge: "GK", description: "Comfortable in goal; helps spread keeper options across teams." },
-  { key: "isPlaymaker", label: "Playmaker", badge: "PM", description: "Controls passing and creates chances for teammates.", icon: Share2 },
-  { key: "isFinisher", label: "Finisher", badge: "FIN", description: "Reliable scorer who turns chances into goals.", icon: Target },
-  { key: "isDribbler", label: "Dribbler", badge: "DRB", description: "Strong 1v1 player; keeps the ball under pressure.", icon: Zap },
+  { key: "isPlaymaker", label: "Playmaker", badge: "PM", description: "Controls passing and creates chances for teammates.", icon: MagicWandBadgeIcon },
+  { key: "isFinisher", label: "Finisher", badge: "FIN", description: "Reliable scorer who turns chances into goals.", icon: FinisherBadgeIcon },
+  { key: "isDribbler", label: "Dribbler", badge: "DRB", description: "Strong 1v1 player; keeps the ball under pressure.", icon: DribblerBadgeIcon },
   { key: "isSentinel", label: "Sentinel", badge: "SEN", description: "Defensive stopper; tackles, marks, and protects space.", icon: Shield },
   { key: "isEngine", label: "Engine", badge: "ENG", description: "High work rate; keeps running, pressing, and covering.", icon: EngineBadgeIcon },
   { key: "isVersatile", label: "Versatile", badge: "ALL", description: "All-rounder who can fill weak spots in a team.", icon: VersatileBadgeIcon },
   { key: "isSpaceFinder", label: "Space Finder", badge: "SPC", description: "Finds smart spaces in attack and defense.", icon: Search },
-  { key: "isLongPass", label: "Long Pass", badge: "L-PAS", description: "Boosts Passing +2 and Attack +1. Good for switching play and longer through balls.", icon: Share2 },
-  { key: "isTikiTaka", label: "Tiki-Taka", badge: "TIKI", description: "Boosts Passing +2, Attack +1, and a tiny Stamina bonus. Quick short passing and combinations.", icon: Share2 },
-  { key: "isCrossing", label: "Crossing", badge: "CRS", description: "Boosts Passing +2 and Attack +1. Creates chances from wide areas.", icon: Share2 },
-  { key: "isAerial", label: "Aerial", badge: "AIR", description: "Boosts Strength +2, Defense +1, and Attack +1. Strong in headers and clearances.", icon: Dumbbell },
-  { key: "isPowerShot", label: "Power Shot", badge: "PWR", description: "Boosts Attack +2 and Strength +1. Dangerous hard shooter.", icon: Target },
+  { key: "isLongPass", label: "Long Pass", badge: "L-PAS", description: "Boosts Passing +2 and Attack +1. Good for switching play and longer through balls.", icon: LongPassBadgeIcon },
+  { key: "isTikiTaka", label: "Tiki-Taka", badge: "TIKI", description: "Boosts Passing +2, Attack +1, and a tiny Stamina bonus. Quick short passing and combinations.", icon: TikiTakaBadgeIcon },
+  { key: "isCrossing", label: "Crossing", badge: "CRS", description: "Boosts Passing +2 and Attack +1. Creates chances from wide areas.", icon: CrossingBadgeIcon },
+  { key: "isAerial", label: "Aerial", badge: "AIR", description: "Boosts Strength +2, Defense +1, and Attack +1. Strong in headers and clearances.", icon: EagleBadgeIcon },
+  { key: "isPowerShot", label: "Power Shot", badge: "PWR", description: "Boosts Attack +2 and Strength +1. Dangerous hard shooter.", icon: PowerShotBadgeIcon },
+  { key: "isBulldog", label: "Bulldog", badge: "DOG", description: "Boosts Stamina +2 and Defense +1. Relentless presser who hounds opponents and fights for loose balls.", icon: BulldogBadgeIcon },
 ];
 
 
@@ -125,7 +241,7 @@ type AddPlayerDetails = Pick<RoomPlayer,
   "attack" | "defense" | "speed" | "passing" | "stamina" | "physical" | "teamPlay" |
   "funBadge" | "isGoalkeeper" | "isPlaymaker" | "isFinisher" | "isDribbler" |
   "isSentinel" | "isEngine" | "isVersatile" | "isSpaceFinder" |
-  "isLongPass" | "isTikiTaka" | "isCrossing" | "isAerial" | "isPowerShot"
+  "isLongPass" | "isTikiTaka" | "isCrossing" | "isAerial" | "isPowerShot" | "isBulldog"
 >;
 
 function createDefaultAddPlayerDetails(): AddPlayerDetails {
@@ -151,6 +267,7 @@ function createDefaultAddPlayerDetails(): AddPlayerDetails {
     isCrossing: false,
     isAerial: false,
     isPowerShot: false,
+    isBulldog: false,
   };
 }
 

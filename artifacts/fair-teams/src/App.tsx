@@ -20,6 +20,7 @@ import { TodayTab } from "@/components/TodayTab";
 import { TeamsTab } from "@/components/TeamsTab";
 import { Button } from "@/components/ui/button";
 import fairTeamsLogo from "@/assets/fairteams-logo.png";
+import fairTeamsLogoFloating from "@/assets/fairteams-logo-floating.png";
 import {
   RoomPlayer,
   csvToPlayers,
@@ -59,14 +60,17 @@ function hexToRgba(hex: string, alpha: number) {
 
 function PoweredByFairTeams() {
   return (
-    <div className="mt-7 mb-2 flex items-center justify-center gap-1.5 text-[11px] font-bold text-slate-400 select-none">
+    <div className="mt-auto pt-7 pb-2 flex items-center justify-center gap-1.5 text-[11px] font-bold text-slate-400 select-none">
       <span>Powered by</span>
       <img
-        src={fairTeamsLogo}
+        src={fairTeamsLogoFloating}
         alt=""
-        className="h-5 w-5 object-contain opacity-80"
+        className="h-5 w-5 object-contain opacity-85"
       />
-      <span className="text-[#102A43]/70">Fair Teams</span>
+      <span className="font-black tracking-tight leading-none">
+        <span className="text-[#102A43]/80">FAIR</span>
+        <span className="text-[#16A34A]"> TEAMS</span>
+      </span>
     </div>
   );
 }
@@ -389,6 +393,7 @@ function App() {
         </header>
 
         <div className="flex-1 overflow-y-auto p-4 md:p-5">
+          <div className="flex min-h-full flex-col">
           <TabsContent
             value="players"
             className="m-0 data-[state=active]:animate-in data-[state=active]:fade-in-50"
@@ -408,6 +413,7 @@ function App() {
             <TeamsTab players={players} />
           </TabsContent>
           <PoweredByFairTeams />
+          </div>
         </div>
       </Tabs>
 
@@ -417,180 +423,139 @@ function App() {
           role="dialog"
           aria-modal="true"
         >
-          <div className="max-h-[88dvh] w-full max-w-2xl overflow-y-auto rounded-t-3xl border border-slate-200 bg-white p-4 shadow-2xl sm:rounded-3xl">
+          <div className="w-full max-w-xl rounded-t-3xl border border-slate-200 bg-white p-4 shadow-2xl sm:rounded-3xl">
             <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-3">
               <div>
-                <h2 className="text-lg font-black tracking-tight text-[#102A43]">
+                <h2 className="text-base font-black tracking-tight text-[#102A43]">
                   Group Settings
                 </h2>
-                <p className="mt-0.5 text-xs font-semibold text-slate-500">
-                  Name, logo, and color theme for your app.
+                <p className="mt-0.5 text-[11px] font-semibold text-slate-500">
+                  Name, logo, and color theme.
                 </p>
               </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  type="button"
-                  className="h-9 rounded-xl bg-[#102A43] px-4 text-xs font-black text-white"
-                  onClick={saveGroupSettings}
-                >
-                  Save
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-9 w-9 rounded-xl"
-                  onClick={cancelGroupSettings}
-                  title="Close"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 rounded-xl"
+                onClick={cancelGroupSettings}
+                title="Close"
+              >
+                <X className="h-4 w-4" />
+              </Button>
             </div>
 
-            <div className="mt-4 grid gap-4 md:grid-cols-[160px_1fr]">
-              <div className="grid gap-2 self-start text-sm font-black text-[#102A43]">
-                <div className="flex items-center gap-2 rounded-2xl bg-blue-50 px-3 py-3 text-blue-700">
-                  <Pencil className="h-4 w-4" /> Group Info
-                </div>
-                <div className="flex items-center gap-2 rounded-2xl px-3 py-3 text-slate-500">
-                  <Palette className="h-4 w-4" /> Group Color
-                </div>
-                <div className="flex items-center gap-2 rounded-2xl px-3 py-3 text-slate-500">
-                  <ImageIcon className="h-4 w-4" /> Group Logo
-                </div>
-              </div>
+            <div className="mt-4 space-y-4">
+              <section>
+                <h3 className="text-sm font-black text-[#102A43]">
+                  Group Name
+                </h3>
+                <input
+                  value={draftGroupName}
+                  onChange={(e) => setDraftGroupName(e.target.value)}
+                  maxLength={32}
+                  className="mt-2 h-10 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm font-extrabold text-[#102A43] outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
+                  placeholder="Fair Teams"
+                />
+              </section>
 
-              <div className="space-y-5">
-                <section>
-                  <h3 className="text-sm font-black uppercase tracking-wide text-slate-500">
-                    Group Info
-                  </h3>
-                  <label className="mt-2 block text-xs font-bold text-slate-500">
-                    Group name
-                  </label>
-                  <input
-                    value={draftGroupName}
-                    onChange={(e) => setDraftGroupName(e.target.value)}
-                    maxLength={32}
-                    className="mt-1 h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm font-extrabold text-[#102A43] outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
-                    placeholder="Fair Teams"
-                  />
-                </section>
-
-                <section>
-                  <h3 className="text-sm font-black uppercase tracking-wide text-slate-500">
-                    Group Logo
-                  </h3>
-                  <div className="mt-2 flex items-center gap-3">
-                    <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-3xl border border-slate-200 bg-slate-50 shadow-sm">
-                      <img
-                        src={draftGroupLogo || fairTeamsLogo}
-                        alt="Group logo preview"
-                        className="h-full w-full object-cover"
-                      />
-                    </div>
-                    <div className="flex flex-wrap gap-2">
+              <section>
+                <h3 className="text-sm font-black text-[#102A43]">
+                  Group Logo
+                </h3>
+                <div className="mt-2 flex items-center gap-3">
+                  <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 shadow-sm">
+                    <img
+                      src={draftGroupLogo || fairTeamsLogo}
+                      alt="Group logo preview"
+                      className="h-full w-full object-cover"
+                    />
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-9 rounded-2xl text-xs font-black"
+                      onClick={() => logoInputRef.current?.click()}
+                    >
+                      Choose logo
+                    </Button>
+                    {draftGroupLogo && (
                       <Button
                         type="button"
-                        variant="outline"
-                        className="rounded-2xl"
-                        onClick={() => logoInputRef.current?.click()}
+                        variant="ghost"
+                        className="h-9 rounded-2xl text-xs font-bold text-slate-500"
+                        onClick={() => setDraftGroupLogo("")}
                       >
-                        Choose logo
+                        Use default
                       </Button>
-                      {draftGroupLogo && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          className="rounded-2xl text-slate-500"
-                          onClick={() => setDraftGroupLogo("")}
-                        >
-                          Use default
-                        </Button>
-                      )}
-                      <input
-                        ref={logoInputRef}
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          e.target.value = "";
-                          if (file) readLogoFile(file);
-                        }}
-                      />
-                    </div>
+                    )}
+                    <input
+                      ref={logoInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        e.target.value = "";
+                        if (file) readLogoFile(file);
+                      }}
+                    />
                   </div>
-                </section>
+                </div>
+              </section>
 
-                <section>
-                  <h3 className="text-sm font-black uppercase tracking-wide text-slate-500">
-                    Group Color
-                  </h3>
-                  <p className="mt-1 text-xs font-semibold text-slate-500">
-                    Choose a color theme for the header mood.
-                  </p>
-                  <div className="mt-3 grid grid-cols-5 gap-3">
-                    {GROUP_COLOR_THEMES.map((theme) => {
-                      const selected =
-                        draftHeaderColor.toLowerCase() ===
-                        theme.value.toLowerCase();
-                      return (
-                        <button
-                          key={theme.name}
-                          type="button"
-                          onClick={() => setDraftHeaderColor(theme.value)}
-                          className="group flex flex-col items-center gap-1.5 text-[11px] font-bold text-slate-600"
-                          title={theme.name}
+              <section>
+                <h3 className="text-sm font-black text-[#102A43]">
+                  Group Color
+                </h3>
+                <div className="mt-2 grid grid-cols-5 gap-2.5">
+                  {GROUP_COLOR_THEMES.map((theme) => {
+                    const selected =
+                      draftHeaderColor.toLowerCase() ===
+                      theme.value.toLowerCase();
+                    return (
+                      <button
+                        key={theme.name}
+                        type="button"
+                        onClick={() => setDraftHeaderColor(theme.value)}
+                        className="group flex flex-col items-center gap-1 text-[10px] font-bold text-slate-600"
+                        title={theme.name}
+                      >
+                        <span
+                          className={`flex h-9 w-full min-w-0 items-center justify-center rounded-2xl border shadow-sm transition-transform group-active:scale-95 ${selected ? "border-blue-500 ring-2 ring-blue-200" : "border-white"}`}
+                          style={{
+                            background: `linear-gradient(135deg, ${theme.value}, ${hexToRgba(theme.value, 0.42)})`,
+                          }}
                         >
-                          <span
-                            className={`flex h-11 w-full min-w-0 items-center justify-center rounded-2xl border shadow-sm transition-transform group-active:scale-95 ${selected ? "border-blue-500 ring-2 ring-blue-200" : "border-white"}`}
-                            style={{
-                              background: `linear-gradient(135deg, ${theme.value}, ${hexToRgba(theme.value, 0.42)})`,
-                            }}
-                          >
-                            {selected && (
-                              <Check className="h-5 w-5 text-white drop-shadow" />
-                            )}
-                          </span>
-                          <span className="truncate">{theme.name}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </section>
+                          {selected && (
+                            <Check className="h-4 w-4 text-white drop-shadow" />
+                          )}
+                        </span>
+                        <span className="truncate">{theme.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+            </div>
 
-                <section>
-                  <h3 className="text-sm font-black uppercase tracking-wide text-slate-500">
-                    Preview
-                  </h3>
-                  <div
-                    className="mt-2 rounded-3xl border border-slate-200 p-3"
-                    style={{
-                      background: `linear-gradient(135deg, ${hexToRgba(draftHeaderColor, 0.24)} 0%, rgba(255,255,255,0.98) 55%, rgba(248,250,252,0.96) 100%)`,
-                    }}
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="flex min-w-0 items-center gap-2.5">
-                        <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white/80 border border-white/70 shadow-sm">
-                          <img
-                            src={draftGroupLogo || fairTeamsLogo}
-                            alt=""
-                            className="h-full w-full object-cover"
-                          />
-                        </span>
-                        <span className="truncate text-sm font-black text-[#102A43]">
-                          {draftGroupName.trim() || "Fair Teams"}
-                        </span>
-                      </div>
-                      <span className="rounded-xl border border-slate-200 bg-white/85 px-3 py-2 text-xs font-black text-[#102A43]">
-                        Files
-                      </span>
-                    </div>
-                  </div>
-                </section>
-              </div>
+            <div className="mt-5 flex gap-2 border-t border-slate-100 pt-3">
+              <Button
+                type="button"
+                variant="outline"
+                className="h-11 flex-1 rounded-2xl text-sm font-black"
+                onClick={cancelGroupSettings}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                className="h-11 flex-[1.4] rounded-2xl bg-[#102A43] text-sm font-black text-white"
+                onClick={saveGroupSettings}
+              >
+                Save
+              </Button>
             </div>
           </div>
         </div>

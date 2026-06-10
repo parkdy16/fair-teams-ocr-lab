@@ -23,13 +23,12 @@ const STAT_FIELDS = [
 
 function EngineBadgeIcon({ className }: { className?: string }) {
   return (
-    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M7 9h7l2 2h2v5h-2l-1.4 2H8l-1.5-2H4v-5h3z" />
-      <path d="M9 9V6h5" />
-      <path d="M10 6V4" />
-      <path d="M13 6V4" />
-      <path d="M18 12h2" />
-      <path d="M4 13H2" />
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="4" y="8" width="14" height="9" rx="2" />
+      <path d="M18 11h2v3h-2" />
+      <path d="M7 11v3" />
+      <path d="M10 11v3" />
+      <path d="M13 11v3" />
     </svg>
   );
 }
@@ -115,25 +114,27 @@ function TikiTakaBadgeIcon({ className }: { className?: string }) {
   );
 }
 
-function CrossingBadgeIcon({ className }: { className?: string }) {
+function TechnicianBadgeIcon({ className }: { className?: string }) {
   return (
-    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M4 18c7-9 12-10 16-6" />
-      <path d="M16 8l4 4-5 2" />
-      <path d="M5 6v14" />
-      <path d="M5 6h5" />
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="8" cy="14" r="2.3" />
+      <path d="M12 10c1.5-1.6 3.5-1.6 5 0" />
+      <path d="M12 14c1.5 1.6 3.5 1.6 5 0" />
+      <path d="M18 5l.7 1.6L20.5 7l-1.8.4L18 9l-.7-1.6L15.5 7l1.8-.4z" fill="currentColor" stroke="none" />
+      <path d="M5 5l.6 1.3L7 7l-1.4.4L5 8.7l-.6-1.3L3 7l1.4-.7z" fill="currentColor" stroke="none" />
     </svg>
   );
 }
 
-function EagleBadgeIcon({ className }: { className?: string }) {
+function HeaderBadgeIcon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M3 12c3-5 6-6 9-2 3-4 6-3 9 2" />
-      <path d="M6 12l4 5" />
-      <path d="M18 12l-4 5" />
-      <path d="M12 10v8" />
-      <path d="M10 7l2-2 2 2" />
+      <circle cx="12" cy="5" r="2.4" />
+      <path d="M8 12c1-2 2.3-3 4-3s3 1 4 3" />
+      <path d="M9 17c1.5 1.2 4.5 1.2 6 0" />
+      <path d="M12 9v5" />
+      <path d="M7 7l-2 2" />
+      <path d="M17 7l2 2" />
     </svg>
   );
 }
@@ -141,12 +142,12 @@ function EagleBadgeIcon({ className }: { className?: string }) {
 function PowerShotBadgeIcon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <circle cx="8" cy="15" r="3" />
-      <path d="M13 15h7" />
-      <path d="M17 11l3 4-3 4" />
-      <path d="M5 5l1.2 3" />
-      <path d="M11 4l-1 3" />
-      <path d="M16 6l-2 2" />
+      <circle cx="7" cy="15" r="2.8" />
+      <path d="M12 15h7" />
+      <path d="M16 11l3 4-3 4" />
+      <path d="M10 8l2-3" />
+      <path d="M13 9l4-3" />
+      <path d="M13 21l4-3" />
     </svg>
   );
 }
@@ -170,18 +171,24 @@ type AbilityKey = "isGoalkeeper" | "isPlaymaker" | "isFinisher" | "isDribbler" |
 
 const SPECIAL_ABILITIES: { key: AbilityKey; label: string; badge: string; description: string; icon?: React.ComponentType<{ className?: string }> }[] = [
   { key: "isGoalkeeper", label: "Goalkeeper", badge: "GK", description: "Comfortable in goal; helps spread keeper options across teams." },
-  { key: "isPlaymaker", label: "Playmaker", badge: "PM", description: "Controls passing and creates chances for teammates.", icon: MagicWandBadgeIcon },
+
+  // Attack-first traits
   { key: "isFinisher", label: "Finisher", badge: "FIN", description: "Reliable scorer who turns chances into goals.", icon: FinisherBadgeIcon },
+  { key: "isPowerShot", label: "Power Shot", badge: "PWR", description: "Boosts Attack +2 and Strength +1. Dangerous hard shooter.", icon: PowerShotBadgeIcon },
+  { key: "isAerial", label: "Header", badge: "HEAD", description: "Boosts Strength +2, Defense +1, and Attack +1. Strong with headers and clearances.", icon: HeaderBadgeIcon },
+  { key: "isSpaceFinder", label: "Space Finder", badge: "SPC", description: "Finds smart spaces in attack and defense.", icon: Search },
   { key: "isDribbler", label: "Dribbler", badge: "DRB", description: "Strong 1v1 player; keeps the ball under pressure.", icon: DribblerBadgeIcon },
-  { key: "isSentinel", label: "Sentinel", badge: "SEN", description: "Defensive stopper; tackles, marks, and protects space.", icon: Shield },
+
+  // Midfield / control traits
+  { key: "isPlaymaker", label: "Playmaker", badge: "PM", description: "Controls passing and creates chances for teammates.", icon: MagicWandBadgeIcon },
+  { key: "isCrossing", label: "Technician", badge: "TECH", description: "Boosts Team Play and Passing. Clean touch, control, and technical skill.", icon: TechnicianBadgeIcon },
+  { key: "isTikiTaka", label: "Tiki-Taka", badge: "TIKI", description: "Boosts Passing +2, Attack +1, and a tiny Stamina bonus. Quick short passing and combinations.", icon: TikiTakaBadgeIcon },
+  { key: "isLongPass", label: "Long Pass", badge: "L-PAS", description: "Boosts Passing +2 and Attack +1. Good for switching play and longer through balls.", icon: LongPassBadgeIcon },
   { key: "isEngine", label: "Engine", badge: "ENG", description: "High work rate; keeps running, pressing, and covering.", icon: EngineBadgeIcon },
   { key: "isVersatile", label: "Versatile", badge: "ALL", description: "All-rounder who can fill weak spots in a team.", icon: VersatileBadgeIcon },
-  { key: "isSpaceFinder", label: "Space Finder", badge: "SPC", description: "Finds smart spaces in attack and defense.", icon: Search },
-  { key: "isLongPass", label: "Long Pass", badge: "L-PAS", description: "Boosts Passing +2 and Attack +1. Good for switching play and longer through balls.", icon: LongPassBadgeIcon },
-  { key: "isTikiTaka", label: "Tiki-Taka", badge: "TIKI", description: "Boosts Passing +2, Attack +1, and a tiny Stamina bonus. Quick short passing and combinations.", icon: TikiTakaBadgeIcon },
-  { key: "isCrossing", label: "Crossing", badge: "CRS", description: "Boosts Passing +2 and Attack +1. Creates chances from wide areas.", icon: CrossingBadgeIcon },
-  { key: "isAerial", label: "Aerial", badge: "AIR", description: "Boosts Strength +2, Defense +1, and Attack +1. Strong in headers and clearances.", icon: EagleBadgeIcon },
-  { key: "isPowerShot", label: "Power Shot", badge: "PWR", description: "Boosts Attack +2 and Strength +1. Dangerous hard shooter.", icon: PowerShotBadgeIcon },
+
+  // Defense-first traits
+  { key: "isSentinel", label: "Sentinel", badge: "SEN", description: "Defensive guardian; holds shape, marks, and protects space.", icon: Shield },
   { key: "isBulldog", label: "Bulldog", badge: "DOG", description: "Boosts Stamina +2 and Defense +1. Relentless presser who hounds opponents and fights for loose balls.", icon: BulldogBadgeIcon },
 ];
 

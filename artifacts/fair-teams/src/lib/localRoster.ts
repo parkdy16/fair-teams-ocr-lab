@@ -55,7 +55,7 @@ function clamp(num: unknown, min: number, max: number, fallback: number) {
 }
 
 function getSpecialSkillStatBoosts(player: Partial<RoomPlayer>) {
-  const boosts = { attack: 0, defense: 0, passing: 0, physical: 0, stamina: 0, speed: 0 };
+  const boosts = { attack: 0, defense: 0, passing: 0, physical: 0, stamina: 0, speed: 0, teamPlay: 0 };
 
   if (player.isLongPass) {
     boosts.passing += 2;
@@ -66,10 +66,14 @@ function getSpecialSkillStatBoosts(player: Partial<RoomPlayer>) {
     boosts.attack += 1;
     boosts.stamina += 0.5;
   }
+  // Internal compatibility: older saved rosters used isCrossing for Crossing.
+  // It now represents Technician.
   if (player.isCrossing) {
-    boosts.passing += 2;
-    boosts.attack += 1;
+    boosts.teamPlay += 1;
+    boosts.passing += 1;
   }
+  // Internal compatibility: older saved rosters used isAerial for Aerial.
+  // It now represents Header.
   if (player.isAerial) {
     boosts.physical += 2;
     boosts.defense += 1;
@@ -120,6 +124,7 @@ export function calculateOverall(player: Partial<RoomPlayer>) {
   const effectiveSpeed = Math.min(10, speed + boosts.speed);
   const effectiveStamina = Math.min(10, stamina + boosts.stamina);
   const effectivePhysical = Math.min(10, physical + boosts.physical);
+  const effectiveTeamPlay = Math.min(3, teamPlay + boosts.teamPlay);
 
   // Casual football OVA: football skills matter most; raw strength is only a small tie-breaker.
   const baseOverall =
@@ -129,7 +134,7 @@ export function calculateOverall(player: Partial<RoomPlayer>) {
     effectiveSpeed * 0.20 +
     effectiveStamina * 0.12 +
     effectivePhysical * 0.04;
-  const teamPlayMultiplier = teamPlay === 1 ? 0.93 : teamPlay === 3 ? 1.07 : 1.0;
+  const teamPlayMultiplier = effectiveTeamPlay === 1 ? 0.93 : effectiveTeamPlay === 3 ? 1.07 : 1.0;
   const overall = baseOverall * teamPlayMultiplier + specialAbilityBonus(player);
   return Math.round(Math.min(10, overall) * 10) / 10;
 }
@@ -207,7 +212,7 @@ export function escapeCsv(value: unknown) {
 }
 
 export function playersToCsv(players: RoomPlayer[]) {
-  const headers = ["name", "aka", "gender", "overall", "attack", "defense", "speed", "passing", "stamina", "strength", "teamPlay", "isGoalkeeper", "isPlaymaker", "isFinisher", "isDribbler", "isSentinel", "isEngine", "isVersatile", "isSpaceFinder", "isLongPass", "isTikiTaka", "isCrossing", "isAerial", "isPowerShot", "isBulldog", "isOrganizer", "isNew", "funBadge", "attending", "createdAt", "updatedAt"];
+  const headers = ["name", "aka", "gender", "overall", "attack", "defense", "speed", "passing", "stamina", "strength", "teamPlay", "isGoalkeeper", "isPlaymaker", "isFinisher", "isDribbler", "isSentinel", "isEngine", "isVersatile", "isSpaceFinder", "isLongPass", "isTikiTaka", "isTechnician", "isHeader", "isPowerShot", "isBulldog", "isOrganizer", "isNew", "funBadge", "attending", "createdAt", "updatedAt"];
   const rows = players.map(p => [p.name, p.aka || "", p.gender, p.skill, p.attack, p.defense, p.speed, p.passing, p.stamina, p.physical, p.teamPlay, p.isGoalkeeper ? "yes" : "no", p.isPlaymaker ? "yes" : "no", p.isFinisher ? "yes" : "no", p.isDribbler ? "yes" : "no", p.isSentinel ? "yes" : "no", p.isEngine ? "yes" : "no", p.isVersatile ? "yes" : "no", p.isSpaceFinder ? "yes" : "no", p.isLongPass ? "yes" : "no", p.isTikiTaka ? "yes" : "no", p.isCrossing ? "yes" : "no", p.isAerial ? "yes" : "no", p.isPowerShot ? "yes" : "no", p.isBulldog ? "yes" : "no", p.isOrganizer ? "yes" : "no", p.isNew ? "yes" : "no", p.funBadge || "", p.attending ? "yes" : "no", p.createdAt, p.updatedAt || ""]);
   return [headers, ...rows].map(row => row.map(escapeCsv).join(",")).join("\n");
 }
@@ -275,8 +280,8 @@ export function csvToPlayers(csvText: string): RoomPlayer[] {
       isSpaceFinder: parseBoolean(get("isspacefinder") || get("spacefinder") || get("space finder")),
       isLongPass: parseBoolean(get("islongpass") || get("longpass") || get("long pass")),
       isTikiTaka: parseBoolean(get("istikitaka") || get("tikitaka") || get("tiki taka") || get("tiki-taka")),
-      isCrossing: parseBoolean(get("iscrossing") || get("crossing")),
-      isAerial: parseBoolean(get("isaerial") || get("aerial")),
+      isCrossing: parseBoolean(get("istechnician") || get("technician") || get("iscrossing") || get("crossing")),
+      isAerial: parseBoolean(get("isheader") || get("header") || get("isaerial") || get("aerial")),
       isPowerShot: parseBoolean(get("ispowershot") || get("powershot") || get("power shot")),
       isBulldog: parseBoolean(get("isbulldog") || get("bulldog") || get("dog")),
       isOrganizer: parseBoolean(get("isorganizer") || get("organizer") || get("org")),

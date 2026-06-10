@@ -148,6 +148,25 @@ function cleanOcrLine(value: string) {
     .trim();
 }
 
+function cleanMeetupNamePrefix(value: string) {
+  const words = cleanOcrLine(value).split(/\s+/).filter(Boolean);
+  if (words.length >= 2) {
+    const last = words[words.length - 1];
+    const lettersOnly = stripDiacritics(last).toLowerCase().replace(/[^a-z]/g, "");
+    const looksLikeAvatarNoise =
+      lettersOnly.length <= 2 && new Set(lettersOnly.split("")).size <= 1;
+
+    if (looksLikeAvatarNoise) words.pop();
+  }
+  return words.join(" ").trim();
+}
+
+function extractMeetupNameFromMemberLine(value: string) {
+  const beforeRole = value.split(/\b(?:event\s+host|member|host)\b/i)[0] ?? "";
+  const possibleName = cleanMeetupNamePrefix(beforeRole);
+  return isProbablyName(possibleName) ? possibleName : "";
+}
+
 function hasRosterSignal(value: string, roster: RoomPlayer[]) {
   const normalized = normalizeForMatch(value);
   if (!normalized) return false;
@@ -273,11 +292,19 @@ function extractOcrNames(
     if (
       current === "member" ||
       current === "event host" ||
-      current.includes("member")
+      current.includes("member") ||
+      current.includes("event host")
     ) {
+      const sameLineName = extractMeetupNameFromMemberLine(lines[index]);
+      if (sameLineName) {
+        names.push(sameLineName);
+        continue;
+      }
+
       for (let back = index - 1; back >= Math.max(0, index - 3); back -= 1) {
-        if (isProbablyName(lines[back])) {
-          names.push(cleanOcrLine(lines[back]));
+        const previousLineName = cleanMeetupNamePrefix(lines[back]);
+        if (isProbablyName(previousLineName)) {
+          names.push(previousLineName);
           break;
         }
       }
@@ -420,6 +447,7 @@ export function TodayTab({
   const [ocrRunning, setOcrRunning] = useState(false);
   const [ocrProgress, setOcrProgress] = useState(0);
   const [ocrStatus, setOcrStatus] = useState("");
+  const [expectedAttendeeCount, setExpectedAttendeeCount] = useState("");
   const [confirmNewPlayersOpen, setConfirmNewPlayersOpen] = useState(false);
   const [confirmAddAllOpen, setConfirmAddAllOpen] = useState(false);
 
@@ -465,6 +493,16 @@ export function TodayTab({
     (candidate) => candidate.status === "new" && !candidate.bestMatch,
   );
   const allOcrTotal = allRosterCandidates.length + allNewCandidates.length;
+  const expectedAttendeeTotal = Number.parseInt(expectedAttendeeCount, 10);
+  const hasExpectedAttendeeTotal =
+    Number.isFinite(expectedAttendeeTotal) && expectedAttendeeTotal > 0;
+  const detectedAttendeeTotal = possibleNames.length;
+  const missingAttendeeTotal = hasExpectedAttendeeTotal
+    ? Math.max(expectedAttendeeTotal - detectedAttendeeTotal, 0)
+    : 0;
+  const extraAttendeeTotal = hasExpectedAttendeeTotal
+    ? Math.max(detectedAttendeeTotal - expectedAttendeeTotal, 0)
+    : 0;
   const allCheckCandidates = possibleNames.filter(
     (candidate) => candidate.status === "suggest",
   );
@@ -720,6 +758,25 @@ export function TodayTab({
           </DialogHeader>
 
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain pr-1 pb-2">
+            <div className="rounded-xl border bg-card p-3">
+              <label className="mb-1 block text-[10px] font-black uppercase tracking-wider text-muted-foreground">
+                Expected attendees today optional
+              </label>
+              <Input
+                type="number"
+                inputMode="numeric"
+                min="1"
+                placeholder="Example: 21"
+                value={expectedAttendeeCount}
+                onChange={(event) => setExpectedAttendeeCount(event.target.value)}
+                className="h-9 text-xs font-bold"
+                data-testid="expected-attendee-count"
+              />
+              <div className="mt-1.5 text-[10px] font-medium text-muted-foreground">
+                Used only to show how many names may be missing after OCR.
+              </div>
+            </div>
+
             <label className="flex min-h-28 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-muted/40 p-4 text-center transition-colors hover:bg-muted/70">
               <Upload className="h-6 w-6 text-muted-foreground" />
               <div className="text-xs font-black text-foreground">
@@ -806,6 +863,37 @@ export function TodayTab({
                 <div className="mt-2 text-[11px] font-medium text-muted-foreground">
                   {ocrStatus}
                 </div>
+              </div>
+            )}
+
+            {hasExpectedAttendeeTotal && ocrText && (
+              <div className="rounded-xl border bg-card p-3">
+                <div className="mb-2 text-[10px] font-black uppercase tracking-wider text-muted-foreground">
+                  Scan Count Check
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-center text-[11px] font-black">
+                  <div className="rounded-lg bg-muted/50 p-2">
+                    <div className="text-[10px] text-muted-foreground">Expected</div>
+                    <div className="text-base">{expectedAttendeeTotal}</div>
+                  </div>
+                  <div className="rounded-lg bg-muted/50 p-2">
+                    <div className="text-[10px] text-muted-foreground">Scanned</div>
+                    <div className="text-base">{detectedAttendeeTotal}</div>
+                  </div>
+                  <div className={`rounded-lg p-2 ${missingAttendeeTotal > 0 ? "bg-amber-50 text-amber-800" : "bg-emerald-50 text-emerald-800"}`}>
+                    <div className="text-[10px] opacity-75">
+                      {extraAttendeeTotal > 0 ? "Extra" : "Missing"}
+                    </div>
+                    <div className="text-base">
+                      {extraAttendeeTotal > 0 ? extraAttendeeTotal : missingAttendeeTotal}
+                    </div>
+                  </div>
+                </div>
+                {missingAttendeeTotal > 0 && (
+                  <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2 text-[11px] font-medium text-amber-800">
+                    {missingAttendeeTotal} attendee{missingAttendeeTotal === 1 ? "" : "s"} may be missing from the scan or not visible in the screenshots.
+                  </div>
+                )}
               </div>
             )}
 
@@ -1013,6 +1101,22 @@ export function TodayTab({
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2 rounded-xl border bg-muted/40 p-3 text-xs">
+            {hasExpectedAttendeeTotal && (
+              <>
+                <div className="flex justify-between gap-3 font-bold">
+                  <span>Expected attendees</span>
+                  <span>{expectedAttendeeTotal}</span>
+                </div>
+                <div className="flex justify-between gap-3 font-bold">
+                  <span>Scanned names</span>
+                  <span>{detectedAttendeeTotal}</span>
+                </div>
+                <div className={`flex justify-between gap-3 font-bold ${missingAttendeeTotal > 0 ? "text-amber-700" : "text-emerald-700"}`}>
+                  <span>{extraAttendeeTotal > 0 ? "Extra scanned" : "Missing from scan"}</span>
+                  <span>{extraAttendeeTotal > 0 ? extraAttendeeTotal : missingAttendeeTotal}</span>
+                </div>
+              </>
+            )}
             <div className="flex justify-between gap-3 font-bold">
               <span>Safe matches</span>
               <span>{safeMatches}</span>

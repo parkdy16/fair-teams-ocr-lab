@@ -175,19 +175,19 @@ const SPECIAL_ABILITIES: { key: AbilityKey; label: string; badge: string; descri
   // Attack-first traits
   { key: "isFinisher", label: "Finisher", badge: "FIN", description: "Reliable scorer who turns chances into goals.", icon: FinisherBadgeIcon },
   { key: "isPowerShot", label: "Power Shot", badge: "PWR", description: "Boosts Attack +2 and Strength +1. Dangerous hard shooter.", icon: PowerShotBadgeIcon },
-  { key: "isAerial", label: "Header", badge: "HEAD", description: "Boosts Strength +2, Defense +1, and Attack +1. Strong with headers and clearances.", icon: HeaderBadgeIcon },
-  { key: "isSpaceFinder", label: "Space Finder", badge: "SPC", description: "Finds smart spaces in attack and defense.", icon: Search },
   { key: "isDribbler", label: "Dribbler", badge: "DRB", description: "Strong 1v1 player; keeps the ball under pressure.", icon: DribblerBadgeIcon },
+  { key: "isSpaceFinder", label: "Space Finder", badge: "SPC", description: "Finds smart spaces in attack and defense.", icon: Search },
 
   // Midfield / control traits
   { key: "isPlaymaker", label: "Playmaker", badge: "PM", description: "Controls passing and creates chances for teammates.", icon: MagicWandBadgeIcon },
   { key: "isCrossing", label: "Technician", badge: "TECH", description: "Boosts Team Play and Passing. Clean touch, control, and technical skill.", icon: TechnicianBadgeIcon },
   { key: "isTikiTaka", label: "Tiki-Taka", badge: "TIKI", description: "Boosts Passing +2, Attack +1, and a tiny Stamina bonus. Quick short passing and combinations.", icon: TikiTakaBadgeIcon },
+  { key: "isVersatile", label: "Versatile", badge: "ALL", description: "All-rounder who can fill weak spots in a team.", icon: VersatileBadgeIcon },
   { key: "isLongPass", label: "Long Pass", badge: "L-PAS", description: "Boosts Passing +2 and Attack +1. Good for switching play and longer through balls.", icon: LongPassBadgeIcon },
   { key: "isEngine", label: "Engine", badge: "ENG", description: "High work rate; keeps running, pressing, and covering.", icon: EngineBadgeIcon },
-  { key: "isVersatile", label: "Versatile", badge: "ALL", description: "All-rounder who can fill weak spots in a team.", icon: VersatileBadgeIcon },
 
   // Defense-first traits
+  { key: "isAerial", label: "Header", badge: "HEAD", description: "Boosts Strength +2, Defense +1, and Attack +1. Strong with headers and clearances.", icon: HeaderBadgeIcon },
   { key: "isSentinel", label: "Sentinel", badge: "SEN", description: "Defensive guardian; holds shape, marks, and protects space.", icon: Shield },
   { key: "isBulldog", label: "Bulldog", badge: "DOG", description: "Boosts Stamina +2 and Defense +1. Relentless presser who hounds opponents and fights for loose balls.", icon: BulldogBadgeIcon },
 ];

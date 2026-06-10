@@ -24,6 +24,11 @@ export interface Player {
   isEngine?: boolean;
   isVersatile?: boolean;
   isSpaceFinder?: boolean;
+  isLongPass?: boolean;
+  isTikiTaka?: boolean;
+  isCrossing?: boolean;
+  isAerial?: boolean;
+  isPowerShot?: boolean;
   isOrganizer?: boolean;
   isNew?: boolean;
   funBadge?: FunBadge;

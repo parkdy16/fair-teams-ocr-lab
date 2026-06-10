@@ -51,7 +51,7 @@ function VersatileBadgeIcon({ className }: { className?: string }) {
   );
 }
 
-type AbilityKey = "isGoalkeeper" | "isPlaymaker" | "isFinisher" | "isDribbler" | "isSentinel" | "isEngine" | "isVersatile" | "isSpaceFinder";
+type AbilityKey = "isGoalkeeper" | "isPlaymaker" | "isFinisher" | "isDribbler" | "isSentinel" | "isEngine" | "isVersatile" | "isSpaceFinder" | "isLongPass" | "isTikiTaka" | "isCrossing" | "isAerial" | "isPowerShot";
 
 const SPECIAL_ABILITIES: { key: AbilityKey; label: string; badge: string; description: string; icon?: React.ComponentType<{ className?: string }> }[] = [
   { key: "isGoalkeeper", label: "Goalkeeper", badge: "GK", description: "Comfortable in goal; helps spread keeper options across teams." },
@@ -62,6 +62,11 @@ const SPECIAL_ABILITIES: { key: AbilityKey; label: string; badge: string; descri
   { key: "isEngine", label: "Engine", badge: "ENG", description: "High work rate; keeps running, pressing, and covering.", icon: EngineBadgeIcon },
   { key: "isVersatile", label: "Versatile", badge: "ALL", description: "All-rounder who can fill weak spots in a team.", icon: VersatileBadgeIcon },
   { key: "isSpaceFinder", label: "Space Finder", badge: "SPC", description: "Finds smart spaces in attack and defense.", icon: Search },
+  { key: "isLongPass", label: "Long Pass", badge: "L-PAS", description: "Boosts Passing +2 and Attack +1. Good for switching play and longer through balls.", icon: Share2 },
+  { key: "isTikiTaka", label: "Tiki-Taka", badge: "TIKI", description: "Boosts Passing +2, Attack +1, and a tiny Stamina bonus. Quick short passing and combinations.", icon: Share2 },
+  { key: "isCrossing", label: "Crossing", badge: "CRS", description: "Boosts Passing +2 and Attack +1. Creates chances from wide areas.", icon: Share2 },
+  { key: "isAerial", label: "Aerial", badge: "AIR", description: "Boosts Strength +2, Defense +1, and Attack +1. Strong in headers and clearances.", icon: Dumbbell },
+  { key: "isPowerShot", label: "Power Shot", badge: "PWR", description: "Boosts Attack +2 and Strength +1. Dangerous hard shooter.", icon: Target },
 ];
 
 
@@ -119,7 +124,8 @@ function createPlayerId() {
 type AddPlayerDetails = Pick<RoomPlayer,
   "attack" | "defense" | "speed" | "passing" | "stamina" | "physical" | "teamPlay" |
   "funBadge" | "isGoalkeeper" | "isPlaymaker" | "isFinisher" | "isDribbler" |
-  "isSentinel" | "isEngine" | "isVersatile" | "isSpaceFinder"
+  "isSentinel" | "isEngine" | "isVersatile" | "isSpaceFinder" |
+  "isLongPass" | "isTikiTaka" | "isCrossing" | "isAerial" | "isPowerShot"
 >;
 
 function createDefaultAddPlayerDetails(): AddPlayerDetails {
@@ -140,6 +146,11 @@ function createDefaultAddPlayerDetails(): AddPlayerDetails {
     isEngine: false,
     isVersatile: false,
     isSpaceFinder: false,
+    isLongPass: false,
+    isTikiTaka: false,
+    isCrossing: false,
+    isAerial: false,
+    isPowerShot: false,
   };
 }
 

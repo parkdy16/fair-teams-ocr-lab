@@ -598,7 +598,7 @@ function ProfileDialog({
           <Pencil className="w-4 h-4" />
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-sm max-h-[90dvh] overflow-y-auto rounded-2xl">
+      <DialogContent className="max-w-sm md:max-w-xl max-h-[90dvh] overflow-y-auto rounded-2xl">
         <DialogHeader>
           <DialogTitle>Edit player profile</DialogTitle>
         </DialogHeader>
@@ -895,7 +895,7 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
           </DialogTrigger>
           <DialogContent
             onOpenAutoFocus={(event) => event.preventDefault()}
-            className="max-w-sm rounded-3xl !top-[10dvh] !translate-y-0 max-h-[82dvh] overflow-y-auto sm:!top-[50%] sm:!-translate-y-1/2"
+            className="max-w-sm md:max-w-xl rounded-3xl !top-[10dvh] !translate-y-0 max-h-[82dvh] overflow-y-auto sm:!top-[50%] sm:!-translate-y-1/2"
           >
             <DialogHeader>
               <DialogTitle>Add player</DialogTitle>
@@ -1143,7 +1143,7 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
             <p className="text-muted-foreground font-medium text-sm">No players match \"{search}\"</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
             {filtered.map(player => {
               const isFlipped = Boolean(flippedPlayerIds[player.id]);
               return (

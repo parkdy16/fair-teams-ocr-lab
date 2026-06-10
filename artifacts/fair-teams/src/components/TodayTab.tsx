@@ -1077,7 +1077,7 @@ export function TodayTab({
       </div>
 
       <Dialog open={ocrOpen} onOpenChange={setOcrOpen}>
-        <DialogContent className="flex h-[90dvh] max-h-[90dvh] w-[94vw] max-w-lg flex-col overflow-hidden rounded-2xl p-4 sm:p-6">
+        <DialogContent className="flex h-[90dvh] max-h-[90dvh] w-[94vw] max-w-lg md:max-w-3xl flex-col overflow-hidden rounded-2xl p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle className="text-base font-black">
               Scan Attendees
@@ -1139,7 +1139,7 @@ export function TodayTab({
                     Clear
                   </Button>
                 </div>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
                   {selectedScreenshotPreviews.map((preview, index) => (
                     <div
                       key={`${preview.name}-${index}`}
@@ -1662,7 +1662,7 @@ export function TodayTab({
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-1.5">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-1.5">
           {filtered.map((player) => (
             <label
               key={player.id}

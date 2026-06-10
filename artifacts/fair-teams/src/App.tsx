@@ -168,7 +168,7 @@ function App() {
   }
 
   return (
-    <div className="flex flex-col min-h-[100dvh] bg-background w-full max-w-md mx-auto relative shadow-2xl overflow-hidden">
+    <div className="flex flex-col min-h-[100dvh] bg-background w-full max-w-md md:max-w-3xl lg:max-w-5xl mx-auto relative shadow-2xl overflow-hidden">
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
         <header className="sticky top-0 z-30 bg-background/95 backdrop-blur border-b border-border px-4 pt-3 pb-2 shadow-sm">
           <div className="flex items-center justify-between gap-3 px-1 pb-2">
@@ -263,7 +263,7 @@ function App() {
           </TabsList>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-4">
+        <div className="flex-1 overflow-y-auto p-4 md:p-5">
           <TabsContent value="players" className="m-0 data-[state=active]:animate-in data-[state=active]:fade-in-50">
             <PlayersTab players={players} setPlayers={replacePlayers} />
           </TabsContent>

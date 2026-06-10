@@ -465,7 +465,7 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
     <div className="flex flex-col gap-3">
       {/* Controls */}
       <div className="bg-card border border-border px-3 py-2.5 rounded-xl shadow-sm flex flex-col gap-2">
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 md:grid-cols-[1fr_1fr_auto] gap-2">
           <div className="flex flex-col gap-1 min-w-0">
             <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Teams</Label>
             <Select value={numTeams.toString()} onValueChange={v => setNumTeams(parseInt(v))}>
@@ -500,7 +500,7 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
           </div>
 
           <Button
-            className={`col-span-2 h-10 w-full px-4 font-black uppercase tracking-wide text-[13px] shadow-sm bg-[#22C55E] text-white hover:bg-[#16A34A] transition-all ${isGenerating ? "ring-4 ring-emerald-300/45 shadow-lg shadow-emerald-400/25" : ""}`}
+            className={`col-span-2 md:col-span-1 h-10 w-full px-4 font-black uppercase tracking-wide text-[13px] shadow-sm bg-[#22C55E] text-white hover:bg-[#16A34A] transition-all ${isGenerating ? "ring-4 ring-emerald-300/45 shadow-lg shadow-emerald-400/25" : ""}`}
             onClick={() => handleGenerate(false)}
             disabled={isGenerating}
             data-testid="button-generate"
@@ -557,7 +557,7 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
 
       {/* Teams grid — 2 columns */}
       {teams.length > 0 && (
-        <div className={`grid grid-cols-2 gap-2 transition-opacity duration-300 ${isGenerating ? "opacity-50" : "opacity-100"}`}>
+        <div className={`grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 transition-opacity duration-300 ${isGenerating ? "opacity-50" : "opacity-100"}`}>
           {teams.map((team, index) => {
             const col = colorFor(team.color);
             const isSwapDest = swap && swap.fromTeamId !== team.id;

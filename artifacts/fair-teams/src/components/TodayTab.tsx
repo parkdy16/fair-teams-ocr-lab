@@ -297,6 +297,92 @@ function extractInlineMeetupNames(text: string) {
   return names;
 }
 
+function findRosterAliasesInTokens(tokens: string[], roster: RoomPlayer[]) {
+  const normalizedTokens = tokens.map((token) => normalizeForMatch(token));
+  const used = new Array(tokens.length).fill(false);
+  const foundNames: string[] = [];
+
+  for (const player of roster) {
+    const aliases = [player.name, player.aka]
+      .filter(Boolean)
+      .map((value) => normalizeForMatch(String(value)))
+      .filter((value) => value.length >= 3);
+
+    for (const alias of aliases) {
+      const aliasTokens = alias.split(" ").filter(Boolean);
+      if (!aliasTokens.length || aliasTokens.length > tokens.length) continue;
+
+      for (let start = 0; start <= tokens.length - aliasTokens.length; start += 1) {
+        const slice = normalizedTokens.slice(start, start + aliasTokens.length);
+        if (slice.join(" ") === aliasTokens.join(" ")) {
+          for (let offset = 0; offset < aliasTokens.length; offset += 1) {
+            used[start + offset] = true;
+          }
+          foundNames.push(player.name);
+        }
+      }
+    }
+  }
+
+  return { used, foundNames };
+}
+
+function extractTeamSheetNames(text: string, roster: RoomPlayer[]) {
+  const lines = text.split(/\r?\n/).map(cleanOcrLine).filter(Boolean);
+  const names: string[] = [];
+  let inTeamSection = false;
+
+  for (const line of lines) {
+    const normalized = normalizeForMatch(line);
+
+    if (/\bteam\s+\d\b/.test(normalized)) {
+      inTeamSection = true;
+      continue;
+    }
+
+    if (!inTeamSection) continue;
+    if (
+      /\b(cancel|add all|fair teams|today s teams|today teams|tuesday|wednesday|thursday|friday|saturday|sunday|monday|june|july|august|ocr|import)\b/.test(
+        normalized,
+      )
+    ) {
+      continue;
+    }
+
+    const tokens = line.split(/\s+/).filter(Boolean);
+    if (!tokens.length || tokens.length > 6) continue;
+
+    const { used, foundNames } = findRosterAliasesInTokens(tokens, roster);
+    names.push(...foundNames);
+
+    let group: string[] = [];
+    const flushGroup = () => {
+      if (!group.length) return;
+      const candidate = cleanOcrLine(group.join(" "));
+      const normalizedCandidate = normalizeForMatch(candidate);
+      if (
+        candidate &&
+        isProbablyName(candidate) &&
+        !OCR_JUNK_WORDS.has(normalizedCandidate)
+      ) {
+        names.push(candidate);
+      }
+      group = [];
+    };
+
+    tokens.forEach((token, index) => {
+      if (used[index]) {
+        flushGroup();
+      } else {
+        group.push(token);
+      }
+    });
+    flushGroup();
+  }
+
+  return names;
+}
+
 function hasRosterSignal(value: string, roster: RoomPlayer[]) {
   const normalized = normalizeForMatch(value);
   if (!normalized) return false;
@@ -418,6 +504,7 @@ function extractOcrNames(
   const names: string[] = [];
 
   names.push(...extractInlineMeetupNames(text));
+  names.push(...extractTeamSheetNames(text, roster));
 
   for (let index = 0; index < lines.length; index += 1) {
     const current = normalizeForMatch(lines[index]);
@@ -573,6 +660,7 @@ export function TodayTab({
   const [ocrStatus, setOcrStatus] = useState("");
   const [confirmNewPlayersOpen, setConfirmNewPlayersOpen] = useState(false);
   const [confirmAddAllOpen, setConfirmAddAllOpen] = useState(false);
+  const [expectedAttendeeCount, setExpectedAttendeeCount] = useState("");
 
   const sorted = [...players].sort((a, b) => a.name.localeCompare(b.name));
   const filtered = search.trim()
@@ -622,6 +710,17 @@ export function TodayTab({
   const allCheckCandidates = possibleNames.filter(
     (candidate) => candidate.status === "suggest",
   );
+  const expectedAttendeeNumber = Number(expectedAttendeeCount);
+  const hasExpectedAttendeeNumber =
+    expectedAttendeeCount.trim() !== "" &&
+    Number.isFinite(expectedAttendeeNumber) &&
+    expectedAttendeeNumber > 0;
+  const scannedNameCount = possibleNames.length;
+  const rosterMatchCount = allRosterCandidates.length;
+  const unmatchedScannedNames = allNewCandidates;
+  const missingFromScan = hasExpectedAttendeeNumber
+    ? Math.max(0, Math.round(expectedAttendeeNumber) - scannedNameCount)
+    : 0;
 
   const openOcrImport = () => {
     // OCR import is a fresh attendance workflow, so start Today from empty
@@ -646,6 +745,7 @@ export function TodayTab({
     setOcrProgress(0);
     setOcrStatus("");
     setSelectedOcrCandidateKeys([]);
+    setExpectedAttendeeCount("");
   };
 
   const runOcr = async () => {
@@ -931,6 +1031,33 @@ export function TodayTab({
             )}
 
             {selectedScreenshots.length > 0 && (
+              <div className="rounded-xl border bg-card p-3">
+                <label
+                  htmlFor="expected-attendee-count"
+                  className="mb-1 block text-[10px] font-black uppercase tracking-wider text-muted-foreground"
+                >
+                  Expected attendees today (optional)
+                </label>
+                <Input
+                  id="expected-attendee-count"
+                  type="number"
+                  inputMode="numeric"
+                  min="1"
+                  value={expectedAttendeeCount}
+                  onChange={(event) =>
+                    setExpectedAttendeeCount(event.target.value)
+                  }
+                  placeholder="Example: 18"
+                  className="h-9 rounded-xl text-sm font-bold"
+                />
+                <div className="mt-1.5 text-[10px] font-medium text-muted-foreground">
+                  Used only for the scan audit, so you can see if OCR missed
+                  anyone.
+                </div>
+              </div>
+            )}
+
+            {selectedScreenshots.length > 0 && (
               <Button
                 type="button"
                 onClick={runOcr}
@@ -960,6 +1087,94 @@ export function TodayTab({
                 <div className="mt-2 text-[11px] font-medium text-muted-foreground">
                   {ocrStatus}
                 </div>
+              </div>
+            )}
+
+            {ocrText && (
+              <div className="rounded-xl border bg-card p-3">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <div className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
+                    Scan Audit
+                  </div>
+                  {hasExpectedAttendeeNumber && (
+                    <div
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-black ${
+                        missingFromScan > 0
+                          ? "bg-amber-100 text-amber-800"
+                          : "bg-emerald-100 text-emerald-800"
+                      }`}
+                    >
+                      {missingFromScan > 0
+                        ? `${missingFromScan} missing`
+                        : "complete"}
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-center">
+                  <div className="rounded-lg bg-muted/50 p-2">
+                    <div className="text-[10px] font-black uppercase text-muted-foreground">
+                      Expected
+                    </div>
+                    <div className="text-lg font-black text-foreground">
+                      {hasExpectedAttendeeNumber
+                        ? Math.round(expectedAttendeeNumber)
+                        : "—"}
+                    </div>
+                  </div>
+                  <div className="rounded-lg bg-muted/50 p-2">
+                    <div className="text-[10px] font-black uppercase text-muted-foreground">
+                      Scanned
+                    </div>
+                    <div className="text-lg font-black text-foreground">
+                      {scannedNameCount}
+                    </div>
+                  </div>
+                  <div className="rounded-lg bg-emerald-50 p-2">
+                    <div className="text-[10px] font-black uppercase text-emerald-700">
+                      Roster matches
+                    </div>
+                    <div className="text-lg font-black text-emerald-800">
+                      {rosterMatchCount}
+                    </div>
+                  </div>
+                  <div className="rounded-lg bg-sky-50 p-2">
+                    <div className="text-[10px] font-black uppercase text-sky-700">
+                      Not in roster
+                    </div>
+                    <div className="text-lg font-black text-sky-800">
+                      {unmatchedScannedNames.length}
+                    </div>
+                  </div>
+                </div>
+
+                {hasExpectedAttendeeNumber && missingFromScan > 0 && (
+                  <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2 text-[11px] font-bold text-amber-800">
+                    OCR scanned {scannedNameCount} name
+                    {scannedNameCount === 1 ? "" : "s"}, but you expected {" "}
+                    {Math.round(expectedAttendeeNumber)}. Check the screenshot
+                    or add {missingFromScan} missing player
+                    {missingFromScan === 1 ? "" : "s"} manually.
+                  </div>
+                )}
+
+                {unmatchedScannedNames.length > 0 && (
+                  <div className="mt-2 rounded-lg border border-sky-200 bg-sky-50 p-2">
+                    <div className="mb-1 text-[10px] font-black uppercase tracking-wider text-sky-800">
+                      Scanned but not in roster
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {unmatchedScannedNames.map((candidate) => (
+                        <span
+                          key={ocrCandidateKey(candidate)}
+                          className="rounded-full bg-card px-2 py-1 text-[10px] font-black text-sky-800 ring-1 ring-sky-100"
+                        >
+                          {candidate.name}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -1185,6 +1400,12 @@ export function TodayTab({
               <span>New players to create</span>
               <span>{allNewCandidates.length}</span>
             </div>
+            {hasExpectedAttendeeNumber && (
+              <div className="flex justify-between gap-3 font-bold text-muted-foreground">
+                <span>Missing from scan</span>
+                <span>{missingFromScan}</span>
+              </div>
+            )}
           </div>
           {(allCheckCandidates.length > 0 || allNewCandidates.length > 0) && (
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[11px] font-medium text-amber-800">

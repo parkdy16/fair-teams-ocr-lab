@@ -86,7 +86,12 @@ function saveTeamHistory(history: TeamHistoryEntry[]) {
 
 function shortDateTime(value: string) {
   try {
-    return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(value));
+    const date = new Date(value);
+    const month = new Intl.DateTimeFormat(undefined, { month: "short" }).format(date);
+    const day = new Intl.DateTimeFormat(undefined, { day: "numeric" }).format(date);
+    const weekday = new Intl.DateTimeFormat(undefined, { weekday: "short" }).format(date);
+    const time = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" }).format(date);
+    return `${month} ${day} ${weekday}, ${time}`;
   } catch {
     return value;
   }

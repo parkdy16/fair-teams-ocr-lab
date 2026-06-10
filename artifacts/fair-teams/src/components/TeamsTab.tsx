@@ -439,10 +439,10 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
     setSwap(null);
   };
 
-  if (attendingPlayers.length < 2) {
+  if (attendingPlayers.length < 2 && teams.length === 0) {
     return (
-      <div className="flex flex-col gap-3">
-        <div className="flex flex-col items-center justify-center py-16 px-6 text-center gap-3">
+      <div className="flex min-h-[calc(100vh-220px)] flex-col gap-3">
+        <div className="flex flex-1 flex-col items-center justify-center px-6 text-center gap-3">
           <div className="w-12 h-12 bg-muted rounded-full flex items-center justify-center">
             <Zap className="w-6 h-6 text-muted-foreground opacity-40" />
           </div>
@@ -450,7 +450,7 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
             Select at least 2 players in the Today tab to generate teams.
           </p>
         </div>
-        {historyPanel}
+        {historyPanel && <div className="mt-auto">{historyPanel}</div>}
       </div>
     );
   }

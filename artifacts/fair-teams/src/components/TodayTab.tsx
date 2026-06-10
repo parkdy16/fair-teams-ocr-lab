@@ -746,8 +746,8 @@ export function TodayTab({
     return `rgba(${r}, ${g}, ${b}, ${alpha})`;
   };
   const attendingSummaryStyle = {
-    background: `linear-gradient(135deg, ${hexToRgba(safeThemeColor, 0.14)} 0%, ${hexToRgba(safeThemeColor, 0.06)} 52%, rgba(255,255,255,0.96) 100%)`,
-    borderColor: hexToRgba(safeThemeColor, 0.24),
+    background: '#ffffff',
+    borderColor: 'rgba(148,163,184,0.25)',
   } as React.CSSProperties;
   const [selectedScreenshotPreviews, setSelectedScreenshotPreviews] = useState<
     Array<{ name: string; url: string }>

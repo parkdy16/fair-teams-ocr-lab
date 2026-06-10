@@ -526,9 +526,9 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
 
         {showFieldHelp && (
           <div className="rounded-lg bg-muted/50 border border-border p-2 text-[10px] leading-snug text-muted-foreground">
-            <p><span className="font-black text-foreground">Small:</span> 4v4–5v5. Passing, attack and defense matter more.</p>
+            <p><span className="font-black text-foreground">Small:</span> 4v4–5v5. Passing and quick play matter a bit more.</p>
             <p><span className="font-black text-foreground">Medium:</span> 6v6–8v8. Balanced weighting.</p>
-            <p><span className="font-black text-foreground">Large:</span> all abilities are weighted equally.</p>
+            <p><span className="font-black text-foreground">Large:</span> 9v9–11v11. Speed and stamina matter more.</p>
           </div>
         )}
 

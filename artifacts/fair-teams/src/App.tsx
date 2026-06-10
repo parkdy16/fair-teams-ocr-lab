@@ -5,7 +5,6 @@ import { PlayersTab } from "@/components/PlayersTab";
 import { TodayTab } from "@/components/TodayTab";
 import { TeamsTab } from "@/components/TeamsTab";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import fairTeamsLogo from "@/assets/fairteams-logo.png";
 import {
   RoomPlayer,
@@ -28,32 +27,6 @@ function hexToRgba(hex: string, alpha: number) {
   const g = Number.parseInt(normalized.slice(3, 5), 16);
   const b = Number.parseInt(normalized.slice(5, 7), 16);
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
-
-function readFileAsTextSafe(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
-    reader.onerror = () => reject(new Error("The browser could not read this file. Try the paste import option."));
-    reader.readAsText(file);
-  });
-}
-
-function isLikelyTabletScreen() {
-  if (typeof window === "undefined") return false;
-  const coarsePointer = window.matchMedia?.("(pointer: coarse)").matches ?? false;
-  return coarsePointer && window.innerWidth >= 700;
-}
-
-function canStorePlayers(nextPlayers: RoomPlayer[]) {
-  try {
-    const key = "fair-teams-storage-test";
-    window.localStorage.setItem(key, JSON.stringify(nextPlayers));
-    window.localStorage.removeItem(key);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 function PoweredByFairTeams() {
@@ -83,17 +56,6 @@ function App() {
   }, []);
 
   const [players, setPlayers] = useState<RoomPlayer[]>(() => loadPlayers());
-
-  useEffect(() => {
-    const updateTabletFlag = () => setIsTabletLayout(isLikelyTabletScreen());
-    updateTabletFlag();
-    window.addEventListener("resize", updateTabletFlag);
-    window.addEventListener("orientationchange", updateTabletFlag);
-    return () => {
-      window.removeEventListener("resize", updateTabletFlag);
-      window.removeEventListener("orientationchange", updateTabletFlag);
-    };
-  }, []);
   const [activeTab, setActiveTab] = useState("players");
   const [groupName, setGroupName] = useState(() => {
     try {
@@ -112,10 +74,6 @@ function App() {
   const [isEditingGroupName, setIsEditingGroupName] = useState(false);
   const [draftGroupName, setDraftGroupName] = useState(groupName);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [showImportDialog, setShowImportDialog] = useState(false);
-  const [pasteImportText, setPasteImportText] = useState("");
-  const [importStatus, setImportStatus] = useState<string | null>(null);
-  const [isTabletLayout, setIsTabletLayout] = useState(false);
 
   useEffect(() => {
     savePlayers(players);
@@ -173,67 +131,37 @@ function App() {
     );
   };
 
-  const finishImportedPlayers = async (normalized: RoomPlayer[], sourceLabel = "file") => {
-    if (normalized.length === 0) {
-      alert("No players found in that import.");
-      return;
-    }
-
-    if (!canStorePlayers(normalized)) {
-      throw new Error("This browser could read the roster, but could not save it locally. Try closing other tabs or clearing site data for Fair Teams.");
-    }
-
-    const ok = window.confirm(`Import ${normalized.length} players from ${sourceLabel}? This replaces the current roster on this device.`);
-    if (!ok) return;
-
-    setImportStatus("Importing roster…");
-    await new Promise(resolve => window.setTimeout(resolve, 60));
-    setPlayers(normalized);
-    setActiveTab("players");
-    setShowImportDialog(false);
-    setPasteImportText("");
-    setImportStatus(null);
+  const readImportFileAsText = (file: File) => {
+    return new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
+      reader.onerror = () => reject(new Error("Could not read the selected roster file."));
+      reader.readAsText(file);
+    });
   };
 
-  const parseRosterText = (text: string, fileName = "roster.csv") => {
-    const isJson = fileName.toLowerCase().endsWith(".json") || text.trim().startsWith("[");
-    const imported = isJson ? JSON.parse(text) : csvToPlayers(text);
+  const importFile = async (file: File) => {
+    const lowerName = file.name.toLowerCase();
+    const text = await readImportFileAsText(file);
+    const imported = lowerName.endsWith(".json")
+      ? JSON.parse(text)
+      : csvToPlayers(text);
 
     if (!Array.isArray(imported)) {
       throw new Error("Import file does not contain a roster list.");
     }
 
-    return isJson
+    const normalized = lowerName.endsWith(".json")
       ? imported.map((p, index) => normalizePlayer(p, index)).filter(p => p.name)
       : imported;
-  };
 
-  const importFile = async (file: File) => {
-    if (file.size > 1024 * 1024) {
-      throw new Error("Roster file is unusually large. Please use a small CSV roster export.");
+    if (normalized.length === 0) {
+      alert("No players found in that file.");
+      return;
     }
-    setImportStatus("Reading roster file…");
-    const text = await readFileAsTextSafe(file);
-    await new Promise(resolve => window.setTimeout(resolve, 30));
-    setImportStatus("Checking roster…");
-    const normalized = parseRosterText(text, file.name);
-    await finishImportedPlayers(normalized, file.name);
-  };
 
-  const importPastedRoster = async () => {
-    try {
-      const text = pasteImportText.trim();
-      if (!text) {
-        alert("Paste your CSV roster text first.");
-        return;
-      }
-      setImportStatus("Checking pasted roster…");
-      const normalized = parseRosterText(text, "pasted-roster.csv");
-      await finishImportedPlayers(normalized, "pasted CSV");
-    } catch (error) {
-      setImportStatus(null);
-      alert(error instanceof Error ? error.message : "Import failed.");
-    }
+    const ok = window.confirm(`Import ${normalized.length} players? This replaces the current roster on this device.`);
+    if (ok) setPlayers(normalized);
   };
 
   if (showSplash) {
@@ -269,10 +197,10 @@ function App() {
                     className="min-w-0 flex-1 h-9 rounded-xl bg-white text-[#102A43] px-3 text-sm font-extrabold outline-none border border-slate-200 shadow-sm"
                     placeholder="Group name"
                   />
-                  <Button variant="secondary" size="icon" className="h-9 w-9 rounded-xl bg-slate-100 border border-slate-200" onClick={saveGroupName} title="Save group name">
+                  <Button type="button" variant="secondary" size="icon" className="h-9 w-9 rounded-xl bg-slate-100 border border-slate-200" onClick={saveGroupName} title="Save group name">
                     <Check className="w-4 h-4" />
                   </Button>
-                  <Button variant="secondary" size="icon" className="h-9 w-9 rounded-xl bg-slate-100 border border-slate-200" onClick={cancelGroupNameEdit} title="Cancel">
+                  <Button type="button" variant="secondary" size="icon" className="h-9 w-9 rounded-xl bg-slate-100 border border-slate-200" onClick={cancelGroupNameEdit} title="Cancel">
                     <X className="w-4 h-4" />
                   </Button>
                 </div>
@@ -300,59 +228,31 @@ function App() {
                         aria-label="Pick group color"
                       />
                     </label>
-                    <Button variant="secondary" size="icon" className="h-7 w-7 rounded-lg bg-slate-100 border border-slate-200" onClick={exportCsv} title="Export Roster" disabled={players.length === 0}>
+                    <Button type="button" variant="secondary" size="icon" className="h-7 w-7 rounded-lg bg-slate-100 border border-slate-200" onClick={exportCsv} title="Export Roster" disabled={players.length === 0}>
                       <Download className="w-3.5 h-3.5" />
                     </Button>
-                    <Button variant="secondary" size="icon" className="h-7 w-7 rounded-lg bg-slate-100 border border-slate-200" onClick={() => isTabletLayout ? setShowImportDialog(true) : fileInputRef.current?.click()} title="Import Roster">
+                    <Button type="button" variant="secondary" size="icon" className="h-7 w-7 rounded-lg bg-slate-100 border border-slate-200" onClick={(event) => { event.preventDefault(); event.stopPropagation(); fileInputRef.current?.click(); }} title="Import Roster">
                       <Upload className="w-3.5 h-3.5" />
                     </Button>
                   </>
                 )}
                 {activeTab !== "players" && <span className="text-[11px] font-extrabold text-slate-400 tracking-tight whitespace-nowrap">Fair teams. Fun games.</span>}
-                {showImportDialog && (
-                  <Dialog open={showImportDialog} onOpenChange={open => {
-                    setShowImportDialog(open);
-                    if (!open) setImportStatus(null);
-                  }}>
-                    <DialogContent className="w-[calc(100vw-2rem)] max-w-xl rounded-3xl">
-                      <DialogHeader>
-                        <DialogTitle>Import roster</DialogTitle>
-                      </DialogHeader>
-                      <div className="space-y-3">
-                        <p className="text-xs font-semibold text-muted-foreground leading-relaxed">
-                          Choose your CSV file. If your tablet file picker crashes, open the CSV as text and paste it below.
-                        </p>
-                        <Button type="button" className="w-full rounded-2xl font-black" onClick={() => fileInputRef.current?.click()}>
-                          <Upload className="mr-2 h-4 w-4" /> Choose CSV file
-                        </Button>
-                        <textarea
-                          value={pasteImportText}
-                          onChange={e => setPasteImportText(e.target.value)}
-                          placeholder="Paste CSV roster text here…"
-                          className="min-h-36 w-full rounded-2xl border border-border bg-white p-3 text-xs font-mono outline-none focus:ring-2 focus:ring-primary/20"
-                        />
-                        {importStatus && <div className="rounded-2xl bg-primary/10 px-3 py-2 text-xs font-bold text-primary">{importStatus}</div>}
-                        <div className="grid grid-cols-2 gap-2">
-                          <Button type="button" variant="outline" className="rounded-2xl font-bold" onClick={() => setShowImportDialog(false)}>Cancel</Button>
-                          <Button type="button" className="rounded-2xl font-black" onClick={importPastedRoster}>Import pasted</Button>
-                        </div>
-                      </div>
-                    </DialogContent>
-                  </Dialog>
-                )}
                 <input
                   ref={fileInputRef}
                   type="file"
                   accept=".csv,.json,text/csv,application/json"
                   className="hidden"
+                  onClick={e => e.stopPropagation()}
                   onChange={async e => {
-                    const file = e.target.files?.[0];
-                    e.target.value = "";
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const input = e.currentTarget;
+                    const file = input.files?.[0];
+                    input.value = "";
                     if (!file) return;
                     try {
                       await importFile(file);
                     } catch (error) {
-                      setImportStatus(null);
                       alert(error instanceof Error ? error.message : "Import failed.");
                     }
                   }}

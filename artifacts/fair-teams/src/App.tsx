@@ -190,7 +190,7 @@ function App() {
       ? groupName
       : "Fair Teams";
   const headerGradientStyle = {
-    background: `linear-gradient(135deg, ${hexToRgba(headerColor, 0.22)} 0%, rgba(255,255,255,0.98) 44%, rgba(248,250,252,0.96) 100%)`,
+    background: `linear-gradient(135deg, ${hexToRgba(headerColor, 0.46)} 0%, ${hexToRgba(headerColor, 0.18)} 46%, rgba(255,255,255,0.96) 100%)`,
   } as React.CSSProperties;
 
   const replacePlayers = (nextPlayers: RoomPlayer[]) => {

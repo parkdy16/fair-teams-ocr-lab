@@ -4,7 +4,7 @@ import type { RoomPlayer } from "@/lib/localRoster";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Camera, Mic, Search, Upload, X } from "lucide-react";
+import { Image as ImageIcon, Mic, Search, Upload, X } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -722,6 +722,7 @@ export function TodayTab({
   setPlayers: (players: RoomPlayer[]) => void;
   themeColor?: string;
 }) {
+  void themeColor;
   const [search, setSearch] = useState("");
   const [ocrOpen, setOcrOpen] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
@@ -736,18 +737,10 @@ export function TodayTab({
   const [showRawOcrText, setShowRawOcrText] = useState(false);
   const [prioritizeScannedPlayers, setPrioritizeScannedPlayers] = useState(false);
 
-  const safeThemeColor = /^#[0-9A-Fa-f]{6}$/.test(themeColor)
-    ? themeColor
-    : "#3B82F6";
-  const hexToRgba = (hex: string, alpha: number) => {
-    const r = Number.parseInt(hex.slice(1, 3), 16);
-    const g = Number.parseInt(hex.slice(3, 5), 16);
-    const b = Number.parseInt(hex.slice(5, 7), 16);
-    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-  };
   const attendingSummaryStyle = {
-    background: `linear-gradient(135deg, ${hexToRgba(safeThemeColor, 0.14)} 0%, ${hexToRgba(safeThemeColor, 0.06)} 52%, rgba(255,255,255,0.96) 100%)`,
-    borderColor: hexToRgba(safeThemeColor, 0.24),
+    background: "linear-gradient(135deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.98) 100%)",
+    borderColor: "rgba(148,163,184,0.32)",
+    boxShadow: "0 10px 24px rgba(15,23,42,0.06)",
   } as React.CSSProperties;
   const [selectedScreenshotPreviews, setSelectedScreenshotPreviews] = useState<
     Array<{ name: string; url: string }>
@@ -1079,8 +1072,8 @@ export function TodayTab({
           className="h-9 rounded-xl text-xs font-black"
           data-testid="ocr-import-button"
         >
-          <Camera className="mr-1.5 h-3.5 w-3.5" />
-          Scan Attendees
+          <ImageIcon className="mr-1.5 h-3.5 w-3.5" />
+          Screenshot Import
         </Button>
         <Button
           type="button"
@@ -1099,7 +1092,7 @@ export function TodayTab({
         <DialogContent className="flex h-[90dvh] max-h-[90dvh] w-[94vw] max-w-lg md:max-w-3xl flex-col overflow-hidden rounded-2xl p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle className="text-base font-black">
-              Scan Attendees
+              Screenshot Import
             </DialogTitle>
             <DialogDescription className="text-xs">
               Import today's attendees from a Meetup, WhatsApp, Telegram, or
@@ -1400,7 +1393,7 @@ export function TodayTab({
                 </div>
               ) : (
                 <div className="rounded-lg bg-muted/50 p-3 text-center text-xs font-medium text-muted-foreground">
-                  Scan Attendees to show filtered possible names here.
+                  Screenshot Import will show filtered possible names here.
                 </div>
               )}
               </div>
@@ -1469,7 +1462,7 @@ export function TodayTab({
                     disabled={selectedScreenshots.length === 0 || ocrRunning}
                     className="h-10 rounded-xl px-4 text-xs font-black"
                   >
-                    {ocrRunning ? "Scanning…" : "Scan Attendees"}
+                    {ocrRunning ? "Scanning…" : "Screenshot Import"}
                   </Button>
                 </div>
                 <div className="text-[10px] font-medium text-muted-foreground">

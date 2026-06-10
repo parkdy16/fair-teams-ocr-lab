@@ -115,8 +115,10 @@ function App() {
     setIsEditingGroupName(false);
   };
 
-  const isDefaultHeaderColor = headerColor.toUpperCase() === DEFAULT_HEADER_COLOR;
-  const canEditHeader = true;
+  const headerDisplayName = groupName.trim() && groupName !== DEFAULT_GROUP_NAME ? groupName : "Fair Teams";
+  const headerGradientStyle = {
+    background: `linear-gradient(135deg, ${hexToRgba(headerColor, 0.22)} 0%, rgba(255,255,255,0.98) 44%, rgba(248,250,252,0.96) 100%)`,
+  } as React.CSSProperties;
 
   const replacePlayers = (nextPlayers: RoomPlayer[]) => {
     setPlayers(nextPlayers);
@@ -190,7 +192,7 @@ function App() {
   return (
     <div className="flex flex-col min-h-[100dvh] bg-background w-full max-w-md md:max-w-3xl lg:max-w-5xl mx-auto relative shadow-2xl overflow-hidden">
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
-        <header className="sticky top-0 z-30 bg-background/95 backdrop-blur border-b border-border px-4 pt-3 pb-2 shadow-sm">
+        <header className="sticky top-0 z-30 backdrop-blur border-b border-border px-4 pt-3 pb-2 shadow-sm" style={headerGradientStyle}>
           <div className="flex items-center justify-between gap-3 px-1 pb-2">
             <div className="min-w-0 flex-1">
               {isEditingGroupName ? (
@@ -226,14 +228,12 @@ function App() {
                   </Button>
                 </div>
               ) : (
-                <button type="button" onClick={startGroupNameEdit} className="group flex flex-col items-start text-left min-w-0 max-w-full active:scale-[0.99] transition-transform">
-                  <span className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-[#16A34A] leading-none">
-                    <img src={fairTeamsLogo} alt="" className="h-3.5 w-3.5 object-contain" />
-                    Fair Teams
+                <button type="button" onClick={startGroupNameEdit} className="group flex items-center gap-2.5 text-left min-w-0 max-w-full active:scale-[0.99] transition-transform">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-white/80 border border-white/70 shadow-sm">
+                    <img src={fairTeamsLogo} alt="" className="h-7 w-7 object-contain" />
                   </span>
-                  <span className="mt-1 flex items-center gap-1.5 min-w-0 max-w-full">
-                    <span className="h-2 w-2 rounded-full shrink-0 shadow-sm" style={{ backgroundColor: headerColor }} />
-                    <h1 className="text-[15px] font-black leading-tight truncate tracking-tight text-[#102A43]">{groupName}</h1>
+                  <span className="flex items-center gap-1.5 min-w-0 max-w-full">
+                    <h1 className="text-[17px] font-black leading-tight truncate tracking-tight text-[#102A43]">{headerDisplayName}</h1>
                     <Pencil className="w-3.5 h-3.5 text-[#102A43]/45 opacity-90 shrink-0" />
                   </span>
                 </button>
@@ -246,7 +246,7 @@ function App() {
                   <Button
                     type="button"
                     variant="secondary"
-                    className="h-8 rounded-xl bg-slate-100 border border-slate-200 px-2.5 gap-1.5 text-[11px] font-black text-[#102A43]"
+                    className="h-9 rounded-xl bg-white/85 border border-slate-200 px-3 gap-1.5 text-[12px] font-black text-[#102A43]"
                     onClick={() => setRosterFilesOpen(true)}
                     title="Roster files"
                   >
@@ -328,7 +328,7 @@ function App() {
               </Button>
               <Button type="button" variant="outline" className="h-12 justify-start rounded-2xl gap-3" onClick={exportCsv} disabled={players.length === 0}>
                 <Download className="h-4 w-4" />
-                <span className="font-black">Export CSV</span>
+                <span className="font-black">Export roster</span>
               </Button>
               <Button
                 type="button"

@@ -5,6 +5,8 @@ import { PlayersTab } from "@/components/PlayersTab";
 import { TodayTab } from "@/components/TodayTab";
 import { TeamsTab } from "@/components/TeamsTab";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import fairTeamsLogo from "@/assets/fairteams-logo.png";
 import {
   RoomPlayer,
@@ -73,6 +75,9 @@ function App() {
   });
   const [isEditingGroupName, setIsEditingGroupName] = useState(false);
   const [draftGroupName, setDraftGroupName] = useState(groupName);
+  const [showRosterImportDialog, setShowRosterImportDialog] = useState(false);
+  const [pastedRosterText, setPastedRosterText] = useState("");
+  const [importStatus, setImportStatus] = useState("");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -140,12 +145,18 @@ function App() {
     });
   };
 
-  const importFile = async (file: File) => {
-    const lowerName = file.name.toLowerCase();
-    const text = await readImportFileAsText(file);
+  const importRosterText = async (text: string, sourceName = "pasted.csv") => {
+    const lowerName = sourceName.toLowerCase();
+    const trimmedText = text.trim();
+
+    if (!trimmedText) {
+      throw new Error("No roster data found.");
+    }
+
+    setImportStatus("Parsing roster…");
     const imported = lowerName.endsWith(".json")
-      ? JSON.parse(text)
-      : csvToPlayers(text);
+      ? JSON.parse(trimmedText)
+      : csvToPlayers(trimmedText);
 
     if (!Array.isArray(imported)) {
       throw new Error("Import file does not contain a roster list.");
@@ -156,12 +167,36 @@ function App() {
       : imported;
 
     if (normalized.length === 0) {
-      alert("No players found in that file.");
-      return;
+      throw new Error("No players found in that roster.");
     }
 
     const ok = window.confirm(`Import ${normalized.length} players? This replaces the current roster on this device.`);
-    if (ok) setPlayers(normalized);
+    if (!ok) {
+      setImportStatus("Import cancelled.");
+      return;
+    }
+
+    setImportStatus("Importing roster…");
+    setPlayers(normalized);
+    setPastedRosterText("");
+    setShowRosterImportDialog(false);
+    setImportStatus("");
+  };
+
+  const importFile = async (file: File) => {
+    setImportStatus(`Reading ${file.name}…`);
+    const text = await readImportFileAsText(file);
+    await importRosterText(text, file.name);
+  };
+
+  const importPastedRoster = async () => {
+    try {
+      await importRosterText(pastedRosterText, "pasted.csv");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Import failed.";
+      setImportStatus(message);
+      alert(message);
+    }
   };
 
   if (showSplash) {
@@ -231,7 +266,7 @@ function App() {
                     <Button type="button" variant="secondary" size="icon" className="h-7 w-7 rounded-lg bg-slate-100 border border-slate-200" onClick={exportCsv} title="Export Roster" disabled={players.length === 0}>
                       <Download className="w-3.5 h-3.5" />
                     </Button>
-                    <Button type="button" variant="secondary" size="icon" className="h-7 w-7 rounded-lg bg-slate-100 border border-slate-200" onClick={(event) => { event.preventDefault(); event.stopPropagation(); fileInputRef.current?.click(); }} title="Import Roster">
+                    <Button type="button" variant="secondary" size="icon" className="h-7 w-7 rounded-lg bg-slate-100 border border-slate-200" onClick={(event) => { event.preventDefault(); event.stopPropagation(); setImportStatus(""); setShowRosterImportDialog(true); }} title="Import Roster">
                       <Upload className="w-3.5 h-3.5" />
                     </Button>
                   </>
@@ -253,10 +288,54 @@ function App() {
                     try {
                       await importFile(file);
                     } catch (error) {
-                      alert(error instanceof Error ? error.message : "Import failed.");
+                      const message = error instanceof Error ? error.message : "Import failed.";
+                      setImportStatus(message);
+                      alert(message);
                     }
                   }}
                 />
+                <Dialog open={showRosterImportDialog} onOpenChange={setShowRosterImportDialog}>
+                  <DialogContent className="w-[calc(100vw-2rem)] max-w-md rounded-3xl p-5">
+                    <DialogHeader>
+                      <DialogTitle>Import roster</DialogTitle>
+                      <DialogDescription>
+                        Choose a CSV/JSON roster file, or paste CSV text if your tablet has trouble opening files.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                      <Button
+                        type="button"
+                        className="w-full rounded-2xl bg-[#102A43] text-white"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          setImportStatus("");
+                          fileInputRef.current?.click();
+                        }}
+                      >
+                        <Upload className="mr-2 h-4 w-4" /> Choose CSV file
+                      </Button>
+
+                      <div className="space-y-2">
+                        <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Paste CSV text</p>
+                        <Textarea
+                          value={pastedRosterText}
+                          onChange={e => setPastedRosterText(e.target.value)}
+                          placeholder="name,attack,defense,..."
+                          className="min-h-32 rounded-2xl text-sm"
+                        />
+                      </div>
+
+                      {importStatus && (
+                        <p className="rounded-2xl bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-600">{importStatus}</p>
+                      )}
+                    </div>
+                    <DialogFooter className="gap-2 sm:gap-2">
+                      <Button type="button" variant="secondary" className="rounded-2xl" onClick={() => setShowRosterImportDialog(false)}>Cancel</Button>
+                      <Button type="button" className="rounded-2xl bg-[#16A34A] text-white" onClick={importPastedRoster} disabled={!pastedRosterText.trim()}>Import pasted</Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
               </div>
             )}
           </div>

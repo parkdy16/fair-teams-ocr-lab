@@ -9,7 +9,6 @@ import {
   Pencil,
   Check,
   X,
-  Palette,
   Trash2,
   AlertTriangle,
   Package,
@@ -38,6 +37,7 @@ const DEFAULT_GROUP_NAME = "My Group";
 const DEFAULT_HEADER_COLOR = "#3B82F6";
 
 const GROUP_COLOR_THEMES = [
+  { name: "White", value: "#FFFFFF" },
   { name: "Blue", value: "#3B82F6" },
   { name: "Teal", value: "#14B8A6" },
   { name: "Green", value: "#22C55E" },
@@ -189,8 +189,13 @@ function App() {
     groupName.trim() && groupName !== DEFAULT_GROUP_NAME
       ? groupName
       : "Fair Teams";
-  const headerGradientStyle = {
-    background: `linear-gradient(135deg, ${hexToRgba(headerColor, 0.22)} 0%, rgba(255,255,255,0.98) 44%, rgba(248,250,252,0.96) 100%)`,
+  const isWhiteHeaderColor = headerColor.toLowerCase() === "#ffffff";
+  const identityAccentColor = isWhiteHeaderColor ? "#E2E8F0" : headerColor;
+  const logoRingStyle = {
+    borderColor: isWhiteHeaderColor ? "#E2E8F0" : headerColor,
+    boxShadow: isWhiteHeaderColor
+      ? "0 1px 2px rgba(15, 23, 42, 0.08)"
+      : `0 0 0 2px ${hexToRgba(headerColor, 0.14)}`,
   } as React.CSSProperties;
 
   const replacePlayers = (nextPlayers: RoomPlayer[]) => {
@@ -295,31 +300,49 @@ function App() {
         onValueChange={setActiveTab}
         className="flex-1 flex flex-col min-h-0"
       >
-        <header
-          className="sticky top-0 z-30 backdrop-blur border-b border-border px-4 pt-3 pb-2 shadow-sm"
-          style={headerGradientStyle}
-        >
+        <header className="sticky top-0 z-30 border-b border-border bg-white px-4 pt-3 pb-2 shadow-sm">
           <div className="flex items-center justify-between gap-3 px-1 pb-2">
             <div className="min-w-0 flex-1">
-              <button
-                type="button"
-                onClick={openGroupSettings}
-                className="group flex items-center gap-2.5 text-left min-w-0 max-w-full active:scale-[0.99] transition-transform"
-              >
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white/80 border border-white/70 shadow-sm">
-                  <img
-                    src={groupLogo || fairTeamsLogo}
-                    alt=""
-                    className="h-full w-full object-cover"
-                  />
-                </span>
-                <span className="flex items-center gap-1.5 min-w-0 max-w-full">
-                  <h1 className="text-[17px] font-black leading-tight truncate tracking-tight text-[#102A43]">
+              {activeTab === "players" ? (
+                <button
+                  type="button"
+                  onClick={openGroupSettings}
+                  className="group flex max-w-full min-w-0 items-center gap-2.5 text-left transition-transform active:scale-[0.99]"
+                >
+                  <span
+                    className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-2xl border-2 bg-white shadow-sm"
+                    style={logoRingStyle}
+                  >
+                    <img
+                      src={groupLogo || fairTeamsLogo}
+                      alt=""
+                      className="h-full w-full object-cover"
+                    />
+                  </span>
+                  <span className="flex min-w-0 max-w-full items-center gap-1.5">
+                    <h1 className="truncate text-[17px] font-black leading-tight tracking-tight text-[#102A43]">
+                      {headerDisplayName}
+                    </h1>
+                    <Pencil className="h-3.5 w-3.5 shrink-0 text-[#102A43]/45" />
+                  </span>
+                </button>
+              ) : (
+                <div className="flex max-w-full min-w-0 items-center gap-2.5 text-left">
+                  <span
+                    className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-2xl border-2 bg-white shadow-sm"
+                    style={logoRingStyle}
+                  >
+                    <img
+                      src={groupLogo || fairTeamsLogo}
+                      alt=""
+                      className="h-full w-full object-cover"
+                    />
+                  </span>
+                  <h1 className="truncate text-[17px] font-black leading-tight tracking-tight text-[#102A43]">
                     {headerDisplayName}
                   </h1>
-                  <Pencil className="w-3.5 h-3.5 text-[#102A43]/45 opacity-90 shrink-0" />
-                </span>
-              </button>
+                </div>
+              )}
             </div>
 
             <div className="flex items-center gap-1.5 shrink-0">
@@ -360,6 +383,10 @@ function App() {
               />
             </div>
           </div>
+          <div
+            className="mx-1 mb-2 h-0.5 rounded-full"
+            style={{ backgroundColor: identityAccentColor }}
+          />
 
           <TabsList className="w-full h-11 bg-slate-100/90 grid grid-cols-3 rounded-2xl p-1 gap-1.5 border border-border/70 shadow-inner">
             <TabsTrigger
@@ -394,25 +421,29 @@ function App() {
 
         <div className="flex-1 overflow-y-auto p-4 md:p-5">
           <div className="flex min-h-[calc(100dvh-168px)] flex-col">
-          <TabsContent
-            value="players"
-            className="m-0 data-[state=active]:animate-in data-[state=active]:fade-in-50"
-          >
-            <PlayersTab players={players} setPlayers={replacePlayers} />
-          </TabsContent>
-          <TabsContent
-            value="today"
-            className="m-0 data-[state=active]:animate-in data-[state=active]:fade-in-50"
-          >
-            <TodayTab players={players} setPlayers={replacePlayers} themeColor={headerColor} />
-          </TabsContent>
-          <TabsContent
-            value="teams"
-            className="m-0 data-[state=active]:animate-in data-[state=active]:fade-in-50"
-          >
-            <TeamsTab players={players} />
-          </TabsContent>
-          <PoweredByFairTeams />
+            <TabsContent
+              value="players"
+              className="m-0 data-[state=active]:animate-in data-[state=active]:fade-in-50"
+            >
+              <PlayersTab players={players} setPlayers={replacePlayers} />
+            </TabsContent>
+            <TabsContent
+              value="today"
+              className="m-0 data-[state=active]:animate-in data-[state=active]:fade-in-50"
+            >
+              <TodayTab
+                players={players}
+                setPlayers={replacePlayers}
+                themeColor={headerColor}
+              />
+            </TabsContent>
+            <TabsContent
+              value="teams"
+              className="m-0 data-[state=active]:animate-in data-[state=active]:fade-in-50"
+            >
+              <TeamsTab players={players} />
+            </TabsContent>
+            <PoweredByFairTeams />
           </div>
         </div>
       </Tabs>
@@ -525,11 +556,16 @@ function App() {
                         <span
                           className={`flex h-9 w-full min-w-0 items-center justify-center rounded-2xl border shadow-sm transition-transform group-active:scale-95 ${selected ? "border-blue-500 ring-2 ring-blue-200" : "border-white"}`}
                           style={{
-                            background: `linear-gradient(135deg, ${theme.value}, ${hexToRgba(theme.value, 0.42)})`,
+                            background:
+                              theme.value.toLowerCase() === "#ffffff"
+                                ? "linear-gradient(135deg, #ffffff, #f8fafc)"
+                                : `linear-gradient(135deg, ${theme.value}, ${hexToRgba(theme.value, 0.42)})`,
                           }}
                         >
                           {selected && (
-                            <Check className="h-4 w-4 text-white drop-shadow" />
+                            <Check
+                              className={`h-4 w-4 drop-shadow ${theme.value.toLowerCase() === "#ffffff" ? "text-slate-700" : "text-white"}`}
+                            />
                           )}
                         </span>
                         <span className="truncate">{theme.name}</span>

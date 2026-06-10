@@ -3,11 +3,8 @@ import { FieldSize, Player, Team, TeamColor } from "./types";
 const DEFAULT_COLORS: TeamColor[] = ["red", "blue", "lime", "yellow", "orange", "black"];
 
 export function getWeightedSkill(player: Player, fieldSize: FieldSize = "medium") {
-  // Field size should nudge balance, not rewrite player value.
-  // Small fields reward touch/combination play a bit more.
-  // Large fields make speed and especially stamina more important.
   const weights = fieldSize === "small"
-    ? { attack: 0.23, passing: 0.25, defense: 0.21, speed: 0.17, stamina: 0.14 }
+    ? { attack: 0.22, passing: 0.26, defense: 0.22, speed: 0.15, stamina: 0.15 }
     : fieldSize === "large"
       ? { attack: 0.16, passing: 0.18, defense: 0.20, speed: 0.22, stamina: 0.24 }
       : { attack: 0.20, passing: 0.20, defense: 0.20, speed: 0.20, stamina: 0.20 };

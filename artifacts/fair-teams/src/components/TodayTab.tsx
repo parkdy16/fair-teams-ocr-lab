@@ -4,7 +4,7 @@ import type { RoomPlayer } from "@/lib/localRoster";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Camera, Mic, Search, Upload, X } from "lucide-react";
+import { Image as ImageIcon, Mic, Search, Upload, X } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -270,10 +270,7 @@ function extractMeetupNameBeforeMarker(chunk: string) {
   // OCR can attach tiny avatar/UI fragments before a real name, for example
   // "ir Danill Member". Remove only known title-like fragments, not real
   // short name particles such as "De" in "Karim De La Cruz".
-  while (
-    tokens.length > 1 &&
-    OCR_LEADING_NAME_NOISE.has(tokenKey(tokens[0]))
-  ) {
+  while (tokens.length > 1 && OCR_LEADING_NAME_NOISE.has(tokenKey(tokens[0]))) {
     tokens = tokens.slice(1);
   }
   while (tokens.length && isMeetupNoiseToken(tokens[tokens.length - 1])) {
@@ -332,7 +329,11 @@ function findRosterAliasesInTokens(tokens: string[], roster: RoomPlayer[]) {
       const aliasTokens = alias.split(" ").filter(Boolean);
       if (!aliasTokens.length || aliasTokens.length > tokens.length) continue;
 
-      for (let start = 0; start <= tokens.length - aliasTokens.length; start += 1) {
+      for (
+        let start = 0;
+        start <= tokens.length - aliasTokens.length;
+        start += 1
+      ) {
         const slice = normalizedTokens.slice(start, start + aliasTokens.length);
         if (slice.join(" ") === aliasTokens.join(" ")) {
           for (let offset = 0; offset < aliasTokens.length; offset += 1) {
@@ -638,7 +639,8 @@ function extractOcrNames(
     if (best && best.score >= matchThreshold) {
       const strongMatches = ranked.filter(
         (match) =>
-          match.score >= matchThreshold && Math.abs(match.score - best.score) <= 2,
+          match.score >= matchThreshold &&
+          Math.abs(match.score - best.score) <= 2,
       );
       if (strongMatches.length > 1) {
         return {
@@ -734,27 +736,23 @@ export function TodayTab({
   const [confirmAddAllOpen, setConfirmAddAllOpen] = useState(false);
   const [expectedAttendeeCount, setExpectedAttendeeCount] = useState("");
   const [showRawOcrText, setShowRawOcrText] = useState(false);
-  const [prioritizeScannedPlayers, setPrioritizeScannedPlayers] = useState(false);
+  const [prioritizeScannedPlayers, setPrioritizeScannedPlayers] =
+    useState(false);
 
-  const safeThemeColor = /^#[0-9A-Fa-f]{6}$/.test(themeColor)
-    ? themeColor
-    : "#3B82F6";
-  const hexToRgba = (hex: string, alpha: number) => {
-    const r = Number.parseInt(hex.slice(1, 3), 16);
-    const g = Number.parseInt(hex.slice(3, 5), 16);
-    const b = Number.parseInt(hex.slice(5, 7), 16);
-    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-  };
   const attendingSummaryStyle = {
-    background: `linear-gradient(135deg, ${hexToRgba(safeThemeColor, 0.14)} 0%, ${hexToRgba(safeThemeColor, 0.06)} 52%, rgba(255,255,255,0.96) 100%)`,
-    borderColor: hexToRgba(safeThemeColor, 0.24),
+    background: "linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)",
+    borderColor: "rgba(148, 163, 184, 0.35)",
+    boxShadow: "0 8px 18px rgba(15, 23, 42, 0.05)",
   } as React.CSSProperties;
   const [selectedScreenshotPreviews, setSelectedScreenshotPreviews] = useState<
     Array<{ name: string; url: string }>
   >([]);
 
   const sorted = [...players].sort((a, b) => {
-    if (prioritizeScannedPlayers && Boolean(a.attending) !== Boolean(b.attending)) {
+    if (
+      prioritizeScannedPlayers &&
+      Boolean(a.attending) !== Boolean(b.attending)
+    ) {
       return a.attending ? -1 : 1;
     }
     return displayName(a).localeCompare(displayName(b));
@@ -795,7 +793,9 @@ export function TodayTab({
   const resolveOcrMatch = (candidate: OcrNameCandidate) => {
     const chosenPlayerId = chosenOcrMatchIds[ocrCandidateKey(candidate)];
     if (chosenPlayerId) {
-      const chosenPlayer = players.find((player) => player.id === chosenPlayerId);
+      const chosenPlayer = players.find(
+        (player) => player.id === chosenPlayerId,
+      );
       if (chosenPlayer) return chosenPlayer;
     }
     return candidate.bestMatch;
@@ -930,7 +930,10 @@ export function TodayTab({
     );
   };
 
-  const chooseOcrSuggestion = (candidate: OcrNameCandidate, player: RoomPlayer) => {
+  const chooseOcrSuggestion = (
+    candidate: OcrNameCandidate,
+    player: RoomPlayer,
+  ) => {
     const key = ocrCandidateKey(candidate);
     setChosenOcrMatchIds((current) => ({ ...current, [key]: player.id }));
     setSelectedOcrCandidateKeys((current) =>
@@ -1079,8 +1082,8 @@ export function TodayTab({
           className="h-9 rounded-xl text-xs font-black"
           data-testid="ocr-import-button"
         >
-          <Camera className="mr-1.5 h-3.5 w-3.5" />
-          Scan Attendees
+          <ImageIcon className="mr-1.5 h-3.5 w-3.5" />
+          Screenshot Import
         </Button>
         <Button
           type="button"
@@ -1099,7 +1102,7 @@ export function TodayTab({
         <DialogContent className="flex h-[90dvh] max-h-[90dvh] w-[94vw] max-w-lg md:max-w-3xl flex-col overflow-hidden rounded-2xl p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle className="text-base font-black">
-              Scan Attendees
+              Screenshot Import
             </DialogTitle>
             <DialogDescription className="text-xs">
               Import today's attendees from a Meetup, WhatsApp, Telegram, or
@@ -1261,7 +1264,7 @@ export function TodayTab({
                 {hasExpectedAttendeeNumber && missingFromScan > 0 && (
                   <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2 text-[11px] font-bold text-amber-800">
                     Scan found {scannedNameCount} name
-                    {scannedNameCount === 1 ? "" : "s"}, but you expected {" "}
+                    {scannedNameCount === 1 ? "" : "s"}, but you expected{" "}
                     {Math.round(expectedAttendeeNumber)}. Check the screenshot
                     or add {missingFromScan} missing player
                     {missingFromScan === 1 ? "" : "s"} manually.
@@ -1290,119 +1293,122 @@ export function TodayTab({
 
             {ocrText && (
               <div className="rounded-xl border bg-card p-3">
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <div className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
-                  Review Names
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <div className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
+                    Review Names
+                  </div>
+                  {possibleNames.length > 0 && (
+                    <div className="text-[10px] font-black text-muted-foreground">
+                      {safeMatches} match · {suggestions} check · {newNames} new
+                    </div>
+                  )}
                 </div>
-                {possibleNames.length > 0 && (
-                  <div className="text-[10px] font-black text-muted-foreground">
-                    {safeMatches} match · {suggestions} check · {newNames} new
+                {possibleNames.length > 0 ? (
+                  <div className="space-y-2 pr-1">
+                    {possibleNames.map((candidate, index) => {
+                      const candidateKey = ocrCandidateKey(candidate);
+                      const isSelectedMatch =
+                        selectedOcrCandidateKeySet.has(candidateKey);
+                      const resolvedMatch = resolveOcrMatch(candidate);
+
+                      return (
+                        <div
+                          key={`${candidate.name}-${index}`}
+                          className={`rounded-lg p-2.5 text-[11px] ${
+                            isSelectedMatch
+                              ? "bg-primary/10 ring-1 ring-primary/20"
+                              : "bg-muted/50"
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex min-w-0 gap-2">
+                              <Checkbox
+                                checked={isSelectedMatch}
+                                onCheckedChange={() =>
+                                  toggleOcrCandidate(candidate)
+                                }
+                                className="mt-0.5 h-4 w-4 shrink-0 rounded-full"
+                              />
+                              <div className="min-w-0">
+                                <div className="font-black text-foreground">
+                                  {candidate.name}
+                                </div>
+                                {candidate.status === "match" &&
+                                  resolvedMatch && (
+                                    <div className="mt-0.5 font-medium text-emerald-700">
+                                      MATCH: {displayName(resolvedMatch)} ·{" "}
+                                      {candidate.score}%
+                                    </div>
+                                  )}
+                                {candidate.status === "suggest" &&
+                                  resolvedMatch && (
+                                    <div className="mt-0.5 font-medium text-amber-700">
+                                      SELECTED: {displayName(resolvedMatch)} ·{" "}
+                                      {candidate.score}%
+                                    </div>
+                                  )}
+                                {candidate.status === "new" && (
+                                  <div className="mt-0.5 font-medium text-sky-700">
+                                    {resolvedMatch
+                                      ? `SELECTED: ${displayName(resolvedMatch)}`
+                                      : "NEW: Will create roster player if selected"}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            <div
+                              className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-black ${
+                                candidate.status === "match"
+                                  ? "bg-emerald-100 text-emerald-800"
+                                  : candidate.status === "suggest"
+                                    ? "bg-amber-100 text-amber-800"
+                                    : "bg-sky-100 text-sky-800"
+                              }`}
+                            >
+                              {candidate.status === "match"
+                                ? "MATCH"
+                                : candidate.status === "suggest"
+                                  ? "CHECK"
+                                  : "NEW"}
+                            </div>
+                          </div>
+                          {candidate.status !== "match" &&
+                            candidate.suggestions.length > 0 && (
+                              <div className="mt-2 flex flex-wrap gap-1">
+                                {candidate.suggestions
+                                  .slice(0, 3)
+                                  .map(({ player, score }) => {
+                                    const isChosen =
+                                      resolvedMatch?.id === player.id;
+                                    return (
+                                      <button
+                                        key={player.id}
+                                        type="button"
+                                        onClick={() =>
+                                          chooseOcrSuggestion(candidate, player)
+                                        }
+                                        className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${
+                                          isChosen
+                                            ? "bg-amber-100 text-amber-900 border-amber-300"
+                                            : "bg-card text-muted-foreground"
+                                        }`}
+                                      >
+                                        {isChosen ? "✓ " : "Use "}
+                                        {displayName(player)} {score}%
+                                      </button>
+                                    );
+                                  })}
+                              </div>
+                            )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="rounded-lg bg-muted/50 p-3 text-center text-xs font-medium text-muted-foreground">
+                    Screenshot Import will show filtered possible names here.
                   </div>
                 )}
-              </div>
-              {possibleNames.length > 0 ? (
-                <div className="space-y-2 pr-1">
-                  {possibleNames.map((candidate, index) => {
-                    const candidateKey = ocrCandidateKey(candidate);
-                    const isSelectedMatch =
-                      selectedOcrCandidateKeySet.has(candidateKey);
-                    const resolvedMatch = resolveOcrMatch(candidate);
-
-                    return (
-                      <div
-                        key={`${candidate.name}-${index}`}
-                        className={`rounded-lg p-2.5 text-[11px] ${
-                          isSelectedMatch
-                            ? "bg-primary/10 ring-1 ring-primary/20"
-                            : "bg-muted/50"
-                        }`}
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex min-w-0 gap-2">
-                            <Checkbox
-                              checked={isSelectedMatch}
-                              onCheckedChange={() =>
-                                toggleOcrCandidate(candidate)
-                              }
-                              className="mt-0.5 h-4 w-4 shrink-0 rounded-full"
-                            />
-                            <div className="min-w-0">
-                              <div className="font-black text-foreground">
-                                {candidate.name}
-                              </div>
-                              {candidate.status === "match" &&
-                                resolvedMatch && (
-                                  <div className="mt-0.5 font-medium text-emerald-700">
-                                    MATCH: {displayName(resolvedMatch)} ·{" "}
-                                    {candidate.score}%
-                                  </div>
-                                )}
-                              {candidate.status === "suggest" &&
-                                resolvedMatch && (
-                                  <div className="mt-0.5 font-medium text-amber-700">
-                                    SELECTED: {displayName(resolvedMatch)} ·{" "}
-                                    {candidate.score}%
-                                  </div>
-                                )}
-                              {candidate.status === "new" && (
-                                <div className="mt-0.5 font-medium text-sky-700">
-                                  {resolvedMatch
-                                    ? `SELECTED: ${displayName(resolvedMatch)}`
-                                    : "NEW: Will create roster player if selected"}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                          <div
-                            className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-black ${
-                              candidate.status === "match"
-                                ? "bg-emerald-100 text-emerald-800"
-                                : candidate.status === "suggest"
-                                  ? "bg-amber-100 text-amber-800"
-                                  : "bg-sky-100 text-sky-800"
-                            }`}
-                          >
-                            {candidate.status === "match"
-                              ? "MATCH"
-                              : candidate.status === "suggest"
-                                ? "CHECK"
-                                : "NEW"}
-                          </div>
-                        </div>
-                        {candidate.status !== "match" &&
-                          candidate.suggestions.length > 0 && (
-                            <div className="mt-2 flex flex-wrap gap-1">
-                              {candidate.suggestions
-                                .slice(0, 3)
-                                .map(({ player, score }) => {
-                                  const isChosen = resolvedMatch?.id === player.id;
-                                  return (
-                                    <button
-                                      key={player.id}
-                                      type="button"
-                                      onClick={() => chooseOcrSuggestion(candidate, player)}
-                                      className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${
-                                        isChosen
-                                          ? "bg-amber-100 text-amber-900 border-amber-300"
-                                          : "bg-card text-muted-foreground"
-                                      }`}
-                                    >
-                                      {isChosen ? "✓ " : "Use "}
-                                      {displayName(player)} {score}%
-                                    </button>
-                                  );
-                                })}
-                            </div>
-                          )}
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="rounded-lg bg-muted/50 p-3 text-center text-xs font-medium text-muted-foreground">
-                  Scan Attendees to show filtered possible names here.
-                </div>
-              )}
               </div>
             )}
 
@@ -1447,7 +1453,8 @@ export function TodayTab({
                     >
                       Expected attendees today
                       <span className="font-bold normal-case tracking-normal text-muted-foreground/80">
-                        {" "}(optional)
+                        {" "}
+                        (optional)
                       </span>
                     </label>
                     <Input
@@ -1469,7 +1476,7 @@ export function TodayTab({
                     disabled={selectedScreenshots.length === 0 || ocrRunning}
                     className="h-10 rounded-xl px-4 text-xs font-black"
                   >
-                    {ocrRunning ? "Scanning…" : "Scan Attendees"}
+                    {ocrRunning ? "Scanning…" : "Screenshot Import"}
                   </Button>
                 </div>
                 <div className="text-[10px] font-medium text-muted-foreground">
@@ -1534,8 +1541,8 @@ export function TodayTab({
             ))}
           </div>
           <div className="rounded-xl bg-sky-50 p-3 text-[11px] font-medium text-sky-800 border border-sky-100">
-            New players will start with default ratings and the NEW badge. You can
-            edit them later in the Roster tab.
+            New players will start with default ratings and the NEW badge. You
+            can edit them later in the Roster tab.
           </div>
           <DialogFooter className="gap-2 sm:gap-2">
             <Button
@@ -1564,8 +1571,8 @@ export function TodayTab({
               Add All Scan Results?
             </DialogTitle>
             <DialogDescription className="text-xs">
-              This will add every detected scan result, including unchecked CHECK
-              suggestions and NEW players.
+              This will add every detected scan result, including unchecked
+              CHECK suggestions and NEW players.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2 rounded-xl border bg-muted/40 p-3 text-xs">
@@ -1636,8 +1643,7 @@ export function TodayTab({
               Voice Import
             </DialogTitle>
             <DialogDescription className="text-xs">
-              Voice roll call will come later. Screenshot scan comes
-              first.
+              Voice roll call will come later. Screenshot scan comes first.
             </DialogDescription>
           </DialogHeader>
           <div className="rounded-xl border bg-muted/50 p-4 text-center text-xs font-medium text-muted-foreground">

@@ -218,6 +218,17 @@ const MEETUP_NOISE_WORDS = new Set([
   "ember",
 ]);
 
+const OCR_LEADING_NAME_NOISE = new Set([
+  "ir",
+  "mr",
+  "mrs",
+  "ms",
+  "dr",
+  "sir",
+  "jr",
+  "sr",
+]);
+
 function tokenKey(value: string) {
   return normalizeForMatch(value).replace(/\s+/g, "");
 }
@@ -254,6 +265,15 @@ function extractMeetupNameBeforeMarker(chunk: string) {
 
   tokens = tokens.slice(startAfter + 1);
   while (tokens.length && isMeetupNoiseToken(tokens[0])) {
+    tokens = tokens.slice(1);
+  }
+  // OCR can attach tiny avatar/UI fragments before a real name, for example
+  // "ir Danill Member". Remove only known title-like fragments, not real
+  // short name particles such as "De" in "Karim De La Cruz".
+  while (
+    tokens.length > 1 &&
+    OCR_LEADING_NAME_NOISE.has(tokenKey(tokens[0]))
+  ) {
     tokens = tokens.slice(1);
   }
   while (tokens.length && isMeetupNoiseToken(tokens[tokens.length - 1])) {
@@ -447,9 +467,21 @@ function similarity(a: string, b: string) {
 }
 
 function playerSearchNames(player: RoomPlayer) {
-  return [player.name, player.aka, displayName(player)]
-    .filter(Boolean)
-    .map((value) => normalizeForMatch(String(value)));
+  const values = [player.name, player.aka, displayName(player)];
+  const aka = player.aka?.trim();
+  if (aka) {
+    values.push(`${player.name} ${aka}`);
+    values.push(`${aka} ${player.name}`);
+  }
+
+  return Array.from(
+    new Set(
+      values
+        .filter(Boolean)
+        .map((value) => normalizeForMatch(String(value)))
+        .filter(Boolean),
+    ),
+  );
 }
 
 function scorePlayerMatch(ocrName: string, player: RoomPlayer) {
@@ -463,6 +495,20 @@ function scorePlayerMatch(ocrName: string, player: RoomPlayer) {
       const candidateWords = candidate.split(" ").filter(Boolean);
       const ocrFirstName = ocrWords[0] ?? "";
       const candidateFirstName = candidateWords[0] ?? "";
+
+      // If OCR adds a short junk prefix before a saved one-word roster name
+      // (example: "ir Danill"), still match/suggest the real roster player.
+      if (candidateWords.length === 1 && candidateFirstName.length >= 4) {
+        const bestTokenScore = Math.max(
+          0,
+          ...ocrWords
+            .filter((word) => word.length >= 3)
+            .map((word) => similarity(word, candidateFirstName)),
+        );
+        if (bestTokenScore === 100) return 96;
+        if (bestTokenScore >= 90) return 94;
+        if (bestTokenScore >= 84) return 88;
+      }
 
       // Meetup screenshots often show full public names while the Fair Teams
       // roster may store nicknames/first names such as "Abou", "Luca", or
@@ -563,23 +609,47 @@ function extractOcrNames(
       .sort((a, b) => b.score - a.score);
 
     const best = ranked[0];
-    const exact = ranked.find((match) =>
+    const exactMatches = ranked.filter((match) =>
       playerSearchNames(match.player).includes(normalized),
     );
     const matchThreshold = wordCount === 1 ? 95 : 88;
     const suggestThreshold = wordCount === 1 ? 78 : 72;
 
-    if (exact) {
+    if (exactMatches.length === 1) {
       return {
         name,
         status: "match" as const,
-        bestMatch: exact.player,
+        bestMatch: exactMatches[0].player,
         score: 100,
         suggestions: ranked.slice(0, 3),
       };
     }
 
+    if (exactMatches.length > 1) {
+      return {
+        name,
+        status: "suggest" as const,
+        bestMatch: exactMatches[0].player,
+        score: 100,
+        suggestions: exactMatches.slice(0, 3),
+      };
+    }
+
     if (best && best.score >= matchThreshold) {
+      const strongMatches = ranked.filter(
+        (match) =>
+          match.score >= matchThreshold && Math.abs(match.score - best.score) <= 2,
+      );
+      if (strongMatches.length > 1) {
+        return {
+          name,
+          status: "suggest" as const,
+          bestMatch: best.player,
+          score: best.score,
+          suggestions: strongMatches.slice(0, 3),
+        };
+      }
+
       return {
         name,
         status: "match" as const,
@@ -679,7 +749,20 @@ export function TodayTab({
   const [selectedOcrCandidateKeys, setSelectedOcrCandidateKeys] = useState<
     string[]
   >([]);
+  const [chosenOcrMatchIds, setChosenOcrMatchIds] = useState<
+    Record<string, string>
+  >({});
   const selectedOcrCandidateKeySet = new Set(selectedOcrCandidateKeys);
+
+  const resolveOcrMatch = (candidate: OcrNameCandidate) => {
+    const chosenPlayerId = chosenOcrMatchIds[ocrCandidateKey(candidate)];
+    if (chosenPlayerId) {
+      const chosenPlayer = players.find((player) => player.id === chosenPlayerId);
+      if (chosenPlayer) return chosenPlayer;
+    }
+    return candidate.bestMatch;
+  };
+
   const safeMatches = possibleNames.filter(
     (candidate) => candidate.status === "match",
   ).length;
@@ -692,19 +775,19 @@ export function TodayTab({
   const selectedOcrCandidates = possibleNames.filter((candidate) =>
     selectedOcrCandidateKeySet.has(ocrCandidateKey(candidate)),
   );
-  const selectedRosterMatches = selectedOcrCandidates.filter(
-    (candidate) => candidate.bestMatch,
+  const selectedRosterMatches = selectedOcrCandidates.filter((candidate) =>
+    Boolean(resolveOcrMatch(candidate)),
   );
   const selectedNewCandidates = selectedOcrCandidates.filter(
-    (candidate) => candidate.status === "new" && !candidate.bestMatch,
+    (candidate) => candidate.status === "new" && !resolveOcrMatch(candidate),
   );
   const selectedOcrTotal =
     selectedRosterMatches.length + selectedNewCandidates.length;
-  const allRosterCandidates = possibleNames.filter(
-    (candidate) => candidate.bestMatch,
+  const allRosterCandidates = possibleNames.filter((candidate) =>
+    Boolean(resolveOcrMatch(candidate)),
   );
   const allNewCandidates = possibleNames.filter(
-    (candidate) => candidate.status === "new" && !candidate.bestMatch,
+    (candidate) => candidate.status === "new" && !resolveOcrMatch(candidate),
   );
   const allOcrTotal = allRosterCandidates.length + allNewCandidates.length;
   const allCheckCandidates = possibleNames.filter(
@@ -745,6 +828,7 @@ export function TodayTab({
     setOcrProgress(0);
     setOcrStatus("");
     setSelectedOcrCandidateKeys([]);
+    setChosenOcrMatchIds({});
     setExpectedAttendeeCount("");
   };
 
@@ -806,19 +890,23 @@ export function TodayTab({
     );
   };
 
-  const finalizeOcrCandidates = (candidatesToAdd: OcrNameCandidate[]) => {
-    const currentRosterMatches = candidatesToAdd.filter(
-      (candidate) => candidate.bestMatch,
+  const chooseOcrSuggestion = (candidate: OcrNameCandidate, player: RoomPlayer) => {
+    const key = ocrCandidateKey(candidate);
+    setChosenOcrMatchIds((current) => ({ ...current, [key]: player.id }));
+    setSelectedOcrCandidateKeys((current) =>
+      current.includes(key) ? current : [...current, key],
     );
+  };
+
+  const finalizeOcrCandidates = (candidatesToAdd: OcrNameCandidate[]) => {
+    const currentRosterMatches = candidatesToAdd
+      .map((candidate) => resolveOcrMatch(candidate))
+      .filter(Boolean) as RoomPlayer[];
     const currentNewCandidates = candidatesToAdd.filter(
-      (candidate) => candidate.status === "new" && !candidate.bestMatch,
+      (candidate) => candidate.status === "new" && !resolveOcrMatch(candidate),
     );
 
-    const playerIds = new Set(
-      currentRosterMatches
-        .map((candidate) => candidate.bestMatch?.id)
-        .filter(Boolean) as string[],
-    );
+    const playerIds = new Set(currentRosterMatches.map((player) => player.id));
 
     if (playerIds.size === 0 && currentNewCandidates.length === 0) return;
 
@@ -1195,6 +1283,7 @@ export function TodayTab({
                     const candidateKey = ocrCandidateKey(candidate);
                     const isSelectedMatch =
                       selectedOcrCandidateKeySet.has(candidateKey);
+                    const resolvedMatch = resolveOcrMatch(candidate);
 
                     return (
                       <div
@@ -1219,22 +1308,24 @@ export function TodayTab({
                                 {candidate.name}
                               </div>
                               {candidate.status === "match" &&
-                                candidate.bestMatch && (
+                                resolvedMatch && (
                                   <div className="mt-0.5 font-medium text-emerald-700">
-                                    MATCH: {displayName(candidate.bestMatch)} ·{" "}
+                                    MATCH: {displayName(resolvedMatch)} ·{" "}
                                     {candidate.score}%
                                   </div>
                                 )}
                               {candidate.status === "suggest" &&
-                                candidate.bestMatch && (
+                                resolvedMatch && (
                                   <div className="mt-0.5 font-medium text-amber-700">
-                                    SUGGEST: {displayName(candidate.bestMatch)}{" "}
-                                    · {candidate.score}%
+                                    SELECTED: {displayName(resolvedMatch)} ·{" "}
+                                    {candidate.score}%
                                   </div>
                                 )}
                               {candidate.status === "new" && (
                                 <div className="mt-0.5 font-medium text-sky-700">
-                                  NEW: Will create roster player if selected
+                                  {resolvedMatch
+                                    ? `SELECTED: ${displayName(resolvedMatch)}`
+                                    : "NEW: Will create roster player if selected"}
                                 </div>
                               )}
                             </div>
@@ -1260,14 +1351,24 @@ export function TodayTab({
                             <div className="mt-2 flex flex-wrap gap-1">
                               {candidate.suggestions
                                 .slice(0, 3)
-                                .map(({ player, score }) => (
-                                  <span
-                                    key={player.id}
-                                    className="rounded-full border bg-card px-2 py-0.5 text-[10px] font-bold text-muted-foreground"
-                                  >
-                                    {displayName(player)} {score}%
-                                  </span>
-                                ))}
+                                .map(({ player, score }) => {
+                                  const isChosen = resolvedMatch?.id === player.id;
+                                  return (
+                                    <button
+                                      key={player.id}
+                                      type="button"
+                                      onClick={() => chooseOcrSuggestion(candidate, player)}
+                                      className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${
+                                        isChosen
+                                          ? "bg-amber-100 text-amber-900 border-amber-300"
+                                          : "bg-card text-muted-foreground"
+                                      }`}
+                                    >
+                                      {isChosen ? "✓ " : "Use "}
+                                      {displayName(player)} {score}%
+                                    </button>
+                                  );
+                                })}
                             </div>
                           )}
                       </div>

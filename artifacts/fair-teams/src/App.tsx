@@ -404,7 +404,7 @@ function App() {
             value="today"
             className="m-0 data-[state=active]:animate-in data-[state=active]:fade-in-50"
           >
-            <TodayTab players={players} setPlayers={replacePlayers} />
+            <TodayTab players={players} setPlayers={replacePlayers} themeColor={headerColor} />
           </TabsContent>
           <TabsContent
             value="teams"

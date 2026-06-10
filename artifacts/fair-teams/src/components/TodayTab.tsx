@@ -1149,44 +1149,6 @@ export function TodayTab({
               </div>
             )}
 
-            {selectedScreenshots.length > 0 && (
-              <div className="rounded-xl border bg-card p-3">
-                <label
-                  htmlFor="expected-attendee-count"
-                  className="mb-1 block text-[10px] font-black uppercase tracking-wider text-muted-foreground"
-                >
-                  Expected attendees today (optional)
-                </label>
-                <Input
-                  id="expected-attendee-count"
-                  type="number"
-                  inputMode="numeric"
-                  min="1"
-                  value={expectedAttendeeCount}
-                  onChange={(event) =>
-                    setExpectedAttendeeCount(event.target.value)
-                  }
-                  placeholder="Example: 18"
-                  className="h-9 rounded-xl text-sm font-bold"
-                />
-                <div className="mt-1.5 text-[10px] font-medium text-muted-foreground">
-                  Used only for the scan audit, so you can see if the scan missed
-                  anyone.
-                </div>
-              </div>
-            )}
-
-            {selectedScreenshots.length > 0 && (
-              <Button
-                type="button"
-                onClick={runOcr}
-                disabled={ocrRunning}
-                className="h-9 w-full rounded-xl text-xs font-black"
-              >
-                {ocrRunning ? "Scanning screenshots…" : "Scan Attendees"}
-              </Button>
-            )}
-
             {(ocrRunning || ocrStatus) && (
               <div className="rounded-xl border bg-card p-3">
                 <div className="mb-2 flex items-center justify-between gap-2">
@@ -1445,32 +1407,75 @@ export function TodayTab({
             )}
           </div>
 
-          <DialogFooter className="shrink-0 gap-2 border-t pt-3 sm:gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setOcrOpen(false)}
-              className="h-9 text-xs font-bold"
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={addAllOcrMatches}
-              disabled={allOcrTotal === 0}
-              className="h-9 text-xs font-black"
-            >
-              Add All ({allOcrTotal})
-            </Button>
-            <Button
-              type="button"
-              onClick={addSelectedOcrMatches}
-              disabled={selectedOcrTotal === 0}
-              className="h-9 text-xs font-black"
-            >
-              Add Selected ({selectedOcrTotal})
-            </Button>
+          <DialogFooter className="shrink-0 border-t pt-3 sm:gap-2">
+            {!ocrText ? (
+              <div className="w-full space-y-2">
+                <div className="grid grid-cols-[1fr_auto] items-end gap-2">
+                  <div>
+                    <label
+                      htmlFor="expected-attendee-count"
+                      className="mb-1 block text-[10px] font-black uppercase tracking-wider text-muted-foreground"
+                    >
+                      Expected attendees today
+                      <span className="font-bold normal-case tracking-normal text-muted-foreground/80">
+                        {" "}(optional)
+                      </span>
+                    </label>
+                    <Input
+                      id="expected-attendee-count"
+                      type="number"
+                      inputMode="numeric"
+                      min="1"
+                      value={expectedAttendeeCount}
+                      onChange={(event) =>
+                        setExpectedAttendeeCount(event.target.value)
+                      }
+                      placeholder="Example: 18"
+                      className="h-10 rounded-xl text-sm font-bold"
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    onClick={runOcr}
+                    disabled={selectedScreenshots.length === 0 || ocrRunning}
+                    className="h-10 rounded-xl px-4 text-xs font-black"
+                  >
+                    {ocrRunning ? "Scanning…" : "Scan Attendees"}
+                  </Button>
+                </div>
+                <div className="text-[10px] font-medium text-muted-foreground">
+                  This footer stays fixed while you review uploaded screenshots.
+                </div>
+              </div>
+            ) : (
+              <div className="grid w-full grid-cols-3 gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setOcrOpen(false)}
+                  className="h-9 text-xs font-bold"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={addAllOcrMatches}
+                  disabled={allOcrTotal === 0}
+                  className="h-9 text-xs font-black"
+                >
+                  Add All ({allOcrTotal})
+                </Button>
+                <Button
+                  type="button"
+                  onClick={addSelectedOcrMatches}
+                  disabled={selectedOcrTotal === 0}
+                  className="h-9 text-xs font-black"
+                >
+                  Add Selected ({selectedOcrTotal})
+                </Button>
+              </div>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

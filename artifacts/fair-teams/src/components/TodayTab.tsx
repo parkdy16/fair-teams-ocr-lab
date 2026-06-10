@@ -1448,12 +1448,12 @@ export function TodayTab({
                 </div>
               </div>
             ) : (
-              <div className="grid w-full grid-cols-3 gap-2">
+              <div className="flex w-full items-center justify-end gap-2">
                 <Button
                   type="button"
                   variant="outline"
                   onClick={() => setOcrOpen(false)}
-                  className="h-9 text-xs font-bold"
+                  className="h-9 shrink-0 rounded-xl px-3 text-xs font-bold whitespace-nowrap"
                 >
                   Cancel
                 </Button>
@@ -1462,7 +1462,7 @@ export function TodayTab({
                   variant="secondary"
                   onClick={addAllOcrMatches}
                   disabled={allOcrTotal === 0}
-                  className="h-9 text-xs font-black"
+                  className="h-9 shrink-0 rounded-xl px-3 text-xs font-black whitespace-nowrap"
                 >
                   Add All ({allOcrTotal})
                 </Button>
@@ -1470,7 +1470,7 @@ export function TodayTab({
                   type="button"
                   onClick={addSelectedOcrMatches}
                   disabled={selectedOcrTotal === 0}
-                  className="h-9 text-xs font-black"
+                  className="h-9 min-w-0 flex-1 rounded-xl px-3 text-xs font-black whitespace-nowrap"
                 >
                   Add Selected ({selectedOcrTotal})
                 </Button>

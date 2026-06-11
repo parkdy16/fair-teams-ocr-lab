@@ -230,6 +230,24 @@ function getFunBadge(value?: FunBadge) {
   return FUN_BADGES.find(badge => badge.value === value);
 }
 
+const SKILL_LEVEL_EXPLANATIONS: Record<number, string> = {
+  1: "Complete beginner. New to football or needs major help with positioning and ball control.",
+  2: "Beginner. Can join the game but often struggles with control, passing, and positioning.",
+  3: "Casual beginner. Understands the basics but is still inconsistent under pressure.",
+  4: "Lower casual level. Can play simple passes and defend sometimes, but impact is limited.",
+  5: "Average casual player. Reliable enough for normal games, with no major strengths or weaknesses.",
+  6: "Solid regular player. Understands the game well and contributes consistently.",
+  7: "Good player. Technically comfortable, makes good decisions, and affects the game positively.",
+  8: "Strong player. One of the better players in casual games; reliable in attack or defense.",
+  9: "Very strong player. Usually dominates casual games and strongly affects team balance.",
+  10: "Advanced / elite casual player. Clearly above the group level and must be balanced carefully.",
+};
+
+function skillLevelExplanation(skillLevel: number) {
+  const bucket = Math.max(1, Math.min(10, Math.floor(skillLevel)));
+  return SKILL_LEVEL_EXPLANATIONS[bucket];
+}
+
 
 function initials(name: string) {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]?.toUpperCase()).join("") || "?";
@@ -809,6 +827,7 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
   const addPhotoGalleryInput = useRef<HTMLInputElement | null>(null);
   const [addDetails, setAddDetails] = useState<AddPlayerDetails>(() => createDefaultAddPlayerDetails());
   const addOverall = calculateOverall(addDetails);
+  const addSkillExplanation = skillLevelExplanation(skillLevel);
   const updateAddDetails = (data: Partial<AddPlayerDetails>) => setAddDetails(prev => ({ ...prev, ...data }));
   const [autoEditPlayerId, setAutoEditPlayerId] = useState<string | null>(null);
   const [flippedPlayerIds, setFlippedPlayerIds] = useState<Record<string, boolean>>({});
@@ -931,20 +950,9 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
                     data-testid="input-player-name"
                   />
                 </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="aka" className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider">AKA</Label>
-                  <Input
-                    id="aka"
-                    placeholder="Optional"
-                    value={aka}
-                    onChange={e => setAka(e.target.value)}
-                    className="h-11 text-sm font-semibold"
-                    data-testid="input-player-aka"
-                  />
-                </div>
               </div>
 
-              <div className="grid grid-cols-[1.15fr_0.9fr_1fr] gap-2">
+              <div className="grid grid-cols-[1.15fr_0.85fr] gap-2">
                 <Select value={gender} onValueChange={v => setGender(v as Gender)}>
                   <SelectTrigger className="h-10 rounded-xl border-border bg-muted/30 text-xs font-bold px-2" id="gender" data-testid="select-gender">
                     <SelectValue placeholder="Gender" />
@@ -957,14 +965,20 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
                 </Select>
                 <TogglePill
                   active={isNew}
-                  onClick={() => setIsNew(prev => !prev)}
+                  onClick={() => {
+                    setIsNew(prev => {
+                      const next = !prev;
+                      if (next) {
+                        setSkillLevel(5);
+                        setAddDetails(current => applySkillLevelToDetails(current, 5));
+                      }
+                      return next;
+                    });
+                  }}
                   testId="checkbox-new-player"
                   activeClassName="border-sky-300 bg-sky-100 text-sky-800 shadow-sm"
                 >
                   New
-                </TogglePill>
-                <TogglePill active={isOrganizer} onClick={() => setIsOrganizer(!isOrganizer)} testId="checkbox-organizer">
-                  Organizer
                 </TogglePill>
               </div>
 
@@ -972,7 +986,7 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <Label className="text-[11px] uppercase font-black tracking-wide text-primary">Skill Level</Label>
-                    <div className="mt-0.5 text-[10px] font-semibold text-muted-foreground">Beginner → Advanced</div>
+                    <div className="mt-0.5 text-[10px] font-semibold text-muted-foreground">1–10, adjustable by 0.5</div>
                   </div>
                   <div className="rounded-xl bg-primary text-primary-foreground px-3 py-1.5 text-center shadow-sm">
                     <div className="text-[8px] uppercase font-black opacity-75 leading-none">Skill</div>
@@ -983,6 +997,7 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
                   type="range"
                   min={1}
                   max={10}
+                  step={0.5}
                   value={skillLevel}
                   onChange={e => {
                     const next = Number(e.target.value);
@@ -992,9 +1007,8 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
                   className="w-full accent-primary"
                   data-testid="input-player-skill-level"
                 />
-                <div className="flex justify-between text-[9px] font-bold uppercase tracking-wide text-muted-foreground">
-                  <span>Beginner</span>
-                  <span>Advanced</span>
+                <div className="rounded-xl border border-primary/10 bg-background/70 px-3 py-2 text-[11px] font-semibold leading-snug text-muted-foreground">
+                  {addSkillExplanation}
                 </div>
               </div>
 
@@ -1026,6 +1040,25 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
                     <div className="rounded-xl bg-primary text-primary-foreground px-2.5 py-1 text-right shadow-sm">
                       <div className="text-[8px] uppercase font-black opacity-75 leading-none">Skill</div>
                       <div className="text-lg font-black leading-none">{addOverall}</div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_0.75fr]">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="aka" className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider">AKA</Label>
+                      <Input
+                        id="aka"
+                        placeholder="Optional nickname"
+                        value={aka}
+                        onChange={e => setAka(e.target.value)}
+                        className="h-10 text-sm font-semibold"
+                        data-testid="input-player-aka"
+                      />
+                    </div>
+                    <div className="flex items-end">
+                      <TogglePill active={isOrganizer} onClick={() => setIsOrganizer(!isOrganizer)} testId="checkbox-organizer">
+                        Organizer
+                      </TogglePill>
                     </div>
                   </div>
 

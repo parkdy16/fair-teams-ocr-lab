@@ -750,7 +750,11 @@ function ProfileDialog({
                   </SelectContent>
                 </Select>
               </div>
-              <TogglePill active={!!draft.isNew} onClick={() => updateDraft({ isNew: !draft.isNew })}>
+              <TogglePill
+                active={!!draft.isNew}
+                onClick={() => updateDraft({ isNew: !draft.isNew })}
+                activeClassName="border-sky-300 bg-sky-100 text-sky-800 shadow-sm"
+              >
                 New Player
               </TogglePill>
             </div>
@@ -859,10 +863,18 @@ function ProfileDialog({
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2">
-                <TogglePill active={!!draft.isNew} onClick={() => updateDraft({ isNew: !draft.isNew })}>
+                <TogglePill
+                  active={!!draft.isNew}
+                  onClick={() => updateDraft({ isNew: !draft.isNew })}
+                  activeClassName="border-sky-300 bg-sky-100 text-sky-800 shadow-sm"
+                >
                   New Player
                 </TogglePill>
-                <TogglePill active={!!draft.isOrganizer} onClick={() => updateDraft({ isOrganizer: !draft.isOrganizer })}>
+                <TogglePill
+                  active={!!draft.isOrganizer}
+                  onClick={() => updateDraft({ isOrganizer: !draft.isOrganizer })}
+                  activeClassName="border-violet-200 bg-violet-100 text-violet-800 shadow-sm"
+                >
                   Organizer
                 </TogglePill>
               </div>
@@ -1043,7 +1055,7 @@ export function PlayersTab({
       gender,
       skill: calculateOverall(profileDetails),
       ...profileDetails,
-      profilePhoto: addAdvancedOpen ? addProfilePhoto : undefined,
+      profilePhoto: addProfilePhoto,
       isOrganizer,
       isNew,
       attending: false,
@@ -1107,103 +1119,113 @@ export function PlayersTab({
             className="max-w-sm md:max-w-xl rounded-3xl !top-[10dvh] !translate-y-0 max-h-[82dvh] overflow-y-auto sm:!top-[50%] sm:!-translate-y-1/2"
           >
             <DialogHeader>
-              <DialogTitle>Add player</DialogTitle>
+              <DialogTitle>{addAdvancedOpen ? "Advanced player edit" : "Add player"}</DialogTitle>
             </DialogHeader>
             <form onSubmit={handleAdd} className="flex flex-col gap-3.5 pt-1">
-              <div className="grid grid-cols-1 gap-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="name" className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider">Player Name</Label>
-                  <Input
-                    id="name"
-                    placeholder="e.g. Paul"
-                    value={name}
-                    onChange={e => setName(e.target.value)}
-                    className="h-11 text-sm font-semibold"
-                    data-testid="input-player-name"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-[1.15fr_0.85fr] gap-2">
-                <Select value={gender} onValueChange={v => setGender(v as Gender)}>
-                  <SelectTrigger className="h-10 rounded-xl border-border bg-muted/30 text-xs font-bold px-2" id="gender" data-testid="select-gender">
-                    <SelectValue placeholder="Gender" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="male">Male</SelectItem>
-                    <SelectItem value="female">Female</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
-                  </SelectContent>
-                </Select>
-                <TogglePill
-                  active={isNew}
-                  onClick={() => {
-                    setIsNew(prev => {
-                      const next = !prev;
-                      if (next) {
-                        setSkillLevel(5);
-                        setAddDetails(current => applySkillLevelToDetails(current, 5));
-                      }
-                      return next;
-                    });
-                  }}
-                  testId="checkbox-new-player"
-                  activeClassName="border-sky-300 bg-sky-100 text-sky-800 shadow-sm"
-                >
-                  New
-                </TogglePill>
-              </div>
-
-              <div className="rounded-2xl border border-primary/15 bg-primary/5 p-3 space-y-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <Label className="text-[11px] uppercase font-black tracking-wide text-primary">Skill Level</Label>
-                    <div className="mt-0.5 text-[10px] font-semibold text-muted-foreground">1–10, adjustable by 0.5</div>
+              {!addAdvancedOpen ? (
+                <>
+                  <div className="grid grid-cols-1 gap-3">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="name" className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider">Player Name</Label>
+                      <Input
+                        id="name"
+                        placeholder="e.g. Paul"
+                        value={name}
+                        onChange={e => setName(e.target.value)}
+                        className="h-11 text-sm font-semibold"
+                        data-testid="input-player-name"
+                      />
+                    </div>
                   </div>
-                  <div className="rounded-xl bg-primary text-primary-foreground px-3 py-1.5 text-center shadow-sm">
-                    <div className="text-[8px] uppercase font-black opacity-75 leading-none">Skill</div>
-                    <div className="text-xl font-black leading-none">{skillLevel}</div>
+
+                  <div className="grid grid-cols-[1.15fr_0.85fr] gap-2">
+                    <Select value={gender} onValueChange={v => setGender(v as Gender)}>
+                      <SelectTrigger className="h-10 rounded-xl border-border bg-muted/30 text-xs font-bold px-2" id="gender" data-testid="select-gender">
+                        <SelectValue placeholder="Gender" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="male">Male</SelectItem>
+                        <SelectItem value="female">Female</SelectItem>
+                        <SelectItem value="other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <TogglePill
+                      active={isNew}
+                      onClick={() => {
+                        setIsNew(prev => {
+                          const next = !prev;
+                          if (next) {
+                            setSkillLevel(5);
+                            setAddDetails(current => applySkillLevelToDetails(current, 5));
+                          }
+                          return next;
+                        });
+                      }}
+                      testId="checkbox-new-player"
+                      activeClassName="border-sky-300 bg-sky-100 text-sky-800 shadow-sm"
+                    >
+                      New
+                    </TogglePill>
                   </div>
-                </div>
-                <input
-                  type="range"
-                  min={1}
-                  max={10}
-                  step={0.5}
-                  value={skillLevel}
-                  onChange={e => {
-                    const next = Number(e.target.value);
-                    setSkillLevel(next);
-                    setAddDetails(prev => applySkillLevelToDetails(prev, next));
-                  }}
-                  className="w-full accent-primary"
-                  data-testid="input-player-skill-level"
-                />
-                <div className="rounded-xl border border-primary/10 bg-background/70 px-3 py-2 text-[11px] font-semibold leading-snug text-muted-foreground">
-                  {addSkillExplanation}
-                </div>
-              </div>
 
-              <div className="rounded-2xl border border-border/70 bg-muted/25 p-2.5 text-[11px] font-semibold text-muted-foreground leading-snug">
-                {isNew ? (
-                  <span>NEW marks players who still need proper evaluation. Skill can be adjusted now and refined later.</span>
-                ) : (
-                  <span>Known player: quick skill level is enough. Use Advanced only when you know details.</span>
-                )}
-              </div>
+                  <div className="rounded-2xl border border-primary/15 bg-primary/5 p-3 space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <Label className="text-[11px] uppercase font-black tracking-wide text-primary">Skill Level</Label>
+                        <div className="mt-0.5 text-[10px] font-semibold text-muted-foreground">1–10, adjustable by 0.5</div>
+                      </div>
+                      <div className="rounded-xl bg-primary text-primary-foreground px-3 py-1.5 text-center shadow-sm">
+                        <div className="text-[8px] uppercase font-black opacity-75 leading-none">Skill</div>
+                        <div className="text-xl font-black leading-none">{skillLevel}</div>
+                      </div>
+                    </div>
+                    <input
+                      type="range"
+                      min={1}
+                      max={10}
+                      step={0.5}
+                      value={skillLevel}
+                      onChange={e => {
+                        const next = Number(e.target.value);
+                        setSkillLevel(next);
+                        setAddDetails(prev => applySkillLevelToDetails(prev, next));
+                      }}
+                      className="w-full accent-primary"
+                      data-testid="input-player-skill-level"
+                    />
+                    <div className="rounded-xl border border-primary/10 bg-background/70 px-3 py-2 text-[11px] font-semibold leading-snug text-muted-foreground">
+                      {addSkillExplanation}
+                    </div>
+                  </div>
 
-              <button
-                type="button"
-                onClick={() => setAddAdvancedOpen(prev => !prev)}
-                className="flex h-10 items-center justify-between rounded-2xl border border-border bg-background px-3 text-left text-xs font-black tracking-wide text-foreground"
-                data-testid="button-toggle-add-advanced"
-              >
-                <span>Advanced Edit</span>
-                <span className="text-muted-foreground">{addAdvancedOpen ? "▲" : "▼"}</span>
-              </button>
+                  <div className="rounded-2xl border border-border/70 bg-muted/25 p-2.5 text-[11px] font-semibold text-muted-foreground leading-snug">
+                    {isNew ? (
+                      <span>NEW marks players who still need proper evaluation. Skill can be adjusted now and refined later.</span>
+                    ) : (
+                      <span>Known player: quick skill level is enough. Use Advanced only when you know details.</span>
+                    )}
+                  </div>
 
-              {addAdvancedOpen && (
-                <div className="rounded-2xl border border-primary/15 bg-primary/5 p-3 space-y-3">
+                  <button
+                    type="button"
+                    onClick={() => { setAddPhotoActionsOpen(false); setAddAdvancedOpen(true); }}
+                    className="flex h-10 items-center justify-between rounded-2xl border border-border bg-background px-3 text-left text-xs font-black tracking-wide text-foreground"
+                    data-testid="button-toggle-add-advanced"
+                  >
+                    <span>Advanced Edit</span>
+                    <span className="text-muted-foreground">›</span>
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => { setAddPhotoActionsOpen(false); setAddAdvancedOpen(false); }}
+                    className="flex h-9 w-fit items-center gap-2 rounded-xl border border-border bg-background px-3 text-xs font-black text-muted-foreground hover:text-foreground"
+                  >
+                    ‹ Easy Edit
+                  </button>
+
                   <div className="flex items-start gap-3">
                     <div className="relative shrink-0 pt-5">
                       <button
@@ -1283,20 +1305,60 @@ export function PlayersTab({
                     }}
                   />
 
-
-                  <div className="grid grid-cols-[1fr_auto] items-end gap-2">
-                    <div className="space-y-1.5 min-w-0">
-                      <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Player Vibe</Label>
-                      <VibePicker value={addDetails.funBadge} onChange={funBadge => updateAddDetails({ funBadge })} />
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-2 gap-2 items-end">
+                      <div className="space-y-1.5">
+                        <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Gender</Label>
+                        <Select value={gender} onValueChange={v => setGender(v as Gender)}>
+                          <SelectTrigger className="h-10 rounded-xl"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="male">Male</SelectItem>
+                            <SelectItem value="female">Female</SelectItem>
+                            <SelectItem value="other">Other</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5 min-w-0">
+                        <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Player Vibe</Label>
+                        <VibePicker value={addDetails.funBadge} onChange={funBadge => updateAddDetails({ funBadge })} />
+                      </div>
                     </div>
-                    <TogglePill
-                      active={isOrganizer}
-                      onClick={() => setIsOrganizer(!isOrganizer)}
-                      testId="checkbox-organizer"
-                      activeClassName="border-violet-200 bg-violet-100 text-violet-800 shadow-sm"
-                    >
-                      Org
-                    </TogglePill>
+                    <div className="grid grid-cols-2 gap-2">
+                      <TogglePill
+                        active={isNew}
+                        onClick={() => setIsNew(prev => !prev)}
+                        testId="checkbox-new-player-advanced"
+                        activeClassName="border-sky-300 bg-sky-100 text-sky-800 shadow-sm"
+                      >
+                        New Player
+                      </TogglePill>
+                      <TogglePill
+                        active={isOrganizer}
+                        onClick={() => setIsOrganizer(!isOrganizer)}
+                        testId="checkbox-organizer"
+                        activeClassName="border-violet-200 bg-violet-100 text-violet-800 shadow-sm"
+                      >
+                        Organizer
+                      </TogglePill>
+                    </div>
+                  </div>
+
+                  <div className="relative">
+                    <PlayerRadar player={normalizePlayer({
+                      id: "add-preview",
+                      roomId: 1,
+                      name: name.trim() || "New Player",
+                      aka: aka.trim() || undefined,
+                      gender,
+                      skill: addOverall,
+                      ...addDetails,
+                      profilePhoto: addProfilePhoto,
+                      isOrganizer,
+                      isNew,
+                      attending: false,
+                      createdAt: "",
+                      updatedAt: "",
+                    })} />
                   </div>
 
                   <div className="rounded-2xl border border-primary/15 bg-primary/5 px-3 py-2 flex items-center justify-between">
@@ -1318,8 +1380,11 @@ export function PlayersTab({
                     <div />
                   </div>
 
-                  <div className="space-y-2">
-                    <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider flex items-center gap-1"><Star className="w-3 h-3" /> Special abilities</Label>
+                  <div className="rounded-xl border border-border p-3 bg-muted/30 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider flex items-center gap-1"><Star className="w-3 h-3" /> Special abilities</Label>
+                      <span className="text-[10px] font-bold text-muted-foreground">Affects Skill</span>
+                    </div>
                     <div className="grid grid-cols-2 gap-2">
                       {SPECIAL_ABILITIES.map(ability => {
                         const selected = Boolean(addDetails[ability.key]);
@@ -1329,20 +1394,20 @@ export function PlayersTab({
                             key={ability.key}
                             type="button"
                             onClick={() => updateAddDetails({ [ability.key]: !selected } as Partial<AddPlayerDetails>)}
-                            className={`flex h-8 items-center gap-1.5 rounded-xl border px-2 text-left transition-colors ${selected ? "border-amber-400 bg-amber-50 text-amber-900" : "border-border bg-background/70 text-foreground"}`}
+                            className={`flex h-9 items-center gap-2 rounded-xl border px-2.5 text-left transition-colors ${selected ? "border-amber-400 bg-amber-50 text-amber-900" : "border-border bg-background/70 text-foreground"}`}
                           >
                             {ability.badge === "GK" ? (
-                              <span className="text-[10px] font-semibold text-amber-700 w-5 text-center">GK</span>
+                              <span className="text-[11px] font-semibold text-amber-700 w-5 text-center">GK</span>
                             ) : (
-                              <Icon className="w-3.5 h-3.5 shrink-0 text-amber-700" />
+                              <Icon className="w-4 h-4 shrink-0 text-amber-700" />
                             )}
-                            <span className="text-[11px] font-semibold leading-tight truncate">{ability.label}</span>
+                            <span className="text-xs font-medium leading-tight truncate">{ability.label}</span>
                           </button>
                         );
                       })}
                     </div>
                   </div>
-                </div>
+                </>
               )}
 
               <Button

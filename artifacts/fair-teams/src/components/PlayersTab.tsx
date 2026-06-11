@@ -307,32 +307,35 @@ function applySkillLevelToDetails(details: AddPlayerDetails, skillLevel: number)
 }
 
 async function fileToSmallDataUrl(file: File) {
-  const dataUrl = await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(new Error("Could not read the selected file."));
-    reader.readAsDataURL(file);
-  });
+  // Camera captures can be very large on phones/tablets. Avoid FileReader here
+  // because it loads the full-size photo as a huge base64 string before we shrink it,
+  // which can crash/reload mobile browsers and Android WebView.
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new window.Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error("This photo format is not supported by the browser. Try a JPG or PNG."));
+      img.src = objectUrl;
+    });
 
-  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
-    const img = new window.Image();
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error("This photo format is not supported by the browser. Try a JPG or PNG."));
-    img.src = dataUrl;
-  });
+    const size = 144;
+    const canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext("2d", { alpha: false });
+    if (!ctx) throw new Error("Could not resize photo.");
 
-  const size = 192;
-  const canvas = document.createElement("canvas");
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return dataUrl;
-
-  const minSide = Math.min(image.naturalWidth || image.width, image.naturalHeight || image.height);
-  const sx = ((image.naturalWidth || image.width) - minSide) / 2;
-  const sy = ((image.naturalHeight || image.height) - minSide) / 2;
-  ctx.drawImage(image, sx, sy, minSide, minSide, 0, 0, size, size);
-  return canvas.toDataURL("image/jpeg", 0.72);
+    const sourceWidth = image.naturalWidth || image.width;
+    const sourceHeight = image.naturalHeight || image.height;
+    const minSide = Math.min(sourceWidth, sourceHeight);
+    const sx = (sourceWidth - minSide) / 2;
+    const sy = (sourceHeight - minSide) / 2;
+    ctx.drawImage(image, sx, sy, minSide, minSide, 0, 0, size, size);
+    return canvas.toDataURL("image/jpeg", 0.62);
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
 }
 
 function PlayerAvatar({ player, size = "md" }: { player: RoomPlayer; size?: "sm" | "md" | "lg" | "xl" }) {

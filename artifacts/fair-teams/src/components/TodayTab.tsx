@@ -122,6 +122,17 @@ const OCR_JUNK_WORDS = new Set([
   "i have no idea",
   "cannot join",
   "can not join",
+  "ok",
+  "okay",
+  "understood",
+  "of course",
+  "i'm both",
+  "im both",
+  "you know me",
+  "good vibes",
+  "good vibes guaranteed",
+  "goals not so much",
+  "i think i got well into both categories",
 ]);
 
 function stripDiacritics(value: string) {
@@ -137,6 +148,9 @@ function normalizeForMatch(value: string) {
     .trim();
 }
 
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 function cleanOcrLine(value: string) {
   return value
     .replace(/---.*?\.(jpg|jpeg|png).*?---/gi, " ")
@@ -219,6 +233,22 @@ const MEETUP_NOISE_WORDS = new Set([
   "ember",
 ]);
 
+const MEETUP_COMMENT_WORDS = new Set([
+  "ok",
+  "okay",
+  "yes",
+  "no",
+  "maybe",
+  "ja",
+  "na",
+  "understood",
+  "of course",
+  "i'm both",
+  "im both",
+  "you know me",
+  "good vibes guaranteed goals not so much",
+]);
+
 const OCR_LEADING_NAME_NOISE = new Set([
   "ir",
   "mr",
@@ -237,6 +267,23 @@ function tokenKey(value: string) {
 function isMeetupNoiseToken(value: string) {
   const key = tokenKey(value);
   return !key || MEETUP_NOISE_WORDS.has(key) || /^[a-z]$/i.test(key);
+}
+
+function isMeetupCommentLine(value: string) {
+  const normalized = normalizeForMatch(value);
+  if (!normalized) return true;
+  if (OCR_JUNK_WORDS.has(normalized)) return true;
+  if (MEETUP_STOP_WORDS.has(normalized.replace(/\s+/g, ""))) return true;
+  if (normalized.split(" ").some((word) => MEETUP_STOP_WORDS.has(word))) {
+    return true;
+  }
+  return MEETUP_COMMENT_WORDS.has(normalized);
+}
+
+function shouldUseMeetupAdjacentName(value: string) {
+  const clean = cleanOcrLine(value);
+  if (!clean || isMeetupCommentLine(clean)) return false;
+  return isProbablyName(clean) || isProbablySingleUsername(clean);
 }
 
 function isProbablySingleUsername(value: string) {
@@ -556,16 +603,35 @@ function extractOcrNames(
 
   for (let index = 0; index < lines.length; index += 1) {
     const current = normalizeForMatch(lines[index]);
-    if (
+    const isMeetupRoleLine =
       current === "member" ||
       current === "event host" ||
-      current.includes("member")
-    ) {
-      for (let back = index - 1; back >= Math.max(0, index - 3); back -= 1) {
-        if (isProbablyName(lines[back])) {
-          names.push(cleanOcrLine(lines[back]));
+      /^member\b/.test(current) ||
+      /^event host\b/.test(current);
+
+    if (isMeetupRoleLine) {
+      // Meetup attendee blocks are normally:
+      //   Name
+      //   Member/Event host
+      //   optional RSVP comment
+      // So the line before the role marker is the safest source. Keep this
+      // local to Meetup-style screenshots so generic OCR remains conservative.
+      for (let back = index - 1; back >= Math.max(0, index - 2); back -= 1) {
+        const previous = lines[back];
+        const previousNormalized = normalizeForMatch(previous);
+        if (MEETUP_MARKER_PATTERN.test(previousNormalized)) break;
+        if (shouldUseMeetupAdjacentName(previous)) {
+          names.push(cleanOcrLine(previous));
           break;
         }
+      }
+
+      // Some mobile OCR reads the grey role line before the bold name, e.g.
+      // "Member ee" then "Tany". Rescue only very clean next lines, and keep
+      // common RSVP comments such as "Understood" blocked.
+      const next = lines[index + 1];
+      if (next && shouldUseMeetupAdjacentName(next)) {
+        names.push(cleanOcrLine(next));
       }
     }
   }
@@ -737,6 +803,14 @@ export function TodayTab({
   const [confirmAddAllOpen, setConfirmAddAllOpen] = useState(false);
   const [expectedAttendeeCount, setExpectedAttendeeCount] = useState("");
   const [showRawOcrText, setShowRawOcrText] = useState(false);
+  const [manualRawOcrName, setManualRawOcrName] = useState("");
+  const [rawOcrAddedNames, setRawOcrAddedNames] = useState<string[]>([]);
+  const [rawOcrCreatedPlayerIds, setRawOcrCreatedPlayerIds] = useState<
+    string[]
+  >([]);
+  const [newOcrPlayerGenders, setNewOcrPlayerGenders] = useState<
+    Record<string, Gender>
+  >({});
   const [prioritizeScannedPlayers, setPrioritizeScannedPlayers] =
     useState(false);
 
@@ -783,14 +857,55 @@ export function TodayTab({
     () => (ocrText ? extractOcrNames(ocrText, players) : []),
     [ocrText, players],
   );
+  const rawOcrLineEntries = useMemo(() => {
+    if (!ocrText) return [];
+    const seen = new Set<string>();
+    return ocrText
+      .split(/\r?\n/)
+      .map((line, index) => {
+        const cleaned = cleanOcrLine(line);
+        const normalizedLine = normalizeForMatch(cleaned);
+        if (!cleaned || !normalizedLine) return null;
+        if (seen.has(`${index}:${normalizedLine}`)) return null;
+        seen.add(`${index}:${normalizedLine}`);
+
+        const foundCandidates = possibleNames.filter((candidate) => {
+          const candidateName = normalizeForMatch(candidate.name);
+          if (candidateName && normalizedLine.includes(candidateName))
+            return true;
+          const match = candidate.bestMatch;
+          if (!match) return false;
+          return playerSearchNames(match).some(
+            (searchName) => searchName && normalizedLine.includes(searchName),
+          );
+        });
+        const alreadyPromoted = possibleNames.some(
+          (candidate) => normalizeForMatch(candidate.name) === normalizedLine,
+        );
+        const looksLikeStandaloneName =
+          isProbablyName(cleaned) && !alreadyPromoted;
+
+        return {
+          index,
+          text: cleaned,
+          normalized: normalizedLine,
+          foundCandidates,
+          suggestedName: looksLikeStandaloneName ? cleaned : "",
+        };
+      })
+      .filter(Boolean) as Array<{
+      index: number;
+      text: string;
+      normalized: string;
+      foundCandidates: OcrNameCandidate[];
+      suggestedName: string;
+    }>;
+  }, [ocrText, possibleNames]);
   const [selectedOcrCandidateKeys, setSelectedOcrCandidateKeys] = useState<
     string[]
   >([]);
   const [chosenOcrMatchIds, setChosenOcrMatchIds] = useState<
     Record<string, string>
-  >({});
-  const [pendingOcrNewGenders, setPendingOcrNewGenders] = useState<
-    Record<string, Gender>
   >({});
   const selectedOcrCandidateKeySet = new Set(selectedOcrCandidateKeys);
 
@@ -805,14 +920,33 @@ export function TodayTab({
     return candidate.bestMatch;
   };
 
+  const getOcrReviewStatus = (candidate: OcrNameCandidate): OcrMatchStatus => {
+    const resolvedMatch = resolveOcrMatch(candidate);
+
+    // A player manually CREATED from the raw OCR rescue view immediately becomes
+    // a roster match because it now exists in the roster. In the Review Names
+    // window, keep showing only those newly-created rows as NEW. Existing roster
+    // players clicked from raw OCR should remain MATCH, even if their roster
+    // player already has the NEW flag.
+    if (
+      resolvedMatch &&
+      resolvedMatch.isNew &&
+      rawOcrCreatedPlayerIds.includes(resolvedMatch.id)
+    ) {
+      return "new";
+    }
+
+    return candidate.status;
+  };
+
   const safeMatches = possibleNames.filter(
-    (candidate) => candidate.status === "match",
+    (candidate) => getOcrReviewStatus(candidate) === "match",
   ).length;
   const suggestions = possibleNames.filter(
-    (candidate) => candidate.status === "suggest",
+    (candidate) => getOcrReviewStatus(candidate) === "suggest",
   ).length;
   const newNames = possibleNames.filter(
-    (candidate) => candidate.status === "new",
+    (candidate) => getOcrReviewStatus(candidate) === "new",
   ).length;
   const selectedOcrCandidates = possibleNames.filter((candidate) =>
     selectedOcrCandidateKeySet.has(ocrCandidateKey(candidate)),
@@ -872,9 +1006,12 @@ export function TodayTab({
     setOcrStatus("");
     setSelectedOcrCandidateKeys([]);
     setChosenOcrMatchIds({});
-    setPendingOcrNewGenders({});
     setExpectedAttendeeCount("");
     setShowRawOcrText(false);
+    setManualRawOcrName("");
+    setRawOcrAddedNames([]);
+    setRawOcrCreatedPlayerIds([]);
+    setNewOcrPlayerGenders({});
   };
 
   const runOcr = async () => {
@@ -884,6 +1021,10 @@ export function TodayTab({
     setOcrText("");
     setOcrProgress(0);
     setOcrStatus("Starting scan…");
+    setManualRawOcrName("");
+    setRawOcrAddedNames([]);
+    setRawOcrCreatedPlayerIds([]);
+    setNewOcrPlayerGenders({});
 
     const chunks: string[] = [];
 
@@ -946,6 +1087,125 @@ export function TodayTab({
     );
   };
 
+  const addRawOcrName = (rawName: string) => {
+    const cleanedName = cleanOcrLine(rawName);
+    const normalizedName = normalizeForMatch(cleanedName);
+    if (!cleanedName || !normalizedName || !isProbablyName(cleanedName)) {
+      setOcrStatus("Type a clean player name from the raw OCR text first.");
+      return;
+    }
+
+    const existingPlayer = players.find((player) =>
+      playerSearchNames(player).includes(normalizedName),
+    );
+
+    if (existingPlayer) {
+      setPlayers(
+        players.map((player) =>
+          player.id === existingPlayer.id
+            ? { ...player, attending: true }
+            : player,
+        ),
+      );
+      setPrioritizeScannedPlayers(true);
+      setRawOcrAddedNames((current) =>
+        current.includes(normalizedName)
+          ? current
+          : [...current, normalizedName],
+      );
+      setManualRawOcrName("");
+      setOcrStatus(
+        `${displayName(existingPlayer)} marked attending from raw OCR text.`,
+      );
+      return;
+    }
+
+    if (rawOcrAddedNames.includes(normalizedName)) {
+      setOcrStatus(`${cleanedName} was already added from raw OCR text.`);
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const newPlayerId = createOcrPlayerId();
+    const newPlayer: RoomPlayer = {
+      id: newPlayerId,
+      roomId: 1,
+      name: cleanedName,
+      gender: "male",
+      skill: 5,
+      attack: 5,
+      defense: 5,
+      speed: 5,
+      passing: 5,
+      stamina: 5,
+      physical: 5,
+      teamPlay: 2,
+      isNew: true,
+      attending: true,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    setPlayers(
+      [...players, newPlayer].sort((a, b) =>
+        displayName(a).localeCompare(displayName(b)),
+      ),
+    );
+    setPrioritizeScannedPlayers(true);
+    setRawOcrAddedNames((current) => [...current, normalizedName]);
+    setRawOcrCreatedPlayerIds((current) => [...current, newPlayerId]);
+    setManualRawOcrName("");
+    setOcrStatus(
+      `Created ${cleanedName} from raw OCR text as NEW and attending.`,
+    );
+  };
+
+  const renderHighlightedRawOcrText = (
+    text: string,
+    candidates: OcrNameCandidate[],
+  ) => {
+    const names = Array.from(
+      new Map(
+        candidates
+          .map((candidate) => [normalizeForMatch(candidate.name), candidate])
+          .filter(([key]) => Boolean(key)),
+      ).values(),
+    ).sort((a, b) => b.name.length - a.name.length);
+
+    if (!names.length) return text;
+
+    let parts: React.ReactNode[] = [text];
+    names.forEach((candidate) => {
+      const escapedName = escapeRegExp(candidate.name.trim());
+      if (!escapedName) return;
+      const pattern = new RegExp(`(${escapedName})`, "gi");
+      parts = parts.flatMap((part, index) => {
+        if (typeof part !== "string") return [part];
+        return part.split(pattern).map((piece, pieceIndex) => {
+          if (piece.toLowerCase() !== candidate.name.toLowerCase())
+            return piece;
+          const reviewStatus = getOcrReviewStatus(candidate);
+          const className =
+            reviewStatus === "match"
+              ? "rounded bg-emerald-100 px-1 font-black text-emerald-800"
+              : reviewStatus === "suggest"
+                ? "rounded bg-amber-100 px-1 font-black text-amber-800"
+                : "rounded bg-sky-100 px-1 font-black text-sky-800";
+          return (
+            <mark
+              key={`${candidate.name}-${index}-${pieceIndex}`}
+              className={className}
+            >
+              {piece}
+            </mark>
+          );
+        });
+      });
+    });
+
+    return parts;
+  };
+
   const finalizeOcrCandidates = (candidatesToAdd: OcrNameCandidate[]) => {
     const currentRosterMatches = candidatesToAdd
       .map((candidate) => resolveOcrMatch(candidate))
@@ -963,7 +1223,7 @@ export function TodayTab({
       id: createOcrPlayerId(),
       roomId: 1,
       name: candidate.name.trim(),
-      gender: pendingOcrNewGenders[ocrCandidateKey(candidate)] ?? "other",
+      gender: newOcrPlayerGenders[ocrCandidateKey(candidate)] ?? "other",
       skill: 5,
       attack: 5,
       defense: 5,
@@ -993,6 +1253,11 @@ export function TodayTab({
     setConfirmNewPlayersOpen(false);
     setConfirmAddAllOpen(false);
     setOcrOpen(false);
+  };
+
+  const setNewOcrPlayerGender = (candidate: OcrNameCandidate, gender: Gender) => {
+    const key = ocrCandidateKey(candidate);
+    setNewOcrPlayerGenders((current) => ({ ...current, [key]: gender }));
   };
 
   const finalizeAddSelectedOcrMatches = () => {
@@ -1106,7 +1371,8 @@ export function TodayTab({
       <Dialog open={ocrOpen} onOpenChange={setOcrOpen}>
         <DialogContent
           onOpenAutoFocus={(e) => e.preventDefault()}
-          className="flex h-[90dvh] max-h-[90dvh] w-[94vw] max-w-lg md:max-w-3xl flex-col overflow-hidden rounded-2xl p-4 sm:p-6">
+          className="flex h-[90dvh] max-h-[90dvh] w-[94vw] max-w-lg md:max-w-3xl flex-col overflow-hidden rounded-2xl p-4 sm:p-6"
+        >
           <DialogHeader>
             <DialogTitle className="text-base font-black">
               Screenshot Import
@@ -1142,6 +1408,9 @@ export function TodayTab({
                   setSelectedOcrCandidateKeys([]);
                   setChosenOcrMatchIds({});
                   setShowRawOcrText(false);
+                  setManualRawOcrName("");
+                  setRawOcrAddedNames([]);
+                  setRawOcrCreatedPlayerIds([]);
                 }}
                 data-testid="ocr-file-input"
               />
@@ -1317,6 +1586,7 @@ export function TodayTab({
                       const isSelectedMatch =
                         selectedOcrCandidateKeySet.has(candidateKey);
                       const resolvedMatch = resolveOcrMatch(candidate);
+                      const reviewStatus = getOcrReviewStatus(candidate);
 
                       return (
                         <div
@@ -1340,24 +1610,23 @@ export function TodayTab({
                                 <div className="font-black text-foreground">
                                   {candidate.name}
                                 </div>
-                                {candidate.status === "match" &&
-                                  resolvedMatch && (
-                                    <div className="mt-0.5 font-medium text-emerald-700">
-                                      MATCH: {displayName(resolvedMatch)} ·{" "}
-                                      {candidate.score}%
-                                    </div>
-                                  )}
-                                {candidate.status === "suggest" &&
+                                {reviewStatus === "match" && resolvedMatch && (
+                                  <div className="mt-0.5 font-medium text-emerald-700">
+                                    MATCH: {displayName(resolvedMatch)} ·{" "}
+                                    {candidate.score}%
+                                  </div>
+                                )}
+                                {reviewStatus === "suggest" &&
                                   resolvedMatch && (
                                     <div className="mt-0.5 font-medium text-amber-700">
                                       SELECTED: {displayName(resolvedMatch)} ·{" "}
                                       {candidate.score}%
                                     </div>
                                   )}
-                                {candidate.status === "new" && (
+                                {reviewStatus === "new" && (
                                   <div className="mt-0.5 font-medium text-sky-700">
                                     {resolvedMatch
-                                      ? `SELECTED: ${displayName(resolvedMatch)}`
+                                      ? `NEW: ${displayName(resolvedMatch)} added from screenshot`
                                       : "NEW: Will create roster player if selected"}
                                   </div>
                                 )}
@@ -1365,21 +1634,21 @@ export function TodayTab({
                             </div>
                             <div
                               className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-black ${
-                                candidate.status === "match"
+                                reviewStatus === "match"
                                   ? "bg-emerald-100 text-emerald-800"
-                                  : candidate.status === "suggest"
+                                  : reviewStatus === "suggest"
                                     ? "bg-amber-100 text-amber-800"
                                     : "bg-sky-100 text-sky-800"
                               }`}
                             >
-                              {candidate.status === "match"
+                              {reviewStatus === "match"
                                 ? "MATCH"
-                                : candidate.status === "suggest"
+                                : reviewStatus === "suggest"
                                   ? "CHECK"
                                   : "NEW"}
                             </div>
                           </div>
-                          {candidate.status !== "match" &&
+                          {reviewStatus !== "match" &&
                             candidate.suggestions.length > 0 && (
                               <div className="mt-2 flex flex-wrap gap-1">
                                 {candidate.suggestions
@@ -1441,9 +1710,95 @@ export function TodayTab({
                   </Button>
                 </div>
                 {showRawOcrText && (
-                  <pre className="mt-2 max-h-48 whitespace-pre-wrap overflow-y-auto rounded-lg bg-muted/50 p-3 text-[11px] leading-relaxed text-foreground">
-                    {ocrText}
-                  </pre>
+                  <div className="mt-2 space-y-2">
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-[10px] font-bold text-amber-800">
+                      Green = roster match, amber = check, blue = new. If a real
+                      name is visible but was missed, type it below or use Add
+                      on a clean raw line.
+                    </div>
+                    <div className="grid grid-cols-[1fr_auto] gap-2">
+                      <Input
+                        value={manualRawOcrName}
+                        onChange={(event) =>
+                          setManualRawOcrName(event.target.value)
+                        }
+                        placeholder="Type missing name from raw text"
+                        className="h-9 rounded-xl text-xs font-bold"
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => addRawOcrName(manualRawOcrName)}
+                        disabled={!manualRawOcrName.trim()}
+                        className="h-9 rounded-xl px-3 text-[10px] font-black"
+                      >
+                        Add
+                      </Button>
+                    </div>
+                    <div className="max-h-56 space-y-1 overflow-y-auto rounded-lg bg-muted/50 p-2 text-[11px] leading-relaxed text-foreground">
+                      {rawOcrLineEntries.map((entry) => {
+                        const alreadyAdded = rawOcrAddedNames.includes(
+                          entry.normalized,
+                        );
+                        return (
+                          <div
+                            key={`${entry.index}-${entry.normalized}`}
+                            className="rounded-md bg-card/70 p-2 ring-1 ring-border/40"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0 whitespace-pre-wrap break-words">
+                                {renderHighlightedRawOcrText(
+                                  entry.text,
+                                  entry.foundCandidates,
+                                )}
+                              </div>
+                              {entry.suggestedName && (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() =>
+                                    addRawOcrName(entry.suggestedName)
+                                  }
+                                  disabled={alreadyAdded}
+                                  className="h-6 shrink-0 px-2 text-[9px] font-black"
+                                >
+                                  {alreadyAdded ? "Added" : "Add"}
+                                </Button>
+                              )}
+                            </div>
+                            {entry.foundCandidates.length > 0 && (
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                {entry.foundCandidates.map((candidate) => {
+                                  const reviewStatus =
+                                    getOcrReviewStatus(candidate);
+                                  return (
+                                    <span
+                                      key={ocrCandidateKey(candidate)}
+                                      className={`rounded-full px-1.5 py-0.5 text-[9px] font-black ${
+                                        reviewStatus === "match"
+                                          ? "bg-emerald-100 text-emerald-800"
+                                          : reviewStatus === "suggest"
+                                            ? "bg-amber-100 text-amber-800"
+                                            : "bg-sky-100 text-sky-800"
+                                      }`}
+                                    >
+                                      {reviewStatus === "match"
+                                        ? "MATCH"
+                                        : reviewStatus === "suggest"
+                                          ? "CHECK"
+                                          : "NEW"}{" "}
+                                      {candidate.name}
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
                 )}
               </div>
             )}
@@ -1537,40 +1892,33 @@ export function TodayTab({
               default Skill Level 5 and add them to Today?
             </DialogDescription>
           </DialogHeader>
-          <div className="max-h-56 space-y-1 overflow-y-auto rounded-xl border bg-muted/40 p-3">
+          <div className="max-h-56 space-y-2 overflow-y-auto rounded-xl border bg-muted/40 p-3">
             {selectedNewCandidates.map((candidate) => {
-              const candidateKey = ocrCandidateKey(candidate);
-              const selectedGender = pendingOcrNewGenders[candidateKey] ?? "other";
-
+              const key = ocrCandidateKey(candidate);
+              const selectedGender = newOcrPlayerGenders[key] ?? "other";
               return (
                 <div
-                  key={candidateKey}
-                  className="grid grid-cols-[1fr_auto] items-center gap-2 rounded-lg bg-card px-3 py-2 text-xs font-black text-foreground"
+                  key={key}
+                  className="flex items-center gap-2 rounded-lg bg-card px-3 py-2 text-xs font-black text-foreground"
                 >
-                  <div className="min-w-0 truncate">{candidate.name}</div>
-                  <div className="inline-flex rounded-full border bg-muted/40 p-0.5">
-                    {([
-                      ["other", "?"],
-                      ["male", "M"],
-                      ["female", "F"],
-                    ] as const).map(([gender, label]) => (
+                  <span className="min-w-0 flex-1 truncate">{candidate.name}</span>
+                  <div className="flex shrink-0 rounded-full border bg-muted/40 p-0.5" aria-label={`Gender for ${candidate.name}`}>
+                    {[
+                      { value: "other" as Gender, label: "?" },
+                      { value: "male" as Gender, label: "M" },
+                      { value: "female" as Gender, label: "F" },
+                    ].map((option) => (
                       <button
-                        key={gender}
+                        key={option.value}
                         type="button"
-                        onClick={() =>
-                          setPendingOcrNewGenders((current) => ({
-                            ...current,
-                            [candidateKey]: gender,
-                          }))
-                        }
-                        className={`h-7 min-w-7 rounded-full px-2 text-[10px] font-black transition ${
-                          selectedGender === gender
+                        onClick={() => setNewOcrPlayerGender(candidate, option.value)}
+                        className={`h-6 min-w-6 rounded-full px-2 text-[10px] font-black transition ${
+                          selectedGender === option.value
                             ? "bg-primary text-primary-foreground shadow-sm"
                             : "text-muted-foreground hover:bg-background"
                         }`}
-                        aria-pressed={selectedGender === gender}
                       >
-                        {label}
+                        {option.label}
                       </button>
                     ))}
                   </div>
@@ -1579,8 +1927,8 @@ export function TodayTab({
             })}
           </div>
           <div className="rounded-xl bg-sky-50 p-3 text-[11px] font-medium text-sky-800 border border-sky-100">
-            New players will start with Skill Level 5 and the NEW badge. Gender
-            defaults to ? unless selected here. You can edit them later in the Roster tab.
+            New players will start with Skill Level 5 and the NEW badge. You can
+            edit them later in the Roster tab.
           </div>
           <DialogFooter className="gap-2 sm:gap-2">
             <Button

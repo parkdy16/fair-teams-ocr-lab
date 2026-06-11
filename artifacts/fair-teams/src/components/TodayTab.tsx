@@ -583,6 +583,10 @@ function voiceNameAlternates(name: string) {
   const alternatesByName: Record<string, string[]> = {
     george: ["Jorge"],
     jorge: ["George"],
+    yan: ["Jan"],
+    jan: ["Yan"],
+    yann: ["Jan"],
+    jaan: ["Jan"],
     andrew: ["Andrea"],
     andrea: ["Andrew"],
     june: ["Joon"],
@@ -1286,10 +1290,8 @@ export function TodayTab({
         }
         setVoiceInterimText(interimText);
         if (finalText.length > 0) {
-          setVoiceText((current) => {
-            const prefix = current.trim() ? `${current.trim()}\n` : "";
-            return `${prefix}${finalText.join("\n")}`;
-          });
+          const heardNames = splitVoiceTextIntoNameLines(finalText.join(" "), players);
+          setVoiceText((current) => mergeVoiceNameText(current, heardNames, players));
           setVoiceInterimText("");
         }
       };
@@ -1322,7 +1324,7 @@ export function TodayTab({
       };
       recognitionRef.current = recognition;
       recognition.start();
-      setVoiceStatus("Recording now. Say names one after another; pauses are okay.");
+      setVoiceStatus("Recording now. Keep scanning and say multiple names. They will be added as a comma list.");
       setVoiceListening(true);
     } catch (error) {
       console.error(error);
@@ -2565,7 +2567,7 @@ export function TodayTab({
                       <span className="relative inline-flex h-3 w-3 rounded-full bg-red-500" />
                     </span>
                   )}
-                  <span>{voiceListening ? "RECORDING — say names now" : "Ready for voice, paste, or typing"}</span>
+                  <span>{voiceListening ? "🔴 RECORDING — keep saying names" : "Ready for voice, paste, or typing"}</span>
                 </div>
                 <span className="shrink-0 rounded-full bg-card px-2 py-0.5 text-[10px] font-black text-foreground ring-1 ring-border">
                   {voiceParsedNames.length} name{voiceParsedNames.length === 1 ? "" : "s"}
@@ -2582,6 +2584,10 @@ export function TodayTab({
               className={`min-h-36 resize-none rounded-xl text-sm font-semibold leading-relaxed ${voiceListening ? "border-red-300 ring-2 ring-red-100" : ""}`}
               data-testid="voice-text-import-notepad"
             />
+
+            <div className="-mt-1 text-[10px] font-bold text-muted-foreground">
+              Voice adds names as a comma list. You can edit spelling here before importing.
+            </div>
 
             {(voiceStatus || voiceInterimText) && (
               <div className={`rounded-xl border p-3 text-[11px] font-bold ${voiceListening ? "border-red-200 bg-red-50 text-red-800" : "bg-muted/50 text-muted-foreground"}`}>
@@ -2669,9 +2675,21 @@ export function TodayTab({
 
           <DialogFooter className="shrink-0 border-t pt-3">
             <div className="flex w-full items-center gap-2">
-              <Button type="button" variant={voiceListening ? "destructive" : "outline"} onClick={() => { if (voiceListening) stopVoiceListening(); else startVoiceListening(); }} className={`h-10 rounded-xl px-3 text-xs font-black ${voiceListening ? "shadow-md ring-2 ring-red-200" : ""}`}>
+              <Button
+                type="button"
+                variant={voiceListening ? "destructive" : "outline"}
+                onClick={() => {
+                  if (voiceListening) stopVoiceListening();
+                  else startVoiceListening();
+                }}
+                className={`h-10 rounded-xl px-3 text-xs font-black ${
+                  voiceListening
+                    ? "border-2 border-red-700 bg-red-600 text-white shadow-lg ring-4 ring-red-200"
+                    : "border-2"
+                }`}
+              >
                 <Mic className={`mr-1.5 h-3.5 w-3.5 ${voiceListening ? "animate-pulse" : ""}`} />
-                {voiceListening ? "Stop" : "Record"}
+                {voiceListening ? "RECORDING — TAP TO STOP" : "Record"}
               </Button>
               <Button type="button" variant="outline" onClick={() => { stopVoiceListening(); setVoiceText(""); setVoiceStatus(""); setVoiceInterimText(""); setVoiceRosterSearch(""); }} disabled={!voiceText.trim() && !voiceListening} className="h-10 rounded-xl px-3 text-xs font-bold">
                 Clear

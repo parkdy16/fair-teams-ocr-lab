@@ -823,6 +823,7 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
   const [addAdvancedOpen, setAddAdvancedOpen] = useState(false);
   const [isOrganizer, setIsOrganizer] = useState(false);
   const [addProfilePhoto, setAddProfilePhoto] = useState<string | undefined>(undefined);
+  const [addPhotoMenuOpen, setAddPhotoMenuOpen] = useState(false);
   const addPhotoCameraInput = useRef<HTMLInputElement | null>(null);
   const addPhotoGalleryInput = useRef<HTMLInputElement | null>(null);
   const [addDetails, setAddDetails] = useState<AddPlayerDetails>(() => createDefaultAddPlayerDetails());
@@ -887,6 +888,7 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
     setSkillLevel(5);
     setAddDetails(createDefaultAddPlayerDetails(5));
     setAddProfilePhoto(undefined);
+    setAddPhotoMenuOpen(false);
     setAddAdvancedOpen(false);
     setIsOrganizer(false);
     setAddPlayerOpen(false);
@@ -917,6 +919,7 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
             setSkillLevel(5);
             setAddDetails(createDefaultAddPlayerDetails(5));
             setAddProfilePhoto(undefined);
+            setAddPhotoMenuOpen(false);
             setAddAdvancedOpen(false);
           }
         }}>
@@ -1032,72 +1035,76 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
 
               {addAdvancedOpen && (
                 <div className="rounded-2xl border border-primary/15 bg-primary/5 p-3 space-y-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <div>
-                      <div className="text-[11px] font-black uppercase tracking-wide text-primary">Advanced edit</div>
-                      <div className="text-[10px] font-semibold text-muted-foreground">Fine-tune stats and abilities</div>
-                    </div>
-                    <div className="rounded-xl bg-primary text-primary-foreground px-2.5 py-1 text-right shadow-sm">
-                      <div className="text-[8px] uppercase font-black opacity-75 leading-none">Skill</div>
-                      <div className="text-lg font-black leading-none">{addOverall}</div>
-                    </div>
-                  </div>
-
-                  <div className="rounded-2xl border border-border/70 bg-background/75 p-2.5">
-                    <div className="mb-2 text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Photo</div>
-                    <div className="flex items-center gap-2">
+                  <div className="flex justify-center">
+                    <div className="relative flex flex-col items-center gap-1.5">
                       <button
                         type="button"
-                        onClick={() => addPhotoGalleryInput.current?.click()}
-                        className="h-12 w-12 shrink-0 overflow-hidden rounded-full border border-primary/20 bg-primary/10 text-sm font-black text-primary flex items-center justify-center"
-                        title="Choose photo"
+                        onClick={() => setAddPhotoMenuOpen(prev => !prev)}
+                        className="h-16 w-16 overflow-hidden rounded-full border border-primary/20 bg-background text-base font-black text-primary shadow-sm ring-4 ring-primary/10 flex items-center justify-center transition-transform active:scale-95"
+                        title="Photo options"
                       >
-                        {addProfilePhoto ? <img src={addProfilePhoto} alt="" className="h-full w-full object-cover" /> : (name.trim() ? initials(name.trim()) : <Camera className="h-4 w-4" />)}
+                        {addProfilePhoto ? <img src={addProfilePhoto} alt="" className="h-full w-full object-cover" /> : (name.trim() ? initials(name.trim()) : <Camera className="h-5 w-5" />)}
                       </button>
-                      <div className="grid flex-1 grid-cols-2 gap-1.5">
-                        <Button type="button" variant="outline" size="sm" className="h-8 rounded-xl px-2 text-[10px] font-bold" onClick={() => addPhotoCameraInput.current?.click()}>
-                          <Camera className="mr-1 h-3 w-3" /> Camera
-                        </Button>
-                        <Button type="button" variant="outline" size="sm" className="h-8 rounded-xl px-2 text-[10px] font-bold" onClick={() => addPhotoGalleryInput.current?.click()}>
-                          <ImageIcon className="mr-1 h-3 w-3" /> Import
-                        </Button>
-                      </div>
-                      {addProfilePhoto && (
-                        <Button type="button" variant="ghost" size="icon" className="h-8 w-8 rounded-xl text-muted-foreground" onClick={() => setAddProfilePhoto(undefined)} title="Remove photo">
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
+                      <div className="text-[10px] font-bold text-muted-foreground">Photo</div>
+                      {addPhotoMenuOpen && (
+                        <div className="absolute left-1/2 top-[4.9rem] z-20 w-40 -translate-x-1/2 rounded-2xl border border-border bg-popover p-1.5 shadow-lg">
+                          <button
+                            type="button"
+                            onClick={() => { setAddPhotoMenuOpen(false); addPhotoCameraInput.current?.click(); }}
+                            className="flex h-8 w-full items-center gap-2 rounded-xl px-2 text-left text-[11px] font-bold hover:bg-accent"
+                          >
+                            <Camera className="h-3.5 w-3.5" /> Camera
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => { setAddPhotoMenuOpen(false); addPhotoGalleryInput.current?.click(); }}
+                            className="flex h-8 w-full items-center gap-2 rounded-xl px-2 text-left text-[11px] font-bold hover:bg-accent"
+                          >
+                            <ImageIcon className="h-3.5 w-3.5" /> Import
+                          </button>
+                          {addProfilePhoto && (
+                            <button
+                              type="button"
+                              onClick={() => { setAddProfilePhoto(undefined); setAddPhotoMenuOpen(false); }}
+                              className="flex h-8 w-full items-center gap-2 rounded-xl px-2 text-left text-[11px] font-bold text-muted-foreground hover:bg-accent"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" /> Clear
+                            </button>
+                          )}
+                        </div>
                       )}
                     </div>
-                    <input
-                      ref={addPhotoCameraInput}
-                      type="file"
-                      accept="image/*"
-                      capture="user"
-                      className="sr-only"
-                      onChange={async e => {
-                        const file = e.target.files?.[0];
-                        e.target.value = "";
-                        if (!file) return;
-                        try { setAddProfilePhoto(await fileToSmallDataUrl(file)); }
-                        catch { alert("Could not load that photo."); }
-                      }}
-                    />
-                    <input
-                      ref={addPhotoGalleryInput}
-                      type="file"
-                      accept="image/*"
-                      className="sr-only"
-                      onChange={async e => {
-                        const file = e.target.files?.[0];
-                        e.target.value = "";
-                        if (!file) return;
-                        try { setAddProfilePhoto(await fileToSmallDataUrl(file)); }
-                        catch { alert("Could not load that photo."); }
-                      }}
-                    />
                   </div>
 
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <input
+                    ref={addPhotoCameraInput}
+                    type="file"
+                    accept="image/*"
+                    capture="user"
+                    className="sr-only"
+                    onChange={async e => {
+                      const file = e.target.files?.[0];
+                      e.target.value = "";
+                      if (!file) return;
+                      try { setAddProfilePhoto(await fileToSmallDataUrl(file)); }
+                      catch { alert("Could not load that photo."); }
+                    }}
+                  />
+                  <input
+                    ref={addPhotoGalleryInput}
+                    type="file"
+                    accept="image/*"
+                    className="sr-only"
+                    onChange={async e => {
+                      const file = e.target.files?.[0];
+                      e.target.value = "";
+                      if (!file) return;
+                      try { setAddProfilePhoto(await fileToSmallDataUrl(file)); }
+                      catch { alert("Could not load that photo."); }
+                    }}
+                  />
+
+                  <div className="grid grid-cols-2 gap-2">
                     <div className="space-y-1.5">
                       <Label htmlFor="add-name-advanced" className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider">Name</Label>
                       <Input
@@ -1112,7 +1119,7 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
                       <Label htmlFor="aka" className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider">AKA</Label>
                       <Input
                         id="aka"
-                        placeholder="Optional nickname"
+                        placeholder="Nickname"
                         value={aka}
                         onChange={e => setAka(e.target.value)}
                         className="h-10 text-sm font-semibold"
@@ -1121,15 +1128,22 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_0.75fr]">
-                    <div className="space-y-1.5">
+                  <div className="grid grid-cols-[1fr_auto_auto] items-end gap-2">
+                    <div className="space-y-1.5 min-w-0">
                       <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Player Vibe</Label>
                       <VibePicker value={addDetails.funBadge} onChange={funBadge => updateAddDetails({ funBadge })} />
                     </div>
-                    <div className="flex items-end">
-                      <TogglePill active={isOrganizer} onClick={() => setIsOrganizer(!isOrganizer)} testId="checkbox-organizer">
-                        Organizer
-                      </TogglePill>
+                    <TogglePill
+                      active={isOrganizer}
+                      onClick={() => setIsOrganizer(!isOrganizer)}
+                      testId="checkbox-organizer"
+                      activeClassName="border-violet-200 bg-violet-100 text-violet-800 shadow-sm"
+                    >
+                      Org
+                    </TogglePill>
+                    <div className="rounded-xl bg-primary text-primary-foreground px-2.5 py-1 text-center shadow-sm">
+                      <div className="text-[8px] uppercase font-black opacity-75 leading-none">Skill</div>
+                      <div className="text-lg font-black leading-none">{addOverall}</div>
                     </div>
                   </div>
 

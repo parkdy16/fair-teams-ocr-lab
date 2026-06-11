@@ -787,16 +787,19 @@ export function TodayTab({
   setPlayers,
   themeColor = "#3B82F6",
   openOcrToken = 0,
+  ocrMode = "today",
   onAddPlayerManually,
 }: {
   players: RoomPlayer[];
   setPlayers: (players: RoomPlayer[]) => void;
   themeColor?: string;
   openOcrToken?: number;
+  ocrMode?: "today" | "roster";
   onAddPlayerManually?: () => void;
 }) {
   const [search, setSearch] = useState("");
   const [ocrOpen, setOcrOpen] = useState(false);
+  const [currentOcrMode, setCurrentOcrMode] = useState<"today" | "roster">(ocrMode);
   const [voiceOpen, setVoiceOpen] = useState(false);
   const [selectedScreenshots, setSelectedScreenshots] = useState<File[]>([]);
   const [ocrText, setOcrText] = useState("");
@@ -985,16 +988,19 @@ export function TodayTab({
     ? Math.max(0, Math.round(expectedAttendeeNumber) - scannedNameCount)
     : 0;
 
-  const openOcrImport = () => {
-    // Screenshot scan is a fresh attendance workflow, so start Today from empty
-    // instead of accidentally keeping last week's selected players.
-    setPrioritizeScannedPlayers(false);
-    setPlayers(players.map((player) => ({ ...player, attending: false })));
+  const openOcrImport = (mode: "today" | "roster" = "today") => {
+    setCurrentOcrMode(mode);
+    if (mode === "today") {
+      // Screenshot scan is a fresh attendance workflow, so start Today from empty
+      // instead of accidentally keeping last week's selected players.
+      setPrioritizeScannedPlayers(false);
+      setPlayers(players.map((player) => ({ ...player, attending: false })));
+    }
     setOcrOpen(true);
   };
 
   useEffect(() => {
-    if (openOcrToken > 0) openOcrImport();
+    if (openOcrToken > 0) openOcrImport(ocrMode);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openOcrToken]);
 
@@ -1315,7 +1321,7 @@ export function TodayTab({
           <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
             <Button
               type="button"
-              onClick={openOcrImport}
+              onClick={() => openOcrImport("today")}
               className="h-10 rounded-xl text-xs font-black uppercase tracking-wide"
               data-testid="empty-today-ocr-import-button"
             >
@@ -1381,7 +1387,7 @@ export function TodayTab({
           type="button"
           variant="outline"
           size="sm"
-          onClick={openOcrImport}
+          onClick={() => openOcrImport("today")}
           className="h-9 rounded-xl text-xs font-black"
           data-testid="ocr-import-button"
         >
@@ -1411,11 +1417,12 @@ export function TodayTab({
         >
           <DialogHeader>
             <DialogTitle className="text-base font-black">
-              Screenshot Import
+              {currentOcrMode === "roster" ? "Add players from screenshot" : "Screenshot Import"}
             </DialogTitle>
             <DialogDescription className="text-xs">
-              Import today's attendees from a Meetup, WhatsApp, Telegram, or
-              list screenshot.
+              {currentOcrMode === "roster"
+                ? "Add multiple players to your roster from a Meetup, WhatsApp, Telegram, or roster screenshot. New players will be saved with the NEW badge."
+                : "Import today's attendees from a Meetup, WhatsApp, Telegram, or list screenshot."}
             </DialogDescription>
           </DialogHeader>
 
@@ -1428,8 +1435,9 @@ export function TodayTab({
                   : "Upload Screenshot(s)"}
               </div>
               <div className="text-[10px] font-medium text-muted-foreground">
-                Select all screenshots for one attendee list. You can select
-                multiple screenshots from one attendee list.
+                {currentOcrMode === "roster"
+                  ? "Best for building your roster quickly. Select one or more screenshots that contain player names."
+                  : "Select all screenshots for one attendee list. You can select multiple screenshots from one attendee list."}
               </div>
               <input
                 type="file"
@@ -1874,7 +1882,7 @@ export function TodayTab({
                     disabled={selectedScreenshots.length === 0 || ocrRunning}
                     className="h-10 rounded-xl px-4 text-xs font-black"
                   >
-                    {ocrRunning ? "Scanning…" : "Screenshot Import"}
+                    {ocrRunning ? "Scanning…" : currentOcrMode === "roster" ? "Add Players from Screenshot" : "Screenshot Import"}
                   </Button>
                 </div>
                 <div className="text-[10px] font-medium text-muted-foreground">

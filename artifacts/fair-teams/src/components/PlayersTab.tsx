@@ -994,7 +994,7 @@ export function PlayersTab({
 }: {
   players: RoomPlayer[];
   setPlayers: (players: RoomPlayer[]) => void;
-  onScreenshotImport?: () => void;
+  onScreenshotImport?: (source?: "roster" | "today") => void;
 }) {
   const [name, setName] = useState("");
   const [aka, setAka] = useState("");
@@ -1015,6 +1015,7 @@ export function PlayersTab({
   const [flippedPlayerIds, setFlippedPlayerIds] = useState<Record<string, boolean>>({});
   const [search, setSearch] = useState("");
   const [addPlayerOpen, setAddPlayerOpen] = useState(false);
+  const [addChoiceOpen, setAddChoiceOpen] = useState(false);
   const [hideOverall, setHideOverall] = useState(() => {
     try { return window.localStorage.getItem("fair-teams-hide-roster-skill") !== "false"; }
     catch { return true; }
@@ -1093,6 +1094,58 @@ export function PlayersTab({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-2">
+        <Dialog open={addChoiceOpen} onOpenChange={setAddChoiceOpen}>
+          <DialogTrigger asChild>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-9 rounded-xl border-primary/20 bg-primary/5 px-3 text-[11px] font-black uppercase tracking-wide text-primary shadow-none hover:bg-primary/10 hover:text-primary"
+              data-testid="button-open-add-options"
+            >
+              <Plus className="mr-1.5 h-3.5 w-3.5" /> Add Player
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-sm rounded-3xl">
+            <DialogHeader>
+              <DialogTitle>Add players</DialogTitle>
+            </DialogHeader>
+            <div className="grid gap-2 pt-1">
+              <Button
+                type="button"
+                variant="outline"
+                className="h-auto justify-start rounded-2xl border-border bg-background p-3 text-left shadow-none"
+                onClick={() => { setAddChoiceOpen(false); setAddPlayerOpen(true); }}
+                data-testid="button-add-player-manual-option"
+              >
+                <div className="flex items-start gap-3">
+                  <span className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary"><Plus className="h-4 w-4" /></span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-black text-foreground">Add manually</span>
+                    <span className="mt-0.5 block text-[11px] font-semibold leading-snug text-muted-foreground">Create one player with name, skill level, gender, and NEW status.</span>
+                  </span>
+                </div>
+              </Button>
+              {onScreenshotImport && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-auto justify-start rounded-2xl border-primary/20 bg-primary/5 p-3 text-left text-primary shadow-none hover:bg-primary/10 hover:text-primary"
+                  onClick={() => { setAddChoiceOpen(false); onScreenshotImport("roster"); }}
+                  data-testid="button-add-player-screenshot-option"
+                >
+                  <div className="flex items-start gap-3">
+                    <span className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary"><ImageIcon className="h-4 w-4" /></span>
+                    <span className="min-w-0">
+                      <span className="block text-sm font-black text-foreground">Import from screenshot</span>
+                      <span className="mt-0.5 block text-[11px] font-semibold leading-snug text-muted-foreground">Add multiple players from a Meetup, WhatsApp, Telegram, or roster screenshot.</span>
+                    </span>
+                  </div>
+                </Button>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+
         <Dialog open={addPlayerOpen} onOpenChange={(next) => {
           setAddPlayerOpen(next);
           if (next) {
@@ -1104,16 +1157,6 @@ export function PlayersTab({
             setAddAdvancedOpen(false);
           }
         }}>
-          <DialogTrigger asChild>
-            <Button
-              type="button"
-              variant="outline"
-              className="h-9 rounded-xl border-primary/20 bg-primary/5 px-3 text-[11px] font-black uppercase tracking-wide text-primary shadow-none hover:bg-primary/10 hover:text-primary"
-              data-testid="button-open-add-player"
-            >
-              <Plus className="mr-1.5 h-3.5 w-3.5" /> Add Player
-            </Button>
-          </DialogTrigger>
           <DialogContent
             onOpenAutoFocus={(event) => event.preventDefault()}
             className="max-w-sm md:max-w-xl rounded-3xl !top-[10dvh] !translate-y-0 max-h-[82dvh] overflow-y-auto sm:!top-[50%] sm:!-translate-y-1/2"
@@ -1422,20 +1465,6 @@ export function PlayersTab({
         </Dialog>
 
         <div className="flex items-center gap-1.5 shrink-0">
-          {onScreenshotImport && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={onScreenshotImport}
-              className="h-8 rounded-xl px-2.5 text-[10px] font-black uppercase tracking-wide shadow-none border-primary/20 bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary"
-              title="Import players from a screenshot"
-              data-testid="button-roster-screenshot-import"
-            >
-              <ImageIcon className="mr-1 h-3 w-3" />
-              Import
-            </Button>
-          )}
           <Button
             type="button"
             variant="outline"
@@ -1497,7 +1526,7 @@ export function PlayersTab({
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={onScreenshotImport}
+                onClick={() => onScreenshotImport("roster")}
                 className="h-9 rounded-xl text-xs font-black"
                 data-testid="empty-roster-screenshot-import"
               >

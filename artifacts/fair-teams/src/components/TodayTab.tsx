@@ -1074,6 +1074,15 @@ export function TodayTab({
     : sorted;
 
   const selectedCount = players.filter((p) => p.attending).length;
+  const quickVoiceCandidates = useMemo(() => {
+    const spokenName = cleanOcrLine(quickVoiceHeard);
+    if (!spokenName) return [] as Array<{ player: RoomPlayer; score: number }>;
+    return players
+      .map((player) => ({ player, score: scorePlayerMatch(spokenName, player) }))
+      .filter((match) => match.score >= 70)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 5);
+  }, [quickVoiceHeard, players]);
 
   const selectedScreenshotNames = selectedScreenshots.map((file) => file.name);
 
@@ -1280,6 +1289,67 @@ export function TodayTab({
     setVoiceListening(false);
   };
 
+  const stopQuickVoiceListening = () => {
+    quickRecognitionRef.current?.stop();
+    setQuickVoiceListening(false);
+  };
+
+  const openQuickVoiceSelect = () => {
+    stopVoiceListening();
+    setQuickVoiceHeard("");
+    setQuickVoiceStatus("");
+    setQuickVoiceOpen(true);
+  };
+
+  const startQuickVoiceListening = () => {
+    const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!Recognition) {
+      setQuickVoiceStatus("Voice is not supported here. Type a name below.");
+      return;
+    }
+    try {
+      setQuickVoiceHeard("");
+      setQuickVoiceStatus("Say one player name.");
+      navigator.vibrate?.(25);
+      quickRecognitionRef.current?.abort?.();
+      const recognition = new Recognition();
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.lang = navigator.language || "en-US";
+      recognition.onresult = (event) => {
+        const transcript = event.results?.[event.resultIndex]?.[0]?.transcript?.trim?.() ?? "";
+        setQuickVoiceHeard(transcript);
+        setQuickVoiceStatus(transcript ? "Choose the player to select." : "No name heard. Try again or type.");
+      };
+      recognition.onerror = (event) => {
+        setQuickVoiceStatus(event.error ? `Voice stopped: ${event.error}` : "Try again or type a name.");
+        setQuickVoiceListening(false);
+      };
+      recognition.onend = () => setQuickVoiceListening(false);
+      quickRecognitionRef.current = recognition;
+      recognition.start();
+      setQuickVoiceListening(true);
+    } catch (error) {
+      console.error(error);
+      setQuickVoiceStatus("Voice could not start. Type a name below.");
+      setQuickVoiceListening(false);
+    }
+  };
+
+  const selectQuickVoicePlayer = (player: RoomPlayer) => {
+    setPlayers(
+      players.map((currentPlayer) =>
+        currentPlayer.id === player.id
+          ? { ...currentPlayer, attending: true }
+          : currentPlayer,
+      ),
+    );
+    setPrioritizeScannedPlayers(true);
+    setQuickVoiceOpen(false);
+    setQuickVoiceHeard("");
+    setQuickVoiceStatus("");
+  };
+
   const startVoiceListening = () => {
     const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!Recognition) {
@@ -1390,7 +1460,10 @@ export function TodayTab({
   }, [openOcrToken]);
 
   useEffect(() => {
-    return () => recognitionRef.current?.abort?.();
+    return () => {
+      recognitionRef.current?.abort?.();
+      quickRecognitionRef.current?.abort?.();
+    };
   }, []);
 
   useEffect(() => {
@@ -1789,20 +1862,114 @@ export function TodayTab({
         </div>
       </div>
 
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        onClick={openImportChoice}
-        className="h-9 rounded-xl text-xs font-black"
-        data-testid="today-import-button"
-      >
-        <ClipboardList className="mr-1.5 h-3.5 w-3.5" />
-        Import
-      </Button>
+      <div className="grid grid-cols-2 gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={openImportChoice}
+          className="h-9 rounded-xl text-xs font-black"
+          data-testid="today-import-button"
+        >
+          <ClipboardList className="mr-1.5 h-3.5 w-3.5" />
+          Import
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={openQuickVoiceSelect}
+          className="h-9 rounded-xl text-xs font-black"
+          data-testid="today-quick-voice-button"
+        >
+          <Mic className="mr-1.5 h-3.5 w-3.5" />
+          Quick Select
+        </Button>
+      </div>
 
         </>
       )}
+
+      <Dialog
+        open={quickVoiceOpen}
+        onOpenChange={(open) => {
+          if (!open) stopQuickVoiceListening();
+          setQuickVoiceOpen(open);
+        }}
+      >
+        <DialogContent className="w-[92vw] max-w-sm rounded-2xl p-4 sm:p-5">
+          <DialogHeader>
+            <DialogTitle className="text-base font-black">Quick Select</DialogTitle>
+            <DialogDescription className="text-xs">
+              Say one roster name, then tap the correct player.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Button
+              type="button"
+              onClick={quickVoiceListening ? stopQuickVoiceListening : startQuickVoiceListening}
+              className={`h-11 w-full rounded-xl text-xs font-black ${quickVoiceListening ? "bg-red-600 text-white hover:bg-red-700" : ""}`}
+            >
+              <Mic className="mr-1.5 h-4 w-4" />
+              {quickVoiceListening ? "LISTENING… TAP TO STOP" : "Tap and Say Name"}
+            </Button>
+            <div>
+              <label className="mb-1 block text-[10px] font-black uppercase tracking-wider text-muted-foreground">
+                Heard / type name
+              </label>
+              <Input
+                value={quickVoiceHeard}
+                onChange={(event) => setQuickVoiceHeard(event.target.value)}
+                placeholder="Example: Jorge"
+                className="h-10 rounded-xl text-sm font-bold"
+              />
+            </div>
+            {quickVoiceStatus && (
+              <div className="rounded-lg bg-muted/50 px-3 py-2 text-[11px] font-bold text-muted-foreground">
+                {quickVoiceStatus}
+              </div>
+            )}
+            {quickVoiceHeard.trim() && (
+              <div className="space-y-2">
+                <div className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
+                  Choose player
+                </div>
+                {quickVoiceCandidates.length > 0 ? (
+                  <div className="space-y-1.5">
+                    {quickVoiceCandidates.map(({ player }) => (
+                      <button
+                        key={player.id}
+                        type="button"
+                        onClick={() => selectQuickVoicePlayer(player)}
+                        className={`flex w-full items-center justify-between rounded-xl border px-3 py-2 text-left text-xs font-black transition ${player.attending ? "border-primary bg-primary/10 text-primary" : "bg-card hover:bg-muted/50"}`}
+                      >
+                        <span className="truncate">{displayName(player)}</span>
+                        <span className="shrink-0 text-[10px] font-black">
+                          {player.attending ? "Already selected" : "Select"}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-dashed bg-muted/40 p-3 text-center text-xs font-bold text-muted-foreground">
+                    No roster match. Try typing a few letters, or add this player manually.
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setQuickVoiceOpen(false)}
+              className="h-9 w-full rounded-xl text-xs font-bold"
+            >
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={importChoiceOpen} onOpenChange={setImportChoiceOpen}>
         <DialogContent className="w-[92vw] max-w-md rounded-2xl p-4 sm:p-6">
@@ -1910,15 +2077,15 @@ export function TodayTab({
             </label>
             )}
 
-            {ocrInputSource === "screenshot" && selectedScreenshotPreviews.length > 0 && (
+            {ocrInputSource === "screenshot" && selectedScreenshotNames.length > 0 && !ocrText && !ocrRunning && (
               <div className="rounded-xl border bg-card p-3">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <div>
-                    <div className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
-                      Uploaded screenshots
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-xs font-black text-foreground">
+                      ✓ {selectedScreenshotNames.length} screenshot{selectedScreenshotNames.length === 1 ? "" : "s"} ready
                     </div>
-                    <div className="text-[10px] font-medium text-muted-foreground">
-                      Check these before scanning.
+                    <div className="truncate text-[10px] font-medium text-muted-foreground">
+                      {selectedScreenshotNames.join(", ")}
                     </div>
                   </div>
                   <Button
@@ -1926,27 +2093,10 @@ export function TodayTab({
                     variant="ghost"
                     size="sm"
                     onClick={clearOcrSelection}
-                    className="h-7 px-2 text-[10px] font-black"
+                    className="h-7 shrink-0 px-2 text-[10px] font-black"
                   >
                     Clear
                   </Button>
-                </div>
-                <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
-                  {selectedScreenshotPreviews.map((preview, index) => (
-                    <div
-                      key={`${preview.name}-${index}`}
-                      className="overflow-hidden rounded-lg border bg-muted/40"
-                    >
-                      <img
-                        src={preview.url}
-                        alt={`Screenshot ${index + 1}`}
-                        className="h-24 w-full object-cover object-top"
-                      />
-                      <div className="truncate px-1.5 py-1 text-[9px] font-bold text-muted-foreground">
-                        {index + 1}. {preview.name}
-                      </div>
-                    </div>
-                  ))}
                 </div>
               </div>
             )}
@@ -1977,85 +2127,45 @@ export function TodayTab({
               <div className="rounded-xl border bg-card p-3">
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <div className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
-                    {ocrInputSource === "voiceText" ? "List Audit" : "Scan Audit"}
+                    {ocrInputSource === "voiceText" ? "List Summary" : "Scan Summary"}
                   </div>
                   {hasExpectedAttendeeNumber && (
-                    <div
-                      className={`rounded-full px-2 py-0.5 text-[10px] font-black ${
-                        missingFromScan > 0
-                          ? "bg-amber-100 text-amber-800"
-                          : "bg-emerald-100 text-emerald-800"
-                      }`}
-                    >
-                      {missingFromScan > 0
-                        ? `${missingFromScan} missing`
-                        : "complete"}
+                    <div className={`rounded-full px-2 py-0.5 text-[10px] font-black ${missingFromScan > 0 ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>
+                      {scannedNameCount} / {Math.round(expectedAttendeeNumber)}
                     </div>
                   )}
                 </div>
-
-                <div className="grid grid-cols-2 gap-2 text-center">
-                  <div className="rounded-lg bg-muted/50 p-2">
-                    <div className="text-[10px] font-black uppercase text-muted-foreground">
-                      Expected
-                    </div>
-                    <div className="text-lg font-black text-foreground">
-                      {hasExpectedAttendeeNumber
-                        ? Math.round(expectedAttendeeNumber)
-                        : "—"}
-                    </div>
-                  </div>
-                  <div className="rounded-lg bg-muted/50 p-2">
-                    <div className="text-[10px] font-black uppercase text-muted-foreground">
-                      {ocrInputSource === "voiceText" ? "Parsed" : "Scanned"}
-                    </div>
-                    <div className="text-lg font-black text-foreground">
-                      {scannedNameCount}
-                    </div>
-                  </div>
-                  <div className="rounded-lg bg-emerald-50 p-2">
-                    <div className="text-[10px] font-black uppercase text-emerald-700">
-                      Roster matches
-                    </div>
-                    <div className="text-lg font-black text-emerald-800">
-                      {rosterMatchCount}
-                    </div>
-                  </div>
-                  <div className="rounded-lg bg-sky-50 p-2">
-                    <div className="text-[10px] font-black uppercase text-sky-700">
-                      Not in roster
-                    </div>
-                    <div className="text-lg font-black text-sky-800">
-                      {unmatchedScannedNames.length}
-                    </div>
-                  </div>
+                <div className="flex flex-wrap items-center gap-2 text-[11px] font-black">
+                  <span className="rounded-full bg-muted/60 px-2 py-1 text-foreground">
+                    {ocrInputSource === "voiceText" ? "Parsed" : "Found"}: {scannedNameCount}
+                  </span>
+                  <span className="rounded-full bg-emerald-50 px-2 py-1 text-emerald-800">
+                    ✓ {rosterMatchCount}
+                  </span>
+                  <span className="rounded-full bg-amber-50 px-2 py-1 text-amber-800">
+                    ? {suggestions}
+                  </span>
+                  <span className="rounded-full bg-sky-50 px-2 py-1 text-sky-800">
+                    + {newNames}
+                  </span>
+                  {hasExpectedAttendeeNumber && missingFromScan > 0 && (
+                    <span className="rounded-full bg-amber-100 px-2 py-1 text-amber-900">
+                      {missingFromScan} missing
+                    </span>
+                  )}
                 </div>
-
-                {hasExpectedAttendeeNumber && missingFromScan > 0 && (
-                  <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2 text-[11px] font-bold text-amber-800">
-                    Scan found {scannedNameCount} name
-                    {scannedNameCount === 1 ? "" : "s"}, but you expected{" "}
-                    {Math.round(expectedAttendeeNumber)}. Check the screenshot
-                    or add {missingFromScan} missing player
-                    {missingFromScan === 1 ? "" : "s"} manually.
-                  </div>
-                )}
-
                 {unmatchedScannedNames.length > 0 && (
-                  <div className="mt-2 rounded-lg border border-sky-200 bg-sky-50 p-2">
-                    <div className="mb-1 text-[10px] font-black uppercase tracking-wider text-sky-800">
-                      {ocrInputSource === "voiceText" ? "Parsed" : "Scanned"} but not in roster
-                    </div>
-                    <div className="flex flex-wrap gap-1">
-                      {unmatchedScannedNames.map((candidate) => (
-                        <span
-                          key={ocrCandidateKey(candidate)}
-                          className="rounded-full bg-card px-2 py-1 text-[10px] font-black text-sky-800 ring-1 ring-sky-100"
-                        >
-                          {candidate.name}
-                        </span>
-                      ))}
-                    </div>
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {unmatchedScannedNames.slice(0, 8).map((candidate) => (
+                      <span key={ocrCandidateKey(candidate)} className="rounded-full bg-sky-50 px-2 py-1 text-[10px] font-black text-sky-800 ring-1 ring-sky-100">
+                        + {candidate.name}
+                      </span>
+                    ))}
+                    {unmatchedScannedNames.length > 8 && (
+                      <span className="rounded-full bg-muted px-2 py-1 text-[10px] font-black text-muted-foreground">
+                        +{unmatchedScannedNames.length - 8} more
+                      </span>
+                    )}
                   </div>
                 )}
               </div>

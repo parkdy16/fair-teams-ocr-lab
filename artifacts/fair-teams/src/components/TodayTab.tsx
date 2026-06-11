@@ -849,14 +849,34 @@ export function TodayTab({
     return candidate.bestMatch;
   };
 
+  const getOcrReviewStatus = (candidate: OcrNameCandidate): OcrMatchStatus => {
+    const resolvedMatch = resolveOcrMatch(candidate);
+    const wasCreatedFromRawText =
+      rawOcrAddedNames.includes(normalizeForMatch(candidate.name)) ||
+      Boolean(
+        resolvedMatch &&
+          playerSearchNames(resolvedMatch).some((searchName) =>
+            rawOcrAddedNames.includes(searchName),
+          ),
+      );
+
+    // A player manually created from the raw OCR rescue view immediately becomes
+    // a roster match on the next OCR pass. For the Review Names window, keep
+    // showing that row as NEW so the organizer understands this was just added
+    // from the screenshot, while the actual roster player still remains saved.
+    if (wasCreatedFromRawText && resolvedMatch?.isNew) return "new";
+
+    return candidate.status;
+  };
+
   const safeMatches = possibleNames.filter(
-    (candidate) => candidate.status === "match",
+    (candidate) => getOcrReviewStatus(candidate) === "match",
   ).length;
   const suggestions = possibleNames.filter(
-    (candidate) => candidate.status === "suggest",
+    (candidate) => getOcrReviewStatus(candidate) === "suggest",
   ).length;
   const newNames = possibleNames.filter(
-    (candidate) => candidate.status === "new",
+    (candidate) => getOcrReviewStatus(candidate) === "new",
   ).length;
   const selectedOcrCandidates = possibleNames.filter((candidate) =>
     selectedOcrCandidateKeySet.has(ocrCandidateKey(candidate)),
@@ -1077,10 +1097,11 @@ export function TodayTab({
         if (typeof part !== "string") return [part];
         return part.split(pattern).map((piece, pieceIndex) => {
           if (piece.toLowerCase() !== candidate.name.toLowerCase()) return piece;
+          const reviewStatus = getOcrReviewStatus(candidate);
           const className =
-            candidate.status === "match"
+            reviewStatus === "match"
               ? "rounded bg-emerald-100 px-1 font-black text-emerald-800"
-              : candidate.status === "suggest"
+              : reviewStatus === "suggest"
                 ? "rounded bg-amber-100 px-1 font-black text-amber-800"
                 : "rounded bg-sky-100 px-1 font-black text-sky-800";
           return (
@@ -1471,6 +1492,7 @@ export function TodayTab({
                       const isSelectedMatch =
                         selectedOcrCandidateKeySet.has(candidateKey);
                       const resolvedMatch = resolveOcrMatch(candidate);
+                      const reviewStatus = getOcrReviewStatus(candidate);
 
                       return (
                         <div
@@ -1494,24 +1516,24 @@ export function TodayTab({
                                 <div className="font-black text-foreground">
                                   {candidate.name}
                                 </div>
-                                {candidate.status === "match" &&
+                                {reviewStatus === "match" &&
                                   resolvedMatch && (
                                     <div className="mt-0.5 font-medium text-emerald-700">
                                       MATCH: {displayName(resolvedMatch)} ·{" "}
                                       {candidate.score}%
                                     </div>
                                   )}
-                                {candidate.status === "suggest" &&
+                                {reviewStatus === "suggest" &&
                                   resolvedMatch && (
                                     <div className="mt-0.5 font-medium text-amber-700">
                                       SELECTED: {displayName(resolvedMatch)} ·{" "}
                                       {candidate.score}%
                                     </div>
                                   )}
-                                {candidate.status === "new" && (
+                                {reviewStatus === "new" && (
                                   <div className="mt-0.5 font-medium text-sky-700">
                                     {resolvedMatch
-                                      ? `SELECTED: ${displayName(resolvedMatch)}`
+                                      ? `NEW: ${displayName(resolvedMatch)} added from screenshot`
                                       : "NEW: Will create roster player if selected"}
                                   </div>
                                 )}
@@ -1519,21 +1541,21 @@ export function TodayTab({
                             </div>
                             <div
                               className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-black ${
-                                candidate.status === "match"
+                                reviewStatus === "match"
                                   ? "bg-emerald-100 text-emerald-800"
-                                  : candidate.status === "suggest"
+                                  : reviewStatus === "suggest"
                                     ? "bg-amber-100 text-amber-800"
                                     : "bg-sky-100 text-sky-800"
                               }`}
                             >
-                              {candidate.status === "match"
+                              {reviewStatus === "match"
                                 ? "MATCH"
-                                : candidate.status === "suggest"
+                                : reviewStatus === "suggest"
                                   ? "CHECK"
                                   : "NEW"}
                             </div>
                           </div>
-                          {candidate.status !== "match" &&
+                          {reviewStatus !== "match" &&
                             candidate.suggestions.length > 0 && (
                               <div className="mt-2 flex flex-wrap gap-1">
                                 {candidate.suggestions
@@ -1643,25 +1665,28 @@ export function TodayTab({
                             </div>
                             {entry.foundCandidates.length > 0 && (
                               <div className="mt-1 flex flex-wrap gap-1">
-                                {entry.foundCandidates.map((candidate) => (
-                                  <span
-                                    key={ocrCandidateKey(candidate)}
-                                    className={`rounded-full px-1.5 py-0.5 text-[9px] font-black ${
-                                      candidate.status === "match"
-                                        ? "bg-emerald-100 text-emerald-800"
-                                        : candidate.status === "suggest"
-                                          ? "bg-amber-100 text-amber-800"
-                                          : "bg-sky-100 text-sky-800"
-                                    }`}
-                                  >
-                                    {candidate.status === "match"
-                                      ? "MATCH"
-                                      : candidate.status === "suggest"
-                                        ? "CHECK"
-                                        : "NEW"}{" "}
-                                    {candidate.name}
-                                  </span>
-                                ))}
+                                {entry.foundCandidates.map((candidate) => {
+                                  const reviewStatus = getOcrReviewStatus(candidate);
+                                  return (
+                                    <span
+                                      key={ocrCandidateKey(candidate)}
+                                      className={`rounded-full px-1.5 py-0.5 text-[9px] font-black ${
+                                        reviewStatus === "match"
+                                          ? "bg-emerald-100 text-emerald-800"
+                                          : reviewStatus === "suggest"
+                                            ? "bg-amber-100 text-amber-800"
+                                            : "bg-sky-100 text-sky-800"
+                                      }`}
+                                    >
+                                      {reviewStatus === "match"
+                                        ? "MATCH"
+                                        : reviewStatus === "suggest"
+                                          ? "CHECK"
+                                          : "NEW"}{" "}
+                                      {candidate.name}
+                                    </span>
+                                  );
+                                })}
                               </div>
                             )}
                           </div>

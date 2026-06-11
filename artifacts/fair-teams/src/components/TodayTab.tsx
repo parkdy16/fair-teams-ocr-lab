@@ -885,7 +885,45 @@ function extractOcrNames(
   return Array.from(byFinalIdentity.values());
 }
 
+function splitSpeechChunkIntoNames(text: string, roster: RoomPlayer[]) {
+  const output: string[] = [];
+  const words = normalizeForMatch(text).split(" ").filter(Boolean);
+  const originalWords = cleanOcrLine(text).split(/\s+/).filter(Boolean);
+
+  const rosterAliases = roster
+    .flatMap((player) =>
+      playerSearchNames(player).map((alias) => ({
+        alias,
+        tokens: alias.split(" ").filter(Boolean),
+        name: player.name,
+      })),
+    )
+    .filter((entry) => entry.alias.length >= 3)
+    .sort((a, b) => b.tokens.length - a.tokens.length || b.alias.length - a.alias.length);
+
+  let index = 0;
+  while (index < words.length) {
+    const exactRosterMatch = rosterAliases.find((entry) => {
+      if (entry.tokens.length === 0) return false;
+      const slice = words.slice(index, index + entry.tokens.length).join(" ");
+      return slice === entry.alias;
+    });
+
+    if (exactRosterMatch) {
+      output.push(exactRosterMatch.name);
+      index += exactRosterMatch.tokens.length;
+      continue;
+    }
+
+    output.push(originalWords[index] ?? words[index]);
+    index += 1;
+  }
+
+  return output;
+}
+
 function splitVoiceTextIntoNameLines(text: string, roster: RoomPlayer[]) {
+  const hasExplicitSeparators = /[,，、;；|/\n\r]/.test(text) || /\s+(?:and|und|그리고|랑|하고)\s+/i.test(text);
   const normalizedSeparators = text
     .replace(/[，、;；|/]+/g, "\n")
     .replace(/\s+(?:and|und|그리고|랑|하고)\s+/gi, "\n")
@@ -902,47 +940,43 @@ function splitVoiceTextIntoNameLines(text: string, roster: RoomPlayer[]) {
     }
   };
 
-  const rosterAliases = roster
-    .flatMap((player) =>
-      playerSearchNames(player).map((alias) => ({
-        alias,
-        tokens: alias.split(" ").filter(Boolean),
-        name: player.name,
-      })),
-    )
-    .filter((entry) => entry.alias.length >= 3)
-    .sort((a, b) => b.tokens.length - a.tokens.length || b.alias.length - a.alias.length);
-
   for (const rawLine of normalizedSeparators.split("\n")) {
     const cleanedLine = cleanOcrLine(rawLine);
     if (!cleanedLine) continue;
     const words = normalizeForMatch(cleanedLine).split(" ").filter(Boolean);
 
-    if (words.length <= 4) {
-      pushName(cleanedLine);
+    if (!hasExplicitSeparators && words.length > 1) {
+      splitSpeechChunkIntoNames(cleanedLine, roster).forEach(pushName);
       continue;
     }
 
-    let index = 0;
-    while (index < words.length) {
-      const exactRosterMatch = rosterAliases.find((entry) => {
-        if (entry.tokens.length === 0) return false;
-        const slice = words.slice(index, index + entry.tokens.length).join(" ");
-        return slice === entry.alias;
-      });
-
-      if (exactRosterMatch) {
-        pushName(exactRosterMatch.name);
-        index += exactRosterMatch.tokens.length;
-        continue;
-      }
-
-      pushName(words[index]);
-      index += 1;
+    if (words.length > 4) {
+      splitSpeechChunkIntoNames(cleanedLine, roster).forEach(pushName);
+      continue;
     }
+
+    pushName(cleanedLine);
   }
 
   return output;
+}
+
+function formatVoiceNameList(names: string[]) {
+  const output: string[] = [];
+  for (const name of names) {
+    const cleaned = cleanOcrLine(name);
+    const key = normalizeForMatch(cleaned);
+    if (!cleaned || !key || output.some((existing) => normalizeForMatch(existing) === key)) continue;
+    output.push(cleaned);
+  }
+  return output.join(", ");
+}
+
+function mergeVoiceNameText(currentText: string, nextNames: string[], roster: RoomPlayer[]) {
+  return formatVoiceNameList([
+    ...splitVoiceTextIntoNameLines(currentText, roster),
+    ...nextNames,
+  ]);
 }
 
 function makeVoiceTextReviewInput(text: string, roster: RoomPlayer[]) {
@@ -987,6 +1021,7 @@ export function TodayTab({
   const [voiceListening, setVoiceListening] = useState(false);
   const [voiceStatus, setVoiceStatus] = useState("");
   const [voiceInterimText, setVoiceInterimText] = useState("");
+  const [voiceRosterSearch, setVoiceRosterSearch] = useState("");
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const voiceShouldListenRef = useRef(false);
   const [ocrInputSource, setOcrInputSource] = useState<"screenshot" | "voiceText">("screenshot");
@@ -1053,6 +1088,21 @@ export function TodayTab({
     () => (ocrText ? extractOcrNames(ocrText, players) : []),
     [ocrText, players],
   );
+  const voiceParsedNames = useMemo(
+    () => splitVoiceTextIntoNameLines(voiceText, players),
+    [voiceText, players],
+  );
+  const voiceRosterSearchResults = useMemo(() => {
+    const query = normalizeForMatch(voiceRosterSearch);
+    if (!voiceOpen || !query) return [];
+    const existingKeys = new Set(voiceParsedNames.map(normalizeForMatch));
+    return players
+      .filter((player) =>
+        playerSearchNames(player).some((name) => name.includes(query)) &&
+        !existingKeys.has(normalizeForMatch(player.name)),
+      )
+      .slice(0, 6);
+  }, [players, voiceOpen, voiceParsedNames, voiceRosterSearch]);
   const rawOcrLineEntries = useMemo(() => {
     if (!ocrText) return [];
     const seen = new Set<string>();
@@ -1197,6 +1247,8 @@ export function TodayTab({
     setOcrInputSource("voiceText");
     setVoiceStatus("");
     setVoiceInterimText("");
+    setVoiceRosterSearch("");
+    setOcrText(makeVoiceTextReviewInput(voiceText, players));
     setVoiceOpen(true);
   };
 
@@ -1280,30 +1332,42 @@ export function TodayTab({
     }
   };
 
+  const syncVoiceReviewText = (nextText = voiceText) => {
+    const reviewInput = makeVoiceTextReviewInput(nextText, players);
+    setOcrInputSource("voiceText");
+    setOcrText(reviewInput);
+    setOcrProgress(reviewInput.trim() ? 100 : 0);
+    setOcrStatus(reviewInput.trim() ? "Voice/Text list ready. Import from this screen." : "");
+    return reviewInput;
+  };
+
   const reviewVoiceText = () => {
-    const reviewInput = makeVoiceTextReviewInput(voiceText, players);
+    const reviewInput = syncVoiceReviewText();
     if (!reviewInput.trim()) {
       setVoiceStatus("Type or say at least one clean player name first.");
       return;
     }
     stopVoiceListening();
-    setOcrInputSource("voiceText");
-    setPrioritizeScannedPlayers(false);
-    setPlayers(players.map((player) => ({ ...player, attending: false })));
-    setOcrText(reviewInput);
-    setSelectedScreenshots([]);
-    setOcrProgress(100);
-    setOcrStatus("Voice/Text list ready. Review names below.");
-    setSelectedOcrCandidateKeys([]);
-    setChosenOcrMatchIds({});
-    setExpectedAttendeeCount("");
-    setShowRawOcrText(false);
-    setManualRawOcrName("");
-    setRawOcrAddedNames([]);
-    setRawOcrCreatedPlayerIds([]);
-    setNewOcrPlayerGenders({});
-    setVoiceOpen(false);
-    setOcrOpen(true);
+    setVoiceStatus("Review the matches below, edit the text box if needed, then import selected names.");
+  };
+
+  const addRosterPlayerToVoiceText = (player: RoomPlayer) => {
+    setVoiceText((current) => mergeVoiceNameText(current, [player.name], players));
+    setVoiceRosterSearch("");
+  };
+
+  const importSelectedVoiceNames = () => {
+    const reviewInput = syncVoiceReviewText();
+    if (!reviewInput.trim()) {
+      setVoiceStatus("Type or say at least one clean player name first.");
+      return;
+    }
+    stopVoiceListening();
+    if (selectedOcrTotal === 0) {
+      setVoiceStatus("Select at least one matched or new name below first.");
+      return;
+    }
+    addSelectedOcrMatches();
   };
 
   useEffect(() => {
@@ -1316,14 +1380,22 @@ export function TodayTab({
   }, []);
 
   useEffect(() => {
+    if (!voiceOpen) return;
+    syncVoiceReviewText(voiceText);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voiceOpen, voiceText, players]);
+
+  useEffect(() => {
     setSelectedOcrCandidateKeys(
       possibleNames
-        .filter(
-          (candidate) => candidate.status === "match" && candidate.bestMatch,
-        )
+        .filter((candidate) => {
+          if (candidate.status === "match" && candidate.bestMatch) return true;
+          if (voiceOpen && ocrInputSource === "voiceText" && candidate.status === "new") return true;
+          return false;
+        })
         .map(ocrCandidateKey),
     );
-  }, [possibleNames]);
+  }, [possibleNames, voiceOpen, ocrInputSource]);
 
   const clearOcrSelection = () => {
     setSelectedScreenshots([]);
@@ -1588,6 +1660,7 @@ export function TodayTab({
     setConfirmNewPlayersOpen(false);
     setConfirmAddAllOpen(false);
     setOcrOpen(false);
+    setVoiceOpen(false);
   };
 
   const setNewOcrPlayerGender = (candidate: OcrNameCandidate, gender: Gender) => {
@@ -2473,100 +2546,138 @@ export function TodayTab({
       >
         <DialogContent
           onOpenAutoFocus={(e) => e.preventDefault()}
-          className="flex h-[82dvh] max-h-[82dvh] w-[94vw] max-w-lg flex-col overflow-hidden rounded-2xl p-4 sm:p-6"
+          className={`flex h-[88dvh] max-h-[88dvh] w-[94vw] max-w-lg flex-col overflow-hidden rounded-2xl p-4 sm:p-6 ${voiceListening ? "ring-2 ring-red-300" : ""}`}
         >
           <DialogHeader>
-            <DialogTitle className="text-base font-black">
-              Say or Paste Names
-            </DialogTitle>
+            <DialogTitle className="text-base font-black">Say or Paste Names</DialogTitle>
             <DialogDescription className="text-xs">
-              Say names one after another, paste a list, or type directly. You can edit everything before review.
+              Keep recording while you scan the field. Edit the comma list, pick roster matches below, then import selected names.
             </DialogDescription>
           </DialogHeader>
 
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1 pb-2">
-            <div className="rounded-xl border bg-muted/40 p-3 text-[11px] font-medium leading-relaxed text-muted-foreground">
-              Best result: say one name, pause briefly, then say the next name. Commas and line breaks also work.
-            </div>
-            {voiceListening && (
-              <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-[11px] font-black text-red-700 shadow-sm">
-                <span className="relative flex h-3 w-3">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
-                  <span className="relative inline-flex h-3 w-3 rounded-full bg-red-500" />
+            <div className={`rounded-xl border p-3 text-[11px] font-bold leading-relaxed ${voiceListening ? "border-red-300 bg-red-50 text-red-800" : "bg-muted/40 text-muted-foreground"}`}>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  {voiceListening && (
+                    <span className="relative flex h-3 w-3">
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
+                      <span className="relative inline-flex h-3 w-3 rounded-full bg-red-500" />
+                    </span>
+                  )}
+                  <span>{voiceListening ? "RECORDING — say names now" : "Ready for voice, paste, or typing"}</span>
+                </div>
+                <span className="shrink-0 rounded-full bg-card px-2 py-0.5 text-[10px] font-black text-foreground ring-1 ring-border">
+                  {voiceParsedNames.length} name{voiceParsedNames.length === 1 ? "" : "s"}
                 </span>
-                RECORDING — say names now. Pauses are okay.
               </div>
-            )}
+              <div className="mt-1 font-medium opacity-80">Use commas for quick editing: Joon, Jan, Andrea, Phillip R</div>
+            </div>
+
             <Textarea
               value={voiceText}
               onChange={(event) => setVoiceText(event.target.value)}
-              placeholder={"Nick Chan\nBruno\nMinji\nAlex Kim"}
-              className="min-h-56 resize-none rounded-xl text-sm font-semibold leading-relaxed"
+              onBlur={() => setVoiceText((current) => formatVoiceNameList(splitVoiceTextIntoNameLines(current, players)))}
+              placeholder="Joon, Jan, Andrea, Phillip R, Jorge"
+              className={`min-h-36 resize-none rounded-xl text-sm font-semibold leading-relaxed ${voiceListening ? "border-red-300 ring-2 ring-red-100" : ""}`}
               data-testid="voice-text-import-notepad"
             />
+
             {(voiceStatus || voiceInterimText) && (
               <div className={`rounded-xl border p-3 text-[11px] font-bold ${voiceListening ? "border-red-200 bg-red-50 text-red-800" : "bg-muted/50 text-muted-foreground"}`}>
                 <div>{voiceStatus}</div>
-                {voiceInterimText && (
-                  <div className="mt-1 font-medium opacity-80">Hearing: “{voiceInterimText}”</div>
-                )}
+                {voiceInterimText && <div className="mt-1 font-medium opacity-80">Hearing: “{voiceInterimText}”</div>}
               </div>
             )}
+
             <div className="rounded-xl border bg-card p-3">
-              <div className="mb-2 text-[10px] font-black uppercase tracking-wider text-muted-foreground">
-                Parsed preview
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {splitVoiceTextIntoNameLines(voiceText, players).length > 0 ? (
-                  splitVoiceTextIntoNameLines(voiceText, players).map((name) => (
-                    <span key={normalizeForMatch(name)} className="rounded-full bg-primary/10 px-2 py-1 text-[10px] font-black text-primary">
-                      {name}
-                    </span>
-                  ))
-                ) : (
-                  <span className="text-xs font-medium text-muted-foreground">
-                    Names will appear here before review.
-                  </span>
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <div>
+                  <div className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Smart match review</div>
+                  <div className="text-[10px] font-medium text-muted-foreground">Edit the text box anytime; this updates automatically.</div>
+                </div>
+                {possibleNames.length > 0 && (
+                  <div className="shrink-0 text-[10px] font-black text-muted-foreground">
+                    {safeMatches} match · {suggestions} check · {newNames} new
+                  </div>
                 )}
               </div>
+
+              {possibleNames.length > 0 ? (
+                <div className="space-y-2">
+                  {possibleNames.map((candidate, index) => {
+                    const candidateKey = ocrCandidateKey(candidate);
+                    const isSelectedMatch = selectedOcrCandidateKeySet.has(candidateKey);
+                    const resolvedMatch = resolveOcrMatch(candidate);
+                    const reviewStatus = getOcrReviewStatus(candidate);
+                    return (
+                      <div key={`${candidate.name}-${index}`} className={`rounded-lg p-2.5 text-[11px] ${isSelectedMatch ? "bg-primary/10 ring-1 ring-primary/20" : "bg-muted/50"}`}>
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex min-w-0 gap-2">
+                            <Checkbox checked={isSelectedMatch} onCheckedChange={() => toggleOcrCandidate(candidate)} className="mt-0.5 h-4 w-4 shrink-0 rounded-full" />
+                            <div className="min-w-0">
+                              <div className="font-black text-foreground">{candidate.name}</div>
+                              {reviewStatus === "match" && resolvedMatch && <div className="mt-0.5 font-medium text-emerald-700">MATCH: {displayName(resolvedMatch)} · {candidate.score}%</div>}
+                              {reviewStatus === "suggest" && resolvedMatch && <div className="mt-0.5 font-medium text-amber-700">SELECTED: {displayName(resolvedMatch)} · {candidate.score}%</div>}
+                              {reviewStatus === "new" && <div className="mt-0.5 font-medium text-sky-700">NEW: Will create roster player if selected</div>}
+                            </div>
+                          </div>
+                          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-black ${reviewStatus === "match" ? "bg-emerald-100 text-emerald-800" : reviewStatus === "suggest" ? "bg-amber-100 text-amber-800" : "bg-sky-100 text-sky-800"}`}>
+                            {reviewStatus === "match" ? "MATCH" : reviewStatus === "suggest" ? "CHECK" : "NEW"}
+                          </span>
+                        </div>
+                        {reviewStatus !== "match" && candidate.suggestions.length > 0 && (
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            {candidate.suggestions.slice(0, 5).map(({ player, score }) => {
+                              const isChosen = resolvedMatch?.id === player.id;
+                              return (
+                                <button key={player.id} type="button" onClick={() => chooseOcrSuggestion(candidate, player)} className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${isChosen ? "border-amber-300 bg-amber-100 text-amber-900" : "bg-card text-muted-foreground"}`}>
+                                  {isChosen ? "✓ " : "+ "}{displayName(player)} {score}%
+                                </button>
+                              );
+                            })}
+                            {candidate.status === "suggest" && (
+                              <button type="button" onClick={() => chooseOcrCandidateAsNew(candidate)} className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${chosenOcrMatchIds[candidateKey] === "__new__" ? "border-sky-300 bg-sky-100 text-sky-900" : "bg-card text-muted-foreground"}`}>
+                                {chosenOcrMatchIds[candidateKey] === "__new__" ? "✓ " : "+ New: "}{candidate.name}
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="rounded-lg bg-muted/50 p-3 text-center text-xs font-medium text-muted-foreground">Say, paste, or type names above. Matches will appear here.</div>
+              )}
+            </div>
+
+            <div className="rounded-xl border bg-card p-3">
+              <div className="mb-2 text-[10px] font-black uppercase tracking-wider text-muted-foreground">Add from roster if voice missed someone</div>
+              <Input value={voiceRosterSearch} onChange={(event) => setVoiceRosterSearch(event.target.value)} placeholder="Search roster name" className="h-9 rounded-xl text-xs font-bold" />
+              {voiceRosterSearchResults.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {voiceRosterSearchResults.map((player) => (
+                    <button key={player.id} type="button" onClick={() => addRosterPlayerToVoiceText(player)} className="rounded-full border bg-muted/40 px-2 py-1 text-[10px] font-black text-foreground">
+                      + {displayName(player)}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
           <DialogFooter className="shrink-0 border-t pt-3">
             <div className="flex w-full items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  if (voiceListening) stopVoiceListening();
-                  else startVoiceListening();
-                }}
-                className={`h-9 rounded-xl px-3 text-xs font-black ${voiceListening ? "border-red-300 bg-red-50 text-red-700" : ""}`}
-              >
+              <Button type="button" variant={voiceListening ? "destructive" : "outline"} onClick={() => { if (voiceListening) stopVoiceListening(); else startVoiceListening(); }} className={`h-10 rounded-xl px-3 text-xs font-black ${voiceListening ? "shadow-md ring-2 ring-red-200" : ""}`}>
                 <Mic className={`mr-1.5 h-3.5 w-3.5 ${voiceListening ? "animate-pulse" : ""}`} />
-                {voiceListening ? "Recording" : "Start"}
+                {voiceListening ? "Stop" : "Record"}
               </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  stopVoiceListening();
-                  setVoiceText("");
-                  setVoiceStatus("");
-                  setVoiceInterimText("");
-                }}
-                disabled={!voiceText.trim() && !voiceListening}
-                className="h-9 rounded-xl px-3 text-xs font-bold"
-              >
+              <Button type="button" variant="outline" onClick={() => { stopVoiceListening(); setVoiceText(""); setVoiceStatus(""); setVoiceInterimText(""); setVoiceRosterSearch(""); }} disabled={!voiceText.trim() && !voiceListening} className="h-10 rounded-xl px-3 text-xs font-bold">
                 Clear
               </Button>
-              <Button
-                type="button"
-                onClick={reviewVoiceText}
-                disabled={!voiceText.trim()}
-                className="h-9 min-w-0 flex-1 rounded-xl px-3 text-xs font-black"
-              >
-                Review Names
+              <Button type="button" onClick={importSelectedVoiceNames} disabled={!voiceText.trim() || selectedOcrTotal === 0} className="h-10 min-w-0 flex-1 rounded-xl px-3 text-xs font-black">
+                Import Selected ({selectedOcrTotal})
               </Button>
             </div>
           </DialogFooter>

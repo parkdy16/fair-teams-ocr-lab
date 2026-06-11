@@ -833,7 +833,15 @@ function PlayerCardBack({ player }: { player: RoomPlayer }) {
   );
 }
 
-export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; setPlayers: (players: RoomPlayer[]) => void }) {
+export function PlayersTab({
+  players,
+  setPlayers,
+  onScreenshotImport,
+}: {
+  players: RoomPlayer[];
+  setPlayers: (players: RoomPlayer[]) => void;
+  onScreenshotImport?: () => void;
+}) {
   const [name, setName] = useState("");
   const [aka, setAka] = useState("");
   const [gender, setGender] = useState<Gender>("male");
@@ -1207,6 +1215,20 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
         </Dialog>
 
         <div className="flex items-center gap-1.5 shrink-0">
+          {onScreenshotImport && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onScreenshotImport}
+              className="h-8 rounded-xl px-2.5 text-[10px] font-black uppercase tracking-wide shadow-none border-primary/20 bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary"
+              title="Import players from a screenshot"
+              data-testid="button-roster-screenshot-import"
+            >
+              <ImageIcon className="mr-1 h-3 w-3" />
+              Import
+            </Button>
+          )}
           <Button
             type="button"
             variant="outline"
@@ -1261,8 +1283,21 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
         )}
 
         {players.length === 0 ? (
-          <div className="text-center py-10 bg-muted/50 rounded-xl border border-dashed border-border">
+          <div className="space-y-3 rounded-xl border border-dashed border-border bg-muted/50 p-5 text-center">
             <p className="text-muted-foreground font-medium text-sm">No players added yet.</p>
+            {onScreenshotImport && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={onScreenshotImport}
+                className="h-9 rounded-xl text-xs font-black"
+                data-testid="empty-roster-screenshot-import"
+              >
+                <ImageIcon className="mr-1.5 h-3.5 w-3.5" />
+                Import Screenshot
+              </Button>
+            )}
           </div>
         ) : filtered.length === 0 ? (
           <div className="text-center py-8 bg-muted/50 rounded-xl border border-dashed border-border">

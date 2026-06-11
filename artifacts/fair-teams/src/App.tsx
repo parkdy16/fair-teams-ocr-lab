@@ -92,7 +92,8 @@ function App() {
   }, []);
 
   const [players, setPlayers] = useState<RoomPlayer[]>(() => loadPlayers());
-  const [activeTab, setActiveTab] = useState("players");
+  const [activeTab, setActiveTab] = useState("today");
+  const [todayOcrOpenToken, setTodayOcrOpenToken] = useState(0);
   const [groupName, setGroupName] = useState(() => {
     try {
       return (
@@ -425,7 +426,14 @@ function App() {
               value="players"
               className="m-0 data-[state=active]:animate-in data-[state=active]:fade-in-50"
             >
-              <PlayersTab players={players} setPlayers={replacePlayers} />
+              <PlayersTab
+                players={players}
+                setPlayers={replacePlayers}
+                onScreenshotImport={() => {
+                  setActiveTab("today");
+                  setTodayOcrOpenToken((token) => token + 1);
+                }}
+              />
             </TabsContent>
             <TabsContent
               value="today"
@@ -435,6 +443,8 @@ function App() {
                 players={players}
                 setPlayers={replacePlayers}
                 themeColor={headerColor}
+                openOcrToken={todayOcrOpenToken}
+                onAddPlayerManually={() => setActiveTab("players")}
               />
             </TabsContent>
             <TabsContent

@@ -786,10 +786,14 @@ export function TodayTab({
   players,
   setPlayers,
   themeColor = "#3B82F6",
+  openOcrToken = 0,
+  onAddPlayerManually,
 }: {
   players: RoomPlayer[];
   setPlayers: (players: RoomPlayer[]) => void;
   themeColor?: string;
+  openOcrToken?: number;
+  onAddPlayerManually?: () => void;
 }) {
   const [search, setSearch] = useState("");
   const [ocrOpen, setOcrOpen] = useState(false);
@@ -988,6 +992,11 @@ export function TodayTab({
     setPlayers(players.map((player) => ({ ...player, attending: false })));
     setOcrOpen(true);
   };
+
+  useEffect(() => {
+    if (openOcrToken > 0) openOcrImport();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openOcrToken]);
 
   useEffect(() => {
     setSelectedOcrCandidateKeys(
@@ -1290,18 +1299,42 @@ export function TodayTab({
     );
   };
 
-  if (players.length === 0) {
-    return (
-      <div className="flex min-h-[calc(100dvh-250px)] items-center justify-center px-6 text-center">
-        <p className="text-sm text-muted-foreground font-medium">
-          Add players in the Roster tab first.
-        </p>
-      </div>
-    );
-  }
-
   return (
     <div className="flex flex-col gap-4">
+      {players.length === 0 ? (
+        <div className="rounded-3xl border border-dashed border-primary/25 bg-primary/5 p-5 text-center shadow-sm">
+          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-white shadow-sm">
+            <ImageIcon className="h-6 w-6 text-primary" />
+          </div>
+          <h2 className="text-lg font-black tracking-tight text-[#102A43]">
+            Create your first player list
+          </h2>
+          <p className="mx-auto mt-2 max-w-xs text-xs font-semibold leading-relaxed text-muted-foreground">
+            Fastest setup: import a Meetup, WhatsApp, Telegram, or attendee screenshot and create multiple players at once.
+          </p>
+          <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <Button
+              type="button"
+              onClick={openOcrImport}
+              className="h-10 rounded-xl text-xs font-black uppercase tracking-wide"
+              data-testid="empty-today-ocr-import-button"
+            >
+              <ImageIcon className="mr-1.5 h-3.5 w-3.5" />
+              Import Screenshot
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onAddPlayerManually}
+              className="h-10 rounded-xl text-xs font-black uppercase tracking-wide"
+              data-testid="empty-today-add-player-button"
+            >
+              Add Player Manually
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <>
       <div
         className="flex items-center justify-between rounded-xl border p-3 shadow-sm"
         style={attendingSummaryStyle}
@@ -1367,6 +1400,9 @@ export function TodayTab({
           Voice Import
         </Button>
       </div>
+
+        </>
+      )}
 
       <Dialog open={ocrOpen} onOpenChange={setOcrOpen}>
         <DialogContent

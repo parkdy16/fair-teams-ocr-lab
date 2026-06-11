@@ -603,7 +603,6 @@ function ProfileDialog({
   const [open, setOpen] = useState(false);
   const photoCameraInput = useRef<HTMLInputElement | null>(null);
   const photoGalleryInput = useRef<HTMLInputElement | null>(null);
-  const [photoActionsOpen, setPhotoActionsOpen] = useState(false);
   const overall = calculateOverall(draft);
 
   const updateDraft = (data: Partial<RoomPlayer>) => {
@@ -623,7 +622,7 @@ function ProfileDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={(next) => { setOpen(next); setPhotoActionsOpen(false); if (next) setDraft(normalizePlayer(player)); }}>
+    <Dialog open={open} onOpenChange={(next) => { setOpen(next); if (next) setDraft(normalizePlayer(player)); }}>
       <DialogTrigger asChild>
         <Button variant="outline" size="icon" className="w-8 h-8 rounded-full" title="Edit player" data-testid={`profile-${player.id}`} onClick={e => e.stopPropagation()}>
           <Pencil className="w-4 h-4" />
@@ -635,34 +634,23 @@ function ProfileDialog({
         </DialogHeader>
 
         <div className="flex flex-col gap-4">
-          <div className="flex items-start gap-3">
-            <div className="relative shrink-0 pt-5">
-              <button
-                type="button"
-                onClick={() => setPhotoActionsOpen(prev => !prev)}
-                className="relative group rounded-full transition-transform active:scale-95"
-                title="Change photo"
-              >
+          <div className="flex items-start gap-4">
+            <div className="shrink-0 flex flex-col items-center gap-1.5">
+              <button type="button" onClick={() => photoGalleryInput.current?.click()} className="relative group pt-1">
                 <PlayerAvatar player={draft} size="lg" />
                 <span className="absolute inset-0 bg-slate-900/35 rounded-full text-white hidden group-hover:flex items-center justify-center">
                   <Camera className="w-5 h-5" />
                 </span>
               </button>
-              {photoActionsOpen && (
-                <div className="absolute left-0 top-full z-20 mt-2 w-36 rounded-xl border border-border bg-popover p-1.5 shadow-lg">
-                  <button type="button" className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] font-bold hover:bg-accent" onClick={() => { setPhotoActionsOpen(false); photoCameraInput.current?.click(); }}>
-                    <Camera className="h-3.5 w-3.5" /> Take Photo
-                  </button>
-                  <button type="button" className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] font-bold hover:bg-accent" onClick={() => { setPhotoActionsOpen(false); photoGalleryInput.current?.click(); }}>
-                    <ImageIcon className="h-3.5 w-3.5" /> Import Photo
-                  </button>
-                  {draft.profilePhoto && (
-                    <button type="button" className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] font-bold text-muted-foreground hover:bg-accent" onClick={() => { setPhotoActionsOpen(false); updateDraft({ profilePhoto: undefined }); }}>
-                      <Trash2 className="h-3.5 w-3.5" /> Clear Photo
-                    </button>
-                  )}
-                </div>
-              )}
+              <div className="grid grid-cols-2 gap-1 w-full">
+                <Button type="button" variant="outline" size="sm" className="h-7 px-1.5 text-[10px]" onClick={() => photoCameraInput.current?.click()}>
+                  <Camera className="w-3 h-3" />
+                </Button>
+                <Button type="button" variant="outline" size="sm" className="h-7 px-1.5 text-[10px]" onClick={() => photoGalleryInput.current?.click()}>
+                  <ImageIcon className="w-3 h-3" />
+                </Button>
+              </div>
+              {draft.profilePhoto && <Button type="button" variant="ghost" size="sm" className="h-6 px-1.5 text-[10px] text-muted-foreground" onClick={() => updateDraft({ profilePhoto: undefined })}><Trash2 className="w-3 h-3 mr-1" /> Remove</Button>}
             </div>
             <div className="flex-1 space-y-2 min-w-0">
               <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Name</Label>
@@ -729,16 +717,9 @@ function ProfileDialog({
 
           <div className="relative">
             <PlayerRadar player={{ ...draft, skill: overall }} />
-          </div>
-
-          <div className="rounded-2xl border border-primary/15 bg-primary/5 px-3 py-2 flex items-center justify-between">
-            <div>
-              <Label className="text-[10px] uppercase font-black tracking-wide text-primary">Skill Level</Label>
-              <div className="mt-0.5 text-[10px] font-semibold text-muted-foreground">Updates as advanced sliders change</div>
-            </div>
-            <div className="rounded-xl bg-primary text-primary-foreground px-3 py-1.5 text-center shadow-sm">
-              <div className="text-[8px] uppercase font-black opacity-75 leading-none">Skill</div>
-              <div className="text-xl font-black leading-none">{overall}</div>
+            <div className="absolute right-3 top-3 rounded-xl bg-primary text-primary-foreground px-3 py-1.5 shadow-sm flex items-center gap-2">
+              <span className="text-[9px] uppercase font-bold opacity-75 leading-none">Skill</span>
+              <span className="text-xl font-black leading-none">{overall}</span>
             </div>
           </div>
 
@@ -842,7 +823,6 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
   const [addAdvancedOpen, setAddAdvancedOpen] = useState(false);
   const [isOrganizer, setIsOrganizer] = useState(false);
   const [addProfilePhoto, setAddProfilePhoto] = useState<string | undefined>(undefined);
-  const [addPhotoActionsOpen, setAddPhotoActionsOpen] = useState(false);
   const addPhotoCameraInput = useRef<HTMLInputElement | null>(null);
   const addPhotoGalleryInput = useRef<HTMLInputElement | null>(null);
   const [addDetails, setAddDetails] = useState<AddPlayerDetails>(() => createDefaultAddPlayerDetails());
@@ -907,7 +887,6 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
     setSkillLevel(5);
     setAddDetails(createDefaultAddPlayerDetails(5));
     setAddProfilePhoto(undefined);
-    setAddPhotoActionsOpen(false);
     setAddAdvancedOpen(false);
     setIsOrganizer(false);
     setAddPlayerOpen(false);
@@ -938,8 +917,7 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
             setSkillLevel(5);
             setAddDetails(createDefaultAddPlayerDetails(5));
             setAddProfilePhoto(undefined);
-            setAddPhotoActionsOpen(false);
-            setAddAdvancedOpen(false);
+                    setAddAdvancedOpen(false);
           }
         }}>
           <DialogTrigger asChild>
@@ -1054,53 +1032,47 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
 
               {addAdvancedOpen && (
                 <div className="rounded-2xl border border-primary/15 bg-primary/5 p-3 space-y-3">
-                  <div className="flex items-start gap-3">
-                    <div className="relative shrink-0 pt-5">
+                  <div className="flex justify-center">
+                    <div className="flex flex-col items-center gap-2">
                       <button
                         type="button"
-                        onClick={(event) => { event.preventDefault(); event.stopPropagation(); setAddPhotoActionsOpen(prev => !prev); }}
+                        onClick={(event) => { event.preventDefault(); event.stopPropagation(); addPhotoGalleryInput.current?.click(); }}
                         className="h-16 w-16 overflow-hidden rounded-full border border-primary/20 bg-background text-base font-black text-primary shadow-sm ring-4 ring-primary/10 flex items-center justify-center transition-transform active:scale-95"
-                        title="Change photo"
+                        title="Choose photo"
                       >
                         {addProfilePhoto ? <img src={addProfilePhoto} alt="" className="h-full w-full object-cover" /> : (name.trim() ? initials(name.trim()) : <Camera className="h-5 w-5" />)}
                       </button>
-                      {addPhotoActionsOpen && (
-                        <div className="absolute left-0 top-full z-20 mt-2 w-36 rounded-xl border border-border bg-popover p-1.5 shadow-lg">
-                          <button type="button" className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] font-bold hover:bg-accent" onClick={(event) => { event.preventDefault(); event.stopPropagation(); setAddPhotoActionsOpen(false); addPhotoCameraInput.current?.click(); }}>
-                            <Camera className="h-3.5 w-3.5" /> Take Photo
-                          </button>
-                          <button type="button" className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] font-bold hover:bg-accent" onClick={(event) => { event.preventDefault(); event.stopPropagation(); setAddPhotoActionsOpen(false); addPhotoGalleryInput.current?.click(); }}>
-                            <ImageIcon className="h-3.5 w-3.5" /> Import Photo
-                          </button>
-                          {addProfilePhoto && (
-                            <button type="button" className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] font-bold text-muted-foreground hover:bg-accent" onClick={(event) => { event.preventDefault(); event.stopPropagation(); setAddPhotoActionsOpen(false); setAddProfilePhoto(undefined); }}>
-                              <Trash2 className="h-3.5 w-3.5" /> Clear Photo
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                    <div className="grid flex-1 grid-cols-2 gap-2 min-w-0">
-                      <div className="space-y-1.5">
-                        <Label htmlFor="add-name-advanced" className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider">Name</Label>
-                        <Input
-                          id="add-name-advanced"
-                          placeholder="Player name"
-                          value={name}
-                          onChange={e => setName(e.target.value)}
-                          className="h-10 text-sm font-semibold"
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label htmlFor="aka" className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider">AKA</Label>
-                        <Input
-                          id="aka"
-                          placeholder="Nickname"
-                          value={aka}
-                          onChange={e => setAka(e.target.value)}
-                          className="h-10 text-sm font-semibold"
-                          data-testid="input-player-aka"
-                        />
+                      <div className="flex items-center justify-center gap-1.5">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-8 rounded-xl px-2 text-[10px] font-bold"
+                          onClick={(event) => { event.preventDefault(); event.stopPropagation(); addPhotoCameraInput.current?.click(); }}
+                        >
+                          <Camera className="mr-1 h-3 w-3" /> Camera
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-8 rounded-xl px-2 text-[10px] font-bold"
+                          onClick={(event) => { event.preventDefault(); event.stopPropagation(); addPhotoGalleryInput.current?.click(); }}
+                        >
+                          <ImageIcon className="mr-1 h-3 w-3" /> Import
+                        </Button>
+                        {addProfilePhoto && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 rounded-xl text-muted-foreground"
+                            onClick={(event) => { event.preventDefault(); event.stopPropagation(); setAddProfilePhoto(undefined); }}
+                            title="Remove photo"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1133,8 +1105,31 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
                     }}
                   />
 
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="add-name-advanced" className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider">Name</Label>
+                      <Input
+                        id="add-name-advanced"
+                        placeholder="Player name"
+                        value={name}
+                        onChange={e => setName(e.target.value)}
+                        className="h-10 text-sm font-semibold"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="aka" className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider">AKA</Label>
+                      <Input
+                        id="aka"
+                        placeholder="Nickname"
+                        value={aka}
+                        onChange={e => setAka(e.target.value)}
+                        className="h-10 text-sm font-semibold"
+                        data-testid="input-player-aka"
+                      />
+                    </div>
+                  </div>
 
-                  <div className="grid grid-cols-[1fr_auto] items-end gap-2">
+                  <div className="grid grid-cols-[1fr_auto_auto] items-end gap-2">
                     <div className="space-y-1.5 min-w-0">
                       <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Player Vibe</Label>
                       <VibePicker value={addDetails.funBadge} onChange={funBadge => updateAddDetails({ funBadge })} />
@@ -1147,16 +1142,9 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
                     >
                       Org
                     </TogglePill>
-                  </div>
-
-                  <div className="rounded-2xl border border-primary/15 bg-primary/5 px-3 py-2 flex items-center justify-between">
-                    <div>
-                      <Label className="text-[10px] uppercase font-black tracking-wide text-primary">Skill Level</Label>
-                      <div className="mt-0.5 text-[10px] font-semibold text-muted-foreground">Updates as advanced sliders change</div>
-                    </div>
-                    <div className="rounded-xl bg-primary text-primary-foreground px-3 py-1.5 text-center shadow-sm">
+                    <div className="rounded-xl bg-primary text-primary-foreground px-2.5 py-1 text-center shadow-sm">
                       <div className="text-[8px] uppercase font-black opacity-75 leading-none">Skill</div>
-                      <div className="text-xl font-black leading-none">{addOverall}</div>
+                      <div className="text-lg font-black leading-none">{addOverall}</div>
                     </div>
                   </div>
 

@@ -1274,8 +1274,7 @@ export function TodayTab({
   };
 
   const openImportChoice = () => {
-    onOcrImportContextChange?.("today");
-    setImportChoiceOpen(true);
+    openOcrImport();
   };
 
   const openVoiceImport = () => {
@@ -1898,10 +1897,13 @@ export function TodayTab({
       )}
 
       {quickVoiceOpen && (
-        <div className="fixed inset-x-3 bottom-20 z-50 mx-auto max-w-sm rounded-2xl border bg-background/95 p-3 shadow-2xl backdrop-blur supports-[backdrop-filter]:bg-background/85">
+        <div className="fixed inset-x-4 top-24 z-50 mx-auto max-w-sm rounded-3xl border border-slate-200/80 bg-white/95 p-3 shadow-xl backdrop-blur supports-[backdrop-filter]:bg-white/85">
           <div className="mb-2 flex items-center justify-between gap-3">
-            <div className="text-xs font-black text-foreground">
-              {quickVoiceListening ? "🎙 Listening…" : quickVoiceHeard.trim() ? "Choose player" : "Quick Select"}
+            <div className="flex items-center gap-2 text-xs font-black text-slate-900">
+              <span className={`flex h-7 w-7 items-center justify-center rounded-full ${quickVoiceListening ? "bg-red-100 text-red-700" : "bg-slate-100 text-slate-700"}`}>
+                <Mic className={`h-3.5 w-3.5 ${quickVoiceListening ? "animate-pulse" : ""}`} />
+              </span>
+              <span>{quickVoiceListening ? "Say one name" : quickVoiceHeard.trim() ? "Choose player" : "Quick Select"}</span>
             </div>
             <button
               type="button"
@@ -1909,28 +1911,28 @@ export function TodayTab({
                 stopQuickVoiceListening();
                 setQuickVoiceOpen(false);
               }}
-              className="rounded-full px-2 py-1 text-[10px] font-black uppercase text-muted-foreground hover:bg-muted"
+              className="rounded-full px-2 py-1 text-[10px] font-black uppercase text-slate-500 hover:bg-slate-100"
             >
               Close
             </button>
           </div>
 
           {quickVoiceListening && (
-            <div className="mb-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-center text-[11px] font-black text-red-700">
-              Say one roster name
+            <div className="mb-2 rounded-2xl border border-red-100 bg-red-50 px-3 py-2 text-center text-[11px] font-black text-red-700">
+              Listening…
             </div>
           )}
 
           {!quickVoiceListening && quickVoiceStatus && !quickVoiceHeard.trim() && (
-            <div className="mb-2 rounded-xl bg-muted/50 px-3 py-2 text-center text-[11px] font-bold text-muted-foreground">
+            <div className="mb-2 rounded-2xl bg-slate-50 px-3 py-2 text-center text-[11px] font-bold text-slate-500">
               {quickVoiceStatus}
             </div>
           )}
 
           {quickVoiceHeard.trim() && (
             <div className="space-y-2">
-              <div className="rounded-xl bg-muted/50 px-3 py-2 text-[11px] font-bold text-muted-foreground">
-                Heard: <span className="text-foreground">{cleanOcrLine(quickVoiceHeard)}</span>
+              <div className="rounded-2xl bg-slate-50 px-3 py-2 text-[11px] font-bold text-slate-500">
+                Heard: <span className="text-slate-900">{cleanOcrLine(quickVoiceHeard)}</span>
               </div>
               {quickVoiceCandidates.length > 0 ? (
                 <div className="space-y-1.5">
@@ -1939,7 +1941,7 @@ export function TodayTab({
                       key={player.id}
                       type="button"
                       onClick={() => selectQuickVoicePlayer(player)}
-                      className={`flex w-full items-center justify-between rounded-xl border px-3 py-2 text-left text-xs font-black transition ${index === 0 ? "border-primary bg-primary/10 text-primary" : "bg-card hover:bg-muted/50"}`}
+                      className={`flex w-full items-center justify-between rounded-2xl border px-3 py-2.5 text-left text-xs font-black transition ${index === 0 ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"}`}
                     >
                       <span className="truncate">{displayName(player)}</span>
                       <span className="shrink-0 text-[10px] font-black">
@@ -1949,7 +1951,7 @@ export function TodayTab({
                   ))}
                 </div>
               ) : (
-                <div className="rounded-xl border border-dashed bg-muted/40 p-3 text-center text-xs font-bold text-muted-foreground">
+                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-3 text-center text-xs font-bold text-slate-500">
                   No roster match. Use search or add manually.
                 </div>
               )}
@@ -1961,7 +1963,7 @@ export function TodayTab({
               type="button"
               variant="outline"
               onClick={startQuickVoiceListening}
-              className="mt-2 h-9 w-full rounded-xl text-xs font-black"
+              className="mt-2 h-9 w-full rounded-2xl text-xs font-black"
             >
               <Mic className="mr-1.5 h-3.5 w-3.5" />
               Try Again

@@ -1025,7 +1025,7 @@ export function TodayTab({
   const [voiceListening, setVoiceListening] = useState(false);
   const [voiceStatus, setVoiceStatus] = useState("");
   const [voiceInterimText, setVoiceInterimText] = useState("");
-  const [voiceRosterSearch, setVoiceRosterSearch] = useState("");
+  const [voiceExpectedAttendeeCount, setVoiceExpectedAttendeeCount] = useState("");
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const voiceShouldListenRef = useRef(false);
   const [ocrInputSource, setOcrInputSource] = useState<"screenshot" | "voiceText">("screenshot");
@@ -1096,17 +1096,6 @@ export function TodayTab({
     () => splitVoiceTextIntoNameLines(voiceText, players),
     [voiceText, players],
   );
-  const voiceRosterSearchResults = useMemo(() => {
-    const query = normalizeForMatch(voiceRosterSearch);
-    if (!voiceOpen || !query) return [];
-    const existingKeys = new Set(voiceParsedNames.map(normalizeForMatch));
-    return players
-      .filter((player) =>
-        playerSearchNames(player).some((name) => name.includes(query)) &&
-        !existingKeys.has(normalizeForMatch(player.name)),
-      )
-      .slice(0, 6);
-  }, [players, voiceOpen, voiceParsedNames, voiceRosterSearch]);
   const rawOcrLineEntries = useMemo(() => {
     if (!ocrText) return [];
     const seen = new Set<string>();
@@ -1232,11 +1221,39 @@ export function TodayTab({
   const missingFromScan = hasExpectedAttendeeNumber
     ? Math.max(0, Math.round(expectedAttendeeNumber) - scannedNameCount)
     : 0;
+  const voiceExpectedAttendeeNumber = Number(voiceExpectedAttendeeCount);
+  const hasVoiceExpectedAttendeeNumber =
+    voiceExpectedAttendeeCount.trim() !== "" &&
+    Number.isFinite(voiceExpectedAttendeeNumber) &&
+    voiceExpectedAttendeeNumber > 0;
+  const voiceCapturedCount = voiceParsedNames.length;
+  const voiceMissingCount = hasVoiceExpectedAttendeeNumber
+    ? Math.max(0, Math.round(voiceExpectedAttendeeNumber) - voiceCapturedCount)
+    : 0;
+
+
+  const resetImportReviewState = () => {
+    setSelectedOcrCandidateKeys([]);
+    setChosenOcrMatchIds({});
+    setOcrText("");
+    setOcrProgress(0);
+    setOcrStatus("");
+    setShowRawOcrText(false);
+    setManualRawOcrName("");
+    setRawOcrAddedNames([]);
+    setRawOcrCreatedPlayerIds([]);
+    setNewOcrPlayerGenders({});
+  };
 
   const openOcrImport = () => {
-    // Screenshot scan is a fresh attendance workflow, so start Today from empty
-    // instead of accidentally keeping last week's selected players.
+    // Screenshot and Voice/Text are separate attendance workflows.
+    // Always start screenshot import from a clean screenshot state so a previous
+    // voice list cannot appear inside the screenshot importer.
     setOcrInputSource("screenshot");
+    stopVoiceListening();
+    setSelectedScreenshots([]);
+    setSelectedScreenshotPreviews([]);
+    resetImportReviewState();
     setPrioritizeScannedPlayers(false);
     setPlayers(players.map((player) => ({ ...player, attending: false })));
     setOcrOpen(true);
@@ -1251,7 +1268,7 @@ export function TodayTab({
     setOcrInputSource("voiceText");
     setVoiceStatus("");
     setVoiceInterimText("");
-    setVoiceRosterSearch("");
+    resetImportReviewState();
     setOcrText(makeVoiceTextReviewInput(voiceText, players));
     setVoiceOpen(true);
   };
@@ -1297,7 +1314,7 @@ export function TodayTab({
       };
       recognition.onerror = (event) => {
         if (voiceShouldListenRef.current && (event.error === "no-speech" || event.error === "network")) {
-          setVoiceStatus("Still listening. Say the next name clearly, or pause when finished.");
+          setVoiceStatus("");
           return;
         }
         setVoiceStatus(event.error ? `Voice stopped: ${event.error}` : "Voice stopped. You can try again or type names manually.");
@@ -1311,7 +1328,7 @@ export function TodayTab({
           return;
         }
 
-        setVoiceStatus("Still listening. Say the next name, then review before adding.");
+        setVoiceStatus("");
         window.setTimeout(() => {
           if (!voiceShouldListenRef.current) return;
           try {
@@ -1324,7 +1341,7 @@ export function TodayTab({
       };
       recognitionRef.current = recognition;
       recognition.start();
-      setVoiceStatus("Recording now. Keep scanning and say multiple names. They will be added as a comma list.");
+      setVoiceStatus("");
       setVoiceListening(true);
     } catch (error) {
       console.error(error);
@@ -1351,11 +1368,6 @@ export function TodayTab({
     }
     stopVoiceListening();
     setVoiceStatus("Review the matches below, edit the text box if needed, then import selected names.");
-  };
-
-  const addRosterPlayerToVoiceText = (player: RoomPlayer) => {
-    setVoiceText((current) => mergeVoiceNameText(current, [player.name], players));
-    setVoiceRosterSearch("");
   };
 
   const importSelectedVoiceNames = () => {
@@ -1799,7 +1811,7 @@ export function TodayTab({
               Import Attendance
             </DialogTitle>
             <DialogDescription className="text-xs">
-              Choose how you want to build today&apos;s player list. Both options let you review matches before adding anyone.
+              Choose one method for today. Screenshot and Voice/Text stay separate.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-2">
@@ -1834,7 +1846,7 @@ export function TodayTab({
               </span>
               <span className="min-w-0">
                 <span className="block text-sm font-black text-foreground">Say or paste names</span>
-                <span className="block text-xs font-medium text-muted-foreground">Use voice, paste a list, or type names into an editable notepad.</span>
+                <span className="block text-xs font-medium text-muted-foreground">Say names continuously, paste a list, or type names.</span>
               </span>
             </button>
           </div>
@@ -2553,27 +2565,32 @@ export function TodayTab({
           <DialogHeader>
             <DialogTitle className="text-base font-black">Say or Paste Names</DialogTitle>
             <DialogDescription className="text-xs">
-              Keep recording while you scan the field. Edit the comma list, pick roster matches below, then import selected names.
+              Say, paste, or type names. The text box is the control center.
             </DialogDescription>
           </DialogHeader>
 
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1 pb-2">
-            <div className={`rounded-xl border p-3 text-[11px] font-bold leading-relaxed ${voiceListening ? "border-red-300 bg-red-50 text-red-800" : "bg-muted/40 text-muted-foreground"}`}>
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  {voiceListening && (
-                    <span className="relative flex h-3 w-3">
-                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
-                      <span className="relative inline-flex h-3 w-3 rounded-full bg-red-500" />
-                    </span>
-                  )}
-                  <span>{voiceListening ? "🔴 RECORDING — keep saying names" : "Ready for voice, paste, or typing"}</span>
-                </div>
-                <span className="shrink-0 rounded-full bg-card px-2 py-0.5 text-[10px] font-black text-foreground ring-1 ring-border">
-                  {voiceParsedNames.length} name{voiceParsedNames.length === 1 ? "" : "s"}
-                </span>
+            <div className="grid grid-cols-[1fr_auto] items-end gap-2 rounded-xl border bg-card p-3">
+              <div>
+                <label htmlFor="voice-expected-attendee-count" className="mb-1 block text-[10px] font-black uppercase tracking-wider text-muted-foreground">
+                  Expected
+                  <span className="font-bold normal-case tracking-normal text-muted-foreground/80"> (optional)</span>
+                </label>
+                <Input
+                  id="voice-expected-attendee-count"
+                  type="number"
+                  inputMode="numeric"
+                  min="1"
+                  value={voiceExpectedAttendeeCount}
+                  onChange={(event) => setVoiceExpectedAttendeeCount(event.target.value)}
+                  placeholder="Example: 18"
+                  className="h-10 rounded-xl text-sm font-bold"
+                />
               </div>
-              <div className="mt-1 font-medium opacity-80">Use commas for quick editing: Joon, Jan, Andrea, Phillip R</div>
+              <div className={`rounded-xl px-3 py-2 text-center text-[11px] font-black ${hasVoiceExpectedAttendeeNumber && voiceMissingCount > 0 ? "bg-amber-50 text-amber-800 ring-1 ring-amber-200" : "bg-muted text-foreground"}`}>
+                <div>{voiceCapturedCount}{hasVoiceExpectedAttendeeNumber ? ` / ${Math.round(voiceExpectedAttendeeNumber)}` : ""}</div>
+                <div className="text-[9px] uppercase tracking-wide text-muted-foreground">names</div>
+              </div>
             </div>
 
             <Textarea
@@ -2585,14 +2602,14 @@ export function TodayTab({
               data-testid="voice-text-import-notepad"
             />
 
-            <div className="-mt-1 text-[10px] font-bold text-muted-foreground">
-              Voice adds names as a comma list. You can edit spelling here before importing.
-            </div>
-
-            {(voiceStatus || voiceInterimText) && (
-              <div className={`rounded-xl border p-3 text-[11px] font-bold ${voiceListening ? "border-red-200 bg-red-50 text-red-800" : "bg-muted/50 text-muted-foreground"}`}>
-                <div>{voiceStatus}</div>
-                {voiceInterimText && <div className="mt-1 font-medium opacity-80">Hearing: “{voiceInterimText}”</div>}
+            {voiceListening && voiceInterimText && (
+              <div className="rounded-xl border border-red-200 bg-red-50 p-2 text-[11px] font-bold text-red-800">
+                Hearing: “{voiceInterimText}”
+              </div>
+            )}
+            {!voiceListening && voiceStatus && (
+              <div className="rounded-xl border bg-muted/50 p-2 text-[11px] font-bold text-muted-foreground">
+                {voiceStatus}
               </div>
             )}
 
@@ -2600,7 +2617,6 @@ export function TodayTab({
               <div className="mb-2 flex items-center justify-between gap-2">
                 <div>
                   <div className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Smart match review</div>
-                  <div className="text-[10px] font-medium text-muted-foreground">Edit the text box anytime; this updates automatically.</div>
                 </div>
                 {possibleNames.length > 0 && (
                   <div className="shrink-0 text-[10px] font-black text-muted-foreground">
@@ -2654,23 +2670,11 @@ export function TodayTab({
                   })}
                 </div>
               ) : (
-                <div className="rounded-lg bg-muted/50 p-3 text-center text-xs font-medium text-muted-foreground">Say, paste, or type names above. Matches will appear here.</div>
+                <div className="rounded-lg bg-muted/50 p-3 text-center text-xs font-medium text-muted-foreground">Names typed above will appear here.</div>
               )}
             </div>
 
-            <div className="rounded-xl border bg-card p-3">
-              <div className="mb-2 text-[10px] font-black uppercase tracking-wider text-muted-foreground">Add from roster if voice missed someone</div>
-              <Input value={voiceRosterSearch} onChange={(event) => setVoiceRosterSearch(event.target.value)} placeholder="Search roster name" className="h-9 rounded-xl text-xs font-bold" />
-              {voiceRosterSearchResults.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {voiceRosterSearchResults.map((player) => (
-                    <button key={player.id} type="button" onClick={() => addRosterPlayerToVoiceText(player)} className="rounded-full border bg-muted/40 px-2 py-1 text-[10px] font-black text-foreground">
-                      + {displayName(player)}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+
           </div>
 
           <DialogFooter className="shrink-0 border-t pt-3">
@@ -2691,11 +2695,11 @@ export function TodayTab({
                 <Mic className={`mr-1.5 h-3.5 w-3.5 ${voiceListening ? "animate-pulse" : ""}`} />
                 {voiceListening ? "RECORDING — TAP TO STOP" : "Record"}
               </Button>
-              <Button type="button" variant="outline" onClick={() => { stopVoiceListening(); setVoiceText(""); setVoiceStatus(""); setVoiceInterimText(""); setVoiceRosterSearch(""); }} disabled={!voiceText.trim() && !voiceListening} className="h-10 rounded-xl px-3 text-xs font-bold">
+              <Button type="button" variant="outline" onClick={() => { stopVoiceListening(); setVoiceText(""); setVoiceStatus(""); setVoiceInterimText(""); }} disabled={!voiceText.trim() && !voiceListening} className="h-10 rounded-xl px-3 text-xs font-bold">
                 Clear
               </Button>
               <Button type="button" onClick={importSelectedVoiceNames} disabled={!voiceText.trim() || selectedOcrTotal === 0} className="h-10 min-w-0 flex-1 rounded-xl px-3 text-xs font-black">
-                Import Selected ({selectedOcrTotal})
+                Import Names ({selectedOcrTotal})
               </Button>
             </div>
           </DialogFooter>

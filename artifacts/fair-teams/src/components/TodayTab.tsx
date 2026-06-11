@@ -548,6 +548,36 @@ function similarity(a: string, b: string) {
   return Math.round((1 - levenshtein(a, b) / maxLength) * 100);
 }
 
+function speechSoundKey(value: string) {
+  return normalizeForMatch(value)
+    .replace(/ph/g, "f")
+    .replace(/ck/g, "k")
+    .replace(/qu/g, "kw")
+    .replace(/x/g, "ks")
+    .split(" ")
+    .map((word) => {
+      const compact = word.replace(/[^a-z0-9]/g, "");
+      if (compact.length <= 2) return compact;
+      const first = compact[0];
+      const rest = compact
+        .slice(1)
+        .replace(/[aeiouy]+/g, "")
+        .replace(/(.)\1+/g, "$1");
+      return `${first}${rest}`;
+    })
+    .filter(Boolean)
+    .join(" ");
+}
+
+function speechSoundSimilarity(a: string, b: string) {
+  const aKey = speechSoundKey(a);
+  const bKey = speechSoundKey(b);
+  if (!aKey || !bKey) return 0;
+  if (aKey === bKey) return 88;
+  const score = similarity(aKey, bKey);
+  return score >= 80 ? Math.min(87, score) : 0;
+}
+
 function playerSearchNames(player: RoomPlayer) {
   const values = [player.name, player.aka, displayName(player)];
   const aka = player.aka?.trim();
@@ -612,6 +642,12 @@ function scorePlayerMatch(ocrName: string, player: RoomPlayer) {
         return 95;
       }
 
+      const speechScore = speechSoundSimilarity(normalizedOcr, candidate);
+      const firstWordSoundScore = speechSoundSimilarity(ocrFirstName, candidateFirstName);
+      if (speechScore >= 88 || firstWordSoundScore >= 88) {
+        return Math.max(speechScore, firstWordSoundScore, 84);
+      }
+
       // For normal fuzzy matching, keep the original first-letter guard so
       // unrelated names cannot jump to high scores.
       if (candidate[0] !== ocrFirst) return 0;
@@ -619,7 +655,7 @@ function scorePlayerMatch(ocrName: string, player: RoomPlayer) {
       const rawScore = similarity(normalizedOcr, candidate);
       const firstWordScore = similarity(ocrFirstName, candidateFirstName);
       if (firstWordScore < 70) return 0;
-      return rawScore;
+      return Math.max(rawScore, speechScore);
     }),
   );
 }
@@ -722,7 +758,7 @@ function extractOcrNames(
         status: "match" as const,
         bestMatch: exactMatches[0].player,
         score: 100,
-        suggestions: ranked.slice(0, 3),
+        suggestions: ranked.slice(0, 5),
       };
     }
 
@@ -732,7 +768,7 @@ function extractOcrNames(
         status: "suggest" as const,
         bestMatch: exactMatches[0].player,
         score: 100,
-        suggestions: exactMatches.slice(0, 3),
+        suggestions: exactMatches.slice(0, 5),
       };
     }
 
@@ -748,7 +784,7 @@ function extractOcrNames(
           status: "suggest" as const,
           bestMatch: best.player,
           score: best.score,
-          suggestions: strongMatches.slice(0, 3),
+          suggestions: strongMatches.slice(0, 5),
         };
       }
 
@@ -757,7 +793,7 @@ function extractOcrNames(
         status: "match" as const,
         bestMatch: best.player,
         score: best.score,
-        suggestions: ranked.slice(0, 3),
+        suggestions: ranked.slice(0, 5),
       };
     }
 
@@ -767,11 +803,27 @@ function extractOcrNames(
         status: "suggest" as const,
         bestMatch: best.player,
         score: best.score,
-        suggestions: ranked.slice(0, 3),
+        suggestions: ranked.slice(0, 5),
       };
     }
 
-    return { name, status: "new" as const, suggestions: ranked.slice(0, 3) };
+    return { name, status: "new" as const, suggestions: ranked.slice(0, 5) };
+  });
+
+  const expandedCandidates = candidates.flatMap((candidate) => {
+    if (candidate.status !== "suggest") return [candidate];
+
+    const closeSuggestions = candidate.suggestions.filter(
+      (suggestion) => suggestion.score >= Math.max(78, (candidate.score ?? 0) - 8),
+    );
+
+    if (closeSuggestions.length <= 1) return [candidate];
+
+    return closeSuggestions.map((suggestion) => ({
+      ...candidate,
+      bestMatch: suggestion.player,
+      score: suggestion.score,
+    }));
   });
 
   // Screenshots often overlap. Dedupe after matching, not just by OCR text:
@@ -783,7 +835,7 @@ function extractOcrNames(
     new: 1,
   };
 
-  for (const candidate of candidates) {
+  for (const candidate of expandedCandidates) {
     const key = candidate.bestMatch
       ? `roster:${candidate.bestMatch.id}`
       : `new:${normalizeForMatch(candidate.name)}`;
@@ -1023,16 +1075,18 @@ export function TodayTab({
 
   const resolveOcrMatch = (candidate: OcrNameCandidate) => {
     const chosenPlayerId = chosenOcrMatchIds[ocrCandidateKey(candidate)];
+    if (chosenPlayerId === "__new__") return undefined;
     if (chosenPlayerId) {
       const chosenPlayer = players.find(
         (player) => player.id === chosenPlayerId,
       );
       if (chosenPlayer) return chosenPlayer;
     }
-    return candidate.bestMatch;
+    return candidate.status === "suggest" ? undefined : candidate.bestMatch;
   };
 
   const getOcrReviewStatus = (candidate: OcrNameCandidate): OcrMatchStatus => {
+    if (chosenOcrMatchIds[ocrCandidateKey(candidate)] === "__new__") return "new";
     const resolvedMatch = resolveOcrMatch(candidate);
 
     // A player manually CREATED from the raw OCR rescue view immediately becomes
@@ -1067,7 +1121,7 @@ export function TodayTab({
     Boolean(resolveOcrMatch(candidate)),
   );
   const selectedNewCandidates = selectedOcrCandidates.filter(
-    (candidate) => candidate.status === "new" && !resolveOcrMatch(candidate),
+    (candidate) => getOcrReviewStatus(candidate) === "new" && !resolveOcrMatch(candidate),
   );
   const selectedOcrTotal =
     selectedRosterMatches.length + selectedNewCandidates.length;
@@ -1075,7 +1129,7 @@ export function TodayTab({
     Boolean(resolveOcrMatch(candidate)),
   );
   const allNewCandidates = possibleNames.filter(
-    (candidate) => candidate.status === "new" && !resolveOcrMatch(candidate),
+    (candidate) => getOcrReviewStatus(candidate) === "new" && !resolveOcrMatch(candidate),
   );
   const allOcrTotal = allRosterCandidates.length + allNewCandidates.length;
   const allCheckCandidates = possibleNames.filter(
@@ -1289,6 +1343,14 @@ export function TodayTab({
   ) => {
     const key = ocrCandidateKey(candidate);
     setChosenOcrMatchIds((current) => ({ ...current, [key]: player.id }));
+    setSelectedOcrCandidateKeys((current) =>
+      current.includes(key) ? current : [...current, key],
+    );
+  };
+
+  const chooseOcrCandidateAsNew = (candidate: OcrNameCandidate) => {
+    const key = ocrCandidateKey(candidate);
+    setChosenOcrMatchIds((current) => ({ ...current, [key]: "__new__" }));
     setSelectedOcrCandidateKeys((current) =>
       current.includes(key) ? current : [...current, key],
     );
@@ -1905,7 +1967,7 @@ export function TodayTab({
                                 {reviewStatus === "new" && (
                                   <div className="mt-0.5 font-medium text-sky-700">
                                     {resolvedMatch
-                                      ? `NEW: ${displayName(resolvedMatch)} added from screenshot`
+                                      ? `NEW: ${displayName(resolvedMatch)} added from import`
                                       : "NEW: Will create roster player if selected"}
                                   </div>
                                 )}
@@ -1931,7 +1993,7 @@ export function TodayTab({
                             candidate.suggestions.length > 0 && (
                               <div className="mt-2 flex flex-wrap gap-1">
                                 {candidate.suggestions
-                                  .slice(0, 3)
+                                  .slice(0, 5)
                                   .map(({ player, score }) => {
                                     const isChosen =
                                       resolvedMatch?.id === player.id;
@@ -1953,6 +2015,20 @@ export function TodayTab({
                                       </button>
                                     );
                                   })}
+                                {candidate.status === "suggest" && (
+                                  <button
+                                    type="button"
+                                    onClick={() => chooseOcrCandidateAsNew(candidate)}
+                                    className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${
+                                      chosenOcrMatchIds[candidateKey] === "__new__"
+                                        ? "bg-sky-100 text-sky-900 border-sky-300"
+                                        : "bg-card text-muted-foreground"
+                                    }`}
+                                  >
+                                    {chosenOcrMatchIds[candidateKey] === "__new__" ? "✓ " : "Add as new: "}
+                                    {candidate.name}
+                                  </button>
+                                )}
                               </div>
                             )}
                         </div>

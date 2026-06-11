@@ -307,35 +307,32 @@ function applySkillLevelToDetails(details: AddPlayerDetails, skillLevel: number)
 }
 
 async function fileToSmallDataUrl(file: File) {
-  // Camera captures can be very large on phones/tablets. Avoid FileReader here
-  // because it loads the full-size photo as a huge base64 string before we shrink it,
-  // which can crash/reload mobile browsers and Android WebView.
-  const objectUrl = URL.createObjectURL(file);
-  try {
-    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
-      const img = new window.Image();
-      img.onload = () => resolve(img);
-      img.onerror = () => reject(new Error("This photo format is not supported by the browser. Try a JPG or PNG."));
-      img.src = objectUrl;
-    });
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error("Could not read the selected file."));
+    reader.readAsDataURL(file);
+  });
 
-    const size = 144;
-    const canvas = document.createElement("canvas");
-    canvas.width = size;
-    canvas.height = size;
-    const ctx = canvas.getContext("2d", { alpha: false });
-    if (!ctx) throw new Error("Could not resize photo.");
+  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const img = new window.Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("This photo format is not supported by the browser. Try a JPG or PNG."));
+    img.src = dataUrl;
+  });
 
-    const sourceWidth = image.naturalWidth || image.width;
-    const sourceHeight = image.naturalHeight || image.height;
-    const minSide = Math.min(sourceWidth, sourceHeight);
-    const sx = (sourceWidth - minSide) / 2;
-    const sy = (sourceHeight - minSide) / 2;
-    ctx.drawImage(image, sx, sy, minSide, minSide, 0, 0, size, size);
-    return canvas.toDataURL("image/jpeg", 0.62);
-  } finally {
-    URL.revokeObjectURL(objectUrl);
-  }
+  const size = 192;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return dataUrl;
+
+  const minSide = Math.min(image.naturalWidth || image.width, image.naturalHeight || image.height);
+  const sx = ((image.naturalWidth || image.width) - minSide) / 2;
+  const sy = ((image.naturalHeight || image.height) - minSide) / 2;
+  ctx.drawImage(image, sx, sy, minSide, minSide, 0, 0, size, size);
+  return canvas.toDataURL("image/jpeg", 0.72);
 }
 
 function PlayerAvatar({ player, size = "md" }: { player: RoomPlayer; size?: "sm" | "md" | "lg" | "xl" }) {
@@ -826,27 +823,12 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
   const [addAdvancedOpen, setAddAdvancedOpen] = useState(false);
   const [isOrganizer, setIsOrganizer] = useState(false);
   const [addProfilePhoto, setAddProfilePhoto] = useState<string | undefined>(undefined);
-  const [addPhotoMenuOpen, setAddPhotoMenuOpen] = useState(false);
   const addPhotoCameraInput = useRef<HTMLInputElement | null>(null);
   const addPhotoGalleryInput = useRef<HTMLInputElement | null>(null);
-  const addPhotoPickingRef = useRef(false);
   const [addDetails, setAddDetails] = useState<AddPlayerDetails>(() => createDefaultAddPlayerDetails());
   const addOverall = calculateOverall(addDetails);
   const addSkillExplanation = skillLevelExplanation(skillLevel);
   const updateAddDetails = (data: Partial<AddPlayerDetails>) => setAddDetails(prev => ({ ...prev, ...data }));
-  const openAddPhotoPicker = (inputRef: React.RefObject<HTMLInputElement | null>) => {
-    addPhotoPickingRef.current = true;
-    setAddPhotoMenuOpen(false);
-    window.setTimeout(() => {
-      addPhotoPickingRef.current = false;
-    }, 120000);
-    inputRef.current?.click();
-  };
-  const finishAddPhotoPicker = () => {
-    window.setTimeout(() => {
-      addPhotoPickingRef.current = false;
-    }, 300);
-  };
   const [autoEditPlayerId, setAutoEditPlayerId] = useState<string | null>(null);
   const [flippedPlayerIds, setFlippedPlayerIds] = useState<Record<string, boolean>>({});
   const [search, setSearch] = useState("");
@@ -905,7 +887,6 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
     setSkillLevel(5);
     setAddDetails(createDefaultAddPlayerDetails(5));
     setAddProfilePhoto(undefined);
-    setAddPhotoMenuOpen(false);
     setAddAdvancedOpen(false);
     setIsOrganizer(false);
     setAddPlayerOpen(false);
@@ -930,15 +911,13 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-2">
         <Dialog open={addPlayerOpen} onOpenChange={(next) => {
-          if (!next && addPhotoPickingRef.current) return;
           setAddPlayerOpen(next);
           if (next) {
             setIsNew(true);
             setSkillLevel(5);
             setAddDetails(createDefaultAddPlayerDetails(5));
             setAddProfilePhoto(undefined);
-            setAddPhotoMenuOpen(false);
-            setAddAdvancedOpen(false);
+                    setAddAdvancedOpen(false);
           }
         }}>
           <DialogTrigger asChild>
@@ -1054,43 +1033,47 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
               {addAdvancedOpen && (
                 <div className="rounded-2xl border border-primary/15 bg-primary/5 p-3 space-y-3">
                   <div className="flex justify-center">
-                    <div className="relative flex flex-col items-center gap-1.5">
+                    <div className="flex flex-col items-center gap-2">
                       <button
                         type="button"
-                        onClick={() => setAddPhotoMenuOpen(prev => !prev)}
+                        onClick={(event) => { event.preventDefault(); event.stopPropagation(); addPhotoGalleryInput.current?.click(); }}
                         className="h-16 w-16 overflow-hidden rounded-full border border-primary/20 bg-background text-base font-black text-primary shadow-sm ring-4 ring-primary/10 flex items-center justify-center transition-transform active:scale-95"
-                        title="Photo options"
+                        title="Choose photo"
                       >
                         {addProfilePhoto ? <img src={addProfilePhoto} alt="" className="h-full w-full object-cover" /> : (name.trim() ? initials(name.trim()) : <Camera className="h-5 w-5" />)}
                       </button>
-                      <div className="text-[10px] font-bold text-muted-foreground">Photo</div>
-                      {addPhotoMenuOpen && (
-                        <div className="absolute left-1/2 top-[4.9rem] z-20 w-40 -translate-x-1/2 rounded-2xl border border-border bg-popover p-1.5 shadow-lg">
-                          <button
+                      <div className="flex items-center justify-center gap-1.5">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-8 rounded-xl px-2 text-[10px] font-bold"
+                          onClick={(event) => { event.preventDefault(); event.stopPropagation(); addPhotoCameraInput.current?.click(); }}
+                        >
+                          <Camera className="mr-1 h-3 w-3" /> Camera
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-8 rounded-xl px-2 text-[10px] font-bold"
+                          onClick={(event) => { event.preventDefault(); event.stopPropagation(); addPhotoGalleryInput.current?.click(); }}
+                        >
+                          <ImageIcon className="mr-1 h-3 w-3" /> Import
+                        </Button>
+                        {addProfilePhoto && (
+                          <Button
                             type="button"
-                            onClick={() => openAddPhotoPicker(addPhotoCameraInput)}
-                            className="flex h-8 w-full items-center gap-2 rounded-xl px-2 text-left text-[11px] font-bold hover:bg-accent"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 rounded-xl text-muted-foreground"
+                            onClick={(event) => { event.preventDefault(); event.stopPropagation(); setAddProfilePhoto(undefined); }}
+                            title="Remove photo"
                           >
-                            <Camera className="h-3.5 w-3.5" /> Camera
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => openAddPhotoPicker(addPhotoGalleryInput)}
-                            className="flex h-8 w-full items-center gap-2 rounded-xl px-2 text-left text-[11px] font-bold hover:bg-accent"
-                          >
-                            <ImageIcon className="h-3.5 w-3.5" /> Import
-                          </button>
-                          {addProfilePhoto && (
-                            <button
-                              type="button"
-                              onClick={() => { setAddProfilePhoto(undefined); setAddPhotoMenuOpen(false); }}
-                              className="flex h-8 w-full items-center gap-2 rounded-xl px-2 text-left text-[11px] font-bold text-muted-foreground hover:bg-accent"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" /> Clear
-                            </button>
-                          )}
-                        </div>
-                      )}
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   </div>
 
@@ -1103,10 +1086,9 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
                     onChange={async e => {
                       const file = e.target.files?.[0];
                       e.target.value = "";
-                      if (!file) { finishAddPhotoPicker(); return; }
+                      if (!file) return;
                       try { setAddProfilePhoto(await fileToSmallDataUrl(file)); }
                       catch { alert("Could not load that photo."); }
-                      finally { finishAddPhotoPicker(); }
                     }}
                   />
                   <input
@@ -1117,10 +1099,9 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
                     onChange={async e => {
                       const file = e.target.files?.[0];
                       e.target.value = "";
-                      if (!file) { finishAddPhotoPicker(); return; }
+                      if (!file) return;
                       try { setAddProfilePhoto(await fileToSmallDataUrl(file)); }
                       catch { alert("Could not load that photo."); }
-                      finally { finishAddPhotoPicker(); }
                     }}
                   />
 

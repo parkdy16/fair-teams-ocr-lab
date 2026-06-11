@@ -136,6 +136,9 @@ function normalizeForMatch(value: string) {
     .trim();
 }
 
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 function cleanOcrLine(value: string) {
   return value
     .replace(/---.*?\.(jpg|jpeg|png).*?---/gi, " ")
@@ -736,6 +739,8 @@ export function TodayTab({
   const [confirmAddAllOpen, setConfirmAddAllOpen] = useState(false);
   const [expectedAttendeeCount, setExpectedAttendeeCount] = useState("");
   const [showRawOcrText, setShowRawOcrText] = useState(false);
+  const [manualRawOcrName, setManualRawOcrName] = useState("");
+  const [rawOcrAddedNames, setRawOcrAddedNames] = useState<string[]>([]);
   const [prioritizeScannedPlayers, setPrioritizeScannedPlayers] =
     useState(false);
 
@@ -782,6 +787,49 @@ export function TodayTab({
     () => (ocrText ? extractOcrNames(ocrText, players) : []),
     [ocrText, players],
   );
+  const rawOcrLineEntries = useMemo(() => {
+    if (!ocrText) return [];
+    const seen = new Set<string>();
+    return ocrText
+      .split(/\r?\n/)
+      .map((line, index) => {
+        const cleaned = cleanOcrLine(line);
+        const normalizedLine = normalizeForMatch(cleaned);
+        if (!cleaned || !normalizedLine) return null;
+        if (seen.has(`${index}:${normalizedLine}`)) return null;
+        seen.add(`${index}:${normalizedLine}`);
+
+        const foundCandidates = possibleNames.filter((candidate) => {
+          const candidateName = normalizeForMatch(candidate.name);
+          if (candidateName && normalizedLine.includes(candidateName)) return true;
+          const match = candidate.bestMatch;
+          if (!match) return false;
+          return playerSearchNames(match).some(
+            (searchName) => searchName && normalizedLine.includes(searchName),
+          );
+        });
+        const alreadyPromoted = possibleNames.some(
+          (candidate) => normalizeForMatch(candidate.name) === normalizedLine,
+        );
+        const looksLikeStandaloneName =
+          isProbablyName(cleaned) && !alreadyPromoted;
+
+        return {
+          index,
+          text: cleaned,
+          normalized: normalizedLine,
+          foundCandidates,
+          suggestedName: looksLikeStandaloneName ? cleaned : "",
+        };
+      })
+      .filter(Boolean) as Array<{
+        index: number;
+        text: string;
+        normalized: string;
+        foundCandidates: OcrNameCandidate[];
+        suggestedName: string;
+      }>;
+  }, [ocrText, possibleNames]);
   const [selectedOcrCandidateKeys, setSelectedOcrCandidateKeys] = useState<
     string[]
   >([]);
@@ -870,6 +918,8 @@ export function TodayTab({
     setChosenOcrMatchIds({});
     setExpectedAttendeeCount("");
     setShowRawOcrText(false);
+    setManualRawOcrName("");
+    setRawOcrAddedNames([]);
   };
 
   const runOcr = async () => {
@@ -879,6 +929,8 @@ export function TodayTab({
     setOcrText("");
     setOcrProgress(0);
     setOcrStatus("Starting scan…");
+    setManualRawOcrName("");
+    setRawOcrAddedNames([]);
 
     const chunks: string[] = [];
 
@@ -939,6 +991,111 @@ export function TodayTab({
     setSelectedOcrCandidateKeys((current) =>
       current.includes(key) ? current : [...current, key],
     );
+  };
+
+  const addRawOcrName = (rawName: string) => {
+    const cleanedName = cleanOcrLine(rawName);
+    const normalizedName = normalizeForMatch(cleanedName);
+    if (!cleanedName || !normalizedName || !isProbablyName(cleanedName)) {
+      setOcrStatus("Type a clean player name from the raw OCR text first.");
+      return;
+    }
+
+    const existingPlayer = players.find((player) =>
+      playerSearchNames(player).includes(normalizedName),
+    );
+
+    if (existingPlayer) {
+      setPlayers(
+        players.map((player) =>
+          player.id === existingPlayer.id
+            ? { ...player, attending: true }
+            : player,
+        ),
+      );
+      setPrioritizeScannedPlayers(true);
+      setRawOcrAddedNames((current) =>
+        current.includes(normalizedName) ? current : [...current, normalizedName],
+      );
+      setManualRawOcrName("");
+      setOcrStatus(`${displayName(existingPlayer)} marked attending from raw OCR text.`);
+      return;
+    }
+
+    if (rawOcrAddedNames.includes(normalizedName)) {
+      setOcrStatus(`${cleanedName} was already added from raw OCR text.`);
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const newPlayer: RoomPlayer = {
+      id: createOcrPlayerId(),
+      roomId: 1,
+      name: cleanedName,
+      gender: "male",
+      skill: 5,
+      attack: 5,
+      defense: 5,
+      speed: 5,
+      passing: 5,
+      stamina: 5,
+      physical: 5,
+      teamPlay: 2,
+      isNew: true,
+      attending: true,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    setPlayers([...players, newPlayer].sort((a, b) => displayName(a).localeCompare(displayName(b))));
+    setPrioritizeScannedPlayers(true);
+    setRawOcrAddedNames((current) => [...current, normalizedName]);
+    setManualRawOcrName("");
+    setOcrStatus(`Created ${cleanedName} from raw OCR text as NEW and attending.`);
+  };
+
+  const renderHighlightedRawOcrText = (
+    text: string,
+    candidates: OcrNameCandidate[],
+  ) => {
+    const names = Array.from(
+      new Map(
+        candidates
+          .map((candidate) => [normalizeForMatch(candidate.name), candidate])
+          .filter(([key]) => Boolean(key)),
+      ).values(),
+    ).sort((a, b) => b.name.length - a.name.length);
+
+    if (!names.length) return text;
+
+    let parts: React.ReactNode[] = [text];
+    names.forEach((candidate) => {
+      const escapedName = escapeRegExp(candidate.name.trim());
+      if (!escapedName) return;
+      const pattern = new RegExp(`(${escapedName})`, "gi");
+      parts = parts.flatMap((part, index) => {
+        if (typeof part !== "string") return [part];
+        return part.split(pattern).map((piece, pieceIndex) => {
+          if (piece.toLowerCase() !== candidate.name.toLowerCase()) return piece;
+          const className =
+            candidate.status === "match"
+              ? "rounded bg-emerald-100 px-1 font-black text-emerald-800"
+              : candidate.status === "suggest"
+                ? "rounded bg-amber-100 px-1 font-black text-amber-800"
+                : "rounded bg-sky-100 px-1 font-black text-sky-800";
+          return (
+            <mark
+              key={`${candidate.name}-${index}-${pieceIndex}`}
+              className={className}
+            >
+              {piece}
+            </mark>
+          );
+        });
+      });
+    });
+
+    return parts;
   };
 
   const finalizeOcrCandidates = (candidatesToAdd: OcrNameCandidate[]) => {
@@ -1137,6 +1294,8 @@ export function TodayTab({
                   setSelectedOcrCandidateKeys([]);
                   setChosenOcrMatchIds({});
                   setShowRawOcrText(false);
+                  setManualRawOcrName("");
+                  setRawOcrAddedNames([]);
                 }}
                 data-testid="ocr-file-input"
               />
@@ -1436,9 +1595,80 @@ export function TodayTab({
                   </Button>
                 </div>
                 {showRawOcrText && (
-                  <pre className="mt-2 max-h-48 whitespace-pre-wrap overflow-y-auto rounded-lg bg-muted/50 p-3 text-[11px] leading-relaxed text-foreground">
-                    {ocrText}
-                  </pre>
+                  <div className="mt-2 space-y-2">
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-[10px] font-bold text-amber-800">
+                      Green = roster match, amber = check, blue = new. If a real name is visible but was missed, type it below or use Add on a clean raw line.
+                    </div>
+                    <div className="grid grid-cols-[1fr_auto] gap-2">
+                      <Input
+                        value={manualRawOcrName}
+                        onChange={(event) => setManualRawOcrName(event.target.value)}
+                        placeholder="Type missing name from raw text"
+                        className="h-9 rounded-xl text-xs font-bold"
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => addRawOcrName(manualRawOcrName)}
+                        disabled={!manualRawOcrName.trim()}
+                        className="h-9 rounded-xl px-3 text-[10px] font-black"
+                      >
+                        Add
+                      </Button>
+                    </div>
+                    <div className="max-h-56 space-y-1 overflow-y-auto rounded-lg bg-muted/50 p-2 text-[11px] leading-relaxed text-foreground">
+                      {rawOcrLineEntries.map((entry) => {
+                        const alreadyAdded = rawOcrAddedNames.includes(entry.normalized);
+                        return (
+                          <div
+                            key={`${entry.index}-${entry.normalized}`}
+                            className="rounded-md bg-card/70 p-2 ring-1 ring-border/40"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0 whitespace-pre-wrap break-words">
+                                {renderHighlightedRawOcrText(entry.text, entry.foundCandidates)}
+                              </div>
+                              {entry.suggestedName && (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => addRawOcrName(entry.suggestedName)}
+                                  disabled={alreadyAdded}
+                                  className="h-6 shrink-0 px-2 text-[9px] font-black"
+                                >
+                                  {alreadyAdded ? "Added" : "Add"}
+                                </Button>
+                              )}
+                            </div>
+                            {entry.foundCandidates.length > 0 && (
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                {entry.foundCandidates.map((candidate) => (
+                                  <span
+                                    key={ocrCandidateKey(candidate)}
+                                    className={`rounded-full px-1.5 py-0.5 text-[9px] font-black ${
+                                      candidate.status === "match"
+                                        ? "bg-emerald-100 text-emerald-800"
+                                        : candidate.status === "suggest"
+                                          ? "bg-amber-100 text-amber-800"
+                                          : "bg-sky-100 text-sky-800"
+                                    }`}
+                                  >
+                                    {candidate.status === "match"
+                                      ? "MATCH"
+                                      : candidate.status === "suggest"
+                                        ? "CHECK"
+                                        : "NEW"}{" "}
+                                    {candidate.name}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
                 )}
               </div>
             )}

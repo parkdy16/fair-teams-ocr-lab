@@ -578,6 +578,24 @@ function speechSoundSimilarity(a: string, b: string) {
   return score >= 80 ? Math.min(87, score) : 0;
 }
 
+function voiceNameAlternates(name: string) {
+  const normalized = normalizeForMatch(name);
+  const alternatesByName: Record<string, string[]> = {
+    george: ["Jorge"],
+    jorge: ["George"],
+    andrew: ["Andrea"],
+    andrea: ["Andrew"],
+    june: ["Joon"],
+    joon: ["June"],
+    philip: ["Phillip", "Filip", "Fillip"],
+    phillip: ["Philip", "Filip", "Fillip"],
+    filip: ["Philip", "Phillip", "Fillip"],
+    fillip: ["Philip", "Phillip", "Filip"],
+  };
+
+  return alternatesByName[normalized] ?? [];
+}
+
 function playerSearchNames(player: RoomPlayer) {
   const values = [player.name, player.aka, displayName(player)];
   const aka = player.aka?.trim();
@@ -929,9 +947,21 @@ function splitVoiceTextIntoNameLines(text: string, roster: RoomPlayer[]) {
 
 function makeVoiceTextReviewInput(text: string, roster: RoomPlayer[]) {
   const names = splitVoiceTextIntoNameLines(text, roster);
-  return names.map((name) => `${name}\nMember`).join("\n");
-}
+  const namesWithAlternates: string[] = [];
 
+  for (const name of names) {
+    const candidates = [name, ...voiceNameAlternates(name)];
+    for (const candidate of candidates) {
+      const key = normalizeForMatch(candidate);
+      if (!key) continue;
+      if (!namesWithAlternates.some((existing) => normalizeForMatch(existing) === key)) {
+        namesWithAlternates.push(candidate);
+      }
+    }
+  }
+
+  return namesWithAlternates.map((name) => `${name}\nMember`).join("\n");
+}
 export function TodayTab({
   players,
   setPlayers,
@@ -956,7 +986,9 @@ export function TodayTab({
   const [voiceText, setVoiceText] = useState("");
   const [voiceListening, setVoiceListening] = useState(false);
   const [voiceStatus, setVoiceStatus] = useState("");
+  const [voiceInterimText, setVoiceInterimText] = useState("");
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
+  const voiceShouldListenRef = useRef(false);
   const [ocrInputSource, setOcrInputSource] = useState<"screenshot" | "voiceText">("screenshot");
   const [selectedScreenshots, setSelectedScreenshots] = useState<File[]>([]);
   const [ocrText, setOcrText] = useState("");
@@ -1164,11 +1196,14 @@ export function TodayTab({
   const openVoiceImport = () => {
     setOcrInputSource("voiceText");
     setVoiceStatus("");
+    setVoiceInterimText("");
     setVoiceOpen(true);
   };
 
   const stopVoiceListening = () => {
+    voiceShouldListenRef.current = false;
     recognitionRef.current?.stop();
+    setVoiceInterimText("");
     setVoiceListening(false);
   };
 
@@ -1180,6 +1215,9 @@ export function TodayTab({
     }
 
     try {
+      voiceShouldListenRef.current = true;
+      setVoiceInterimText("");
+      navigator.vibrate?.(35);
       recognitionRef.current?.abort?.();
       const recognition = new Recognition();
       recognition.continuous = true;
@@ -1187,28 +1225,56 @@ export function TodayTab({
       recognition.lang = navigator.language || "en-US";
       recognition.onresult = (event) => {
         const finalText: string[] = [];
+        let interimText = "";
         for (let index = event.resultIndex; index < event.results.length; index += 1) {
           const result = event.results[index];
-          if (result.isFinal) finalText.push(result[0].transcript.trim());
+          const transcript = result[0].transcript.trim();
+          if (result.isFinal) finalText.push(transcript);
+          else interimText = transcript;
         }
+        setVoiceInterimText(interimText);
         if (finalText.length > 0) {
           setVoiceText((current) => {
             const prefix = current.trim() ? `${current.trim()}\n` : "";
             return `${prefix}${finalText.join("\n")}`;
           });
+          setVoiceInterimText("");
         }
       };
       recognition.onerror = (event) => {
+        if (voiceShouldListenRef.current && (event.error === "no-speech" || event.error === "network")) {
+          setVoiceStatus("Still listening. Say the next name clearly, or pause when finished.");
+          return;
+        }
         setVoiceStatus(event.error ? `Voice stopped: ${event.error}` : "Voice stopped. You can try again or type names manually.");
+        voiceShouldListenRef.current = false;
         setVoiceListening(false);
       };
-      recognition.onend = () => setVoiceListening(false);
+      recognition.onend = () => {
+        if (!voiceShouldListenRef.current) {
+          setVoiceListening(false);
+          setVoiceInterimText("");
+          return;
+        }
+
+        setVoiceStatus("Still listening. Say the next name, then review before adding.");
+        window.setTimeout(() => {
+          if (!voiceShouldListenRef.current) return;
+          try {
+            recognition.start();
+            setVoiceListening(true);
+          } catch {
+            setVoiceListening(false);
+          }
+        }, 300);
+      };
       recognitionRef.current = recognition;
       recognition.start();
-      setVoiceStatus("Listening. Say names one after another, then review before adding.");
+      setVoiceStatus("Recording now. Say names one after another; pauses are okay.");
       setVoiceListening(true);
     } catch (error) {
       console.error(error);
+      voiceShouldListenRef.current = false;
       setVoiceStatus("Voice could not start. You can still paste or type names here.");
       setVoiceListening(false);
     }
@@ -2422,6 +2488,15 @@ export function TodayTab({
             <div className="rounded-xl border bg-muted/40 p-3 text-[11px] font-medium leading-relaxed text-muted-foreground">
               Best result: say one name, pause briefly, then say the next name. Commas and line breaks also work.
             </div>
+            {voiceListening && (
+              <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-[11px] font-black text-red-700 shadow-sm">
+                <span className="relative flex h-3 w-3">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
+                  <span className="relative inline-flex h-3 w-3 rounded-full bg-red-500" />
+                </span>
+                RECORDING — say names now. Pauses are okay.
+              </div>
+            )}
             <Textarea
               value={voiceText}
               onChange={(event) => setVoiceText(event.target.value)}
@@ -2429,9 +2504,12 @@ export function TodayTab({
               className="min-h-56 resize-none rounded-xl text-sm font-semibold leading-relaxed"
               data-testid="voice-text-import-notepad"
             />
-            {voiceStatus && (
-              <div className={`rounded-xl border p-3 text-[11px] font-bold ${voiceListening ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "bg-muted/50 text-muted-foreground"}`}>
-                {voiceStatus}
+            {(voiceStatus || voiceInterimText) && (
+              <div className={`rounded-xl border p-3 text-[11px] font-bold ${voiceListening ? "border-red-200 bg-red-50 text-red-800" : "bg-muted/50 text-muted-foreground"}`}>
+                <div>{voiceStatus}</div>
+                {voiceInterimText && (
+                  <div className="mt-1 font-medium opacity-80">Hearing: “{voiceInterimText}”</div>
+                )}
               </div>
             )}
             <div className="rounded-xl border bg-card p-3">
@@ -2463,10 +2541,10 @@ export function TodayTab({
                   if (voiceListening) stopVoiceListening();
                   else startVoiceListening();
                 }}
-                className="h-9 rounded-xl px-3 text-xs font-black"
+                className={`h-9 rounded-xl px-3 text-xs font-black ${voiceListening ? "border-red-300 bg-red-50 text-red-700" : ""}`}
               >
-                <Mic className="mr-1.5 h-3.5 w-3.5" />
-                {voiceListening ? "Pause" : "Start"}
+                <Mic className={`mr-1.5 h-3.5 w-3.5 ${voiceListening ? "animate-pulse" : ""}`} />
+                {voiceListening ? "Recording" : "Start"}
               </Button>
               <Button
                 type="button"
@@ -2475,6 +2553,7 @@ export function TodayTab({
                   stopVoiceListening();
                   setVoiceText("");
                   setVoiceStatus("");
+                  setVoiceInterimText("");
                 }}
                 disabled={!voiceText.trim() && !voiceListening}
                 className="h-9 rounded-xl px-3 text-xs font-bold"

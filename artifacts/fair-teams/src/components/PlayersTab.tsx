@@ -249,14 +249,14 @@ type AddPlayerDetails = Pick<RoomPlayer,
   "isLongPass" | "isTikiTaka" | "isCrossing" | "isAerial" | "isPowerShot" | "isBulldog"
 >;
 
-function createDefaultAddPlayerDetails(): AddPlayerDetails {
+function createDefaultAddPlayerDetails(skillLevel = 5): AddPlayerDetails {
   return {
-    attack: 5,
-    defense: 5,
-    speed: 5,
-    passing: 5,
-    stamina: 5,
-    physical: 5,
+    attack: skillLevel,
+    defense: skillLevel,
+    speed: skillLevel,
+    passing: skillLevel,
+    stamina: skillLevel,
+    physical: skillLevel,
     teamPlay: 2,
     funBadge: undefined,
     isGoalkeeper: false,
@@ -273,6 +273,18 @@ function createDefaultAddPlayerDetails(): AddPlayerDetails {
     isAerial: false,
     isPowerShot: false,
     isBulldog: false,
+  };
+}
+
+function applySkillLevelToDetails(details: AddPlayerDetails, skillLevel: number): AddPlayerDetails {
+  return {
+    ...details,
+    attack: skillLevel,
+    defense: skillLevel,
+    speed: skillLevel,
+    passing: skillLevel,
+    stamina: skillLevel,
+    physical: skillLevel,
   };
 }
 
@@ -688,7 +700,7 @@ function ProfileDialog({
           <div className="relative">
             <PlayerRadar player={{ ...draft, skill: overall }} />
             <div className="absolute right-3 top-3 rounded-xl bg-primary text-primary-foreground px-3 py-1.5 shadow-sm flex items-center gap-2">
-              <span className="text-[9px] uppercase font-bold opacity-75 leading-none">OVR</span>
+              <span className="text-[9px] uppercase font-bold opacity-75 leading-none">Skill</span>
               <span className="text-xl font-black leading-none">{overall}</span>
             </div>
           </div>
@@ -704,7 +716,7 @@ function ProfileDialog({
           <div className="rounded-xl border border-border p-3 bg-muted/30 space-y-2">
             <div className="flex items-center justify-between">
               <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider flex items-center gap-1"><Star className="w-3 h-3" /> Special abilities</Label>
-              <span className="text-[10px] font-bold text-muted-foreground">Affects OVR</span>
+              <span className="text-[10px] font-bold text-muted-foreground">Affects Skill</span>
             </div>
             <div className="grid grid-cols-2 gap-2">
               {SPECIAL_ABILITIES.map(ability => {
@@ -744,7 +756,7 @@ function ProfileDialog({
 function OverallBadge({ player }: { player: RoomPlayer }) {
   return (
     <div className="w-10 h-9 rounded-xl bg-primary/10 text-primary border border-primary/15 flex flex-col items-center justify-center shrink-0 shadow-sm">
-      <span className="text-[6px] font-bold uppercase opacity-70 leading-none">OVR</span>
+      <span className="text-[6px] font-bold uppercase opacity-70 leading-none">Skill</span>
       <span className="text-base font-black leading-none">{player.skill}</span>
     </div>
   );
@@ -789,6 +801,8 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
   const [aka, setAka] = useState("");
   const [gender, setGender] = useState<Gender>("male");
   const [isNew, setIsNew] = useState(true);
+  const [skillLevel, setSkillLevel] = useState(5);
+  const [addAdvancedOpen, setAddAdvancedOpen] = useState(false);
   const [isOrganizer, setIsOrganizer] = useState(false);
   const [addProfilePhoto, setAddProfilePhoto] = useState<string | undefined>(undefined);
   const addPhotoCameraInput = useRef<HTMLInputElement | null>(null);
@@ -801,8 +815,8 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
   const [search, setSearch] = useState("");
   const [addPlayerOpen, setAddPlayerOpen] = useState(false);
   const [hideOverall, setHideOverall] = useState(() => {
-    try { return window.localStorage.getItem("fair-teams-hide-roster-ovr") === "true"; }
-    catch { return false; }
+    try { return window.localStorage.getItem("fair-teams-hide-roster-skill") !== "false"; }
+    catch { return true; }
   });
   const [sortMode, setSortMode] = useState<"recent" | "alpha">(() => {
     try { return window.localStorage.getItem("fair-teams-roster-sort") === "alpha" ? "alpha" : "recent"; }
@@ -810,7 +824,7 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
   });
 
   useEffect(() => {
-    try { window.localStorage.setItem("fair-teams-hide-roster-ovr", hideOverall ? "true" : "false"); }
+    try { window.localStorage.setItem("fair-teams-hide-roster-skill", hideOverall ? "true" : "false"); }
     catch {}
   }, [hideOverall]);
 
@@ -831,7 +845,7 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
     e.preventDefault();
     if (!name.trim()) return;
     const now = new Date().toISOString();
-    const profileDetails = isNew ? createDefaultAddPlayerDetails() : addDetails;
+    const profileDetails = addDetails;
     const newPlayer = normalizePlayer({
       id: createPlayerId(),
       roomId: 1,
@@ -840,7 +854,7 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
       gender,
       skill: calculateOverall(profileDetails),
       ...profileDetails,
-      profilePhoto: isNew ? undefined : addProfilePhoto,
+      profilePhoto: addAdvancedOpen ? addProfilePhoto : undefined,
       isOrganizer,
       isNew,
       attending: false,
@@ -851,8 +865,10 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
     setName("");
     setAka("");
     setIsNew(true);
-    setAddDetails(createDefaultAddPlayerDetails());
+    setSkillLevel(5);
+    setAddDetails(createDefaultAddPlayerDetails(5));
     setAddProfilePhoto(undefined);
+    setAddAdvancedOpen(false);
     setIsOrganizer(false);
     setAddPlayerOpen(false);
   };
@@ -879,8 +895,10 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
           setAddPlayerOpen(next);
           if (next) {
             setIsNew(true);
-            setAddDetails(createDefaultAddPlayerDetails());
+            setSkillLevel(5);
+            setAddDetails(createDefaultAddPlayerDetails(5));
             setAddProfilePhoto(undefined);
+            setAddAdvancedOpen(false);
           }
         }}>
           <DialogTrigger asChild>
@@ -939,11 +957,7 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
                 </Select>
                 <TogglePill
                   active={isNew}
-                  onClick={() => setIsNew(prev => {
-                    const next = !prev;
-                    if (next) setAddDetails(createDefaultAddPlayerDetails());
-                    return next;
-                  })}
+                  onClick={() => setIsNew(prev => !prev)}
                   testId="checkbox-new-player"
                   activeClassName="border-sky-300 bg-sky-100 text-sky-800 shadow-sm"
                 >
@@ -954,23 +968,63 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
                 </TogglePill>
               </div>
 
+              <div className="rounded-2xl border border-primary/15 bg-primary/5 p-3 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <Label className="text-[11px] uppercase font-black tracking-wide text-primary">Skill Level</Label>
+                    <div className="mt-0.5 text-[10px] font-semibold text-muted-foreground">Beginner → Advanced</div>
+                  </div>
+                  <div className="rounded-xl bg-primary text-primary-foreground px-3 py-1.5 text-center shadow-sm">
+                    <div className="text-[8px] uppercase font-black opacity-75 leading-none">Skill</div>
+                    <div className="text-xl font-black leading-none">{skillLevel}</div>
+                  </div>
+                </div>
+                <input
+                  type="range"
+                  min={1}
+                  max={10}
+                  value={skillLevel}
+                  onChange={e => {
+                    const next = Number(e.target.value);
+                    setSkillLevel(next);
+                    setAddDetails(prev => applySkillLevelToDetails(prev, next));
+                  }}
+                  className="w-full accent-primary"
+                  data-testid="input-player-skill-level"
+                />
+                <div className="flex justify-between text-[9px] font-bold uppercase tracking-wide text-muted-foreground">
+                  <span>Beginner</span>
+                  <span>Advanced</span>
+                </div>
+              </div>
+
               <div className="rounded-2xl border border-border/70 bg-muted/25 p-2.5 text-[11px] font-semibold text-muted-foreground leading-snug">
                 {isNew ? (
-                  <span>New player: quick add now, rate later.</span>
+                  <span>NEW marks players who still need proper evaluation. Skill can be adjusted now and refined later.</span>
                 ) : (
-                  <span>Known player: full edit expands below before adding.</span>
+                  <span>Known player: quick skill level is enough. Use Advanced only when you know details.</span>
                 )}
               </div>
 
-              {!isNew && (
+              <button
+                type="button"
+                onClick={() => setAddAdvancedOpen(prev => !prev)}
+                className="flex h-10 items-center justify-between rounded-2xl border border-border bg-background px-3 text-left text-xs font-black uppercase tracking-wide text-foreground"
+                data-testid="button-toggle-add-advanced"
+              >
+                <span>Advanced</span>
+                <span className="text-muted-foreground">{addAdvancedOpen ? "▲" : "▼"}</span>
+              </button>
+
+              {addAdvancedOpen && (
                 <div className="rounded-2xl border border-primary/15 bg-primary/5 p-3 space-y-3">
                   <div className="flex items-center justify-between gap-2">
                     <div>
-                      <div className="text-[11px] font-black uppercase tracking-wide text-primary">Full edit</div>
-                      <div className="text-[10px] font-semibold text-muted-foreground">Set known player details now</div>
+                      <div className="text-[11px] font-black uppercase tracking-wide text-primary">Advanced edit</div>
+                      <div className="text-[10px] font-semibold text-muted-foreground">Fine-tune stats and abilities</div>
                     </div>
                     <div className="rounded-xl bg-primary text-primary-foreground px-2.5 py-1 text-right shadow-sm">
-                      <div className="text-[8px] uppercase font-black opacity-75 leading-none">OVR</div>
+                      <div className="text-[8px] uppercase font-black opacity-75 leading-none">Skill</div>
                       <div className="text-lg font-black leading-none">{addOverall}</div>
                     </div>
                   </div>
@@ -1099,11 +1153,11 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
             size="sm"
             onClick={() => setHideOverall(prev => !prev)}
             className={`h-8 rounded-xl px-2.5 text-[10px] font-black uppercase tracking-wide shadow-none ${hideOverall ? "border-border bg-muted/35 text-muted-foreground" : "border-primary/20 bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary"}`}
-            title={hideOverall ? "Show roster OVR" : "Hide roster OVR"}
+            title={hideOverall ? "Show roster skill" : "Hide roster skill"}
             data-testid="button-toggle-roster-ovr"
           >
             {hideOverall ? <EyeOff className="mr-1 h-3 w-3" /> : <Eye className="mr-1 h-3 w-3" />}
-            OVR
+            Skill
           </Button>
           <span className="inline-flex h-8 min-w-8 items-center justify-center rounded-xl border border-primary/15 bg-primary/10 px-2 text-[10px] font-black text-primary shadow-none" title="Roster count">
             {search ? `${filtered.length}/${players.length}` : players.length}

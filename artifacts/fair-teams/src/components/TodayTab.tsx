@@ -1529,7 +1529,7 @@ export function TodayTab({
             </DialogTitle>
             <DialogDescription className="text-xs">
               These scan names are not in your roster yet. Create them with
-              default ratings and add them to Today?
+              default Skill Level 5 and add them to Today?
             </DialogDescription>
           </DialogHeader>
           <div className="max-h-56 space-y-1 overflow-y-auto rounded-xl border bg-muted/40 p-3">
@@ -1543,7 +1543,7 @@ export function TodayTab({
             ))}
           </div>
           <div className="rounded-xl bg-sky-50 p-3 text-[11px] font-medium text-sky-800 border border-sky-100">
-            New players will start with default ratings and the NEW badge. You
+            New players will start with Skill Level 5 and the NEW badge. You
             can edit them later in the Roster tab.
           </div>
           <DialogFooter className="gap-2 sm:gap-2">
@@ -1600,7 +1600,7 @@ export function TodayTab({
           {(allCheckCandidates.length > 0 || allNewCandidates.length > 0) && (
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[11px] font-medium text-amber-800">
               Review carefully: CHECK names use the suggested roster match, and
-              NEW names will be created with default ratings.
+              NEW names will be created with Skill Level 5.
             </div>
           )}
           {allNewCandidates.length > 0 && (
@@ -1710,7 +1710,7 @@ export function TodayTab({
                 </div>
                 <div className="mt-0.5 flex items-center gap-1 min-w-0">
                   <span className="text-[10px] text-muted-foreground font-medium shrink-0">
-                    OVR {player.skill}
+                    Skill {player.skill}
                   </span>
                   {(player.isNew ||
                     player.isGoalkeeper ||

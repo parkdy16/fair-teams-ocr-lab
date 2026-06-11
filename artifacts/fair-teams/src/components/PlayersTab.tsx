@@ -1023,10 +1023,10 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
               <button
                 type="button"
                 onClick={() => setAddAdvancedOpen(prev => !prev)}
-                className="flex h-10 items-center justify-between rounded-2xl border border-border bg-background px-3 text-left text-xs font-black uppercase tracking-wide text-foreground"
+                className="flex h-10 items-center justify-between rounded-2xl border border-border bg-background px-3 text-left text-xs font-black tracking-wide text-foreground"
                 data-testid="button-toggle-add-advanced"
               >
-                <span>Advanced</span>
+                <span>Advanced Edit</span>
                 <span className="text-muted-foreground">{addAdvancedOpen ? "▲" : "▼"}</span>
               </button>
 
@@ -1040,25 +1040,6 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
                     <div className="rounded-xl bg-primary text-primary-foreground px-2.5 py-1 text-right shadow-sm">
                       <div className="text-[8px] uppercase font-black opacity-75 leading-none">Skill</div>
                       <div className="text-lg font-black leading-none">{addOverall}</div>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_0.75fr]">
-                    <div className="space-y-1.5">
-                      <Label htmlFor="aka" className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider">AKA</Label>
-                      <Input
-                        id="aka"
-                        placeholder="Optional nickname"
-                        value={aka}
-                        onChange={e => setAka(e.target.value)}
-                        className="h-10 text-sm font-semibold"
-                        data-testid="input-player-aka"
-                      />
-                    </div>
-                    <div className="flex items-end">
-                      <TogglePill active={isOrganizer} onClick={() => setIsOrganizer(!isOrganizer)} testId="checkbox-organizer">
-                        Organizer
-                      </TogglePill>
                     </div>
                   </div>
 
@@ -1116,9 +1097,40 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
                     />
                   </div>
 
-                  <div className="space-y-1.5">
-                    <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Player Vibe</Label>
-                    <VibePicker value={addDetails.funBadge} onChange={funBadge => updateAddDetails({ funBadge })} />
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="add-name-advanced" className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider">Name</Label>
+                      <Input
+                        id="add-name-advanced"
+                        placeholder="Player name"
+                        value={name}
+                        onChange={e => setName(e.target.value)}
+                        className="h-10 text-sm font-semibold"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="aka" className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider">AKA</Label>
+                      <Input
+                        id="aka"
+                        placeholder="Optional nickname"
+                        value={aka}
+                        onChange={e => setAka(e.target.value)}
+                        className="h-10 text-sm font-semibold"
+                        data-testid="input-player-aka"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_0.75fr]">
+                    <div className="space-y-1.5">
+                      <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Player Vibe</Label>
+                      <VibePicker value={addDetails.funBadge} onChange={funBadge => updateAddDetails({ funBadge })} />
+                    </div>
+                    <div className="flex items-end">
+                      <TogglePill active={isOrganizer} onClick={() => setIsOrganizer(!isOrganizer)} testId="checkbox-organizer">
+                        Organizer
+                      </TogglePill>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">

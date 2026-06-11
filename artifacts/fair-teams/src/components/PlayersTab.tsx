@@ -826,10 +826,24 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
   const [addPhotoMenuOpen, setAddPhotoMenuOpen] = useState(false);
   const addPhotoCameraInput = useRef<HTMLInputElement | null>(null);
   const addPhotoGalleryInput = useRef<HTMLInputElement | null>(null);
+  const addPhotoPickingRef = useRef(false);
   const [addDetails, setAddDetails] = useState<AddPlayerDetails>(() => createDefaultAddPlayerDetails());
   const addOverall = calculateOverall(addDetails);
   const addSkillExplanation = skillLevelExplanation(skillLevel);
   const updateAddDetails = (data: Partial<AddPlayerDetails>) => setAddDetails(prev => ({ ...prev, ...data }));
+  const openAddPhotoPicker = (inputRef: React.RefObject<HTMLInputElement | null>) => {
+    addPhotoPickingRef.current = true;
+    setAddPhotoMenuOpen(false);
+    window.setTimeout(() => {
+      addPhotoPickingRef.current = false;
+    }, 120000);
+    inputRef.current?.click();
+  };
+  const finishAddPhotoPicker = () => {
+    window.setTimeout(() => {
+      addPhotoPickingRef.current = false;
+    }, 300);
+  };
   const [autoEditPlayerId, setAutoEditPlayerId] = useState<string | null>(null);
   const [flippedPlayerIds, setFlippedPlayerIds] = useState<Record<string, boolean>>({});
   const [search, setSearch] = useState("");
@@ -913,6 +927,7 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-2">
         <Dialog open={addPlayerOpen} onOpenChange={(next) => {
+          if (!next && addPhotoPickingRef.current) return;
           setAddPlayerOpen(next);
           if (next) {
             setIsNew(true);
@@ -1050,14 +1065,14 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
                         <div className="absolute left-1/2 top-[4.9rem] z-20 w-40 -translate-x-1/2 rounded-2xl border border-border bg-popover p-1.5 shadow-lg">
                           <button
                             type="button"
-                            onClick={() => { setAddPhotoMenuOpen(false); addPhotoCameraInput.current?.click(); }}
+                            onClick={() => openAddPhotoPicker(addPhotoCameraInput)}
                             className="flex h-8 w-full items-center gap-2 rounded-xl px-2 text-left text-[11px] font-bold hover:bg-accent"
                           >
                             <Camera className="h-3.5 w-3.5" /> Camera
                           </button>
                           <button
                             type="button"
-                            onClick={() => { setAddPhotoMenuOpen(false); addPhotoGalleryInput.current?.click(); }}
+                            onClick={() => openAddPhotoPicker(addPhotoGalleryInput)}
                             className="flex h-8 w-full items-center gap-2 rounded-xl px-2 text-left text-[11px] font-bold hover:bg-accent"
                           >
                             <ImageIcon className="h-3.5 w-3.5" /> Import
@@ -1085,9 +1100,10 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
                     onChange={async e => {
                       const file = e.target.files?.[0];
                       e.target.value = "";
-                      if (!file) return;
+                      if (!file) { finishAddPhotoPicker(); return; }
                       try { setAddProfilePhoto(await fileToSmallDataUrl(file)); }
                       catch { alert("Could not load that photo."); }
+                      finally { finishAddPhotoPicker(); }
                     }}
                   />
                   <input
@@ -1098,9 +1114,10 @@ export function PlayersTab({ players, setPlayers }: { players: RoomPlayer[]; set
                     onChange={async e => {
                       const file = e.target.files?.[0];
                       e.target.value = "";
-                      if (!file) return;
+                      if (!file) { finishAddPhotoPicker(); return; }
                       try { setAddProfilePhoto(await fileToSmallDataUrl(file)); }
                       catch { alert("Could not load that photo."); }
+                      finally { finishAddPhotoPicker(); }
                     }}
                   />
 

@@ -1301,9 +1301,11 @@ export function TodayTab({
 
   const openQuickVoiceSelect = () => {
     stopVoiceListening();
+    stopQuickVoiceListening();
     setQuickVoiceHeard("");
     setQuickVoiceStatus("");
     setQuickVoiceOpen(true);
+    window.setTimeout(() => startQuickVoiceListening(), 80);
   };
 
   const startQuickVoiceListening = () => {
@@ -1895,135 +1897,78 @@ export function TodayTab({
         </>
       )}
 
-      <Dialog
-        open={quickVoiceOpen}
-        onOpenChange={(open) => {
-          if (!open) stopQuickVoiceListening();
-          setQuickVoiceOpen(open);
-        }}
-      >
-        <DialogContent className="w-[92vw] max-w-sm rounded-2xl p-4 sm:p-5">
-          <DialogHeader>
-            <DialogTitle className="text-base font-black">Quick Select</DialogTitle>
-            <DialogDescription className="text-xs">
-              Say one roster name, then tap the correct player.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            <Button
-              type="button"
-              onClick={quickVoiceListening ? stopQuickVoiceListening : startQuickVoiceListening}
-              className={`h-11 w-full rounded-xl text-xs font-black ${quickVoiceListening ? "bg-red-600 text-white hover:bg-red-700" : ""}`}
-            >
-              <Mic className="mr-1.5 h-4 w-4" />
-              {quickVoiceListening ? "LISTENING… TAP TO STOP" : "Tap and Say Name"}
-            </Button>
-            <div>
-              <label className="mb-1 block text-[10px] font-black uppercase tracking-wider text-muted-foreground">
-                Heard / type name
-              </label>
-              <Input
-                value={quickVoiceHeard}
-                onChange={(event) => setQuickVoiceHeard(event.target.value)}
-                placeholder="Example: Jorge"
-                className="h-10 rounded-xl text-sm font-bold"
-              />
+      {quickVoiceOpen && (
+        <div className="fixed inset-x-3 bottom-20 z-50 mx-auto max-w-sm rounded-2xl border bg-background/95 p-3 shadow-2xl backdrop-blur supports-[backdrop-filter]:bg-background/85">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <div className="text-xs font-black text-foreground">
+              {quickVoiceListening ? "🎙 Listening…" : quickVoiceHeard.trim() ? "Choose player" : "Quick Select"}
             </div>
-            {quickVoiceStatus && (
-              <div className="rounded-lg bg-muted/50 px-3 py-2 text-[11px] font-bold text-muted-foreground">
-                {quickVoiceStatus}
-              </div>
-            )}
-            {quickVoiceHeard.trim() && (
-              <div className="space-y-2">
-                <div className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
-                  Choose player
-                </div>
-                {quickVoiceCandidates.length > 0 ? (
-                  <div className="space-y-1.5">
-                    {quickVoiceCandidates.map(({ player }) => (
-                      <button
-                        key={player.id}
-                        type="button"
-                        onClick={() => selectQuickVoicePlayer(player)}
-                        className={`flex w-full items-center justify-between rounded-xl border px-3 py-2 text-left text-xs font-black transition ${player.attending ? "border-primary bg-primary/10 text-primary" : "bg-card hover:bg-muted/50"}`}
-                      >
-                        <span className="truncate">{displayName(player)}</span>
-                        <span className="shrink-0 text-[10px] font-black">
-                          {player.attending ? "Already selected" : "Select"}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="rounded-xl border border-dashed bg-muted/40 p-3 text-center text-xs font-bold text-muted-foreground">
-                    No roster match. Try typing a few letters, or add this player manually.
-                  </div>
-                )}
-              </div>
-            )}
+            <button
+              type="button"
+              onClick={() => {
+                stopQuickVoiceListening();
+                setQuickVoiceOpen(false);
+              }}
+              className="rounded-full px-2 py-1 text-[10px] font-black uppercase text-muted-foreground hover:bg-muted"
+            >
+              Close
+            </button>
           </div>
-          <DialogFooter className="gap-2 sm:gap-2">
+
+          {quickVoiceListening && (
+            <div className="mb-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-center text-[11px] font-black text-red-700">
+              Say one roster name
+            </div>
+          )}
+
+          {!quickVoiceListening && quickVoiceStatus && !quickVoiceHeard.trim() && (
+            <div className="mb-2 rounded-xl bg-muted/50 px-3 py-2 text-center text-[11px] font-bold text-muted-foreground">
+              {quickVoiceStatus}
+            </div>
+          )}
+
+          {quickVoiceHeard.trim() && (
+            <div className="space-y-2">
+              <div className="rounded-xl bg-muted/50 px-3 py-2 text-[11px] font-bold text-muted-foreground">
+                Heard: <span className="text-foreground">{cleanOcrLine(quickVoiceHeard)}</span>
+              </div>
+              {quickVoiceCandidates.length > 0 ? (
+                <div className="space-y-1.5">
+                  {quickVoiceCandidates.map(({ player }, index) => (
+                    <button
+                      key={player.id}
+                      type="button"
+                      onClick={() => selectQuickVoicePlayer(player)}
+                      className={`flex w-full items-center justify-between rounded-xl border px-3 py-2 text-left text-xs font-black transition ${index === 0 ? "border-primary bg-primary/10 text-primary" : "bg-card hover:bg-muted/50"}`}
+                    >
+                      <span className="truncate">{displayName(player)}</span>
+                      <span className="shrink-0 text-[10px] font-black">
+                        {player.attending ? "Already selected" : "Select"}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-xl border border-dashed bg-muted/40 p-3 text-center text-xs font-bold text-muted-foreground">
+                  No roster match. Use search or add manually.
+                </div>
+              )}
+            </div>
+          )}
+
+          {!quickVoiceListening && (
             <Button
               type="button"
               variant="outline"
-              onClick={() => setQuickVoiceOpen(false)}
-              className="h-9 w-full rounded-xl text-xs font-bold"
+              onClick={startQuickVoiceListening}
+              className="mt-2 h-9 w-full rounded-xl text-xs font-black"
             >
-              Close
+              <Mic className="mr-1.5 h-3.5 w-3.5" />
+              Try Again
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={importChoiceOpen} onOpenChange={setImportChoiceOpen}>
-        <DialogContent className="w-[92vw] max-w-md rounded-2xl p-4 sm:p-6">
-          <DialogHeader>
-            <DialogTitle className="text-base font-black">
-              Import Attendance
-            </DialogTitle>
-            <DialogDescription className="text-xs">
-              Choose one method for today. Screenshot and Voice/Text stay separate.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setImportChoiceOpen(false);
-                openOcrImport();
-              }}
-              className="flex items-center gap-3 rounded-xl border bg-card p-3 text-left transition hover:bg-muted/50"
-              data-testid="choose-screenshot-import"
-            >
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <ImageIcon className="h-5 w-5" />
-              </span>
-              <span className="min-w-0">
-                <span className="block text-sm font-black text-foreground">Scan screenshot</span>
-                <span className="block text-xs font-medium text-muted-foreground">Use a Meetup, WhatsApp, Telegram, or attendee-list screenshot.</span>
-              </span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setImportChoiceOpen(false);
-                openVoiceImport();
-              }}
-              className="flex items-center gap-3 rounded-xl border bg-card p-3 text-left transition hover:bg-muted/50"
-              data-testid="choose-voice-text-import"
-            >
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <Mic className="h-5 w-5" />
-              </span>
-              <span className="min-w-0">
-                <span className="block text-sm font-black text-foreground">Say or paste names</span>
-                <span className="block text-xs font-medium text-muted-foreground">Say names continuously, paste a list, or type names.</span>
-              </span>
-            </button>
-          </div>
-        </DialogContent>
-      </Dialog>
+          )}
+        </div>
+      )}
 
       <Dialog open={ocrOpen} onOpenChange={setOcrOpen}>
         <DialogContent
@@ -2082,15 +2027,15 @@ export function TodayTab({
             </label>
             )}
 
-            {ocrInputSource === "screenshot" && selectedScreenshotNames.length > 0 && !ocrText && !ocrRunning && (
+            {ocrInputSource === "screenshot" && selectedScreenshotNames.length > 0 && !ocrText && !ocrRunning && !ocrStatus && (
               <div className="rounded-xl border bg-card p-3">
-                <div className="flex items-center justify-between gap-3">
+                <div className="mb-2 flex items-center justify-between gap-3">
                   <div className="min-w-0">
                     <div className="text-xs font-black text-foreground">
-                      ✓ {selectedScreenshotNames.length} screenshot{selectedScreenshotNames.length === 1 ? "" : "s"} ready
+                      {selectedScreenshotNames.length} screenshot{selectedScreenshotNames.length === 1 ? "" : "s"} selected
                     </div>
                     <div className="truncate text-[10px] font-medium text-muted-foreground">
-                      {selectedScreenshotNames.join(", ")}
+                      Check for duplicates before scanning.
                     </div>
                   </div>
                   <Button
@@ -2102,6 +2047,41 @@ export function TodayTab({
                   >
                     Clear
                   </Button>
+                </div>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {selectedScreenshotPreviews.map((preview, index) => (
+                    <div key={`${preview.name}-${index}`} className="overflow-hidden rounded-lg border bg-muted/30">
+                      <img
+                        src={preview.url}
+                        alt={preview.name}
+                        className="h-24 w-full object-cover sm:h-28"
+                      />
+                      <div className="truncate px-2 py-1 text-[9px] font-bold text-muted-foreground">
+                        {index + 1}. {preview.name}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {ocrInputSource === "screenshot" && selectedScreenshotNames.length > 0 && (ocrRunning || ocrStatus || ocrText) && (
+              <div className="rounded-xl border bg-muted/30 px-3 py-2">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0 text-xs font-black text-foreground">
+                    ✓ {selectedScreenshotNames.length} screenshot{selectedScreenshotNames.length === 1 ? "" : "s"} {ocrText ? "scanned" : "loaded"}
+                  </div>
+                  {!ocrRunning && !ocrText && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={clearOcrSelection}
+                      className="h-7 shrink-0 px-2 text-[10px] font-black"
+                    >
+                      Clear
+                    </Button>
+                  )}
                 </div>
               </div>
             )}

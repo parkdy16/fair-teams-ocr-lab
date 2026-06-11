@@ -306,30 +306,6 @@ function applySkillLevelToDetails(details: AddPlayerDetails, skillLevel: number)
   };
 }
 
-
-const PLAYER_STAT_KEYS = ["attack", "defense", "speed", "passing", "stamina", "physical"] as const;
-
-function clampStatValue(value: number) {
-  return Math.max(1, Math.min(10, Math.round(value * 2) / 2));
-}
-
-function applyMasterSkillAdjustment(player: RoomPlayer, targetSkillLevel: number): Partial<RoomPlayer> {
-  const normalized = normalizePlayer(player);
-  const currentSkill = calculateOverall(normalized);
-  const delta = targetSkillLevel - currentSkill;
-
-  if (Math.abs(delta) < 0.05) {
-    return {};
-  }
-
-  const next: Partial<RoomPlayer> = {};
-  PLAYER_STAT_KEYS.forEach(key => {
-    (next as Record<string, number>)[key] = clampStatValue(Number(normalized[key] ?? 5) + delta);
-  });
-
-  return next;
-}
-
 async function fileToSmallDataUrl(file: File) {
   const dataUrl = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -625,45 +601,29 @@ function ProfileDialog({
 }) {
   const [draft, setDraft] = useState<RoomPlayer>(() => normalizePlayer(player));
   const [open, setOpen] = useState(false);
-  const [advancedOpen, setAdvancedOpen] = useState(false);
   const photoCameraInput = useRef<HTMLInputElement | null>(null);
   const photoGalleryInput = useRef<HTMLInputElement | null>(null);
   const [photoActionsOpen, setPhotoActionsOpen] = useState(false);
   const overall = calculateOverall(draft);
-  const skillExplanation = skillLevelExplanation(overall);
 
   const updateDraft = (data: Partial<RoomPlayer>) => {
     setDraft(prev => normalizePlayer({ ...prev, ...data }));
   };
 
-  const resetDraftForOpen = () => {
-    setDraft(normalizePlayer(player));
-    setAdvancedOpen(false);
-    setPhotoActionsOpen(false);
-  };
-
   useEffect(() => {
     if (!autoOpen) return;
-    resetDraftForOpen();
+    setDraft(normalizePlayer(player));
     setOpen(true);
     onAutoOpenHandled?.();
   }, [autoOpen, player, onAutoOpenHandled]);
 
   const save = () => {
-    const nextOverall = calculateOverall(draft);
-    onUpdate({ ...draft, skill: nextOverall, updatedAt: new Date().toISOString() });
+    onUpdate({ ...draft, skill: overall, updatedAt: new Date().toISOString() });
     setOpen(false);
   };
 
-  const setMasterSkillLevel = (targetSkillLevel: number) => {
-    setDraft(prev => {
-      const normalized = normalizePlayer(prev);
-      return normalizePlayer({ ...normalized, ...applyMasterSkillAdjustment(normalized, targetSkillLevel) });
-    });
-  };
-
   return (
-    <Dialog open={open} onOpenChange={(next) => { setOpen(next); setPhotoActionsOpen(false); if (next) resetDraftForOpen(); }}>
+    <Dialog open={open} onOpenChange={(next) => { setOpen(next); setPhotoActionsOpen(false); if (next) setDraft(normalizePlayer(player)); }}>
       <DialogTrigger asChild>
         <Button variant="outline" size="icon" className="w-8 h-8 rounded-full" title="Edit player" data-testid={`profile-${player.id}`} onClick={e => e.stopPropagation()}>
           <Pencil className="w-4 h-4" />
@@ -671,73 +631,75 @@ function ProfileDialog({
       </DialogTrigger>
       <DialogContent className="max-w-sm md:max-w-xl max-h-[90dvh] overflow-y-auto rounded-2xl">
         <DialogHeader>
-          <DialogTitle>{advancedOpen ? "Advanced player edit" : "Edit player"}</DialogTitle>
+          <DialogTitle>Edit player profile</DialogTitle>
         </DialogHeader>
 
-        {!advancedOpen ? (
-          <div className="flex flex-col gap-4">
-            <div className="flex items-start gap-3">
-              <div className="relative shrink-0 pt-5">
-                <button
-                  type="button"
-                  onClick={() => setPhotoActionsOpen(prev => !prev)}
-                  className="relative group rounded-full transition-transform active:scale-95"
-                  title="Change photo"
-                >
-                  <PlayerAvatar player={draft} size="lg" />
-                  <span className="absolute inset-0 bg-slate-900/35 rounded-full text-white hidden group-hover:flex items-center justify-center">
-                    <Camera className="w-5 h-5" />
-                  </span>
-                </button>
-                {photoActionsOpen && (
-                  <div className="absolute left-0 top-full z-20 mt-2 w-36 rounded-xl border border-border bg-popover p-1.5 shadow-lg">
-                    <button type="button" className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] font-bold hover:bg-accent" onClick={() => { setPhotoActionsOpen(false); photoCameraInput.current?.click(); }}>
-                      <Camera className="h-3.5 w-3.5" /> Take Photo
+        <div className="flex flex-col gap-4">
+          <div className="flex items-start gap-3">
+            <div className="relative shrink-0 pt-5">
+              <button
+                type="button"
+                onClick={() => setPhotoActionsOpen(prev => !prev)}
+                className="relative group rounded-full transition-transform active:scale-95"
+                title="Change photo"
+              >
+                <PlayerAvatar player={draft} size="lg" />
+                <span className="absolute inset-0 bg-slate-900/35 rounded-full text-white hidden group-hover:flex items-center justify-center">
+                  <Camera className="w-5 h-5" />
+                </span>
+              </button>
+              {photoActionsOpen && (
+                <div className="absolute left-0 top-full z-20 mt-2 w-36 rounded-xl border border-border bg-popover p-1.5 shadow-lg">
+                  <button type="button" className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] font-bold hover:bg-accent" onClick={() => { setPhotoActionsOpen(false); photoCameraInput.current?.click(); }}>
+                    <Camera className="h-3.5 w-3.5" /> Take Photo
+                  </button>
+                  <button type="button" className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] font-bold hover:bg-accent" onClick={() => { setPhotoActionsOpen(false); photoGalleryInput.current?.click(); }}>
+                    <ImageIcon className="h-3.5 w-3.5" /> Import Photo
+                  </button>
+                  {draft.profilePhoto && (
+                    <button type="button" className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] font-bold text-muted-foreground hover:bg-accent" onClick={() => { setPhotoActionsOpen(false); updateDraft({ profilePhoto: undefined }); }}>
+                      <Trash2 className="h-3.5 w-3.5" /> Clear Photo
                     </button>
-                    <button type="button" className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] font-bold hover:bg-accent" onClick={() => { setPhotoActionsOpen(false); photoGalleryInput.current?.click(); }}>
-                      <ImageIcon className="h-3.5 w-3.5" /> Import Photo
-                    </button>
-                    {draft.profilePhoto && (
-                      <button type="button" className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] font-bold text-muted-foreground hover:bg-accent" onClick={() => { setPhotoActionsOpen(false); updateDraft({ profilePhoto: undefined }); }}>
-                        <Trash2 className="h-3.5 w-3.5" /> Clear Photo
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-              <div className="flex-1 space-y-2 min-w-0">
-                <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Name</Label>
-                <Input value={draft.name} onChange={e => updateDraft({ name: e.target.value })} />
-                <input
-                  ref={photoCameraInput}
-                  type="file"
-                  accept="image/*"
-                  capture="user"
-                  className="sr-only"
-                  onChange={async e => {
-                    const file = e.target.files?.[0];
-                    e.target.value = "";
-                    if (!file) return;
-                    try { updateDraft({ profilePhoto: await fileToSmallDataUrl(file) }); }
-                    catch { alert("Could not load that photo."); }
-                  }}
-                />
-                <input
-                  ref={photoGalleryInput}
-                  type="file"
-                  accept="image/*"
-                  className="sr-only"
-                  onChange={async e => {
-                    const file = e.target.files?.[0];
-                    e.target.value = "";
-                    if (!file) return;
-                    try { updateDraft({ profilePhoto: await fileToSmallDataUrl(file) }); }
-                    catch { alert("Could not load that photo."); }
-                  }}
-                />
-              </div>
+                  )}
+                </div>
+              )}
             </div>
+            <div className="flex-1 space-y-2 min-w-0">
+              <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Name</Label>
+              <Input value={draft.name} onChange={e => updateDraft({ name: e.target.value })} />
+              <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">AKA / Nickname</Label>
+              <Input value={draft.aka || ""} placeholder="Optional" onChange={e => updateDraft({ aka: e.target.value })} />
+              <input
+                ref={photoCameraInput}
+                type="file"
+                accept="image/*"
+                capture="user"
+                className="sr-only"
+                onChange={async e => {
+                  const file = e.target.files?.[0];
+                  e.target.value = "";
+                  if (!file) return;
+                  try { updateDraft({ profilePhoto: await fileToSmallDataUrl(file) }); }
+                  catch { alert("Could not load that photo."); }
+                }}
+              />
+              <input
+                ref={photoGalleryInput}
+                type="file"
+                accept="image/*"
+                className="sr-only"
+                onChange={async e => {
+                  const file = e.target.files?.[0];
+                  e.target.value = "";
+                  if (!file) return;
+                  try { updateDraft({ profilePhoto: await fileToSmallDataUrl(file) }); }
+                  catch { alert("Could not load that photo."); }
+                }}
+              />
+            </div>
+          </div>
 
+          <div className="space-y-2">
             <div className="grid grid-cols-2 gap-2 items-end">
               <div className="space-y-1.5">
                 <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Gender</Label>
@@ -750,195 +712,79 @@ function ProfileDialog({
                   </SelectContent>
                 </Select>
               </div>
-              <TogglePill
-                active={!!draft.isNew}
-                onClick={() => updateDraft({ isNew: !draft.isNew })}
-                activeClassName="border-sky-300 bg-sky-100 text-sky-800 shadow-sm"
-              >
+              <div className="space-y-1.5">
+                <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Player Vibe</Label>
+                <VibePicker value={draft.funBadge} onChange={funBadge => updateDraft({ funBadge })} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <TogglePill active={!!draft.isNew} onClick={() => updateDraft({ isNew: !draft.isNew })}>
                 New Player
               </TogglePill>
+              <TogglePill active={!!draft.isOrganizer} onClick={() => updateDraft({ isOrganizer: !draft.isOrganizer })}>
+                Organizer
+              </TogglePill>
             </div>
-
-            <div className="rounded-2xl border border-primary/15 bg-primary/5 p-3 space-y-3">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <Label className="text-[11px] uppercase font-black tracking-wide text-primary">Skill Level</Label>
-                  <div className="mt-0.5 text-[10px] font-semibold text-muted-foreground">Quickly adjust overall strength while keeping the player's stat shape.</div>
-                </div>
-                <div className="rounded-xl bg-primary text-primary-foreground px-3 py-1.5 text-center shadow-sm">
-                  <div className="text-[8px] uppercase font-black opacity-75 leading-none">Skill</div>
-                  <div className="text-xl font-black leading-none">{overall}</div>
-                </div>
-              </div>
-              <input
-                type="range"
-                min={1}
-                max={10}
-                step={0.5}
-                value={overall}
-                onChange={e => setMasterSkillLevel(Number(e.target.value))}
-                className="w-full accent-primary"
-                data-testid={`input-player-quick-skill-${player.id}`}
-              />
-              <div className="rounded-xl border border-primary/10 bg-background/70 px-3 py-2 text-[11px] font-semibold leading-snug text-muted-foreground">
-                {skillExplanation}
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => { setPhotoActionsOpen(false); setAdvancedOpen(true); }}
-              className="flex h-10 items-center justify-between rounded-2xl border border-border bg-background px-3 text-left text-xs font-black tracking-wide text-foreground"
-              data-testid={`button-open-advanced-profile-${player.id}`}
-            >
-              <span>Advanced Edit</span>
-              <span className="text-muted-foreground">›</span>
-            </button>
-
-            <Button onClick={save} className="h-11 font-black uppercase">Save Player</Button>
           </div>
-        ) : (
-          <div className="flex flex-col gap-4">
-            <button
-              type="button"
-              onClick={() => { setPhotoActionsOpen(false); setAdvancedOpen(false); }}
-              className="flex h-9 w-fit items-center gap-2 rounded-xl border border-border bg-background px-3 text-xs font-black text-muted-foreground hover:text-foreground"
-            >
-              ‹ Easy Edit
-            </button>
 
-            <div className="flex items-start gap-3">
-              <div className="relative shrink-0 pt-5">
-                <button
-                  type="button"
-                  onClick={() => setPhotoActionsOpen(prev => !prev)}
-                  className="relative group rounded-full transition-transform active:scale-95"
-                  title="Change photo"
-                >
-                  <PlayerAvatar player={draft} size="lg" />
-                  <span className="absolute inset-0 bg-slate-900/35 rounded-full text-white hidden group-hover:flex items-center justify-center">
-                    <Camera className="w-5 h-5" />
-                  </span>
-                </button>
-                {photoActionsOpen && (
-                  <div className="absolute left-0 top-full z-20 mt-2 w-36 rounded-xl border border-border bg-popover p-1.5 shadow-lg">
-                    <button type="button" className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] font-bold hover:bg-accent" onClick={() => { setPhotoActionsOpen(false); photoCameraInput.current?.click(); }}>
-                      <Camera className="h-3.5 w-3.5" /> Take Photo
-                    </button>
-                    <button type="button" className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] font-bold hover:bg-accent" onClick={() => { setPhotoActionsOpen(false); photoGalleryInput.current?.click(); }}>
-                      <ImageIcon className="h-3.5 w-3.5" /> Import Photo
-                    </button>
-                    {draft.profilePhoto && (
-                      <button type="button" className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] font-bold text-muted-foreground hover:bg-accent" onClick={() => { setPhotoActionsOpen(false); updateDraft({ profilePhoto: undefined }); }}>
-                        <Trash2 className="h-3.5 w-3.5" /> Clear Photo
-                      </button>
+          <div className="relative">
+            <PlayerRadar player={{ ...draft, skill: overall }} />
+          </div>
+
+          <div className="rounded-2xl border border-primary/15 bg-primary/5 px-3 py-2 flex items-center justify-between">
+            <div>
+              <Label className="text-[10px] uppercase font-black tracking-wide text-primary">Skill Level</Label>
+              <div className="mt-0.5 text-[10px] font-semibold text-muted-foreground">Updates as advanced sliders change</div>
+            </div>
+            <div className="rounded-xl bg-primary text-primary-foreground px-3 py-1.5 text-center shadow-sm">
+              <div className="text-[8px] uppercase font-black opacity-75 leading-none">Skill</div>
+              <div className="text-xl font-black leading-none">{overall}</div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            {STAT_FIELDS.map(({ key, label }) => (
+              <StatControl key={key} label={label} value={draft[key]} onChange={value => updateDraft({ [key]: value } as Partial<RoomPlayer>)} />
+            ))}
+            <StatControl label="Team Play" value={draft.teamPlay} max={3} onChange={value => updateDraft({ teamPlay: value })} />
+            <div />
+          </div>
+
+          <div className="rounded-xl border border-border p-3 bg-muted/30 space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider flex items-center gap-1"><Star className="w-3 h-3" /> Special abilities</Label>
+              <span className="text-[10px] font-bold text-muted-foreground">Affects Skill</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {SPECIAL_ABILITIES.map(ability => {
+                const selected = Boolean(draft[ability.key]);
+                const Icon = ability.icon ?? Star;
+                return (
+                  <button
+                    key={ability.key}
+                    type="button"
+                    onClick={() => updateDraft({ [ability.key]: !selected } as Partial<RoomPlayer>)}
+                    className={`flex h-9 items-center gap-2 rounded-xl border px-2.5 text-left transition-colors ${selected ? "border-amber-400 bg-amber-50 text-amber-900" : "border-border bg-background/70 text-foreground"}`}
+                  >
+                    {ability.badge === "GK" ? (
+                      <span className="text-[11px] font-semibold text-amber-700 w-5 text-center">GK</span>
+                    ) : (
+                      <Icon className="w-4 h-4 shrink-0 text-amber-700" />
                     )}
-                  </div>
-                )}
-              </div>
-              <div className="flex-1 space-y-2 min-w-0">
-                <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Name</Label>
-                <Input value={draft.name} onChange={e => updateDraft({ name: e.target.value })} />
-                <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">AKA / Nickname</Label>
-                <Input value={draft.aka || ""} placeholder="Optional" onChange={e => updateDraft({ aka: e.target.value })} />
-              </div>
+                    <span className="text-xs font-medium leading-tight truncate">{ability.label}</span>
+                  </button>
+                );
+              })}
             </div>
-
-            <div className="space-y-2">
-              <div className="grid grid-cols-2 gap-2 items-end">
-                <div className="space-y-1.5">
-                  <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Gender</Label>
-                  <Select value={draft.gender} onValueChange={v => updateDraft({ gender: v as Gender })}>
-                    <SelectTrigger className="h-10 rounded-xl"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="male">Male</SelectItem>
-                      <SelectItem value="female">Female</SelectItem>
-                      <SelectItem value="other">Other</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Player Vibe</Label>
-                  <VibePicker value={draft.funBadge} onChange={funBadge => updateDraft({ funBadge })} />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <TogglePill
-                  active={!!draft.isNew}
-                  onClick={() => updateDraft({ isNew: !draft.isNew })}
-                  activeClassName="border-sky-300 bg-sky-100 text-sky-800 shadow-sm"
-                >
-                  New Player
-                </TogglePill>
-                <TogglePill
-                  active={!!draft.isOrganizer}
-                  onClick={() => updateDraft({ isOrganizer: !draft.isOrganizer })}
-                  activeClassName="border-violet-200 bg-violet-100 text-violet-800 shadow-sm"
-                >
-                  Organizer
-                </TogglePill>
-              </div>
-            </div>
-
-            <div className="relative">
-              <PlayerRadar player={{ ...draft, skill: overall }} />
-            </div>
-
-            <div className="rounded-2xl border border-primary/15 bg-primary/5 px-3 py-2 flex items-center justify-between">
-              <div>
-                <Label className="text-[10px] uppercase font-black tracking-wide text-primary">Skill Level</Label>
-                <div className="mt-0.5 text-[10px] font-semibold text-muted-foreground">Updates as advanced sliders change</div>
-              </div>
-              <div className="rounded-xl bg-primary text-primary-foreground px-3 py-1.5 text-center shadow-sm">
-                <div className="text-[8px] uppercase font-black opacity-75 leading-none">Skill</div>
-                <div className="text-xl font-black leading-none">{overall}</div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              {STAT_FIELDS.map(({ key, label }) => (
-                <StatControl key={key} label={label} value={draft[key]} onChange={value => updateDraft({ [key]: value } as Partial<RoomPlayer>)} />
-              ))}
-              <StatControl label="Team Play" value={draft.teamPlay} max={3} onChange={value => updateDraft({ teamPlay: value })} />
-              <div />
-            </div>
-
-            <div className="rounded-xl border border-border p-3 bg-muted/30 space-y-2">
-              <div className="flex items-center justify-between">
-                <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider flex items-center gap-1"><Star className="w-3 h-3" /> Special abilities</Label>
-                <span className="text-[10px] font-bold text-muted-foreground">Affects Skill</span>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                {SPECIAL_ABILITIES.map(ability => {
-                  const selected = Boolean(draft[ability.key]);
-                  const Icon = ability.icon ?? Star;
-                  return (
-                    <button
-                      key={ability.key}
-                      type="button"
-                      onClick={() => updateDraft({ [ability.key]: !selected } as Partial<RoomPlayer>)}
-                      className={`flex h-9 items-center gap-2 rounded-xl border px-2.5 text-left transition-colors ${selected ? "border-amber-400 bg-amber-50 text-amber-900" : "border-border bg-background/70 text-foreground"}`}
-                    >
-                      {ability.badge === "GK" ? (
-                        <span className="text-[11px] font-semibold text-amber-700 w-5 text-center">GK</span>
-                      ) : (
-                        <Icon className="w-4 h-4 shrink-0 text-amber-700" />
-                      )}
-                      <span className="text-xs font-medium leading-tight truncate">{ability.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-border p-3 bg-muted/30 text-[11px] text-muted-foreground font-semibold space-y-1">
-              <div className="flex justify-between gap-3"><span>Added</span><span className="text-right text-foreground">{formatDateTime(draft.createdAt)}</span></div>
-              <div className="flex justify-between gap-3"><span>Last edited</span><span className="text-right text-foreground">{formatDateTime(draft.updatedAt || draft.createdAt)}</span></div>
-            </div>
-
-            <Button onClick={save} className="h-11 font-black uppercase">Save Profile</Button>
           </div>
-        )}
+
+          <div className="rounded-xl border border-border p-3 bg-muted/30 text-[11px] text-muted-foreground font-semibold space-y-1">
+            <div className="flex justify-between gap-3"><span>Added</span><span className="text-right text-foreground">{formatDateTime(draft.createdAt)}</span></div>
+            <div className="flex justify-between gap-3"><span>Last edited</span><span className="text-right text-foreground">{formatDateTime(draft.updatedAt || draft.createdAt)}</span></div>
+          </div>
+
+          <Button onClick={save} className="h-11 font-black uppercase">Save Profile</Button>
+        </div>
       </DialogContent>
     </Dialog>
   );
@@ -994,7 +840,7 @@ export function PlayersTab({
 }: {
   players: RoomPlayer[];
   setPlayers: (players: RoomPlayer[]) => void;
-  onScreenshotImport?: (source?: "roster" | "today") => void;
+  onScreenshotImport?: () => void;
 }) {
   const [name, setName] = useState("");
   const [aka, setAka] = useState("");
@@ -1014,8 +860,8 @@ export function PlayersTab({
   const [autoEditPlayerId, setAutoEditPlayerId] = useState<string | null>(null);
   const [flippedPlayerIds, setFlippedPlayerIds] = useState<Record<string, boolean>>({});
   const [search, setSearch] = useState("");
+  const [addOptionsOpen, setAddOptionsOpen] = useState(false);
   const [addPlayerOpen, setAddPlayerOpen] = useState(false);
-  const [addChoiceOpen, setAddChoiceOpen] = useState(false);
   const [hideOverall, setHideOverall] = useState(() => {
     try { return window.localStorage.getItem("fair-teams-hide-roster-skill") !== "false"; }
     catch { return true; }
@@ -1024,6 +870,30 @@ export function PlayersTab({
     try { return window.localStorage.getItem("fair-teams-roster-sort") === "alpha" ? "alpha" : "recent"; }
     catch { return "recent"; }
   });
+
+  const resetAddPlayerForm = () => {
+    setName("");
+    setAka("");
+    setGender("other");
+    setIsNew(true);
+    setSkillLevel(5);
+    setAddDetails(createDefaultAddPlayerDetails(5));
+    setAddProfilePhoto(undefined);
+    setAddPhotoActionsOpen(false);
+    setAddAdvancedOpen(false);
+    setIsOrganizer(false);
+  };
+
+  const openManualAddPlayer = () => {
+    resetAddPlayerForm();
+    setAddOptionsOpen(false);
+    setAddPlayerOpen(true);
+  };
+
+  const openRosterScreenshotImport = () => {
+    setAddOptionsOpen(false);
+    onScreenshotImport?.();
+  };
 
   useEffect(() => {
     try { window.localStorage.setItem("fair-teams-hide-roster-skill", hideOverall ? "true" : "false"); }
@@ -1056,7 +926,7 @@ export function PlayersTab({
       gender,
       skill: calculateOverall(profileDetails),
       ...profileDetails,
-      profilePhoto: addProfilePhoto,
+      profilePhoto: addAdvancedOpen ? addProfilePhoto : undefined,
       isOrganizer,
       isNew,
       attending: false,
@@ -1094,53 +964,48 @@ export function PlayersTab({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-2">
-        <Dialog open={addChoiceOpen} onOpenChange={setAddChoiceOpen}>
-          <DialogTrigger asChild>
-            <Button
-              type="button"
-              variant="outline"
-              className="h-9 rounded-xl border-primary/20 bg-primary/5 px-3 text-[11px] font-black uppercase tracking-wide text-primary shadow-none hover:bg-primary/10 hover:text-primary"
-              data-testid="button-open-add-options"
-            >
-              <Plus className="mr-1.5 h-3.5 w-3.5" /> Add Player
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-sm rounded-3xl">
-            <DialogHeader>
-              <DialogTitle>Add players</DialogTitle>
-            </DialogHeader>
-            <div className="grid gap-2 pt-1">
-              <Button
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => setAddOptionsOpen(true)}
+          className="h-9 rounded-xl border-primary/20 bg-primary/5 px-3 text-[11px] font-black uppercase tracking-wide text-primary shadow-none hover:bg-primary/10 hover:text-primary"
+          data-testid="button-open-add-options"
+        >
+          <Plus className="mr-1.5 h-3.5 w-3.5" /> Player
+        </Button>
+
+        <Dialog open={addOptionsOpen} onOpenChange={setAddOptionsOpen}>
+          <DialogContent
+            onOpenAutoFocus={(event) => event.preventDefault()}
+            className="max-w-[340px] rounded-3xl p-0 overflow-hidden"
+          >
+            <div className="flex items-center justify-between border-b border-border px-5 py-4">
+              <DialogTitle className="text-xl font-black tracking-tight">Add players</DialogTitle>
+            </div>
+            <div className="flex flex-col gap-2 p-4">
+              <button
                 type="button"
-                variant="outline"
-                className="h-auto justify-start rounded-2xl border-border bg-background p-3 text-left shadow-none"
-                onClick={() => { setAddChoiceOpen(false); setAddPlayerOpen(true); }}
-                data-testid="button-add-player-manual-option"
+                onClick={openManualAddPlayer}
+                className="flex items-center gap-3 rounded-2xl border border-border bg-background p-3 text-left transition-colors hover:bg-muted/50"
+                data-testid="button-add-manually-option"
               >
-                <div className="flex items-start gap-3">
-                  <span className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary"><Plus className="h-4 w-4" /></span>
-                  <span className="min-w-0">
-                    <span className="block text-sm font-black text-foreground">Add manually</span>
-                    <span className="mt-0.5 block text-[11px] font-semibold leading-snug text-muted-foreground">Create one player with name, skill level, gender, and NEW status.</span>
-                  </span>
-                </div>
-              </Button>
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-muted text-primary">
+                  <Plus className="h-5 w-5" />
+                </span>
+                <span className="text-base font-black text-foreground">Add manually</span>
+              </button>
               {onScreenshotImport && (
-                <Button
+                <button
                   type="button"
-                  variant="outline"
-                  className="h-auto justify-start rounded-2xl border-primary/20 bg-primary/5 p-3 text-left text-primary shadow-none hover:bg-primary/10 hover:text-primary"
-                  onClick={() => { setAddChoiceOpen(false); onScreenshotImport("roster"); }}
-                  data-testid="button-add-player-screenshot-option"
+                  onClick={openRosterScreenshotImport}
+                  className="flex items-center gap-3 rounded-2xl border border-border bg-background p-3 text-left transition-colors hover:bg-muted/50"
+                  data-testid="button-import-screenshot-option"
                 >
-                  <div className="flex items-start gap-3">
-                    <span className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary"><ImageIcon className="h-4 w-4" /></span>
-                    <span className="min-w-0">
-                      <span className="block text-sm font-black text-foreground">Import from screenshot</span>
-                      <span className="mt-0.5 block text-[11px] font-semibold leading-snug text-muted-foreground">Add multiple players from a Meetup, WhatsApp, Telegram, or roster screenshot.</span>
-                    </span>
-                  </div>
-                </Button>
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-muted text-primary">
+                    <ImageIcon className="h-5 w-5" />
+                  </span>
+                  <span className="text-base font-black text-foreground">Import screenshot</span>
+                </button>
               )}
             </div>
           </DialogContent>
@@ -1149,12 +1014,7 @@ export function PlayersTab({
         <Dialog open={addPlayerOpen} onOpenChange={(next) => {
           setAddPlayerOpen(next);
           if (next) {
-            setIsNew(true);
-            setSkillLevel(5);
-            setAddDetails(createDefaultAddPlayerDetails(5));
-            setAddProfilePhoto(undefined);
-            setAddPhotoActionsOpen(false);
-            setAddAdvancedOpen(false);
+            resetAddPlayerForm();
           }
         }}>
           <DialogContent
@@ -1162,113 +1022,103 @@ export function PlayersTab({
             className="max-w-sm md:max-w-xl rounded-3xl !top-[10dvh] !translate-y-0 max-h-[82dvh] overflow-y-auto sm:!top-[50%] sm:!-translate-y-1/2"
           >
             <DialogHeader>
-              <DialogTitle>{addAdvancedOpen ? "Advanced player edit" : "Add player"}</DialogTitle>
+              <DialogTitle>Add player</DialogTitle>
             </DialogHeader>
             <form onSubmit={handleAdd} className="flex flex-col gap-3.5 pt-1">
-              {!addAdvancedOpen ? (
-                <>
-                  <div className="grid grid-cols-1 gap-3">
-                    <div className="space-y-1.5">
-                      <Label htmlFor="name" className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider">Player Name</Label>
-                      <Input
-                        id="name"
-                        placeholder="e.g. Paul"
-                        value={name}
-                        onChange={e => setName(e.target.value)}
-                        className="h-11 text-sm font-semibold"
-                        data-testid="input-player-name"
-                      />
-                    </div>
+              <div className="grid grid-cols-1 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="name" className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider">Player Name</Label>
+                  <Input
+                    id="name"
+                    placeholder="e.g. Paul"
+                    value={name}
+                    onChange={e => setName(e.target.value)}
+                    className="h-11 text-sm font-semibold"
+                    data-testid="input-player-name"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-[1.15fr_0.85fr] gap-2">
+                <Select value={gender} onValueChange={v => setGender(v as Gender)}>
+                  <SelectTrigger className="h-10 rounded-xl border-border bg-muted/30 text-xs font-bold px-2" id="gender" data-testid="select-gender">
+                    <SelectValue placeholder="Gender" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="male">Male</SelectItem>
+                    <SelectItem value="female">Female</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+                <TogglePill
+                  active={isNew}
+                  onClick={() => {
+                    setIsNew(prev => {
+                      const next = !prev;
+                      if (next) {
+                        setSkillLevel(5);
+                        setAddDetails(current => applySkillLevelToDetails(current, 5));
+                      }
+                      return next;
+                    });
+                  }}
+                  testId="checkbox-new-player"
+                  activeClassName="border-sky-300 bg-sky-100 text-sky-800 shadow-sm"
+                >
+                  New
+                </TogglePill>
+              </div>
+
+              <div className="rounded-2xl border border-primary/15 bg-primary/5 p-3 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <Label className="text-[11px] uppercase font-black tracking-wide text-primary">Skill Level</Label>
+                    <div className="mt-0.5 text-[10px] font-semibold text-muted-foreground">1–10, adjustable by 0.5</div>
                   </div>
-
-                  <div className="grid grid-cols-[1.15fr_0.85fr] gap-2">
-                    <Select value={gender} onValueChange={v => setGender(v as Gender)}>
-                      <SelectTrigger className="h-10 rounded-xl border-border bg-muted/30 text-xs font-bold px-2" id="gender" data-testid="select-gender">
-                        <SelectValue placeholder="Gender" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="male">Male</SelectItem>
-                        <SelectItem value="female">Female</SelectItem>
-                        <SelectItem value="other">Other</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <TogglePill
-                      active={isNew}
-                      onClick={() => {
-                        setIsNew(prev => {
-                          const next = !prev;
-                          if (next) {
-                            setSkillLevel(5);
-                            setAddDetails(current => applySkillLevelToDetails(current, 5));
-                          }
-                          return next;
-                        });
-                      }}
-                      testId="checkbox-new-player"
-                      activeClassName="border-sky-300 bg-sky-100 text-sky-800 shadow-sm"
-                    >
-                      New
-                    </TogglePill>
+                  <div className="rounded-xl bg-primary text-primary-foreground px-3 py-1.5 text-center shadow-sm">
+                    <div className="text-[8px] uppercase font-black opacity-75 leading-none">Skill</div>
+                    <div className="text-xl font-black leading-none">{skillLevel}</div>
                   </div>
+                </div>
+                <input
+                  type="range"
+                  min={1}
+                  max={10}
+                  step={0.5}
+                  value={skillLevel}
+                  onChange={e => {
+                    const next = Number(e.target.value);
+                    setSkillLevel(next);
+                    setAddDetails(prev => applySkillLevelToDetails(prev, next));
+                  }}
+                  className="w-full accent-primary"
+                  data-testid="input-player-skill-level"
+                />
+                <div className="rounded-xl border border-primary/10 bg-background/70 px-3 py-2 text-[11px] font-semibold leading-snug text-muted-foreground">
+                  {addSkillExplanation}
+                </div>
+              </div>
 
-                  <div className="rounded-2xl border border-primary/15 bg-primary/5 p-3 space-y-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <Label className="text-[11px] uppercase font-black tracking-wide text-primary">Skill Level</Label>
-                        <div className="mt-0.5 text-[10px] font-semibold text-muted-foreground">1–10, adjustable by 0.5</div>
-                      </div>
-                      <div className="rounded-xl bg-primary text-primary-foreground px-3 py-1.5 text-center shadow-sm">
-                        <div className="text-[8px] uppercase font-black opacity-75 leading-none">Skill</div>
-                        <div className="text-xl font-black leading-none">{skillLevel}</div>
-                      </div>
-                    </div>
-                    <input
-                      type="range"
-                      min={1}
-                      max={10}
-                      step={0.5}
-                      value={skillLevel}
-                      onChange={e => {
-                        const next = Number(e.target.value);
-                        setSkillLevel(next);
-                        setAddDetails(prev => applySkillLevelToDetails(prev, next));
-                      }}
-                      className="w-full accent-primary"
-                      data-testid="input-player-skill-level"
-                    />
-                    <div className="rounded-xl border border-primary/10 bg-background/70 px-3 py-2 text-[11px] font-semibold leading-snug text-muted-foreground">
-                      {addSkillExplanation}
-                    </div>
-                  </div>
+              <div className="rounded-2xl border border-border/70 bg-muted/25 p-2.5 text-[11px] font-semibold text-muted-foreground leading-snug">
+                {isNew ? (
+                  <span>NEW marks players who still need proper evaluation. Skill can be adjusted now and refined later.</span>
+                ) : (
+                  <span>Known player: quick skill level is enough. Use Advanced only when you know details.</span>
+                )}
+              </div>
 
-                  <div className="rounded-2xl border border-border/70 bg-muted/25 p-2.5 text-[11px] font-semibold text-muted-foreground leading-snug">
-                    {isNew ? (
-                      <span>NEW marks players who still need proper evaluation. Skill can be adjusted now and refined later.</span>
-                    ) : (
-                      <span>Known player: quick skill level is enough. Use Advanced only when you know details.</span>
-                    )}
-                  </div>
+              <button
+                type="button"
+                onClick={() => setAddAdvancedOpen(prev => !prev)}
+                className="flex h-10 items-center justify-between rounded-2xl border border-border bg-background px-3 text-left text-xs font-black tracking-wide text-foreground"
+                data-testid="button-toggle-add-advanced"
+              >
+                <span>Advanced Edit</span>
+                <span className="text-muted-foreground">{addAdvancedOpen ? "▲" : "▼"}</span>
+              </button>
 
-                  <button
-                    type="button"
-                    onClick={() => { setAddPhotoActionsOpen(false); setAddAdvancedOpen(true); }}
-                    className="flex h-10 items-center justify-between rounded-2xl border border-border bg-background px-3 text-left text-xs font-black tracking-wide text-foreground"
-                    data-testid="button-toggle-add-advanced"
-                  >
-                    <span>Advanced Edit</span>
-                    <span className="text-muted-foreground">›</span>
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => { setAddPhotoActionsOpen(false); setAddAdvancedOpen(false); }}
-                    className="flex h-9 w-fit items-center gap-2 rounded-xl border border-border bg-background px-3 text-xs font-black text-muted-foreground hover:text-foreground"
-                  >
-                    ‹ Easy Edit
-                  </button>
-
+              {addAdvancedOpen && (
+                <div className="rounded-2xl border border-primary/15 bg-primary/5 p-3 space-y-3">
                   <div className="flex items-start gap-3">
                     <div className="relative shrink-0 pt-5">
                       <button
@@ -1348,60 +1198,20 @@ export function PlayersTab({
                     }}
                   />
 
-                  <div className="space-y-2">
-                    <div className="grid grid-cols-2 gap-2 items-end">
-                      <div className="space-y-1.5">
-                        <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Gender</Label>
-                        <Select value={gender} onValueChange={v => setGender(v as Gender)}>
-                          <SelectTrigger className="h-10 rounded-xl"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="male">Male</SelectItem>
-                            <SelectItem value="female">Female</SelectItem>
-                            <SelectItem value="other">Other</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-1.5 min-w-0">
-                        <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Player Vibe</Label>
-                        <VibePicker value={addDetails.funBadge} onChange={funBadge => updateAddDetails({ funBadge })} />
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <TogglePill
-                        active={isNew}
-                        onClick={() => setIsNew(prev => !prev)}
-                        testId="checkbox-new-player-advanced"
-                        activeClassName="border-sky-300 bg-sky-100 text-sky-800 shadow-sm"
-                      >
-                        New Player
-                      </TogglePill>
-                      <TogglePill
-                        active={isOrganizer}
-                        onClick={() => setIsOrganizer(!isOrganizer)}
-                        testId="checkbox-organizer"
-                        activeClassName="border-violet-200 bg-violet-100 text-violet-800 shadow-sm"
-                      >
-                        Organizer
-                      </TogglePill>
-                    </div>
-                  </div>
 
-                  <div className="relative">
-                    <PlayerRadar player={normalizePlayer({
-                      id: "add-preview",
-                      roomId: 1,
-                      name: name.trim() || "New Player",
-                      aka: aka.trim() || undefined,
-                      gender,
-                      skill: addOverall,
-                      ...addDetails,
-                      profilePhoto: addProfilePhoto,
-                      isOrganizer,
-                      isNew,
-                      attending: false,
-                      createdAt: "",
-                      updatedAt: "",
-                    })} />
+                  <div className="grid grid-cols-[1fr_auto] items-end gap-2">
+                    <div className="space-y-1.5 min-w-0">
+                      <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Player Vibe</Label>
+                      <VibePicker value={addDetails.funBadge} onChange={funBadge => updateAddDetails({ funBadge })} />
+                    </div>
+                    <TogglePill
+                      active={isOrganizer}
+                      onClick={() => setIsOrganizer(!isOrganizer)}
+                      testId="checkbox-organizer"
+                      activeClassName="border-violet-200 bg-violet-100 text-violet-800 shadow-sm"
+                    >
+                      Org
+                    </TogglePill>
                   </div>
 
                   <div className="rounded-2xl border border-primary/15 bg-primary/5 px-3 py-2 flex items-center justify-between">
@@ -1423,11 +1233,8 @@ export function PlayersTab({
                     <div />
                   </div>
 
-                  <div className="rounded-xl border border-border p-3 bg-muted/30 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider flex items-center gap-1"><Star className="w-3 h-3" /> Special abilities</Label>
-                      <span className="text-[10px] font-bold text-muted-foreground">Affects Skill</span>
-                    </div>
+                  <div className="space-y-2">
+                    <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider flex items-center gap-1"><Star className="w-3 h-3" /> Special abilities</Label>
                     <div className="grid grid-cols-2 gap-2">
                       {SPECIAL_ABILITIES.map(ability => {
                         const selected = Boolean(addDetails[ability.key]);
@@ -1437,20 +1244,20 @@ export function PlayersTab({
                             key={ability.key}
                             type="button"
                             onClick={() => updateAddDetails({ [ability.key]: !selected } as Partial<AddPlayerDetails>)}
-                            className={`flex h-9 items-center gap-2 rounded-xl border px-2.5 text-left transition-colors ${selected ? "border-amber-400 bg-amber-50 text-amber-900" : "border-border bg-background/70 text-foreground"}`}
+                            className={`flex h-8 items-center gap-1.5 rounded-xl border px-2 text-left transition-colors ${selected ? "border-amber-400 bg-amber-50 text-amber-900" : "border-border bg-background/70 text-foreground"}`}
                           >
                             {ability.badge === "GK" ? (
-                              <span className="text-[11px] font-semibold text-amber-700 w-5 text-center">GK</span>
+                              <span className="text-[10px] font-semibold text-amber-700 w-5 text-center">GK</span>
                             ) : (
-                              <Icon className="w-4 h-4 shrink-0 text-amber-700" />
+                              <Icon className="w-3.5 h-3.5 shrink-0 text-amber-700" />
                             )}
-                            <span className="text-xs font-medium leading-tight truncate">{ability.label}</span>
+                            <span className="text-[11px] font-semibold leading-tight truncate">{ability.label}</span>
                           </button>
                         );
                       })}
                     </div>
                   </div>
-                </>
+                </div>
               )}
 
               <Button
@@ -1520,20 +1327,10 @@ export function PlayersTab({
 
         {players.length === 0 ? (
           <div className="space-y-3 rounded-xl border border-dashed border-border bg-muted/50 p-5 text-center">
-            <p className="text-muted-foreground font-medium text-sm">No players added yet.</p>
-            {onScreenshotImport && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => onScreenshotImport("roster")}
-                className="h-9 rounded-xl text-xs font-black"
-                data-testid="empty-roster-screenshot-import"
-              >
-                <ImageIcon className="mr-1.5 h-3.5 w-3.5" />
-                Import Screenshot
-              </Button>
-            )}
+            <p className="text-foreground font-black text-sm">Create your roster</p>
+            <p className="mx-auto max-w-sm text-muted-foreground font-medium text-xs leading-relaxed">
+              Fastest setup: press <span className="font-black text-primary">+ Player</span> above and import a Meetup, WhatsApp, Telegram, or attendee screenshot. You can also add players manually one by one.
+            </p>
           </div>
         ) : filtered.length === 0 ? (
           <div className="text-center py-8 bg-muted/50 rounded-xl border border-dashed border-border">

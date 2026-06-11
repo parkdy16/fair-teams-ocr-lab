@@ -94,7 +94,7 @@ function App() {
   const [players, setPlayers] = useState<RoomPlayer[]>(() => loadPlayers());
   const [activeTab, setActiveTab] = useState("today");
   const [todayOcrOpenToken, setTodayOcrOpenToken] = useState(0);
-  const [todayOcrMode, setTodayOcrMode] = useState<"today" | "roster">("today");
+  const [ocrImportContext, setOcrImportContext] = useState<"today" | "roster">("today");
   const [groupName, setGroupName] = useState(() => {
     try {
       return (
@@ -430,8 +430,8 @@ function App() {
               <PlayersTab
                 players={players}
                 setPlayers={replacePlayers}
-                onScreenshotImport={(source = "roster") => {
-                  setTodayOcrMode(source);
+                onScreenshotImport={() => {
+                  setOcrImportContext("roster");
                   setActiveTab("today");
                   setTodayOcrOpenToken((token) => token + 1);
                 }}
@@ -446,7 +446,8 @@ function App() {
                 setPlayers={replacePlayers}
                 themeColor={headerColor}
                 openOcrToken={todayOcrOpenToken}
-                ocrMode={todayOcrMode}
+                ocrImportContext={ocrImportContext}
+                onOcrImportContextChange={setOcrImportContext}
                 onAddPlayerManually={() => setActiveTab("players")}
               />
             </TabsContent>

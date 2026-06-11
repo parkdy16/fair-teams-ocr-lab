@@ -1026,6 +1026,11 @@ export function TodayTab({
   const [voiceStatus, setVoiceStatus] = useState("");
   const [voiceInterimText, setVoiceInterimText] = useState("");
   const [voiceExpectedAttendeeCount, setVoiceExpectedAttendeeCount] = useState("");
+  const [quickVoiceOpen, setQuickVoiceOpen] = useState(false);
+  const [quickVoiceHeard, setQuickVoiceHeard] = useState("");
+  const [quickVoiceListening, setQuickVoiceListening] = useState(false);
+  const [quickVoiceStatus, setQuickVoiceStatus] = useState("");
+  const quickRecognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const voiceShouldListenRef = useRef(false);
   const [ocrInputSource, setOcrInputSource] = useState<"screenshot" | "voiceText">("screenshot");

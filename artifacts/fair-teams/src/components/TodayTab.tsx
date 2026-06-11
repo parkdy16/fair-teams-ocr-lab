@@ -1,11 +1,12 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import Tesseract from "tesseract.js";
 import type { RoomPlayer } from "@/lib/localRoster";
 import type { Gender } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Image as ImageIcon, Mic, Search, Upload, X } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { ClipboardList, Image as ImageIcon, Mic, Search, Upload, X } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -41,6 +42,38 @@ function ORGBadge() {
       ORG
     </span>
   );
+}
+
+
+type SpeechRecognitionResultLike = {
+  isFinal: boolean;
+  0: { transcript: string };
+};
+
+type SpeechRecognitionEventLike = {
+  resultIndex: number;
+  results: SpeechRecognitionResultLike[];
+};
+
+type SpeechRecognitionInstance = {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  start: () => void;
+  stop: () => void;
+  abort?: () => void;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onend: (() => void) | null;
+  onerror: ((event: { error?: string }) => void) | null;
+};
+
+type SpeechRecognitionConstructor = new () => SpeechRecognitionInstance;
+
+declare global {
+  interface Window {
+    SpeechRecognition?: SpeechRecognitionConstructor;
+    webkitSpeechRecognition?: SpeechRecognitionConstructor;
+  }
 }
 
 type OcrMatchStatus = "match" | "suggest" | "new";
@@ -782,6 +815,71 @@ function extractOcrNames(
   return Array.from(byFinalIdentity.values());
 }
 
+function splitVoiceTextIntoNameLines(text: string, roster: RoomPlayer[]) {
+  const normalizedSeparators = text
+    .replace(/[，、;；|/]+/g, "\n")
+    .replace(/\s+(?:and|und|그리고|랑|하고)\s+/gi, "\n")
+    .replace(/\r?\n+/g, "\n");
+
+  const output: string[] = [];
+  const pushName = (value: string) => {
+    const cleaned = cleanOcrLine(value);
+    if (!cleaned || !isProbablyName(cleaned)) return;
+    const key = normalizeForMatch(cleaned);
+    if (!key) return;
+    if (!output.some((name) => normalizeForMatch(name) === key)) {
+      output.push(cleaned);
+    }
+  };
+
+  const rosterAliases = roster
+    .flatMap((player) =>
+      playerSearchNames(player).map((alias) => ({
+        alias,
+        tokens: alias.split(" ").filter(Boolean),
+        name: player.name,
+      })),
+    )
+    .filter((entry) => entry.alias.length >= 3)
+    .sort((a, b) => b.tokens.length - a.tokens.length || b.alias.length - a.alias.length);
+
+  for (const rawLine of normalizedSeparators.split("\n")) {
+    const cleanedLine = cleanOcrLine(rawLine);
+    if (!cleanedLine) continue;
+    const words = normalizeForMatch(cleanedLine).split(" ").filter(Boolean);
+
+    if (words.length <= 4) {
+      pushName(cleanedLine);
+      continue;
+    }
+
+    let index = 0;
+    while (index < words.length) {
+      const exactRosterMatch = rosterAliases.find((entry) => {
+        if (entry.tokens.length === 0) return false;
+        const slice = words.slice(index, index + entry.tokens.length).join(" ");
+        return slice === entry.alias;
+      });
+
+      if (exactRosterMatch) {
+        pushName(exactRosterMatch.name);
+        index += exactRosterMatch.tokens.length;
+        continue;
+      }
+
+      pushName(words[index]);
+      index += 1;
+    }
+  }
+
+  return output;
+}
+
+function makeVoiceTextReviewInput(text: string, roster: RoomPlayer[]) {
+  const names = splitVoiceTextIntoNameLines(text, roster);
+  return names.map((name) => `${name}\nMember`).join("\n");
+}
+
 export function TodayTab({
   players,
   setPlayers,
@@ -801,7 +899,13 @@ export function TodayTab({
 }) {
   const [search, setSearch] = useState("");
   const [ocrOpen, setOcrOpen] = useState(false);
+  const [importChoiceOpen, setImportChoiceOpen] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
+  const [voiceText, setVoiceText] = useState("");
+  const [voiceListening, setVoiceListening] = useState(false);
+  const [voiceStatus, setVoiceStatus] = useState("");
+  const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
+  const [ocrInputSource, setOcrInputSource] = useState<"screenshot" | "voiceText">("screenshot");
   const [selectedScreenshots, setSelectedScreenshots] = useState<File[]>([]);
   const [ocrText, setOcrText] = useState("");
   const [ocrRunning, setOcrRunning] = useState(false);
@@ -992,8 +1096,93 @@ export function TodayTab({
   const openOcrImport = () => {
     // Screenshot scan is a fresh attendance workflow, so start Today from empty
     // instead of accidentally keeping last week's selected players.
+    setOcrInputSource("screenshot");
     setPrioritizeScannedPlayers(false);
     setPlayers(players.map((player) => ({ ...player, attending: false })));
+    setOcrOpen(true);
+  };
+
+  const openImportChoice = () => {
+    onOcrImportContextChange?.("today");
+    setImportChoiceOpen(true);
+  };
+
+  const openVoiceImport = () => {
+    setOcrInputSource("voiceText");
+    setVoiceStatus("");
+    setVoiceOpen(true);
+  };
+
+  const stopVoiceListening = () => {
+    recognitionRef.current?.stop();
+    setVoiceListening(false);
+  };
+
+  const startVoiceListening = () => {
+    const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!Recognition) {
+      setVoiceStatus("Voice is not supported in this browser. You can still paste or type names here.");
+      return;
+    }
+
+    try {
+      recognitionRef.current?.abort?.();
+      const recognition = new Recognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = navigator.language || "en-US";
+      recognition.onresult = (event) => {
+        const finalText: string[] = [];
+        for (let index = event.resultIndex; index < event.results.length; index += 1) {
+          const result = event.results[index];
+          if (result.isFinal) finalText.push(result[0].transcript.trim());
+        }
+        if (finalText.length > 0) {
+          setVoiceText((current) => {
+            const prefix = current.trim() ? `${current.trim()}\n` : "";
+            return `${prefix}${finalText.join("\n")}`;
+          });
+        }
+      };
+      recognition.onerror = (event) => {
+        setVoiceStatus(event.error ? `Voice stopped: ${event.error}` : "Voice stopped. You can try again or type names manually.");
+        setVoiceListening(false);
+      };
+      recognition.onend = () => setVoiceListening(false);
+      recognitionRef.current = recognition;
+      recognition.start();
+      setVoiceStatus("Listening. Say names one after another, then review before adding.");
+      setVoiceListening(true);
+    } catch (error) {
+      console.error(error);
+      setVoiceStatus("Voice could not start. You can still paste or type names here.");
+      setVoiceListening(false);
+    }
+  };
+
+  const reviewVoiceText = () => {
+    const reviewInput = makeVoiceTextReviewInput(voiceText, players);
+    if (!reviewInput.trim()) {
+      setVoiceStatus("Type or say at least one clean player name first.");
+      return;
+    }
+    stopVoiceListening();
+    setOcrInputSource("voiceText");
+    setPrioritizeScannedPlayers(false);
+    setPlayers(players.map((player) => ({ ...player, attending: false })));
+    setOcrText(reviewInput);
+    setSelectedScreenshots([]);
+    setOcrProgress(100);
+    setOcrStatus("Voice/Text list ready. Review names below.");
+    setSelectedOcrCandidateKeys([]);
+    setChosenOcrMatchIds({});
+    setExpectedAttendeeCount("");
+    setShowRawOcrText(false);
+    setManualRawOcrName("");
+    setRawOcrAddedNames([]);
+    setRawOcrCreatedPlayerIds([]);
+    setNewOcrPlayerGenders({});
+    setVoiceOpen(false);
     setOcrOpen(true);
   };
 
@@ -1001,6 +1190,10 @@ export function TodayTab({
     if (openOcrToken > 0) openOcrImport();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openOcrToken]);
+
+  useEffect(() => {
+    return () => recognitionRef.current?.abort?.();
+  }, []);
 
   useEffect(() => {
     setSelectedOcrCandidateKeys(
@@ -1030,6 +1223,7 @@ export function TodayTab({
   const runOcr = async () => {
     if (selectedScreenshots.length === 0 || ocrRunning) return;
 
+    setOcrInputSource("screenshot");
     setOcrRunning(true);
     setOcrText("");
     setOcrProgress(0);
@@ -1319,15 +1513,12 @@ export function TodayTab({
           <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
             <Button
               type="button"
-              onClick={() => {
-                onOcrImportContextChange?.("today");
-                openOcrImport();
-              }}
+              onClick={openImportChoice}
               className="h-10 rounded-xl text-xs font-black uppercase tracking-wide"
-              data-testid="empty-today-ocr-import-button"
+              data-testid="empty-today-import-button"
             >
-              <ImageIcon className="mr-1.5 h-3.5 w-3.5" />
-              Import Screenshot
+              <ClipboardList className="mr-1.5 h-3.5 w-3.5" />
+              Import
             </Button>
             <Button
               type="button"
@@ -1383,36 +1574,69 @@ export function TodayTab({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => {
-            onOcrImportContextChange?.("today");
-            openOcrImport();
-          }}
-          className="h-9 rounded-xl text-xs font-black"
-          data-testid="ocr-import-button"
-        >
-          <ImageIcon className="mr-1.5 h-3.5 w-3.5" />
-          Screenshot Import
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => setVoiceOpen(true)}
-          className="h-9 rounded-xl text-xs font-black"
-          data-testid="voice-import-button"
-        >
-          <Mic className="mr-1.5 h-3.5 w-3.5" />
-          Voice Import
-        </Button>
-      </div>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={openImportChoice}
+        className="h-9 rounded-xl text-xs font-black"
+        data-testid="today-import-button"
+      >
+        <ClipboardList className="mr-1.5 h-3.5 w-3.5" />
+        Import
+      </Button>
 
         </>
       )}
+
+      <Dialog open={importChoiceOpen} onOpenChange={setImportChoiceOpen}>
+        <DialogContent className="w-[92vw] max-w-md rounded-2xl p-4 sm:p-6">
+          <DialogHeader>
+            <DialogTitle className="text-base font-black">
+              Import Attendance
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Choose how you want to build today&apos;s player list. Both options let you review matches before adding anyone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setImportChoiceOpen(false);
+                openOcrImport();
+              }}
+              className="flex items-center gap-3 rounded-xl border bg-card p-3 text-left transition hover:bg-muted/50"
+              data-testid="choose-screenshot-import"
+            >
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <ImageIcon className="h-5 w-5" />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-black text-foreground">Scan screenshot</span>
+                <span className="block text-xs font-medium text-muted-foreground">Use a Meetup, WhatsApp, Telegram, or attendee-list screenshot.</span>
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setImportChoiceOpen(false);
+                openVoiceImport();
+              }}
+              className="flex items-center gap-3 rounded-xl border bg-card p-3 text-left transition hover:bg-muted/50"
+              data-testid="choose-voice-text-import"
+            >
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <Mic className="h-5 w-5" />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-black text-foreground">Say or paste names</span>
+                <span className="block text-xs font-medium text-muted-foreground">Use voice, paste a list, or type names into an editable notepad.</span>
+              </span>
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={ocrOpen} onOpenChange={setOcrOpen}>
         <DialogContent
@@ -1421,16 +1645,23 @@ export function TodayTab({
         >
           <DialogHeader>
             <DialogTitle className="text-base font-black">
-              {ocrImportContext === "roster" ? "Add Players from Screenshot" : "Screenshot Import"}
+              {ocrInputSource === "voiceText"
+                ? "Review Voice/Text Names"
+                : ocrImportContext === "roster"
+                  ? "Add Players from Screenshot"
+                  : "Screenshot Import"}
             </DialogTitle>
             <DialogDescription className="text-xs">
-              {ocrImportContext === "roster"
-                ? "Add multiple players to your roster from a Meetup, WhatsApp, Telegram, or attendee screenshot."
-                : "Import today's attendees from a Meetup, WhatsApp, Telegram, or list screenshot."}
+              {ocrInputSource === "voiceText"
+                ? "Check matches and new players before anything is added to Today."
+                : ocrImportContext === "roster"
+                  ? "Add multiple players to your roster from a Meetup, WhatsApp, Telegram, or attendee screenshot."
+                  : "Import today's attendees from a Meetup, WhatsApp, Telegram, or list screenshot."}
             </DialogDescription>
           </DialogHeader>
 
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain pr-1 pb-2">
+            {ocrInputSource === "screenshot" && (
             <label className="flex min-h-28 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-muted/40 p-4 text-center transition-colors hover:bg-muted/70">
               <Upload className="h-6 w-6 text-muted-foreground" />
               <div className="text-xs font-black text-foreground">
@@ -1462,8 +1693,9 @@ export function TodayTab({
                 data-testid="ocr-file-input"
               />
             </label>
+            )}
 
-            {selectedScreenshotPreviews.length > 0 && (
+            {ocrInputSource === "screenshot" && selectedScreenshotPreviews.length > 0 && (
               <div className="rounded-xl border bg-card p-3">
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <div>
@@ -1504,7 +1736,7 @@ export function TodayTab({
               </div>
             )}
 
-            {(ocrRunning || ocrStatus) && (
+            {ocrInputSource === "screenshot" && (ocrRunning || ocrStatus) && (
               <div className="rounded-xl border bg-card p-3">
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <div className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
@@ -1530,7 +1762,7 @@ export function TodayTab({
               <div className="rounded-xl border bg-card p-3">
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <div className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
-                    Scan Audit
+                    {ocrInputSource === "voiceText" ? "List Audit" : "Scan Audit"}
                   </div>
                   {hasExpectedAttendeeNumber && (
                     <div
@@ -1560,7 +1792,7 @@ export function TodayTab({
                   </div>
                   <div className="rounded-lg bg-muted/50 p-2">
                     <div className="text-[10px] font-black uppercase text-muted-foreground">
-                      Scanned
+                      {ocrInputSource === "voiceText" ? "Parsed" : "Scanned"}
                     </div>
                     <div className="text-lg font-black text-foreground">
                       {scannedNameCount}
@@ -1597,7 +1829,7 @@ export function TodayTab({
                 {unmatchedScannedNames.length > 0 && (
                   <div className="mt-2 rounded-lg border border-sky-200 bg-sky-50 p-2">
                     <div className="mb-1 text-[10px] font-black uppercase tracking-wider text-sky-800">
-                      Scanned but not in roster
+                      {ocrInputSource === "voiceText" ? "Parsed" : "Scanned"} but not in roster
                     </div>
                     <div className="flex flex-wrap gap-1">
                       {unmatchedScannedNames.map((candidate) => (
@@ -1735,7 +1967,7 @@ export function TodayTab({
               </div>
             )}
 
-            {ocrText && (
+            {ocrInputSource === "screenshot" && ocrText && (
               <div className="rounded-xl border bg-card p-3">
                 <div className="flex items-center justify-between gap-2">
                   <div>
@@ -2090,27 +2322,98 @@ export function TodayTab({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={voiceOpen} onOpenChange={setVoiceOpen}>
-        <DialogContent className="w-[92vw] max-w-md rounded-2xl p-4 sm:p-6">
+      <Dialog
+        open={voiceOpen}
+        onOpenChange={(open) => {
+          if (!open) stopVoiceListening();
+          setVoiceOpen(open);
+        }}
+      >
+        <DialogContent
+          onOpenAutoFocus={(e) => e.preventDefault()}
+          className="flex h-[82dvh] max-h-[82dvh] w-[94vw] max-w-lg flex-col overflow-hidden rounded-2xl p-4 sm:p-6"
+        >
           <DialogHeader>
             <DialogTitle className="text-base font-black">
-              Voice Import
+              Say or Paste Names
             </DialogTitle>
             <DialogDescription className="text-xs">
-              Voice roll call will come later. Screenshot scan comes first.
+              Say names one after another, paste a list, or type directly. You can edit everything before review.
             </DialogDescription>
           </DialogHeader>
-          <div className="rounded-xl border bg-muted/50 p-4 text-center text-xs font-medium text-muted-foreground">
-            Coming soon.
+
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1 pb-2">
+            <div className="rounded-xl border bg-muted/40 p-3 text-[11px] font-medium leading-relaxed text-muted-foreground">
+              Best result: say one name, pause briefly, then say the next name. Commas and line breaks also work.
+            </div>
+            <Textarea
+              value={voiceText}
+              onChange={(event) => setVoiceText(event.target.value)}
+              placeholder={"Nick Chan\nBruno\nMinji\nAlex Kim"}
+              className="min-h-56 resize-none rounded-xl text-sm font-semibold leading-relaxed"
+              data-testid="voice-text-import-notepad"
+            />
+            {voiceStatus && (
+              <div className={`rounded-xl border p-3 text-[11px] font-bold ${voiceListening ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "bg-muted/50 text-muted-foreground"}`}>
+                {voiceStatus}
+              </div>
+            )}
+            <div className="rounded-xl border bg-card p-3">
+              <div className="mb-2 text-[10px] font-black uppercase tracking-wider text-muted-foreground">
+                Parsed preview
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {splitVoiceTextIntoNameLines(voiceText, players).length > 0 ? (
+                  splitVoiceTextIntoNameLines(voiceText, players).map((name) => (
+                    <span key={normalizeForMatch(name)} className="rounded-full bg-primary/10 px-2 py-1 text-[10px] font-black text-primary">
+                      {name}
+                    </span>
+                  ))
+                ) : (
+                  <span className="text-xs font-medium text-muted-foreground">
+                    Names will appear here before review.
+                  </span>
+                )}
+              </div>
+            </div>
           </div>
-          <DialogFooter>
-            <Button
-              type="button"
-              onClick={() => setVoiceOpen(false)}
-              className="h-9 text-xs font-black"
-            >
-              OK
-            </Button>
+
+          <DialogFooter className="shrink-0 border-t pt-3">
+            <div className="flex w-full items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  if (voiceListening) stopVoiceListening();
+                  else startVoiceListening();
+                }}
+                className="h-9 rounded-xl px-3 text-xs font-black"
+              >
+                <Mic className="mr-1.5 h-3.5 w-3.5" />
+                {voiceListening ? "Pause" : "Start"}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  stopVoiceListening();
+                  setVoiceText("");
+                  setVoiceStatus("");
+                }}
+                disabled={!voiceText.trim() && !voiceListening}
+                className="h-9 rounded-xl px-3 text-xs font-bold"
+              >
+                Clear
+              </Button>
+              <Button
+                type="button"
+                onClick={reviewVoiceText}
+                disabled={!voiceText.trim()}
+                className="h-9 min-w-0 flex-1 rounded-xl px-3 text-xs font-black"
+              >
+                Review Names
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>

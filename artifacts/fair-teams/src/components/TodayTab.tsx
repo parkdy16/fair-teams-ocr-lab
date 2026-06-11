@@ -1853,45 +1853,66 @@ export function TodayTab({
 
           <DialogFooter className="shrink-0 border-t pt-3 sm:gap-2">
             {!ocrText ? (
-              <div className="w-full space-y-2">
-                <div className="grid grid-cols-[1fr_auto] items-end gap-2">
-                  <div>
-                    <label
-                      htmlFor="expected-attendee-count"
-                      className="mb-1 block text-[10px] font-black uppercase tracking-wider text-muted-foreground"
-                    >
-                      Expected attendees today
-                      <span className="font-bold normal-case tracking-normal text-muted-foreground/80">
-                        {" "}
-                        (optional)
-                      </span>
-                    </label>
-                    <Input
-                      id="expected-attendee-count"
-                      type="number"
-                      inputMode="numeric"
-                      min="1"
-                      value={expectedAttendeeCount}
-                      onChange={(event) =>
-                        setExpectedAttendeeCount(event.target.value)
-                      }
-                      placeholder="Example: 18"
-                      className="h-10 rounded-xl text-sm font-bold"
-                    />
-                  </div>
+              ocrImportContext === "roster" ? (
+                <div className="flex w-full items-center justify-end gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setOcrOpen(false)}
+                    className="h-10 rounded-xl px-4 text-xs font-bold"
+                  >
+                    Cancel
+                  </Button>
                   <Button
                     type="button"
                     onClick={runOcr}
                     disabled={selectedScreenshots.length === 0 || ocrRunning}
                     className="h-10 rounded-xl px-4 text-xs font-black"
                   >
-                    {ocrRunning ? "Scanning…" : "Screenshot Import"}
+                    {ocrRunning ? "Scanning…" : "Scan Screenshot"}
                   </Button>
                 </div>
-                <div className="text-[10px] font-medium text-muted-foreground">
-                  This footer stays fixed while you review uploaded screenshots.
+              ) : (
+                <div className="w-full space-y-2">
+                  <div className="grid grid-cols-[1fr_auto] items-end gap-2">
+                    <div>
+                      <label
+                        htmlFor="expected-attendee-count"
+                        className="mb-1 block text-[10px] font-black uppercase tracking-wider text-muted-foreground"
+                      >
+                        Expected attendees today
+                        <span className="font-bold normal-case tracking-normal text-muted-foreground/80">
+                          {" "}
+                          (optional)
+                        </span>
+                      </label>
+                      <Input
+                        id="expected-attendee-count"
+                        type="number"
+                        inputMode="numeric"
+                        min="1"
+                        value={expectedAttendeeCount}
+                        onChange={(event) =>
+                          setExpectedAttendeeCount(event.target.value)
+                        }
+                        placeholder="Example: 18"
+                        className="h-10 rounded-xl text-sm font-bold"
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      onClick={runOcr}
+                      disabled={selectedScreenshots.length === 0 || ocrRunning}
+                      className="h-10 rounded-xl px-4 text-xs font-black"
+                    >
+                      {ocrRunning ? "Scanning…" : "Screenshot Import"}
+                    </Button>
+                  </div>
+                  <div className="text-[10px] font-medium text-muted-foreground">
+                    This footer stays fixed while you review uploaded screenshots.
+                  </div>
                 </div>
-              </div>
+              )
             ) : (
               <div className="flex w-full items-center justify-end gap-2">
                 <Button

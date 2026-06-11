@@ -741,6 +741,7 @@ export function TodayTab({
   const [showRawOcrText, setShowRawOcrText] = useState(false);
   const [manualRawOcrName, setManualRawOcrName] = useState("");
   const [rawOcrAddedNames, setRawOcrAddedNames] = useState<string[]>([]);
+  const [rawOcrCreatedPlayerIds, setRawOcrCreatedPlayerIds] = useState<string[]>([]);
   const [prioritizeScannedPlayers, setPrioritizeScannedPlayers] =
     useState(false);
 
@@ -851,20 +852,19 @@ export function TodayTab({
 
   const getOcrReviewStatus = (candidate: OcrNameCandidate): OcrMatchStatus => {
     const resolvedMatch = resolveOcrMatch(candidate);
-    const wasCreatedFromRawText =
-      rawOcrAddedNames.includes(normalizeForMatch(candidate.name)) ||
-      Boolean(
-        resolvedMatch &&
-          playerSearchNames(resolvedMatch).some((searchName) =>
-            rawOcrAddedNames.includes(searchName),
-          ),
-      );
 
-    // A player manually created from the raw OCR rescue view immediately becomes
-    // a roster match on the next OCR pass. For the Review Names window, keep
-    // showing that row as NEW so the organizer understands this was just added
-    // from the screenshot, while the actual roster player still remains saved.
-    if (wasCreatedFromRawText && resolvedMatch?.isNew) return "new";
+    // A player manually CREATED from the raw OCR rescue view immediately becomes
+    // a roster match because it now exists in the roster. In the Review Names
+    // window, keep showing only those newly-created rows as NEW. Existing roster
+    // players clicked from raw OCR should remain MATCH, even if their roster
+    // player already has the NEW flag.
+    if (
+      resolvedMatch &&
+      resolvedMatch.isNew &&
+      rawOcrCreatedPlayerIds.includes(resolvedMatch.id)
+    ) {
+      return "new";
+    }
 
     return candidate.status;
   };
@@ -940,6 +940,7 @@ export function TodayTab({
     setShowRawOcrText(false);
     setManualRawOcrName("");
     setRawOcrAddedNames([]);
+    setRawOcrCreatedPlayerIds([]);
   };
 
   const runOcr = async () => {
@@ -951,6 +952,7 @@ export function TodayTab({
     setOcrStatus("Starting scan…");
     setManualRawOcrName("");
     setRawOcrAddedNames([]);
+    setRawOcrCreatedPlayerIds([]);
 
     const chunks: string[] = [];
 
@@ -1048,8 +1050,9 @@ export function TodayTab({
     }
 
     const now = new Date().toISOString();
+    const newPlayerId = createOcrPlayerId();
     const newPlayer: RoomPlayer = {
-      id: createOcrPlayerId(),
+      id: newPlayerId,
       roomId: 1,
       name: cleanedName,
       gender: "male",
@@ -1070,6 +1073,7 @@ export function TodayTab({
     setPlayers([...players, newPlayer].sort((a, b) => displayName(a).localeCompare(displayName(b))));
     setPrioritizeScannedPlayers(true);
     setRawOcrAddedNames((current) => [...current, normalizedName]);
+    setRawOcrCreatedPlayerIds((current) => [...current, newPlayerId]);
     setManualRawOcrName("");
     setOcrStatus(`Created ${cleanedName} from raw OCR text as NEW and attending.`);
   };
@@ -1317,6 +1321,7 @@ export function TodayTab({
                   setShowRawOcrText(false);
                   setManualRawOcrName("");
                   setRawOcrAddedNames([]);
+    setRawOcrCreatedPlayerIds([]);
                 }}
                 data-testid="ocr-file-input"
               />

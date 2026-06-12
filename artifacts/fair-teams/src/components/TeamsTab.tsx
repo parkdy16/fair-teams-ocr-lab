@@ -521,11 +521,6 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
           </Button>
         </div>
 
-        {notHereYetPlayers.length > 0 && (
-          <p className="text-[10px] font-bold text-amber-700">
-            {hereNowCount} here now · {notHereYetPlayers.length} not here yet. Teams will balance here-now players first and spread late players.
-          </p>
-        )}
 
         {isGenerating && (
           <div className="rounded-lg border border-emerald-300/35 bg-emerald-50/80 px-3 py-2 text-[11px] font-black text-emerald-700 shadow-inner">

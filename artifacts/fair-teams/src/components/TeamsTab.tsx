@@ -54,12 +54,12 @@ function displayName(player: Pick<Player, "name" | "aka">) {
 function GenderBadge({ gender }: { gender?: string }) {
   const normalized = (gender ?? "other").toLowerCase();
   if (normalized === "female") {
-    return <span className="text-[10px] font-black text-pink-600">F</span>;
+    return <span className="text-[9px] font-semibold text-pink-500/70">F</span>;
   }
   if (normalized === "male") {
-    return <span className="text-[10px] font-black text-blue-600">M</span>;
+    return <span className="text-[9px] font-semibold text-blue-500/70">M</span>;
   }
-  return <span className="text-[10px] font-black text-purple-500">O</span>;
+  return <span className="text-[9px] font-semibold text-purple-500/60">O</span>;
 }
 
 const FIELD_SIZE_STORAGE_KEY = "fair-teams-field-size-v1";
@@ -506,18 +506,22 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
     }
   };
 
-  const handlePlayerPointerDown = (playerId: string, fromTeamId: string) => {
+  const handlePlayerPointerDown = (event: React.PointerEvent<HTMLButtonElement>, playerId: string, fromTeamId: string) => {
     if (longPressTimerRef.current !== null) window.clearTimeout(longPressTimerRef.current);
+    try { event.currentTarget.setPointerCapture(event.pointerId); } catch {}
     longPressTimerRef.current = window.setTimeout(() => {
       const nextDrag = { playerId, fromTeamId };
       dragRef.current = nextDrag;
       setDragging(nextDrag);
       setSwap(nextDrag);
-    }, 360);
+      suppressClickRef.current = true;
+      if (navigator.vibrate) navigator.vibrate(12);
+    }, 380);
   };
 
   const handlePlayerPointerMove = (event: React.PointerEvent) => {
     if (!dragRef.current) return;
+    event.preventDefault();
     const y = event.clientY;
     const edge = 90;
     const speed = y < edge ? -14 : y > window.innerHeight - edge ? 14 : 0;
@@ -530,7 +534,8 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
     }
   };
 
-  const handlePlayerPointerUp = (event: React.PointerEvent) => {
+  const handlePlayerPointerUp = (event: React.PointerEvent<HTMLButtonElement>) => {
+    try { event.currentTarget.releasePointerCapture(event.pointerId); } catch {}
     if (longPressTimerRef.current !== null) {
       window.clearTimeout(longPressTimerRef.current);
       longPressTimerRef.current = null;
@@ -728,12 +733,12 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
                     {/* Team color selector */}
                     <Select value={team.color} onValueChange={v => handleColorChange(team.id, v as TeamColor)}>
                       <SelectTrigger
-                        className="h-7 w-7 rounded-full border p-0 shadow-none bg-background hover:bg-muted [&>svg:last-child]:hidden"
-                        style={{ borderColor: `${accentColor}66`, color: accentColor }}
+                        className="h-7 w-7 border-0 p-0 shadow-none bg-transparent hover:bg-transparent text-muted-foreground hover:text-foreground [&>svg:last-child]:hidden"
+                        style={{ color: accentColor }}
                         title={`Change team color (${col.label})`}
                         data-testid={`select-team-color-${team.id}`}
                       >
-                        <Palette className="h-3.5 w-3.5" />
+                        <Palette className="h-4 w-4" />
                       </SelectTrigger>
                       <SelectContent>
                         {COLOR_OPTIONS.map(c => (
@@ -744,8 +749,8 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="flex items-center gap-1.5 text-[10px] font-bold leading-tight text-muted-foreground">
-                    <span>Avg Skill {avgSkill} · Total {totalSkill}</span>
+                  <div className="flex items-center gap-1.5 text-[10px] font-semibold leading-tight text-muted-foreground">
+                    <span>Avg {avgSkill} · Total {totalSkill}</span>
                     {notHereCount > 0 && (
                       <span
                         className="inline-flex items-center gap-0.5 rounded-full border border-amber-200 bg-amber-100 px-1 py-0.5 text-[8px] font-black text-amber-800"
@@ -778,13 +783,13 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
                       return (
                         <button
                           key={player.id}
-                          className="relative w-full flex items-center gap-1.5 px-2.5 py-1.5 text-left transition-colors"
+                          className="relative w-full flex touch-none select-none items-center gap-1.5 px-2.5 py-1.5 text-left transition-colors"
                           style={{
                             backgroundColor: isSelected ? `${accentColor}20` : undefined,
                             borderLeft: isSelected ? `3px solid ${accentColor}` : "3px solid transparent",
                           }}
                           onClick={() => handleSelectPlayer(player.id, team.id)}
-                          onPointerDown={() => handlePlayerPointerDown(player.id, team.id)}
+                          onPointerDown={(event) => handlePlayerPointerDown(event, player.id, team.id)}
                           onPointerMove={handlePlayerPointerMove}
                           onPointerUp={handlePlayerPointerUp}
                           onPointerCancel={handlePlayerPointerCancel}

@@ -868,8 +868,11 @@ export function PlayersTab({
     try { return window.localStorage.getItem("fair-teams-hide-roster-skill") !== "false"; }
     catch { return true; }
   });
-  const [sortMode, setSortMode] = useState<"recent" | "alpha">(() => {
-    try { return window.localStorage.getItem("fair-teams-roster-sort") === "alpha" ? "alpha" : "recent"; }
+  const [sortMode, setSortMode] = useState<"recent" | "alpha" | "skill">(() => {
+    try {
+      const saved = window.localStorage.getItem("fair-teams-roster-sort");
+      return saved === "alpha" || saved === "skill" ? saved : "recent";
+    }
     catch { return "recent"; }
   });
 
@@ -950,6 +953,12 @@ export function PlayersTab({
 
   const sortedPlayers = [...players].sort((a, b) => {
     if (sortMode === "alpha") {
+      return displayName(a).localeCompare(displayName(b));
+    }
+
+    if (sortMode === "skill") {
+      const skillDiff = (b.skill ?? 0) - (a.skill ?? 0);
+      if (skillDiff !== 0) return skillDiff;
       return displayName(a).localeCompare(displayName(b));
     }
 
@@ -1278,13 +1287,13 @@ export function PlayersTab({
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => setSortMode(prev => prev === "recent" ? "alpha" : "recent")}
+            onClick={() => setSortMode(prev => prev === "recent" ? "alpha" : prev === "alpha" ? "skill" : "recent")}
             className="h-8 rounded-xl px-2.5 text-[10px] font-black uppercase tracking-wide shadow-none border-primary/20 bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary"
-            title={sortMode === "recent" ? "Roster sorted by last edited / added. Tap for A-Z." : "Roster sorted A-Z. Tap for last edited / added."}
+            title={sortMode === "recent" ? "Roster sorted by last edited / added. Tap for A-Z." : sortMode === "alpha" ? "Roster sorted A-Z. Tap for Skill high to low." : "Roster sorted by Skill high to low. Tap for Recent."}
             data-testid="button-toggle-roster-sort"
           >
-            {sortMode === "recent" ? <Clock3 className="mr-1 h-3 w-3" /> : <ArrowDownAZ className="mr-1 h-3 w-3" />}
-            {sortMode === "recent" ? "Recent" : "A-Z"}
+            {sortMode === "recent" ? <Clock3 className="mr-1 h-3 w-3" /> : sortMode === "alpha" ? <ArrowDownAZ className="mr-1 h-3 w-3" /> : <Star className="mr-1 h-3 w-3" />}
+            {sortMode === "recent" ? "Recent" : sortMode === "alpha" ? "A-Z" : "Skill ↓"}
           </Button>
           <Button
             type="button"

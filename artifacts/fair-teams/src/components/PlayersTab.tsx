@@ -1339,7 +1339,7 @@ export function PlayersTab({
             <p className="text-muted-foreground font-medium text-sm">No players match \"{search}\"</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
+          <div className="flex flex-wrap items-start gap-2">
             {filtered.map(player => {
               const isFlipped = Boolean(flippedPlayerIds[player.id]);
               return (
@@ -1354,7 +1354,7 @@ export function PlayersTab({
                       setFlippedPlayerIds(prev => ({ ...prev, [player.id]: !prev[player.id] }));
                     }
                   }}
-                  className="p-2 bg-card border border-border rounded-xl shadow-sm active:scale-[0.99] transition-transform cursor-pointer"
+                  className="w-full md:w-[calc(50%-0.25rem)] xl:w-[calc(33.333%-0.34rem)] p-2 bg-card border border-border rounded-xl shadow-sm active:scale-[0.99] transition-transform cursor-pointer"
                   data-testid={`player-row-${player.id}`}
                 >
                   <div className="flex items-center gap-2">

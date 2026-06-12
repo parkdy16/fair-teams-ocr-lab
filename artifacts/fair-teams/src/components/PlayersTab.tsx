@@ -805,30 +805,32 @@ function PlayerCardBack({ player }: { player: RoomPlayer }) {
   const selectedAbility = abilities.find(a => a.key === selectedAbilityKey) ?? abilities[0];
   return (
     <div className="mt-3 border-t border-border/70 pt-3 space-y-3">
-      <div className="space-y-2" onClick={e => e.stopPropagation()}>
-        <div className="flex flex-wrap gap-1.5 items-center justify-center">
-          {abilities.length > 0 ? abilities.map(a => (
-            <AbilityBadge
-              key={a.key}
-              ability={a}
-              selected={selectedAbility?.key === a.key}
-              onClick={() => setSelectedAbilityKey(prev => prev === a.key ? null : a.key)}
-            />
-          )) : <span className="text-[10px] font-semibold text-muted-foreground">No special abilities set</span>}
-        </div>
-        {selectedAbility ? (
-          <div className="mx-auto max-w-[260px] text-center">
-            <div className="text-[11px] font-semibold text-foreground leading-tight">{selectedAbility.label}</div>
-            <div className="mt-0.5 text-[10px] font-medium text-muted-foreground leading-snug">{selectedAbility.description}</div>
-          </div>
-        ) : (abilities.length > 0 ? (
-          <div className="text-center text-[10px] font-semibold text-muted-foreground">Tap an ability icon to see what it means.</div>
-        ) : null)}
-      </div>
-
       <div className="rounded-2xl bg-muted/25 border border-border/70 p-2 shadow-inner">
         <PlayerRadar player={player} compact />
       </div>
+
+      {abilities.length > 0 && (
+        <div className="space-y-2" onClick={e => e.stopPropagation()}>
+          <div className="flex flex-wrap gap-1.5 items-center justify-center">
+            {abilities.map(a => (
+              <AbilityBadge
+                key={a.key}
+                ability={a}
+                selected={selectedAbility?.key === a.key}
+                onClick={() => setSelectedAbilityKey(prev => prev === a.key ? null : a.key)}
+              />
+            ))}
+          </div>
+          {selectedAbility ? (
+            <div className="mx-auto max-w-[260px] text-center">
+              <div className="text-[11px] font-semibold text-foreground leading-tight">{selectedAbility.label}</div>
+              <div className="mt-0.5 text-[10px] font-medium text-muted-foreground leading-snug">{selectedAbility.description}</div>
+            </div>
+          ) : (
+            <div className="text-center text-[10px] font-semibold text-muted-foreground">Tap an ability icon to see what it means.</div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -2863,9 +2863,10 @@ export function TodayTab({
                 className="w-4 h-4 rounded-full border-2 shrink-0 data-[state=checked]:bg-primary data-[state=checked]:border-primary"
                 data-testid={`attendance-check-${player.id}`}
               />
-              <div className="flex flex-col min-w-0 flex-1">
+              <div className="flex flex-col min-w-0 flex-1 overflow-hidden">
                 <div
-                  className={`font-bold text-xs truncate leading-tight ${player.attending ? "text-primary" : "text-foreground"}`}
+                  className={`block w-full max-w-full overflow-hidden text-ellipsis whitespace-nowrap font-bold text-xs leading-tight ${player.attending ? "text-primary" : "text-foreground"}`}
+                  title={displayName(player)}
                 >
                   {displayName(player)}
                 </div>
@@ -2885,7 +2886,7 @@ export function TodayTab({
                     event.stopPropagation();
                     toggleNotHereYet(player);
                   }}
-                  className={`shrink-0 rounded-full border px-2 py-1 text-[9px] font-black uppercase tracking-wide transition-colors ${
+                  className={`shrink-0 rounded-full border px-1.5 py-1 text-[9px] font-black uppercase tracking-wide transition-colors ${
                     isNotHereYet(player)
                       ? "border-amber-300 bg-amber-100 text-amber-800"
                       : "border-slate-200 bg-white/80 text-slate-500"

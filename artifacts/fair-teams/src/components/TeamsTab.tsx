@@ -472,24 +472,6 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
 
   return (
     <div className="flex flex-col gap-3">
-      {notHereYetPlayers.length > 0 && teams.length > 0 && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-3 shadow-sm">
-          <div className="mb-2 text-[10px] font-black uppercase tracking-wider text-amber-800">
-            Not here yet · already assigned
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {notHereYetPlayers.map(player => {
-              const assignedTeam = teams.find(team => team.players.some(teamPlayer => teamPlayer.id === player.id));
-              return (
-                <span key={player.id} className="rounded-full border border-amber-200 bg-white/80 px-2 py-1 text-[10px] font-bold text-amber-900">
-                  {displayName(player)} → {assignedTeam?.name ?? "team"}
-                </span>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
       {/* Controls */}
       <div className="bg-card border border-border px-3 py-2.5 rounded-xl shadow-sm flex flex-col gap-2">
         <div className="grid grid-cols-2 md:grid-cols-[1fr_1fr_auto] gap-2">

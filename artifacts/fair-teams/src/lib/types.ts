@@ -2,6 +2,8 @@ export type Gender = "male" | "female" | "other";
 
 export type FunBadge = "cool-head" | "unbothered" | "wildcard" | "silent-mode" | "smooth-talker" | "no-filter" | "human-alarm" | "influencer" | "main-character" | "old-school" | "always-late" | "early-exit" | "first-5" | "eighty-minute-warmup" | "third-half" | "yellow-card" | "var-caller" | "kit-collector" | "shoe-collector" | "fashion-icon" | "club-legend" | "snack-captain" | "cameo" | "mastermind";
 
+export type TodayStatus = "here" | "not_here_yet";
+
 export interface Player {
   id: string;
   name: string;
@@ -33,6 +35,7 @@ export interface Player {
   isOrganizer?: boolean;
   isNew?: boolean;
   funBadge?: FunBadge;
+  todayStatus?: TodayStatus;
 }
 
 export type AttendanceMap = Record<string, boolean>;

@@ -1,4 +1,4 @@
-import { FunBadge, Gender } from "@/lib/types";
+import { FunBadge, Gender, TodayStatus } from "@/lib/types";
 
 export interface RoomPlayer {
   id: string;
@@ -32,6 +32,7 @@ export interface RoomPlayer {
   isOrganizer?: boolean;
   isNew?: boolean;
   funBadge?: FunBadge;
+  todayStatus?: TodayStatus;
   attending: boolean;
   createdAt: string;
   updatedAt?: string;
@@ -231,6 +232,7 @@ export function normalizePlayer(player: Partial<RoomPlayer> & { name?: string },
     isOrganizer: Boolean(player.isOrganizer ?? false),
     isNew: Boolean(player.isNew ?? false),
     funBadge: normalizeFunBadge(player.funBadge),
+    todayStatus: player.todayStatus === "not_here_yet" ? "not_here_yet" : "here",
     attending: Boolean(player.attending ?? false),
     createdAt: player.createdAt || new Date().toISOString(),
     updatedAt: player.updatedAt || player.createdAt || new Date().toISOString(),

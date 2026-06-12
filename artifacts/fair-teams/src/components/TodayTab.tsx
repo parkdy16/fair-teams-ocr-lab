@@ -44,6 +44,18 @@ function ORGBadge() {
   );
 }
 
+function isNotHereYet(player: Pick<RoomPlayer, "todayStatus">) {
+  return player.todayStatus === "not_here_yet";
+}
+
+function NotHereBadge() {
+  return (
+    <span className="inline-flex items-center rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-black text-amber-800 border border-amber-200">
+      Not here yet
+    </span>
+  );
+}
+
 
 type SpeechRecognitionResultLike = {
   isFinal: boolean;
@@ -1079,6 +1091,8 @@ export function TodayTab({
     : sorted;
 
   const selectedCount = players.filter((p) => p.attending).length;
+  const notHereYetCount = players.filter((p) => p.attending && isNotHereYet(p)).length;
+  const hereNowCount = selectedCount - notHereYetCount;
   const quickVoiceCandidates = useMemo(() => {
     const spokenName = cleanOcrLine(quickVoiceHeard);
     if (!spokenName) return [] as Array<{ player: RoomPlayer; score: number }>;
@@ -1346,7 +1360,7 @@ export function TodayTab({
     setPlayers(
       players.map((currentPlayer) =>
         currentPlayer.id === player.id
-          ? { ...currentPlayer, attending: true }
+          ? { ...currentPlayer, attending: true, todayStatus: "here" }
           : currentPlayer,
       ),
     );
@@ -1603,7 +1617,7 @@ export function TodayTab({
       setPlayers(
         players.map((player) =>
           player.id === existingPlayer.id
-            ? { ...player, attending: true }
+            ? { ...player, attending: true, todayStatus: "here" }
             : player,
         ),
       );
@@ -1642,6 +1656,7 @@ export function TodayTab({
       teamPlay: 2,
       isNew: true,
       attending: true,
+      todayStatus: "here",
       createdAt: now,
       updatedAt: now,
     };
@@ -1734,13 +1749,14 @@ export function TodayTab({
       teamPlay: 2,
       isNew: true,
       attending: true,
+      todayStatus: "here",
       createdAt: now,
       updatedAt: now,
     }));
 
     const nextPlayers = [
       ...players.map((player) =>
-        playerIds.has(player.id) ? { ...player, attending: true } : player,
+        playerIds.has(player.id) ? { ...player, attending: true, todayStatus: "here" } : player,
       ),
       ...newPlayers,
     ].sort((a, b) => displayName(a).localeCompare(displayName(b)));
@@ -1786,7 +1802,19 @@ export function TodayTab({
   const togglePlayer = (player: RoomPlayer) => {
     setPlayers(
       players.map((p) =>
-        p.id === player.id ? { ...p, attending: !p.attending } : p,
+        p.id === player.id
+          ? { ...p, attending: !p.attending, todayStatus: "here" }
+          : p,
+      ),
+    );
+  };
+
+  const toggleNotHereYet = (player: RoomPlayer) => {
+    setPlayers(
+      players.map((p) =>
+        p.id === player.id
+          ? { ...p, attending: true, todayStatus: isNotHereYet(p) ? "here" : "not_here_yet" }
+          : p,
       ),
     );
   };
@@ -1833,12 +1861,17 @@ export function TodayTab({
       >
         <div className="flex flex-col">
           <span className="text-[10px] uppercase font-black tracking-wider text-slate-500">
-            Attending Today
+            Today
           </span>
           <span className="text-lg font-black leading-tight text-slate-900">
-            {selectedCount}{" "}
+            {hereNowCount} here
+            {notHereYetCount > 0 && (
+              <span className="text-xs font-semibold text-amber-700">
+                {" · "}{notHereYetCount} not here yet
+              </span>
+            )}
             <span className="text-xs font-semibold text-slate-500">
-              / {players.length}
+              {" "}/ {players.length}
             </span>
           </span>
         </div>
@@ -1848,7 +1881,7 @@ export function TodayTab({
             size="sm"
             onClick={() => {
               setPrioritizeScannedPlayers(false);
-              setPlayers(players.map((p) => ({ ...p, attending: true })));
+              setPlayers(players.map((p) => ({ ...p, attending: true, todayStatus: "here" })));
             }}
             className="h-7 bg-white/75 px-2 text-[10px] font-black uppercase text-slate-700 hover:bg-white"
           >
@@ -1859,7 +1892,7 @@ export function TodayTab({
             size="sm"
             onClick={() => {
               setPrioritizeScannedPlayers(false);
-              setPlayers(players.map((p) => ({ ...p, attending: false })));
+              setPlayers(players.map((p) => ({ ...p, attending: false, todayStatus: "here" })));
             }}
             className="h-7 bg-white/60 px-2 text-[10px] font-black uppercase text-slate-500 hover:bg-white hover:text-slate-700"
           >
@@ -2854,15 +2887,35 @@ export function TodayTab({
                   </span>
                   {(player.isNew ||
                     player.isGoalkeeper ||
-                    player.isOrganizer) && (
+                    player.isOrganizer ||
+                    (player.attending && isNotHereYet(player))) && (
                     <div className="flex flex-wrap gap-1 min-w-0">
                       {player.isNew && <NewBadge />}
                       {player.isGoalkeeper && <GKBadge />}
                       {player.isOrganizer && <ORGBadge />}
+                      {player.attending && isNotHereYet(player) && <NotHereBadge />}
                     </div>
                   )}
                 </div>
               </div>
+              {player.attending && (
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    toggleNotHereYet(player);
+                  }}
+                  className={`shrink-0 rounded-full border px-2 py-1 text-[9px] font-black uppercase tracking-wide transition-colors ${
+                    isNotHereYet(player)
+                      ? "border-amber-300 bg-amber-100 text-amber-800"
+                      : "border-slate-200 bg-white/80 text-slate-500"
+                  }`}
+                  data-testid={`today-status-${player.id}`}
+                >
+                  {isNotHereYet(player) ? "Arrived?" : "Not here"}
+                </button>
+              )}
             </label>
           ))}
         </div>

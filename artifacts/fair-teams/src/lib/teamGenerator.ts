@@ -28,6 +28,17 @@ export function getWeightedSkill(player: Player, fieldSize: FieldSize = "medium"
   ).toFixed(1));
 }
 
+const NOT_HERE_YET_BALANCE_WEIGHT = 0.35;
+
+function isNotHereYet(player: Player) {
+  return player.todayStatus === "not_here_yet";
+}
+
+function getBalanceSkill(player: Player, fieldSize: FieldSize = "medium") {
+  const skill = getWeightedSkill(player, fieldSize);
+  return Number((skill * (isNotHereYet(player) ? NOT_HERE_YET_BALANCE_WEIGHT : 1)).toFixed(1));
+}
+
 export function generateTeams(
   players: Player[],
   numTeams: number,
@@ -45,11 +56,23 @@ export function generateTeams(
     color: DEFAULT_COLORS[i % DEFAULT_COLORS.length],
   }));
 
-  // Always assign to the team with the lowest current total skill
+  // Checked-in players carry normal weight. Not-here-yet players still get teams,
+  // but count lightly so the kickoff balance stays fair.
   const assignToLowest = (player: Player) => {
     const t = teams.reduce((a, b) => (a.totalSkill <= b.totalSkill ? a : b));
     t.players.push(player);
-    t.totalSkill = Number((t.totalSkill + getWeightedSkill(player, fieldSize)).toFixed(1));
+    t.totalSkill = Number((t.totalSkill + getBalanceSkill(player, fieldSize)).toFixed(1));
+  };
+
+  const assignLateToLowestLateCount = (player: Player) => {
+    const t = teams.reduce((best, candidate) => {
+      const bestLate = best.players.filter(isNotHereYet).length;
+      const candidateLate = candidate.players.filter(isNotHereYet).length;
+      if (candidateLate !== bestLate) return candidateLate < bestLate ? candidate : best;
+      return candidate.totalSkill < best.totalSkill ? candidate : best;
+    });
+    t.players.push(player);
+    t.totalSkill = Number((t.totalSkill + getBalanceSkill(player, fieldSize)).toFixed(1));
   };
 
   // Pre-compute stable noise per player so sorting is consistent within one call
@@ -62,10 +85,13 @@ export function generateTeams(
   const sk = (p: Player) => getWeightedSkill(p, fieldSize) + (noise.get(p.id) ?? 0);
   const bySkillDesc = (a: Player, b: Player) => sk(b) - sk(a);
 
-  // Split into buckets
-  const females = players.filter(p => p.gender === "female").sort(bySkillDesc);
-  const runners = players.filter(p => p.gender !== "female" && p.speed >= 7).sort(bySkillDesc);
-  const rest    = players.filter(p => p.gender !== "female" && p.speed < 7).sort(bySkillDesc);
+  // Split into checked-in buckets first. Late players are assigned afterward
+  // so they are spread across teams without ruining current-field balance.
+  const herePlayers = players.filter(p => !isNotHereYet(p));
+  const latePlayers = players.filter(isNotHereYet).sort(bySkillDesc);
+  const females = herePlayers.filter(p => p.gender === "female").sort(bySkillDesc);
+  const runners = herePlayers.filter(p => p.gender !== "female" && p.speed >= 7).sort(bySkillDesc);
+  const rest    = herePlayers.filter(p => p.gender !== "female" && p.speed < 7).sort(bySkillDesc);
 
   // Pass 1: Give each team at most one female (greedy — avoids stacking top females on one team)
   const femalesForPass1 = females.splice(0, Math.min(numTeams, females.length));
@@ -75,8 +101,11 @@ export function generateTeams(
   const runnersForPass1 = runners.splice(0, Math.min(numTeams, runners.length));
   runnersForPass1.forEach(assignToLowest);
 
-  // Pass 3: All remaining players distributed greedily by skill descending
+  // Pass 3: All remaining checked-in players distributed greedily by skill descending
   [...females, ...runners, ...rest].sort(bySkillDesc).forEach(assignToLowest);
+
+  // Pass 4: Assign not-here-yet players evenly across teams.
+  latePlayers.forEach(assignLateToLowestLateCount);
 
   // Compute averages
   teams.forEach(t => {
@@ -91,7 +120,7 @@ export function generateTeams(
 
 export function recomputeStats(teams: Team[], fieldSize: FieldSize = "medium"): Team[] {
   return teams.map(t => {
-    const totalSkill = Number(t.players.reduce((sum, p) => sum + getWeightedSkill(p, fieldSize), 0).toFixed(1));
+    const totalSkill = Number(t.players.reduce((sum, p) => sum + getBalanceSkill(p, fieldSize), 0).toFixed(1));
     return {
       ...t,
       totalSkill,

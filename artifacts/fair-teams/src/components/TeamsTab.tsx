@@ -34,6 +34,13 @@ function NewBadge() {
   return <span className="inline-flex items-center rounded-full bg-sky-100 px-1.5 py-0.5 text-[9px] font-black text-sky-800 border border-sky-200">NEW</span>;
 }
 
+function NotHereBadge() {
+  return <span className="inline-flex items-center rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-black text-amber-800 border border-amber-200">Not here yet</span>;
+}
+
+function isNotHereYet(player: Pick<Player, "todayStatus">) {
+  return player.todayStatus === "not_here_yet";
+}
 
 function displayName(player: Pick<Player, "name" | "aka">) {
   const aka = player.aka?.trim();
@@ -111,7 +118,7 @@ function toLocalPlayer(p: RoomPlayer): Player {
     teamPlay: p.teamPlay, profilePhoto: p.profilePhoto, isGoalkeeper: p.isGoalkeeper,
     isPlaymaker: p.isPlaymaker, isFinisher: p.isFinisher, isDribbler: p.isDribbler, isSentinel: p.isSentinel, isEngine: p.isEngine, isVersatile: p.isVersatile,
     isSpaceFinder: p.isSpaceFinder, isLongPass: p.isLongPass, isTikiTaka: p.isTikiTaka, isCrossing: p.isCrossing, isAerial: p.isAerial, isPowerShot: p.isPowerShot, isBulldog: p.isBulldog,
-    isOrganizer: p.isOrganizer, isNew: p.isNew,
+    isOrganizer: p.isOrganizer, isNew: p.isNew, todayStatus: p.todayStatus,
   };
 }
 
@@ -261,7 +268,7 @@ async function exportTeamsAsJpg(teams: Team[], fieldSize: FieldSize) {
       team.players.forEach(player => {
         ctx.fillStyle = "#102A43";
         ctx.font = `800 16px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
-        ctx.fillText(displayName(player), playerX, playerY);
+        ctx.fillText(`${displayName(player)}${isNotHereYet(player) ? "  (not here yet)" : ""}`, playerX, playerY);
 
         let badgeX = badgeRight;
         const badgeY = playerY - 13;
@@ -347,6 +354,8 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
   }, []);
 
   const attendingPlayers = players.filter(p => p.attending).map(toLocalPlayer);
+  const hereNowCount = attendingPlayers.filter(p => !isNotHereYet(p)).length;
+  const notHereYetPlayers = attendingPlayers.filter(isNotHereYet);
 
   const historyPanel = history.length > 0 ? (
     <div className="bg-card border border-border rounded-xl p-3 shadow-sm">
@@ -463,6 +472,24 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
 
   return (
     <div className="flex flex-col gap-3">
+      {notHereYetPlayers.length > 0 && teams.length > 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-3 shadow-sm">
+          <div className="mb-2 text-[10px] font-black uppercase tracking-wider text-amber-800">
+            Not here yet · already assigned
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {notHereYetPlayers.map(player => {
+              const assignedTeam = teams.find(team => team.players.some(teamPlayer => teamPlayer.id === player.id));
+              return (
+                <span key={player.id} className="rounded-full border border-amber-200 bg-white/80 px-2 py-1 text-[10px] font-bold text-amber-900">
+                  {displayName(player)} → {assignedTeam?.name ?? "team"}
+                </span>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Controls */}
       <div className="bg-card border border-border px-3 py-2.5 rounded-xl shadow-sm flex flex-col gap-2">
         <div className="grid grid-cols-2 md:grid-cols-[1fr_1fr_auto] gap-2">
@@ -511,6 +538,12 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
             </span>
           </Button>
         </div>
+
+        {notHereYetPlayers.length > 0 && (
+          <p className="text-[10px] font-bold text-amber-700">
+            {hereNowCount} here now · {notHereYetPlayers.length} not here yet. Teams will balance here-now players first and spread late players.
+          </p>
+        )}
 
         {isGenerating && (
           <div className="rounded-lg border border-emerald-300/35 bg-emerald-50/80 px-3 py-2 text-[11px] font-black text-emerald-700 shadow-inner">
@@ -614,7 +647,7 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
                     </Select>
                   </div>
                   <div className="text-[9px] font-bold opacity-85 leading-tight" style={{ color: col.textHex }}>
-                    {team.players.length}p · Total {team.totalSkill} · Avg {team.averageSkill}
+                    {team.players.filter(p => !isNotHereYet(p)).length} here / {team.players.length} total · Bal {team.totalSkill}
                   </div>
                   {isSwapDest && (
                     <button
@@ -651,11 +684,12 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
                           )}
                           <div className={`min-w-0 flex-1 ${isSelected ? "pl-3" : ""}`}>
                             <div className="font-bold text-xs truncate text-left">{displayName(player)}</div>
-                            {(player.isNew || player.isGoalkeeper || player.isOrganizer) && (
+                            {(player.isNew || player.isGoalkeeper || player.isOrganizer || isNotHereYet(player)) && (
                               <div className="mt-0.5 flex flex-wrap gap-1">
                                 {player.isNew && <NewBadge />}
                                 {player.isGoalkeeper && <GKBadge />}
                                 {player.isOrganizer && <ORGBadge />}
+                                {isNotHereYet(player) && <NotHereBadge />}
                               </div>
                             )}
                           </div>

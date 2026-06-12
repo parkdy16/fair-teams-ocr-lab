@@ -5,7 +5,7 @@ import { generateTeams, recomputeStats } from "@/lib/teamGenerator";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Shuffle, ArrowLeftRight, Download, HelpCircle, Clock, Pencil, Palette, Zap, Sparkles } from "lucide-react";
+import { Shuffle, ArrowLeftRight, Download, HelpCircle, Clock, Pencil, Zap, Sparkles } from "lucide-react";
 import fairTeamsLogo from "@/assets/fairteams-logo.png";
 
 const COLOR_OPTIONS: { value: TeamColor; label: string; hex: string; textHex: string }[] = [
@@ -23,23 +23,19 @@ function colorFor(color: TeamColor) {
 }
 
 function GKBadge() {
-  return <span className="inline-flex items-center rounded-full border border-emerald-200/60 bg-emerald-50/50 px-1 py-0 text-[8px] font-semibold lowercase text-emerald-700/70">gk</span>;
+  return <span className="inline-flex items-center rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-black text-emerald-800 border border-emerald-200">GK</span>;
 }
 
 function ORGBadge() {
-  return <span className="inline-flex items-center rounded-full border border-violet-200/60 bg-violet-50/50 px-1 py-0 text-[8px] font-semibold lowercase text-violet-700/70">org</span>;
+  return <span className="inline-flex items-center rounded-full bg-violet-100 px-1.5 py-0.5 text-[9px] font-black text-violet-800 border border-violet-200">ORG</span>;
 }
 
 function NewBadge() {
-  return <span className="inline-flex items-center rounded-full border border-sky-200/60 bg-sky-50/50 px-1 py-0 text-[8px] font-semibold lowercase text-sky-700/70">new</span>;
+  return <span className="inline-flex items-center rounded-full bg-sky-100 px-1.5 py-0.5 text-[9px] font-black text-sky-800 border border-sky-200">NEW</span>;
 }
 
 function NotHereBadge() {
-  return (
-    <span className="inline-flex items-center text-amber-700" title="Not here yet" aria-label="Not here yet">
-      <Clock className="h-3.5 w-3.5" />
-    </span>
-  );
+  return <span className="inline-flex items-center rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-black text-amber-800 border border-amber-200">Not here yet</span>;
 }
 
 function isNotHereYet(player: Pick<Player, "todayStatus">) {
@@ -54,12 +50,12 @@ function displayName(player: Pick<Player, "name" | "aka">) {
 function GenderBadge({ gender }: { gender?: string }) {
   const normalized = (gender ?? "other").toLowerCase();
   if (normalized === "female") {
-    return <span className="text-[8px] font-medium lowercase text-pink-500/50">f</span>;
+    return <span className="text-[10px] font-black text-pink-600">F</span>;
   }
   if (normalized === "male") {
-    return <span className="text-[8px] font-medium lowercase text-blue-500/50">m</span>;
+    return <span className="text-[10px] font-black text-blue-600">M</span>;
   }
-  return <span className="text-[8px] font-medium lowercase text-purple-500/45">o</span>;
+  return <span className="text-[10px] font-black text-purple-500">O</span>;
 }
 
 const FIELD_SIZE_STORAGE_KEY = "fair-teams-field-size-v1";
@@ -435,26 +431,15 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
     setTeams(prev => prev.map(t => t.id === teamId ? { ...t, name: trimmed } : t));
   };
 
-  const swapPlayers = (fromTeamId: string, fromPlayerId: string, toTeamId: string, toPlayerId: string) => {
-    if (fromTeamId === toTeamId && fromPlayerId === toPlayerId) return;
-    setTeams(prev => {
-      const next = prev.map(t => ({ ...t, players: [...t.players] }));
-      const fromTeam = next.find(t => t.id === fromTeamId);
-      const toTeam = next.find(t => t.id === toTeamId);
-      if (!fromTeam || !toTeam) return prev;
-      const fromIdx = fromTeam.players.findIndex(p => p.id === fromPlayerId);
-      const toIdx = toTeam.players.findIndex(p => p.id === toPlayerId);
-      if (fromIdx === -1 || toIdx === -1) return prev;
-      const fromPlayer = fromTeam.players[fromIdx]!;
-      const toPlayer = toTeam.players[toIdx]!;
-      fromTeam.players[fromIdx] = toPlayer;
-      toTeam.players[toIdx] = fromPlayer;
-      return recomputeStats(next, fieldSize);
-    });
+  const handleSelectPlayer = (playerId: string, fromTeamId: string) => {
+    if (swap?.playerId === playerId && swap?.fromTeamId === fromTeamId) setSwap(null);
+    else setSwap({ playerId, fromTeamId });
   };
 
-  const movePlayerToTeam = (fromTeamId: string, playerId: string, toTeamId: string) => {
-    if (toTeamId === fromTeamId) return;
+  const handleMoveTo = (toTeamId: string) => {
+    if (!swap) return;
+    const { playerId, fromTeamId } = swap;
+    if (toTeamId === fromTeamId) { setSwap(null); return; }
     setTeams(prev => {
       const next = prev.map(t => ({ ...t, players: [...t.players] }));
       const fromTeam = next.find(t => t.id === fromTeamId);
@@ -466,24 +451,6 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
       toTeam.players.push(moved!);
       return recomputeStats(next, fieldSize);
     });
-  };
-
-  const handleSelectPlayer = (playerId: string, fromTeamId: string) => {
-    if (!swap) {
-      setSwap({ playerId, fromTeamId });
-      return;
-    }
-    if (swap.playerId === playerId && swap.fromTeamId === fromTeamId) {
-      setSwap(null);
-      return;
-    }
-    swapPlayers(swap.fromTeamId, swap.playerId, fromTeamId, playerId);
-    setSwap(null);
-  };
-
-  const handleMoveTo = (toTeamId: string) => {
-    if (!swap) return;
-    movePlayerToTeam(swap.fromTeamId, swap.playerId, toTeamId);
     setSwap(null);
   };
 
@@ -505,9 +472,27 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
 
   return (
     <div className="flex flex-col gap-3">
+      {notHereYetPlayers.length > 0 && teams.length > 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-3 shadow-sm">
+          <div className="mb-2 text-[10px] font-black uppercase tracking-wider text-amber-800">
+            Not here yet · already assigned
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {notHereYetPlayers.map(player => {
+              const assignedTeam = teams.find(team => team.players.some(teamPlayer => teamPlayer.id === player.id));
+              return (
+                <span key={player.id} className="rounded-full border border-amber-200 bg-white/80 px-2 py-1 text-[10px] font-bold text-amber-900">
+                  {displayName(player)} → {assignedTeam?.name ?? "team"}
+                </span>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Controls */}
       <div className="bg-card border border-border px-3 py-2.5 rounded-xl shadow-sm flex flex-col gap-2">
-        <div className={`grid ${teams.length > 0 ? "grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]" : "grid-cols-2"} md:grid-cols-[1fr_1fr_auto] gap-2`}>
+        <div className="grid grid-cols-2 md:grid-cols-[1fr_1fr_auto] gap-2">
           <div className="flex flex-col gap-1 min-w-0">
             <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Teams</Label>
             <Select value={numTeams.toString()} onValueChange={v => setNumTeams(parseInt(v))}>
@@ -542,19 +527,23 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
           </div>
 
           <Button
-            className={`${teams.length > 0 ? "h-10 w-auto min-w-[76px] px-3 text-[12px]" : "col-span-2 md:col-span-1 h-10 w-full px-4 text-[13px]"} font-black uppercase tracking-wide shadow-sm bg-[#22C55E] text-white hover:bg-[#16A34A] transition-all ${isGenerating ? "ring-4 ring-emerald-300/45 shadow-lg shadow-emerald-400/25" : ""}`}
-            onClick={() => handleGenerate(teams.length > 0)}
+            className={`col-span-2 md:col-span-1 h-10 w-full px-4 font-black uppercase tracking-wide text-[13px] shadow-sm bg-background border-2 hover:bg-muted transition-all ${isGenerating ? "ring-4 ring-emerald-300/45 shadow-lg shadow-emerald-400/25" : ""}`}
+            onClick={() => handleGenerate(false)}
             disabled={isGenerating}
-            title={teams.length > 0 ? "Shuffle teams" : "Generate teams"}
-            data-testid={teams.length > 0 ? "button-shuffle" : "button-generate"}
+            data-testid="button-generate"
           >
             <span className="inline-flex items-center gap-1.5">
-              {isGenerating ? <Shuffle className="w-3.5 h-3.5 animate-spin" /> : teams.length > 0 ? <Shuffle className="w-3.5 h-3.5" /> : <Sparkles className="w-3.5 h-3.5" />}
-              {isGenerating ? "Balancing" : teams.length > 0 ? "Shuffle" : "Generate Teams"}
+              {isGenerating ? <Shuffle className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+              {isGenerating ? "Balancing" : (teams.length ? "Shuffle" : "Generate")}
             </span>
           </Button>
         </div>
 
+        {notHereYetPlayers.length > 0 && (
+          <p className="text-[10px] font-bold text-amber-700">
+            {hereNowCount} here now · {notHereYetPlayers.length} not here yet. Teams will balance here-now players first and spread late players.
+          </p>
+        )}
 
         {isGenerating && (
           <div className="rounded-lg border border-emerald-300/35 bg-emerald-50/80 px-3 py-2 text-[11px] font-black text-emerald-700 shadow-inner">
@@ -577,17 +566,12 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
         )}
 
         {teams.length > 0 && (
-          <div className="flex justify-end">
-            <Button
-              size="sm"
-              className="h-9 rounded-xl px-3 text-[12px] font-black tracking-tight bg-primary text-primary-foreground hover:bg-primary/90"
-              onClick={() => void exportTeamsAsJpg(teams, fieldSize)}
-              disabled={isGenerating}
-              title="Save teams as image"
-              data-testid="button-export"
-            >
-              <Download className="w-3.5 h-3.5 mr-1.5" />
-              Save Image
+          <div className="flex gap-2 justify-end">
+            <Button variant="outline" size="icon" className="h-9 w-9 border-2 shrink-0" onClick={() => handleGenerate(true)} disabled={isGenerating} title="Shuffle" data-testid="button-shuffle">
+              <Shuffle className="w-4 h-4" />
+            </Button>
+            <Button variant="outline" size="icon" className="h-9 w-9 border-2 shrink-0" onClick={() => void exportTeamsAsJpg(teams, fieldSize)} disabled={isGenerating} title="Export as JPG" data-testid="button-export">
+              <Download className="w-4 h-4" />
             </Button>
           </div>
         )}
@@ -598,7 +582,7 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
         <div className="bg-primary/10 border border-primary/30 rounded-xl px-3 py-2 flex items-center gap-2">
           <ArrowLeftRight className="w-3.5 h-3.5 text-primary shrink-0" />
           <p className="text-xs font-semibold text-primary flex-1">
-            Selected <span className="font-black">{displayName(teams.flatMap(t => t.players).find(p => p.id === swap.playerId) || { name: "player" })}</span> — tap another player to swap, or tap Move here on a team
+            Moving <span className="font-black">{displayName(teams.flatMap(t => t.players).find(p => p.id === swap.playerId) || { name: "player" })}</span> — tap a team to move there
           </p>
           <button className="text-[10px] text-muted-foreground underline shrink-0" onClick={() => setSwap(null)} data-testid="button-cancel-swap">Cancel</button>
         </div>
@@ -609,49 +593,49 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
         <div className={`grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 transition-opacity duration-300 ${isGenerating ? "opacity-50" : "opacity-100"}`}>
           {teams.map((team, index) => {
             const col = colorFor(team.color);
-            const accentColor = team.color === "white" ? "hsl(var(--border))" : col.hex;
             const isSwapDest = swap && swap.fromTeamId !== team.id;
-            const notHereCount = team.players.filter(isNotHereYet).length;
-            const avgSkill = team.averageSkill.toFixed(1);
-            const totalSkill = team.totalSkill.toFixed(1);
 
             return (
               <div
                 key={team.id}
-                className={`relative rounded-xl overflow-hidden border-2 bg-card shadow-sm transition-all duration-300 ${justGenerated ? "animate-in fade-in zoom-in-95" : ""}`}
+                className={`rounded-xl overflow-hidden border-2 shadow-sm transition-all duration-300 ${justGenerated ? "animate-in fade-in zoom-in-95" : ""}`}
                 style={{
-                  borderColor: team.color === "white" ? "hsl(var(--border))" : `${col.hex}${isSwapDest ? "cc" : "88"}`,
+                  borderColor: isSwapDest ? col.hex : "hsl(var(--border))",
                   animationDelay: justGenerated ? `${index * 90}ms` : undefined,
-                  boxShadow: justGenerated ? `0 0 0 1px ${accentColor}33, 0 10px 24px ${accentColor}18` : undefined,
+                  boxShadow: justGenerated ? `0 0 0 1px ${col.hex}33, 0 10px 24px ${col.hex}18` : undefined,
                 }}
-                data-team-drop-id={team.id}
                 data-testid={`card-team-${team.id}`}
               >
                 {/* Header */}
-                <div className="bg-card px-3 pt-2 pb-1.5">
-                  <div className="flex items-start justify-between gap-2 mb-1">
+                <div className="px-2.5 pt-2 pb-1.5" style={{ backgroundColor: col.hex }}>
+                  <div className="flex items-center justify-between gap-1 mb-1">
                     <div className="flex items-center gap-1 min-w-0">
-                      <span className="text-sm font-black leading-tight truncate text-foreground">{team.name}</span>
+                      <span className="text-xs font-black uppercase tracking-wide leading-tight truncate" style={{ color: col.textHex }}>{team.name}</span>
                       <button
                         type="button"
                         onClick={() => handleRenameTeam(team.id, team.name)}
-                        className="h-5 w-5 inline-flex items-center justify-center rounded-full shrink-0 text-muted-foreground hover:bg-muted"
+                        className="h-5 w-5 inline-flex items-center justify-center rounded-full shrink-0"
+                        style={{ color: col.textHex, backgroundColor: col.textHex === "#fff" ? "rgba(255,255,255,0.16)" : "rgba(0,0,0,0.08)" }}
                         title="Rename team"
                         data-testid={`button-rename-team-${team.id}`}
                       >
                         <Pencil className="w-3 h-3" />
                       </button>
                     </div>
-
-                    {/* Team color selector */}
+                  </div>
+                  {/* Team color selector */}
+                  <div className="mb-1">
                     <Select value={team.color} onValueChange={v => handleColorChange(team.id, v as TeamColor)}>
                       <SelectTrigger
-                        className="h-7 w-7 border-0 p-0 shadow-none bg-transparent hover:bg-transparent text-muted-foreground hover:text-foreground [&>svg:last-child]:hidden"
-                        style={{ color: accentColor }}
-                        title={`Change team color (${col.label})`}
+                        className="h-7 w-full rounded-md border px-2 py-0 text-[10px] font-black shadow-none"
+                        style={{
+                          backgroundColor: col.textHex === "#fff" ? "rgba(255,255,255,0.16)" : "rgba(0,0,0,0.06)",
+                          borderColor: col.textHex === "#fff" ? "rgba(255,255,255,0.35)" : "rgba(15,42,67,0.18)",
+                          color: col.textHex,
+                        }}
                         data-testid={`select-team-color-${team.id}`}
                       >
-                        <Palette className="h-4 w-4" />
+                        <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
                         {COLOR_OPTIONS.map(c => (
@@ -662,23 +646,14 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="flex items-center gap-1.5 text-[10px] font-semibold leading-tight text-muted-foreground">
-                    <span>Avg {avgSkill} · Total {totalSkill}</span>
-                    {notHereCount > 0 && (
-                      <span
-                        className="inline-flex items-center gap-0.5 rounded-full border border-amber-200 bg-amber-100 px-1 py-0.5 text-[8px] font-black text-amber-800"
-                        title={`${notHereCount} not here yet`}
-                      >
-                        <Clock className="h-2.5 w-2.5" />
-                        {notHereCount}
-                      </span>
-                    )}
+                  <div className="text-[9px] font-bold opacity-85 leading-tight" style={{ color: col.textHex }}>
+                    {team.players.filter(p => !isNotHereYet(p)).length} here / {team.players.length} total · Bal {team.totalSkill}
                   </div>
                   {isSwapDest && (
                     <button
                       onClick={() => handleMoveTo(team.id)}
-                      className="mt-1.5 w-full rounded-md py-1 text-[10px] font-black uppercase tracking-widest text-white"
-                      style={{ backgroundColor: accentColor }}
+                      className="mt-1.5 w-full rounded-md py-1 text-[10px] font-black uppercase tracking-widest"
+                      style={{ backgroundColor: col.textHex === "#fff" ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.1)", color: col.textHex, border: `1px solid ${col.textHex}` }}
                       data-testid={`button-moveto-${team.id}`}
                     >
                       Move here
@@ -696,21 +671,21 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
                       return (
                         <button
                           key={player.id}
-                          className="relative w-full flex select-none items-center gap-1.5 px-2.5 py-1.5 text-left transition-colors"
+                          className="relative w-full flex items-center gap-1.5 px-2.5 py-1.5 text-left transition-colors"
                           style={{
-                            backgroundColor: isSelected ? `${accentColor}20` : undefined,
-                            borderLeft: isSelected ? `3px solid ${accentColor}` : "3px solid transparent",
+                            backgroundColor: isSelected ? `${col.hex}20` : undefined,
+                            borderLeft: isSelected ? `3px solid ${col.hex}` : "3px solid transparent",
                           }}
                           onClick={() => handleSelectPlayer(player.id, team.id)}
                           data-testid={`player-row-${player.id}-team-${team.id}`}
                         >
                           {isSelected && (
-                            <ArrowLeftRight className="absolute left-1 top-1/2 w-2.5 h-2.5 -translate-y-1/2" style={{ color: accentColor }} />
+                            <ArrowLeftRight className="absolute left-1 top-1/2 w-2.5 h-2.5 -translate-y-1/2" style={{ color: col.hex }} />
                           )}
                           <div className={`min-w-0 flex-1 ${isSelected ? "pl-3" : ""}`}>
                             <div className="font-bold text-xs truncate text-left">{displayName(player)}</div>
                             {(player.isNew || player.isGoalkeeper || player.isOrganizer || isNotHereYet(player)) && (
-                              <div className="mt-0.5 flex flex-wrap items-center gap-0.5">
+                              <div className="mt-0.5 flex flex-wrap gap-1">
                                 {player.isNew && <NewBadge />}
                                 {player.isGoalkeeper && <GKBadge />}
                                 {player.isOrganizer && <ORGBadge />}

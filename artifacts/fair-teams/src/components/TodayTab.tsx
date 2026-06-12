@@ -1851,16 +1851,15 @@ export function TodayTab({
           <span className="text-[10px] uppercase font-black tracking-wider text-slate-500">
             Today
           </span>
-          <span className="text-lg font-black leading-tight text-slate-900">
-            {hereNowCount} here
+          <span className="inline-flex flex-wrap items-center gap-x-1.5 text-lg font-black leading-tight text-slate-900">
+            <span>{selectedCount} selected</span>
+            <span className="text-xs font-semibold text-slate-500">/ {players.length}</span>
             {notHereYetCount > 0 && (
-              <span className="text-xs font-semibold text-amber-700">
-                {" · "}{notHereYetCount} not here yet
+              <span className="inline-flex items-center gap-0.5 text-xs font-semibold text-amber-700">
+                <Clock3 className="h-3.5 w-3.5" aria-hidden="true" />
+                {notHereYetCount}
               </span>
             )}
-            <span className="text-xs font-semibold text-slate-500">
-              {" "}/ {players.length}
-            </span>
           </span>
         </div>
         <div className="flex gap-2">

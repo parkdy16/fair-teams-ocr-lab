@@ -595,7 +595,7 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
             return (
               <div
                 key={team.id}
-                className={`rounded-xl overflow-hidden border-2 shadow-sm transition-all duration-300 ${justGenerated ? "animate-in fade-in zoom-in-95" : ""}`}
+                className={`relative rounded-xl overflow-hidden border-2 shadow-sm transition-all duration-300 ${justGenerated ? "animate-in fade-in zoom-in-95" : ""}`}
                 style={{
                   borderColor: isSwapDest ? col.hex : "hsl(var(--border))",
                   animationDelay: justGenerated ? `${index * 90}ms` : undefined,
@@ -603,35 +603,36 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
                 }}
                 data-testid={`card-team-${team.id}`}
               >
+                <div className="absolute inset-y-0 left-0 w-1" style={{ backgroundColor: col.hex }} aria-hidden="true" />
+
                 {/* Header */}
-                <div className="px-2.5 pt-2 pb-1.5" style={{ backgroundColor: col.hex }}>
-                  <div className="flex items-center justify-between gap-1 mb-1">
+                <div className="bg-card px-3 pt-2 pb-1.5 pl-3.5">
+                  <div className="flex items-start justify-between gap-2 mb-1">
                     <div className="flex items-center gap-1 min-w-0">
-                      <span className="text-xs font-black uppercase tracking-wide leading-tight truncate" style={{ color: col.textHex }}>{team.name}</span>
+                      <span className="text-xs font-black uppercase tracking-wide leading-tight truncate text-foreground">{team.name}</span>
                       <button
                         type="button"
                         onClick={() => handleRenameTeam(team.id, team.name)}
-                        className="h-5 w-5 inline-flex items-center justify-center rounded-full shrink-0"
-                        style={{ color: col.textHex, backgroundColor: col.textHex === "#fff" ? "rgba(255,255,255,0.16)" : "rgba(0,0,0,0.08)" }}
+                        className="h-5 w-5 inline-flex items-center justify-center rounded-full shrink-0 text-muted-foreground hover:bg-muted"
                         title="Rename team"
                         data-testid={`button-rename-team-${team.id}`}
                       >
                         <Pencil className="w-3 h-3" />
                       </button>
                     </div>
-                  </div>
-                  {/* Team color selector */}
-                  <div className="mb-1">
+
+                    {/* Team color selector */}
                     <Select value={team.color} onValueChange={v => handleColorChange(team.id, v as TeamColor)}>
                       <SelectTrigger
-                        className="h-7 w-full rounded-md border px-2 py-0 text-[10px] font-black shadow-none"
-                        style={{
-                          backgroundColor: col.textHex === "#fff" ? "rgba(255,255,255,0.16)" : "rgba(0,0,0,0.06)",
-                          borderColor: col.textHex === "#fff" ? "rgba(255,255,255,0.35)" : "rgba(15,42,67,0.18)",
-                          color: col.textHex,
-                        }}
+                        className="h-6 w-auto min-w-[68px] rounded-full border px-2 py-0 text-[10px] font-black shadow-none gap-1.5 bg-background hover:bg-muted"
+                        style={{ borderColor: `${col.hex}55` }}
                         data-testid={`select-team-color-${team.id}`}
                       >
+                        <span
+                          className="h-2.5 w-2.5 rounded-full border shrink-0"
+                          style={{ backgroundColor: col.hex, borderColor: team.color === "white" ? "hsl(var(--border))" : col.hex }}
+                          aria-hidden="true"
+                        />
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -643,16 +644,11 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="flex items-center gap-1.5 text-[9px] font-bold leading-tight" style={{ color: col.textHex }}>
-                    <span className="opacity-90">Avg Skill {avgSkill} · Total {totalSkill}</span>
+                  <div className="flex items-center gap-1.5 text-[9px] font-bold leading-tight text-muted-foreground">
+                    <span>Avg Skill {avgSkill} · Total {totalSkill}</span>
                     {notHereCount > 0 && (
                       <span
-                        className="inline-flex items-center gap-0.5 rounded-full px-1 py-0.5 text-[8px] font-black"
-                        style={{
-                          backgroundColor: col.textHex === "#fff" ? "rgba(251,191,36,0.22)" : "rgba(245,158,11,0.18)",
-                          border: `1px solid ${col.textHex === "#fff" ? "rgba(253,230,138,0.55)" : "rgba(217,119,6,0.35)"}`,
-                          color: col.textHex,
-                        }}
+                        className="inline-flex items-center gap-0.5 rounded-full border border-amber-200 bg-amber-100 px-1 py-0.5 text-[8px] font-black text-amber-800"
                         title={`${notHereCount} not here yet`}
                       >
                         <Clock className="h-2.5 w-2.5" />
@@ -663,8 +659,8 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
                   {isSwapDest && (
                     <button
                       onClick={() => handleMoveTo(team.id)}
-                      className="mt-1.5 w-full rounded-md py-1 text-[10px] font-black uppercase tracking-widest"
-                      style={{ backgroundColor: col.textHex === "#fff" ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.1)", color: col.textHex, border: `1px solid ${col.textHex}` }}
+                      className="mt-1.5 w-full rounded-md py-1 text-[10px] font-black uppercase tracking-widest text-white"
+                      style={{ backgroundColor: col.hex }}
                       data-testid={`button-moveto-${team.id}`}
                     >
                       Move here

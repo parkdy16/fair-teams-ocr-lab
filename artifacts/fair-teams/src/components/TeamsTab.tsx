@@ -160,7 +160,7 @@ async function exportTeamsAsJpg(teams: Team[], fieldSize: FieldSize) {
   const CANVAS_W = 720;
   const PAD = 28;
   const GAP = 14;
-  const TITLE_H = 104;
+  const TITLE_H = 78;
   const TEAM_HEADER_H = 34;
   const PLAYER_LINE_H = 20;
   const CARD_PAD_X = 16;
@@ -206,14 +206,10 @@ async function exportTeamsAsJpg(teams: Team[], fieldSize: FieldSize) {
   ctx.fillStyle = "#16A34A";
   ctx.fillText(teamsText, startX + fairW + teamsW / 2, 34);
 
-  ctx.fillStyle = "#102A43";
-  ctx.font = `900 18px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
-  ctx.fillText("Today's Teams", CANVAS_W / 2, 62);
-
   ctx.fillStyle = "#16A34A";
   ctx.font = `800 11px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
   const dateText = new Date().toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" });
-  ctx.fillText(dateText, CANVAS_W / 2, 82);
+  ctx.fillText(dateText, CANVAS_W / 2, 56);
   ctx.textAlign = "left";
 
   const rowY = teamRowHeights.reduce<number[]>((positions, height, row) => {
@@ -272,18 +268,27 @@ async function exportTeamsAsJpg(teams: Team[], fieldSize: FieldSize) {
       team.players.forEach(player => {
         ctx.fillStyle = "#102A43";
         ctx.font = `800 16px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
-        ctx.fillText(`${displayName(player)}${isNotHereYet(player) ? "  (not here yet)" : ""}`, playerX, playerY);
+        const badges = [
+          ...(player.isOrganizer ? ["ORG"] : []),
+          ...(player.isGoalkeeper ? ["GK"] : []),
+        ];
+        const badgeGap = 6;
+        const badgeWidths = badges.reduce((sum, badge) => sum + (badge === "ORG" ? 30 : 25), 0) + Math.max(0, badges.length - 1) * 4;
+        const maxNameWidth = CARD_W - CARD_PAD_X * 2 - (badges.length ? badgeGap + badgeWidths : 0);
+        const nameText = truncateCanvasText(ctx, displayName(player), maxNameWidth);
+        ctx.fillText(nameText, playerX, playerY);
 
-        let badgeX = badgeRight;
+        let badgeX = playerX + ctx.measureText(nameText).width + badgeGap;
         const badgeY = playerY - 13;
-        if (player.isOrganizer) {
-          badgeX -= 32;
-          drawTextBadge(ctx, "ORG", badgeX, badgeY, "#EA580C", "#FFEDD5", "#FDBA74");
-        }
-        if (player.isGoalkeeper) {
-          badgeX -= 34;
-          drawTextBadge(ctx, "GK", badgeX, badgeY, "#15803D", "#DCFCE7", "#86EFAC");
-        }
+        badges.forEach((badge) => {
+          if (badge === "ORG") {
+            drawTextBadge(ctx, "ORG", badgeX, badgeY, "#EA580C", "#FFEDD5", "#FDBA74");
+            badgeX += 34;
+          } else {
+            drawTextBadge(ctx, "GK", badgeX, badgeY, "#15803D", "#DCFCE7", "#86EFAC");
+            badgeX += 29;
+          }
+        });
 
         playerY += PLAYER_LINE_H;
       });
@@ -295,6 +300,17 @@ async function exportTeamsAsJpg(teams: Team[], fieldSize: FieldSize) {
   a.href = url;
   a.download = `fair-teams-${new Date().toISOString().slice(0, 10)}.jpg`;
   a.click();
+}
+
+
+function truncateCanvasText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number) {
+  if (ctx.measureText(text).width <= maxWidth) return text;
+  const ellipsis = "…";
+  let trimmed = text;
+  while (trimmed.length > 1 && ctx.measureText(trimmed + ellipsis).width > maxWidth) {
+    trimmed = trimmed.slice(0, -1);
+  }
+  return `${trimmed}${ellipsis}`;
 }
 
 function drawTextBadge(

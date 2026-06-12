@@ -594,6 +594,9 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
           {teams.map((team, index) => {
             const col = colorFor(team.color);
             const isSwapDest = swap && swap.fromTeamId !== team.id;
+            const notHereCount = team.players.filter(isNotHereYet).length;
+            const avgSkill = team.averageSkill.toFixed(1);
+            const totalSkill = team.totalSkill.toFixed(1);
 
             return (
               <div
@@ -646,8 +649,22 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="text-[9px] font-bold opacity-85 leading-tight" style={{ color: col.textHex }}>
-                    {team.players.filter(p => !isNotHereYet(p)).length} here / {team.players.length} total · Bal {team.totalSkill}
+                  <div className="flex items-center gap-1.5 text-[9px] font-bold leading-tight" style={{ color: col.textHex }}>
+                    <span className="opacity-90">Avg Skill {avgSkill} · Total {totalSkill}</span>
+                    {notHereCount > 0 && (
+                      <span
+                        className="inline-flex items-center gap-0.5 rounded-full px-1 py-0.5 text-[8px] font-black"
+                        style={{
+                          backgroundColor: col.textHex === "#fff" ? "rgba(251,191,36,0.22)" : "rgba(245,158,11,0.18)",
+                          border: `1px solid ${col.textHex === "#fff" ? "rgba(253,230,138,0.55)" : "rgba(217,119,6,0.35)"}`,
+                          color: col.textHex,
+                        }}
+                        title={`${notHereCount} not here yet`}
+                      >
+                        <Clock className="h-2.5 w-2.5" />
+                        {notHereCount}
+                      </span>
+                    )}
                   </div>
                   {isSwapDest && (
                     <button

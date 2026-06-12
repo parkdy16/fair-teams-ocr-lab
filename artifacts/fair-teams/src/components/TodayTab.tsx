@@ -48,15 +48,6 @@ function isNotHereYet(player: Pick<RoomPlayer, "todayStatus">) {
   return player.todayStatus === "not_here_yet";
 }
 
-function NotHereBadge() {
-  return (
-    <span className="inline-flex items-center rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-black text-amber-800 border border-amber-200">
-      Not here yet
-    </span>
-  );
-}
-
-
 type SpeechRecognitionResultLike = {
   isFinal: boolean;
   0: { transcript: string };
@@ -2878,15 +2869,11 @@ export function TodayTab({
                 >
                   {displayName(player)}
                 </div>
-                {(player.isNew ||
-                  player.isGoalkeeper ||
-                  player.isOrganizer ||
-                  (player.attending && isNotHereYet(player))) && (
+                {(player.isNew || player.isGoalkeeper || player.isOrganizer) && (
                   <div className="mt-0.5 flex flex-wrap gap-1 min-w-0">
                     {player.isNew && <NewBadge />}
                     {player.isGoalkeeper && <GKBadge />}
                     {player.isOrganizer && <ORGBadge />}
-                    {player.attending && isNotHereYet(player) && <NotHereBadge />}
                   </div>
                 )}
               </div>

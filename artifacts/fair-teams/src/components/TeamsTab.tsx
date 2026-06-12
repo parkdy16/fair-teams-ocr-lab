@@ -548,12 +548,29 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
         )}
 
         {teams.length > 0 && (
-          <div className="flex gap-2 justify-end">
-            <Button variant="outline" size="icon" className="h-9 w-9 border-2 shrink-0" onClick={() => handleGenerate(true)} disabled={isGenerating} title="Shuffle" data-testid="button-shuffle">
-              <Shuffle className="w-4 h-4" />
+          <div className="flex flex-wrap gap-2 justify-end">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9 rounded-xl border-2 px-3 text-[12px] font-black tracking-tight"
+              onClick={() => handleGenerate(true)}
+              disabled={isGenerating}
+              title="Shuffle teams again"
+              data-testid="button-shuffle"
+            >
+              <Shuffle className="w-3.5 h-3.5 mr-1.5" />
+              Shuffle Again
             </Button>
-            <Button variant="outline" size="icon" className="h-9 w-9 border-2 shrink-0" onClick={() => void exportTeamsAsJpg(teams, fieldSize)} disabled={isGenerating} title="Export as JPG" data-testid="button-export">
-              <Download className="w-4 h-4" />
+            <Button
+              size="sm"
+              className="h-9 rounded-xl px-3 text-[12px] font-black tracking-tight bg-primary text-primary-foreground hover:bg-primary/90"
+              onClick={() => void exportTeamsAsJpg(teams, fieldSize)}
+              disabled={isGenerating}
+              title="Save teams as image"
+              data-testid="button-export"
+            >
+              <Download className="w-3.5 h-3.5 mr-1.5" />
+              Save Image
             </Button>
           </div>
         )}

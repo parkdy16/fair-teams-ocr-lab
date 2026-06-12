@@ -2893,7 +2893,7 @@ export function TodayTab({
                   }`}
                   data-testid={`today-status-${player.id}`}
                 >
-                  {isNotHereYet(player) ? "Arrived?" : "Not here"}
+                  {isNotHereYet(player) ? "Arrived?" : "Late"}
                 </button>
               )}
             </label>

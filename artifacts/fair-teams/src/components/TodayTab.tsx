@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { ClipboardList, Image as ImageIcon, Mic, Search, Upload, X } from "lucide-react";
+import { Clock3, ClipboardList, Image as ImageIcon, Mic, Search, Upload, X } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -2881,19 +2881,21 @@ export function TodayTab({
               {player.attending && (
                 <button
                   type="button"
+                  aria-label={isNotHereYet(player) ? "Mark player as arrived" : "Mark player as not here yet"}
+                  title={isNotHereYet(player) ? "Mark arrived" : "Not here yet"}
                   onClick={(event) => {
                     event.preventDefault();
                     event.stopPropagation();
                     toggleNotHereYet(player);
                   }}
-                  className={`shrink-0 rounded-full border px-1.5 py-1 text-[9px] font-black uppercase tracking-wide transition-colors ${
+                  className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border transition-colors ${
                     isNotHereYet(player)
                       ? "border-amber-300 bg-amber-100 text-amber-800"
                       : "border-slate-200 bg-white/80 text-slate-500"
                   }`}
                   data-testid={`today-status-${player.id}`}
                 >
-                  {isNotHereYet(player) ? "Arrived?" : "Late"}
+                  <Clock3 className="h-3.5 w-3.5" aria-hidden="true" />
                 </button>
               )}
             </label>

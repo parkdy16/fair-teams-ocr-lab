@@ -5,7 +5,7 @@ import { generateTeams, recomputeStats } from "@/lib/teamGenerator";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Shuffle, ArrowLeftRight, Download, HelpCircle, Clock, Pencil, Zap, Sparkles } from "lucide-react";
+import { Shuffle, ArrowLeftRight, Download, HelpCircle, Clock, Pencil, Palette, Zap, Sparkles } from "lucide-react";
 import fairTeamsLogo from "@/assets/fairteams-logo.png";
 
 const COLOR_OPTIONS: { value: TeamColor; label: string; hex: string; textHex: string }[] = [
@@ -35,7 +35,11 @@ function NewBadge() {
 }
 
 function NotHereBadge() {
-  return <span className="inline-flex items-center rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-black text-amber-800 border border-amber-200">Not here yet</span>;
+  return (
+    <span className="inline-flex items-center text-amber-700" title="Not here yet" aria-label="Not here yet">
+      <Clock className="h-3.5 w-3.5" />
+    </span>
+  );
 }
 
 function isNotHereYet(player: Pick<Player, "todayStatus">) {
@@ -330,6 +334,11 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
   const [drawStep, setDrawStep] = useState(0);
   const [justGenerated, setJustGenerated] = useState(false);
   const generateTimerRef = useRef<number | null>(null);
+  const longPressTimerRef = useRef<number | null>(null);
+  const dragScrollTimerRef = useRef<number | null>(null);
+  const dragRef = useRef<{ playerId: string; fromTeamId: string } | null>(null);
+  const suppressClickRef = useRef(false);
+  const [dragging, setDragging] = useState<{ playerId: string; fromTeamId: string } | null>(null);
 
   useEffect(() => {
     localStorage.setItem(FIELD_SIZE_STORAGE_KEY, fieldSize);
@@ -350,6 +359,8 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
   useEffect(() => {
     return () => {
       if (generateTimerRef.current !== null) window.clearTimeout(generateTimerRef.current);
+      if (longPressTimerRef.current !== null) window.clearTimeout(longPressTimerRef.current);
+      if (dragScrollTimerRef.current !== null) window.clearInterval(dragScrollTimerRef.current);
     };
   }, []);
 
@@ -431,15 +442,26 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
     setTeams(prev => prev.map(t => t.id === teamId ? { ...t, name: trimmed } : t));
   };
 
-  const handleSelectPlayer = (playerId: string, fromTeamId: string) => {
-    if (swap?.playerId === playerId && swap?.fromTeamId === fromTeamId) setSwap(null);
-    else setSwap({ playerId, fromTeamId });
+  const swapPlayers = (fromTeamId: string, fromPlayerId: string, toTeamId: string, toPlayerId: string) => {
+    if (fromTeamId === toTeamId && fromPlayerId === toPlayerId) return;
+    setTeams(prev => {
+      const next = prev.map(t => ({ ...t, players: [...t.players] }));
+      const fromTeam = next.find(t => t.id === fromTeamId);
+      const toTeam = next.find(t => t.id === toTeamId);
+      if (!fromTeam || !toTeam) return prev;
+      const fromIdx = fromTeam.players.findIndex(p => p.id === fromPlayerId);
+      const toIdx = toTeam.players.findIndex(p => p.id === toPlayerId);
+      if (fromIdx === -1 || toIdx === -1) return prev;
+      const fromPlayer = fromTeam.players[fromIdx]!;
+      const toPlayer = toTeam.players[toIdx]!;
+      fromTeam.players[fromIdx] = toPlayer;
+      toTeam.players[toIdx] = fromPlayer;
+      return recomputeStats(next, fieldSize);
+    });
   };
 
-  const handleMoveTo = (toTeamId: string) => {
-    if (!swap) return;
-    const { playerId, fromTeamId } = swap;
-    if (toTeamId === fromTeamId) { setSwap(null); return; }
+  const movePlayerToTeam = (fromTeamId: string, playerId: string, toTeamId: string) => {
+    if (toTeamId === fromTeamId) return;
     setTeams(prev => {
       const next = prev.map(t => ({ ...t, players: [...t.players] }));
       const fromTeam = next.find(t => t.id === fromTeamId);
@@ -451,7 +473,89 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
       toTeam.players.push(moved!);
       return recomputeStats(next, fieldSize);
     });
+  };
+
+  const handleSelectPlayer = (playerId: string, fromTeamId: string) => {
+    if (suppressClickRef.current) {
+      suppressClickRef.current = false;
+      return;
+    }
+    if (dragging) return;
+    if (!swap) {
+      setSwap({ playerId, fromTeamId });
+      return;
+    }
+    if (swap.playerId === playerId && swap.fromTeamId === fromTeamId) {
+      setSwap(null);
+      return;
+    }
+    swapPlayers(swap.fromTeamId, swap.playerId, fromTeamId, playerId);
     setSwap(null);
+  };
+
+  const handleMoveTo = (toTeamId: string) => {
+    if (!swap) return;
+    movePlayerToTeam(swap.fromTeamId, swap.playerId, toTeamId);
+    setSwap(null);
+  };
+
+  const stopDragAutoScroll = () => {
+    if (dragScrollTimerRef.current !== null) {
+      window.clearInterval(dragScrollTimerRef.current);
+      dragScrollTimerRef.current = null;
+    }
+  };
+
+  const handlePlayerPointerDown = (playerId: string, fromTeamId: string) => {
+    if (longPressTimerRef.current !== null) window.clearTimeout(longPressTimerRef.current);
+    longPressTimerRef.current = window.setTimeout(() => {
+      const nextDrag = { playerId, fromTeamId };
+      dragRef.current = nextDrag;
+      setDragging(nextDrag);
+      setSwap(nextDrag);
+    }, 360);
+  };
+
+  const handlePlayerPointerMove = (event: React.PointerEvent) => {
+    if (!dragRef.current) return;
+    const y = event.clientY;
+    const edge = 90;
+    const speed = y < edge ? -14 : y > window.innerHeight - edge ? 14 : 0;
+    if (speed === 0) {
+      stopDragAutoScroll();
+      return;
+    }
+    if (dragScrollTimerRef.current === null) {
+      dragScrollTimerRef.current = window.setInterval(() => window.scrollBy({ top: speed, behavior: "auto" }), 16);
+    }
+  };
+
+  const handlePlayerPointerUp = (event: React.PointerEvent) => {
+    if (longPressTimerRef.current !== null) {
+      window.clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    const activeDrag = dragRef.current;
+    stopDragAutoScroll();
+    dragRef.current = null;
+    setDragging(null);
+    if (!activeDrag) return;
+    suppressClickRef.current = true;
+    window.setTimeout(() => { suppressClickRef.current = false; }, 0);
+    const target = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>("[data-team-drop-id]");
+    const toTeamId = target?.dataset.teamDropId;
+    if (toTeamId) movePlayerToTeam(activeDrag.fromTeamId, activeDrag.playerId, toTeamId);
+    setSwap(null);
+  };
+
+  const handlePlayerPointerCancel = () => {
+    if (longPressTimerRef.current !== null) {
+      window.clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    stopDragAutoScroll();
+    dragRef.current = null;
+    setDragging(null);
   };
 
   if (attendingPlayers.length < 2 && teams.length === 0) {
@@ -576,7 +680,7 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
         <div className="bg-primary/10 border border-primary/30 rounded-xl px-3 py-2 flex items-center gap-2">
           <ArrowLeftRight className="w-3.5 h-3.5 text-primary shrink-0" />
           <p className="text-xs font-semibold text-primary flex-1">
-            Moving <span className="font-black">{displayName(teams.flatMap(t => t.players).find(p => p.id === swap.playerId) || { name: "player" })}</span> — tap a team to move there
+            Selected <span className="font-black">{displayName(teams.flatMap(t => t.players).find(p => p.id === swap.playerId) || { name: "player" })}</span> — tap another player to swap, or long-press and drag to move
           </p>
           <button className="text-[10px] text-muted-foreground underline shrink-0" onClick={() => setSwap(null)} data-testid="button-cancel-swap">Cancel</button>
         </div>
@@ -587,6 +691,7 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
         <div className={`grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 transition-opacity duration-300 ${isGenerating ? "opacity-50" : "opacity-100"}`}>
           {teams.map((team, index) => {
             const col = colorFor(team.color);
+            const accentColor = team.color === "white" ? "hsl(var(--border))" : col.hex;
             const isSwapDest = swap && swap.fromTeamId !== team.id;
             const notHereCount = team.players.filter(isNotHereYet).length;
             const avgSkill = team.averageSkill.toFixed(1);
@@ -595,21 +700,20 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
             return (
               <div
                 key={team.id}
-                className={`relative rounded-xl overflow-hidden border-2 shadow-sm transition-all duration-300 ${justGenerated ? "animate-in fade-in zoom-in-95" : ""}`}
+                className={`relative rounded-xl overflow-hidden border-2 bg-card shadow-sm transition-all duration-300 ${justGenerated ? "animate-in fade-in zoom-in-95" : ""}`}
                 style={{
-                  borderColor: isSwapDest ? col.hex : "hsl(var(--border))",
+                  borderColor: team.color === "white" ? "hsl(var(--border))" : `${col.hex}${isSwapDest ? "cc" : "88"}`,
                   animationDelay: justGenerated ? `${index * 90}ms` : undefined,
-                  boxShadow: justGenerated ? `0 0 0 1px ${col.hex}33, 0 10px 24px ${col.hex}18` : undefined,
+                  boxShadow: justGenerated ? `0 0 0 1px ${accentColor}33, 0 10px 24px ${accentColor}18` : undefined,
                 }}
+                data-team-drop-id={team.id}
                 data-testid={`card-team-${team.id}`}
               >
-                <div className="absolute inset-y-0 left-0 w-1" style={{ backgroundColor: col.hex }} aria-hidden="true" />
-
                 {/* Header */}
-                <div className="bg-card px-3 pt-2 pb-1.5 pl-3.5">
+                <div className="bg-card px-3 pt-2 pb-1.5">
                   <div className="flex items-start justify-between gap-2 mb-1">
                     <div className="flex items-center gap-1 min-w-0">
-                      <span className="text-xs font-black uppercase tracking-wide leading-tight truncate text-foreground">{team.name}</span>
+                      <span className="text-sm font-black leading-tight truncate text-foreground">{team.name}</span>
                       <button
                         type="button"
                         onClick={() => handleRenameTeam(team.id, team.name)}
@@ -624,16 +728,12 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
                     {/* Team color selector */}
                     <Select value={team.color} onValueChange={v => handleColorChange(team.id, v as TeamColor)}>
                       <SelectTrigger
-                        className="h-6 w-auto min-w-[68px] rounded-full border px-2 py-0 text-[10px] font-black shadow-none gap-1.5 bg-background hover:bg-muted"
-                        style={{ borderColor: `${col.hex}55` }}
+                        className="h-7 w-7 rounded-full border p-0 shadow-none bg-background hover:bg-muted [&>svg:last-child]:hidden"
+                        style={{ borderColor: `${accentColor}66`, color: accentColor }}
+                        title={`Change team color (${col.label})`}
                         data-testid={`select-team-color-${team.id}`}
                       >
-                        <span
-                          className="h-2.5 w-2.5 rounded-full border shrink-0"
-                          style={{ backgroundColor: col.hex, borderColor: team.color === "white" ? "hsl(var(--border))" : col.hex }}
-                          aria-hidden="true"
-                        />
-                        <SelectValue />
+                        <Palette className="h-3.5 w-3.5" />
                       </SelectTrigger>
                       <SelectContent>
                         {COLOR_OPTIONS.map(c => (
@@ -644,7 +744,7 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="flex items-center gap-1.5 text-[9px] font-bold leading-tight text-muted-foreground">
+                  <div className="flex items-center gap-1.5 text-[10px] font-bold leading-tight text-muted-foreground">
                     <span>Avg Skill {avgSkill} · Total {totalSkill}</span>
                     {notHereCount > 0 && (
                       <span
@@ -660,7 +760,7 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
                     <button
                       onClick={() => handleMoveTo(team.id)}
                       className="mt-1.5 w-full rounded-md py-1 text-[10px] font-black uppercase tracking-widest text-white"
-                      style={{ backgroundColor: col.hex }}
+                      style={{ backgroundColor: accentColor }}
                       data-testid={`button-moveto-${team.id}`}
                     >
                       Move here
@@ -680,19 +780,23 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
                           key={player.id}
                           className="relative w-full flex items-center gap-1.5 px-2.5 py-1.5 text-left transition-colors"
                           style={{
-                            backgroundColor: isSelected ? `${col.hex}20` : undefined,
-                            borderLeft: isSelected ? `3px solid ${col.hex}` : "3px solid transparent",
+                            backgroundColor: isSelected ? `${accentColor}20` : undefined,
+                            borderLeft: isSelected ? `3px solid ${accentColor}` : "3px solid transparent",
                           }}
                           onClick={() => handleSelectPlayer(player.id, team.id)}
+                          onPointerDown={() => handlePlayerPointerDown(player.id, team.id)}
+                          onPointerMove={handlePlayerPointerMove}
+                          onPointerUp={handlePlayerPointerUp}
+                          onPointerCancel={handlePlayerPointerCancel}
                           data-testid={`player-row-${player.id}-team-${team.id}`}
                         >
                           {isSelected && (
-                            <ArrowLeftRight className="absolute left-1 top-1/2 w-2.5 h-2.5 -translate-y-1/2" style={{ color: col.hex }} />
+                            <ArrowLeftRight className="absolute left-1 top-1/2 w-2.5 h-2.5 -translate-y-1/2" style={{ color: accentColor }} />
                           )}
                           <div className={`min-w-0 flex-1 ${isSelected ? "pl-3" : ""}`}>
                             <div className="font-bold text-xs truncate text-left">{displayName(player)}</div>
                             {(player.isNew || player.isGoalkeeper || player.isOrganizer || isNotHereYet(player)) && (
-                              <div className="mt-0.5 flex flex-wrap gap-1">
+                              <div className="mt-0.5 flex flex-wrap items-center gap-1">
                                 {player.isNew && <NewBadge />}
                                 {player.isGoalkeeper && <GKBadge />}
                                 {player.isOrganizer && <ORGBadge />}

@@ -1363,16 +1363,8 @@ export function PlayersTab({
                       <div className="font-black leading-tight text-[14px] break-words">{displayName(player)}</div>
                       <PlayerTags player={player} includeVibe includeAbilityCount={!isFlipped} />
                     </div>
-                    {!hideOverall ? <OverallBadge player={player} /> : null}
-                  </div>
-
-                  {isFlipped ? <PlayerCardBack player={player} /> : null}
-
-                  <div className="mt-1.5 flex items-center justify-between gap-2 border-t border-border/60 pt-1">
-                    <div className="text-[9px] text-muted-foreground font-bold tracking-wide">
-                      {isFlipped ? "Tap card to hide details" : "Tap card for stats"}
-                    </div>
-                    <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
+                    <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
+                      {!hideOverall ? <OverallBadge player={player} /> : null}
                       <ProfileDialog player={player} onUpdate={(data) => updatePlayer(player.id, data)} autoOpen={autoEditPlayerId === player.id} onAutoOpenHandled={() => setAutoEditPlayerId(null)} />
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
@@ -1393,6 +1385,8 @@ export function PlayersTab({
                       </AlertDialog>
                     </div>
                   </div>
+
+                  {isFlipped ? <PlayerCardBack player={player} /> : null}
                 </div>
               );
             })}

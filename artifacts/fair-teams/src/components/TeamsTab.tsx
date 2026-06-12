@@ -5,7 +5,7 @@ import { generateTeams, recomputeStats } from "@/lib/teamGenerator";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Shuffle, ArrowLeftRight, Download, HelpCircle, Clock, Pencil, Palette, Zap, Sparkles } from "lucide-react";
+import { Shuffle, ArrowLeftRight, Download, HelpCircle, Clock, Palette, Zap, Sparkles } from "lucide-react";
 import fairTeamsLogo from "@/assets/fairteams-logo.png";
 
 const COLOR_OPTIONS: { value: TeamColor; label: string; hex: string; textHex: string }[] = [
@@ -328,6 +328,8 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
   const [fieldSize, setFieldSize] = useState<FieldSize>(() => loadFieldSize());
   const [showFieldHelp, setShowFieldHelp] = useState(false);
   const [teams, setTeams] = useState<Team[]>([]);
+  const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
+  const [editingTeamName, setEditingTeamName] = useState("");
   const [history, setHistory] = useState<TeamHistoryEntry[]>(() => loadTeamHistory());
   const [swap, setSwap] = useState<SwapSelection | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -427,12 +429,24 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
     setTeams(prev => prev.map(t => t.id === teamId ? { ...t, color, name: label } : t));
   };
 
-  const handleRenameTeam = (teamId: string, currentName: string) => {
-    const nextName = window.prompt("Team name", currentName);
-    if (nextName === null) return;
-    const trimmed = nextName.trim();
-    if (!trimmed) return;
-    setTeams(prev => prev.map(t => t.id === teamId ? { ...t, name: trimmed } : t));
+  const startEditingTeamName = (teamId: string, currentName: string) => {
+    setEditingTeamId(teamId);
+    setEditingTeamName(currentName);
+  };
+
+  const commitTeamName = () => {
+    if (!editingTeamId) return;
+    const trimmed = editingTeamName.trim();
+    if (trimmed) {
+      setTeams(prev => prev.map(t => t.id === editingTeamId ? { ...t, name: trimmed } : t));
+    }
+    setEditingTeamId(null);
+    setEditingTeamName("");
+  };
+
+  const cancelTeamNameEdit = () => {
+    setEditingTeamId(null);
+    setEditingTeamName("");
   };
 
   const swapPlayers = (fromTeamId: string, fromPlayerId: string, toTeamId: string, toPlayerId: string) => {
@@ -621,22 +635,36 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
                 <div className="bg-card px-3 pt-2 pb-1.5">
                   <div className="flex items-start justify-between gap-2 mb-1">
                     <div className="flex items-center gap-1 min-w-0">
-                      <span className="text-sm font-black leading-tight truncate text-foreground">{team.name}</span>
-                      <button
-                        type="button"
-                        onClick={() => handleRenameTeam(team.id, team.name)}
-                        className="h-5 w-5 inline-flex items-center justify-center rounded-full shrink-0 text-muted-foreground hover:bg-muted"
-                        title="Rename team"
-                        data-testid={`button-rename-team-${team.id}`}
-                      >
-                        <Pencil className="w-3 h-3" />
-                      </button>
+                      {editingTeamId === team.id ? (
+                        <input
+                          className="min-w-0 w-full max-w-[8rem] rounded-md border border-border bg-background px-1.5 py-0.5 text-sm font-black leading-tight text-foreground outline-none focus:border-primary"
+                          value={editingTeamName}
+                          autoFocus
+                          onChange={e => setEditingTeamName(e.target.value)}
+                          onBlur={commitTeamName}
+                          onKeyDown={e => {
+                            if (e.key === "Enter") commitTeamName();
+                            if (e.key === "Escape") cancelTeamNameEdit();
+                          }}
+                          data-testid={`input-team-name-${team.id}`}
+                        />
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => startEditingTeamName(team.id, team.name)}
+                          className="min-w-0 truncate text-left text-sm font-black leading-tight text-foreground hover:text-primary"
+                          title="Tap to rename team"
+                          data-testid={`button-team-name-${team.id}`}
+                        >
+                          {team.name}
+                        </button>
+                      )}
                     </div>
 
                     {/* Team color selector */}
                     <Select value={team.color} onValueChange={v => handleColorChange(team.id, v as TeamColor)}>
                       <SelectTrigger
-                        className="h-7 w-7 border-0 p-0 shadow-none bg-transparent hover:bg-transparent text-muted-foreground hover:text-foreground [&>svg:last-child]:hidden"
+                        className="h-7 w-7 border-0 p-0 shadow-none bg-transparent hover:bg-transparent text-muted-foreground hover:text-foreground outline-none ring-0 focus:outline-none focus:ring-0 focus:ring-offset-0 focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 data-[state=open]:bg-transparent data-[state=open]:ring-0 [&>svg:last-child]:hidden"
                         style={{ color: accentColor }}
                         title={`Change team color (${col.label})`}
                         data-testid={`select-team-color-${team.id}`}

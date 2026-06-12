@@ -23,15 +23,15 @@ function colorFor(color: TeamColor) {
 }
 
 function GKBadge() {
-  return <span className="inline-flex items-center rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-black text-emerald-800 border border-emerald-200">GK</span>;
+  return <span className="inline-flex items-center rounded-full border border-emerald-200/60 bg-emerald-50/50 px-1 py-0 text-[8px] font-semibold lowercase text-emerald-700/70">gk</span>;
 }
 
 function ORGBadge() {
-  return <span className="inline-flex items-center rounded-full bg-violet-100 px-1.5 py-0.5 text-[9px] font-black text-violet-800 border border-violet-200">ORG</span>;
+  return <span className="inline-flex items-center rounded-full border border-violet-200/60 bg-violet-50/50 px-1 py-0 text-[8px] font-semibold lowercase text-violet-700/70">org</span>;
 }
 
 function NewBadge() {
-  return <span className="inline-flex items-center rounded-full bg-sky-100 px-1.5 py-0.5 text-[9px] font-black text-sky-800 border border-sky-200">NEW</span>;
+  return <span className="inline-flex items-center rounded-full border border-sky-200/60 bg-sky-50/50 px-1 py-0 text-[8px] font-semibold lowercase text-sky-700/70">new</span>;
 }
 
 function NotHereBadge() {
@@ -54,12 +54,12 @@ function displayName(player: Pick<Player, "name" | "aka">) {
 function GenderBadge({ gender }: { gender?: string }) {
   const normalized = (gender ?? "other").toLowerCase();
   if (normalized === "female") {
-    return <span className="text-[9px] font-semibold text-pink-500/70">F</span>;
+    return <span className="text-[8px] font-medium lowercase text-pink-500/50">f</span>;
   }
   if (normalized === "male") {
-    return <span className="text-[9px] font-semibold text-blue-500/70">M</span>;
+    return <span className="text-[8px] font-medium lowercase text-blue-500/50">m</span>;
   }
-  return <span className="text-[9px] font-semibold text-purple-500/60">O</span>;
+  return <span className="text-[8px] font-medium lowercase text-purple-500/45">o</span>;
 }
 
 const FIELD_SIZE_STORAGE_KEY = "fair-teams-field-size-v1";
@@ -334,11 +334,6 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
   const [drawStep, setDrawStep] = useState(0);
   const [justGenerated, setJustGenerated] = useState(false);
   const generateTimerRef = useRef<number | null>(null);
-  const longPressTimerRef = useRef<number | null>(null);
-  const dragScrollTimerRef = useRef<number | null>(null);
-  const dragRef = useRef<{ playerId: string; fromTeamId: string } | null>(null);
-  const suppressClickRef = useRef(false);
-  const [dragging, setDragging] = useState<{ playerId: string; fromTeamId: string } | null>(null);
 
   useEffect(() => {
     localStorage.setItem(FIELD_SIZE_STORAGE_KEY, fieldSize);
@@ -359,8 +354,6 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
   useEffect(() => {
     return () => {
       if (generateTimerRef.current !== null) window.clearTimeout(generateTimerRef.current);
-      if (longPressTimerRef.current !== null) window.clearTimeout(longPressTimerRef.current);
-      if (dragScrollTimerRef.current !== null) window.clearInterval(dragScrollTimerRef.current);
     };
   }, []);
 
@@ -476,11 +469,6 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
   };
 
   const handleSelectPlayer = (playerId: string, fromTeamId: string) => {
-    if (suppressClickRef.current) {
-      suppressClickRef.current = false;
-      return;
-    }
-    if (dragging) return;
     if (!swap) {
       setSwap({ playerId, fromTeamId });
       return;
@@ -497,70 +485,6 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
     if (!swap) return;
     movePlayerToTeam(swap.fromTeamId, swap.playerId, toTeamId);
     setSwap(null);
-  };
-
-  const stopDragAutoScroll = () => {
-    if (dragScrollTimerRef.current !== null) {
-      window.clearInterval(dragScrollTimerRef.current);
-      dragScrollTimerRef.current = null;
-    }
-  };
-
-  const handlePlayerPointerDown = (event: React.PointerEvent<HTMLButtonElement>, playerId: string, fromTeamId: string) => {
-    if (longPressTimerRef.current !== null) window.clearTimeout(longPressTimerRef.current);
-    try { event.currentTarget.setPointerCapture(event.pointerId); } catch {}
-    longPressTimerRef.current = window.setTimeout(() => {
-      const nextDrag = { playerId, fromTeamId };
-      dragRef.current = nextDrag;
-      setDragging(nextDrag);
-      setSwap(nextDrag);
-      suppressClickRef.current = true;
-      if (navigator.vibrate) navigator.vibrate(12);
-    }, 380);
-  };
-
-  const handlePlayerPointerMove = (event: React.PointerEvent) => {
-    if (!dragRef.current) return;
-    event.preventDefault();
-    const y = event.clientY;
-    const edge = 90;
-    const speed = y < edge ? -14 : y > window.innerHeight - edge ? 14 : 0;
-    if (speed === 0) {
-      stopDragAutoScroll();
-      return;
-    }
-    if (dragScrollTimerRef.current === null) {
-      dragScrollTimerRef.current = window.setInterval(() => window.scrollBy({ top: speed, behavior: "auto" }), 16);
-    }
-  };
-
-  const handlePlayerPointerUp = (event: React.PointerEvent<HTMLButtonElement>) => {
-    try { event.currentTarget.releasePointerCapture(event.pointerId); } catch {}
-    if (longPressTimerRef.current !== null) {
-      window.clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-    }
-    const activeDrag = dragRef.current;
-    stopDragAutoScroll();
-    dragRef.current = null;
-    setDragging(null);
-    if (!activeDrag) return;
-    suppressClickRef.current = true;
-    window.setTimeout(() => { suppressClickRef.current = false; }, 0);
-    const target = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>("[data-team-drop-id]");
-    const toTeamId = target?.dataset.teamDropId;
-    if (toTeamId) movePlayerToTeam(activeDrag.fromTeamId, activeDrag.playerId, toTeamId);
-    setSwap(null);
-  };
-
-  const handlePlayerPointerCancel = () => {
-    if (longPressTimerRef.current !== null) {
-      window.clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-    }
-    stopDragAutoScroll();
-    dragRef.current = null;
-    setDragging(null);
   };
 
   if (attendingPlayers.length < 2 && teams.length === 0) {
@@ -685,7 +609,7 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
         <div className="bg-primary/10 border border-primary/30 rounded-xl px-3 py-2 flex items-center gap-2">
           <ArrowLeftRight className="w-3.5 h-3.5 text-primary shrink-0" />
           <p className="text-xs font-semibold text-primary flex-1">
-            Selected <span className="font-black">{displayName(teams.flatMap(t => t.players).find(p => p.id === swap.playerId) || { name: "player" })}</span> — tap another player to swap, or long-press and drag to move
+            Selected <span className="font-black">{displayName(teams.flatMap(t => t.players).find(p => p.id === swap.playerId) || { name: "player" })}</span> — tap another player to swap, or tap Move here on a team
           </p>
           <button className="text-[10px] text-muted-foreground underline shrink-0" onClick={() => setSwap(null)} data-testid="button-cancel-swap">Cancel</button>
         </div>
@@ -783,16 +707,12 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
                       return (
                         <button
                           key={player.id}
-                          className="relative w-full flex touch-none select-none items-center gap-1.5 px-2.5 py-1.5 text-left transition-colors"
+                          className="relative w-full flex select-none items-center gap-1.5 px-2.5 py-1.5 text-left transition-colors"
                           style={{
                             backgroundColor: isSelected ? `${accentColor}20` : undefined,
                             borderLeft: isSelected ? `3px solid ${accentColor}` : "3px solid transparent",
                           }}
                           onClick={() => handleSelectPlayer(player.id, team.id)}
-                          onPointerDown={(event) => handlePlayerPointerDown(event, player.id, team.id)}
-                          onPointerMove={handlePlayerPointerMove}
-                          onPointerUp={handlePlayerPointerUp}
-                          onPointerCancel={handlePlayerPointerCancel}
                           data-testid={`player-row-${player.id}-team-${team.id}`}
                         >
                           {isSelected && (
@@ -801,7 +721,7 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
                           <div className={`min-w-0 flex-1 ${isSelected ? "pl-3" : ""}`}>
                             <div className="font-bold text-xs truncate text-left">{displayName(player)}</div>
                             {(player.isNew || player.isGoalkeeper || player.isOrganizer || isNotHereYet(player)) && (
-                              <div className="mt-0.5 flex flex-wrap items-center gap-1">
+                              <div className="mt-0.5 flex flex-wrap items-center gap-0.5">
                                 {player.isNew && <NewBadge />}
                                 {player.isGoalkeeper && <GKBadge />}
                                 {player.isOrganizer && <ORGBadge />}

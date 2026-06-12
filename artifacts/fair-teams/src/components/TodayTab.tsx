@@ -1076,10 +1076,7 @@ export function TodayTab({
   >([]);
 
   const sorted = [...players].sort((a, b) => {
-    if (
-      prioritizeScannedPlayers &&
-      Boolean(a.attending) !== Boolean(b.attending)
-    ) {
+    if (Boolean(a.attending) !== Boolean(b.attending)) {
       return a.attending ? -1 : 1;
     }
     return displayName(a).localeCompare(displayName(b));
@@ -2881,22 +2878,17 @@ export function TodayTab({
                 >
                   {displayName(player)}
                 </div>
-                <div className="mt-0.5 flex items-center gap-1 min-w-0">
-                  <span className="text-[10px] text-muted-foreground font-medium shrink-0">
-                    Skill {player.skill}
-                  </span>
-                  {(player.isNew ||
-                    player.isGoalkeeper ||
-                    player.isOrganizer ||
-                    (player.attending && isNotHereYet(player))) && (
-                    <div className="flex flex-wrap gap-1 min-w-0">
-                      {player.isNew && <NewBadge />}
-                      {player.isGoalkeeper && <GKBadge />}
-                      {player.isOrganizer && <ORGBadge />}
-                      {player.attending && isNotHereYet(player) && <NotHereBadge />}
-                    </div>
-                  )}
-                </div>
+                {(player.isNew ||
+                  player.isGoalkeeper ||
+                  player.isOrganizer ||
+                  (player.attending && isNotHereYet(player))) && (
+                  <div className="mt-0.5 flex flex-wrap gap-1 min-w-0">
+                    {player.isNew && <NewBadge />}
+                    {player.isGoalkeeper && <GKBadge />}
+                    {player.isOrganizer && <ORGBadge />}
+                    {player.attending && isNotHereYet(player) && <NotHereBadge />}
+                  </div>
+                )}
               </div>
               {player.attending && (
                 <button

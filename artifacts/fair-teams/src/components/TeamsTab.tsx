@@ -161,7 +161,7 @@ async function exportTeamsAsJpg(teams: Team[], fieldSize: FieldSize) {
   const PAD = 28;
   const GAP = 14;
   const TITLE_H = 78;
-  const TEAM_HEADER_H = 34;
+  const TEAM_HEADER_H = 46;
   const PLAYER_LINE_H = 20;
   const CARD_PAD_X = 16;
   const CARD_PAD_Y = 12;
@@ -247,7 +247,11 @@ async function exportTeamsAsJpg(teams: Team[], fieldSize: FieldSize) {
     // Team header: minimal, no icons
     ctx.fillStyle = colOpt.hex;
     ctx.font = `900 16px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
-    ctx.fillText(team.name, x + CARD_PAD_X, y + 24);
+    ctx.fillText(team.name, x + CARD_PAD_X, y + 23);
+
+    ctx.fillStyle = "#64748B";
+    ctx.font = `700 10px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
+    ctx.fillText(`${team.players.length} ${team.players.length === 1 ? "player" : "players"}`, x + CARD_PAD_X, y + 38);
 
     ctx.strokeStyle = colOpt.hex;
     ctx.lineWidth = 2;

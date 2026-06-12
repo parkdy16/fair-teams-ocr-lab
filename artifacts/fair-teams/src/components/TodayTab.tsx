@@ -1891,9 +1891,10 @@ export function TodayTab({
       <div className="grid grid-cols-2 gap-2">
         <Button
           type="button"
+          variant="outline"
           size="sm"
           onClick={openImportChoice}
-          className="h-9 rounded-xl bg-primary text-xs font-black text-primary-foreground shadow-sm hover:bg-primary/90"
+          className="h-9 rounded-xl border-slate-300 bg-white/80 text-xs font-black text-slate-700 shadow-sm hover:bg-white hover:text-slate-900"
           data-testid="today-import-button"
         >
           <ClipboardList className="mr-1.5 h-3.5 w-3.5" />
@@ -1904,10 +1905,14 @@ export function TodayTab({
           variant="outline"
           size="sm"
           onClick={openQuickVoiceSelect}
-          className="h-9 rounded-xl text-xs font-black"
+          className={`h-9 rounded-xl text-xs font-black ${
+            quickVoiceOpen || quickVoiceListening
+              ? "border-red-300 bg-red-50 text-red-700 shadow-sm hover:bg-red-50 hover:text-red-800"
+              : ""
+          }`}
           data-testid="today-quick-voice-button"
         >
-          <Mic className="mr-1.5 h-3.5 w-3.5" />
+          <Mic className={`mr-1.5 h-3.5 w-3.5 ${quickVoiceOpen || quickVoiceListening ? "animate-pulse" : ""}`} />
           Voice Select
         </Button>
       </div>

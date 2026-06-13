@@ -2141,7 +2141,7 @@ export function TodayTab({
           <p className="mx-auto mt-2 max-w-xs text-xs font-semibold leading-relaxed text-muted-foreground">
             Fastest setup: import a Meetup, WhatsApp, Telegram, or attendee screenshot and create multiple players at once.
           </p>
-          <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
             <Button
               type="button"
               onClick={openImportChoice}
@@ -2159,6 +2159,16 @@ export function TodayTab({
               data-testid="empty-today-add-player-button"
             >
               Add Player Manually
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={openQuickVoiceSelect}
+              className={`h-10 rounded-xl text-xs font-black uppercase tracking-wide ${quickVoiceOpen || quickVoiceListening ? "border-red-300 bg-red-50 text-red-700" : ""}`}
+              data-testid="empty-today-voice-add-button"
+            >
+              <Mic className={`mr-1.5 h-3.5 w-3.5 ${quickVoiceOpen || quickVoiceListening ? "animate-pulse" : ""}`} />
+              Voice Add
             </Button>
           </div>
         </div>
@@ -2248,7 +2258,7 @@ export function TodayTab({
               <span className={`flex h-7 w-7 items-center justify-center rounded-full ${quickVoiceListening ? "bg-red-100 text-red-700" : "bg-slate-100 text-slate-700"}`}>
                 <Mic className={`h-3.5 w-3.5 ${quickVoiceListening ? "animate-pulse" : ""}`} />
               </span>
-              <span>{quickVoiceListening ? "Say one name" : quickVoiceHeard.trim() ? "Choose player" : "Voice Select"}</span>
+              <span>{quickVoiceListening ? "Say one name" : quickVoiceHeard.trim() ? (players.length === 0 ? "Add player" : "Choose player") : (players.length === 0 ? "Voice Add" : "Voice Select")}</span>
             </div>
             <button
               type="button"
@@ -2314,7 +2324,7 @@ export function TodayTab({
                 </div>
               ) : (
                 <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-3 text-center text-xs font-bold text-slate-500">
-                  No roster match found.
+                  {players.length === 0 ? "No roster yet. Add the heard name below." : "No roster match found."}
                 </div>
               )}
 
@@ -2323,7 +2333,9 @@ export function TodayTab({
                   <div className="mb-2 text-[10px] font-bold leading-snug text-sky-700">
                     {quickVoiceCandidates.length > 0
                       ? "Not one of these? Add the heard name as a new player for today."
-                      : "No roster match? Add the heard name as a new player for today."}
+                      : players.length === 0
+                        ? "Add the heard name as a new player for today."
+                        : "No roster match? Add the heard name as a new player for today."}
                   </div>
                   <Button
                     type="button"

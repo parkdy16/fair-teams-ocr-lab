@@ -7,9 +7,64 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { UserMinus, Plus, Star, Zap, Search, X, Camera, Image as ImageIcon, Trash2, Pencil, Shield, Activity, Dumbbell, Target, Share2, Eye, EyeOff, ArrowDownAZ, Clock3 } from "lucide-react";
+import { UserMinus, Plus, Star, Zap, Search, X, Camera, Image as ImageIcon, Trash2, Pencil, Shield, Activity, Dumbbell, Target, Share2, Eye, EyeOff, ArrowDownAZ, Clock3, Mic } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart, ResponsiveContainer } from "recharts";
+
+
+
+type SpeechRecognitionResultLike = {
+  isFinal: boolean;
+  0: { transcript: string };
+};
+
+type SpeechRecognitionEventLike = {
+  resultIndex: number;
+  results: SpeechRecognitionResultLike[];
+};
+
+type SpeechRecognitionInstance = {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  start: () => void;
+  stop: () => void;
+  abort?: () => void;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onend: (() => void) | null;
+  onerror: ((event: { error?: string }) => void) | null;
+};
+
+type SpeechRecognitionConstructor = new () => SpeechRecognitionInstance;
+
+function cleanVoiceAddName(value: string) {
+  return value
+    .replace(/[’`´]/g, "'")
+    .replace(/[^\p{L}\p{M}\s.'-]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeVoiceAddName(value: string) {
+  return cleanVoiceAddName(value)
+    .toLocaleLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+}
+
+function isProbablyVoiceAddName(value: string) {
+  const cleaned = cleanVoiceAddName(value);
+  if (cleaned.length < 2 || cleaned.length > 42) return false;
+  const words = cleaned.split(/\s+/).filter(Boolean);
+  if (words.length < 1 || words.length > 4) return false;
+  if (!/[\p{L}]/u.test(cleaned)) return false;
+  if (!/^[\p{L}\p{M}][\p{L}\p{M}.'-]*(?:\s+[\p{L}\p{M}][\p{L}\p{M}.'-]*)*$/u.test(cleaned)) return false;
+  const lowered = cleaned.toLocaleLowerCase();
+  const blocked = new Set(["yes", "no", "okay", "ok", "cancel", "stop", "try again", "add player", "screenshot", "import"]);
+  return !blocked.has(lowered);
+}
 
 const STAT_FIELDS = [
   { key: "attack", label: "Attack", short: "ATK", icon: Target },
@@ -864,6 +919,11 @@ export function PlayersTab({
   const [search, setSearch] = useState("");
   const [addOptionsOpen, setAddOptionsOpen] = useState(false);
   const [addPlayerOpen, setAddPlayerOpen] = useState(false);
+  const [voiceAddOpen, setVoiceAddOpen] = useState(false);
+  const [voiceAddHeard, setVoiceAddHeard] = useState("");
+  const [voiceAddListening, setVoiceAddListening] = useState(false);
+  const [voiceAddStatus, setVoiceAddStatus] = useState("");
+  const voiceAddRecognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const [hideOverall, setHideOverall] = useState(() => {
     try { return window.localStorage.getItem("fair-teams-hide-roster-skill") !== "false"; }
     catch { return true; }
@@ -899,6 +959,106 @@ export function PlayersTab({
     setAddOptionsOpen(false);
     onScreenshotImport?.();
   };
+
+  const stopVoiceAddListening = () => {
+    voiceAddRecognitionRef.current?.stop();
+    setVoiceAddListening(false);
+  };
+
+  const startVoiceAddListening = () => {
+    const voiceWindow = window as Window & {
+      SpeechRecognition?: SpeechRecognitionConstructor;
+      webkitSpeechRecognition?: SpeechRecognitionConstructor;
+    };
+    const Recognition = voiceWindow.SpeechRecognition || voiceWindow.webkitSpeechRecognition;
+    if (!Recognition) {
+      setVoiceAddStatus("Voice is not supported here. Type a name below.");
+      return;
+    }
+    try {
+      setVoiceAddHeard("");
+      setVoiceAddStatus("Say one player name.");
+      navigator.vibrate?.(25);
+      voiceAddRecognitionRef.current?.abort?.();
+      const recognition = new Recognition();
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.lang = navigator.language || "en-US";
+      recognition.onresult = (event) => {
+        const transcript = event.results?.[event.resultIndex]?.[0]?.transcript?.trim?.() ?? "";
+        setVoiceAddHeard(transcript);
+        setVoiceAddStatus(transcript ? "Review and add the player." : "No name heard. Try again or type.");
+      };
+      recognition.onerror = (event) => {
+        setVoiceAddStatus(event.error ? `Voice stopped: ${event.error}` : "Try again or type a name.");
+        setVoiceAddListening(false);
+      };
+      recognition.onend = () => setVoiceAddListening(false);
+      voiceAddRecognitionRef.current = recognition;
+      recognition.start();
+      setVoiceAddListening(true);
+    } catch (error) {
+      console.error(error);
+      setVoiceAddStatus("Voice could not start. Type a name below.");
+      setVoiceAddListening(false);
+    }
+  };
+
+  const openVoiceAddPlayer = () => {
+    setAddOptionsOpen(false);
+    setVoiceAddHeard("");
+    setVoiceAddStatus("");
+    setVoiceAddOpen(true);
+    window.setTimeout(() => startVoiceAddListening(), 80);
+  };
+
+  const voiceAddCleanName = cleanVoiceAddName(voiceAddHeard);
+  const voiceAddDuplicatePlayer = useMemo(() => {
+    const normalizedName = normalizeVoiceAddName(voiceAddCleanName);
+    if (!normalizedName) return undefined;
+    return players.find((player) => {
+      const names = [player.name, player.aka].filter(Boolean) as string[];
+      return names.some((candidate) => normalizeVoiceAddName(candidate) === normalizedName);
+    });
+  }, [players, voiceAddCleanName]);
+  const voiceAddCanAdd = Boolean(voiceAddCleanName && isProbablyVoiceAddName(voiceAddCleanName) && !voiceAddDuplicatePlayer);
+
+  const addVoicePlayerToRoster = () => {
+    const cleanedName = voiceAddCleanName;
+    if (!cleanedName || !isProbablyVoiceAddName(cleanedName)) {
+      setVoiceAddStatus("Type a clean player name first.");
+      return;
+    }
+    if (voiceAddDuplicatePlayer) {
+      setVoiceAddStatus(`${displayName(voiceAddDuplicatePlayer)} already exists in the roster.`);
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const profileDetails = createDefaultAddPlayerDetails(5);
+    const newPlayer = normalizePlayer({
+      id: createPlayerId(),
+      roomId: 1,
+      name: cleanedName,
+      gender: "other",
+      skill: calculateOverall(profileDetails),
+      ...profileDetails,
+      isOrganizer: false,
+      isNew: true,
+      attending: false,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    setPlayers([...players, newPlayer]);
+    setVoiceAddOpen(false);
+    setVoiceAddHeard("");
+    setVoiceAddStatus("");
+  };
+
+  useEffect(() => () => {
+    voiceAddRecognitionRef.current?.abort?.();
+  }, []);
 
   useEffect(() => {
     try { window.localStorage.setItem("fair-teams-hide-roster-skill", hideOverall ? "true" : "false"); }
@@ -994,17 +1154,6 @@ export function PlayersTab({
               <DialogTitle className="text-xl font-black tracking-tight">Add players</DialogTitle>
             </div>
             <div className="flex flex-col gap-2 p-4">
-              <button
-                type="button"
-                onClick={openManualAddPlayer}
-                className="flex items-center gap-3 rounded-2xl border border-border bg-background p-3 text-left transition-colors hover:bg-muted/50"
-                data-testid="button-add-manually-option"
-              >
-                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-muted text-primary">
-                  <Plus className="h-5 w-5" />
-                </span>
-                <span className="text-base font-black text-foreground">Add manually</span>
-              </button>
               {onScreenshotImport && (
                 <button
                   type="button"
@@ -1018,6 +1167,105 @@ export function PlayersTab({
                   <span className="text-base font-black text-foreground">Import screenshot</span>
                 </button>
               )}
+              <button
+                type="button"
+                onClick={openManualAddPlayer}
+                className="flex items-center gap-3 rounded-2xl border border-border bg-background p-3 text-left transition-colors hover:bg-muted/50"
+                data-testid="button-add-manually-option"
+              >
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-muted text-primary">
+                  <Plus className="h-5 w-5" />
+                </span>
+                <span className="text-base font-black text-foreground">Add manually</span>
+              </button>
+              <button
+                type="button"
+                onClick={openVoiceAddPlayer}
+                className="flex items-center gap-3 rounded-2xl border border-border bg-background p-3 text-left transition-colors hover:bg-muted/50"
+                data-testid="button-add-by-voice-option"
+              >
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-muted text-primary">
+                  <Mic className="h-5 w-5" />
+                </span>
+                <span className="text-base font-black text-foreground">Add by voice</span>
+              </button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={voiceAddOpen} onOpenChange={(next) => {
+          setVoiceAddOpen(next);
+          if (!next) {
+            stopVoiceAddListening();
+          }
+        }}>
+          <DialogContent
+            onOpenAutoFocus={(event) => event.preventDefault()}
+            className="max-w-sm rounded-3xl p-0 overflow-hidden"
+          >
+            <div className="flex items-center justify-between border-b border-border px-5 py-4">
+              <DialogTitle className="text-xl font-black tracking-tight">Add by voice</DialogTitle>
+              <span className={`flex h-8 w-8 items-center justify-center rounded-full ${voiceAddListening ? "bg-red-100 text-red-700" : "bg-muted text-primary"}`}>
+                <Mic className={`h-4 w-4 ${voiceAddListening ? "animate-pulse" : ""}`} />
+              </span>
+            </div>
+            <div className="space-y-3 p-4">
+              {voiceAddListening && (
+                <div className="rounded-2xl border border-red-100 bg-red-50 px-3 py-2 text-center text-[11px] font-black text-red-700">
+                  Listening… say one player name
+                </div>
+              )}
+
+              {!voiceAddListening && voiceAddStatus && !voiceAddHeard.trim() && (
+                <div className="rounded-2xl bg-muted/40 px-3 py-2 text-center text-[11px] font-bold text-muted-foreground">
+                  {voiceAddStatus}
+                </div>
+              )}
+
+              <div className="rounded-2xl bg-muted/35 px-3 py-2">
+                <Label className="mb-1 block text-[10px] font-black uppercase tracking-wide text-muted-foreground">
+                  Heard / edit before adding
+                </Label>
+                <Input
+                  value={voiceAddCleanName}
+                  onChange={(event) => setVoiceAddHeard(event.target.value)}
+                  className="h-9 rounded-xl bg-background text-sm font-black"
+                  placeholder="Type one player name"
+                />
+              </div>
+
+              {voiceAddDuplicatePlayer && (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">
+                  Duplicate warning: {displayName(voiceAddDuplicatePlayer)} already exists in the roster.
+                </div>
+              )}
+
+              {voiceAddCleanName && !isProbablyVoiceAddName(voiceAddCleanName) && (
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-500">
+                  Type a clean player name before adding.
+                </div>
+              )}
+
+              <Button
+                type="button"
+                onClick={addVoicePlayerToRoster}
+                disabled={!voiceAddCanAdd}
+                className="h-10 w-full rounded-xl font-black uppercase tracking-wide"
+                data-testid="button-confirm-voice-add-player"
+              >
+                Add{voiceAddCleanName ? ` “${voiceAddCleanName}”` : " Player"}
+              </Button>
+
+              <Button
+                type="button"
+                variant="outline"
+                onClick={startVoiceAddListening}
+                disabled={voiceAddListening}
+                className="h-9 w-full rounded-xl text-xs font-black"
+              >
+                <Mic className="mr-1.5 h-3.5 w-3.5" />
+                Try Again
+              </Button>
             </div>
           </DialogContent>
         </Dialog>

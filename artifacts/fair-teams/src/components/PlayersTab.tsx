@@ -1111,6 +1111,14 @@ export function PlayersTab({
     setAddPlayerOpen(false);
   };
 
+  const preventKeyboardSubmit = (event: React.KeyboardEvent<HTMLFormElement>) => {
+    if (event.key !== "Enter") return;
+    const target = event.target as HTMLElement;
+    if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") {
+      event.preventDefault();
+    }
+  };
+
   const sortedPlayers = [...players].sort((a, b) => {
     if (sortMode === "alpha") {
       return displayName(a).localeCompare(displayName(b));
@@ -1283,7 +1291,7 @@ export function PlayersTab({
             <DialogHeader>
               <DialogTitle>Add player</DialogTitle>
             </DialogHeader>
-            <form onSubmit={handleAdd} className="flex flex-col gap-3.5 pt-1">
+            <form onSubmit={handleAdd} onKeyDown={preventKeyboardSubmit} className="flex flex-col gap-3.5 pt-1">
               <div className="grid grid-cols-1 gap-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="name" className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider">Player Name</Label>
@@ -1294,6 +1302,7 @@ export function PlayersTab({
                     onChange={e => setName(e.target.value)}
                     className="h-11 text-sm font-semibold"
                     data-testid="input-player-name"
+                    enterKeyHint="done"
                   />
                 </div>
               </div>
@@ -1413,6 +1422,7 @@ export function PlayersTab({
                           value={name}
                           onChange={e => setName(e.target.value)}
                           className="h-10 text-sm font-semibold"
+                          enterKeyHint="done"
                         />
                       </div>
                       <div className="space-y-1.5">
@@ -1423,6 +1433,7 @@ export function PlayersTab({
                           value={aka}
                           onChange={e => setAka(e.target.value)}
                           className="h-10 text-sm font-semibold"
+                          enterKeyHint="done"
                           data-testid="input-player-aka"
                         />
                       </div>

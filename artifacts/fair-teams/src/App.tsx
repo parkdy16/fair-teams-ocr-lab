@@ -11,9 +11,8 @@ import {
   X,
   Trash2,
   AlertTriangle,
-  Package,
   Plus,
-  ChevronDown,
+  Settings,
   Share2,
   ArchiveRestore,
 } from "lucide-react";
@@ -198,7 +197,6 @@ function App() {
   const [rosterFilesOpen, setRosterFilesOpen] = useState(false);
   const [clearRosterOpen, setClearRosterOpen] = useState(false);
   const [clearRosterSlide, setClearRosterSlide] = useState(0);
-  const [rosterManagerOpen, setRosterManagerOpen] = useState(false);
   const [newRosterName, setNewRosterName] = useState("");
   const [fileImportMode, setFileImportMode] = useState<"shared" | "backup">("shared");
 
@@ -295,6 +293,7 @@ function App() {
       activeRosterId: roster.id,
     }));
     setNewRosterName("");
+    setRosterFilesOpen(false);
   };
 
   const exportSharedRoster = () => {
@@ -318,7 +317,6 @@ function App() {
 
   const openClearRoster = () => {
     setRosterFilesOpen(false);
-    setRosterManagerOpen(false);
     setClearRosterSlide(0);
     setClearRosterOpen(true);
   };
@@ -446,9 +444,10 @@ function App() {
             <div className="min-w-0 flex-1">
               <button
                 type="button"
-                onClick={openGroupSettings}
-                className="group flex max-w-full min-w-0 items-center gap-2.5 text-left transition-transform active:scale-[0.99]"
-                title="Edit active roster name, logo, and color"
+                onClick={activeTab === "players" ? openGroupSettings : undefined}
+                className={`group flex max-w-full min-w-0 items-center gap-2.5 text-left ${activeTab === "players" ? "transition-transform active:scale-[0.99]" : "cursor-default"}`}
+                title={activeTab === "players" ? "Edit active roster name, logo, and color" : activeRosterName}
+                aria-label={activeTab === "players" ? "Edit active roster identity" : `Current roster: ${activeRosterName}`}
               >
                 <span
                   className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-2xl border-2 bg-white shadow-sm"
@@ -464,32 +463,31 @@ function App() {
                   <h1 className="truncate text-[17px] font-black leading-tight tracking-tight text-[#102A43]">
                     {headerDisplayName}
                   </h1>
-                  <Pencil className="h-3.5 w-3.5 shrink-0 text-[#102A43]/45" />
+                  {activeTab === "players" && (
+                    <Pencil className="h-3.5 w-3.5 shrink-0 text-[#102A43]/45" />
+                  )}
                 </span>
               </button>
             </div>
 
-            <div className="flex items-center gap-1.5 shrink-0">
-              {activeTab === "players" && (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  className="h-9 rounded-xl bg-white/85 border border-slate-200 px-3 gap-1.5 text-[12px] font-black text-[#102A43]"
-                  onClick={() => {
-                  setRosterManagerOpen(false);
-                  setRosterFilesOpen(true);
-                }}
-                  title="Roster files"
-                >
-                  <Package className="w-3.5 h-3.5" />
-                  <span>Files</span>
-                </Button>
-              )}
+            <div className="flex items-center gap-2 shrink-0">
               {activeTab !== "players" && (
-                <span className="text-[11px] font-extrabold text-slate-400 tracking-tight whitespace-nowrap">
-                  Balanced teams. Better games.
+                <span className="text-right text-[9px] font-extrabold leading-[0.95] text-slate-400 tracking-tight whitespace-nowrap">
+                  <span className="block">Balanced teams.</span>
+                  <span className="block">Better games.</span>
                 </span>
               )}
+              <Button
+                type="button"
+                variant="secondary"
+                size="icon"
+                className="h-9 w-9 rounded-xl border border-slate-200 bg-white/85 text-[#102A43] shadow-none"
+                onClick={() => setRosterFilesOpen(true)}
+                title="Roster tools"
+                aria-label="Roster tools"
+              >
+                <Settings className="w-4 h-4" />
+              </Button>
               <input
                 ref={fileInputRef}
                 type="file"
@@ -515,30 +513,6 @@ function App() {
             style={{ backgroundColor: identityAccentColor }}
           />
 
-          <button
-            type="button"
-            onClick={() => setRosterManagerOpen(true)}
-            className="mx-1 mb-2 flex w-[calc(100%-0.5rem)] items-center justify-between gap-2 rounded-2xl border border-slate-200 bg-slate-50/80 px-3 py-2 text-left shadow-sm transition active:scale-[0.99]"
-            title="Switch roster"
-          >
-            <span className="flex min-w-0 items-center gap-2">
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-white text-[#102A43] shadow-sm">
-                <Users className="h-3.5 w-3.5" />
-              </span>
-              <span className="min-w-0">
-                <span className="block text-[10px] font-black uppercase tracking-wide text-slate-400">
-                  Active roster
-                </span>
-                <span className="block truncate text-sm font-black text-[#102A43]">
-                  {activeRosterName}
-                </span>
-              </span>
-            </span>
-            <span className="flex shrink-0 items-center gap-1.5 text-[11px] font-extrabold text-slate-500">
-              {players.length} player{players.length === 1 ? "" : "s"}
-              <ChevronDown className="h-3.5 w-3.5" />
-            </span>
-          </button>
 
           <TabsList className="w-full h-11 bg-slate-100/90 grid grid-cols-3 rounded-2xl p-1 gap-1.5 border border-border/70 shadow-inner">
             <TabsTrigger
@@ -572,7 +546,7 @@ function App() {
         </header>
 
         <div className="flex-1 overflow-y-auto p-4 md:p-5">
-          <div className="flex min-h-[calc(100dvh-168px)] flex-col">
+          <div className="flex min-h-[calc(100dvh-128px)] flex-col">
             <TabsContent
               value="players"
               className="m-0 data-[state=active]:animate-in data-[state=active]:fade-in-50"
@@ -761,113 +735,6 @@ function App() {
         </div>
       )}
 
-      {rosterManagerOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/45 p-4 sm:items-center"
-          role="dialog"
-          aria-modal="true"
-        >
-          <div className="w-full max-w-sm rounded-3xl border border-slate-200 bg-white p-4 shadow-2xl">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h2 className="text-base font-black tracking-tight text-[#102A43]">
-                  Rosters
-                </h2>
-                <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  Switch classes or groups. Each roster stays separate. Tap the top title to edit name, logo, and color.
-                </p>
-              </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 rounded-xl"
-                onClick={() => setRosterManagerOpen(false)}
-                title="Close"
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-
-            <div className="mt-4 max-h-56 space-y-2 overflow-y-auto pr-1">
-              {rosters.map((roster) => {
-                const selected = roster.id === activeRosterId;
-                return (
-                  <button
-                    key={roster.id}
-                    type="button"
-                    onClick={() => {
-                      switchRoster(roster.id);
-                      setRosterManagerOpen(false);
-                    }}
-                    className={`flex w-full items-center justify-between gap-3 rounded-2xl border px-3 py-2.5 text-left transition active:scale-[0.99] ${selected ? "border-blue-200 bg-blue-50/80" : "border-slate-100 bg-slate-50/70"}`}
-                  >
-                    <span className="min-w-0">
-                      <span className="block truncate text-sm font-black text-[#102A43]">
-                        {roster.name}
-                      </span>
-                      <span className="block text-[11px] font-bold text-slate-500">
-                        {roster.players.length} player{roster.players.length === 1 ? "" : "s"}
-                      </span>
-                    </span>
-                    {selected && (
-                      <span className="shrink-0 rounded-full bg-[#102A43] px-2 py-1 text-[10px] font-black uppercase tracking-wide text-white">
-                        Active
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="mt-4 rounded-2xl border border-slate-100 bg-slate-50/70 p-3">
-              <div className="flex gap-2">
-                <input
-                  value={newRosterName}
-                  onChange={(e) => setNewRosterName(e.target.value)}
-                  className="h-10 min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-bold text-[#102A43] outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
-                  placeholder="New roster name"
-                  maxLength={36}
-                />
-                <Button
-                  type="button"
-                  className="h-10 rounded-2xl bg-[#102A43] px-3 text-xs font-black text-white"
-                  onClick={createNewRoster}
-                >
-                  <Plus className="mr-1.5 h-3.5 w-3.5" />
-                  New
-                </Button>
-              </div>
-            </div>
-
-
-            <div className="mt-4 flex gap-2 border-t border-slate-100 pt-3">
-              <Button
-                type="button"
-                variant="outline"
-                className="h-10 flex-1 rounded-2xl text-xs font-black"
-                onClick={() => {
-                  setRosterManagerOpen(false);
-                  setRosterFilesOpen(true);
-                }}
-              >
-                <Package className="mr-1.5 h-3.5 w-3.5" />
-                Files
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="h-10 flex-1 rounded-2xl border-red-100 bg-red-50/70 text-xs font-black text-red-700 hover:bg-red-100 hover:text-red-800"
-                onClick={openClearRoster}
-              >
-                <Trash2 className="mr-1.5 h-3.5 w-3.5" />
-                {rosters.length > 1 ? "Delete" : "Clear"}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {rosterFilesOpen && (
         <div
           className="fixed inset-0 z-50 flex items-end justify-center bg-black/45 p-4 sm:items-center"
@@ -878,10 +745,10 @@ function App() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h2 className="text-base font-black tracking-tight text-[#102A43]">
-                  Files
+                  Roster Tools
                 </h2>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  Share one roster or back up everything on this device.
+                  Switch rosters, share one roster, or back up everything.
                 </p>
               </div>
               <Button
@@ -897,24 +764,91 @@ function App() {
             </div>
 
             <div className="mt-4 rounded-2xl border border-slate-100 bg-slate-50/70 p-3">
-              <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-                Current roster
-              </div>
-              <div className="mt-1 flex items-center justify-between gap-2">
-                <div className="min-w-0 truncate text-sm font-black text-[#102A43]">
-                  {activeRosterName}
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+                    Current roster
+                  </div>
+                  <div className="mt-1 truncate text-sm font-black text-[#102A43]">
+                    {activeRosterName}
+                  </div>
                 </div>
-                <div className="shrink-0 text-[11px] font-extrabold text-slate-500">
+                <div className="shrink-0 rounded-full bg-white px-2.5 py-1 text-[11px] font-extrabold text-slate-500 shadow-sm">
                   {players.length} player{players.length === 1 ? "" : "s"}
                 </div>
               </div>
             </div>
 
-            <div className="mt-4 grid gap-2">
+            <div className="mt-4">
+              <div className="mb-2 text-[10px] font-black uppercase tracking-wide text-slate-400">
+                Switch roster
+              </div>
+              <div className="max-h-40 space-y-2 overflow-y-auto pr-1">
+                {rosters.map((roster) => {
+                  const selected = roster.id === activeRosterId;
+                  return (
+                    <button
+                      key={roster.id}
+                      type="button"
+                      onClick={() => {
+                        switchRoster(roster.id);
+                        setRosterFilesOpen(false);
+                      }}
+                      className={`flex w-full items-center justify-between gap-3 rounded-2xl border px-3 py-2 text-left transition active:scale-[0.99] ${selected ? "border-blue-200 bg-blue-50/80" : "border-slate-100 bg-slate-50/70"}`}
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-black text-[#102A43]">
+                          {roster.name}
+                        </span>
+                        <span className="block text-[11px] font-bold text-slate-500">
+                          {roster.players.length} player{roster.players.length === 1 ? "" : "s"}
+                        </span>
+                      </span>
+                      {selected && (
+                        <span className="shrink-0 rounded-full bg-[#102A43] px-2 py-1 text-[10px] font-black uppercase tracking-wide text-white">
+                          Active
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-slate-100 bg-slate-50/70 p-3">
+              <div className="mb-2 text-[10px] font-black uppercase tracking-wide text-slate-400">
+                New roster
+              </div>
+              <div className="flex gap-2">
+                <input
+                  value={newRosterName}
+                  onChange={(e) => setNewRosterName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      createNewRoster();
+                    }
+                  }}
+                  className="h-10 min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-bold text-[#102A43] outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
+                  placeholder="New roster name"
+                  maxLength={36}
+                />
+                <Button
+                  type="button"
+                  className="h-10 rounded-2xl bg-[#102A43] px-3 text-xs font-black text-white"
+                  onClick={createNewRoster}
+                >
+                  <Plus className="mr-1.5 h-3.5 w-3.5" />
+                  New
+                </Button>
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-2 border-t border-slate-100 pt-3">
               <Button
                 type="button"
                 variant="outline"
-                className="h-12 justify-start rounded-2xl gap-3"
+                className="h-11 justify-start rounded-2xl gap-3"
                 onClick={exportSharedRoster}
                 disabled={players.length === 0}
               >
@@ -924,7 +858,7 @@ function App() {
               <Button
                 type="button"
                 variant="outline"
-                className="h-12 justify-start rounded-2xl gap-3"
+                className="h-11 justify-start rounded-2xl gap-3"
                 onClick={() => openImportPicker("shared")}
               >
                 <Upload className="h-4 w-4" />
@@ -934,7 +868,7 @@ function App() {
               <Button
                 type="button"
                 variant="outline"
-                className="h-12 justify-start rounded-2xl gap-3"
+                className="h-11 justify-start rounded-2xl gap-3"
                 onClick={exportAllRostersBackup}
                 disabled={rosters.length === 0}
               >
@@ -944,7 +878,7 @@ function App() {
               <Button
                 type="button"
                 variant="outline"
-                className="h-12 justify-start rounded-2xl gap-3"
+                className="h-11 justify-start rounded-2xl gap-3"
                 onClick={() => openImportPicker("backup")}
               >
                 <ArchiveRestore className="h-4 w-4" />
@@ -954,7 +888,7 @@ function App() {
               <Button
                 type="button"
                 variant="outline"
-                className="h-12 justify-start rounded-2xl gap-3 border-red-100 bg-red-50/70 text-red-700 hover:bg-red-100 hover:text-red-800"
+                className="h-11 justify-start rounded-2xl gap-3 border-red-100 bg-red-50/70 text-red-700 hover:bg-red-100 hover:text-red-800"
                 onClick={openClearRoster}
               >
                 <Trash2 className="h-4 w-4" />

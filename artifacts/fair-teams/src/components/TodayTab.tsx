@@ -640,6 +640,25 @@ function isProbablyName(value: string) {
   return true;
 }
 
+function isProbablyVoicePlayerName(value: string) {
+  const clean = cleanOcrLine(value);
+  const normalized = normalizeForMatch(clean);
+  if (!clean || !normalized) return false;
+  if (OCR_JUNK_WORDS.has(normalized)) return false;
+  if (/\d/.test(clean)) return false;
+  if (clean.length < 2 || clean.length > 36) return false;
+  if (
+    /\b(i|we|you|he|she|they|it|this|that|but|would|like|come|join|plan|moved|time|thing|attend|club|anymore|gathering|question|list|event|search|checked|attendees?)\b/i.test(
+      clean,
+    )
+  )
+    return false;
+  const words = normalized.split(" ").filter(Boolean);
+  if (words.length < 1 || words.length > 3) return false;
+  if (words.some((word) => word.length === 1 && words.length > 1)) return false;
+  return true;
+}
+
 function levenshtein(a: string, b: string) {
   const matrix = Array.from({ length: a.length + 1 }, (_, i) => [i]);
   for (let j = 1; j <= b.length; j += 1) matrix[0][j] = j;
@@ -1249,7 +1268,7 @@ export function TodayTab({
   const quickVoiceCanAddNew = useMemo(() => {
     const cleanedName = quickVoiceCleanName;
     const normalizedName = normalizeForMatch(cleanedName);
-    if (!cleanedName || !normalizedName || !isProbablyName(cleanedName)) return false;
+    if (!cleanedName || !normalizedName || !isProbablyVoicePlayerName(cleanedName)) return false;
     return !players.some((player) => playerSearchNames(player).includes(normalizedName));
   }, [quickVoiceCleanName, players]);
 
@@ -1597,7 +1616,7 @@ export function TodayTab({
   const addQuickVoicePlayer = () => {
     const cleanedName = quickVoiceCleanName;
     const normalizedName = normalizeForMatch(cleanedName);
-    if (!cleanedName || !normalizedName || !isProbablyName(cleanedName)) {
+    if (!cleanedName || !normalizedName || !isProbablyVoicePlayerName(cleanedName)) {
       setQuickVoiceStatus("Type a clean player name first.");
       return;
     }
@@ -2302,7 +2321,9 @@ export function TodayTab({
               {quickVoiceCanAddNew && (
                 <div className="rounded-2xl border border-sky-100 bg-sky-50 p-2.5">
                   <div className="mb-2 text-[10px] font-bold leading-snug text-sky-700">
-                    Not one of these? Add the heard name as a new player for today.
+                    {quickVoiceCandidates.length > 0
+                      ? "Not one of these? Add the heard name as a new player for today."
+                      : "No roster match? Add the heard name as a new player for today."}
                   </div>
                   <Button
                     type="button"

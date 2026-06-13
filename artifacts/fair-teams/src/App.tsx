@@ -13,7 +13,7 @@ import {
   AlertTriangle,
   Plus,
   Settings,
-  Share2,
+  Archive,
   ArchiveRestore,
 } from "lucide-react";
 import { PlayersTab } from "@/components/PlayersTab";
@@ -814,7 +814,7 @@ function App() {
                   Roster Tools
                 </h2>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  Manage rosters, sharing, and backups.
+                  Manage roster files and backups.
                 </p>
               </div>
               <Button
@@ -888,8 +888,8 @@ function App() {
                   onClick={exportSharedRoster}
                   disabled={players.length === 0}
                 >
-                  <Share2 className="h-4 w-4" />
-                  <span className="font-black">Share current roster</span>
+                  <Download className="h-4 w-4" />
+                  <span className="font-black">Export current roster</span>
                 </Button>
                 <Button
                   type="button"
@@ -898,7 +898,7 @@ function App() {
                   onClick={() => openImportPicker("shared")}
                 >
                   <Upload className="h-4 w-4" />
-                  <span className="font-black">Import shared roster</span>
+                  <span className="font-black">Import single roster</span>
                 </Button>
                 <div className="my-1 h-px bg-slate-100" />
                 <Button
@@ -908,8 +908,8 @@ function App() {
                   onClick={exportAllRostersBackup}
                   disabled={rosters.length === 0}
                 >
-                  <Download className="h-4 w-4" />
-                  <span className="font-black">Backup all rosters</span>
+                  <Archive className="h-4 w-4" />
+                  <span className="font-black">Export all rosters</span>
                 </Button>
                 <Button
                   type="button"
@@ -918,7 +918,7 @@ function App() {
                   onClick={() => openImportPicker("backup")}
                 >
                   <ArchiveRestore className="h-4 w-4" />
-                  <span className="font-black">Restore / add backup</span>
+                  <span className="font-black">Import all rosters</span>
                 </Button>
                 <div className="my-1 h-px bg-slate-100" />
                 <Button

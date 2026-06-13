@@ -39,7 +39,9 @@ import {
   saveRosterState,
 } from "@/lib/localRoster";
 import { getGoogleDriveConfig } from "@/lib/googleDriveConfig";
+import { allRostersToDriveBackupJson } from "@/lib/googleDriveBackup";
 import { requestGoogleDriveAccessToken } from "@/lib/googleDriveAuth";
+import { createGoogleDriveJsonFile, type GoogleDriveFileResult } from "@/lib/googleDriveFiles";
 
 const GROUP_NAME_STORAGE_KEY = "fair-teams-group-name";
 const HEADER_COLOR_STORAGE_KEY = "fair-teams-header-color-v2";
@@ -103,6 +105,15 @@ function slugifyFilename(value: string) {
       .replace(/[^a-z0-9\p{L}\p{M}]+/gu, "-")
       .replace(/^-+|-+$/g, "") || "roster"
   );
+}
+
+function timestampForFilename(date = new Date()) {
+  return date.toISOString().slice(0, 16).replace("T", "-").replace(":", "");
+}
+
+function allRostersDriveBackupFilename(rosters: RoomRoster[]) {
+  const readableName = rosters.length === 1 ? rosters[0]?.name || "Roster" : "All rosters";
+  return `Fair Teams - ${slugifyFilename(readableName)} - ${timestampForFilename()}.json`;
 }
 
 function uniqueRosterName(name: string, rosters: RoomRoster[]) {
@@ -208,6 +219,8 @@ function App() {
   const googleDriveConfig = getGoogleDriveConfig();
   const [googleDriveAccessToken, setGoogleDriveAccessToken] = useState("");
   const [googleDriveConnecting, setGoogleDriveConnecting] = useState(false);
+  const [googleDriveSaving, setGoogleDriveSaving] = useState(false);
+  const [currentDriveBackup, setCurrentDriveBackup] = useState<GoogleDriveFileResult | null>(null);
   const googleDriveConnected = Boolean(googleDriveAccessToken);
   const googleDriveStatusText = !googleDriveConfig.isConfigured
     ? "Add Google Client ID and API key to .env.local"
@@ -366,7 +379,7 @@ function App() {
     try {
       const result = await requestGoogleDriveAccessToken(googleDriveAccessToken ? "" : "consent");
       setGoogleDriveAccessToken(result.accessToken);
-      window.alert("Google Drive connected. Next patch will add real save/open actions.");
+      window.alert("Google Drive connected.");
     } catch (error) {
       window.alert(error instanceof Error ? error.message : "Could not connect Google Drive.");
     } finally {
@@ -376,6 +389,7 @@ function App() {
 
   const disconnectGoogleDrive = () => {
     setGoogleDriveAccessToken("");
+    setCurrentDriveBackup(null);
     window.alert("Google Drive disconnected from this browser session.");
   };
 
@@ -388,7 +402,39 @@ function App() {
       window.alert("Connect Google Drive first, then this action can be added in the next patch.");
       return;
     }
-    window.alert(`${action} will be connected in the next Google Drive patch. Google Drive sign-in is now working.`);
+    window.alert(`${action} will be connected in the next Google Drive patch.`);
+  };
+
+  const saveAllRostersToGoogleDrive = async () => {
+    if (!googleDriveConfig.isConfigured) {
+      window.alert("Google Drive keys are not configured yet. Add VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_API_KEY to .env.local first.");
+      return;
+    }
+    if (!googleDriveAccessToken) {
+      window.alert("Connect Google Drive first.");
+      return;
+    }
+    if (isEmptyStarterRoster) {
+      window.alert("Create or import a roster before saving to Google Drive.");
+      return;
+    }
+
+    setGoogleDriveSaving(true);
+    try {
+      const jsonText = allRostersToDriveBackupJson(rosterState);
+      const file = await createGoogleDriveJsonFile(
+        googleDriveAccessToken,
+        allRostersDriveBackupFilename(rosters),
+        jsonText,
+      );
+      setCurrentDriveBackup(file);
+      const openText = file.webViewLink ? "\n\nYou can open it from Google Drive later." : "";
+      window.alert(`Saved to Google Drive:\n${file.name}${openText}`);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Could not save to Google Drive.");
+    } finally {
+      setGoogleDriveSaving(false);
+    }
   };
 
   const exportSharedRoster = () => {
@@ -963,6 +1009,11 @@ function App() {
                     <div className={`mt-2 rounded-2xl px-2.5 py-1.5 text-[11px] font-black ${googleDriveConfig.isConfigured ? "bg-white text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
                       {googleDriveStatusText}
                     </div>
+                    {currentDriveBackup ? (
+                      <div className="mt-1 truncate text-[11px] font-bold text-blue-700">
+                        Last saved: {currentDriveBackup.name}
+                      </div>
+                    ) : null}
                   </div>
                 </div>
 
@@ -986,11 +1037,11 @@ function App() {
                     type="button"
                     variant="outline"
                     className="h-11 justify-start rounded-2xl gap-3 border-blue-100 bg-white/90"
-                    onClick={() => showGoogleDriveComingSoon("Save all rosters to Google Drive")}
-                    disabled={isEmptyStarterRoster || !googleDriveConnected}
+                    onClick={saveAllRostersToGoogleDrive}
+                    disabled={isEmptyStarterRoster || !googleDriveConnected || googleDriveSaving}
                   >
                     <CloudUpload className="h-4 w-4" />
-                    <span className="font-black">Save all rosters to Drive</span>
+                    <span className="font-black">{googleDriveSaving ? "Saving to Drive..." : "Save all rosters to Drive"}</span>
                   </Button>
                   <Button
                     type="button"

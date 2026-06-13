@@ -42,7 +42,6 @@ const DEFAULT_GROUP_NAME = "My Group";
 const DEFAULT_HEADER_COLOR = "#3B82F6";
 const ROSTERS_STORAGE_KEY = "fair-teams-rosters-v1";
 
-
 function hasSavedRosterState() {
   try {
     return Boolean(window.localStorage.getItem(ROSTERS_STORAGE_KEY));
@@ -53,7 +52,9 @@ function hasSavedRosterState() {
 
 function readStoredGroupName() {
   try {
-    return window.localStorage.getItem(GROUP_NAME_STORAGE_KEY) || DEFAULT_GROUP_NAME;
+    return (
+      window.localStorage.getItem(GROUP_NAME_STORAGE_KEY) || DEFAULT_GROUP_NAME
+    );
   } catch {
     return DEFAULT_GROUP_NAME;
   }
@@ -62,7 +63,9 @@ function readStoredGroupName() {
 function readStoredHeaderColor() {
   try {
     const stored = window.localStorage.getItem(HEADER_COLOR_STORAGE_KEY);
-    return /^#[0-9A-Fa-f]{6}$/.test(stored || "") ? stored! : DEFAULT_HEADER_COLOR;
+    return /^#[0-9A-Fa-f]{6}$/.test(stored || "")
+      ? stored!
+      : DEFAULT_HEADER_COLOR;
   } catch {
     return DEFAULT_HEADER_COLOR;
   }
@@ -161,11 +164,15 @@ function App() {
 
   const [activeTab, setActiveTab] = useState("today");
   const [todayOcrOpenToken, setTodayOcrOpenToken] = useState(0);
-  const [ocrImportContext, setOcrImportContext] = useState<"today" | "roster">("today");
+  const [ocrImportContext, setOcrImportContext] = useState<"today" | "roster">(
+    "today",
+  );
   const [rosterState, setRosterState] = useState(() => {
     const legacyName = readStoredGroupName();
     const shouldMigrateLegacyIdentity = !hasSavedRosterState();
-    const legacyColor = shouldMigrateLegacyIdentity ? readStoredHeaderColor() : DEFAULT_HEADER_COLOR;
+    const legacyColor = shouldMigrateLegacyIdentity
+      ? readStoredHeaderColor()
+      : DEFAULT_HEADER_COLOR;
     const legacyLogo = shouldMigrateLegacyIdentity ? readStoredGroupLogo() : "";
     const loaded = loadRosterState(legacyName);
     return {
@@ -183,7 +190,8 @@ function App() {
   });
   const rosters = rosterState.rosters;
   const activeRosterId = rosterState.activeRosterId;
-  const activeRoster = rosters.find((roster) => roster.id === activeRosterId) || rosters[0];
+  const activeRoster =
+    rosters.find((roster) => roster.id === activeRosterId) || rosters[0];
   const players = activeRoster?.players || [];
   const activeRosterName = activeRoster?.name || "Default roster";
   const headerColor = rosterThemeColor(activeRoster);
@@ -195,15 +203,32 @@ function App() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const logoInputRef = useRef<HTMLInputElement | null>(null);
   const [rosterFilesOpen, setRosterFilesOpen] = useState(false);
+  const [rosterPickerOpen, setRosterPickerOpen] = useState(false);
   const [clearRosterOpen, setClearRosterOpen] = useState(false);
   const [clearRosterSlide, setClearRosterSlide] = useState(0);
   const [newRosterName, setNewRosterName] = useState("");
-  const [fileImportMode, setFileImportMode] = useState<"shared" | "backup">("shared");
+  const [fileImportMode, setFileImportMode] = useState<"shared" | "backup">(
+    "shared",
+  );
 
   useEffect(() => {
     saveRosterState(rosterState);
   }, [rosterState]);
 
+  useEffect(() => {
+    const shouldLockScroll =
+      groupSettingsOpen ||
+      rosterFilesOpen ||
+      rosterPickerOpen ||
+      clearRosterOpen;
+    if (!shouldLockScroll) return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [groupSettingsOpen, rosterFilesOpen, rosterPickerOpen, clearRosterOpen]);
 
   const openGroupSettings = () => {
     setDraftGroupName(activeRosterName);
@@ -215,11 +240,14 @@ function App() {
   const saveGroupSettings = () => {
     setRosterState((current) => {
       const currentRoster =
-        current.rosters.find((roster) => roster.id === current.activeRosterId) ||
-        current.rosters[0];
+        current.rosters.find(
+          (roster) => roster.id === current.activeRosterId,
+        ) || current.rosters[0];
       const nextName = uniqueRosterName(
         draftGroupName || currentRoster?.name || DEFAULT_GROUP_NAME,
-        current.rosters.filter((roster) => roster.id !== current.activeRosterId),
+        current.rosters.filter(
+          (roster) => roster.id !== current.activeRosterId,
+        ),
       );
       return {
         ...current,
@@ -269,7 +297,9 @@ function App() {
         roster.id === current.activeRosterId
           ? {
               ...roster,
-              players: nextPlayers.map((player, index) => normalizePlayer(player, index)),
+              players: nextPlayers.map((player, index) =>
+                normalizePlayer(player, index),
+              ),
               updatedAt: new Date().toISOString(),
             }
           : roster,
@@ -286,7 +316,10 @@ function App() {
   };
 
   const createNewRoster = () => {
-    const name = uniqueRosterName(newRosterName || `Roster ${rosters.length + 1}`, rosters);
+    const name = uniqueRosterName(
+      newRosterName || `Roster ${rosters.length + 1}`,
+      rosters,
+    );
     const roster = createRoster(name, []);
     setRosterState((current) => ({
       rosters: [...current.rosters, roster],
@@ -317,6 +350,7 @@ function App() {
 
   const openClearRoster = () => {
     setRosterFilesOpen(false);
+    setRosterPickerOpen(false);
     setClearRosterSlide(0);
     setClearRosterOpen(true);
   };
@@ -327,11 +361,16 @@ function App() {
     window.setTimeout(() => fileInputRef.current?.click(), 0);
   };
 
-  const addImportedRosters = (incomingRosters: RoomRoster[], mode: "shared" | "backup") => {
+  const addImportedRosters = (
+    incomingRosters: RoomRoster[],
+    mode: "shared" | "backup",
+  ) => {
     const normalizedIncoming = incomingRosters
       .map((roster) => ({
         ...roster,
-        players: roster.players.map((player, playerIndex) => normalizePlayer(player, playerIndex)),
+        players: roster.players.map((player, playerIndex) =>
+          normalizePlayer(player, playerIndex),
+        ),
       }))
       .filter((roster) => roster.players.length > 0 || mode === "backup");
 
@@ -344,7 +383,10 @@ function App() {
       .slice(0, 4)
       .map((roster) => `• ${roster.name}`)
       .join("\n");
-    const moreText = normalizedIncoming.length > 4 ? `\n…and ${normalizedIncoming.length - 4} more` : "";
+    const moreText =
+      normalizedIncoming.length > 4
+        ? `\n…and ${normalizedIncoming.length - 4} more`
+        : "";
     const ok = window.confirm(
       mode === "backup"
         ? `Add ${normalizedIncoming.length} roster${normalizedIncoming.length === 1 ? "" : "s"} from this backup?\n\n${namesPreview}${moreText}\n\nYour current rosters will stay.`
@@ -355,7 +397,11 @@ function App() {
     setRosterState((current) => {
       const nextRosters = [...current.rosters];
       const added = normalizedIncoming.map((roster) => {
-        const copied = createRoster(uniqueRosterName(roster.name, nextRosters), roster.players, { themeColor: roster.themeColor, logo: roster.logo });
+        const copied = createRoster(
+          uniqueRosterName(roster.name, nextRosters),
+          roster.players,
+          { themeColor: roster.themeColor, logo: roster.logo },
+        );
         nextRosters.push(copied);
         return copied;
       });
@@ -403,7 +449,9 @@ function App() {
           ),
         };
       }
-      const remaining = current.rosters.filter((roster) => roster.id !== current.activeRosterId);
+      const remaining = current.rosters.filter(
+        (roster) => roster.id !== current.activeRosterId,
+      );
       return {
         rosters: remaining,
         activeRosterId: remaining[0]?.id || current.activeRosterId,
@@ -444,10 +492,20 @@ function App() {
             <div className="min-w-0 flex-1">
               <button
                 type="button"
-                onClick={activeTab === "players" ? openGroupSettings : undefined}
+                onClick={
+                  activeTab === "players" ? openGroupSettings : undefined
+                }
                 className={`group flex max-w-full min-w-0 items-center gap-2.5 text-left ${activeTab === "players" ? "transition-transform active:scale-[0.99]" : "cursor-default"}`}
-                title={activeTab === "players" ? "Edit active roster name, logo, and color" : activeRosterName}
-                aria-label={activeTab === "players" ? "Edit active roster identity" : `Current roster: ${activeRosterName}`}
+                title={
+                  activeTab === "players"
+                    ? "Edit active roster name, logo, and color"
+                    : activeRosterName
+                }
+                aria-label={
+                  activeTab === "players"
+                    ? "Edit active roster identity"
+                    : `Current roster: ${activeRosterName}`
+                }
               >
                 <span
                   className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-2xl border-2 bg-white shadow-sm"
@@ -512,7 +570,6 @@ function App() {
             className="mx-1 mb-2 h-0.5 rounded-full"
             style={{ backgroundColor: identityAccentColor }}
           />
-
 
           <TabsList className="w-full h-11 bg-slate-100/90 grid grid-cols-3 rounded-2xl p-1 gap-1.5 border border-border/70 shadow-inner">
             <TabsTrigger
@@ -622,6 +679,12 @@ function App() {
                 <input
                   value={draftGroupName}
                   onChange={(e) => setDraftGroupName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      e.currentTarget.blur();
+                    }
+                  }}
                   maxLength={32}
                   className="mt-2 h-10 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm font-extrabold text-[#102A43] outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
                   placeholder="Fair Teams"
@@ -737,18 +800,18 @@ function App() {
 
       {rosterFilesOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/45 p-4 sm:items-center"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4"
           role="dialog"
           aria-modal="true"
         >
-          <div className="w-full max-w-sm rounded-3xl border border-slate-200 bg-white p-4 shadow-2xl">
-            <div className="flex items-start justify-between gap-3">
+          <div className="flex max-h-[calc(100dvh-2rem)] w-full max-w-sm flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
+            <div className="flex items-start justify-between gap-3 border-b border-slate-100 p-4 pb-3">
               <div>
                 <h2 className="text-base font-black tracking-tight text-[#102A43]">
                   Roster Tools
                 </h2>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  Switch rosters, share one roster, or back up everything.
+                  Manage rosters, sharing, and backups.
                 </p>
               </div>
               <Button
@@ -763,139 +826,180 @@ function App() {
               </Button>
             </div>
 
-            <div className="mt-4 rounded-2xl border border-slate-100 bg-slate-50/70 p-3">
-              <div className="flex items-center justify-between gap-2">
-                <div className="min-w-0">
-                  <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain p-4">
+              <button
+                type="button"
+                onClick={() => setRosterPickerOpen(true)}
+                className="flex w-full items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-slate-50/80 px-3 py-3 text-left transition active:scale-[0.99]"
+              >
+                <span className="min-w-0">
+                  <span className="block text-[10px] font-black uppercase tracking-wide text-slate-400">
                     Current roster
-                  </div>
-                  <div className="mt-1 truncate text-sm font-black text-[#102A43]">
+                  </span>
+                  <span className="mt-1 block truncate text-sm font-black text-[#102A43]">
                     {activeRosterName}
-                  </div>
-                </div>
-                <div className="shrink-0 rounded-full bg-white px-2.5 py-1 text-[11px] font-extrabold text-slate-500 shadow-sm">
-                  {players.length} player{players.length === 1 ? "" : "s"}
-                </div>
-              </div>
-            </div>
+                  </span>
+                  <span className="block text-[11px] font-bold text-slate-500">
+                    {players.length} player{players.length === 1 ? "" : "s"}
+                  </span>
+                </span>
+                <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-lg font-black leading-none text-slate-400 shadow-sm">
+                  ›
+                </span>
+              </button>
 
-            <div className="mt-4">
-              <div className="mb-2 text-[10px] font-black uppercase tracking-wide text-slate-400">
-                Switch roster
+              <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-3">
+                <div className="mb-2 text-[10px] font-black uppercase tracking-wide text-slate-400">
+                  New roster
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    value={newRosterName}
+                    onChange={(e) => setNewRosterName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        createNewRoster();
+                      }
+                    }}
+                    className="h-10 min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-bold text-[#102A43] outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
+                    placeholder="New roster name"
+                    maxLength={36}
+                  />
+                  <Button
+                    type="button"
+                    className="h-10 rounded-2xl bg-[#102A43] px-3 text-xs font-black text-white"
+                    onClick={createNewRoster}
+                  >
+                    <Plus className="mr-1.5 h-3.5 w-3.5" />
+                    New
+                  </Button>
+                </div>
               </div>
-              <div className="max-h-40 space-y-2 overflow-y-auto pr-1">
-                {rosters.map((roster) => {
-                  const selected = roster.id === activeRosterId;
-                  return (
-                    <button
-                      key={roster.id}
-                      type="button"
-                      onClick={() => {
-                        switchRoster(roster.id);
-                        setRosterFilesOpen(false);
-                      }}
-                      className={`flex w-full items-center justify-between gap-3 rounded-2xl border px-3 py-2 text-left transition active:scale-[0.99] ${selected ? "border-blue-200 bg-blue-50/80" : "border-slate-100 bg-slate-50/70"}`}
-                    >
-                      <span className="min-w-0">
-                        <span className="block truncate text-sm font-black text-[#102A43]">
-                          {roster.name}
-                        </span>
-                        <span className="block text-[11px] font-bold text-slate-500">
-                          {roster.players.length} player{roster.players.length === 1 ? "" : "s"}
-                        </span>
-                      </span>
-                      {selected && (
-                        <span className="shrink-0 rounded-full bg-[#102A43] px-2 py-1 text-[10px] font-black uppercase tracking-wide text-white">
-                          Active
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
 
-            <div className="mt-4 rounded-2xl border border-slate-100 bg-slate-50/70 p-3">
-              <div className="mb-2 text-[10px] font-black uppercase tracking-wide text-slate-400">
-                New roster
-              </div>
-              <div className="flex gap-2">
-                <input
-                  value={newRosterName}
-                  onChange={(e) => setNewRosterName(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      createNewRoster();
-                    }
-                  }}
-                  className="h-10 min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-bold text-[#102A43] outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
-                  placeholder="New roster name"
-                  maxLength={36}
-                />
+              <div className="grid gap-2 border-t border-slate-100 pt-3">
                 <Button
                   type="button"
-                  className="h-10 rounded-2xl bg-[#102A43] px-3 text-xs font-black text-white"
-                  onClick={createNewRoster}
+                  variant="outline"
+                  className="h-11 justify-start rounded-2xl gap-3"
+                  onClick={exportSharedRoster}
+                  disabled={players.length === 0}
                 >
-                  <Plus className="mr-1.5 h-3.5 w-3.5" />
-                  New
+                  <Share2 className="h-4 w-4" />
+                  <span className="font-black">Share current roster</span>
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-11 justify-start rounded-2xl gap-3"
+                  onClick={() => openImportPicker("shared")}
+                >
+                  <Upload className="h-4 w-4" />
+                  <span className="font-black">Import shared roster</span>
+                </Button>
+                <div className="my-1 h-px bg-slate-100" />
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-11 justify-start rounded-2xl gap-3"
+                  onClick={exportAllRostersBackup}
+                  disabled={rosters.length === 0}
+                >
+                  <Download className="h-4 w-4" />
+                  <span className="font-black">Backup all rosters</span>
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-11 justify-start rounded-2xl gap-3"
+                  onClick={() => openImportPicker("backup")}
+                >
+                  <ArchiveRestore className="h-4 w-4" />
+                  <span className="font-black">Restore / add backup</span>
+                </Button>
+                <div className="my-1 h-px bg-slate-100" />
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-11 justify-start rounded-2xl gap-3 border-red-100 bg-red-50/70 text-red-700 hover:bg-red-100 hover:text-red-800"
+                  onClick={openClearRoster}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  <span className="font-black">
+                    {rosters.length > 1
+                      ? "Delete current roster"
+                      : "Clear current roster"}
+                  </span>
                 </Button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
 
-            <div className="mt-4 grid gap-2 border-t border-slate-100 pt-3">
+      {rosterPickerOpen && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/45 p-4"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="flex max-h-[calc(100dvh-2rem)] w-full max-w-sm flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
+            <div className="flex items-start justify-between gap-3 border-b border-slate-100 p-4 pb-3">
+              <div>
+                <h2 className="text-base font-black tracking-tight text-[#102A43]">
+                  Current roster
+                </h2>
+                <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
+                  Choose the roster to use now.
+                </p>
+              </div>
               <Button
                 type="button"
-                variant="outline"
-                className="h-11 justify-start rounded-2xl gap-3"
-                onClick={exportSharedRoster}
-                disabled={players.length === 0}
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 rounded-xl"
+                onClick={() => setRosterPickerOpen(false)}
+                title="Close"
               >
-                <Share2 className="h-4 w-4" />
-                <span className="font-black">Share current roster</span>
+                <X className="h-4 w-4" />
               </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="h-11 justify-start rounded-2xl gap-3"
-                onClick={() => openImportPicker("shared")}
-              >
-                <Upload className="h-4 w-4" />
-                <span className="font-black">Import shared roster</span>
-              </Button>
-              <div className="my-1 h-px bg-slate-100" />
-              <Button
-                type="button"
-                variant="outline"
-                className="h-11 justify-start rounded-2xl gap-3"
-                onClick={exportAllRostersBackup}
-                disabled={rosters.length === 0}
-              >
-                <Download className="h-4 w-4" />
-                <span className="font-black">Backup all rosters</span>
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="h-11 justify-start rounded-2xl gap-3"
-                onClick={() => openImportPicker("backup")}
-              >
-                <ArchiveRestore className="h-4 w-4" />
-                <span className="font-black">Restore / add backup</span>
-              </Button>
-              <div className="my-1 h-px bg-slate-100" />
-              <Button
-                type="button"
-                variant="outline"
-                className="h-11 justify-start rounded-2xl gap-3 border-red-100 bg-red-50/70 text-red-700 hover:bg-red-100 hover:text-red-800"
-                onClick={openClearRoster}
-              >
-                <Trash2 className="h-4 w-4" />
-                <span className="font-black">
-                  {rosters.length > 1 ? "Delete current roster" : "Clear current roster"}
-                </span>
-              </Button>
+            </div>
+
+            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain p-4">
+              {rosters.map((roster) => {
+                const selected = roster.id === activeRosterId;
+                return (
+                  <button
+                    key={roster.id}
+                    type="button"
+                    onClick={() => {
+                      switchRoster(roster.id);
+                      setRosterPickerOpen(false);
+                      setRosterFilesOpen(false);
+                    }}
+                    className={`flex w-full items-center justify-between gap-3 rounded-2xl border px-3 py-3 text-left transition active:scale-[0.99] ${selected ? "border-blue-200 bg-blue-50/80" : "border-slate-100 bg-slate-50/70"}`}
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-black text-[#102A43]">
+                        {roster.name}
+                      </span>
+                      <span className="block text-[11px] font-bold text-slate-500">
+                        {roster.players.length} player
+                        {roster.players.length === 1 ? "" : "s"}
+                      </span>
+                    </span>
+                    {selected ? (
+                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#102A43] text-white">
+                        <Check className="h-4 w-4" />
+                      </span>
+                    ) : (
+                      <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-lg font-black leading-none text-slate-400 shadow-sm">
+                        ›
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -914,7 +1018,9 @@ function App() {
               </div>
               <div className="min-w-0 flex-1">
                 <h2 className="text-base font-black tracking-tight text-[#102A43]">
-                  {rosters.length > 1 ? `Delete “${activeRosterName}”?` : `Clear “${activeRosterName}”?`}
+                  {rosters.length > 1
+                    ? `Delete “${activeRosterName}”?`
+                    : `Clear “${activeRosterName}”?`}
                 </h2>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
                   {rosters.length > 1

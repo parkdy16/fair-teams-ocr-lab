@@ -198,6 +198,29 @@ function isFunBadge(value: unknown): value is FunBadge {
   return Boolean(normalizeFunBadge(value));
 }
 
+function readStringField(source: unknown, keys: string[]) {
+  if (!source || typeof source !== "object") return undefined;
+  const record = source as Record<string, unknown>;
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return undefined;
+}
+
+function cleanPlayerPhoto(player: unknown) {
+  const photo = readStringField(player, [
+    "profilePhoto",
+    "photo",
+    "avatar",
+    "avatarUrl",
+    "image",
+    "profileImage",
+    "profileImageUrl",
+  ]);
+  return photo;
+}
+
 export function normalizePlayer(player: Partial<RoomPlayer> & { name?: string }, index = 0): RoomPlayer {
   const baseSkill = clamp(player.skill, 0, 10, 5);
   const normalized: RoomPlayer = {
@@ -214,7 +237,7 @@ export function normalizePlayer(player: Partial<RoomPlayer> & { name?: string },
     stamina: clamp(player.stamina, 1, 10, 5),
     physical: clamp(player.physical, 1, 10, 5),
     teamPlay: clamp(player.teamPlay, 1, 3, 2),
-    profilePhoto: typeof player.profilePhoto === "string" ? player.profilePhoto : undefined,
+    profilePhoto: cleanPlayerPhoto(player),
     isGoalkeeper: Boolean(player.isGoalkeeper ?? false),
     isPlaymaker: Boolean(player.isPlaymaker ?? false),
     isFinisher: Boolean(player.isFinisher ?? false),
@@ -293,14 +316,31 @@ export function cleanRosterName(name: unknown, fallback = DEFAULT_ROSTER_NAME) {
   return cleaned || fallback;
 }
 
+function pickRosterName(roster: unknown, fallback = DEFAULT_ROSTER_NAME) {
+  return cleanRosterName(
+    readStringField(roster, ["name", "rosterName", "groupName", "teamName", "title"]),
+    fallback,
+  );
+}
+
 function cleanRosterColor(value: unknown) {
   return typeof value === "string" && /^#[0-9A-Fa-f]{6}$/.test(value.trim())
     ? value.trim()
     : undefined;
 }
 
+function pickRosterColor(roster: unknown) {
+  return cleanRosterColor(
+    readStringField(roster, ["themeColor", "headerColor", "color", "teamColor", "groupColor"]),
+  );
+}
+
 function cleanRosterLogo(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function pickRosterLogo(roster: unknown) {
+  return cleanRosterLogo(readStringField(roster, ["logo", "groupLogo", "teamLogo", "crest", "badge"]));
 }
 
 export function createRoster(
@@ -313,8 +353,8 @@ export function createRoster(
     id: createLocalRosterId(),
     name: cleanRosterName(name),
     players: players.map((player, index) => normalizePlayer(player, index)).filter((player) => player.name),
-    themeColor: cleanRosterColor(identity.themeColor),
-    logo: cleanRosterLogo(identity.logo),
+    themeColor: pickRosterColor(identity),
+    logo: pickRosterLogo(identity),
     createdAt: now,
     updatedAt: now,
   };
@@ -322,15 +362,15 @@ export function createRoster(
 
 export function normalizeRoster(roster: Partial<RoomRoster> & { rosterName?: string; players?: Partial<RoomPlayer>[] }, index = 0): RoomRoster {
   const now = new Date().toISOString();
-  const name = cleanRosterName(roster.name || roster.rosterName, `${DEFAULT_ROSTER_NAME} ${index + 1}`);
+  const name = pickRosterName(roster, `${DEFAULT_ROSTER_NAME} ${index + 1}`);
   return {
     id: typeof roster.id === "string" && roster.id.trim() ? roster.id : createLocalRosterId(),
     name,
     players: Array.isArray(roster.players)
       ? roster.players.map((player, playerIndex) => normalizePlayer(player, playerIndex)).filter((player) => player.name)
       : [],
-    themeColor: cleanRosterColor(roster.themeColor),
-    logo: cleanRosterLogo(roster.logo),
+    themeColor: pickRosterColor(roster),
+    logo: pickRosterLogo(roster),
     createdAt: typeof roster.createdAt === "string" ? roster.createdAt : now,
     updatedAt: typeof roster.updatedAt === "string" ? roster.updatedAt : now,
   };
@@ -435,13 +475,25 @@ export function parseRosterFile(text: string, filename = "Imported roster"): Roo
       return parsed.rosters.map((roster: Partial<RoomRoster>, index: number) => normalizeRoster(roster, index));
     }
 
-    if (Array.isArray(parsed?.players)) {
-      const name = parsed.rosterName || parsed.name || parsed.roster?.name || fileBaseName(filename);
-      return [createRoster(name, parsed.players)];
+    // Prefer the full roster object when present. It preserves the roster name,
+    // color, logo, and complete player records. Older import logic read the
+    // top-level `players` array first, which could fall back to the filename
+    // for the roster name and drop identity fields.
+    if (parsed?.roster && Array.isArray(parsed.roster.players)) {
+      return [normalizeRoster({
+        ...parsed.roster,
+        name: parsed.roster.name || parsed.rosterName || parsed.name,
+        themeColor: parsed.roster.themeColor || parsed.themeColor || parsed.headerColor || parsed.color,
+        logo: parsed.roster.logo || parsed.logo || parsed.groupLogo || parsed.teamLogo,
+      }, 0)];
     }
 
-    if (parsed?.roster && Array.isArray(parsed.roster.players)) {
-      return [normalizeRoster(parsed.roster, 0)];
+    if (Array.isArray(parsed?.players)) {
+      const name = parsed.rosterName || parsed.name || fileBaseName(filename);
+      return [createRoster(name, parsed.players, {
+        themeColor: parsed.themeColor || parsed.headerColor || parsed.color,
+        logo: parsed.logo || parsed.groupLogo || parsed.teamLogo,
+      })];
     }
 
     throw new Error("Import file does not contain a Fair Teams roster.");

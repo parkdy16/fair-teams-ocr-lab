@@ -296,8 +296,119 @@ const OCR_LEADING_NAME_NOISE = new Set([
   "sr",
 ]);
 
+const OCR_NAME_PREFIX_PHRASES = [
+  ["see", "more"],
+  ["show", "more"],
+  ["view", "more"],
+  ["read", "more"],
+  // Keep single words such as "Abou", "About", and "Could" intact.
+  // They can be real names or OCR variants of real names, so the review UI
+  // should let the user edit them instead of silently stripping them.
+  ["i", "could"],
+] as const;
+
+const OCR_NAME_TRAILING_NOISE = new Set([
+  ...MEETUP_NOISE_WORDS,
+  "member",
+  "members",
+]);
+
+const NAME_PARTICLES = new Set([
+  "de",
+  "del",
+  "der",
+  "di",
+  "da",
+  "dos",
+  "du",
+  "la",
+  "le",
+  "van",
+  "von",
+]);
+
 function tokenKey(value: string) {
   return normalizeForMatch(value).replace(/\s+/g, "");
+}
+
+function titleCaseNameWord(word: string) {
+  return word
+    .split(/([-'])/)
+    .map((part) => {
+      if (part === "-" || part === "'") return part;
+      if (!part) return part;
+      return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+    })
+    .join("");
+}
+
+function titleCaseName(value: string) {
+  return value
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word, index) => {
+      const key = tokenKey(word);
+      if (index > 0 && NAME_PARTICLES.has(key)) return key;
+
+      const hasLower = /[a-zà-öø-ÿ]/.test(word);
+      const hasUpper = /[A-ZÀ-ÖØ-Þ]/.test(word);
+
+      if ((hasLower && !hasUpper) || (!hasLower && hasUpper)) {
+        return titleCaseNameWord(word);
+      }
+
+      return word;
+    })
+    .join(" ");
+}
+
+function stripOcrNamePrefixTokens(tokens: string[]) {
+  let output = [...tokens];
+  let changed = true;
+
+  while (changed && output.length > 1) {
+    changed = false;
+    for (const phrase of OCR_NAME_PREFIX_PHRASES) {
+      if (output.length <= phrase.length) continue;
+      const matchesPhrase = phrase.every(
+        (word, index) => tokenKey(output[index]) === word,
+      );
+      if (matchesPhrase) {
+        output = output.slice(phrase.length);
+        changed = true;
+        break;
+      }
+    }
+  }
+
+  return output;
+}
+
+function cleanDetectedNameCandidate(value: string) {
+  const cleaned = cleanOcrLine(value);
+  if (!cleaned) return "";
+
+  let tokens = cleaned.split(/\s+/).filter(Boolean);
+  if (!tokens.length) return "";
+
+  tokens = stripOcrNamePrefixTokens(tokens);
+
+  while (tokens.length > 1 && isMeetupNoiseToken(tokens[0])) {
+    tokens = tokens.slice(1);
+  }
+
+  while (tokens.length > 1 && OCR_LEADING_NAME_NOISE.has(tokenKey(tokens[0]))) {
+    tokens = tokens.slice(1);
+  }
+
+  while (tokens.length > 1 && OCR_NAME_TRAILING_NOISE.has(tokenKey(tokens[tokens.length - 1]))) {
+    tokens = tokens.slice(0, -1);
+  }
+
+  const candidate = cleanOcrLine(tokens.join(" "));
+  if (!candidate) return "";
+
+  return titleCaseName(candidate);
 }
 
 function isMeetupNoiseToken(value: string) {
@@ -317,7 +428,7 @@ function isMeetupCommentLine(value: string) {
 }
 
 function shouldUseMeetupAdjacentName(value: string) {
-  const clean = cleanOcrLine(value);
+  const clean = cleanDetectedNameCandidate(value);
   if (!clean || isMeetupCommentLine(clean)) return false;
   return isProbablyName(clean) || isProbablySingleUsername(clean);
 }
@@ -369,8 +480,9 @@ function extractMeetupNameBeforeMarker(chunk: string) {
       .split(" ")
       .filter(Boolean);
     if (normalizedWords.some((word) => MEETUP_STOP_WORDS.has(word))) continue;
-    if (isProbablyName(candidate) || isProbablySingleUsername(candidate)) {
-      return cleanOcrLine(candidate);
+    const cleanedCandidate = cleanDetectedNameCandidate(candidate);
+    if (cleanedCandidate && (isProbablyName(cleanedCandidate) || isProbablySingleUsername(cleanedCandidate))) {
+      return cleanedCandidate;
     }
   }
 
@@ -463,7 +575,7 @@ function extractTeamSheetNames(text: string, roster: RoomPlayer[]) {
     let group: string[] = [];
     const flushGroup = () => {
       if (!group.length) return;
-      const candidate = cleanOcrLine(group.join(" "));
+      const candidate = cleanDetectedNameCandidate(group.join(" "));
       const normalizedCandidate = normalizeForMatch(candidate);
       if (
         candidate &&
@@ -715,7 +827,8 @@ function extractOcrNames(
         const previousNormalized = normalizeForMatch(previous);
         if (MEETUP_MARKER_PATTERN.test(previousNormalized)) break;
         if (shouldUseMeetupAdjacentName(previous)) {
-          names.push(cleanOcrLine(previous));
+          const cleanedPrevious = cleanDetectedNameCandidate(previous);
+          if (cleanedPrevious) names.push(cleanedPrevious);
           break;
         }
       }
@@ -725,7 +838,8 @@ function extractOcrNames(
       // common RSVP comments such as "Understood" blocked.
       const next = lines[index + 1];
       if (next && shouldUseMeetupAdjacentName(next)) {
-        names.push(cleanOcrLine(next));
+        const cleanedNext = cleanDetectedNameCandidate(next);
+        if (cleanedNext) names.push(cleanedNext);
       }
     }
   }
@@ -758,8 +872,12 @@ function extractOcrNames(
     }
   }
 
+  const cleanedNames = names
+    .map((name) => cleanDetectedNameCandidate(name))
+    .filter((name) => name && (isProbablyName(name) || isProbablySingleUsername(name)));
+
   const uniqueNames = Array.from(
-    new Map(names.map((name) => [normalizeForMatch(name), name])).values(),
+    new Map(cleanedNames.map((name) => [normalizeForMatch(name), name])).values(),
   );
 
   const candidates = uniqueNames.map((name) => {
@@ -1054,6 +1172,12 @@ export function TodayTab({
   const [newOcrPlayerGenders, setNewOcrPlayerGenders] = useState<
     Record<string, Gender>
   >({});
+  const [editedOcrCandidateNames, setEditedOcrCandidateNames] = useState<
+    Record<string, string>
+  >({});
+  const [editedOcrTokenSelections, setEditedOcrTokenSelections] = useState<
+    Record<string, boolean[]>
+  >({});
   const [prioritizeScannedPlayers, setPrioritizeScannedPlayers] =
     useState(false);
 
@@ -1175,15 +1299,16 @@ export function TodayTab({
         const alreadyPromoted = possibleNames.some(
           (candidate) => normalizeForMatch(candidate.name) === normalizedLine,
         );
+        const cleanedSuggestedName = cleanDetectedNameCandidate(cleaned);
         const looksLikeStandaloneName =
-          isProbablyName(cleaned) && !alreadyPromoted;
+          isProbablyName(cleanedSuggestedName) && !alreadyPromoted;
 
         return {
           index,
           text: cleaned,
           normalized: normalizedLine,
           foundCandidates,
-          suggestedName: looksLikeStandaloneName ? cleaned : "",
+          suggestedName: looksLikeStandaloneName ? cleanedSuggestedName : "",
         };
       })
       .filter(Boolean) as Array<{
@@ -1232,6 +1357,77 @@ export function TodayTab({
     }
 
     return candidate.status;
+  };
+
+  const getOcrNameTokens = (candidate: OcrNameCandidate) =>
+    cleanOcrLine(candidate.name).split(/\s+/).filter(Boolean);
+
+  const getDefaultOcrTokenSelection = (candidate: OcrNameCandidate) => {
+    const tokens = getOcrNameTokens(candidate);
+
+    return tokens.map((token, index) => {
+      if (ocrInputSource !== "screenshot" || tokens.length <= 1) return true;
+
+      const key = tokenKey(token);
+      const nextKey = tokenKey(tokens[index + 1] ?? "");
+
+      // In first-time screenshot imports, OCR often glues normal UI/comment
+      // words to the bold attendee name. Preselect the likely name words, but
+      // keep every word visible as a tap-to-restore chip so real names like
+      // "Abou George" are not silently destroyed.
+      if (index === 0 && (key === "about" || key === "could")) return false;
+      if (index === 0 && key === "see" && nextKey === "more") return false;
+      if (index === 1 && tokenKey(tokens[0]) === "see" && key === "more") return false;
+
+      return true;
+    });
+  };
+
+  const getOcrTokenSelection = (candidate: OcrNameCandidate) => {
+    const key = ocrCandidateKey(candidate);
+    const tokens = getOcrNameTokens(candidate);
+    const savedSelection = editedOcrTokenSelections[key];
+
+    if (savedSelection && savedSelection.length === tokens.length) {
+      return savedSelection;
+    }
+
+    return getDefaultOcrTokenSelection(candidate);
+  };
+
+  const buildOcrNameFromTokens = (candidate: OcrNameCandidate, selection: boolean[]) => {
+    const tokens = getOcrNameTokens(candidate);
+    const keptTokens = tokens.filter((_, index) => selection[index]);
+    return titleCaseName(cleanOcrLine(keptTokens.join(" ")));
+  };
+
+  const getEditedOcrCandidateName = (candidate: OcrNameCandidate) => {
+    const key = ocrCandidateKey(candidate);
+    const editedName = editedOcrCandidateNames[key];
+
+    if (editedName !== undefined) {
+      return cleanDetectedNameCandidate(editedName) || cleanOcrLine(editedName);
+    }
+
+    const tokenName = buildOcrNameFromTokens(candidate, getOcrTokenSelection(candidate));
+    return cleanDetectedNameCandidate(tokenName) || cleanOcrLine(tokenName);
+  };
+
+  const updateEditedOcrCandidateName = (candidate: OcrNameCandidate, name: string) => {
+    const key = ocrCandidateKey(candidate);
+    setEditedOcrCandidateNames((current) => ({ ...current, [key]: name }));
+  };
+
+  const toggleOcrCandidateToken = (candidate: OcrNameCandidate, tokenIndex: number) => {
+    const key = ocrCandidateKey(candidate);
+    const currentSelection = getOcrTokenSelection(candidate);
+    const nextSelection = currentSelection.map((selected, index) =>
+      index === tokenIndex ? !selected : selected,
+    );
+    const nextName = buildOcrNameFromTokens(candidate, nextSelection);
+
+    setEditedOcrTokenSelections((current) => ({ ...current, [key]: nextSelection }));
+    setEditedOcrCandidateNames((current) => ({ ...current, [key]: nextName }));
   };
 
   const safeMatches = possibleNames.filter(
@@ -1297,6 +1493,8 @@ export function TodayTab({
     setRawOcrAddedNames([]);
     setRawOcrCreatedPlayerIds([]);
     setNewOcrPlayerGenders({});
+    setEditedOcrCandidateNames({});
+    setEditedOcrTokenSelections({});
   };
 
   const openOcrImport = () => {
@@ -1592,6 +1790,8 @@ export function TodayTab({
     setRawOcrAddedNames([]);
     setRawOcrCreatedPlayerIds([]);
     setNewOcrPlayerGenders({});
+    setEditedOcrCandidateNames({});
+    setEditedOcrTokenSelections({});
   };
 
   const runOcr = async () => {
@@ -1606,6 +1806,8 @@ export function TodayTab({
     setRawOcrAddedNames([]);
     setRawOcrCreatedPlayerIds([]);
     setNewOcrPlayerGenders({});
+    setEditedOcrCandidateNames({});
+    setEditedOcrTokenSelections({});
 
     const chunks: string[] = [];
 
@@ -1677,7 +1879,7 @@ export function TodayTab({
   };
 
   const addRawOcrName = (rawName: string) => {
-    const cleanedName = cleanOcrLine(rawName);
+    const cleanedName = cleanDetectedNameCandidate(rawName);
     const normalizedName = normalizeForMatch(cleanedName);
     if (!cleanedName || !normalizedName || !isProbablyName(cleanedName)) {
       setOcrStatus("Type a clean player name from the raw OCR text first.");
@@ -1801,18 +2003,31 @@ export function TodayTab({
       .map((candidate) => resolveOcrMatch(candidate))
       .filter(Boolean) as RoomPlayer[];
     const currentNewCandidates = candidatesToAdd.filter(
-      (candidate) => candidate.status === "new" && !resolveOcrMatch(candidate),
+      (candidate) => getOcrReviewStatus(candidate) === "new" && !resolveOcrMatch(candidate),
     );
+    const seenNewNames = new Set<string>();
+    const validNewCandidates = currentNewCandidates
+      .map((candidate) => ({
+        candidate,
+        name: getEditedOcrCandidateName(candidate),
+      }))
+      .filter(({ name }) => name && isProbablyName(name))
+      .filter(({ name }) => {
+        const normalized = normalizeForMatch(name);
+        if (!normalized || seenNewNames.has(normalized)) return false;
+        seenNewNames.add(normalized);
+        return true;
+      });
 
     const playerIds = new Set(currentRosterMatches.map((player) => player.id));
 
-    if (playerIds.size === 0 && currentNewCandidates.length === 0) return;
+    if (playerIds.size === 0 && validNewCandidates.length === 0) return;
 
     const now = new Date().toISOString();
-    const newPlayers: RoomPlayer[] = currentNewCandidates.map((candidate) => ({
+    const newPlayers: RoomPlayer[] = validNewCandidates.map(({ candidate, name }) => ({
       id: createOcrPlayerId(),
       roomId: 1,
-      name: candidate.name.trim(),
+      name: name.trim(),
       gender: newOcrPlayerGenders[ocrCandidateKey(candidate)] ?? "other",
       skill: 5,
       attack: 5,
@@ -2322,6 +2537,15 @@ export function TodayTab({
                         selectedOcrCandidateKeySet.has(candidateKey);
                       const resolvedMatch = resolveOcrMatch(candidate);
                       const reviewStatus = getOcrReviewStatus(candidate);
+                      const canEditNewName = reviewStatus === "new" && !resolvedMatch;
+                      const cleanedEditedName = getEditedOcrCandidateName(candidate);
+                      const editedName = editedOcrCandidateNames[candidateKey] ?? cleanedEditedName;
+                      const nameTokens = getOcrNameTokens(candidate);
+                      const tokenSelection = getOcrTokenSelection(candidate);
+                      const canUseTokenEditor = canEditNewName && nameTokens.length > 1;
+                      const displayCandidateName = canEditNewName
+                        ? cleanedEditedName || candidate.name
+                        : candidate.name;
 
                       return (
                         <div
@@ -2343,7 +2567,7 @@ export function TodayTab({
                               />
                               <div className="min-w-0">
                                 <div className="font-black text-foreground">
-                                  {candidate.name}
+                                  {displayCandidateName}
                                 </div>
                                 {reviewStatus === "match" && resolvedMatch && (
                                   <div className="mt-0.5 font-medium text-emerald-700">
@@ -2383,6 +2607,52 @@ export function TodayTab({
                                   : "NEW"}
                             </div>
                           </div>
+                          {canEditNewName && (
+                            <div className="mt-2 rounded-xl border border-sky-100 bg-white/80 p-2">
+                              {canUseTokenEditor && (
+                                <>
+                                  <div className="mb-1 text-[9px] font-black uppercase tracking-wide text-sky-700">
+                                    Tap wrong words off
+                                  </div>
+                                  <div className="mb-2 flex flex-wrap gap-1">
+                                    {nameTokens.map((token, tokenIndex) => {
+                                      const isKept = tokenSelection[tokenIndex];
+                                      return (
+                                        <button
+                                          key={`${candidateKey}-${token}-${tokenIndex}`}
+                                          type="button"
+                                          onClick={() => toggleOcrCandidateToken(candidate, tokenIndex)}
+                                          className={`rounded-full border px-2 py-0.5 text-[10px] font-black transition ${
+                                            isKept
+                                              ? "border-sky-200 bg-sky-50 text-sky-900"
+                                              : "border-slate-200 bg-slate-100 text-slate-400 line-through"
+                                          }`}
+                                          aria-pressed={isKept}
+                                        >
+                                          {token}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </>
+                              )}
+                              <label className="mb-1 block text-[9px] font-black uppercase tracking-wide text-sky-700">
+                                Will add
+                              </label>
+                              <Input
+                                value={editedName}
+                                onChange={(event) => updateEditedOcrCandidateName(candidate, event.target.value)}
+                                onBlur={() => updateEditedOcrCandidateName(candidate, cleanedEditedName)}
+                                className="h-8 rounded-xl border-sky-100 bg-white text-xs font-black text-slate-900"
+                                placeholder="Clean player name"
+                              />
+                              {cleanedEditedName !== candidate.name && (
+                                <div className="mt-1 text-[10px] font-medium text-sky-700">
+                                  Scan text: {candidate.name}
+                                </div>
+                              )}
+                            </div>
+                          )}
                           {reviewStatus !== "match" &&
                             candidate.suggestions.length > 0 && (
                               <div className="mt-2 flex flex-wrap gap-1">
@@ -2420,7 +2690,7 @@ export function TodayTab({
                                     }`}
                                   >
                                     {chosenOcrMatchIds[candidateKey] === "__new__" ? "✓ " : "Add as new: "}
-                                    {candidate.name}
+                                    {displayCandidateName}
                                   </button>
                                 )}
                               </div>
@@ -2666,13 +2936,14 @@ export function TodayTab({
             {selectedNewCandidates.map((candidate) => {
               const key = ocrCandidateKey(candidate);
               const selectedGender = newOcrPlayerGenders[key] ?? "other";
+              const finalName = getEditedOcrCandidateName(candidate) || candidate.name;
               return (
                 <div
                   key={key}
                   className="flex items-center gap-2 rounded-lg bg-card px-3 py-2 text-xs font-black text-foreground"
                 >
-                  <span className="min-w-0 flex-1 truncate">{candidate.name}</span>
-                  <div className="flex shrink-0 rounded-full border bg-muted/40 p-0.5" aria-label={`Gender for ${candidate.name}`}>
+                  <span className="min-w-0 flex-1 truncate">{finalName}</span>
+                  <div className="flex shrink-0 rounded-full border bg-muted/40 p-0.5" aria-label={`Gender for ${finalName}`}>
                     {[
                       { value: "other" as Gender, label: "?" },
                       { value: "male" as Gender, label: "M" },
@@ -2762,14 +3033,17 @@ export function TodayTab({
               <div className="mb-1 text-[10px] font-black uppercase tracking-wider text-muted-foreground">
                 New Players
               </div>
-              {allNewCandidates.map((candidate) => (
-                <div
-                  key={ocrCandidateKey(candidate)}
-                  className="rounded-lg bg-card px-3 py-2 text-xs font-black text-foreground"
-                >
-                  {candidate.name}
-                </div>
-              ))}
+              {allNewCandidates.map((candidate) => {
+                const finalName = getEditedOcrCandidateName(candidate) || candidate.name;
+                return (
+                  <div
+                    key={ocrCandidateKey(candidate)}
+                    className="rounded-lg bg-card px-3 py-2 text-xs font-black text-foreground"
+                  >
+                    {finalName}
+                  </div>
+                );
+              })}
             </div>
           )}
           <DialogFooter className="gap-2 sm:gap-2">

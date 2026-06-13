@@ -41,7 +41,16 @@ const HEADER_COLOR_STORAGE_KEY = "fair-teams-header-color-v2";
 const GROUP_LOGO_STORAGE_KEY = "fair-teams-group-logo";
 const DEFAULT_GROUP_NAME = "My Group";
 const DEFAULT_HEADER_COLOR = "#3B82F6";
+const ROSTERS_STORAGE_KEY = "fair-teams-rosters-v1";
 
+
+function hasSavedRosterState() {
+  try {
+    return Boolean(window.localStorage.getItem(ROSTERS_STORAGE_KEY));
+  } catch {
+    return false;
+  }
+}
 
 function readStoredGroupName() {
   try {
@@ -49,6 +58,33 @@ function readStoredGroupName() {
   } catch {
     return DEFAULT_GROUP_NAME;
   }
+}
+
+function readStoredHeaderColor() {
+  try {
+    const stored = window.localStorage.getItem(HEADER_COLOR_STORAGE_KEY);
+    return /^#[0-9A-Fa-f]{6}$/.test(stored || "") ? stored! : DEFAULT_HEADER_COLOR;
+  } catch {
+    return DEFAULT_HEADER_COLOR;
+  }
+}
+
+function readStoredGroupLogo() {
+  try {
+    return window.localStorage.getItem(GROUP_LOGO_STORAGE_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
+function rosterThemeColor(roster: RoomRoster | undefined) {
+  return /^#[0-9A-Fa-f]{6}$/.test(roster?.themeColor || "")
+    ? roster!.themeColor!
+    : DEFAULT_HEADER_COLOR;
+}
+
+function rosterLogo(roster: RoomRoster | undefined) {
+  return roster?.logo || "";
 }
 
 function slugifyFilename(value: string) {
@@ -127,32 +163,34 @@ function App() {
   const [activeTab, setActiveTab] = useState("today");
   const [todayOcrOpenToken, setTodayOcrOpenToken] = useState(0);
   const [ocrImportContext, setOcrImportContext] = useState<"today" | "roster">("today");
-  const [groupName, setGroupName] = useState(() => readStoredGroupName());
-  const [rosterState, setRosterState] = useState(() => loadRosterState(readStoredGroupName()));
+  const [rosterState, setRosterState] = useState(() => {
+    const legacyName = readStoredGroupName();
+    const shouldMigrateLegacyIdentity = !hasSavedRosterState();
+    const legacyColor = shouldMigrateLegacyIdentity ? readStoredHeaderColor() : DEFAULT_HEADER_COLOR;
+    const legacyLogo = shouldMigrateLegacyIdentity ? readStoredGroupLogo() : "";
+    const loaded = loadRosterState(legacyName);
+    return {
+      ...loaded,
+      rosters: loaded.rosters.map((roster, index) =>
+        index === 0 && shouldMigrateLegacyIdentity
+          ? {
+              ...roster,
+              themeColor: roster.themeColor || legacyColor,
+              logo: roster.logo || legacyLogo,
+            }
+          : roster,
+      ),
+    };
+  });
   const rosters = rosterState.rosters;
   const activeRosterId = rosterState.activeRosterId;
   const activeRoster = rosters.find((roster) => roster.id === activeRosterId) || rosters[0];
   const players = activeRoster?.players || [];
   const activeRosterName = activeRoster?.name || "Default roster";
-  const [headerColor, setHeaderColor] = useState(() => {
-    try {
-      return (
-        window.localStorage.getItem(HEADER_COLOR_STORAGE_KEY) ||
-        DEFAULT_HEADER_COLOR
-      );
-    } catch {
-      return DEFAULT_HEADER_COLOR;
-    }
-  });
-  const [groupLogo, setGroupLogo] = useState(() => {
-    try {
-      return window.localStorage.getItem(GROUP_LOGO_STORAGE_KEY) || "";
-    } catch {
-      return "";
-    }
-  });
+  const headerColor = rosterThemeColor(activeRoster);
+  const groupLogo = rosterLogo(activeRoster);
   const [groupSettingsOpen, setGroupSettingsOpen] = useState(false);
-  const [draftGroupName, setDraftGroupName] = useState(groupName);
+  const [draftGroupName, setDraftGroupName] = useState(activeRosterName);
   const [draftHeaderColor, setDraftHeaderColor] = useState(headerColor);
   const [draftGroupLogo, setDraftGroupLogo] = useState(groupLogo);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -162,68 +200,55 @@ function App() {
   const [clearRosterSlide, setClearRosterSlide] = useState(0);
   const [rosterManagerOpen, setRosterManagerOpen] = useState(false);
   const [newRosterName, setNewRosterName] = useState("");
-  const [renameRosterName, setRenameRosterName] = useState(activeRosterName);
   const [fileImportMode, setFileImportMode] = useState<"shared" | "backup">("shared");
 
   useEffect(() => {
     saveRosterState(rosterState);
   }, [rosterState]);
 
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(GROUP_NAME_STORAGE_KEY, groupName);
-    } catch {
-      // Local storage can fail in private browsing, but the app should keep working.
-    }
-  }, [groupName]);
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(HEADER_COLOR_STORAGE_KEY, headerColor);
-    } catch {
-      // Keep working even if local storage is unavailable.
-    }
-  }, [headerColor]);
-
-  useEffect(() => {
-    try {
-      if (groupLogo) {
-        window.localStorage.setItem(GROUP_LOGO_STORAGE_KEY, groupLogo);
-      } else {
-        window.localStorage.removeItem(GROUP_LOGO_STORAGE_KEY);
-      }
-    } catch {
-      // Keep working even if local storage is unavailable.
-    }
-  }, [groupLogo]);
 
   const openGroupSettings = () => {
-    setDraftGroupName(groupName);
+    setDraftGroupName(activeRosterName);
     setDraftHeaderColor(headerColor);
     setDraftGroupLogo(groupLogo);
     setGroupSettingsOpen(true);
   };
 
   const saveGroupSettings = () => {
-    const nextName = draftGroupName.trim() || DEFAULT_GROUP_NAME;
-    setGroupName(nextName);
-    setDraftGroupName(nextName);
-    setHeaderColor(draftHeaderColor);
-    setGroupLogo(draftGroupLogo);
+    setRosterState((current) => {
+      const currentRoster =
+        current.rosters.find((roster) => roster.id === current.activeRosterId) ||
+        current.rosters[0];
+      const nextName = uniqueRosterName(
+        draftGroupName || currentRoster?.name || DEFAULT_GROUP_NAME,
+        current.rosters.filter((roster) => roster.id !== current.activeRosterId),
+      );
+      return {
+        ...current,
+        rosters: current.rosters.map((roster) =>
+          roster.id === current.activeRosterId
+            ? {
+                ...roster,
+                name: nextName,
+                themeColor: draftHeaderColor,
+                logo: draftGroupLogo,
+                updatedAt: new Date().toISOString(),
+              }
+            : roster,
+        ),
+      };
+    });
     setGroupSettingsOpen(false);
   };
 
   const cancelGroupSettings = () => {
-    setDraftGroupName(groupName);
+    setDraftGroupName(activeRosterName);
     setDraftHeaderColor(headerColor);
     setDraftGroupLogo(groupLogo);
     setGroupSettingsOpen(false);
   };
 
-  const headerDisplayName =
-    groupName.trim() && groupName !== DEFAULT_GROUP_NAME
-      ? groupName
-      : "Fair Teams";
+  const headerDisplayName = activeRosterName || "Fair Teams";
   const isWhiteHeaderColor = headerColor.toLowerCase() === "#ffffff";
   const identityAccentColor = isWhiteHeaderColor ? "#E2E8F0" : headerColor;
   const logoRingStyle = {
@@ -234,8 +259,10 @@ function App() {
   } as React.CSSProperties;
 
   useEffect(() => {
-    setRenameRosterName(activeRosterName);
-  }, [activeRosterName]);
+    setDraftGroupName(activeRosterName);
+    setDraftHeaderColor(headerColor);
+    setDraftGroupLogo(groupLogo);
+  }, [activeRosterName, headerColor, groupLogo]);
 
   const replacePlayers = (nextPlayers: RoomPlayer[]) => {
     setRosterState((current) => ({
@@ -268,22 +295,6 @@ function App() {
       activeRosterId: roster.id,
     }));
     setNewRosterName("");
-  };
-
-  const renameActiveRoster = () => {
-    const nextName = uniqueRosterName(
-      renameRosterName || activeRosterName,
-      rosters.filter((roster) => roster.id !== activeRosterId),
-    );
-    setRosterState((current) => ({
-      ...current,
-      rosters: current.rosters.map((roster) =>
-        roster.id === current.activeRosterId
-          ? { ...roster, name: nextName, updatedAt: new Date().toISOString() }
-          : roster,
-      ),
-    }));
-    setRenameRosterName(nextName);
   };
 
   const exportSharedRoster = () => {
@@ -346,7 +357,7 @@ function App() {
     setRosterState((current) => {
       const nextRosters = [...current.rosters];
       const added = normalizedIncoming.map((roster) => {
-        const copied = createRoster(uniqueRosterName(roster.name, nextRosters), roster.players);
+        const copied = createRoster(uniqueRosterName(roster.name, nextRosters), roster.players, { themeColor: roster.themeColor, logo: roster.logo });
         nextRosters.push(copied);
         return copied;
       });
@@ -433,46 +444,29 @@ function App() {
         <header className="sticky top-0 z-30 border-b border-border bg-white px-4 pt-3 pb-2 shadow-sm">
           <div className="flex items-center justify-between gap-3 px-1 pb-2">
             <div className="min-w-0 flex-1">
-              {activeTab === "players" ? (
-                <button
-                  type="button"
-                  onClick={openGroupSettings}
-                  className="group flex max-w-full min-w-0 items-center gap-2.5 text-left transition-transform active:scale-[0.99]"
+              <button
+                type="button"
+                onClick={openGroupSettings}
+                className="group flex max-w-full min-w-0 items-center gap-2.5 text-left transition-transform active:scale-[0.99]"
+                title="Edit active roster name, logo, and color"
+              >
+                <span
+                  className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-2xl border-2 bg-white shadow-sm"
+                  style={logoRingStyle}
                 >
-                  <span
-                    className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-2xl border-2 bg-white shadow-sm"
-                    style={logoRingStyle}
-                  >
-                    <img
-                      src={groupLogo || fairTeamsLogo}
-                      alt=""
-                      className="h-full w-full object-cover"
-                    />
-                  </span>
-                  <span className="flex min-w-0 max-w-full items-center gap-1.5">
-                    <h1 className="truncate text-[17px] font-black leading-tight tracking-tight text-[#102A43]">
-                      {headerDisplayName}
-                    </h1>
-                    <Pencil className="h-3.5 w-3.5 shrink-0 text-[#102A43]/45" />
-                  </span>
-                </button>
-              ) : (
-                <div className="flex max-w-full min-w-0 items-center gap-2.5 text-left">
-                  <span
-                    className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-2xl border-2 bg-white shadow-sm"
-                    style={logoRingStyle}
-                  >
-                    <img
-                      src={groupLogo || fairTeamsLogo}
-                      alt=""
-                      className="h-full w-full object-cover"
-                    />
-                  </span>
+                  <img
+                    src={groupLogo || fairTeamsLogo}
+                    alt=""
+                    className="h-full w-full object-cover"
+                  />
+                </span>
+                <span className="flex min-w-0 max-w-full items-center gap-1.5">
                   <h1 className="truncate text-[17px] font-black leading-tight tracking-tight text-[#102A43]">
                     {headerDisplayName}
                   </h1>
-                </div>
-              )}
+                  <Pencil className="h-3.5 w-3.5 shrink-0 text-[#102A43]/45" />
+                </span>
+              </button>
             </div>
 
             <div className="flex items-center gap-1.5 shrink-0">
@@ -628,10 +622,10 @@ function App() {
             <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-3">
               <div>
                 <h2 className="text-base font-black tracking-tight text-[#102A43]">
-                  Group Settings
+                  Roster Identity
                 </h2>
                 <p className="mt-0.5 text-[11px] font-semibold text-slate-500">
-                  Name, logo, and color theme.
+                  Name, logo, and color are saved with this roster.
                 </p>
               </div>
               <Button
@@ -649,7 +643,7 @@ function App() {
             <div className="mt-4 space-y-4">
               <section>
                 <h3 className="text-sm font-black text-[#102A43]">
-                  Group Name
+                  Roster Name
                 </h3>
                 <input
                   value={draftGroupName}
@@ -662,13 +656,13 @@ function App() {
 
               <section>
                 <h3 className="text-sm font-black text-[#102A43]">
-                  Group Logo
+                  Roster Logo
                 </h3>
                 <div className="mt-2 flex items-center gap-3">
                   <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 shadow-sm">
                     <img
                       src={draftGroupLogo || fairTeamsLogo}
-                      alt="Group logo preview"
+                      alt="Roster logo preview"
                       className="h-full w-full object-cover"
                     />
                   </div>
@@ -708,7 +702,7 @@ function App() {
 
               <section>
                 <h3 className="text-sm font-black text-[#102A43]">
-                  Group Color
+                  Roster Color
                 </h3>
                 <div className="mt-2 grid grid-cols-5 gap-2.5">
                   {GROUP_COLOR_THEMES.map((theme) => {
@@ -780,7 +774,7 @@ function App() {
                   Rosters
                 </h2>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  Switch classes or groups. Each roster stays separate.
+                  Switch classes or groups. Each roster stays separate. Tap the top title to edit name, logo, and color.
                 </p>
               </div>
               <Button
@@ -846,28 +840,6 @@ function App() {
               </div>
             </div>
 
-            <div className="mt-3 rounded-2xl border border-slate-100 bg-white p-3">
-              <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-                Rename active roster
-              </div>
-              <div className="mt-2 flex gap-2">
-                <input
-                  value={renameRosterName}
-                  onChange={(e) => setRenameRosterName(e.target.value)}
-                  className="h-10 min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-bold text-[#102A43] outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
-                  placeholder="Roster name"
-                  maxLength={36}
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-10 rounded-2xl px-3 text-xs font-black"
-                  onClick={renameActiveRoster}
-                >
-                  Save
-                </Button>
-              </div>
-            </div>
 
             <div className="mt-4 flex gap-2 border-t border-slate-100 pt-3">
               <Button

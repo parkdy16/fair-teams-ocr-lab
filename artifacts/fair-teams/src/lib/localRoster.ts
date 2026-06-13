@@ -266,6 +266,8 @@ export interface RoomRoster {
   id: string;
   name: string;
   players: RoomPlayer[];
+  themeColor?: string;
+  logo?: string;
   createdAt: string;
   updatedAt?: string;
 }
@@ -291,12 +293,28 @@ export function cleanRosterName(name: unknown, fallback = DEFAULT_ROSTER_NAME) {
   return cleaned || fallback;
 }
 
-export function createRoster(name: string, players: Partial<RoomPlayer>[] = []): RoomRoster {
+function cleanRosterColor(value: unknown) {
+  return typeof value === "string" && /^#[0-9A-Fa-f]{6}$/.test(value.trim())
+    ? value.trim()
+    : undefined;
+}
+
+function cleanRosterLogo(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+export function createRoster(
+  name: string,
+  players: Partial<RoomPlayer>[] = [],
+  identity: { themeColor?: string; logo?: string } = {},
+): RoomRoster {
   const now = new Date().toISOString();
   return {
     id: createLocalRosterId(),
     name: cleanRosterName(name),
     players: players.map((player, index) => normalizePlayer(player, index)).filter((player) => player.name),
+    themeColor: cleanRosterColor(identity.themeColor),
+    logo: cleanRosterLogo(identity.logo),
     createdAt: now,
     updatedAt: now,
   };
@@ -311,6 +329,8 @@ export function normalizeRoster(roster: Partial<RoomRoster> & { rosterName?: str
     players: Array.isArray(roster.players)
       ? roster.players.map((player, playerIndex) => normalizePlayer(player, playerIndex)).filter((player) => player.name)
       : [],
+    themeColor: cleanRosterColor(roster.themeColor),
+    logo: cleanRosterLogo(roster.logo),
     createdAt: typeof roster.createdAt === "string" ? roster.createdAt : now,
     updatedAt: typeof roster.updatedAt === "string" ? roster.updatedAt : now,
   };

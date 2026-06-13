@@ -688,6 +688,7 @@ function App() {
                     }
                   }}
                   maxLength={32}
+                  enterKeyHint="done"
                   className="mt-2 h-10 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm font-extrabold text-[#102A43] outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
                   placeholder="Fair Teams"
                 />

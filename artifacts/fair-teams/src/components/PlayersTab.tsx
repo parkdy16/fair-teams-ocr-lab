@@ -939,7 +939,7 @@ export function PlayersTab({
   const resetAddPlayerForm = () => {
     setName("");
     setAka("");
-    setGender("other");
+    setGender("male");
     setIsNew(true);
     setSkillLevel(5);
     setAddDetails(createDefaultAddPlayerDetails(5));
@@ -1116,6 +1116,7 @@ export function PlayersTab({
     const target = event.target as HTMLElement;
     if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") {
       event.preventDefault();
+      target.blur();
     }
   };
 

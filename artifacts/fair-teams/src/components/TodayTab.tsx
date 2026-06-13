@@ -1941,7 +1941,7 @@ export function TodayTab({
       id: newPlayerId,
       roomId: 1,
       name: cleanedName,
-      gender: "male",
+      gender: "other",
       skill: 5,
       attack: 5,
       defense: 5,

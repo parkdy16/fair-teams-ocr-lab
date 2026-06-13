@@ -12,7 +12,10 @@ import {
   Trash2,
   AlertTriangle,
   Package,
-  Image as ImageIcon,
+  Plus,
+  ChevronDown,
+  Share2,
+  ArchiveRestore,
 } from "lucide-react";
 import { PlayersTab } from "@/components/PlayersTab";
 import { TodayTab } from "@/components/TodayTab";
@@ -22,12 +25,15 @@ import fairTeamsLogo from "@/assets/fairteams-logo.png";
 import fairTeamsLogoFloating from "@/assets/fairteams-logo-floating.png";
 import {
   RoomPlayer,
-  csvToPlayers,
+  RoomRoster,
+  createRoster,
   downloadText,
-  loadPlayers,
+  loadRosterState,
   normalizePlayer,
-  playersToCsv,
-  savePlayers,
+  parseRosterFile,
+  rosterToShareJson,
+  rostersToBackupJson,
+  saveRosterState,
 } from "@/lib/localRoster";
 
 const GROUP_NAME_STORAGE_KEY = "fair-teams-group-name";
@@ -35,6 +41,33 @@ const HEADER_COLOR_STORAGE_KEY = "fair-teams-header-color-v2";
 const GROUP_LOGO_STORAGE_KEY = "fair-teams-group-logo";
 const DEFAULT_GROUP_NAME = "My Group";
 const DEFAULT_HEADER_COLOR = "#3B82F6";
+
+
+function readStoredGroupName() {
+  try {
+    return window.localStorage.getItem(GROUP_NAME_STORAGE_KEY) || DEFAULT_GROUP_NAME;
+  } catch {
+    return DEFAULT_GROUP_NAME;
+  }
+}
+
+function slugifyFilename(value: string) {
+  return (
+    value
+      .toLowerCase()
+      .replace(/[^a-z0-9\p{L}\p{M}]+/gu, "-")
+      .replace(/^-+|-+$/g, "") || "roster"
+  );
+}
+
+function uniqueRosterName(name: string, rosters: RoomRoster[]) {
+  const base = name.replace(/\s+/g, " ").trim() || "New roster";
+  const taken = new Set(rosters.map((roster) => roster.name.toLowerCase()));
+  if (!taken.has(base.toLowerCase())) return base;
+  let index = 2;
+  while (taken.has(`${base} ${index}`.toLowerCase())) index += 1;
+  return `${base} ${index}`;
+}
 
 const GROUP_COLOR_THEMES = [
   { name: "White", value: "#FFFFFF" },
@@ -91,20 +124,16 @@ function App() {
     };
   }, []);
 
-  const [players, setPlayers] = useState<RoomPlayer[]>(() => loadPlayers());
   const [activeTab, setActiveTab] = useState("today");
   const [todayOcrOpenToken, setTodayOcrOpenToken] = useState(0);
   const [ocrImportContext, setOcrImportContext] = useState<"today" | "roster">("today");
-  const [groupName, setGroupName] = useState(() => {
-    try {
-      return (
-        window.localStorage.getItem(GROUP_NAME_STORAGE_KEY) ||
-        DEFAULT_GROUP_NAME
-      );
-    } catch {
-      return DEFAULT_GROUP_NAME;
-    }
-  });
+  const [groupName, setGroupName] = useState(() => readStoredGroupName());
+  const [rosterState, setRosterState] = useState(() => loadRosterState(readStoredGroupName()));
+  const rosters = rosterState.rosters;
+  const activeRosterId = rosterState.activeRosterId;
+  const activeRoster = rosters.find((roster) => roster.id === activeRosterId) || rosters[0];
+  const players = activeRoster?.players || [];
+  const activeRosterName = activeRoster?.name || "Default roster";
   const [headerColor, setHeaderColor] = useState(() => {
     try {
       return (
@@ -131,10 +160,14 @@ function App() {
   const [rosterFilesOpen, setRosterFilesOpen] = useState(false);
   const [clearRosterOpen, setClearRosterOpen] = useState(false);
   const [clearRosterSlide, setClearRosterSlide] = useState(0);
+  const [rosterManagerOpen, setRosterManagerOpen] = useState(false);
+  const [newRosterName, setNewRosterName] = useState("");
+  const [renameRosterName, setRenameRosterName] = useState(activeRosterName);
+  const [fileImportMode, setFileImportMode] = useState<"shared" | "backup">("shared");
 
   useEffect(() => {
-    savePlayers(players);
-  }, [players]);
+    saveRosterState(rosterState);
+  }, [rosterState]);
 
   useEffect(() => {
     try {
@@ -200,28 +233,134 @@ function App() {
       : `0 0 0 2px ${hexToRgba(headerColor, 0.14)}`,
   } as React.CSSProperties;
 
+  useEffect(() => {
+    setRenameRosterName(activeRosterName);
+  }, [activeRosterName]);
+
   const replacePlayers = (nextPlayers: RoomPlayer[]) => {
-    setPlayers(nextPlayers);
+    setRosterState((current) => ({
+      ...current,
+      rosters: current.rosters.map((roster) =>
+        roster.id === current.activeRosterId
+          ? {
+              ...roster,
+              players: nextPlayers.map((player, index) => normalizePlayer(player, index)),
+              updatedAt: new Date().toISOString(),
+            }
+          : roster,
+      ),
+    }));
   };
 
-  const exportCsv = () => {
+  const switchRoster = (rosterId: string) => {
+    setRosterState((current) =>
+      current.rosters.some((roster) => roster.id === rosterId)
+        ? { ...current, activeRosterId: rosterId }
+        : current,
+    );
+  };
+
+  const createNewRoster = () => {
+    const name = uniqueRosterName(newRosterName || `Roster ${rosters.length + 1}`, rosters);
+    const roster = createRoster(name, []);
+    setRosterState((current) => ({
+      rosters: [...current.rosters, roster],
+      activeRosterId: roster.id,
+    }));
+    setNewRosterName("");
+  };
+
+  const renameActiveRoster = () => {
+    const nextName = uniqueRosterName(
+      renameRosterName || activeRosterName,
+      rosters.filter((roster) => roster.id !== activeRosterId),
+    );
+    setRosterState((current) => ({
+      ...current,
+      rosters: current.rosters.map((roster) =>
+        roster.id === current.activeRosterId
+          ? { ...roster, name: nextName, updatedAt: new Date().toISOString() }
+          : roster,
+      ),
+    }));
+    setRenameRosterName(nextName);
+  };
+
+  const exportSharedRoster = () => {
+    if (!activeRoster) return;
     setRosterFilesOpen(false);
     downloadText(
-      "fair-teams-roster.csv",
-      playersToCsv(players),
-      "text/csv;charset=utf-8",
+      `fair-teams-${slugifyFilename(activeRoster.name)}.json`,
+      rosterToShareJson(activeRoster),
+      "application/json;charset=utf-8",
+    );
+  };
+
+  const exportAllRostersBackup = () => {
+    setRosterFilesOpen(false);
+    downloadText(
+      `fair-teams-all-rosters-backup.json`,
+      rostersToBackupJson(rosters, activeRosterId),
+      "application/json;charset=utf-8",
     );
   };
 
   const openClearRoster = () => {
     setRosterFilesOpen(false);
+    setRosterManagerOpen(false);
     setClearRosterSlide(0);
     setClearRosterOpen(true);
   };
 
-  const openImportPicker = () => {
+  const openImportPicker = (mode: "shared" | "backup") => {
+    setFileImportMode(mode);
     setRosterFilesOpen(false);
     window.setTimeout(() => fileInputRef.current?.click(), 0);
+  };
+
+  const addImportedRosters = (incomingRosters: RoomRoster[], mode: "shared" | "backup") => {
+    const normalizedIncoming = incomingRosters
+      .map((roster) => ({
+        ...roster,
+        players: roster.players.map((player, playerIndex) => normalizePlayer(player, playerIndex)),
+      }))
+      .filter((roster) => roster.players.length > 0 || mode === "backup");
+
+    if (normalizedIncoming.length === 0) {
+      alert("No players found in that file.");
+      return;
+    }
+
+    const namesPreview = normalizedIncoming
+      .slice(0, 4)
+      .map((roster) => `• ${roster.name}`)
+      .join("\n");
+    const moreText = normalizedIncoming.length > 4 ? `\n…and ${normalizedIncoming.length - 4} more` : "";
+    const ok = window.confirm(
+      mode === "backup"
+        ? `Add ${normalizedIncoming.length} roster${normalizedIncoming.length === 1 ? "" : "s"} from this backup?\n\n${namesPreview}${moreText}\n\nYour current rosters will stay.`
+        : `Import this as a separate roster?\n\n${namesPreview}\n\nYour current roster “${activeRosterName}” will stay unchanged.`,
+    );
+    if (!ok) return;
+
+    setRosterState((current) => {
+      const nextRosters = [...current.rosters];
+      const added = normalizedIncoming.map((roster) => {
+        const copied = createRoster(uniqueRosterName(roster.name, nextRosters), roster.players);
+        nextRosters.push(copied);
+        return copied;
+      });
+      return {
+        rosters: nextRosters,
+        activeRosterId: added[0]?.id || current.activeRosterId,
+      };
+    });
+  };
+
+  const importFile = async (file: File) => {
+    const text = await file.text();
+    const importedRosters = parseRosterFile(text, file.name);
+    addImportedRosters(importedRosters, fileImportMode);
   };
 
   const readLogoFile = (file: File) => {
@@ -244,35 +383,24 @@ function App() {
 
   const confirmClearRoster = () => {
     if (clearRosterSlide < 95) return;
-    setPlayers([]);
+    setRosterState((current) => {
+      if (current.rosters.length <= 1) {
+        return {
+          ...current,
+          rosters: current.rosters.map((roster) =>
+            roster.id === current.activeRosterId
+              ? { ...roster, players: [], updatedAt: new Date().toISOString() }
+              : roster,
+          ),
+        };
+      }
+      const remaining = current.rosters.filter((roster) => roster.id !== current.activeRosterId);
+      return {
+        rosters: remaining,
+        activeRosterId: remaining[0]?.id || current.activeRosterId,
+      };
+    });
     closeClearRoster();
-  };
-
-  const importFile = async (file: File) => {
-    const text = await file.text();
-    const imported = file.name.toLowerCase().endsWith(".json")
-      ? JSON.parse(text)
-      : csvToPlayers(text);
-
-    if (!Array.isArray(imported)) {
-      throw new Error("Import file does not contain a roster list.");
-    }
-
-    const normalized = file.name.toLowerCase().endsWith(".json")
-      ? imported
-          .map((p, index) => normalizePlayer(p, index))
-          .filter((p) => p.name)
-      : imported;
-
-    if (normalized.length === 0) {
-      alert("No players found in that file.");
-      return;
-    }
-
-    const ok = window.confirm(
-      `Import ${normalized.length} players? This replaces the current roster on this device.`,
-    );
-    if (ok) setPlayers(normalized);
   };
 
   if (showSplash) {
@@ -353,7 +481,10 @@ function App() {
                   type="button"
                   variant="secondary"
                   className="h-9 rounded-xl bg-white/85 border border-slate-200 px-3 gap-1.5 text-[12px] font-black text-[#102A43]"
-                  onClick={() => setRosterFilesOpen(true)}
+                  onClick={() => {
+                  setRosterManagerOpen(false);
+                  setRosterFilesOpen(true);
+                }}
                   title="Roster files"
                 >
                   <Package className="w-3.5 h-3.5" />
@@ -389,6 +520,31 @@ function App() {
             className="mx-1 mb-2 h-0.5 rounded-full"
             style={{ backgroundColor: identityAccentColor }}
           />
+
+          <button
+            type="button"
+            onClick={() => setRosterManagerOpen(true)}
+            className="mx-1 mb-2 flex w-[calc(100%-0.5rem)] items-center justify-between gap-2 rounded-2xl border border-slate-200 bg-slate-50/80 px-3 py-2 text-left shadow-sm transition active:scale-[0.99]"
+            title="Switch roster"
+          >
+            <span className="flex min-w-0 items-center gap-2">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-white text-[#102A43] shadow-sm">
+                <Users className="h-3.5 w-3.5" />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-[10px] font-black uppercase tracking-wide text-slate-400">
+                  Active roster
+                </span>
+                <span className="block truncate text-sm font-black text-[#102A43]">
+                  {activeRosterName}
+                </span>
+              </span>
+            </span>
+            <span className="flex shrink-0 items-center gap-1.5 text-[11px] font-extrabold text-slate-500">
+              {players.length} player{players.length === 1 ? "" : "s"}
+              <ChevronDown className="h-3.5 w-3.5" />
+            </span>
+          </button>
 
           <TabsList className="w-full h-11 bg-slate-100/90 grid grid-cols-3 rounded-2xl p-1 gap-1.5 border border-border/70 shadow-inner">
             <TabsTrigger
@@ -611,6 +767,135 @@ function App() {
         </div>
       )}
 
+      {rosterManagerOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/45 p-4 sm:items-center"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="w-full max-w-sm rounded-3xl border border-slate-200 bg-white p-4 shadow-2xl">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-base font-black tracking-tight text-[#102A43]">
+                  Rosters
+                </h2>
+                <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
+                  Switch classes or groups. Each roster stays separate.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 rounded-xl"
+                onClick={() => setRosterManagerOpen(false)}
+                title="Close"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+
+            <div className="mt-4 max-h-56 space-y-2 overflow-y-auto pr-1">
+              {rosters.map((roster) => {
+                const selected = roster.id === activeRosterId;
+                return (
+                  <button
+                    key={roster.id}
+                    type="button"
+                    onClick={() => {
+                      switchRoster(roster.id);
+                      setRosterManagerOpen(false);
+                    }}
+                    className={`flex w-full items-center justify-between gap-3 rounded-2xl border px-3 py-2.5 text-left transition active:scale-[0.99] ${selected ? "border-blue-200 bg-blue-50/80" : "border-slate-100 bg-slate-50/70"}`}
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-black text-[#102A43]">
+                        {roster.name}
+                      </span>
+                      <span className="block text-[11px] font-bold text-slate-500">
+                        {roster.players.length} player{roster.players.length === 1 ? "" : "s"}
+                      </span>
+                    </span>
+                    {selected && (
+                      <span className="shrink-0 rounded-full bg-[#102A43] px-2 py-1 text-[10px] font-black uppercase tracking-wide text-white">
+                        Active
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-slate-100 bg-slate-50/70 p-3">
+              <div className="flex gap-2">
+                <input
+                  value={newRosterName}
+                  onChange={(e) => setNewRosterName(e.target.value)}
+                  className="h-10 min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-bold text-[#102A43] outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
+                  placeholder="New roster name"
+                  maxLength={36}
+                />
+                <Button
+                  type="button"
+                  className="h-10 rounded-2xl bg-[#102A43] px-3 text-xs font-black text-white"
+                  onClick={createNewRoster}
+                >
+                  <Plus className="mr-1.5 h-3.5 w-3.5" />
+                  New
+                </Button>
+              </div>
+            </div>
+
+            <div className="mt-3 rounded-2xl border border-slate-100 bg-white p-3">
+              <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+                Rename active roster
+              </div>
+              <div className="mt-2 flex gap-2">
+                <input
+                  value={renameRosterName}
+                  onChange={(e) => setRenameRosterName(e.target.value)}
+                  className="h-10 min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-bold text-[#102A43] outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
+                  placeholder="Roster name"
+                  maxLength={36}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-10 rounded-2xl px-3 text-xs font-black"
+                  onClick={renameActiveRoster}
+                >
+                  Save
+                </Button>
+              </div>
+            </div>
+
+            <div className="mt-4 flex gap-2 border-t border-slate-100 pt-3">
+              <Button
+                type="button"
+                variant="outline"
+                className="h-10 flex-1 rounded-2xl text-xs font-black"
+                onClick={() => {
+                  setRosterManagerOpen(false);
+                  setRosterFilesOpen(true);
+                }}
+              >
+                <Package className="mr-1.5 h-3.5 w-3.5" />
+                Files
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-10 flex-1 rounded-2xl border-red-100 bg-red-50/70 text-xs font-black text-red-700 hover:bg-red-100 hover:text-red-800"
+                onClick={openClearRoster}
+              >
+                <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                {rosters.length > 1 ? "Delete" : "Clear"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {rosterFilesOpen && (
         <div
           className="fixed inset-0 z-50 flex items-end justify-center bg-black/45 p-4 sm:items-center"
@@ -624,7 +909,7 @@ function App() {
                   Files
                 </h2>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  Import, export, or clear your roster on this device.
+                  Share one roster or back up everything on this device.
                 </p>
               </div>
               <Button
@@ -639,35 +924,71 @@ function App() {
               </Button>
             </div>
 
+            <div className="mt-4 rounded-2xl border border-slate-100 bg-slate-50/70 p-3">
+              <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+                Current roster
+              </div>
+              <div className="mt-1 flex items-center justify-between gap-2">
+                <div className="min-w-0 truncate text-sm font-black text-[#102A43]">
+                  {activeRosterName}
+                </div>
+                <div className="shrink-0 text-[11px] font-extrabold text-slate-500">
+                  {players.length} player{players.length === 1 ? "" : "s"}
+                </div>
+              </div>
+            </div>
+
             <div className="mt-4 grid gap-2">
               <Button
                 type="button"
                 variant="outline"
                 className="h-12 justify-start rounded-2xl gap-3"
-                onClick={openImportPicker}
+                onClick={exportSharedRoster}
+                disabled={players.length === 0}
               >
-                <Upload className="h-4 w-4" />
-                <span className="font-black">Import roster</span>
+                <Share2 className="h-4 w-4" />
+                <span className="font-black">Share current roster</span>
               </Button>
               <Button
                 type="button"
                 variant="outline"
                 className="h-12 justify-start rounded-2xl gap-3"
-                onClick={exportCsv}
-                disabled={players.length === 0}
+                onClick={() => openImportPicker("shared")}
+              >
+                <Upload className="h-4 w-4" />
+                <span className="font-black">Import shared roster</span>
+              </Button>
+              <div className="my-1 h-px bg-slate-100" />
+              <Button
+                type="button"
+                variant="outline"
+                className="h-12 justify-start rounded-2xl gap-3"
+                onClick={exportAllRostersBackup}
+                disabled={rosters.length === 0}
               >
                 <Download className="h-4 w-4" />
-                <span className="font-black">Export roster</span>
+                <span className="font-black">Backup all rosters</span>
               </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-12 justify-start rounded-2xl gap-3"
+                onClick={() => openImportPicker("backup")}
+              >
+                <ArchiveRestore className="h-4 w-4" />
+                <span className="font-black">Restore / add backup</span>
+              </Button>
+              <div className="my-1 h-px bg-slate-100" />
               <Button
                 type="button"
                 variant="outline"
                 className="h-12 justify-start rounded-2xl gap-3 border-red-100 bg-red-50/70 text-red-700 hover:bg-red-100 hover:text-red-800"
                 onClick={openClearRoster}
-                disabled={players.length === 0}
               >
                 <Trash2 className="h-4 w-4" />
-                <span className="font-black">Clear roster</span>
+                <span className="font-black">
+                  {rosters.length > 1 ? "Delete current roster" : "Clear current roster"}
+                </span>
               </Button>
             </div>
           </div>
@@ -687,11 +1008,12 @@ function App() {
               </div>
               <div className="min-w-0 flex-1">
                 <h2 className="text-base font-black tracking-tight text-[#102A43]">
-                  Clear entire roster?
+                  {rosters.length > 1 ? `Delete “${activeRosterName}”?` : `Clear “${activeRosterName}”?`}
                 </h2>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  This removes all {players.length} player profiles from this
-                  device. Export a backup first if you need one.
+                  {rosters.length > 1
+                    ? "This deletes only the active roster. Your other rosters will stay."
+                    : `You need at least one roster, so this removes all ${players.length} player profiles from this roster only.`}
                 </p>
               </div>
             </div>
@@ -710,10 +1032,10 @@ function App() {
                 value={clearRosterSlide}
                 onChange={(e) => setClearRosterSlide(Number(e.target.value))}
                 className="w-full accent-red-600"
-                aria-label="Slide to confirm clearing roster"
+                aria-label="Slide to confirm roster action"
               />
               <p className="mt-2 text-[11px] font-semibold text-red-700/80">
-                Move the slider all the way right, then press Clear roster.
+                Move the slider all the way right, then confirm.
               </p>
             </div>
 
@@ -732,7 +1054,7 @@ function App() {
                 onClick={confirmClearRoster}
                 disabled={clearRosterSlide < 95}
               >
-                Clear roster
+                {rosters.length > 1 ? "Delete roster" : "Clear roster"}
               </Button>
             </div>
           </div>

@@ -261,6 +261,176 @@ export function savePlayers(players: RoomPlayer[]) {
   }
 }
 
+
+export interface RoomRoster {
+  id: string;
+  name: string;
+  players: RoomPlayer[];
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface RosterState {
+  rosters: RoomRoster[];
+  activeRosterId: string;
+}
+
+export const DEFAULT_ROSTER_NAME = "Default roster";
+const ROSTERS_STORAGE_KEY = "fair-teams-rosters-v1";
+const ACTIVE_ROSTER_STORAGE_KEY = "fair-teams-active-roster-id-v1";
+
+export function createLocalRosterId() {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return `roster-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+export function cleanRosterName(name: unknown, fallback = DEFAULT_ROSTER_NAME) {
+  const cleaned = String(name || "").replace(/\s+/g, " ").trim();
+  return cleaned || fallback;
+}
+
+export function createRoster(name: string, players: Partial<RoomPlayer>[] = []): RoomRoster {
+  const now = new Date().toISOString();
+  return {
+    id: createLocalRosterId(),
+    name: cleanRosterName(name),
+    players: players.map((player, index) => normalizePlayer(player, index)).filter((player) => player.name),
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+export function normalizeRoster(roster: Partial<RoomRoster> & { rosterName?: string; players?: Partial<RoomPlayer>[] }, index = 0): RoomRoster {
+  const now = new Date().toISOString();
+  const name = cleanRosterName(roster.name || roster.rosterName, `${DEFAULT_ROSTER_NAME} ${index + 1}`);
+  return {
+    id: typeof roster.id === "string" && roster.id.trim() ? roster.id : createLocalRosterId(),
+    name,
+    players: Array.isArray(roster.players)
+      ? roster.players.map((player, playerIndex) => normalizePlayer(player, playerIndex)).filter((player) => player.name)
+      : [],
+    createdAt: typeof roster.createdAt === "string" ? roster.createdAt : now,
+    updatedAt: typeof roster.updatedAt === "string" ? roster.updatedAt : now,
+  };
+}
+
+function ensureRosterState(rosters: RoomRoster[], activeRosterId?: string | null, fallbackName = DEFAULT_ROSTER_NAME): RosterState {
+  const normalized = rosters
+    .map((roster, index) => normalizeRoster(roster, index))
+    .filter((roster) => roster.name);
+
+  if (normalized.length === 0) {
+    const empty = createRoster(fallbackName, []);
+    return { rosters: [empty], activeRosterId: empty.id };
+  }
+
+  const activeId = activeRosterId && normalized.some((roster) => roster.id === activeRosterId)
+    ? activeRosterId
+    : normalized[0].id;
+  return { rosters: normalized, activeRosterId: activeId };
+}
+
+export function loadRosterState(fallbackName = DEFAULT_ROSTER_NAME): RosterState {
+  try {
+    const raw = localStorage.getItem(ROSTERS_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      const rosters = Array.isArray(parsed?.rosters)
+        ? parsed.rosters
+        : Array.isArray(parsed)
+          ? parsed
+          : [];
+      const activeId = parsed?.activeRosterId || localStorage.getItem(ACTIVE_ROSTER_STORAGE_KEY);
+      return ensureRosterState(rosters, activeId, fallbackName);
+    }
+  } catch {
+    // Fall back to the old single-roster storage below.
+  }
+
+  const migratedPlayers = loadPlayers();
+  const migratedRoster = createRoster(fallbackName, migratedPlayers);
+  return { rosters: [migratedRoster], activeRosterId: migratedRoster.id };
+}
+
+export function saveRosterState(state: RosterState) {
+  try {
+    const safe = ensureRosterState(state.rosters, state.activeRosterId);
+    localStorage.setItem(ROSTERS_STORAGE_KEY, JSON.stringify({
+      app: "Fair Teams",
+      version: 1,
+      activeRosterId: safe.activeRosterId,
+      rosters: safe.rosters,
+    }));
+    localStorage.setItem(ACTIVE_ROSTER_STORAGE_KEY, safe.activeRosterId);
+  } catch (error) {
+    console.error("Could not save Fair Teams rosters locally.", error);
+  }
+}
+
+export function rosterToShareJson(roster: RoomRoster) {
+  const safe = normalizeRoster(roster);
+  return JSON.stringify({
+    app: "Fair Teams",
+    type: "shared-roster",
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    rosterName: safe.name,
+    roster: safe,
+    players: safe.players,
+  }, null, 2);
+}
+
+export function rostersToBackupJson(rosters: RoomRoster[], activeRosterId: string) {
+  const safe = ensureRosterState(rosters, activeRosterId);
+  return JSON.stringify({
+    app: "Fair Teams",
+    type: "all-rosters-backup",
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    activeRosterId: safe.activeRosterId,
+    rosters: safe.rosters,
+  }, null, 2);
+}
+
+function fileBaseName(filename: string) {
+  const base = filename.replace(/\\/g, "/").split("/").pop() || "Imported roster";
+  return base.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim() || "Imported roster";
+}
+
+export function parseRosterFile(text: string, filename = "Imported roster"): RoomRoster[] {
+  const trimmed = text.trim();
+  if (!trimmed) return [];
+  const lowerName = filename.toLowerCase();
+
+  if (lowerName.endsWith(".json") || trimmed.startsWith("{") || trimmed.startsWith("[")) {
+    const parsed = JSON.parse(trimmed);
+
+    if (Array.isArray(parsed)) {
+      return [createRoster(fileBaseName(filename), parsed)];
+    }
+
+    if (Array.isArray(parsed?.rosters)) {
+      return parsed.rosters.map((roster: Partial<RoomRoster>, index: number) => normalizeRoster(roster, index));
+    }
+
+    if (Array.isArray(parsed?.players)) {
+      const name = parsed.rosterName || parsed.name || parsed.roster?.name || fileBaseName(filename);
+      return [createRoster(name, parsed.players)];
+    }
+
+    if (parsed?.roster && Array.isArray(parsed.roster.players)) {
+      return [normalizeRoster(parsed.roster, 0)];
+    }
+
+    throw new Error("Import file does not contain a Fair Teams roster.");
+  }
+
+  const players = csvToPlayers(trimmed);
+  return players.length ? [createRoster(fileBaseName(filename), players)] : [];
+}
+
 export function escapeCsv(value: unknown) {
   const text = String(value ?? "");
   if (/[",\n\r]/.test(text)) return `"${text.replace(/"/g, '""')}"`;

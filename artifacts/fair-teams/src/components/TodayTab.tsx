@@ -1081,15 +1081,53 @@ export function TodayTab({
   const selectedCount = players.filter((p) => p.attending).length;
   const notHereYetCount = players.filter((p) => p.attending && isNotHereYet(p)).length;
   const hereNowCount = selectedCount - notHereYetCount;
+  const quickVoiceCleanName = cleanOcrLine(quickVoiceHeard);
   const quickVoiceCandidates = useMemo(() => {
     const spokenName = cleanOcrLine(quickVoiceHeard);
-    if (!spokenName) return [] as Array<{ player: RoomPlayer; score: number }>;
+    if (!spokenName) {
+      return [] as Array<{
+        player: RoomPlayer;
+        score: number;
+        matchedName: string;
+        isAlternate: boolean;
+      }>;
+    }
+
+    const spokenKey = normalizeForMatch(spokenName);
+    const namesToTry = Array.from(
+      new Map(
+        [spokenName, ...voiceNameAlternates(spokenName)]
+          .map((name) => [normalizeForMatch(name), cleanOcrLine(name)] as const)
+          .filter(([key, name]) => Boolean(key && name)),
+      ).values(),
+    );
+
     return players
-      .map((player) => ({ player, score: scorePlayerMatch(spokenName, player) }))
+      .map((player) => {
+        const best = namesToTry.reduce(
+          (currentBest, name) => {
+            const score = scorePlayerMatch(name, player);
+            if (score <= currentBest.score) return currentBest;
+            return {
+              score,
+              matchedName: name,
+              isAlternate: normalizeForMatch(name) !== spokenKey,
+            };
+          },
+          { score: 0, matchedName: spokenName, isAlternate: false },
+        );
+        return { player, ...best };
+      })
       .filter((match) => match.score >= 70)
       .sort((a, b) => b.score - a.score)
       .slice(0, 5);
   }, [quickVoiceHeard, players]);
+  const quickVoiceCanAddNew = useMemo(() => {
+    const cleanedName = quickVoiceCleanName;
+    const normalizedName = normalizeForMatch(cleanedName);
+    if (!cleanedName || !normalizedName || !isProbablyName(cleanedName)) return false;
+    return !players.some((player) => playerSearchNames(player).includes(normalizedName));
+  }, [quickVoiceCleanName, players]);
 
   const selectedScreenshotNames = selectedScreenshots.map((file) => file.name);
 
@@ -1350,6 +1388,55 @@ export function TodayTab({
         currentPlayer.id === player.id
           ? { ...currentPlayer, attending: true, todayStatus: "here" }
           : currentPlayer,
+      ),
+    );
+    setPrioritizeScannedPlayers(true);
+    setQuickVoiceOpen(false);
+    setQuickVoiceHeard("");
+    setQuickVoiceStatus("");
+  };
+
+  const addQuickVoicePlayer = () => {
+    const cleanedName = quickVoiceCleanName;
+    const normalizedName = normalizeForMatch(cleanedName);
+    if (!cleanedName || !normalizedName || !isProbablyName(cleanedName)) {
+      setQuickVoiceStatus("Type a clean player name first.");
+      return;
+    }
+
+    const existingPlayer = players.find((player) =>
+      playerSearchNames(player).includes(normalizedName),
+    );
+
+    if (existingPlayer) {
+      selectQuickVoicePlayer(existingPlayer);
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const newPlayer: RoomPlayer = {
+      id: createOcrPlayerId(),
+      roomId: 1,
+      name: cleanedName,
+      gender: "other",
+      skill: 5,
+      attack: 5,
+      defense: 5,
+      speed: 5,
+      passing: 5,
+      stamina: 5,
+      physical: 5,
+      teamPlay: 2,
+      isNew: true,
+      attending: true,
+      todayStatus: "here",
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    setPlayers(
+      [...players, newPlayer].sort((a, b) =>
+        displayName(a).localeCompare(displayName(b)),
       ),
     );
     setPrioritizeScannedPlayers(true);
@@ -1955,19 +2042,36 @@ export function TodayTab({
 
           {quickVoiceHeard.trim() && (
             <div className="space-y-2">
-              <div className="rounded-2xl bg-slate-50 px-3 py-2 text-[11px] font-bold text-slate-500">
-                Heard: <span className="text-slate-900">{cleanOcrLine(quickVoiceHeard)}</span>
+              <div className="rounded-2xl bg-slate-50 px-3 py-2">
+                <label className="mb-1 block text-[10px] font-black uppercase tracking-wide text-slate-400">
+                  Heard / edit before adding
+                </label>
+                <Input
+                  value={quickVoiceCleanName}
+                  onChange={(event) => setQuickVoiceHeard(event.target.value)}
+                  className="h-8 rounded-xl border-slate-200 bg-white text-xs font-black text-slate-900"
+                  placeholder="Type one player name"
+                />
               </div>
+
               {quickVoiceCandidates.length > 0 ? (
                 <div className="space-y-1.5">
-                  {quickVoiceCandidates.map(({ player }, index) => (
+                  <div className="px-1 text-[10px] font-black uppercase tracking-wide text-slate-400">
+                    Roster suggestions
+                  </div>
+                  {quickVoiceCandidates.map(({ player, matchedName, isAlternate }, index) => (
                     <button
                       key={player.id}
                       type="button"
                       onClick={() => selectQuickVoicePlayer(player)}
-                      className={`flex w-full items-center justify-between rounded-2xl border px-3 py-2.5 text-left text-xs font-black transition ${index === 0 ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"}`}
+                      className={`flex w-full items-center justify-between gap-3 rounded-2xl border px-3 py-2.5 text-left transition ${index === 0 ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"}`}
                     >
-                      <span className="truncate">{displayName(player)}</span>
+                      <span className="min-w-0">
+                        <span className="block truncate text-xs font-black">{displayName(player)}</span>
+                        <span className={`mt-0.5 block truncate text-[10px] font-bold ${index === 0 ? "text-emerald-700/80" : "text-slate-400"}`}>
+                          {isAlternate ? `Heard as “${quickVoiceCleanName}”` : matchedName !== quickVoiceCleanName ? `Matched “${matchedName}”` : "Close match"}
+                        </span>
+                      </span>
                       <span className="shrink-0 text-[10px] font-black">
                         {player.attending ? "Already selected" : "Select"}
                       </span>
@@ -1976,7 +2080,23 @@ export function TodayTab({
                 </div>
               ) : (
                 <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-3 text-center text-xs font-bold text-slate-500">
-                  No roster match. Use search or add manually.
+                  No roster match found.
+                </div>
+              )}
+
+              {quickVoiceCanAddNew && (
+                <div className="rounded-2xl border border-sky-100 bg-sky-50 p-2.5">
+                  <div className="mb-2 text-[10px] font-bold leading-snug text-sky-700">
+                    Not one of these? Add the heard name as a new player for today.
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={addQuickVoicePlayer}
+                    className="h-8 w-full rounded-xl border-sky-200 bg-white text-xs font-black text-sky-800 hover:bg-sky-100"
+                  >
+                    Add “{quickVoiceCleanName}” as new player
+                  </Button>
                 </div>
               )}
             </div>

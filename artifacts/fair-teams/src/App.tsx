@@ -39,6 +39,7 @@ import {
   saveRosterState,
 } from "@/lib/localRoster";
 import { getGoogleDriveConfig } from "@/lib/googleDriveConfig";
+import { requestGoogleDriveAccessToken } from "@/lib/googleDriveAuth";
 
 const GROUP_NAME_STORAGE_KEY = "fair-teams-group-name";
 const HEADER_COLOR_STORAGE_KEY = "fair-teams-header-color-v2";
@@ -205,9 +206,14 @@ function App() {
   const isEmptyStarterRoster =
     rosters.length === 1 && players.length === 0 && activeRosterName === EMPTY_ROSTER_NAME;
   const googleDriveConfig = getGoogleDriveConfig();
-  const googleDriveStatusText = googleDriveConfig.isConfigured
-    ? "Ready for Drive connection setup"
-    : "Add Google Client ID and API key to .env.local";
+  const [googleDriveAccessToken, setGoogleDriveAccessToken] = useState("");
+  const [googleDriveConnecting, setGoogleDriveConnecting] = useState(false);
+  const googleDriveConnected = Boolean(googleDriveAccessToken);
+  const googleDriveStatusText = !googleDriveConfig.isConfigured
+    ? "Add Google Client ID and API key to .env.local"
+    : googleDriveConnected
+      ? "Connected to Google Drive"
+      : "Ready to connect to Google Drive";
   const [groupSettingsOpen, setGroupSettingsOpen] = useState(false);
   const [draftGroupName, setDraftGroupName] = useState(activeRosterName);
   const [draftHeaderColor, setDraftHeaderColor] = useState(headerColor);
@@ -350,12 +356,39 @@ function App() {
     setRosterFilesOpen(false);
   };
 
+  const connectGoogleDrive = async () => {
+    if (!googleDriveConfig.isConfigured) {
+      window.alert("Google Drive keys are not configured yet. Add VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_API_KEY to .env.local first.");
+      return;
+    }
+
+    setGoogleDriveConnecting(true);
+    try {
+      const result = await requestGoogleDriveAccessToken(googleDriveAccessToken ? "" : "consent");
+      setGoogleDriveAccessToken(result.accessToken);
+      window.alert("Google Drive connected. Next patch will add real save/open actions.");
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Could not connect Google Drive.");
+    } finally {
+      setGoogleDriveConnecting(false);
+    }
+  };
+
+  const disconnectGoogleDrive = () => {
+    setGoogleDriveAccessToken("");
+    window.alert("Google Drive disconnected from this browser session.");
+  };
+
   const showGoogleDriveComingSoon = (action: string) => {
-    window.alert(
-      googleDriveConfig.isConfigured
-        ? `${action} will be connected in the next Google Drive patch. This first UI step only confirms the safe Drive section placement.`
-        : "Google Drive keys are not configured yet. Add VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_API_KEY to .env.local first.",
-    );
+    if (!googleDriveConfig.isConfigured) {
+      window.alert("Google Drive keys are not configured yet. Add VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_API_KEY to .env.local first.");
+      return;
+    }
+    if (!googleDriveConnected) {
+      window.alert("Connect Google Drive first, then this action can be added in the next patch.");
+      return;
+    }
+    window.alert(`${action} will be connected in the next Google Drive patch. Google Drive sign-in is now working.`);
   };
 
   const exportSharedRoster = () => {
@@ -936,10 +969,25 @@ function App() {
                 <div className="mt-3 grid gap-2">
                   <Button
                     type="button"
+                    className="h-11 justify-start rounded-2xl gap-3 bg-blue-600 text-white hover:bg-blue-700"
+                    onClick={googleDriveConnected ? disconnectGoogleDrive : connectGoogleDrive}
+                    disabled={!googleDriveConfig.isConfigured || googleDriveConnecting}
+                  >
+                    <Cloud className="h-4 w-4" />
+                    <span className="font-black">
+                      {googleDriveConnecting
+                        ? "Connecting..."
+                        : googleDriveConnected
+                          ? "Disconnect Google Drive"
+                          : "Connect Google Drive"}
+                    </span>
+                  </Button>
+                  <Button
+                    type="button"
                     variant="outline"
                     className="h-11 justify-start rounded-2xl gap-3 border-blue-100 bg-white/90"
                     onClick={() => showGoogleDriveComingSoon("Save all rosters to Google Drive")}
-                    disabled={isEmptyStarterRoster}
+                    disabled={isEmptyStarterRoster || !googleDriveConnected}
                   >
                     <CloudUpload className="h-4 w-4" />
                     <span className="font-black">Save all rosters to Drive</span>
@@ -949,6 +997,7 @@ function App() {
                     variant="outline"
                     className="h-11 justify-start rounded-2xl gap-3 border-blue-100 bg-white/90"
                     onClick={() => showGoogleDriveComingSoon("Open a Google Drive backup")}
+                    disabled={!googleDriveConnected}
                   >
                     <CloudDownload className="h-4 w-4" />
                     <span className="font-black">Open Drive backup</span>

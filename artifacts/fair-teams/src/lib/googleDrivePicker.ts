@@ -91,11 +91,14 @@ function createDocsView() {
   const view = new picker.DocsView(picker.ViewId.DOCS);
   view.setIncludeFolders(false);
   view.setSelectFolderEnabled(false);
-  view.setMimeTypes([FAIR_TEAMS_DRIVE_MIME_TYPE, "text/plain"].join(","));
+  // Drive backup files created by Fair Teams are saved as application/json.
+  // Keep the picker focused on JSON files instead of broad text/document files.
+  view.setMimeTypes(FAIR_TEAMS_DRIVE_MIME_TYPE);
+  if (typeof view.setQuery === "function") {
+    view.setQuery("Fair Teams");
+  }
 
-  // JSON backup files do not benefit from thumbnail/grid browsing. Google also
-  // recommends list mode when using the narrow drive.file scope because the app
-  // has not been granted broad access to Drive thumbnails.
+  // JSON backup files do not benefit from thumbnail/grid browsing.
   if (picker.DocsViewMode?.LIST) {
     view.setMode(picker.DocsViewMode.LIST);
   }
@@ -134,10 +137,16 @@ export async function pickGoogleDriveBackupFile(accessToken: string): Promise<Go
           reject(new Error("Google Picker did not return a file."));
           return;
         }
+        const name = picked.name || "Fair Teams Drive backup.json";
+        const mimeType = picked.mimeType || "";
+        if (!name.toLowerCase().endsWith(".json") && mimeType !== FAIR_TEAMS_DRIVE_MIME_TYPE) {
+          reject(new Error("Please choose a Fair Teams .json backup file."));
+          return;
+        }
         resolve({
           id: picked.id,
-          name: picked.name || "Fair Teams Drive backup.json",
-          mimeType: picked.mimeType,
+          name,
+          mimeType,
         });
       });
       builder.build().setVisible(true);

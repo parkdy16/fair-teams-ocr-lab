@@ -166,6 +166,15 @@ function PoweredByFairTeams() {
   );
 }
 
+type DriveImportPreview = {
+  file: GoogleDriveFileResult;
+  rosters: RoomRoster[];
+  activeRosterId?: string;
+  rosterCount: number;
+  playerCount: number;
+  rosterNames: string[];
+};
+
 function App() {
   const [showSplash, setShowSplash] = useState(true);
   const [splashVisible, setSplashVisible] = useState(false);
@@ -224,6 +233,7 @@ function App() {
   const [googleDriveSaving, setGoogleDriveSaving] = useState(false);
   const [googleDriveOpening, setGoogleDriveOpening] = useState(false);
   const [currentDriveBackup, setCurrentDriveBackup] = useState<GoogleDriveFileResult | null>(null);
+  const [driveImportPreview, setDriveImportPreview] = useState<DriveImportPreview | null>(null);
   const googleDriveConnected = Boolean(googleDriveAccessToken);
   const googleDriveStatusText = !googleDriveConfig.isConfigured
     ? "Add Google Client ID and API key to .env.local"
@@ -254,7 +264,8 @@ function App() {
       groupSettingsOpen ||
       rosterFilesOpen ||
       rosterPickerOpen ||
-      clearRosterOpen;
+      clearRosterOpen ||
+      Boolean(driveImportPreview);
     if (!shouldLockScroll) return;
 
     const previousOverflow = document.body.style.overflow;
@@ -262,7 +273,7 @@ function App() {
     return () => {
       document.body.style.overflow = previousOverflow;
     };
-  }, [groupSettingsOpen, rosterFilesOpen, rosterPickerOpen, clearRosterOpen]);
+  }, [groupSettingsOpen, rosterFilesOpen, rosterPickerOpen, clearRosterOpen, driveImportPreview]);
 
   const openGroupSettings = () => {
     setDraftGroupName(activeRosterName);
@@ -487,46 +498,51 @@ function App() {
       const picked = await pickGoogleDriveBackupFile(googleDriveAccessToken);
       if (!picked) return;
 
+      if (!picked.name.toLowerCase().endsWith(".json")) {
+        window.alert("Please choose a Fair Teams .json backup file.");
+        return;
+      }
+
       const { file, text } = await readGoogleDriveJsonFile(googleDriveAccessToken, picked.id);
       const backup = parseDriveBackupJson(text);
       const rosterCount = backup.rosters.length;
       const playerCount = backup.rosters.reduce((sum, roster) => sum + roster.players.length, 0);
-      const namesPreview = backup.rosters
-        .slice(0, 4)
-        .map((roster) => `• ${roster.name} (${roster.players.length})`)
-        .join("\n");
-      const moreText = rosterCount > 4 ? `\n…and ${rosterCount - 4} more` : "";
-      const choice = window.prompt(
-        `Open Drive backup:\n${file.name}\n\nRosters: ${rosterCount}\nPlayers: ${playerCount}\n${namesPreview ? `\n${namesPreview}${moreText}\n` : ""}\nType ADD to add these as new local rosters.\nType REPLACE to replace local rosters with this Drive backup.\n\nPhotos and logos are not stored in Drive files. Matching local photos/logos will be preserved where possible.`,
-        "ADD",
-      );
 
-      if (!choice) return;
-      const normalizedChoice = choice.trim().toUpperCase();
-      if (normalizedChoice === "ADD") {
-        addDriveImportedRosters(backup.rosters);
-        setCurrentDriveBackup(file);
-        window.alert(`Opened from Google Drive and added ${rosterCount} roster${rosterCount === 1 ? "" : "s"}.`);
-        return;
-      }
-
-      if (normalizedChoice === "REPLACE") {
-        const ok = window.confirm(
-          `Replace all local rosters with this Drive backup?\n\n${file.name}\n\nMatching local player photos and roster logos will be preserved where possible. This is still a big change.`,
-        );
-        if (!ok) return;
-        replaceWithDriveImportedRosters(backup.rosters, backup.activeRosterId);
-        setCurrentDriveBackup(file);
-        window.alert(`Opened from Google Drive and replaced local rosters with ${rosterCount} roster${rosterCount === 1 ? "" : "s"}.`);
-        return;
-      }
-
-      window.alert("Drive backup was not imported. Type ADD or REPLACE next time.");
+      setDriveImportPreview({
+        file,
+        rosters: backup.rosters,
+        activeRosterId: backup.activeRosterId,
+        rosterCount,
+        playerCount,
+        rosterNames: backup.rosters.map((roster) => roster.name),
+      });
     } catch (error) {
       window.alert(error instanceof Error ? error.message : "Could not open Google Drive backup.");
     } finally {
       setGoogleDriveOpening(false);
     }
+  };
+
+  const closeDriveImportPreview = () => {
+    setDriveImportPreview(null);
+  };
+
+  const confirmAddDriveImport = () => {
+    if (!driveImportPreview) return;
+    addDriveImportedRosters(driveImportPreview.rosters);
+    setCurrentDriveBackup(driveImportPreview.file);
+    const rosterCount = driveImportPreview.rosterCount;
+    setDriveImportPreview(null);
+    window.alert(`Opened from Google Drive and added ${rosterCount} roster${rosterCount === 1 ? "" : "s"}.`);
+  };
+
+  const confirmReplaceDriveImport = () => {
+    if (!driveImportPreview) return;
+    replaceWithDriveImportedRosters(driveImportPreview.rosters, driveImportPreview.activeRosterId);
+    setCurrentDriveBackup(driveImportPreview.file);
+    const rosterCount = driveImportPreview.rosterCount;
+    setDriveImportPreview(null);
+    window.alert(`Opened from Google Drive and replaced local rosters with ${rosterCount} roster${rosterCount === 1 ? "" : "s"}.`);
   };
 
   const showGoogleDriveComingSoon = (action: string) => {
@@ -1333,6 +1349,114 @@ function App() {
                   </button>
                 );
               })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {driveImportPreview && (
+        <div
+          className="fixed inset-0 z-[60] flex items-end justify-center bg-black/45 p-4 sm:items-center"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="flex max-h-[calc(100dvh-2rem)] w-full max-w-sm flex-col overflow-hidden rounded-3xl border border-blue-100 bg-white shadow-2xl">
+            <div className="flex items-start justify-between gap-3 border-b border-slate-100 p-4 pb-3">
+              <div className="min-w-0">
+                <div className="text-[10px] font-black uppercase tracking-wide text-blue-500">
+                  Google Drive backup
+                </div>
+                <h2 className="mt-1 truncate text-base font-black tracking-tight text-[#102A43]">
+                  Open this backup?
+                </h2>
+                <p className="mt-1 truncate text-xs font-semibold text-slate-500">
+                  {driveImportPreview.file.name}
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 shrink-0 rounded-xl"
+                onClick={closeDriveImportPreview}
+                title="Close"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-3 text-center">
+                  <div className="text-xl font-black text-[#102A43]">
+                    {driveImportPreview.rosterCount}
+                  </div>
+                  <div className="text-[10px] font-black uppercase tracking-wide text-blue-500">
+                    Rosters
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-3 text-center">
+                  <div className="text-xl font-black text-[#102A43]">
+                    {driveImportPreview.playerCount}
+                  </div>
+                  <div className="text-[10px] font-black uppercase tracking-wide text-emerald-600">
+                    Players
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-3 rounded-2xl border border-slate-100 bg-slate-50/80 p-3">
+                <div className="mb-2 text-[10px] font-black uppercase tracking-wide text-slate-400">
+                  Included rosters
+                </div>
+                <div className="space-y-1.5">
+                  {driveImportPreview.rosterNames.slice(0, 5).map((name, index) => (
+                    <div key={`${name}-${index}`} className="truncate text-xs font-bold text-slate-700">
+                      • {name}
+                    </div>
+                  ))}
+                  {driveImportPreview.rosterNames.length > 5 ? (
+                    <div className="text-xs font-bold text-slate-400">
+                      …and {driveImportPreview.rosterNames.length - 5} more
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="mt-3 rounded-2xl border border-amber-100 bg-amber-50/80 p-3">
+                <div className="flex gap-2">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                  <p className="text-xs font-semibold leading-snug text-amber-800">
+                    Drive backups are text-only. Player photos and logo images are not imported from Drive, but matching local photos/logos are preserved where possible.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-2 border-t border-slate-100 p-4">
+              <Button
+                type="button"
+                className="h-11 rounded-2xl bg-blue-600 text-white hover:bg-blue-700"
+                onClick={confirmAddDriveImport}
+              >
+                Add as new rosters
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-11 rounded-2xl border-red-100 bg-red-50/70 text-red-700 hover:bg-red-100 hover:text-red-800"
+                onClick={confirmReplaceDriveImport}
+              >
+                Replace all local rosters
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                className="h-10 rounded-2xl text-slate-500"
+                onClick={closeDriveImportPreview}
+              >
+                Cancel
+              </Button>
             </div>
           </div>
         </div>

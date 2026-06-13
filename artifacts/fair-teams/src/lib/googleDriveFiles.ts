@@ -75,3 +75,46 @@ export async function createGoogleDriveJsonFile(
 
   return result as GoogleDriveFileResult;
 }
+
+export async function readGoogleDriveJsonFile(accessToken: string, fileId: string): Promise<{ file: GoogleDriveFileResult; text: string }> {
+  const metadataResponse = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?fields=id,name,webViewLink,modifiedTime`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+  );
+
+  if (!metadataResponse.ok) {
+    const message = await readDriveError(metadataResponse);
+    if (metadataResponse.status === 401) {
+      throw new Error("Google Drive connection expired. Disconnect and connect Google Drive again, then retry.");
+    }
+    throw new Error(message);
+  }
+
+  const file = (await metadataResponse.json()) as GoogleDriveFileResult;
+  if (!file?.id || !file?.name) {
+    throw new Error("Google Drive did not return file details.");
+  }
+
+  const contentResponse = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+  );
+
+  if (!contentResponse.ok) {
+    const message = await readDriveError(contentResponse);
+    if (contentResponse.status === 401) {
+      throw new Error("Google Drive connection expired. Disconnect and connect Google Drive again, then retry.");
+    }
+    throw new Error(message);
+  }
+
+  return { file, text: await contentResponse.text() };
+}

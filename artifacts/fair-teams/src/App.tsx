@@ -33,15 +33,17 @@ import {
   downloadText,
   loadRosterState,
   normalizePlayer,
+  normalizeRoster,
   parseRosterFile,
   rosterToShareJson,
   rostersToBackupJson,
   saveRosterState,
 } from "@/lib/localRoster";
 import { getGoogleDriveConfig } from "@/lib/googleDriveConfig";
-import { allRostersToDriveBackupJson } from "@/lib/googleDriveBackup";
+import { allRostersToDriveBackupJson, parseDriveBackupJson } from "@/lib/googleDriveBackup";
 import { requestGoogleDriveAccessToken } from "@/lib/googleDriveAuth";
-import { createGoogleDriveJsonFile, type GoogleDriveFileResult } from "@/lib/googleDriveFiles";
+import { createGoogleDriveJsonFile, readGoogleDriveJsonFile, type GoogleDriveFileResult } from "@/lib/googleDriveFiles";
+import { pickGoogleDriveBackupFile } from "@/lib/googleDrivePicker";
 
 const GROUP_NAME_STORAGE_KEY = "fair-teams-group-name";
 const HEADER_COLOR_STORAGE_KEY = "fair-teams-header-color-v2";
@@ -220,6 +222,7 @@ function App() {
   const [googleDriveAccessToken, setGoogleDriveAccessToken] = useState("");
   const [googleDriveConnecting, setGoogleDriveConnecting] = useState(false);
   const [googleDriveSaving, setGoogleDriveSaving] = useState(false);
+  const [googleDriveOpening, setGoogleDriveOpening] = useState(false);
   const [currentDriveBackup, setCurrentDriveBackup] = useState<GoogleDriveFileResult | null>(null);
   const googleDriveConnected = Boolean(googleDriveAccessToken);
   const googleDriveStatusText = !googleDriveConfig.isConfigured
@@ -391,6 +394,139 @@ function App() {
     setGoogleDriveAccessToken("");
     setCurrentDriveBackup(null);
     window.alert("Google Drive disconnected from this browser session.");
+  };
+
+  const preserveLocalImagesForDriveRosters = (
+    incomingRosters: RoomRoster[],
+    existingRosters: RoomRoster[],
+  ) => {
+    const rosterNameKey = (name: string) => name.replace(/\s+/g, " ").trim().toLowerCase();
+    const playerNameKey = (name: string) => name.replace(/\s+/g, " ").trim().toLowerCase();
+
+    return incomingRosters.map((incomingRoster, rosterIndex) => {
+      const matchingRoster =
+        existingRosters.find((roster) => roster.id === incomingRoster.id) ||
+        existingRosters.find((roster) => rosterNameKey(roster.name) === rosterNameKey(incomingRoster.name));
+      const existingPlayers = matchingRoster?.players || [];
+
+      const playersWithLocalPhotos = incomingRoster.players.map((player, playerIndex) => {
+        const matchingPlayer =
+          existingPlayers.find((existingPlayer) => existingPlayer.id === player.id) ||
+          existingPlayers.find((existingPlayer) => playerNameKey(existingPlayer.name) === playerNameKey(player.name));
+        return normalizePlayer(
+          {
+            ...player,
+            profilePhoto: player.profilePhoto || matchingPlayer?.profilePhoto,
+          },
+          playerIndex,
+        );
+      });
+
+      return normalizeRoster(
+        {
+          ...incomingRoster,
+          logo: incomingRoster.logo || matchingRoster?.logo,
+          players: playersWithLocalPhotos,
+        },
+        rosterIndex,
+      );
+    });
+  };
+
+  const addDriveImportedRosters = (incomingRosters: RoomRoster[]) => {
+    setRosterState((current) => {
+      const currentIsStarter =
+        current.rosters.length === 1 &&
+        current.rosters[0]?.players.length === 0 &&
+        current.rosters[0]?.name === EMPTY_ROSTER_NAME;
+      const nextRosters = currentIsStarter ? [] : [...current.rosters];
+      const prepared = preserveLocalImagesForDriveRosters(incomingRosters, current.rosters);
+      const added = prepared.map((roster) => {
+        const copied = createRoster(
+          uniqueRosterName(roster.name, nextRosters),
+          roster.players,
+          { themeColor: roster.themeColor, logo: roster.logo },
+        );
+        nextRosters.push(copied);
+        return copied;
+      });
+
+      return {
+        rosters: nextRosters,
+        activeRosterId: added[0]?.id || current.activeRosterId,
+      };
+    });
+  };
+
+  const replaceWithDriveImportedRosters = (incomingRosters: RoomRoster[], incomingActiveRosterId?: string) => {
+    setRosterState((current) => {
+      const prepared = preserveLocalImagesForDriveRosters(incomingRosters, current.rosters);
+      if (prepared.length === 0) {
+        const empty = createRoster(EMPTY_ROSTER_NAME, []);
+        return { rosters: [empty], activeRosterId: empty.id };
+      }
+      const activeId = incomingActiveRosterId && prepared.some((roster) => roster.id === incomingActiveRosterId)
+        ? incomingActiveRosterId
+        : prepared[0].id;
+      return { rosters: prepared, activeRosterId: activeId };
+    });
+  };
+
+  const openGoogleDriveBackup = async () => {
+    if (!googleDriveConfig.isConfigured) {
+      window.alert("Google Drive keys are not configured yet. Add VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_API_KEY to .env.local first.");
+      return;
+    }
+    if (!googleDriveAccessToken) {
+      window.alert("Connect Google Drive first.");
+      return;
+    }
+
+    setGoogleDriveOpening(true);
+    try {
+      const picked = await pickGoogleDriveBackupFile(googleDriveAccessToken);
+      if (!picked) return;
+
+      const { file, text } = await readGoogleDriveJsonFile(googleDriveAccessToken, picked.id);
+      const backup = parseDriveBackupJson(text);
+      const rosterCount = backup.rosters.length;
+      const playerCount = backup.rosters.reduce((sum, roster) => sum + roster.players.length, 0);
+      const namesPreview = backup.rosters
+        .slice(0, 4)
+        .map((roster) => `• ${roster.name} (${roster.players.length})`)
+        .join("\n");
+      const moreText = rosterCount > 4 ? `\n…and ${rosterCount - 4} more` : "";
+      const choice = window.prompt(
+        `Open Drive backup:\n${file.name}\n\nRosters: ${rosterCount}\nPlayers: ${playerCount}\n${namesPreview ? `\n${namesPreview}${moreText}\n` : ""}\nType ADD to add these as new local rosters.\nType REPLACE to replace local rosters with this Drive backup.\n\nPhotos and logos are not stored in Drive files. Matching local photos/logos will be preserved where possible.`,
+        "ADD",
+      );
+
+      if (!choice) return;
+      const normalizedChoice = choice.trim().toUpperCase();
+      if (normalizedChoice === "ADD") {
+        addDriveImportedRosters(backup.rosters);
+        setCurrentDriveBackup(file);
+        window.alert(`Opened from Google Drive and added ${rosterCount} roster${rosterCount === 1 ? "" : "s"}.`);
+        return;
+      }
+
+      if (normalizedChoice === "REPLACE") {
+        const ok = window.confirm(
+          `Replace all local rosters with this Drive backup?\n\n${file.name}\n\nMatching local player photos and roster logos will be preserved where possible. This is still a big change.`,
+        );
+        if (!ok) return;
+        replaceWithDriveImportedRosters(backup.rosters, backup.activeRosterId);
+        setCurrentDriveBackup(file);
+        window.alert(`Opened from Google Drive and replaced local rosters with ${rosterCount} roster${rosterCount === 1 ? "" : "s"}.`);
+        return;
+      }
+
+      window.alert("Drive backup was not imported. Type ADD or REPLACE next time.");
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Could not open Google Drive backup.");
+    } finally {
+      setGoogleDriveOpening(false);
+    }
   };
 
   const showGoogleDriveComingSoon = (action: string) => {
@@ -1047,11 +1183,11 @@ function App() {
                     type="button"
                     variant="outline"
                     className="h-11 justify-start rounded-2xl gap-3 border-blue-100 bg-white/90"
-                    onClick={() => showGoogleDriveComingSoon("Open a Google Drive backup")}
-                    disabled={!googleDriveConnected}
+                    onClick={openGoogleDriveBackup}
+                    disabled={!googleDriveConnected || googleDriveOpening}
                   >
                     <CloudDownload className="h-4 w-4" />
-                    <span className="font-black">Open Drive backup</span>
+                    <span className="font-black">{googleDriveOpening ? "Opening Drive backup..." : "Open Drive backup"}</span>
                   </Button>
                   <Button
                     type="button"

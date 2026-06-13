@@ -529,23 +529,25 @@ function App() {
             </div>
 
             <div className="flex items-center gap-2 shrink-0">
-              {activeTab !== "players" && (
+              {activeTab === "teams" && (
                 <span className="text-right text-[9px] font-extrabold leading-[0.95] text-slate-400 tracking-tight whitespace-nowrap">
                   <span className="block">Balanced teams.</span>
                   <span className="block">Better games.</span>
                 </span>
               )}
-              <Button
-                type="button"
-                variant="secondary"
-                size="icon"
-                className="h-9 w-9 rounded-xl border border-slate-200 bg-white/85 text-[#102A43] shadow-none"
-                onClick={() => setRosterFilesOpen(true)}
-                title="Roster tools"
-                aria-label="Roster tools"
-              >
-                <Settings className="w-4 h-4" />
-              </Button>
+              {activeTab !== "teams" && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="icon"
+                  className="h-9 w-9 rounded-xl border border-slate-200 bg-white/85 text-[#102A43] shadow-none"
+                  onClick={() => setRosterFilesOpen(true)}
+                  title="Roster tools"
+                  aria-label="Roster tools"
+                >
+                  <Settings className="w-4 h-4" />
+                </Button>
+              )}
               <input
                 ref={fileInputRef}
                 type="file"

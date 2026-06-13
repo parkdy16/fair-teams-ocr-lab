@@ -92,6 +92,14 @@ function createDocsView() {
   view.setIncludeFolders(false);
   view.setSelectFolderEnabled(false);
   view.setMimeTypes([FAIR_TEAMS_DRIVE_MIME_TYPE, "text/plain"].join(","));
+
+  // JSON backup files do not benefit from thumbnail/grid browsing. Google also
+  // recommends list mode when using the narrow drive.file scope because the app
+  // has not been granted broad access to Drive thumbnails.
+  if (picker.DocsViewMode?.LIST) {
+    view.setMode(picker.DocsViewMode.LIST);
+  }
+
   return view;
 }
 

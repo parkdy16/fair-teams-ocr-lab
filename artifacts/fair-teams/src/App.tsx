@@ -15,6 +15,10 @@ import {
   Settings,
   Archive,
   ArchiveRestore,
+  Cloud,
+  CloudUpload,
+  CloudDownload,
+  RefreshCw,
 } from "lucide-react";
 import { PlayersTab } from "@/components/PlayersTab";
 import { TodayTab } from "@/components/TodayTab";
@@ -34,6 +38,7 @@ import {
   rostersToBackupJson,
   saveRosterState,
 } from "@/lib/localRoster";
+import { getGoogleDriveConfig } from "@/lib/googleDriveConfig";
 
 const GROUP_NAME_STORAGE_KEY = "fair-teams-group-name";
 const HEADER_COLOR_STORAGE_KEY = "fair-teams-header-color-v2";
@@ -199,6 +204,10 @@ function App() {
   const groupLogo = rosterLogo(activeRoster);
   const isEmptyStarterRoster =
     rosters.length === 1 && players.length === 0 && activeRosterName === EMPTY_ROSTER_NAME;
+  const googleDriveConfig = getGoogleDriveConfig();
+  const googleDriveStatusText = googleDriveConfig.isConfigured
+    ? "Ready for Drive connection setup"
+    : "Add Google Client ID and API key to .env.local";
   const [groupSettingsOpen, setGroupSettingsOpen] = useState(false);
   const [draftGroupName, setDraftGroupName] = useState(activeRosterName);
   const [draftHeaderColor, setDraftHeaderColor] = useState(headerColor);
@@ -339,6 +348,14 @@ function App() {
     });
     setNewRosterName("");
     setRosterFilesOpen(false);
+  };
+
+  const showGoogleDriveComingSoon = (action: string) => {
+    window.alert(
+      googleDriveConfig.isConfigured
+        ? `${action} will be connected in the next Google Drive patch. This first UI step only confirms the safe Drive section placement.`
+        : "Google Drive keys are not configured yet. Add VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_API_KEY to .env.local first.",
+    );
   };
 
   const exportSharedRoster = () => {
@@ -898,7 +915,62 @@ function App() {
                 </div>
               </div>
 
+              <div className="rounded-2xl border border-blue-100 bg-blue-50/55 p-3 shadow-sm">
+                <div className="flex items-start gap-2.5">
+                  <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-2xl bg-white text-blue-600 shadow-sm">
+                    <Cloud className="h-4 w-4" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[10px] font-black uppercase tracking-wide text-blue-500">
+                      Google Drive backup
+                    </div>
+                    <p className="mt-1 text-xs font-bold leading-snug text-slate-600">
+                      Direct Drive connection. Text-only backups: no player photos or logo images.
+                    </p>
+                    <div className={`mt-2 rounded-2xl px-2.5 py-1.5 text-[11px] font-black ${googleDriveConfig.isConfigured ? "bg-white text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
+                      {googleDriveStatusText}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-3 grid gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-11 justify-start rounded-2xl gap-3 border-blue-100 bg-white/90"
+                    onClick={() => showGoogleDriveComingSoon("Save all rosters to Google Drive")}
+                    disabled={isEmptyStarterRoster}
+                  >
+                    <CloudUpload className="h-4 w-4" />
+                    <span className="font-black">Save all rosters to Drive</span>
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-11 justify-start rounded-2xl gap-3 border-blue-100 bg-white/90"
+                    onClick={() => showGoogleDriveComingSoon("Open a Google Drive backup")}
+                  >
+                    <CloudDownload className="h-4 w-4" />
+                    <span className="font-black">Open Drive backup</span>
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-11 justify-start rounded-2xl gap-3 border-blue-100 bg-white/90"
+                    onClick={() => showGoogleDriveComingSoon("Update the current Google Drive backup")}
+                    disabled
+                    title="Available after a Drive backup has been opened"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                    <span className="font-black">Update current Drive backup</span>
+                  </Button>
+                </div>
+              </div>
+
               <div className="grid gap-2 border-t border-slate-100 pt-3">
+                <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+                  Local file backup
+                </div>
                 <Button
                   type="button"
                   variant="outline"

@@ -7,6 +7,23 @@ export interface GoogleDriveFileResult {
   modifiedTime?: string;
 }
 
+export interface GoogleDrivePermissionDetail {
+  inherited?: boolean;
+  inheritedFrom?: string;
+  permissionType?: string;
+  role?: string;
+}
+
+export interface GoogleDrivePermissionResult {
+  id: string;
+  type: string;
+  role: string;
+  emailAddress?: string;
+  displayName?: string;
+  deleted?: boolean;
+  permissionDetails?: GoogleDrivePermissionDetail[];
+}
+
 function parseGoogleDriveError(value: unknown) {
   if (!value || typeof value !== "object") return "Google Drive request failed.";
   const record = value as { error?: { message?: string }; message?: string };
@@ -189,3 +206,110 @@ export async function updateGoogleDriveJsonFile(
 
   return result as GoogleDriveFileResult;
 }
+
+export async function shareGoogleDriveFileWithEditor(
+  accessToken: string,
+  fileId: string,
+  emailAddress: string,
+): Promise<GoogleDrivePermissionResult> {
+  const params = new URLSearchParams({
+    sendNotificationEmail: "true",
+    supportsAllDrives: "true",
+    fields: "id,type,emailAddress,displayName,role",
+  });
+
+  const response = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}/permissions?${params.toString()}`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json; charset=UTF-8",
+      },
+      body: JSON.stringify({
+        type: "user",
+        role: "writer",
+        emailAddress,
+      }),
+    },
+  );
+
+  if (!response.ok) {
+    const message = await readDriveError(response);
+    if (response.status === 401) {
+      throw new Error("Google Drive connection expired. Disconnect and connect Google Drive again, then retry.");
+    }
+    if (response.status === 403) {
+      throw new Error("Fair Teams cannot share this Drive file. Open the file from Drive again, or make sure you own it or have permission to share it.");
+    }
+    throw new Error(message);
+  }
+
+  const result = await response.json();
+  if (!result?.id) {
+    throw new Error("Google Drive shared the file but did not return permission details.");
+  }
+  return result as GoogleDrivePermissionResult;
+}
+
+export async function listGoogleDriveFilePermissions(
+  accessToken: string,
+  fileId: string,
+): Promise<GoogleDrivePermissionResult[]> {
+  const params = new URLSearchParams({
+    supportsAllDrives: "true",
+    fields: "permissions(id,type,emailAddress,displayName,role,deleted,permissionDetails(inherited,inheritedFrom,permissionType,role))",
+  });
+
+  const response = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}/permissions?${params.toString()}`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+  );
+
+  if (!response.ok) {
+    const message = await readDriveError(response);
+    if (response.status === 401) {
+      throw new Error("Google Drive connection expired. Disconnect and connect Google Drive again, then retry.");
+    }
+    if (response.status === 403) {
+      throw new Error("Fair Teams cannot read sharing access for this Drive file. Open the file from Drive again, or check your sharing permission.");
+    }
+    throw new Error(message);
+  }
+
+  const result = await response.json();
+  return Array.isArray(result?.permissions) ? (result.permissions as GoogleDrivePermissionResult[]) : [];
+}
+
+export async function deleteGoogleDriveFilePermission(
+  accessToken: string,
+  fileId: string,
+  permissionId: string,
+): Promise<void> {
+  const params = new URLSearchParams({ supportsAllDrives: "true" });
+  const response = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}/permissions/${encodeURIComponent(permissionId)}?${params.toString()}`,
+    {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+  );
+
+  if (!response.ok) {
+    const message = await readDriveError(response);
+    if (response.status === 401) {
+      throw new Error("Google Drive connection expired. Disconnect and connect Google Drive again, then retry.");
+    }
+    if (response.status === 403) {
+      throw new Error("Fair Teams cannot remove this access. It may belong to the file owner or come from a shared Drive folder.");
+    }
+    throw new Error(message);
+  }
+}
+

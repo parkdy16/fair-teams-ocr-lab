@@ -19,6 +19,8 @@ import {
   CloudUpload,
   CloudDownload,
   RefreshCw,
+  Share2,
+  UserMinus,
 } from "lucide-react";
 import { PlayersTab } from "@/components/PlayersTab";
 import { TodayTab } from "@/components/TodayTab";
@@ -44,10 +46,14 @@ import { allRostersToDriveBackupJson, parseDriveBackupJson } from "@/lib/googleD
 import { requestGoogleDriveAccessToken } from "@/lib/googleDriveAuth";
 import {
   createGoogleDriveJsonFile,
+  deleteGoogleDriveFilePermission,
   listGoogleDriveBackupFiles,
+  listGoogleDriveFilePermissions,
   readGoogleDriveJsonFile,
+  shareGoogleDriveFileWithEditor,
   updateGoogleDriveJsonFile,
   type GoogleDriveFileResult,
+  type GoogleDrivePermissionResult,
 } from "@/lib/googleDriveFiles";
 import { pickGoogleDriveBackupFile } from "@/lib/googleDrivePicker";
 
@@ -196,6 +202,15 @@ type RosterToolsNotice = {
   tone?: "info" | "success" | "warning" | "error";
 };
 
+type DriveShareConfirm = {
+  email: string;
+};
+
+type DriveRemoveAccessConfirm = {
+  permission: GoogleDrivePermissionResult;
+  label: string;
+};
+
 function App() {
   const [showSplash, setShowSplash] = useState(true);
   const [splashVisible, setSplashVisible] = useState(false);
@@ -259,6 +274,15 @@ function App() {
   const [driveBackupChoices, setDriveBackupChoices] = useState<GoogleDriveFileResult[] | null>(null);
   const [localImportPreview, setLocalImportPreview] = useState<LocalImportPreview | null>(null);
   const [rosterToolsNotice, setRosterToolsNotice] = useState<RosterToolsNotice | null>(null);
+  const [driveShareOpen, setDriveShareOpen] = useState(false);
+  const [driveShareEmail, setDriveShareEmail] = useState("");
+  const [driveShareConfirm, setDriveShareConfirm] = useState<DriveShareConfirm | null>(null);
+  const [googleDriveSharing, setGoogleDriveSharing] = useState(false);
+  const [driveAccessOpen, setDriveAccessOpen] = useState(false);
+  const [driveAccessList, setDriveAccessList] = useState<GoogleDrivePermissionResult[] | null>(null);
+  const [driveAccessLoading, setDriveAccessLoading] = useState(false);
+  const [driveRemoveConfirm, setDriveRemoveConfirm] = useState<DriveRemoveAccessConfirm | null>(null);
+  const [driveRemovingPermissionId, setDriveRemovingPermissionId] = useState("");
   const googleDriveConnected = Boolean(googleDriveAccessToken);
   const googleDriveStatusText = !googleDriveConfig.isConfigured
     ? "Add Google Client ID and API key to .env.local"
@@ -291,6 +315,47 @@ function App() {
     return `Updated ${date.toLocaleDateString(undefined, { month: "short", day: "numeric" })} ${date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`;
   };
 
+  const normalizeShareEmail = (value: string) => value.trim().toLowerCase();
+
+  const validateShareEmail = (value: string) => {
+    const email = normalizeShareEmail(value);
+    if (!email) return "Enter one email address.";
+    if (email.includes(",") || email.includes(";")) return "Enter only one email address for now.";
+    if (/\s/.test(email)) return "Remove spaces from the email address.";
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return "Enter a valid email address.";
+    return "";
+  };
+
+  const formatDrivePermissionRole = (role: string) => {
+    if (role === "owner") return "Owner";
+    if (role === "writer") return "Editor";
+    if (role === "commenter") return "Commenter";
+    if (role === "reader") return "Viewer";
+    return role || "Access";
+  };
+
+  const drivePermissionIsInherited = (permission: GoogleDrivePermissionResult) =>
+    Boolean(permission.permissionDetails?.some((detail) => detail.inherited));
+
+  const drivePermissionLabel = (permission: GoogleDrivePermissionResult) =>
+    permission.emailAddress || permission.displayName ||
+    (permission.type === "anyone" ? "Anyone with the link" : permission.type === "domain" ? "Domain access" : "Unknown access");
+
+  const canRemoveDrivePermission = (permission: GoogleDrivePermissionResult) =>
+    permission.id &&
+    permission.role !== "owner" &&
+    permission.type === "user" &&
+    !permission.deleted &&
+    !drivePermissionIsInherited(permission);
+
+  const downloadAllRostersBackup = () => {
+    downloadText(
+      `fair-teams-all-rosters-backup.json`,
+      rostersToBackupJson(rosters, activeRosterId),
+      "application/json;charset=utf-8",
+    );
+  };
+
   useEffect(() => {
     saveRosterState(rosterState);
   }, [rosterState]);
@@ -304,7 +369,11 @@ function App() {
       Boolean(driveImportPreview) ||
       Boolean(driveBackupChoices) ||
       Boolean(localImportPreview) ||
-      Boolean(rosterToolsNotice);
+      Boolean(rosterToolsNotice) ||
+      driveShareOpen ||
+      Boolean(driveShareConfirm) ||
+      driveAccessOpen ||
+      Boolean(driveRemoveConfirm);
     if (!shouldLockScroll) return;
 
     const previousOverflow = document.body.style.overflow;
@@ -312,7 +381,7 @@ function App() {
     return () => {
       document.body.style.overflow = previousOverflow;
     };
-  }, [groupSettingsOpen, rosterFilesOpen, rosterPickerOpen, clearRosterOpen, driveImportPreview, driveBackupChoices, localImportPreview, rosterToolsNotice]);
+  }, [groupSettingsOpen, rosterFilesOpen, rosterPickerOpen, clearRosterOpen, driveImportPreview, driveBackupChoices, localImportPreview, rosterToolsNotice, driveShareOpen, driveShareConfirm, driveAccessOpen, driveRemoveConfirm]);
 
   const openGroupSettings = () => {
     setDraftGroupName(activeRosterName);
@@ -691,6 +760,107 @@ function App() {
     }
   };
 
+  const openDriveShareModal = () => {
+    if (!googleDriveConnected) {
+      showRosterToolsNotice("Connect Google Drive first", "Connect your Google account before sharing a Drive backup.", "warning");
+      return;
+    }
+    if (!currentDriveBackup) {
+      showRosterToolsNotice("No Drive file selected", "Save or open a Drive backup first, then you can share that selected file.", "warning");
+      return;
+    }
+    setDriveShareEmail("");
+    setDriveShareConfirm(null);
+    setDriveShareOpen(true);
+  };
+
+  const prepareDriveShare = () => {
+    const error = validateShareEmail(driveShareEmail);
+    if (error) {
+      showRosterToolsNotice("Check email address", error, "warning");
+      return;
+    }
+    setDriveShareConfirm({ email: normalizeShareEmail(driveShareEmail) });
+  };
+
+  const confirmDriveShare = async () => {
+    if (!driveShareConfirm || !currentDriveBackup) return;
+    setGoogleDriveSharing(true);
+    try {
+      await shareGoogleDriveFileWithEditor(
+        googleDriveAccessToken,
+        currentDriveBackup.id,
+        driveShareConfirm.email,
+      );
+      const sharedEmail = driveShareConfirm.email;
+      setDriveShareOpen(false);
+      setDriveShareConfirm(null);
+      setDriveShareEmail("");
+      showRosterToolsNotice(
+        "Drive backup shared",
+        `${currentDriveBackup.name} was shared with ${sharedEmail} as Editor.`,
+        "success",
+      );
+      if (driveAccessOpen) {
+        await loadDriveAccessList();
+      }
+    } catch (error) {
+      showRosterToolsNotice("Could not share Drive backup", error instanceof Error ? error.message : "Please try again.", "error");
+    } finally {
+      setGoogleDriveSharing(false);
+    }
+  };
+
+  const loadDriveAccessList = async () => {
+    if (!currentDriveBackup) return;
+    setDriveAccessLoading(true);
+    try {
+      const permissions = await listGoogleDriveFilePermissions(googleDriveAccessToken, currentDriveBackup.id);
+      setDriveAccessList(permissions.filter((permission) => !permission.deleted));
+    } catch (error) {
+      showRosterToolsNotice("Could not load sharing access", error instanceof Error ? error.message : "Please try again.", "error");
+    } finally {
+      setDriveAccessLoading(false);
+    }
+  };
+
+  const openDriveAccessManager = async () => {
+    if (!googleDriveConnected) {
+      showRosterToolsNotice("Connect Google Drive first", "Connect your Google account before managing Drive access.", "warning");
+      return;
+    }
+    if (!currentDriveBackup) {
+      showRosterToolsNotice("No Drive file selected", "Save or open a Drive backup first, then you can manage access to that selected file.", "warning");
+      return;
+    }
+    setDriveAccessOpen(true);
+    setDriveAccessList(null);
+    await loadDriveAccessList();
+  };
+
+  const confirmRemoveDriveAccess = async () => {
+    if (!driveRemoveConfirm || !currentDriveBackup) return;
+    const permissionId = driveRemoveConfirm.permission.id;
+    setDriveRemovingPermissionId(permissionId);
+    try {
+      await deleteGoogleDriveFilePermission(
+        googleDriveAccessToken,
+        currentDriveBackup.id,
+        permissionId,
+      );
+      const removedLabel = driveRemoveConfirm.label;
+      setDriveRemoveConfirm(null);
+      setDriveAccessList((current) =>
+        current ? current.filter((permission) => permission.id !== permissionId) : current,
+      );
+      showRosterToolsNotice("Access removed", `${removedLabel} can no longer access this Drive backup through this direct file permission.`, "success");
+    } catch (error) {
+      showRosterToolsNotice("Could not remove access", error instanceof Error ? error.message : "Please try again.", "error");
+    } finally {
+      setDriveRemovingPermissionId("");
+    }
+  };
+
   const exportSharedRoster = () => {
     if (!activeRoster) return;
     setRosterFilesOpen(false);
@@ -703,11 +873,7 @@ function App() {
 
   const exportAllRostersBackup = () => {
     setRosterFilesOpen(false);
-    downloadText(
-      `fair-teams-all-rosters-backup.json`,
-      rostersToBackupJson(rosters, activeRosterId),
-      "application/json;charset=utf-8",
-    );
+    downloadAllRostersBackup();
   };
 
   const openClearRoster = () => {
@@ -1344,6 +1510,43 @@ function App() {
                     </span>
                   </Button>
                 </div>
+
+                {currentDriveBackup ? (
+                  <div className="mt-3 rounded-2xl border border-blue-100 bg-white/75 p-2.5">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <span className="text-[10px] font-black uppercase tracking-wide text-blue-500">
+                        Sharing
+                      </span>
+                      <span className="truncate text-[10px] font-bold text-slate-400">
+                        Current file only
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-10 rounded-2xl border-blue-100 bg-blue-50/70 text-xs font-black text-blue-700 hover:bg-blue-100"
+                        onClick={openDriveShareModal}
+                        disabled={!googleDriveConnected || googleDriveSharing}
+                      >
+                        <Share2 className="mr-1.5 h-3.5 w-3.5" />
+                        Share file
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-10 rounded-2xl border-slate-100 bg-slate-50/80 text-xs font-black text-slate-700 hover:bg-slate-100"
+                        onClick={openDriveAccessManager}
+                        disabled={!googleDriveConnected || driveAccessLoading}
+                      >
+                        Manage access
+                      </Button>
+                    </div>
+                    <p className="mt-2 text-[10px] font-semibold leading-snug text-slate-500">
+                      Shared editors can update this backup. Keep a private local backup for important rosters.
+                    </p>
+                  </div>
+                ) : null}
               </div>
 
               <div className="grid gap-2 border-t border-slate-100 pt-3">
@@ -1562,6 +1765,311 @@ function App() {
                 variant="ghost"
                 className="h-10 rounded-2xl text-slate-500"
                 onClick={() => setDriveBackupChoices(null)}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {driveShareOpen && (
+        <div
+          className="fixed inset-0 z-[60] flex items-end justify-center bg-black/45 p-4 sm:items-center"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="w-full max-w-sm overflow-hidden rounded-3xl border border-blue-100 bg-white shadow-2xl">
+            <div className="flex items-start justify-between gap-3 border-b border-slate-100 p-4 pb-3">
+              <div className="min-w-0">
+                <div className="text-[10px] font-black uppercase tracking-wide text-blue-500">
+                  Google Drive sharing
+                </div>
+                <h2 className="mt-1 text-base font-black tracking-tight text-[#102A43]">
+                  Share current file
+                </h2>
+                <p className="mt-1 truncate text-xs font-semibold text-slate-500">
+                  {currentDriveBackup?.name || "No Drive file selected"}
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 shrink-0 rounded-xl"
+                onClick={() => {
+                  setDriveShareOpen(false);
+                  setDriveShareConfirm(null);
+                }}
+                title="Close"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+
+            <div className="p-4">
+              <label className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+                Co-organizer email
+              </label>
+              <input
+                value={driveShareEmail}
+                onChange={(e) => setDriveShareEmail(e.target.value)}
+                inputMode="email"
+                autoCapitalize="none"
+                autoCorrect="off"
+                placeholder="sarah@example.com"
+                className="mt-2 h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm font-bold text-[#102A43] outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
+              />
+
+              <div className="mt-3 rounded-2xl border border-amber-100 bg-amber-50/80 p-3">
+                <div className="flex gap-2">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                  <p className="text-xs font-semibold leading-snug text-amber-800">
+                    They will be added as Editor and can update this Drive backup file. Make sure the email address is correct.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-4 grid gap-2">
+                <Button
+                  type="button"
+                  className="h-11 rounded-2xl bg-blue-600 text-white hover:bg-blue-700"
+                  onClick={prepareDriveShare}
+                >
+                  Continue
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="h-10 rounded-2xl text-slate-500"
+                  onClick={() => {
+                    setDriveShareOpen(false);
+                    setDriveShareConfirm(null);
+                  }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {driveShareConfirm && (
+        <div
+          className="fixed inset-0 z-[70] flex items-end justify-center bg-black/50 p-4 sm:items-center"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="w-full max-w-sm rounded-3xl border border-amber-100 bg-white p-4 shadow-2xl">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-amber-50 text-amber-600">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h2 className="text-base font-black tracking-tight text-[#102A43]">
+                  Share as Editor?
+                </h2>
+                <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
+                  {driveShareConfirm.email} can open and update this backup file. This backup contains roster text data only; no player photos or logo images.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-3 rounded-2xl border border-slate-100 bg-slate-50/80 p-3">
+              <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+                File
+              </div>
+              <div className="mt-1 truncate text-xs font-black text-[#102A43]">
+                {currentDriveBackup?.name}
+              </div>
+            </div>
+
+            <div className="mt-3 rounded-2xl border border-amber-100 bg-amber-50/80 p-3">
+              <p className="text-xs font-semibold leading-snug text-amber-800">
+                After sharing, this file is no longer private. Save a local backup first if you want a safe copy.
+              </p>
+            </div>
+
+            <div className="mt-4 grid gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="h-10 rounded-2xl border-slate-200 bg-white text-xs font-black text-slate-700"
+                onClick={downloadAllRostersBackup}
+              >
+                Export local backup first
+              </Button>
+              <Button
+                type="button"
+                className="h-11 rounded-2xl bg-blue-600 text-white hover:bg-blue-700"
+                onClick={confirmDriveShare}
+                disabled={googleDriveSharing}
+              >
+                {googleDriveSharing ? "Sharing..." : "Share as Editor"}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                className="h-10 rounded-2xl text-slate-500"
+                onClick={() => setDriveShareConfirm(null)}
+                disabled={googleDriveSharing}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {driveAccessOpen && (
+        <div
+          className="fixed inset-0 z-[60] flex items-end justify-center bg-black/45 p-4 sm:items-center"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="flex max-h-[calc(100dvh-2rem)] w-full max-w-sm flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
+            <div className="flex items-start justify-between gap-3 border-b border-slate-100 p-4 pb-3">
+              <div className="min-w-0">
+                <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+                  Google Drive sharing
+                </div>
+                <h2 className="mt-1 text-base font-black tracking-tight text-[#102A43]">
+                  Manage access
+                </h2>
+                <p className="mt-1 truncate text-xs font-semibold text-slate-500">
+                  {currentDriveBackup?.name}
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 shrink-0 rounded-xl"
+                onClick={() => setDriveAccessOpen(false)}
+                title="Close"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
+              {driveAccessLoading ? (
+                <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-3 text-xs font-bold text-blue-700">
+                  Loading access...
+                </div>
+              ) : driveAccessList && driveAccessList.length > 0 ? (
+                <div className="space-y-2">
+                  {driveAccessList.map((permission) => {
+                    const label = drivePermissionLabel(permission);
+                    const inherited = drivePermissionIsInherited(permission);
+                    const canRemove = canRemoveDrivePermission(permission);
+                    return (
+                      <div
+                        key={permission.id}
+                        className="rounded-2xl border border-slate-100 bg-slate-50/80 p-3"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-black text-[#102A43]">
+                              {permission.displayName || label}
+                            </div>
+                            <div className="mt-0.5 truncate text-[11px] font-bold text-slate-500">
+                              {permission.emailAddress || label}
+                            </div>
+                            <div className="mt-1 text-[10px] font-black uppercase tracking-wide text-slate-400">
+                              {formatDrivePermissionRole(permission.role)}{inherited ? " from folder" : ""}
+                            </div>
+                          </div>
+                          {canRemove ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="h-8 shrink-0 rounded-xl border-red-100 bg-red-50 px-2 text-[10px] font-black text-red-700 hover:bg-red-100"
+                              onClick={() => setDriveRemoveConfirm({ permission, label })}
+                              disabled={driveRemovingPermissionId === permission.id}
+                            >
+                              <UserMinus className="mr-1 h-3 w-3" />
+                              Remove
+                            </Button>
+                          ) : null}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-slate-100 bg-slate-50/80 p-3 text-xs font-bold text-slate-500">
+                  No sharing details found for this file.
+                </div>
+              )}
+
+              <div className="mt-3 rounded-2xl border border-amber-100 bg-amber-50/80 p-3">
+                <p className="text-xs font-semibold leading-snug text-amber-800">
+                  Shared editors can change this backup. Keep a private local backup if this roster is important.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid gap-2 border-t border-slate-100 p-4">
+              <Button
+                type="button"
+                variant="outline"
+                className="h-10 rounded-2xl border-blue-100 bg-white text-blue-700 hover:bg-blue-50"
+                onClick={loadDriveAccessList}
+                disabled={driveAccessLoading}
+              >
+                Refresh access
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                className="h-10 rounded-2xl text-slate-500"
+                onClick={() => setDriveAccessOpen(false)}
+              >
+                Close
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {driveRemoveConfirm && (
+        <div
+          className="fixed inset-0 z-[70] flex items-end justify-center bg-black/50 p-4 sm:items-center"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="w-full max-w-sm rounded-3xl border border-red-100 bg-white p-4 shadow-2xl">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-red-50 text-red-600">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h2 className="text-base font-black tracking-tight text-[#102A43]">
+                  Remove access?
+                </h2>
+                <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
+                  {driveRemoveConfirm.label} will no longer be able to open or update this Drive backup through this direct file permission.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-2">
+              <Button
+                type="button"
+                className="h-11 rounded-2xl bg-red-600 text-white hover:bg-red-700"
+                onClick={confirmRemoveDriveAccess}
+                disabled={Boolean(driveRemovingPermissionId)}
+              >
+                {driveRemovingPermissionId ? "Removing..." : "Remove access"}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                className="h-10 rounded-2xl text-slate-500"
+                onClick={() => setDriveRemoveConfirm(null)}
+                disabled={Boolean(driveRemovingPermissionId)}
               >
                 Cancel
               </Button>

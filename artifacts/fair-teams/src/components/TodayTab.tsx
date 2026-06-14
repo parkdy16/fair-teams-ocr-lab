@@ -2258,7 +2258,7 @@ export function TodayTab({
   const cropScreenshotForOcr = async (
     file: File,
     cropBox?: CropBox,
-    options: { enhance?: boolean } = {},
+    options: { variant?: "raw" | "gray" | "threshold" | "invert" } = {},
   ) => {
     if (!cropBox || cropBox.w < 3 || cropBox.h < 3) return file;
 
@@ -2281,8 +2281,8 @@ export function TodayTab({
         1,
         Math.round((cropBox.h / 100) * image.naturalHeight),
       );
-      const scale = 4;
-      const padding = 36;
+      const scale = options.variant === "raw" ? 4 : 5;
+      const padding = 48;
       const canvas = document.createElement("canvas");
       canvas.width = sw * scale + padding * 2;
       canvas.height = sh * scale + padding * 2;
@@ -2304,7 +2304,7 @@ export function TodayTab({
         sh * scale,
       );
 
-      if (options.enhance) {
+      if (options.variant && options.variant !== "raw") {
         const imageData = context.getImageData(
           0,
           0,
@@ -2317,7 +2317,16 @@ export function TodayTab({
             0.299 * data[offset] +
             0.587 * data[offset + 1] +
             0.114 * data[offset + 2];
-          const value = gray < 245 ? 0 : 255;
+          let value = gray;
+          if (options.variant === "gray") {
+            // Gentle contrast boost. This helps colored roster text without
+            // destroying thin letters.
+            value = Math.max(0, Math.min(255, (gray - 180) * 2.2 + 180));
+          } else if (options.variant === "threshold") {
+            value = gray < 238 ? 0 : 255;
+          } else if (options.variant === "invert") {
+            value = gray < 238 ? 255 : 0;
+          }
           data[offset] = value;
           data[offset + 1] = value;
           data[offset + 2] = value;
@@ -2332,7 +2341,7 @@ export function TodayTab({
       if (!blob) return file;
       return new File(
         [blob],
-        `${file.name.replace(/\.[^.]+$/, "")}-crop${options.enhance ? "-enhanced" : ""}.png`,
+        `${file.name.replace(/\.[^.]+$/, "")}-crop-${options.variant ?? "raw"}.png`,
         {
           type: "image/png",
         },
@@ -2370,10 +2379,13 @@ export function TodayTab({
           screenshotImportMode === "other"
             ? [
                 await cropScreenshotForOcr(file, cropBoxes[index], {
-                  enhance: false,
+                  variant: "raw",
                 }),
                 await cropScreenshotForOcr(file, cropBoxes[index], {
-                  enhance: true,
+                  variant: "gray",
+                }),
+                await cropScreenshotForOcr(file, cropBoxes[index], {
+                  variant: "threshold",
                 }),
               ]
             : [file];
@@ -2388,6 +2400,8 @@ export function TodayTab({
             sources[sourceIndex],
             "eng",
             {
+              tessedit_pageseg_mode: "6",
+              preserve_interword_spaces: "1",
               logger: (message) => {
                 if (message.status)
                   setOcrStatus(
@@ -2405,7 +2419,7 @@ export function TodayTab({
                   );
                 }
               },
-            },
+            } as any,
           );
           imageTexts.push(result.data.text.trim());
         }
@@ -3204,40 +3218,44 @@ export function TodayTab({
 
                   {selectedScreenshotPreviews[activeCropIndex] && (
                     <>
-                      <div
-                        className="relative min-h-0 flex-1 touch-none overflow-hidden rounded-xl border bg-muted/30"
-                        onPointerDown={(event) =>
-                          startCropDrag(activeCropIndex, event)
-                        }
-                        onPointerMove={moveCropDrag}
-                        onPointerUp={finishCropDrag}
-                        onPointerCancel={finishCropDrag}
-                      >
-                        <img
-                          src={selectedScreenshotPreviews[activeCropIndex].url}
-                          alt={selectedScreenshotPreviews[activeCropIndex].name}
-                          className="h-full w-full select-none object-contain"
-                          draggable={false}
-                        />
-                        {(() => {
-                          const box =
-                            cropDragStart?.index === activeCropIndex &&
-                            draftCropBox
-                              ? draftCropBox
-                              : cropBoxes[activeCropIndex];
-                          if (!box) return null;
-                          return (
-                            <div
-                              className="pointer-events-none absolute border-2 border-primary bg-primary/15 shadow-[0_0_0_9999px_rgba(15,23,42,0.28)]"
-                              style={{
-                                left: `${box.x}%`,
-                                top: `${box.y}%`,
-                                width: `${box.w}%`,
-                                height: `${box.h}%`,
-                              }}
+                      <div className="min-h-0 flex-1 overflow-hidden rounded-xl border bg-muted/30 p-1">
+                        <div className="flex h-full w-full items-center justify-center overflow-hidden">
+                          <div
+                            className="relative touch-none"
+                            onPointerDown={(event) =>
+                              startCropDrag(activeCropIndex, event)
+                            }
+                            onPointerMove={moveCropDrag}
+                            onPointerUp={finishCropDrag}
+                            onPointerCancel={finishCropDrag}
+                          >
+                            <img
+                              src={selectedScreenshotPreviews[activeCropIndex].url}
+                              alt={selectedScreenshotPreviews[activeCropIndex].name}
+                              className="block max-h-[calc(100svh-8.5rem)] max-w-full select-none object-contain"
+                              draggable={false}
                             />
-                          );
-                        })()}
+                            {(() => {
+                              const box =
+                                cropDragStart?.index === activeCropIndex &&
+                                draftCropBox
+                                  ? draftCropBox
+                                  : cropBoxes[activeCropIndex];
+                              if (!box) return null;
+                              return (
+                                <div
+                                  className="pointer-events-none absolute border-2 border-primary bg-primary/15 shadow-[0_0_0_9999px_rgba(15,23,42,0.28)]"
+                                  style={{
+                                    left: `${box.x}%`,
+                                    top: `${box.y}%`,
+                                    width: `${box.w}%`,
+                                    height: `${box.h}%`,
+                                  }}
+                                />
+                              );
+                            })()}
+                          </div>
+                        </div>
                       </div>
 
                       <div className="mt-1 shrink-0 truncate pb-[env(safe-area-inset-bottom)] text-center text-[9px] font-bold text-muted-foreground">

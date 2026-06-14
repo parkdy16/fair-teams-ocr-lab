@@ -784,8 +784,20 @@ function splitOtherScreenshotNameSegments(rawLine: string) {
 function extractOtherScreenshotNames(text: string, roster: RoomPlayer[]) {
   const rawLines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   const names: string[] = [];
+  const structuredListDetected =
+    rawLines.filter((line) => /^\s*\d{1,3}\s*[.)\]:\-–—]+\s+/.test(line)).length >= 3;
 
   for (const rawLine of rawLines) {
+    const isStructuredNameLine =
+      /^\s*(?:\d{1,3}|[a-z])\s*[.)\]:\-–—]+\s+/i.test(rawLine) ||
+      /^\s*[•●▪︎◆◇▶︎►✓✔☑-]+\s+/.test(rawLine) ||
+      OTHER_SCREENSHOT_LABEL_PATTERN.test(rawLine) ||
+      /[;,/|]/.test(rawLine);
+
+    // If OCR sees a numbered roster, trust only structured/list lines. This
+    // blocks WhatsApp UI/background fragments from becoming extra players.
+    if (structuredListDetected && !isStructuredNameLine) continue;
+
     for (const segment of splitOtherScreenshotNameSegments(rawLine)) {
       const cleaned = cleanDetectedNameCandidate(
         stripOtherScreenshotListPrefix(segment),
@@ -3213,7 +3225,7 @@ export function TodayTab({
                         {selectedScreenshotNames.length === 1 ? "" : "s"}{" "}
                         selected
                       </div>
-                      <div className="truncate text-[10px] font-medium text-muted-foreground">
+                      <div className="truncate text-[10px] font-medium text-muted-foreground landscape:hidden">
                         Check for duplicates before scanning.
                       </div>
                     </div>
@@ -3252,19 +3264,20 @@ export function TodayTab({
               !ocrText &&
               !ocrRunning &&
               screenshotImportMode === "other" && (
-                <div className="fixed inset-0 z-[9999] flex h-[100svh] flex-col overflow-hidden bg-background px-2 py-2 shadow-2xl sm:px-3">
-                  <div className="shrink-0 pb-2 pt-[env(safe-area-inset-top)]">
-                    <div className="flex items-center justify-between gap-2">
+                <div className="fixed inset-0 z-[9999] h-[100dvh] w-[100dvw] overflow-hidden bg-background p-1 shadow-2xl">
+                  <div className="flex h-full w-full flex-col gap-1 landscape:flex-row">
+                  <div className="shrink-0 pb-1 pt-[env(safe-area-inset-top)] landscape:flex landscape:w-28 landscape:flex-col landscape:gap-2 landscape:pb-[env(safe-area-inset-bottom)] landscape:pl-[env(safe-area-inset-left)] landscape:pt-1">
+                    <div className="flex items-center justify-between gap-1 landscape:flex-col landscape:items-stretch">
                       <div className="min-w-0">
-                        <div className="text-sm font-black text-foreground">
+                        <div className="text-xs font-black text-foreground landscape:text-[11px]">
                           Crop names area {activeCropIndex + 1}/
                           {selectedScreenshotPreviews.length}
                         </div>
-                        <div className="truncate text-[10px] font-medium text-muted-foreground">
+                        <div className="truncate text-[10px] font-medium text-muted-foreground landscape:hidden">
                           Drag around names only. Tap numbers to switch screenshots.
                         </div>
                       </div>
-                      <div className="flex shrink-0 items-center gap-1.5">
+                      <div className="flex shrink-0 items-center gap-1 landscape:grid landscape:grid-cols-1">
                         <Button
                           type="button"
                           variant="ghost"
@@ -3291,7 +3304,7 @@ export function TodayTab({
                       </div>
                     </div>
 
-                    <div className="mt-2 flex items-center gap-1 overflow-x-auto pb-1">
+                    <div className="mt-1 flex items-center gap-1 overflow-x-auto pb-1 landscape:mt-0 landscape:flex-1 landscape:flex-col landscape:items-stretch landscape:overflow-x-hidden landscape:overflow-y-auto landscape:pb-0">
                       {selectedScreenshotPreviews.map((preview, index) => (
                         <button
                           key={`${preview.name}-tab-${index}`}
@@ -3315,7 +3328,7 @@ export function TodayTab({
                         size="sm"
                         onClick={clearActiveCrop}
                         disabled={!cropBoxes[activeCropIndex]}
-                        className="ml-auto h-7 shrink-0 px-2 text-[10px] font-black"
+                        className="ml-auto h-7 shrink-0 px-2 text-[10px] font-black landscape:ml-0 landscape:w-full"
                       >
                         Clear box
                       </Button>
@@ -3324,7 +3337,7 @@ export function TodayTab({
 
                   {selectedScreenshotPreviews[activeCropIndex] && (
                     <>
-                      <div className="min-h-0 flex-1 overflow-hidden rounded-xl border bg-muted/30 p-1">
+                      <div className="min-h-0 min-w-0 flex-1 overflow-hidden rounded-xl border bg-muted/30 p-1">
                         <div className="flex h-full w-full items-center justify-center overflow-hidden">
                           <div
                             className="relative touch-none"
@@ -3338,7 +3351,7 @@ export function TodayTab({
                             <img
                               src={selectedScreenshotPreviews[activeCropIndex].url}
                               alt={selectedScreenshotPreviews[activeCropIndex].name}
-                              className="block max-h-[calc(100svh-8.5rem)] max-w-full select-none object-contain"
+                              className="block max-h-full max-w-full select-none object-contain"
                               draggable={false}
                             />
                             {(() => {
@@ -3363,12 +3376,9 @@ export function TodayTab({
                           </div>
                         </div>
                       </div>
-
-                      <div className="mt-1 shrink-0 truncate pb-[env(safe-area-inset-bottom)] text-center text-[9px] font-bold text-muted-foreground">
-                        {selectedScreenshotPreviews[activeCropIndex].name}
-                      </div>
                     </>
                   )}
+                  </div>
                 </div>
               )}
 

@@ -151,3 +151,70 @@
 .fairteams-splash-fade {
   animation: fairteams-splash-fade 2.8s ease-in-out forwards;
 }
+
+
+/* Fair Teams mobile-friendly slider styling */
+.fairteams-slider {
+  --slider-fill: 0%;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 30px;
+  cursor: pointer;
+  background: transparent;
+  touch-action: pan-y;
+}
+
+.fairteams-slider:focus {
+  outline: none;
+}
+
+.fairteams-slider::-webkit-slider-runnable-track {
+  height: 12px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    hsl(var(--primary)) 0%,
+    hsl(var(--primary)) var(--slider-fill),
+    hsl(var(--muted)) var(--slider-fill),
+    hsl(var(--muted)) 100%
+  );
+  border: 1px solid hsl(var(--border));
+}
+
+.fairteams-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 28px;
+  height: 28px;
+  margin-top: -9px;
+  border-radius: 999px;
+  background: #fff;
+  border: 3px solid hsl(var(--primary));
+  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.22);
+}
+
+.fairteams-slider:active::-webkit-slider-thumb {
+  transform: scale(1.08);
+}
+
+.fairteams-slider::-moz-range-track {
+  height: 12px;
+  border-radius: 999px;
+  background: hsl(var(--muted));
+  border: 1px solid hsl(var(--border));
+}
+
+.fairteams-slider::-moz-range-progress {
+  height: 12px;
+  border-radius: 999px;
+  background: hsl(var(--primary));
+}
+
+.fairteams-slider::-moz-range-thumb {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: #fff;
+  border: 3px solid hsl(var(--primary));
+  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.22);
+}

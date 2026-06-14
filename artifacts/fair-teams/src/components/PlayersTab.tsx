@@ -576,7 +576,8 @@ function StatControl({ label, value, max = 10, onChange }: { label: string; valu
         max={max}
         value={value}
         onChange={e => onChange(Number(e.target.value))}
-        className="w-full accent-primary"
+        className="fairteams-slider w-full"
+        style={{ "--slider-fill": `${((value - 1) / Math.max(1, max - 1)) * 100}%` } as React.CSSProperties}
       />
     </div>
   );
@@ -838,31 +839,10 @@ function ProfileDialog({
               step={0.5}
               value={quickSkill}
               onChange={e => applyQuickSkill(roundSkillStep(Number(e.target.value)))}
-              className="w-full accent-primary"
+              className="fairteams-slider w-full"
+              style={{ "--slider-fill": `${((quickSkill - 1) / 9) * 100}%` } as React.CSSProperties}
               data-testid={`input-player-quick-skill-${player.id}`}
             />
-            <div className="grid grid-cols-2 gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                className="h-9 rounded-xl border-primary/15 text-xs font-black"
-                onClick={() => applyQuickSkill(quickSkill - 0.5)}
-                disabled={quickSkill <= 1}
-                aria-label="Decrease skill by 0.5"
-              >
-                −0.5
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="h-9 rounded-xl border-primary/15 text-xs font-black"
-                onClick={() => applyQuickSkill(quickSkill + 0.5)}
-                disabled={quickSkill >= 10}
-                aria-label="Increase skill by 0.5"
-              >
-                +0.5
-              </Button>
-            </div>
             <div className="rounded-xl border border-primary/10 bg-background/70 px-3 py-2 text-[11px] font-semibold leading-snug text-muted-foreground">
               {quickSkillExplanation}
             </div>
@@ -1571,39 +1551,10 @@ export function PlayersTab({
                     setSkillLevel(next);
                     setAddDetails(prev => applySkillLevelToDetails(prev, next));
                   }}
-                  className="w-full accent-primary"
+                  className="fairteams-slider w-full"
+                  style={{ "--slider-fill": `${((skillLevel - 1) / 9) * 100}%` } as React.CSSProperties}
                   data-testid="input-player-skill-level"
                 />
-                <div className="grid grid-cols-2 gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-9 rounded-xl border-primary/15 text-xs font-black"
-                    onClick={() => {
-                      const next = roundSkillStep(skillLevel - 0.5);
-                      setSkillLevel(next);
-                      setAddDetails(prev => applySkillLevelToDetails(prev, next));
-                    }}
-                    disabled={skillLevel <= 1}
-                    aria-label="Decrease skill by 0.5"
-                  >
-                    −0.5
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-9 rounded-xl border-primary/15 text-xs font-black"
-                    onClick={() => {
-                      const next = roundSkillStep(skillLevel + 0.5);
-                      setSkillLevel(next);
-                      setAddDetails(prev => applySkillLevelToDetails(prev, next));
-                    }}
-                    disabled={skillLevel >= 10}
-                    aria-label="Increase skill by 0.5"
-                  >
-                    +0.5
-                  </Button>
-                </div>
                 <div className="rounded-xl border border-primary/10 bg-background/70 px-3 py-2 text-[11px] font-semibold leading-snug text-muted-foreground">
                   {addSkillExplanation}
                 </div>

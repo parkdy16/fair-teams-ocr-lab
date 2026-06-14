@@ -49,10 +49,12 @@ function createLocalPlayerId() {
   return `player-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-function clamp(num: unknown, min: number, max: number, fallback: number) {
+function clamp(num: unknown, min: number, max: number, fallback: number, step = 1) {
   const n = Number(num);
   if (!Number.isFinite(n)) return fallback;
-  return Math.min(max, Math.max(min, Math.round(n)));
+  const safeStep = step > 0 ? step : 1;
+  const rounded = Math.round(n / safeStep) * safeStep;
+  return Math.min(max, Math.max(min, Math.round(rounded * 10) / 10));
 }
 
 function getSpecialSkillStatBoosts(player: Partial<RoomPlayer>) {
@@ -111,12 +113,12 @@ function specialAbilityBonus(player: Partial<RoomPlayer>) {
 }
 
 export function calculateOverall(player: Partial<RoomPlayer>) {
-  const attack = clamp(player.attack, 1, 10, clamp(player.skill, 0, 10, 5));
-  const defense = clamp(player.defense, 1, 10, clamp(player.skill, 0, 10, 5));
-  const speed = clamp(player.speed, 1, 10, 5);
-  const passing = clamp(player.passing, 1, 10, clamp(player.skill, 0, 10, 5));
-  const stamina = clamp(player.stamina, 1, 10, 5);
-  const physical = clamp(player.physical, 1, 10, 5);
+  const attack = clamp(player.attack, 1, 10, clamp(player.skill, 0, 10, 5, 0.5), 0.5);
+  const defense = clamp(player.defense, 1, 10, clamp(player.skill, 0, 10, 5, 0.5), 0.5);
+  const speed = clamp(player.speed, 1, 10, 5, 0.5);
+  const passing = clamp(player.passing, 1, 10, clamp(player.skill, 0, 10, 5, 0.5), 0.5);
+  const stamina = clamp(player.stamina, 1, 10, 5, 0.5);
+  const physical = clamp(player.physical, 1, 10, 5, 0.5);
   const teamPlay = clamp(player.teamPlay, 1, 3, 2);
   const boosts = getSpecialSkillStatBoosts(player);
   const effectiveAttack = Math.min(10, attack + boosts.attack);
@@ -222,7 +224,7 @@ function cleanPlayerPhoto(player: unknown) {
 }
 
 export function normalizePlayer(player: Partial<RoomPlayer> & { name?: string }, index = 0): RoomPlayer {
-  const baseSkill = clamp(player.skill, 0, 10, 5);
+  const baseSkill = clamp(player.skill, 0, 10, 5, 0.5);
   const normalized: RoomPlayer = {
     id: player.id || createLocalPlayerId(),
     roomId: 1,
@@ -230,12 +232,12 @@ export function normalizePlayer(player: Partial<RoomPlayer> & { name?: string },
     aka: typeof player.aka === "string" && player.aka.trim() ? player.aka.trim() : undefined,
     gender: player.gender === "female" || player.gender === "other" ? player.gender : "male",
     skill: baseSkill,
-    attack: clamp(player.attack, 1, 10, baseSkill || 5),
-    defense: clamp(player.defense, 1, 10, baseSkill || 5),
-    speed: clamp(player.speed, 1, 10, 5),
-    passing: clamp(player.passing, 1, 10, baseSkill || 5),
-    stamina: clamp(player.stamina, 1, 10, 5),
-    physical: clamp(player.physical, 1, 10, 5),
+    attack: clamp(player.attack, 1, 10, baseSkill || 5, 0.5),
+    defense: clamp(player.defense, 1, 10, baseSkill || 5, 0.5),
+    speed: clamp(player.speed, 1, 10, 5, 0.5),
+    passing: clamp(player.passing, 1, 10, baseSkill || 5, 0.5),
+    stamina: clamp(player.stamina, 1, 10, 5, 0.5),
+    physical: clamp(player.physical, 1, 10, 5, 0.5),
     teamPlay: clamp(player.teamPlay, 1, 3, 2),
     profilePhoto: cleanPlayerPhoto(player),
     isGoalkeeper: Boolean(player.isGoalkeeper ?? false),

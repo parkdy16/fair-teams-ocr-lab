@@ -1800,6 +1800,18 @@ export function TodayTab({
     Number.isFinite(expectedAttendeeNumber) &&
     expectedAttendeeNumber > 0;
   const scannedNameCount = possibleNames.length;
+  const ocrRawLineCount = ocrText
+    ? ocrText
+        .split(/\r?\n/)
+        .map((line) => cleanOcrLine(line))
+        .filter((line) => Boolean(normalizeForMatch(line))).length
+    : 0;
+  const ocrRawWordCount = ocrText
+    ? ocrText
+        .split(/\s+/)
+        .map((word) => cleanOcrLine(word))
+        .filter((word) => Boolean(normalizeForMatch(word))).length
+    : 0;
   const rosterMatchCount = allRosterCandidates.length;
   const unmatchedScannedNames = allNewCandidates;
   const missingFromScan = hasExpectedAttendeeNumber
@@ -3120,16 +3132,15 @@ export function TodayTab({
               !ocrText &&
               !ocrRunning &&
               screenshotImportMode === "other" && (
-                <div className="rounded-xl border bg-card p-3">
-                  <div className="mb-2 flex items-center justify-between gap-3">
+                <div className="fixed inset-0 z-[9999] flex h-[100dvh] flex-col bg-background p-3 shadow-2xl">
+                  <div className="mb-2 flex shrink-0 items-center justify-between gap-3">
                     <div className="min-w-0">
-                      <div className="text-xs font-black text-foreground">
+                      <div className="text-sm font-black text-foreground">
                         Crop names area {activeCropIndex + 1}/
                         {selectedScreenshotPreviews.length}
                       </div>
-                      <div className="text-[10px] font-medium text-muted-foreground">
-                        Drag a box around only the names. Repeat for each
-                        screenshot, then scan once.
+                      <div className="truncate text-[10px] font-medium text-muted-foreground">
+                        Drag around names only. Clear box if it feels wrong.
                       </div>
                     </div>
                     <Button
@@ -3137,19 +3148,19 @@ export function TodayTab({
                       variant="ghost"
                       size="sm"
                       onClick={clearOcrSelection}
-                      className="h-7 shrink-0 px-2 text-[10px] font-black"
+                      className="h-8 shrink-0 px-2 text-[10px] font-black"
                     >
-                      Clear
+                      Cancel
                     </Button>
                   </div>
 
-                  <div className="mb-2 flex shrink-0 flex-wrap gap-1">
+                  <div className="mb-2 flex shrink-0 gap-1 overflow-x-auto pb-1">
                     {selectedScreenshotPreviews.map((preview, index) => (
                       <button
                         key={`${preview.name}-tab-${index}`}
                         type="button"
                         onClick={() => setActiveCropIndex(index)}
-                        className={`rounded-full border px-2 py-1 text-[10px] font-black ${
+                        className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-black ${
                           activeCropIndex === index
                             ? "border-primary bg-primary/10 text-primary"
                             : cropBoxes[index]
@@ -3164,7 +3175,7 @@ export function TodayTab({
                   </div>
 
                   {selectedScreenshotPreviews[activeCropIndex] && (
-                    <div className="space-y-2">
+                    <>
                       <div
                         className="relative min-h-0 flex-1 touch-none overflow-hidden rounded-xl border bg-muted/30"
                         onPointerDown={(event) =>
@@ -3200,34 +3211,35 @@ export function TodayTab({
                           );
                         })()}
                       </div>
-                      <div className="flex shrink-0 items-center justify-between gap-2">
-                        <div className="truncate text-[10px] font-bold text-muted-foreground">
+
+                      <div className="mt-2 shrink-0 space-y-2 pb-[env(safe-area-inset-bottom)]">
+                        <div className="truncate text-center text-[10px] font-bold text-muted-foreground">
                           {selectedScreenshotPreviews[activeCropIndex].name}
                         </div>
-                        <div className="flex gap-2">
-                          <Button
-                            type="button"
-                            size="sm"
-                            onClick={runOcr}
-                            disabled={
-                              ocrRunning ||
-                              !selectedScreenshots.every((_, screenshotIndex) =>
-                                Boolean(cropBoxes[screenshotIndex]),
-                              )
-                            }
-                            className="h-7 px-3 text-[10px] font-black"
-                          >
-                            Scan crops
-                          </Button>
+                        <div className="grid grid-cols-3 gap-2">
                           <Button
                             type="button"
                             variant="outline"
                             size="sm"
                             onClick={clearActiveCrop}
                             disabled={!cropBoxes[activeCropIndex]}
-                            className="h-7 px-2 text-[10px] font-black"
+                            className="h-10 px-2 text-[11px] font-black"
                           >
-                            Reset crop
+                            Clear box
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                              setActiveCropIndex(
+                                Math.max(0, activeCropIndex - 1),
+                              )
+                            }
+                            disabled={activeCropIndex <= 0}
+                            className="h-10 px-2 text-[11px] font-black"
+                          >
+                            Back
                           </Button>
                           <Button
                             type="button"
@@ -3245,13 +3257,27 @@ export function TodayTab({
                               activeCropIndex >=
                               selectedScreenshotPreviews.length - 1
                             }
-                            className="h-7 px-2 text-[10px] font-black"
+                            className="h-10 px-2 text-[11px] font-black"
                           >
                             Next
                           </Button>
                         </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={runOcr}
+                          disabled={
+                            ocrRunning ||
+                            !selectedScreenshots.every((_, screenshotIndex) =>
+                              Boolean(cropBoxes[screenshotIndex]),
+                            )
+                          }
+                          className="h-11 w-full px-3 text-xs font-black"
+                        >
+                          Scan all crops
+                        </Button>
                       </div>
-                    </div>
+                    </>
                   )}
                 </div>
               )}
@@ -3371,6 +3397,12 @@ export function TodayTab({
                     </div>
                   )}
                 </div>
+                {ocrInputSource === "screenshot" && (
+                  <div className="mb-2 rounded-lg border bg-muted/30 px-2 py-1.5 text-[10px] font-bold text-muted-foreground">
+                    OCR debug: {ocrRawWordCount} raw words · {ocrRawLineCount}{" "}
+                    raw lines · {possibleNames.length} review names
+                  </div>
+                )}
                 {possibleNames.length > 0 ? (
                   <div className="space-y-2 pr-1">
                     {possibleNames.map((candidate, index) => {

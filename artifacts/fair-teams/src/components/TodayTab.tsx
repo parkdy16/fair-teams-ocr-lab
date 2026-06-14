@@ -789,6 +789,41 @@ function splitOtherScreenshotNameSegments(rawLine: string) {
   return [source];
 }
 
+
+function scoreOtherScreenshotNameCandidate(value: string, roster: RoomPlayer[]) {
+  const clean = cleanDetectedNameCandidate(value);
+  const normalized = normalizeForMatch(clean);
+  if (!clean || !normalized) return -999;
+
+  let score = 0;
+  if (hasRosterSignal(clean, roster)) score += 80;
+  if (/^[A-Z][a-z]+(?:[\s'-][A-Z][a-z]+){0,2}$/.test(clean)) score += 30;
+  if (/^[A-Za-z\s'-]+$/.test(clean)) score += 20;
+  if (/[aeiou]/i.test(clean)) score += 8;
+  if (clean.length >= 4 && clean.length <= 18) score += 8;
+  if (clean.length > 22) score -= 10;
+  if (/^[A-Z\s]{4,}$/.test(clean)) score -= 10;
+  if (/[^A-Za-z\s'-]/.test(clean)) score -= 30;
+  if (OTHER_SCREENSHOT_JUNK_WORDS.has(normalized)) score -= 100;
+  if (/\b(?:football|players?|attending|tonight|shirts?|message|online|today|forget|bring|see|you|all)\b/i.test(clean)) score -= 100;
+  return score;
+}
+
+function chooseOtherScreenshotNameCandidate(candidates: string[], roster: RoomPlayer[]) {
+  let best = '';
+  let bestScore = -999;
+  for (const candidate of candidates) {
+    const cleaned = cleanDetectedNameCandidate(stripOtherScreenshotListPrefix(candidate));
+    if (!cleaned || !isProbablyOtherScreenshotName(cleaned, roster)) continue;
+    const score = scoreOtherScreenshotNameCandidate(cleaned, roster);
+    if (score > bestScore) {
+      best = cleaned;
+      bestScore = score;
+    }
+  }
+  return best;
+}
+
 function extractOtherScreenshotNames(text: string, roster: RoomPlayer[]) {
   const rawLines = text
     .split(/\r?\n/)
@@ -799,23 +834,53 @@ function extractOtherScreenshotNames(text: string, roster: RoomPlayer[]) {
     rawLines.filter((line) => /^\s*\d{1,3}\s*[.)\]:\-–—]+\s+/.test(line))
       .length >= 3;
 
-  for (const rawLine of rawLines) {
-    const isStructuredNameLine =
-      /^\s*(?:\d{1,3}|[a-z])\s*[.)\]:\-–—]+\s+/i.test(rawLine) ||
-      /^\s*[•●▪︎◆◇▶︎►✓✔☑-]+\s+/.test(rawLine) ||
-      OTHER_SCREENSHOT_LABEL_PATTERN.test(rawLine) ||
-      /[;,/|]/.test(rawLine);
+  if (structuredListDetected) {
+    const numberedCandidates = new Map<number, string[]>();
 
-    // If OCR sees a numbered roster, trust only structured/list lines. This
-    // blocks WhatsApp UI/background fragments from becoming extra players.
-    if (structuredListDetected && !isStructuredNameLine) continue;
-
-    for (const segment of splitOtherScreenshotNameSegments(rawLine)) {
-      const cleaned = cleanDetectedNameCandidate(
-        stripOtherScreenshotListPrefix(segment),
+    for (const rawLine of rawLines) {
+      const numberedMatch = rawLine.match(
+        /^\s*(\d{1,3})\s*[.)\]:\-–—]+\s+(.+)$/i,
       );
-      if (cleaned && isProbablyOtherScreenshotName(cleaned, roster)) {
-        names.push(cleaned);
+      if (!numberedMatch) continue;
+
+      const listNumber = Number(numberedMatch[1]);
+      if (!Number.isFinite(listNumber) || listNumber < 1 || listNumber > 80)
+        continue;
+
+      const lineCandidates = splitOtherScreenshotNameSegments(
+        numberedMatch[2],
+      ).filter(Boolean);
+      if (!lineCandidates.length) continue;
+
+      numberedCandidates.set(listNumber, [
+        ...(numberedCandidates.get(listNumber) ?? []),
+        ...lineCandidates,
+      ]);
+    }
+
+    Array.from(numberedCandidates.entries())
+      .sort(([a], [b]) => a - b)
+      .forEach(([, candidates]) => {
+        const best = chooseOtherScreenshotNameCandidate(candidates, roster);
+        if (best) names.push(best);
+      });
+  } else {
+    for (const rawLine of rawLines) {
+      const isStructuredNameLine =
+        /^\s*(?:\d{1,3}|[a-z])\s*[.)\]:\-–—]+\s+/i.test(rawLine) ||
+        /^\s*[•●▪︎◆◇▶︎►✓✔☑-]+\s+/.test(rawLine) ||
+        OTHER_SCREENSHOT_LABEL_PATTERN.test(rawLine) ||
+        /[;,/|]/.test(rawLine);
+
+      if (!isStructuredNameLine && rawLine.split(/\s+/).length > 3) continue;
+
+      for (const segment of splitOtherScreenshotNameSegments(rawLine)) {
+        const cleaned = cleanDetectedNameCandidate(
+          stripOtherScreenshotListPrefix(segment),
+        );
+        if (cleaned && isProbablyOtherScreenshotName(cleaned, roster)) {
+          names.push(cleaned);
+        }
       }
     }
   }
@@ -3361,7 +3426,7 @@ export function TodayTab({
                         <div className="min-h-0 min-w-0 flex-1 overflow-hidden bg-slate-950 p-0.5">
                           <div className="flex h-full w-full items-center justify-center overflow-hidden">
                             <div
-                              className="relative touch-none"
+                              className="relative flex max-h-full max-w-full touch-none items-center justify-center overflow-hidden"
                               onPointerDown={(event) =>
                                 startCropDrag(activeCropIndex, event)
                               }
@@ -3378,7 +3443,7 @@ export function TodayTab({
                                   selectedScreenshotPreviews[activeCropIndex]
                                     .name
                                 }
-                                className="block max-h-full max-w-full select-none object-contain"
+                                className="block h-auto max-h-full w-auto max-w-full select-none object-contain"
                                 draggable={false}
                               />
                               {(() => {

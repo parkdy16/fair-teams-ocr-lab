@@ -6,7 +6,15 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Clock3, ClipboardList, Image as ImageIcon, Mic, Search, Upload, X } from "lucide-react";
+import {
+  Clock3,
+  ClipboardList,
+  Image as ImageIcon,
+  Mic,
+  Search,
+  Upload,
+  X,
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -426,7 +434,10 @@ function cleanDetectedNameCandidate(value: string) {
     tokens = tokens.slice(1);
   }
 
-  while (tokens.length > 1 && OCR_NAME_TRAILING_NOISE.has(tokenKey(tokens[tokens.length - 1]))) {
+  while (
+    tokens.length > 1 &&
+    OCR_NAME_TRAILING_NOISE.has(tokenKey(tokens[tokens.length - 1]))
+  ) {
     tokens = tokens.slice(0, -1);
   }
 
@@ -506,7 +517,11 @@ function extractMeetupNameBeforeMarker(chunk: string) {
       .filter(Boolean);
     if (normalizedWords.some((word) => MEETUP_STOP_WORDS.has(word))) continue;
     const cleanedCandidate = cleanDetectedNameCandidate(candidate);
-    if (cleanedCandidate && (isProbablyName(cleanedCandidate) || isProbablySingleUsername(cleanedCandidate))) {
+    if (
+      cleanedCandidate &&
+      (isProbablyName(cleanedCandidate) ||
+        isProbablySingleUsername(cleanedCandidate))
+    ) {
       return cleanedCandidate;
     }
   }
@@ -625,7 +640,6 @@ function extractTeamSheetNames(text: string, roster: RoomPlayer[]) {
   return names;
 }
 
-
 function isProbablyCroppedName(value: string) {
   const clean = cleanDetectedNameCandidate(value);
   const normalized = normalizeForMatch(clean);
@@ -633,7 +647,8 @@ function isProbablyCroppedName(value: string) {
   if (OCR_JUNK_WORDS.has(normalized)) return false;
   if (/\d/.test(clean)) return false;
   if (clean.length < 3 || clean.length > 36) return false;
-  if (/^[A-Z\s]{4,}$/.test(clean) && clean.split(/\s+/).length > 1) return false;
+  if (/^[A-Z\s]{4,}$/.test(clean) && clean.split(/\s+/).length > 1)
+    return false;
   if (
     /\b(i|we|you|he|she|they|it|this|that|but|would|like|come|join|plan|moved|time|thing|attend|club|anymore|gathering|question|list|event|search|checked|attendees?|team|teams|done|share|players?)\b/i.test(
       clean,
@@ -668,7 +683,9 @@ function extractOtherScreenshotNames(text: string, roster: RoomPlayer[]) {
       const nameLikeWords = words
         .map((word) => cleanDetectedNameCandidate(word))
         .filter((word) => isProbablyCroppedName(word));
-      if (nameLikeWords.length >= Math.max(3, Math.floor(words.length * 0.65))) {
+      if (
+        nameLikeWords.length >= Math.max(3, Math.floor(words.length * 0.65))
+      ) {
         names.push(...nameLikeWords);
       }
     }
@@ -892,7 +909,10 @@ function scorePlayerMatch(ocrName: string, player: RoomPlayer) {
       }
 
       const speechScore = speechSoundSimilarity(normalizedOcr, candidate);
-      const firstWordSoundScore = speechSoundSimilarity(ocrFirstName, candidateFirstName);
+      const firstWordSoundScore = speechSoundSimilarity(
+        ocrFirstName,
+        candidateFirstName,
+      );
       if (speechScore >= 88 || firstWordSoundScore >= 88) {
         return Math.max(speechScore, firstWordSoundScore, 84);
       }
@@ -990,10 +1010,15 @@ function extractOcrNames(
 
   const cleanedNames = names
     .map((name) => cleanDetectedNameCandidate(name))
-    .filter((name) => name && (isProbablyName(name) || isProbablySingleUsername(name)));
+    .filter(
+      (name) =>
+        name && (isProbablyName(name) || isProbablySingleUsername(name)),
+    );
 
   const uniqueNames = Array.from(
-    new Map(cleanedNames.map((name) => [normalizeForMatch(name), name])).values(),
+    new Map(
+      cleanedNames.map((name) => [normalizeForMatch(name), name]),
+    ).values(),
   );
 
   const candidates = uniqueNames.map((name) => {
@@ -1073,7 +1098,8 @@ function extractOcrNames(
     if (candidate.status !== "suggest") return [candidate];
 
     const closeSuggestions = candidate.suggestions.filter(
-      (suggestion) => suggestion.score >= Math.max(78, (candidate.score ?? 0) - 8),
+      (suggestion) =>
+        suggestion.score >= Math.max(78, (candidate.score ?? 0) - 8),
     );
 
     if (closeSuggestions.length <= 1) return [candidate];
@@ -1200,7 +1226,11 @@ function isManuallyTypedOcrName(value: string) {
   if (/^[A-Za-zÀ-ÖØ-öø-ÿ]$/.test(clean)) return true;
 
   if (clean.length < 2) return false;
-  if (isProbablyName(clean) || isProbablySingleUsername(clean) || isProbablyVoicePlayerName(clean)) {
+  if (
+    isProbablyName(clean) ||
+    isProbablySingleUsername(clean) ||
+    isProbablyVoicePlayerName(clean)
+  ) {
     return true;
   }
 
@@ -1232,7 +1262,10 @@ function splitSpeechChunkIntoNames(text: string, roster: RoomPlayer[]) {
       })),
     )
     .filter((entry) => entry.alias.length >= 3)
-    .sort((a, b) => b.tokens.length - a.tokens.length || b.alias.length - a.alias.length);
+    .sort(
+      (a, b) =>
+        b.tokens.length - a.tokens.length || b.alias.length - a.alias.length,
+    );
 
   let index = 0;
   while (index < words.length) {
@@ -1256,7 +1289,9 @@ function splitSpeechChunkIntoNames(text: string, roster: RoomPlayer[]) {
 }
 
 function splitVoiceTextIntoNameLines(text: string, roster: RoomPlayer[]) {
-  const hasExplicitSeparators = /[,，、;；|/\n\r]/.test(text) || /\s+(?:and|und|그리고|랑|하고)\s+/i.test(text);
+  const hasExplicitSeparators =
+    /[,，、;；|/\n\r]/.test(text) ||
+    /\s+(?:and|und|그리고|랑|하고)\s+/i.test(text);
   const normalizedSeparators = text
     .replace(/[，、;；|/]+/g, "\n")
     .replace(/\s+(?:and|und|그리고|랑|하고)\s+/gi, "\n")
@@ -1299,13 +1334,22 @@ function formatVoiceNameList(names: string[]) {
   for (const name of names) {
     const cleaned = cleanOcrLine(name);
     const key = normalizeForMatch(cleaned);
-    if (!cleaned || !key || output.some((existing) => normalizeForMatch(existing) === key)) continue;
+    if (
+      !cleaned ||
+      !key ||
+      output.some((existing) => normalizeForMatch(existing) === key)
+    )
+      continue;
     output.push(cleaned);
   }
   return output.join(", ");
 }
 
-function mergeVoiceNameText(currentText: string, nextNames: string[], roster: RoomPlayer[]) {
+function mergeVoiceNameText(
+  currentText: string,
+  nextNames: string[],
+  roster: RoomPlayer[],
+) {
   return formatVoiceNameList([
     ...splitVoiceTextIntoNameLines(currentText, roster),
     ...nextNames,
@@ -1321,7 +1365,11 @@ function makeVoiceTextReviewInput(text: string, roster: RoomPlayer[]) {
     for (const candidate of candidates) {
       const key = normalizeForMatch(candidate);
       if (!key) continue;
-      if (!namesWithAlternates.some((existing) => normalizeForMatch(existing) === key)) {
+      if (
+        !namesWithAlternates.some(
+          (existing) => normalizeForMatch(existing) === key,
+        )
+      ) {
         namesWithAlternates.push(candidate);
       }
     }
@@ -1356,7 +1404,8 @@ export function TodayTab({
   const [voiceListening, setVoiceListening] = useState(false);
   const [voiceStatus, setVoiceStatus] = useState("");
   const [voiceInterimText, setVoiceInterimText] = useState("");
-  const [voiceExpectedAttendeeCount, setVoiceExpectedAttendeeCount] = useState("");
+  const [voiceExpectedAttendeeCount, setVoiceExpectedAttendeeCount] =
+    useState("");
   const [quickVoiceOpen, setQuickVoiceOpen] = useState(false);
   const [quickVoiceHeard, setQuickVoiceHeard] = useState("");
   const [quickVoiceListening, setQuickVoiceListening] = useState(false);
@@ -1364,8 +1413,11 @@ export function TodayTab({
   const quickRecognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const voiceShouldListenRef = useRef(false);
-  const [ocrInputSource, setOcrInputSource] = useState<"screenshot" | "voiceText">("screenshot");
-  const [screenshotImportMode, setScreenshotImportMode] = useState<ScreenshotImportMode>("meetup");
+  const [ocrInputSource, setOcrInputSource] = useState<
+    "screenshot" | "voiceText"
+  >("screenshot");
+  const [screenshotImportMode, setScreenshotImportMode] =
+    useState<ScreenshotImportMode>("meetup");
   const [selectedScreenshots, setSelectedScreenshots] = useState<File[]>([]);
   const [ocrText, setOcrText] = useState("");
   const [ocrRunning, setOcrRunning] = useState(false);
@@ -1375,7 +1427,9 @@ export function TodayTab({
   const [expectedAttendeeCount, setExpectedAttendeeCount] = useState("");
   const [showRawOcrText, setShowRawOcrText] = useState(false);
   const [manualRawOcrName, setManualRawOcrName] = useState("");
-  const [manualOcrCandidateNames, setManualOcrCandidateNames] = useState<string[]>([]);
+  const [manualOcrCandidateNames, setManualOcrCandidateNames] = useState<
+    string[]
+  >([]);
   const [rawOcrAddedNames, setRawOcrAddedNames] = useState<string[]>([]);
   const [rawOcrCreatedPlayerIds, setRawOcrCreatedPlayerIds] = useState<
     string[]
@@ -1402,7 +1456,11 @@ export function TodayTab({
   >([]);
   const [activeCropIndex, setActiveCropIndex] = useState(0);
   const [cropBoxes, setCropBoxes] = useState<Record<number, CropBox>>({});
-  const [cropDragStart, setCropDragStart] = useState<{ index: number; x: number; y: number } | null>(null);
+  const [cropDragStart, setCropDragStart] = useState<{
+    index: number;
+    x: number;
+    y: number;
+  } | null>(null);
   const [draftCropBox, setDraftCropBox] = useState<CropBox | null>(null);
   const [newPlayerReviewPrompt, setNewPlayerReviewPrompt] = useState<{
     playerIds: string[];
@@ -1422,7 +1480,9 @@ export function TodayTab({
     : sorted;
 
   const selectedCount = players.filter((p) => p.attending).length;
-  const notHereYetCount = players.filter((p) => p.attending && isNotHereYet(p)).length;
+  const notHereYetCount = players.filter(
+    (p) => p.attending && isNotHereYet(p),
+  ).length;
   const hereNowCount = selectedCount - notHereYetCount;
   const quickVoiceCleanName = cleanOcrLine(quickVoiceHeard);
   const quickVoiceCandidates = useMemo(() => {
@@ -1468,8 +1528,15 @@ export function TodayTab({
   const quickVoiceCanAddNew = useMemo(() => {
     const cleanedName = quickVoiceCleanName;
     const normalizedName = normalizeForMatch(cleanedName);
-    if (!cleanedName || !normalizedName || !isProbablyVoicePlayerName(cleanedName)) return false;
-    return !players.some((player) => playerSearchNames(player).includes(normalizedName));
+    if (
+      !cleanedName ||
+      !normalizedName ||
+      !isProbablyVoicePlayerName(cleanedName)
+    )
+      return false;
+    return !players.some((player) =>
+      playerSearchNames(player).includes(normalizedName),
+    );
   }, [quickVoiceCleanName, players]);
 
   const selectedScreenshotNames = selectedScreenshots.map((file) => file.name);
@@ -1505,7 +1572,13 @@ export function TodayTab({
       byKey.set(ocrCandidateKey(candidate), candidate);
     }
     return Array.from(byKey.values());
-  }, [ocrText, players, manualOcrCandidateNames, ocrInputSource, screenshotImportMode]);
+  }, [
+    ocrText,
+    players,
+    manualOcrCandidateNames,
+    ocrInputSource,
+    screenshotImportMode,
+  ]);
   const voiceParsedNames = useMemo(
     () => splitVoiceTextIntoNameLines(voiceText, players),
     [voiceText, players],
@@ -1576,7 +1649,8 @@ export function TodayTab({
   };
 
   const getOcrReviewStatus = (candidate: OcrNameCandidate): OcrMatchStatus => {
-    if (chosenOcrMatchIds[ocrCandidateKey(candidate)] === "__new__") return "new";
+    if (chosenOcrMatchIds[ocrCandidateKey(candidate)] === "__new__")
+      return "new";
     const resolvedMatch = resolveOcrMatch(candidate);
 
     // A player manually CREATED from the raw OCR rescue view immediately becomes
@@ -1613,7 +1687,8 @@ export function TodayTab({
       // "Abou George" are not silently destroyed.
       if (index === 0 && (key === "about" || key === "could")) return false;
       if (index === 0 && key === "see" && nextKey === "more") return false;
-      if (index === 1 && tokenKey(tokens[0]) === "see" && key === "more") return false;
+      if (index === 1 && tokenKey(tokens[0]) === "see" && key === "more")
+        return false;
 
       return true;
     });
@@ -1631,7 +1706,10 @@ export function TodayTab({
     return getDefaultOcrTokenSelection(candidate);
   };
 
-  const buildOcrNameFromTokens = (candidate: OcrNameCandidate, selection: boolean[]) => {
+  const buildOcrNameFromTokens = (
+    candidate: OcrNameCandidate,
+    selection: boolean[],
+  ) => {
     const tokens = getOcrNameTokens(candidate);
     const keptTokens = tokens.filter((_, index) => selection[index]);
     return titleCaseName(cleanOcrLine(keptTokens.join(" ")));
@@ -1645,16 +1723,25 @@ export function TodayTab({
       return cleanDetectedNameCandidate(editedName) || cleanOcrLine(editedName);
     }
 
-    const tokenName = buildOcrNameFromTokens(candidate, getOcrTokenSelection(candidate));
+    const tokenName = buildOcrNameFromTokens(
+      candidate,
+      getOcrTokenSelection(candidate),
+    );
     return cleanDetectedNameCandidate(tokenName) || cleanOcrLine(tokenName);
   };
 
-  const updateEditedOcrCandidateName = (candidate: OcrNameCandidate, name: string) => {
+  const updateEditedOcrCandidateName = (
+    candidate: OcrNameCandidate,
+    name: string,
+  ) => {
     const key = ocrCandidateKey(candidate);
     setEditedOcrCandidateNames((current) => ({ ...current, [key]: name }));
   };
 
-  const toggleOcrCandidateToken = (candidate: OcrNameCandidate, tokenIndex: number) => {
+  const toggleOcrCandidateToken = (
+    candidate: OcrNameCandidate,
+    tokenIndex: number,
+  ) => {
     const key = ocrCandidateKey(candidate);
     const currentSelection = getOcrTokenSelection(candidate);
     const nextSelection = currentSelection.map((selected, index) =>
@@ -1662,7 +1749,10 @@ export function TodayTab({
     );
     const nextName = buildOcrNameFromTokens(candidate, nextSelection);
 
-    setEditedOcrTokenSelections((current) => ({ ...current, [key]: nextSelection }));
+    setEditedOcrTokenSelections((current) => ({
+      ...current,
+      [key]: nextSelection,
+    }));
     setEditedOcrCandidateNames((current) => ({ ...current, [key]: nextName }));
   };
 
@@ -1682,7 +1772,8 @@ export function TodayTab({
     Boolean(resolveOcrMatch(candidate)),
   );
   const selectedNewCandidates = selectedOcrCandidates.filter(
-    (candidate) => getOcrReviewStatus(candidate) === "new" && !resolveOcrMatch(candidate),
+    (candidate) =>
+      getOcrReviewStatus(candidate) === "new" && !resolveOcrMatch(candidate),
   );
   const selectedOcrTotal =
     selectedRosterMatches.length + selectedNewCandidates.length;
@@ -1690,13 +1781,19 @@ export function TodayTab({
     Boolean(resolveOcrMatch(candidate)),
   );
   const allNewCandidates = possibleNames.filter(
-    (candidate) => getOcrReviewStatus(candidate) === "new" && !resolveOcrMatch(candidate),
+    (candidate) =>
+      getOcrReviewStatus(candidate) === "new" && !resolveOcrMatch(candidate),
   );
   const allOcrTotal = allRosterCandidates.length + allNewCandidates.length;
-  const allSelectableOcrCandidateKeys = [...allRosterCandidates, ...allNewCandidates].map(ocrCandidateKey);
+  const allSelectableOcrCandidateKeys = [
+    ...allRosterCandidates,
+    ...allNewCandidates,
+  ].map(ocrCandidateKey);
   const allSelectableOcrSelected =
     allSelectableOcrCandidateKeys.length > 0 &&
-    allSelectableOcrCandidateKeys.every((key) => selectedOcrCandidateKeySet.has(key));
+    allSelectableOcrCandidateKeys.every((key) =>
+      selectedOcrCandidateKeySet.has(key),
+    );
   const expectedAttendeeNumber = Number(expectedAttendeeCount);
   const hasExpectedAttendeeNumber =
     expectedAttendeeCount.trim() !== "" &&
@@ -1717,7 +1814,6 @@ export function TodayTab({
   const voiceMissingCount = hasVoiceExpectedAttendeeNumber
     ? Math.max(0, Math.round(voiceExpectedAttendeeNumber) - voiceCapturedCount)
     : 0;
-
 
   const resetImportReviewState = () => {
     setSelectedOcrCandidateKeys([]);
@@ -1784,7 +1880,8 @@ export function TodayTab({
   };
 
   const startQuickVoiceListening = () => {
-    const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const Recognition =
+      window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!Recognition) {
       setQuickVoiceStatus("Voice is not supported here. Type a name below.");
       return;
@@ -1799,12 +1896,21 @@ export function TodayTab({
       recognition.interimResults = false;
       recognition.lang = navigator.language || "en-US";
       recognition.onresult = (event) => {
-        const transcript = event.results?.[event.resultIndex]?.[0]?.transcript?.trim?.() ?? "";
+        const transcript =
+          event.results?.[event.resultIndex]?.[0]?.transcript?.trim?.() ?? "";
         setQuickVoiceHeard(transcript);
-        setQuickVoiceStatus(transcript ? "Choose the player to select." : "No name heard. Try again or type.");
+        setQuickVoiceStatus(
+          transcript
+            ? "Choose the player to select."
+            : "No name heard. Try again or type.",
+        );
       };
       recognition.onerror = (event) => {
-        setQuickVoiceStatus(event.error ? `Voice stopped: ${event.error}` : "Try again or type a name.");
+        setQuickVoiceStatus(
+          event.error
+            ? `Voice stopped: ${event.error}`
+            : "Try again or type a name.",
+        );
         setQuickVoiceListening(false);
       };
       recognition.onend = () => setQuickVoiceListening(false);
@@ -1835,7 +1941,11 @@ export function TodayTab({
   const addQuickVoicePlayer = () => {
     const cleanedName = quickVoiceCleanName;
     const normalizedName = normalizeForMatch(cleanedName);
-    if (!cleanedName || !normalizedName || !isProbablyVoicePlayerName(cleanedName)) {
+    if (
+      !cleanedName ||
+      !normalizedName ||
+      !isProbablyVoicePlayerName(cleanedName)
+    ) {
       setQuickVoiceStatus("Type a clean player name first.");
       return;
     }
@@ -1882,9 +1992,12 @@ export function TodayTab({
   };
 
   const startVoiceListening = () => {
-    const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const Recognition =
+      window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!Recognition) {
-      setVoiceStatus("Voice is not supported in this browser. You can still paste or type names here.");
+      setVoiceStatus(
+        "Voice is not supported in this browser. You can still paste or type names here.",
+      );
       return;
     }
 
@@ -1900,7 +2013,11 @@ export function TodayTab({
       recognition.onresult = (event) => {
         const finalText: string[] = [];
         let interimText = "";
-        for (let index = event.resultIndex; index < event.results.length; index += 1) {
+        for (
+          let index = event.resultIndex;
+          index < event.results.length;
+          index += 1
+        ) {
           const result = event.results[index];
           const transcript = result[0].transcript.trim();
           if (result.isFinal) finalText.push(transcript);
@@ -1908,17 +2025,29 @@ export function TodayTab({
         }
         setVoiceInterimText(interimText);
         if (finalText.length > 0) {
-          const heardNames = splitVoiceTextIntoNameLines(finalText.join(" "), players);
-          setVoiceText((current) => mergeVoiceNameText(current, heardNames, players));
+          const heardNames = splitVoiceTextIntoNameLines(
+            finalText.join(" "),
+            players,
+          );
+          setVoiceText((current) =>
+            mergeVoiceNameText(current, heardNames, players),
+          );
           setVoiceInterimText("");
         }
       };
       recognition.onerror = (event) => {
-        if (voiceShouldListenRef.current && (event.error === "no-speech" || event.error === "network")) {
+        if (
+          voiceShouldListenRef.current &&
+          (event.error === "no-speech" || event.error === "network")
+        ) {
           setVoiceStatus("");
           return;
         }
-        setVoiceStatus(event.error ? `Voice stopped: ${event.error}` : "Voice stopped. You can try again or type names manually.");
+        setVoiceStatus(
+          event.error
+            ? `Voice stopped: ${event.error}`
+            : "Voice stopped. You can try again or type names manually.",
+        );
         voiceShouldListenRef.current = false;
         setVoiceListening(false);
       };
@@ -1947,7 +2076,9 @@ export function TodayTab({
     } catch (error) {
       console.error(error);
       voiceShouldListenRef.current = false;
-      setVoiceStatus("Voice could not start. You can still paste or type names here.");
+      setVoiceStatus(
+        "Voice could not start. You can still paste or type names here.",
+      );
       setVoiceListening(false);
     }
   };
@@ -1957,7 +2088,11 @@ export function TodayTab({
     setOcrInputSource("voiceText");
     setOcrText(reviewInput);
     setOcrProgress(reviewInput.trim() ? 100 : 0);
-    setOcrStatus(reviewInput.trim() ? "Voice/Text list ready. Import from this screen." : "");
+    setOcrStatus(
+      reviewInput.trim()
+        ? "Voice/Text list ready. Import from this screen."
+        : "",
+    );
     return reviewInput;
   };
 
@@ -1968,7 +2103,9 @@ export function TodayTab({
       return;
     }
     stopVoiceListening();
-    setVoiceStatus("Review the matches below, edit the text box if needed, then import selected names.");
+    setVoiceStatus(
+      "Review the matches below, edit the text box if needed, then import selected names.",
+    );
   };
 
   const importSelectedVoiceNames = () => {
@@ -2005,14 +2142,22 @@ export function TodayTab({
 
   useEffect(() => {
     const manualCandidateKeySet = new Set(
-      manualOcrCandidateNames.map((name) => normalizeForMatch(name)).filter(Boolean),
+      manualOcrCandidateNames
+        .map((name) => normalizeForMatch(name))
+        .filter(Boolean),
     );
     setSelectedOcrCandidateKeys(
       possibleNames
         .filter((candidate) => {
-          if (manualCandidateKeySet.has(normalizeForMatch(candidate.name))) return true;
+          if (manualCandidateKeySet.has(normalizeForMatch(candidate.name)))
+            return true;
           if (candidate.status === "match" && candidate.bestMatch) return true;
-          if (voiceOpen && ocrInputSource === "voiceText" && candidate.status === "new") return true;
+          if (
+            voiceOpen &&
+            ocrInputSource === "voiceText" &&
+            candidate.status === "new"
+          )
+            return true;
           return false;
         })
         .map(ocrCandidateKey),
@@ -2041,14 +2186,16 @@ export function TodayTab({
     setEditedOcrTokenSelections({});
   };
 
-
-
-  const getPointerCropPoint = (
-    event: React.PointerEvent<HTMLDivElement>,
-  ) => {
+  const getPointerCropPoint = (event: React.PointerEvent<HTMLDivElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
-    const x = Math.min(100, Math.max(0, ((event.clientX - rect.left) / rect.width) * 100));
-    const y = Math.min(100, Math.max(0, ((event.clientY - rect.top) / rect.height) * 100));
+    const x = Math.min(
+      100,
+      Math.max(0, ((event.clientX - rect.left) / rect.width) * 100),
+    );
+    const y = Math.min(
+      100,
+      Math.max(0, ((event.clientY - rect.top) / rect.height) * 100),
+    );
     return { x, y };
   };
 
@@ -2079,7 +2226,10 @@ export function TodayTab({
   const finishCropDrag = () => {
     if (!cropDragStart || !draftCropBox) return;
     if (draftCropBox.w >= 3 && draftCropBox.h >= 3) {
-      setCropBoxes((current) => ({ ...current, [cropDragStart.index]: draftCropBox }));
+      setCropBoxes((current) => ({
+        ...current,
+        [cropDragStart.index]: draftCropBox,
+      }));
     }
     setCropDragStart(null);
     setDraftCropBox(null);
@@ -2093,7 +2243,11 @@ export function TodayTab({
     });
   };
 
-  const cropScreenshotForOcr = async (file: File, cropBox?: CropBox) => {
+  const cropScreenshotForOcr = async (
+    file: File,
+    cropBox?: CropBox,
+    options: { enhance?: boolean } = {},
+  ) => {
     if (!cropBox || cropBox.w < 3 || cropBox.h < 3) return file;
 
     const url = URL.createObjectURL(file);
@@ -2107,35 +2261,70 @@ export function TodayTab({
 
       const sx = Math.round((cropBox.x / 100) * image.naturalWidth);
       const sy = Math.round((cropBox.y / 100) * image.naturalHeight);
-      const sw = Math.max(1, Math.round((cropBox.w / 100) * image.naturalWidth));
-      const sh = Math.max(1, Math.round((cropBox.h / 100) * image.naturalHeight));
-      const scale = 3;
+      const sw = Math.max(
+        1,
+        Math.round((cropBox.w / 100) * image.naturalWidth),
+      );
+      const sh = Math.max(
+        1,
+        Math.round((cropBox.h / 100) * image.naturalHeight),
+      );
+      const scale = 4;
+      const padding = 36;
       const canvas = document.createElement("canvas");
-      canvas.width = sw * scale;
-      canvas.height = sh * scale;
+      canvas.width = sw * scale + padding * 2;
+      canvas.height = sh * scale + padding * 2;
       const context = canvas.getContext("2d");
       if (!context) return file;
-      context.imageSmoothingEnabled = true;
-      context.drawImage(image, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
 
-      // Crop mode is for name lists selected by the user. Upscale and turn
-      // colored/grey app fonts into high-contrast text before OCR. This helps
-      // TeamShake-style green names without changing the Meetup pipeline.
-      const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-      const data = imageData.data;
-      for (let offset = 0; offset < data.length; offset += 4) {
-        const gray = 0.299 * data[offset] + 0.587 * data[offset + 1] + 0.114 * data[offset + 2];
-        const value = gray < 225 ? 0 : 255;
-        data[offset] = value;
-        data[offset + 1] = value;
-        data[offset + 2] = value;
+      context.fillStyle = "#ffffff";
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.imageSmoothingEnabled = true;
+      context.drawImage(
+        image,
+        sx,
+        sy,
+        sw,
+        sh,
+        padding,
+        padding,
+        sw * scale,
+        sh * scale,
+      );
+
+      if (options.enhance) {
+        const imageData = context.getImageData(
+          0,
+          0,
+          canvas.width,
+          canvas.height,
+        );
+        const data = imageData.data;
+        for (let offset = 0; offset < data.length; offset += 4) {
+          const gray =
+            0.299 * data[offset] +
+            0.587 * data[offset + 1] +
+            0.114 * data[offset + 2];
+          const value = gray < 245 ? 0 : 255;
+          data[offset] = value;
+          data[offset + 1] = value;
+          data[offset + 2] = value;
+          data[offset + 3] = 255;
+        }
+        context.putImageData(imageData, 0, 0);
       }
-      context.putImageData(imageData, 0, 0);
 
       const blob = await new Promise<Blob | null>((resolve) =>
         canvas.toBlob(resolve, "image/png", 1),
       );
-      return blob ?? file;
+      if (!blob) return file;
+      return new File(
+        [blob],
+        `${file.name.replace(/\.[^.]+$/, "")}-crop${options.enhance ? "-enhanced" : ""}.png`,
+        {
+          type: "image/png",
+        },
+      );
     } finally {
       URL.revokeObjectURL(url);
     }
@@ -2165,29 +2354,53 @@ export function TodayTab({
           `Reading ${index + 1} of ${selectedScreenshots.length}: ${file.name}`,
         );
 
-        const ocrSource = screenshotImportMode === "other"
-          ? await cropScreenshotForOcr(file, cropBoxes[index])
-          : file;
+        const sources =
+          screenshotImportMode === "other"
+            ? [
+                await cropScreenshotForOcr(file, cropBoxes[index], {
+                  enhance: false,
+                }),
+                await cropScreenshotForOcr(file, cropBoxes[index], {
+                  enhance: true,
+                }),
+              ]
+            : [file];
 
-        const result = await Tesseract.recognize(ocrSource, "eng", {
-          logger: (message) => {
-            if (message.status)
-              setOcrStatus(
-                `${message.status} (${index + 1}/${selectedScreenshots.length})`,
-              );
-            if (typeof message.progress === "number") {
-              const imageShare = 1 / selectedScreenshots.length;
-              const completedShare = index / selectedScreenshots.length;
-              setOcrProgress(
-                Math.round(
-                  (completedShare + message.progress * imageShare) * 100,
-                ),
-              );
-            }
-          },
-        });
+        const imageTexts: string[] = [];
+        for (
+          let sourceIndex = 0;
+          sourceIndex < sources.length;
+          sourceIndex += 1
+        ) {
+          const result = await Tesseract.recognize(
+            sources[sourceIndex],
+            "eng",
+            {
+              logger: (message) => {
+                if (message.status)
+                  setOcrStatus(
+                    `${message.status} (${index + 1}/${selectedScreenshots.length})`,
+                  );
+                if (typeof message.progress === "number") {
+                  const totalPasses =
+                    selectedScreenshots.length * sources.length;
+                  const completedPasses = index * sources.length + sourceIndex;
+                  setOcrProgress(
+                    Math.round(
+                      ((completedPasses + message.progress) / totalPasses) *
+                        100,
+                    ),
+                  );
+                }
+              },
+            },
+          );
+          imageTexts.push(result.data.text.trim());
+        }
 
-        chunks.push(`--- ${file.name} ---\n${result.data.text.trim()}`);
+        chunks.push(
+          `--- ${file.name} ---\n${imageTexts.filter(Boolean).join("\n")}`,
+        );
       }
 
       setOcrText(chunks.join("\n\n"));
@@ -2236,7 +2449,11 @@ export function TodayTab({
   const addRawOcrName = (rawName: string) => {
     const cleanedName = cleanDetectedNameCandidate(rawName);
     const normalizedName = normalizeForMatch(cleanedName);
-    if (!cleanedName || !normalizedName || !isManuallyTypedOcrName(cleanedName)) {
+    if (
+      !cleanedName ||
+      !normalizedName ||
+      !isManuallyTypedOcrName(cleanedName)
+    ) {
       setOcrStatus("Type a clean player name from the raw OCR text first.");
       return;
     }
@@ -2251,18 +2468,25 @@ export function TodayTab({
         current.includes(key) ? current : [...current, key],
       );
       setRawOcrAddedNames((current) =>
-        current.includes(normalizedName) ? current : [...current, normalizedName],
+        current.includes(normalizedName)
+          ? current
+          : [...current, normalizedName],
       );
       setManualRawOcrName("");
       setOcrStatus(`${cleanedName} is now selected in Review Names.`);
       return;
     }
 
-    const reviewCandidate = makeOcrReviewCandidateFromName(cleanedName, players);
+    const reviewCandidate = makeOcrReviewCandidateFromName(
+      cleanedName,
+      players,
+    );
     const reviewKey = ocrCandidateKey(reviewCandidate);
 
     setManualOcrCandidateNames((current) => {
-      const existing = current.some((name) => normalizeForMatch(name) === normalizedName);
+      const existing = current.some(
+        (name) => normalizeForMatch(name) === normalizedName,
+      );
       return existing ? current : [...current, cleanedName];
     });
     setSelectedOcrCandidateKeys((current) =>
@@ -2272,7 +2496,9 @@ export function TodayTab({
       current.includes(normalizedName) ? current : [...current, normalizedName],
     );
     setManualRawOcrName("");
-    setOcrStatus(`${cleanedName} added to Review Names. Press Add Selected to confirm.`);
+    setOcrStatus(
+      `${cleanedName} added to Review Names. Press Add Selected to confirm.`,
+    );
   };
 
   const renderHighlightedRawOcrText = (
@@ -2326,7 +2552,8 @@ export function TodayTab({
       .map((candidate) => resolveOcrMatch(candidate))
       .filter(Boolean) as RoomPlayer[];
     const currentNewCandidates = candidatesToAdd.filter(
-      (candidate) => getOcrReviewStatus(candidate) === "new" && !resolveOcrMatch(candidate),
+      (candidate) =>
+        getOcrReviewStatus(candidate) === "new" && !resolveOcrMatch(candidate),
     );
     const seenNewNames = new Set<string>();
     const validNewCandidates = currentNewCandidates
@@ -2347,29 +2574,33 @@ export function TodayTab({
     if (playerIds.size === 0 && validNewCandidates.length === 0) return;
 
     const now = new Date().toISOString();
-    const newPlayers: RoomPlayer[] = validNewCandidates.map(({ candidate, name }) => ({
-      id: createOcrPlayerId(),
-      roomId: 1,
-      name: name.trim(),
-      gender: newOcrPlayerGenders[ocrCandidateKey(candidate)] ?? "male",
-      skill: 5,
-      attack: 5,
-      defense: 5,
-      speed: 5,
-      passing: 5,
-      stamina: 5,
-      physical: 5,
-      teamPlay: 2,
-      isNew: true,
-      attending: true,
-      todayStatus: "here",
-      createdAt: now,
-      updatedAt: now,
-    }));
+    const newPlayers: RoomPlayer[] = validNewCandidates.map(
+      ({ candidate, name }) => ({
+        id: createOcrPlayerId(),
+        roomId: 1,
+        name: name.trim(),
+        gender: newOcrPlayerGenders[ocrCandidateKey(candidate)] ?? "male",
+        skill: 5,
+        attack: 5,
+        defense: 5,
+        speed: 5,
+        passing: 5,
+        stamina: 5,
+        physical: 5,
+        teamPlay: 2,
+        isNew: true,
+        attending: true,
+        todayStatus: "here",
+        createdAt: now,
+        updatedAt: now,
+      }),
+    );
 
     const nextPlayers = [
       ...players.map((player) =>
-        playerIds.has(player.id) ? { ...player, attending: true, todayStatus: "here" } : player,
+        playerIds.has(player.id)
+          ? { ...player, attending: true, todayStatus: "here" }
+          : player,
       ),
       ...newPlayers,
     ].sort((a, b) => displayName(a).localeCompare(displayName(b)));
@@ -2390,7 +2621,10 @@ export function TodayTab({
     }
   };
 
-  const setNewOcrPlayerGender = (candidate: OcrNameCandidate, gender: Gender) => {
+  const setNewOcrPlayerGender = (
+    candidate: OcrNameCandidate,
+    gender: Gender,
+  ) => {
     const key = ocrCandidateKey(candidate);
     setNewOcrPlayerGenders((current) => ({ ...current, [key]: gender }));
   };
@@ -2398,7 +2632,6 @@ export function TodayTab({
   const finalizeAddSelectedOcrMatches = () => {
     finalizeOcrCandidates(selectedOcrCandidates);
   };
-
 
   const addSelectedOcrMatches = () => {
     if (selectedOcrTotal === 0) return;
@@ -2421,9 +2654,10 @@ export function TodayTab({
     }
 
     setSelectedOcrCandidateKeys(allSelectableOcrCandidateKeys);
-    setOcrStatus("All usable Review Names are selected. Press Add Selected to confirm.");
+    setOcrStatus(
+      "All usable Review Names are selected. Press Add Selected to confirm.",
+    );
   };
-
 
   const togglePlayer = (player: RoomPlayer) => {
     setPlayers(
@@ -2439,7 +2673,11 @@ export function TodayTab({
     setPlayers(
       players.map((p) =>
         p.id === player.id
-          ? { ...p, attending: true, todayStatus: isNotHereYet(p) ? "here" : "not_here_yet" }
+          ? {
+              ...p,
+              attending: true,
+              todayStatus: isNotHereYet(p) ? "here" : "not_here_yet",
+            }
           : p,
       ),
     );
@@ -2456,7 +2694,8 @@ export function TodayTab({
             Create your first player list
           </h2>
           <p className="mx-auto mt-2 max-w-xs text-xs font-semibold leading-relaxed text-muted-foreground">
-            Fastest setup: import a Meetup, WhatsApp, Telegram, or attendee screenshot and create multiple players at once.
+            Fastest setup: import a Meetup, WhatsApp, Telegram, or attendee
+            screenshot and create multiple players at once.
           </p>
           <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
             <Button
@@ -2484,98 +2723,131 @@ export function TodayTab({
               className={`h-10 rounded-xl text-xs font-black uppercase tracking-wide ${quickVoiceOpen || quickVoiceListening ? "border-red-300 bg-red-50 text-red-700" : ""}`}
               data-testid="empty-today-voice-add-button"
             >
-              <Mic className={`mr-1.5 h-3.5 w-3.5 ${quickVoiceOpen || quickVoiceListening ? "animate-pulse" : ""}`} />
+              <Mic
+                className={`mr-1.5 h-3.5 w-3.5 ${quickVoiceOpen || quickVoiceListening ? "animate-pulse" : ""}`}
+              />
               Voice Add
             </Button>
           </div>
         </div>
       ) : (
         <>
-      <div
-        className="flex items-center justify-between rounded-xl border p-3 shadow-sm"
-        style={attendingSummaryStyle}
-      >
-        <div className="flex flex-col">
-          <span className="text-[10px] uppercase font-black tracking-wider text-slate-500">
-            Today
-          </span>
-          <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1 leading-tight">
-            <span className="text-base font-black text-slate-900">{selectedCount} attending</span>
-            {notHereYetCount > 0 && (
-              <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-100 px-1.5 py-0.5 text-[11px] font-black leading-none text-amber-800">
-                <Clock3 className="h-3.5 w-3.5" aria-hidden="true" />
-                {notHereYetCount}
+          <div
+            className="flex items-center justify-between rounded-xl border p-3 shadow-sm"
+            style={attendingSummaryStyle}
+          >
+            <div className="flex flex-col">
+              <span className="text-[10px] uppercase font-black tracking-wider text-slate-500">
+                Today
               </span>
-            )}
-            <span className="text-xs font-semibold text-slate-500">/ {players.length}</span>
-          </span>
-        </div>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              setPrioritizeScannedPlayers(false);
-              setPlayers(players.map((p) => ({ ...p, attending: true, todayStatus: "here" })));
-            }}
-            className="h-7 bg-white/75 px-2 text-[10px] font-black uppercase text-slate-700 hover:bg-white"
-          >
-            All
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              setPrioritizeScannedPlayers(false);
-              setPlayers(players.map((p) => ({ ...p, attending: false, todayStatus: "here" })));
-            }}
-            className="h-7 bg-white/60 px-2 text-[10px] font-black uppercase text-slate-500 hover:bg-white hover:text-slate-700"
-          >
-            Clear
-          </Button>
-        </div>
-      </div>
+              <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1 leading-tight">
+                <span className="text-base font-black text-slate-900">
+                  {selectedCount} attending
+                </span>
+                {notHereYetCount > 0 && (
+                  <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-100 px-1.5 py-0.5 text-[11px] font-black leading-none text-amber-800">
+                    <Clock3 className="h-3.5 w-3.5" aria-hidden="true" />
+                    {notHereYetCount}
+                  </span>
+                )}
+                <span className="text-xs font-semibold text-slate-500">
+                  / {players.length}
+                </span>
+              </span>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setPrioritizeScannedPlayers(false);
+                  setPlayers(
+                    players.map((p) => ({
+                      ...p,
+                      attending: true,
+                      todayStatus: "here",
+                    })),
+                  );
+                }}
+                className="h-7 bg-white/75 px-2 text-[10px] font-black uppercase text-slate-700 hover:bg-white"
+              >
+                All
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setPrioritizeScannedPlayers(false);
+                  setPlayers(
+                    players.map((p) => ({
+                      ...p,
+                      attending: false,
+                      todayStatus: "here",
+                    })),
+                  );
+                }}
+                className="h-7 bg-white/60 px-2 text-[10px] font-black uppercase text-slate-500 hover:bg-white hover:text-slate-700"
+              >
+                Clear
+              </Button>
+            </div>
+          </div>
 
-      <div className="grid grid-cols-2 gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={openImportChoice}
-          className="h-9 rounded-xl border-slate-300 bg-white/80 text-xs font-black text-slate-700 shadow-sm hover:bg-white hover:text-slate-900"
-          data-testid="today-import-button"
-        >
-          <ClipboardList className="mr-1.5 h-3.5 w-3.5" />
-          Screenshot Import
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={openQuickVoiceSelect}
-          className={`h-9 rounded-xl text-xs font-black ${
-            quickVoiceOpen || quickVoiceListening
-              ? "border-red-300 bg-red-50 text-red-700 shadow-sm hover:bg-red-50 hover:text-red-800"
-              : ""
-          }`}
-          data-testid="today-quick-voice-button"
-        >
-          <Mic className={`mr-1.5 h-3.5 w-3.5 ${quickVoiceOpen || quickVoiceListening ? "animate-pulse" : ""}`} />
-          Voice Select
-        </Button>
-      </div>
-
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={openImportChoice}
+              className="h-9 rounded-xl border-slate-300 bg-white/80 text-xs font-black text-slate-700 shadow-sm hover:bg-white hover:text-slate-900"
+              data-testid="today-import-button"
+            >
+              <ClipboardList className="mr-1.5 h-3.5 w-3.5" />
+              Screenshot Import
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={openQuickVoiceSelect}
+              className={`h-9 rounded-xl text-xs font-black ${
+                quickVoiceOpen || quickVoiceListening
+                  ? "border-red-300 bg-red-50 text-red-700 shadow-sm hover:bg-red-50 hover:text-red-800"
+                  : ""
+              }`}
+              data-testid="today-quick-voice-button"
+            >
+              <Mic
+                className={`mr-1.5 h-3.5 w-3.5 ${quickVoiceOpen || quickVoiceListening ? "animate-pulse" : ""}`}
+              />
+              Voice Select
+            </Button>
+          </div>
         </>
       )}
 
       {quickVoiceOpen && (
         <div className="fixed inset-x-4 top-24 z-50 mx-auto max-w-sm rounded-3xl border border-slate-200/80 bg-white/95 p-3 shadow-xl backdrop-blur supports-[backdrop-filter]:bg-white/85">
-          <div className="mb-2 flex items-center justify-between gap-3">
+          <div className="mb-2 flex shrink-0 items-center justify-between gap-3">
             <div className="flex items-center gap-2 text-xs font-black text-slate-900">
-              <span className={`flex h-7 w-7 items-center justify-center rounded-full ${quickVoiceListening ? "bg-red-100 text-red-700" : "bg-slate-100 text-slate-700"}`}>
-                <Mic className={`h-3.5 w-3.5 ${quickVoiceListening ? "animate-pulse" : ""}`} />
+              <span
+                className={`flex h-7 w-7 items-center justify-center rounded-full ${quickVoiceListening ? "bg-red-100 text-red-700" : "bg-slate-100 text-slate-700"}`}
+              >
+                <Mic
+                  className={`h-3.5 w-3.5 ${quickVoiceListening ? "animate-pulse" : ""}`}
+                />
               </span>
-              <span>{quickVoiceListening ? "Say one name" : quickVoiceHeard.trim() ? (players.length === 0 ? "Add player" : "Choose player") : (players.length === 0 ? "Voice Add" : "Voice Select")}</span>
+              <span>
+                {quickVoiceListening
+                  ? "Say one name"
+                  : quickVoiceHeard.trim()
+                    ? players.length === 0
+                      ? "Add player"
+                      : "Choose player"
+                    : players.length === 0
+                      ? "Voice Add"
+                      : "Voice Select"}
+              </span>
             </div>
             <button
               type="button"
@@ -2595,14 +2867,16 @@ export function TodayTab({
             </div>
           )}
 
-          {!quickVoiceListening && quickVoiceStatus && !quickVoiceHeard.trim() && (
-            <div className="mb-2 rounded-2xl bg-slate-50 px-3 py-2 text-center text-[11px] font-bold text-slate-500">
-              {quickVoiceStatus}
-            </div>
-          )}
+          {!quickVoiceListening &&
+            quickVoiceStatus &&
+            !quickVoiceHeard.trim() && (
+              <div className="mb-2 rounded-2xl bg-slate-50 px-3 py-2 text-center text-[11px] font-bold text-slate-500">
+                {quickVoiceStatus}
+              </div>
+            )}
 
           {quickVoiceHeard.trim() && (
-            <div className="space-y-2">
+            <div className="flex min-h-0 flex-1 flex-col gap-2">
               <div className="rounded-2xl bg-slate-50 px-3 py-2">
                 <label className="mb-1 block text-[10px] font-black uppercase tracking-wide text-slate-400">
                   Heard / edit before adding
@@ -2620,28 +2894,40 @@ export function TodayTab({
                   <div className="px-1 text-[10px] font-black uppercase tracking-wide text-slate-400">
                     Roster suggestions
                   </div>
-                  {quickVoiceCandidates.map(({ player, matchedName, isAlternate }, index) => (
-                    <button
-                      key={player.id}
-                      type="button"
-                      onClick={() => selectQuickVoicePlayer(player)}
-                      className={`flex w-full items-center justify-between gap-3 rounded-2xl border px-3 py-2.5 text-left transition ${index === 0 ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"}`}
-                    >
-                      <span className="min-w-0">
-                        <span className="block truncate text-xs font-black">{displayName(player)}</span>
-                        <span className={`mt-0.5 block truncate text-[10px] font-bold ${index === 0 ? "text-emerald-700/80" : "text-slate-400"}`}>
-                          {isAlternate ? `Heard as “${quickVoiceCleanName}”` : matchedName !== quickVoiceCleanName ? `Matched “${matchedName}”` : "Close match"}
+                  {quickVoiceCandidates.map(
+                    ({ player, matchedName, isAlternate }, index) => (
+                      <button
+                        key={player.id}
+                        type="button"
+                        onClick={() => selectQuickVoicePlayer(player)}
+                        className={`flex w-full items-center justify-between gap-3 rounded-2xl border px-3 py-2.5 text-left transition ${index === 0 ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"}`}
+                      >
+                        <span className="min-w-0">
+                          <span className="block truncate text-xs font-black">
+                            {displayName(player)}
+                          </span>
+                          <span
+                            className={`mt-0.5 block truncate text-[10px] font-bold ${index === 0 ? "text-emerald-700/80" : "text-slate-400"}`}
+                          >
+                            {isAlternate
+                              ? `Heard as “${quickVoiceCleanName}”`
+                              : matchedName !== quickVoiceCleanName
+                                ? `Matched “${matchedName}”`
+                                : "Close match"}
+                          </span>
                         </span>
-                      </span>
-                      <span className="shrink-0 text-[10px] font-black">
-                        {player.attending ? "Already selected" : "Select"}
-                      </span>
-                    </button>
-                  ))}
+                        <span className="shrink-0 text-[10px] font-black">
+                          {player.attending ? "Already selected" : "Select"}
+                        </span>
+                      </button>
+                    ),
+                  )}
                 </div>
               ) : (
                 <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-3 text-center text-xs font-bold text-slate-500">
-                  {players.length === 0 ? "No roster yet. Add the heard name below." : "No roster match found."}
+                  {players.length === 0
+                    ? "No roster yet. Add the heard name below."
+                    : "No roster match found."}
                 </div>
               )}
 
@@ -2715,8 +3001,12 @@ export function TodayTab({
                       : "border-border bg-background text-muted-foreground"
                   }`}
                 >
-                  <div className="text-xs font-black">Meetup / attendee list</div>
-                  <div className="mt-1 text-[10px] font-medium">Fast scan using the current safe filter.</div>
+                  <div className="text-xs font-black">
+                    Meetup / attendee list
+                  </div>
+                  <div className="mt-1 text-[10px] font-medium">
+                    Fast scan using the current safe filter.
+                  </div>
                 </button>
                 <button
                   type="button"
@@ -2728,202 +3018,73 @@ export function TodayTab({
                   }`}
                 >
                   <div className="text-xs font-black">Other screenshot</div>
-                  <div className="mt-1 text-[10px] font-medium">Crop the name area before scanning.</div>
+                  <div className="mt-1 text-[10px] font-medium">
+                    Crop the name area before scanning.
+                  </div>
                 </button>
               </div>
             )}
 
             {ocrInputSource === "screenshot" && (
-            <label className="flex min-h-28 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-muted/40 p-4 text-center transition-colors hover:bg-muted/70">
-              <Upload className="h-6 w-6 text-muted-foreground" />
-              <div className="text-xs font-black text-foreground">
-                {selectedScreenshotNames.length > 0
-                  ? `${selectedScreenshotNames.length} screenshot${selectedScreenshotNames.length === 1 ? "" : "s"} selected`
-                  : "Upload Screenshot(s)"}
-              </div>
-              <div className="text-[10px] font-medium text-muted-foreground">
-                {screenshotImportMode === "other"
-                  ? "Select one or more screenshots. You will crop each image before scanning."
-                  : "Select all screenshots for one attendee list. You can select multiple screenshots from one attendee list."}
-              </div>
-              <input
-                type="file"
-                accept="image/*"
-                multiple
-                className="hidden"
-                onChange={(event) => {
-                  setSelectedScreenshots(Array.from(event.target.files ?? []));
-                  setActiveCropIndex(0);
-                  setCropBoxes({});
-                  setCropDragStart(null);
-                  setDraftCropBox(null);
-                  setOcrText("");
-                  setOcrProgress(0);
-                  setOcrStatus("");
-                  setSelectedOcrCandidateKeys([]);
-                  setChosenOcrMatchIds({});
-                  setShowRawOcrText(false);
-                  setManualRawOcrName("");
-                  setManualOcrCandidateNames([]);
-                  setRawOcrAddedNames([]);
-                  setRawOcrCreatedPlayerIds([]);
-                }}
-                data-testid="ocr-file-input"
-              />
-            </label>
+              <label className="flex min-h-28 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-muted/40 p-4 text-center transition-colors hover:bg-muted/70">
+                <Upload className="h-6 w-6 text-muted-foreground" />
+                <div className="text-xs font-black text-foreground">
+                  {selectedScreenshotNames.length > 0
+                    ? `${selectedScreenshotNames.length} screenshot${selectedScreenshotNames.length === 1 ? "" : "s"} selected`
+                    : "Upload Screenshot(s)"}
+                </div>
+                <div className="text-[10px] font-medium text-muted-foreground">
+                  {screenshotImportMode === "other"
+                    ? "Select one or more screenshots. You will crop each image before scanning."
+                    : "Select all screenshots for one attendee list. You can select multiple screenshots from one attendee list."}
+                </div>
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={(event) => {
+                    setSelectedScreenshots(
+                      Array.from(event.target.files ?? []),
+                    );
+                    setActiveCropIndex(0);
+                    setCropBoxes({});
+                    setCropDragStart(null);
+                    setDraftCropBox(null);
+                    setOcrText("");
+                    setOcrProgress(0);
+                    setOcrStatus("");
+                    setSelectedOcrCandidateKeys([]);
+                    setChosenOcrMatchIds({});
+                    setShowRawOcrText(false);
+                    setManualRawOcrName("");
+                    setManualOcrCandidateNames([]);
+                    setRawOcrAddedNames([]);
+                    setRawOcrCreatedPlayerIds([]);
+                  }}
+                  data-testid="ocr-file-input"
+                />
+              </label>
             )}
 
-            {ocrInputSource === "screenshot" && selectedScreenshotNames.length > 0 && !ocrText && !ocrRunning && !ocrStatus && screenshotImportMode === "meetup" && (
-              <div className="rounded-xl border bg-card p-3">
-                <div className="mb-2 flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="text-xs font-black text-foreground">
-                      {selectedScreenshotNames.length} screenshot{selectedScreenshotNames.length === 1 ? "" : "s"} selected
-                    </div>
-                    <div className="truncate text-[10px] font-medium text-muted-foreground">
-                      Check for duplicates before scanning.
-                    </div>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={clearOcrSelection}
-                    className="h-7 shrink-0 px-2 text-[10px] font-black"
-                  >
-                    Clear
-                  </Button>
-                </div>
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                  {selectedScreenshotPreviews.map((preview, index) => (
-                    <div key={`${preview.name}-${index}`} className="overflow-hidden rounded-lg border bg-muted/30">
-                      <img
-                        src={preview.url}
-                        alt={preview.name}
-                        className="h-24 w-full object-cover sm:h-28"
-                      />
-                      <div className="truncate px-2 py-1 text-[9px] font-bold text-muted-foreground">
-                        {index + 1}. {preview.name}
+            {ocrInputSource === "screenshot" &&
+              selectedScreenshotNames.length > 0 &&
+              !ocrText &&
+              !ocrRunning &&
+              !ocrStatus &&
+              screenshotImportMode === "meetup" && (
+                <div className="fixed inset-0 z-[9999] flex flex-col bg-background p-3 shadow-2xl">
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-xs font-black text-foreground">
+                        {selectedScreenshotNames.length} screenshot
+                        {selectedScreenshotNames.length === 1 ? "" : "s"}{" "}
+                        selected
+                      </div>
+                      <div className="truncate text-[10px] font-medium text-muted-foreground">
+                        Check for duplicates before scanning.
                       </div>
                     </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {ocrInputSource === "screenshot" && selectedScreenshotPreviews.length > 0 && !ocrText && !ocrRunning && screenshotImportMode === "other" && (
-              <div className="rounded-xl border bg-card p-3">
-                <div className="mb-2 flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="text-xs font-black text-foreground">
-                      Crop names area {activeCropIndex + 1}/{selectedScreenshotPreviews.length}
-                    </div>
-                    <div className="text-[10px] font-medium text-muted-foreground">
-                      Drag a box around only the names. Repeat for each screenshot, then scan once.
-                    </div>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={clearOcrSelection}
-                    className="h-7 shrink-0 px-2 text-[10px] font-black"
-                  >
-                    Clear
-                  </Button>
-                </div>
-
-                <div className="mb-2 flex flex-wrap gap-1">
-                  {selectedScreenshotPreviews.map((preview, index) => (
-                    <button
-                      key={`${preview.name}-tab-${index}`}
-                      type="button"
-                      onClick={() => setActiveCropIndex(index)}
-                      className={`rounded-full border px-2 py-1 text-[10px] font-black ${
-                        activeCropIndex === index
-                          ? "border-primary bg-primary/10 text-primary"
-                          : cropBoxes[index]
-                            ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                            : "border-border bg-background text-muted-foreground"
-                      }`}
-                    >
-                      {cropBoxes[index] ? "✓ " : ""}{index + 1}
-                    </button>
-                  ))}
-                </div>
-
-                {selectedScreenshotPreviews[activeCropIndex] && (
-                  <div className="space-y-2">
-                    <div
-                      className="relative max-h-[46dvh] touch-none overflow-hidden rounded-xl border bg-muted/30"
-                      onPointerDown={(event) => startCropDrag(activeCropIndex, event)}
-                      onPointerMove={moveCropDrag}
-                      onPointerUp={finishCropDrag}
-                      onPointerCancel={finishCropDrag}
-                    >
-                      <img
-                        src={selectedScreenshotPreviews[activeCropIndex].url}
-                        alt={selectedScreenshotPreviews[activeCropIndex].name}
-                        className="max-h-[46dvh] w-full select-none object-contain"
-                        draggable={false}
-                      />
-                      {(() => {
-                        const box = cropDragStart?.index === activeCropIndex && draftCropBox
-                          ? draftCropBox
-                          : cropBoxes[activeCropIndex];
-                        if (!box) return null;
-                        return (
-                          <div
-                            className="pointer-events-none absolute border-2 border-primary bg-primary/15 shadow-[0_0_0_9999px_rgba(15,23,42,0.28)]"
-                            style={{
-                              left: `${box.x}%`,
-                              top: `${box.y}%`,
-                              width: `${box.w}%`,
-                              height: `${box.h}%`,
-                            }}
-                          />
-                        );
-                      })()}
-                    </div>
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="truncate text-[10px] font-bold text-muted-foreground">
-                        {selectedScreenshotPreviews[activeCropIndex].name}
-                      </div>
-                      <div className="flex gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={clearActiveCrop}
-                          disabled={!cropBoxes[activeCropIndex]}
-                          className="h-7 px-2 text-[10px] font-black"
-                        >
-                          Reset crop
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setActiveCropIndex(Math.min(selectedScreenshotPreviews.length - 1, activeCropIndex + 1))}
-                          disabled={activeCropIndex >= selectedScreenshotPreviews.length - 1}
-                          className="h-7 px-2 text-[10px] font-black"
-                        >
-                          Next
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {ocrInputSource === "screenshot" && selectedScreenshotNames.length > 0 && (ocrRunning || ocrStatus || ocrText) && (
-              <div className="rounded-xl border bg-muted/30 px-3 py-2">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0 text-xs font-black text-foreground">
-                    ✓ {selectedScreenshotNames.length} screenshot{selectedScreenshotNames.length === 1 ? "" : "s"} {ocrText ? "scanned" : "loaded"}
-                  </div>
-                  {!ocrRunning && !ocrText && (
                     <Button
                       type="button"
                       variant="ghost"
@@ -2933,10 +3094,192 @@ export function TodayTab({
                     >
                       Clear
                     </Button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    {selectedScreenshotPreviews.map((preview, index) => (
+                      <div
+                        key={`${preview.name}-${index}`}
+                        className="overflow-hidden rounded-lg border bg-muted/30"
+                      >
+                        <img
+                          src={preview.url}
+                          alt={preview.name}
+                          className="h-24 w-full object-cover sm:h-28"
+                        />
+                        <div className="truncate px-2 py-1 text-[9px] font-bold text-muted-foreground">
+                          {index + 1}. {preview.name}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+            {ocrInputSource === "screenshot" &&
+              selectedScreenshotPreviews.length > 0 &&
+              !ocrText &&
+              !ocrRunning &&
+              screenshotImportMode === "other" && (
+                <div className="rounded-xl border bg-card p-3">
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-xs font-black text-foreground">
+                        Crop names area {activeCropIndex + 1}/
+                        {selectedScreenshotPreviews.length}
+                      </div>
+                      <div className="text-[10px] font-medium text-muted-foreground">
+                        Drag a box around only the names. Repeat for each
+                        screenshot, then scan once.
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={clearOcrSelection}
+                      className="h-7 shrink-0 px-2 text-[10px] font-black"
+                    >
+                      Clear
+                    </Button>
+                  </div>
+
+                  <div className="mb-2 flex shrink-0 flex-wrap gap-1">
+                    {selectedScreenshotPreviews.map((preview, index) => (
+                      <button
+                        key={`${preview.name}-tab-${index}`}
+                        type="button"
+                        onClick={() => setActiveCropIndex(index)}
+                        className={`rounded-full border px-2 py-1 text-[10px] font-black ${
+                          activeCropIndex === index
+                            ? "border-primary bg-primary/10 text-primary"
+                            : cropBoxes[index]
+                              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                              : "border-border bg-background text-muted-foreground"
+                        }`}
+                      >
+                        {cropBoxes[index] ? "✓ " : ""}
+                        {index + 1}
+                      </button>
+                    ))}
+                  </div>
+
+                  {selectedScreenshotPreviews[activeCropIndex] && (
+                    <div className="space-y-2">
+                      <div
+                        className="relative min-h-0 flex-1 touch-none overflow-hidden rounded-xl border bg-muted/30"
+                        onPointerDown={(event) =>
+                          startCropDrag(activeCropIndex, event)
+                        }
+                        onPointerMove={moveCropDrag}
+                        onPointerUp={finishCropDrag}
+                        onPointerCancel={finishCropDrag}
+                      >
+                        <img
+                          src={selectedScreenshotPreviews[activeCropIndex].url}
+                          alt={selectedScreenshotPreviews[activeCropIndex].name}
+                          className="h-full w-full select-none object-contain"
+                          draggable={false}
+                        />
+                        {(() => {
+                          const box =
+                            cropDragStart?.index === activeCropIndex &&
+                            draftCropBox
+                              ? draftCropBox
+                              : cropBoxes[activeCropIndex];
+                          if (!box) return null;
+                          return (
+                            <div
+                              className="pointer-events-none absolute border-2 border-primary bg-primary/15 shadow-[0_0_0_9999px_rgba(15,23,42,0.28)]"
+                              style={{
+                                left: `${box.x}%`,
+                                top: `${box.y}%`,
+                                width: `${box.w}%`,
+                                height: `${box.h}%`,
+                              }}
+                            />
+                          );
+                        })()}
+                      </div>
+                      <div className="flex shrink-0 items-center justify-between gap-2">
+                        <div className="truncate text-[10px] font-bold text-muted-foreground">
+                          {selectedScreenshotPreviews[activeCropIndex].name}
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={runOcr}
+                            disabled={
+                              ocrRunning ||
+                              !selectedScreenshots.every((_, screenshotIndex) =>
+                                Boolean(cropBoxes[screenshotIndex]),
+                              )
+                            }
+                            className="h-7 px-3 text-[10px] font-black"
+                          >
+                            Scan crops
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={clearActiveCrop}
+                            disabled={!cropBoxes[activeCropIndex]}
+                            className="h-7 px-2 text-[10px] font-black"
+                          >
+                            Reset crop
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                              setActiveCropIndex(
+                                Math.min(
+                                  selectedScreenshotPreviews.length - 1,
+                                  activeCropIndex + 1,
+                                ),
+                              )
+                            }
+                            disabled={
+                              activeCropIndex >=
+                              selectedScreenshotPreviews.length - 1
+                            }
+                            className="h-7 px-2 text-[10px] font-black"
+                          >
+                            Next
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
                   )}
                 </div>
-              </div>
-            )}
+              )}
+
+            {ocrInputSource === "screenshot" &&
+              selectedScreenshotNames.length > 0 &&
+              (ocrRunning || ocrStatus || ocrText) && (
+                <div className="rounded-xl border bg-muted/30 px-3 py-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0 text-xs font-black text-foreground">
+                      ✓ {selectedScreenshotNames.length} screenshot
+                      {selectedScreenshotNames.length === 1 ? "" : "s"}{" "}
+                      {ocrText ? "scanned" : "loaded"}
+                    </div>
+                    {!ocrRunning && !ocrText && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={clearOcrSelection}
+                        className="h-7 shrink-0 px-2 text-[10px] font-black"
+                      >
+                        Clear
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              )}
 
             {ocrInputSource === "screenshot" && (ocrRunning || ocrStatus) && (
               <div className="rounded-xl border bg-card p-3">
@@ -2964,17 +3307,22 @@ export function TodayTab({
               <div className="rounded-xl border bg-card p-3">
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <div className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
-                    {ocrInputSource === "voiceText" ? "List Summary" : "Scan Summary"}
+                    {ocrInputSource === "voiceText"
+                      ? "List Summary"
+                      : "Scan Summary"}
                   </div>
                   {hasExpectedAttendeeNumber && (
-                    <div className={`rounded-full px-2 py-0.5 text-[10px] font-black ${missingFromScan > 0 ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>
+                    <div
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-black ${missingFromScan > 0 ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}
+                    >
                       {scannedNameCount} / {Math.round(expectedAttendeeNumber)}
                     </div>
                   )}
                 </div>
                 <div className="flex flex-wrap items-center gap-2 text-[11px] font-black">
                   <span className="rounded-full bg-muted/60 px-2 py-1 text-foreground">
-                    {ocrInputSource === "voiceText" ? "Parsed" : "Found"}: {scannedNameCount}
+                    {ocrInputSource === "voiceText" ? "Parsed" : "Found"}:{" "}
+                    {scannedNameCount}
                   </span>
                   <span className="rounded-full bg-emerald-50 px-2 py-1 text-emerald-800">
                     ✓ {rosterMatchCount}
@@ -2994,7 +3342,10 @@ export function TodayTab({
                 {unmatchedScannedNames.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-1">
                     {unmatchedScannedNames.slice(0, 8).map((candidate) => (
-                      <span key={ocrCandidateKey(candidate)} className="rounded-full bg-sky-50 px-2 py-1 text-[10px] font-black text-sky-800 ring-1 ring-sky-100">
+                      <span
+                        key={ocrCandidateKey(candidate)}
+                        className="rounded-full bg-sky-50 px-2 py-1 text-[10px] font-black text-sky-800 ring-1 ring-sky-100"
+                      >
                         + {candidate.name}
                       </span>
                     ))}
@@ -3028,12 +3379,17 @@ export function TodayTab({
                         selectedOcrCandidateKeySet.has(candidateKey);
                       const resolvedMatch = resolveOcrMatch(candidate);
                       const reviewStatus = getOcrReviewStatus(candidate);
-                      const canEditNewName = reviewStatus === "new" && !resolvedMatch;
-                      const cleanedEditedName = getEditedOcrCandidateName(candidate);
-                      const editedName = editedOcrCandidateNames[candidateKey] ?? cleanedEditedName;
+                      const canEditNewName =
+                        reviewStatus === "new" && !resolvedMatch;
+                      const cleanedEditedName =
+                        getEditedOcrCandidateName(candidate);
+                      const editedName =
+                        editedOcrCandidateNames[candidateKey] ??
+                        cleanedEditedName;
                       const nameTokens = getOcrNameTokens(candidate);
                       const tokenSelection = getOcrTokenSelection(candidate);
-                      const canUseTokenEditor = canEditNewName && nameTokens.length > 1;
+                      const canUseTokenEditor =
+                        canEditNewName && nameTokens.length > 1;
                       const displayCandidateName = canEditNewName
                         ? cleanedEditedName || candidate.name
                         : candidate.name;
@@ -3112,7 +3468,12 @@ export function TodayTab({
                                         <button
                                           key={`${candidateKey}-${token}-${tokenIndex}`}
                                           type="button"
-                                          onClick={() => toggleOcrCandidateToken(candidate, tokenIndex)}
+                                          onClick={() =>
+                                            toggleOcrCandidateToken(
+                                              candidate,
+                                              tokenIndex,
+                                            )
+                                          }
                                           className={`rounded-full border px-2 py-0.5 text-[10px] font-black transition ${
                                             isKept
                                               ? "border-sky-200 bg-sky-50 text-sky-900"
@@ -3132,8 +3493,18 @@ export function TodayTab({
                               </label>
                               <Input
                                 value={editedName}
-                                onChange={(event) => updateEditedOcrCandidateName(candidate, event.target.value)}
-                                onBlur={() => updateEditedOcrCandidateName(candidate, cleanedEditedName)}
+                                onChange={(event) =>
+                                  updateEditedOcrCandidateName(
+                                    candidate,
+                                    event.target.value,
+                                  )
+                                }
+                                onBlur={() =>
+                                  updateEditedOcrCandidateName(
+                                    candidate,
+                                    cleanedEditedName,
+                                  )
+                                }
                                 className="h-8 rounded-xl border-sky-100 bg-white text-xs font-black text-slate-900"
                                 placeholder="Clean player name"
                               />
@@ -3173,14 +3544,20 @@ export function TodayTab({
                                 {candidate.status === "suggest" && (
                                   <button
                                     type="button"
-                                    onClick={() => chooseOcrCandidateAsNew(candidate)}
+                                    onClick={() =>
+                                      chooseOcrCandidateAsNew(candidate)
+                                    }
                                     className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${
-                                      chosenOcrMatchIds[candidateKey] === "__new__"
+                                      chosenOcrMatchIds[candidateKey] ===
+                                      "__new__"
                                         ? "bg-sky-100 text-sky-900 border-sky-300"
                                         : "bg-card text-muted-foreground"
                                     }`}
                                   >
-                                    {chosenOcrMatchIds[candidateKey] === "__new__" ? "✓ " : "Add as new: "}
+                                    {chosenOcrMatchIds[candidateKey] ===
+                                    "__new__"
+                                      ? "✓ "
+                                      : "Add as new: "}
                                     {displayCandidateName}
                                   </button>
                                 )}
@@ -3324,7 +3701,11 @@ export function TodayTab({
                     disabled={selectedScreenshots.length === 0 || ocrRunning}
                     className="h-10 rounded-xl px-4 text-xs font-black"
                   >
-                    {ocrRunning ? "Scanning…" : screenshotImportMode === "other" ? "Scan Crops" : "Scan Screenshot"}
+                    {ocrRunning
+                      ? "Scanning…"
+                      : screenshotImportMode === "other"
+                        ? "Scan Crops"
+                        : "Scan Screenshot"}
                   </Button>
                 </div>
               ) : (
@@ -3360,11 +3741,16 @@ export function TodayTab({
                       disabled={selectedScreenshots.length === 0 || ocrRunning}
                       className="h-10 rounded-xl px-4 text-xs font-black"
                     >
-                      {ocrRunning ? "Scanning…" : screenshotImportMode === "other" ? "Scan Crops" : "Screenshot Import"}
+                      {ocrRunning
+                        ? "Scanning…"
+                        : screenshotImportMode === "other"
+                          ? "Scan Crops"
+                          : "Screenshot Import"}
                     </Button>
                   </div>
                   <div className="text-[10px] font-medium text-muted-foreground">
-                    This footer stays fixed while you review uploaded screenshots.
+                    This footer stays fixed while you review uploaded
+                    screenshots.
                   </div>
                 </div>
               )
@@ -3377,7 +3763,9 @@ export function TodayTab({
                   disabled={allOcrTotal === 0}
                   className="h-9 shrink-0 rounded-xl px-3 text-xs font-black whitespace-nowrap"
                 >
-                  {allSelectableOcrSelected ? `Clear All (${allOcrTotal})` : `Select All (${allOcrTotal})`}
+                  {allSelectableOcrSelected
+                    ? `Clear All (${allOcrTotal})`
+                    : `Select All (${allOcrTotal})`}
                 </Button>
                 <Button
                   type="button"
@@ -3405,11 +3793,15 @@ export function TodayTab({
               Review new players?
             </DialogTitle>
             <DialogDescription className="text-xs">
-              {newPlayerReviewPrompt?.count ?? 0} new player{newPlayerReviewPrompt?.count === 1 ? "" : "s"} were created with default Skill Level 5. You can quickly adjust skill and traits now.
+              {newPlayerReviewPrompt?.count ?? 0} new player
+              {newPlayerReviewPrompt?.count === 1 ? "" : "s"} were created with
+              default Skill Level 5. You can quickly adjust skill and traits
+              now.
             </DialogDescription>
           </DialogHeader>
           <div className="rounded-xl border border-sky-100 bg-sky-50 p-3 text-[11px] font-semibold leading-snug text-sky-800">
-            This opens the Roster tab and starts with the first new player profile.
+            This opens the Roster tab and starts with the first new player
+            profile.
           </div>
           <DialogFooter className="gap-2 sm:gap-2">
             <Button
@@ -3452,7 +3844,8 @@ export function TodayTab({
           <div className="max-h-56 space-y-2 overflow-y-auto rounded-xl border bg-muted/40 p-3">
             {selectedNewCandidates.map((candidate) => {
               const key = ocrCandidateKey(candidate);
-              const finalName = getEditedOcrCandidateName(candidate) || candidate.name;
+              const finalName =
+                getEditedOcrCandidateName(candidate) || candidate.name;
               return (
                 <div
                   key={key}
@@ -3502,7 +3895,9 @@ export function TodayTab({
           className={`flex h-[88dvh] max-h-[88dvh] w-[94vw] max-w-lg flex-col overflow-hidden rounded-2xl p-4 sm:p-6 ${voiceListening ? "ring-2 ring-red-300" : ""}`}
         >
           <DialogHeader>
-            <DialogTitle className="text-base font-black">Say or Paste Names</DialogTitle>
+            <DialogTitle className="text-base font-black">
+              Say or Paste Names
+            </DialogTitle>
             <DialogDescription className="text-xs">
               Say, paste, or type names. The text box is the control center.
             </DialogDescription>
@@ -3511,9 +3906,15 @@ export function TodayTab({
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1 pb-2">
             <div className="grid grid-cols-[1fr_auto] items-end gap-2 rounded-xl border bg-card p-3">
               <div>
-                <label htmlFor="voice-expected-attendee-count" className="mb-1 block text-[10px] font-black uppercase tracking-wider text-muted-foreground">
+                <label
+                  htmlFor="voice-expected-attendee-count"
+                  className="mb-1 block text-[10px] font-black uppercase tracking-wider text-muted-foreground"
+                >
                   Expected
-                  <span className="font-bold normal-case tracking-normal text-muted-foreground/80"> (optional)</span>
+                  <span className="font-bold normal-case tracking-normal text-muted-foreground/80">
+                    {" "}
+                    (optional)
+                  </span>
                 </label>
                 <Input
                   id="voice-expected-attendee-count"
@@ -3521,21 +3922,38 @@ export function TodayTab({
                   inputMode="numeric"
                   min="1"
                   value={voiceExpectedAttendeeCount}
-                  onChange={(event) => setVoiceExpectedAttendeeCount(event.target.value)}
+                  onChange={(event) =>
+                    setVoiceExpectedAttendeeCount(event.target.value)
+                  }
                   placeholder="Example: 18"
                   className="h-10 rounded-xl text-sm font-bold"
                 />
               </div>
-              <div className={`rounded-xl px-3 py-2 text-center text-[11px] font-black ${hasVoiceExpectedAttendeeNumber && voiceMissingCount > 0 ? "bg-amber-50 text-amber-800 ring-1 ring-amber-200" : "bg-muted text-foreground"}`}>
-                <div>{voiceCapturedCount}{hasVoiceExpectedAttendeeNumber ? ` / ${Math.round(voiceExpectedAttendeeNumber)}` : ""}</div>
-                <div className="text-[9px] uppercase tracking-wide text-muted-foreground">names</div>
+              <div
+                className={`rounded-xl px-3 py-2 text-center text-[11px] font-black ${hasVoiceExpectedAttendeeNumber && voiceMissingCount > 0 ? "bg-amber-50 text-amber-800 ring-1 ring-amber-200" : "bg-muted text-foreground"}`}
+              >
+                <div>
+                  {voiceCapturedCount}
+                  {hasVoiceExpectedAttendeeNumber
+                    ? ` / ${Math.round(voiceExpectedAttendeeNumber)}`
+                    : ""}
+                </div>
+                <div className="text-[9px] uppercase tracking-wide text-muted-foreground">
+                  names
+                </div>
               </div>
             </div>
 
             <Textarea
               value={voiceText}
               onChange={(event) => setVoiceText(event.target.value)}
-              onBlur={() => setVoiceText((current) => formatVoiceNameList(splitVoiceTextIntoNameLines(current, players)))}
+              onBlur={() =>
+                setVoiceText((current) =>
+                  formatVoiceNameList(
+                    splitVoiceTextIntoNameLines(current, players),
+                  ),
+                )
+              }
               placeholder="Joon, Jan, Andrea, Phillip R, Jorge"
               className={`min-h-36 resize-none rounded-xl text-sm font-semibold leading-relaxed ${voiceListening ? "border-red-300 ring-2 ring-red-100" : ""}`}
               data-testid="voice-text-import-notepad"
@@ -3555,7 +3973,9 @@ export function TodayTab({
             <div className="rounded-xl border bg-card p-3">
               <div className="mb-2 flex items-center justify-between gap-2">
                 <div>
-                  <div className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Smart match review</div>
+                  <div className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
+                    Smart match review
+                  </div>
                 </div>
                 {possibleNames.length > 0 && (
                   <div className="shrink-0 text-[10px] font-black text-muted-foreground">
@@ -3568,52 +3988,105 @@ export function TodayTab({
                 <div className="space-y-2">
                   {possibleNames.map((candidate, index) => {
                     const candidateKey = ocrCandidateKey(candidate);
-                    const isSelectedMatch = selectedOcrCandidateKeySet.has(candidateKey);
+                    const isSelectedMatch =
+                      selectedOcrCandidateKeySet.has(candidateKey);
                     const resolvedMatch = resolveOcrMatch(candidate);
                     const reviewStatus = getOcrReviewStatus(candidate);
                     return (
-                      <div key={`${candidate.name}-${index}`} className={`rounded-lg p-2.5 text-[11px] ${isSelectedMatch ? "bg-primary/10 ring-1 ring-primary/20" : "bg-muted/50"}`}>
+                      <div
+                        key={`${candidate.name}-${index}`}
+                        className={`rounded-lg p-2.5 text-[11px] ${isSelectedMatch ? "bg-primary/10 ring-1 ring-primary/20" : "bg-muted/50"}`}
+                      >
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex min-w-0 gap-2">
-                            <Checkbox checked={isSelectedMatch} onCheckedChange={() => toggleOcrCandidate(candidate)} className="mt-0.5 h-4 w-4 shrink-0 rounded-full" />
+                            <Checkbox
+                              checked={isSelectedMatch}
+                              onCheckedChange={() =>
+                                toggleOcrCandidate(candidate)
+                              }
+                              className="mt-0.5 h-4 w-4 shrink-0 rounded-full"
+                            />
                             <div className="min-w-0">
-                              <div className="font-black text-foreground">{candidate.name}</div>
-                              {reviewStatus === "match" && resolvedMatch && <div className="mt-0.5 font-medium text-emerald-700">MATCH: {displayName(resolvedMatch)} · {candidate.score}%</div>}
-                              {reviewStatus === "suggest" && resolvedMatch && <div className="mt-0.5 font-medium text-amber-700">SELECTED: {displayName(resolvedMatch)} · {candidate.score}%</div>}
-                              {reviewStatus === "new" && <div className="mt-0.5 font-medium text-sky-700">NEW: Will create roster player if selected</div>}
+                              <div className="font-black text-foreground">
+                                {candidate.name}
+                              </div>
+                              {reviewStatus === "match" && resolvedMatch && (
+                                <div className="mt-0.5 font-medium text-emerald-700">
+                                  MATCH: {displayName(resolvedMatch)} ·{" "}
+                                  {candidate.score}%
+                                </div>
+                              )}
+                              {reviewStatus === "suggest" && resolvedMatch && (
+                                <div className="mt-0.5 font-medium text-amber-700">
+                                  SELECTED: {displayName(resolvedMatch)} ·{" "}
+                                  {candidate.score}%
+                                </div>
+                              )}
+                              {reviewStatus === "new" && (
+                                <div className="mt-0.5 font-medium text-sky-700">
+                                  NEW: Will create roster player if selected
+                                </div>
+                              )}
                             </div>
                           </div>
-                          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-black ${reviewStatus === "match" ? "bg-emerald-100 text-emerald-800" : reviewStatus === "suggest" ? "bg-amber-100 text-amber-800" : "bg-sky-100 text-sky-800"}`}>
-                            {reviewStatus === "match" ? "MATCH" : reviewStatus === "suggest" ? "CHECK" : "NEW"}
+                          <span
+                            className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-black ${reviewStatus === "match" ? "bg-emerald-100 text-emerald-800" : reviewStatus === "suggest" ? "bg-amber-100 text-amber-800" : "bg-sky-100 text-sky-800"}`}
+                          >
+                            {reviewStatus === "match"
+                              ? "MATCH"
+                              : reviewStatus === "suggest"
+                                ? "CHECK"
+                                : "NEW"}
                           </span>
                         </div>
-                        {reviewStatus !== "match" && candidate.suggestions.length > 0 && (
-                          <div className="mt-2 flex flex-wrap gap-1">
-                            {candidate.suggestions.slice(0, 5).map(({ player, score }) => {
-                              const isChosen = resolvedMatch?.id === player.id;
-                              return (
-                                <button key={player.id} type="button" onClick={() => chooseOcrSuggestion(candidate, player)} className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${isChosen ? "border-amber-300 bg-amber-100 text-amber-900" : "bg-card text-muted-foreground"}`}>
-                                  {isChosen ? "✓ " : "+ "}{displayName(player)} {score}%
+                        {reviewStatus !== "match" &&
+                          candidate.suggestions.length > 0 && (
+                            <div className="mt-2 flex flex-wrap gap-1">
+                              {candidate.suggestions
+                                .slice(0, 5)
+                                .map(({ player, score }) => {
+                                  const isChosen =
+                                    resolvedMatch?.id === player.id;
+                                  return (
+                                    <button
+                                      key={player.id}
+                                      type="button"
+                                      onClick={() =>
+                                        chooseOcrSuggestion(candidate, player)
+                                      }
+                                      className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${isChosen ? "border-amber-300 bg-amber-100 text-amber-900" : "bg-card text-muted-foreground"}`}
+                                    >
+                                      {isChosen ? "✓ " : "+ "}
+                                      {displayName(player)} {score}%
+                                    </button>
+                                  );
+                                })}
+                              {candidate.status === "suggest" && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    chooseOcrCandidateAsNew(candidate)
+                                  }
+                                  className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${chosenOcrMatchIds[candidateKey] === "__new__" ? "border-sky-300 bg-sky-100 text-sky-900" : "bg-card text-muted-foreground"}`}
+                                >
+                                  {chosenOcrMatchIds[candidateKey] === "__new__"
+                                    ? "✓ "
+                                    : "+ New: "}
+                                  {candidate.name}
                                 </button>
-                              );
-                            })}
-                            {candidate.status === "suggest" && (
-                              <button type="button" onClick={() => chooseOcrCandidateAsNew(candidate)} className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${chosenOcrMatchIds[candidateKey] === "__new__" ? "border-sky-300 bg-sky-100 text-sky-900" : "bg-card text-muted-foreground"}`}>
-                                {chosenOcrMatchIds[candidateKey] === "__new__" ? "✓ " : "+ New: "}{candidate.name}
-                              </button>
-                            )}
-                          </div>
-                        )}
+                              )}
+                            </div>
+                          )}
                       </div>
                     );
                   })}
                 </div>
               ) : (
-                <div className="rounded-lg bg-muted/50 p-3 text-center text-xs font-medium text-muted-foreground">Names typed above will appear here.</div>
+                <div className="rounded-lg bg-muted/50 p-3 text-center text-xs font-medium text-muted-foreground">
+                  Names typed above will appear here.
+                </div>
               )}
             </div>
-
-
           </div>
 
           <DialogFooter className="shrink-0 border-t pt-3">
@@ -3631,13 +4104,31 @@ export function TodayTab({
                     : "border-2"
                 }`}
               >
-                <Mic className={`mr-1.5 h-3.5 w-3.5 ${voiceListening ? "animate-pulse" : ""}`} />
+                <Mic
+                  className={`mr-1.5 h-3.5 w-3.5 ${voiceListening ? "animate-pulse" : ""}`}
+                />
                 {voiceListening ? "RECORDING — TAP TO STOP" : "Record"}
               </Button>
-              <Button type="button" variant="outline" onClick={() => { stopVoiceListening(); setVoiceText(""); setVoiceStatus(""); setVoiceInterimText(""); }} disabled={!voiceText.trim() && !voiceListening} className="h-10 rounded-xl px-3 text-xs font-bold">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  stopVoiceListening();
+                  setVoiceText("");
+                  setVoiceStatus("");
+                  setVoiceInterimText("");
+                }}
+                disabled={!voiceText.trim() && !voiceListening}
+                className="h-10 rounded-xl px-3 text-xs font-bold"
+              >
                 Clear
               </Button>
-              <Button type="button" onClick={importSelectedVoiceNames} disabled={!voiceText.trim() || selectedOcrTotal === 0} className="h-10 min-w-0 flex-1 rounded-xl px-3 text-xs font-black">
+              <Button
+                type="button"
+                onClick={importSelectedVoiceNames}
+                disabled={!voiceText.trim() || selectedOcrTotal === 0}
+                className="h-10 min-w-0 flex-1 rounded-xl px-3 text-xs font-black"
+              >
                 Import Names ({selectedOcrTotal})
               </Button>
             </div>
@@ -3691,7 +4182,9 @@ export function TodayTab({
                 >
                   {displayName(player)}
                 </div>
-                {(player.isNew || player.isGoalkeeper || player.isOrganizer) && (
+                {(player.isNew ||
+                  player.isGoalkeeper ||
+                  player.isOrganizer) && (
                   <div className="mt-0.5 flex flex-wrap gap-1 min-w-0">
                     {player.isNew && <NewBadge />}
                     {player.isGoalkeeper && <GKBadge />}
@@ -3702,7 +4195,11 @@ export function TodayTab({
               {player.attending && (
                 <button
                   type="button"
-                  aria-label={isNotHereYet(player) ? "Mark player as arrived" : "Mark player as not here yet"}
+                  aria-label={
+                    isNotHereYet(player)
+                      ? "Mark player as arrived"
+                      : "Mark player as not here yet"
+                  }
                   title={isNotHereYet(player) ? "Mark arrived" : "Not here yet"}
                   onClick={(event) => {
                     event.preventDefault();

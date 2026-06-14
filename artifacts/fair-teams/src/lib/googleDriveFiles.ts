@@ -52,6 +52,30 @@ async function readDriveError(response: Response) {
   }
 }
 
+
+export async function getGoogleDriveUserSummary(accessToken: string): Promise<GoogleDriveUserSummary> {
+  const params = new URLSearchParams({
+    fields: "user(displayName,emailAddress,me)",
+  });
+
+  const response = await fetch(`https://www.googleapis.com/drive/v3/about?${params.toString()}`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+
+  if (!response.ok) {
+    const message = await readDriveError(response);
+    if (response.status === 401) {
+      throw new Error("Google Drive connection expired. Disconnect and connect Google Drive again, then retry.");
+    }
+    throw new Error(message);
+  }
+
+  const result = await response.json();
+  return (result?.user || {}) as GoogleDriveUserSummary;
+}
+
 export async function createGoogleDriveJsonFile(
   accessToken: string,
   fileName: string,
@@ -318,6 +342,52 @@ export async function shareGoogleDriveFileWithEditor(
   const result = await response.json();
   if (!result?.id) {
     throw new Error("Google Drive shared the file but did not return permission details.");
+  }
+  return result as GoogleDrivePermissionResult;
+}
+
+
+export async function shareGoogleDriveFileWithViewer(
+  accessToken: string,
+  fileId: string,
+  emailAddress: string,
+): Promise<GoogleDrivePermissionResult> {
+  const params = new URLSearchParams({
+    sendNotificationEmail: "true",
+    supportsAllDrives: "true",
+    fields: "id,type,emailAddress,displayName,role",
+  });
+
+  const response = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}/permissions?${params.toString()}`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json; charset=UTF-8",
+      },
+      body: JSON.stringify({
+        type: "user",
+        role: "reader",
+        emailAddress,
+      }),
+    },
+  );
+
+  if (!response.ok) {
+    const message = await readDriveError(response);
+    if (response.status === 401) {
+      throw new Error("Google Drive connection expired. Disconnect and connect Google Drive again, then retry.");
+    }
+    if (response.status === 403) {
+      throw new Error("Fair Teams cannot send this Drive backup copy. Try reconnecting Google Drive, then retry.");
+    }
+    throw new Error(message);
+  }
+
+  const result = await response.json();
+  if (!result?.id) {
+    throw new Error("Google Drive shared the backup copy but did not return permission details.");
   }
   return result as GoogleDrivePermissionResult;
 }

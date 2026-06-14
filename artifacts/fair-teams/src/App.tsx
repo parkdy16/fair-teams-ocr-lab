@@ -47,10 +47,12 @@ import { requestGoogleDriveAccessToken } from "@/lib/googleDriveAuth";
 import {
   createGoogleDriveJsonFile,
   deleteGoogleDriveFilePermission,
+  getGoogleDriveUserSummary,
   listGoogleDriveBackupFileGroups,
   listGoogleDriveFilePermissions,
   readGoogleDriveJsonFile,
   shareGoogleDriveFileWithEditor,
+  shareGoogleDriveFileWithViewer,
   updateGoogleDriveJsonFile,
   type GoogleDriveBackupFileGroups,
   type GoogleDriveFileResult,
@@ -64,6 +66,7 @@ const DEFAULT_GROUP_NAME = "My Group";
 const DEFAULT_HEADER_COLOR = "#3B82F6";
 const EMPTY_ROSTER_NAME = "New roster";
 const ROSTERS_STORAGE_KEY = "fair-teams-rosters-v1";
+const DRIVE_RECIPIENTS_STORAGE_KEY = "fair-teams-drive-backup-recipients-v1";
 
 function hasSavedRosterState() {
   try {
@@ -204,14 +207,46 @@ type RosterToolsNotice = {
 
 type DriveBackupTab = "mine" | "shared";
 
-type DriveShareConfirm = {
+type DriveBackupRecipient = {
+  id: string;
+  name: string;
   email: string;
+};
+
+type DriveShareConfirm = {
+  recipients: DriveBackupRecipient[];
 };
 
 type DriveRemoveAccessConfirm = {
   permission: GoogleDrivePermissionResult;
   label: string;
 };
+
+function readStoredDriveRecipients(): DriveBackupRecipient[] {
+  try {
+    const raw = window.localStorage.getItem(DRIVE_RECIPIENTS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((item, index) => ({
+        id: typeof item?.id === "string" ? item.id : `recipient_${index}_${Date.now()}`,
+        name: typeof item?.name === "string" ? item.name.trim() : "",
+        email: typeof item?.email === "string" ? item.email.trim().toLowerCase() : "",
+      }))
+      .filter((item) => item.email && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(item.email));
+  } catch {
+    return [];
+  }
+}
+
+function writeStoredDriveRecipients(recipients: DriveBackupRecipient[]) {
+  try {
+    window.localStorage.setItem(DRIVE_RECIPIENTS_STORAGE_KEY, JSON.stringify(recipients));
+  } catch {
+    // Local recipient storage is optional.
+  }
+}
 
 function App() {
   const [showSplash, setShowSplash] = useState(true);
@@ -272,6 +307,7 @@ function App() {
   const [googleDriveUpdating, setGoogleDriveUpdating] = useState(false);
   const [googleDriveOpening, setGoogleDriveOpening] = useState(false);
   const [currentDriveBackup, setCurrentDriveBackup] = useState<GoogleDriveFileResult | null>(null);
+  const [connectedDriveUser, setConnectedDriveUser] = useState<{ displayName?: string; emailAddress?: string } | null>(null);
   const [driveImportPreview, setDriveImportPreview] = useState<DriveImportPreview | null>(null);
   const [driveBackupChoices, setDriveBackupChoices] = useState<GoogleDriveBackupFileGroups | null>(null);
   const [driveBackupTab, setDriveBackupTab] = useState<DriveBackupTab>("mine");
@@ -280,6 +316,9 @@ function App() {
   const [driveShareOpen, setDriveShareOpen] = useState(false);
   const [driveShareEmail, setDriveShareEmail] = useState("");
   const [driveShareConfirm, setDriveShareConfirm] = useState<DriveShareConfirm | null>(null);
+  const [driveRecipients, setDriveRecipients] = useState<DriveBackupRecipient[]>(() => readStoredDriveRecipients());
+  const [selectedDriveRecipientIds, setSelectedDriveRecipientIds] = useState<string[]>([]);
+  const [driveRecipientName, setDriveRecipientName] = useState("");
   const [googleDriveSharing, setGoogleDriveSharing] = useState(false);
   const [driveAccessOpen, setDriveAccessOpen] = useState(false);
   const [driveAccessList, setDriveAccessList] = useState<GoogleDrivePermissionResult[] | null>(null);
@@ -370,6 +409,10 @@ function App() {
   useEffect(() => {
     saveRosterState(rosterState);
   }, [rosterState]);
+
+  useEffect(() => {
+    writeStoredDriveRecipients(driveRecipients);
+  }, [driveRecipients]);
 
   useEffect(() => {
     const shouldLockScroll =
@@ -512,6 +555,11 @@ function App() {
     try {
       const result = await requestGoogleDriveAccessToken(googleDriveAccessToken ? "" : "consent");
       setGoogleDriveAccessToken(result.accessToken);
+      try {
+        setConnectedDriveUser(await getGoogleDriveUserSummary(result.accessToken));
+      } catch {
+        setConnectedDriveUser(null);
+      }
       showRosterToolsNotice("Google Drive connected", "Your browser session is now connected to Google Drive.", "success");
     } catch (error) {
       showRosterToolsNotice("Could not connect Google Drive", error instanceof Error ? error.message : "Please try again.", "error");
@@ -522,6 +570,7 @@ function App() {
 
   const disconnectGoogleDrive = () => {
     setGoogleDriveAccessToken("");
+    setConnectedDriveUser(null);
     setCurrentDriveBackup(null);
     showRosterToolsNotice("Google Drive disconnected", "This browser session is no longer connected to Google Drive.", "info");
   };
@@ -745,50 +794,89 @@ function App() {
 
   const openDriveShareModal = () => {
     if (!googleDriveConnected) {
-      showRosterToolsNotice("Connect Google Drive first", "Connect your Google account before sharing a Drive backup.", "warning");
+      showRosterToolsNotice("Connect Google Drive first", "Connect your Google account before sending a backup copy.", "warning");
       return;
     }
-    if (!currentDriveBackup) {
-      showRosterToolsNotice("No Drive file selected", "Save or open a Drive backup first, then you can share that selected file.", "warning");
+    if (isEmptyStarterRoster) {
+      showRosterToolsNotice("No roster yet", "Create or import a roster first, then send a Drive backup copy.", "warning");
       return;
     }
     setDriveShareEmail("");
+    setDriveRecipientName("");
     setDriveShareConfirm(null);
     setDriveShareOpen(true);
   };
 
-  const prepareDriveShare = () => {
+  const addDriveRecipient = () => {
     const error = validateShareEmail(driveShareEmail);
     if (error) {
-      showRosterToolsNotice("Check email address", error, "warning");
+      showRosterToolsNotice("Check email", error, "warning");
       return;
     }
-    setDriveShareConfirm({ email: normalizeShareEmail(driveShareEmail) });
+    const email = normalizeShareEmail(driveShareEmail);
+    if (driveRecipients.some((recipient) => recipient.email === email)) {
+      showRosterToolsNotice("Already saved", "That email is already in your send list.", "info");
+      return;
+    }
+    const fallbackName = email.split("@")[0] || email;
+    const recipient: DriveBackupRecipient = {
+      id: `recipient_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+      name: driveRecipientName.trim() || fallbackName,
+      email,
+    };
+    setDriveRecipients((current) => [...current, recipient]);
+    setSelectedDriveRecipientIds((current) => [...current, recipient.id]);
+    setDriveRecipientName("");
+    setDriveShareEmail("");
+  };
+
+  const removeDriveRecipient = (recipientId: string) => {
+    setDriveRecipients((current) => current.filter((recipient) => recipient.id !== recipientId));
+    setSelectedDriveRecipientIds((current) => current.filter((id) => id !== recipientId));
+  };
+
+  const toggleDriveRecipient = (recipientId: string) => {
+    setSelectedDriveRecipientIds((current) =>
+      current.includes(recipientId)
+        ? current.filter((id) => id !== recipientId)
+        : [...current, recipientId],
+    );
+  };
+
+  const prepareDriveShare = () => {
+    const recipients = driveRecipients.filter((recipient) => selectedDriveRecipientIds.includes(recipient.id));
+    if (recipients.length === 0) {
+      showRosterToolsNotice("Choose recipients", "Select at least one saved person, or add a new email first.", "warning");
+      return;
+    }
+    setDriveShareConfirm({ recipients });
   };
 
   const confirmDriveShare = async () => {
-    if (!driveShareConfirm || !currentDriveBackup) return;
+    if (!driveShareConfirm) return;
     setGoogleDriveSharing(true);
     try {
-      await shareGoogleDriveFileWithEditor(
+      const jsonText = allRostersToDriveBackupJson(rosterState);
+      const file = await createGoogleDriveJsonFile(
         googleDriveAccessToken,
-        currentDriveBackup.id,
-        driveShareConfirm.email,
+        allRostersDriveBackupFilename(rosters),
+        jsonText,
       );
-      const sharedEmail = driveShareConfirm.email;
+      await Promise.all(
+        driveShareConfirm.recipients.map((recipient) =>
+          shareGoogleDriveFileWithViewer(googleDriveAccessToken, file.id, recipient.email),
+        ),
+      );
+      const names = driveShareConfirm.recipients.map((recipient) => recipient.name || recipient.email).join(", ");
       setDriveShareOpen(false);
       setDriveShareConfirm(null);
-      setDriveShareEmail("");
       showRosterToolsNotice(
-        "Drive backup shared",
-        `${currentDriveBackup.name} was shared with ${sharedEmail} as Editor.`,
+        "Backup copy sent",
+        `Created a new Drive backup copy and shared it with ${names}. Recipients can view/import the copy, but cannot edit your active backup file.`,
         "success",
       );
-      if (driveAccessOpen) {
-        await loadDriveAccessList();
-      }
     } catch (error) {
-      showRosterToolsNotice("Could not share Drive backup", error instanceof Error ? error.message : "Please try again.", "error");
+      showRosterToolsNotice("Could not send backup copy", error instanceof Error ? error.message : "Please try again.", "error");
     } finally {
       setGoogleDriveSharing(false);
     }
@@ -984,9 +1072,7 @@ function App() {
   };
 
   const visibleDriveBackupChoices = driveBackupChoices
-    ? driveBackupTab === "shared"
-      ? driveBackupChoices.shared
-      : driveBackupChoices.mine
+    ? [...driveBackupChoices.mine, ...driveBackupChoices.shared]
     : [];
   const totalDriveBackupChoices = driveBackupChoices
     ? driveBackupChoices.mine.length + driveBackupChoices.shared.length
@@ -1430,7 +1516,7 @@ function App() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
                       <div className="text-[10px] font-black uppercase tracking-wide text-blue-500">
-                        Google Drive
+                        Drive Backup
                       </div>
                       <div className={`rounded-full px-2 py-0.5 text-[10px] font-black ${googleDriveConnected ? "bg-emerald-50 text-emerald-700" : "bg-white text-slate-500"}`}>
                         {googleDriveConnected ? "Connected" : "Not connected"}
@@ -1438,7 +1524,13 @@ function App() {
                     </div>
                     <div className="mt-2 rounded-2xl bg-white/80 px-3 py-2">
                       <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-                        Current file
+                        Connected account
+                      </div>
+                      <div className={`mt-0.5 truncate text-xs font-black ${connectedDriveUser?.emailAddress ? "text-[#102A43]" : "text-slate-400"}`}>
+                        {connectedDriveUser?.emailAddress || (googleDriveConnected ? "Connected" : "Not connected")}
+                      </div>
+                      <div className="mt-2 text-[10px] font-black uppercase tracking-wide text-slate-400">
+                        Active backup
                       </div>
                       <div className={`mt-0.5 truncate text-xs font-black ${currentDriveBackup ? "text-[#102A43]" : "text-slate-400"}`}>
                         {currentDriveBackup?.name || "None selected"}
@@ -1498,55 +1590,29 @@ function App() {
                       googleDriveOpening ||
                       googleDriveUpdating
                     }
-                    title={currentDriveBackup ? "Update the selected Google Drive backup file" : "Open or save a Drive backup first"}
+                    title={currentDriveBackup ? "Update the active Drive backup file" : "Open or save a Drive backup first"}
                   >
                     <RefreshCw className={`h-4 w-4 ${googleDriveUpdating ? "animate-spin" : ""}`} />
                     <span className="font-black">
-                      {googleDriveUpdating ? "Updating..." : "Update current backup"}
+                      {googleDriveUpdating ? "Updating..." : "Update backup"}
                     </span>
                   </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-11 justify-start rounded-2xl gap-3 border-emerald-100 bg-white/90"
+                    onClick={openDriveShareModal}
+                    disabled={isEmptyStarterRoster || !googleDriveConnected || googleDriveSharing}
+                  >
+                    <Share2 className="h-4 w-4" />
+                    <span className="font-black">
+                      {googleDriveSharing ? "Sending..." : "Send backup copy"}
+                    </span>
+                  </Button>
+                  <p className="rounded-2xl bg-white/70 px-3 py-2 text-[10px] font-semibold leading-snug text-slate-500">
+                    Drive backup saves text-only roster files. Use Send backup copy to hand off the latest roster to another organizer.
+                  </p>
                 </div>
-
-                {googleDriveConnected ? (
-                  <div className="mt-3 rounded-2xl border border-blue-100 bg-white/75 p-2.5">
-                    <div className="mb-2 flex items-center justify-between gap-2">
-                      <span className="text-[10px] font-black uppercase tracking-wide text-blue-500">
-                        Sharing
-                      </span>
-                      {!currentDriveBackup ? (
-                        <span className="truncate text-[10px] font-bold text-slate-400">
-                          Select a file first
-                        </span>
-                      ) : null}
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className={`h-10 rounded-2xl text-xs font-black ${currentDriveBackup ? "border-blue-100 bg-blue-50/70 text-blue-700 hover:bg-blue-100" : "border-slate-100 bg-white/70 text-slate-400"}`}
-                        onClick={openDriveShareModal}
-                        disabled={!currentDriveBackup || !googleDriveConnected || googleDriveSharing}
-                      >
-                        <Share2 className="mr-1.5 h-3.5 w-3.5" />
-                        Share file
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className={`h-10 rounded-2xl text-xs font-black ${currentDriveBackup ? "border-slate-100 bg-slate-50/80 text-slate-700 hover:bg-slate-100" : "border-slate-100 bg-white/70 text-slate-400"}`}
-                        onClick={openDriveAccessManager}
-                        disabled={!currentDriveBackup || !googleDriveConnected || driveAccessLoading}
-                      >
-                        Manage access
-                      </Button>
-                    </div>
-                    <p className="mt-2 text-[10px] font-semibold leading-snug text-slate-500">
-                      {currentDriveBackup
-                        ? "Shared editors can update this backup. Keep a private local backup if needed."
-                        : "Open or save a backup first."}
-                    </p>
-                  </div>
-                ) : null}
               </div>
 
               <div className="grid gap-2 border-t border-slate-100 pt-3">
@@ -1694,13 +1760,13 @@ function App() {
             <div className="flex items-start justify-between gap-3 border-b border-slate-100 p-4 pb-3">
               <div className="min-w-0">
                 <div className="text-[10px] font-black uppercase tracking-wide text-blue-500">
-                  Google Drive
+                  Drive Backup
                 </div>
                 <h2 className="mt-1 truncate text-base font-black tracking-tight text-[#102A43]">
                   Open backup
                 </h2>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  Choose a Fair Teams backup file.
+                  Choose a Fair Teams backup you saved from this app.
                 </p>
               </div>
               <Button
@@ -1713,25 +1779,6 @@ function App() {
               >
                 <X className="h-4 w-4" />
               </Button>
-            </div>
-
-            <div className="border-b border-slate-100 p-3 pb-0">
-              <div className="grid grid-cols-2 gap-1 rounded-2xl bg-slate-100 p-1">
-                <button
-                  type="button"
-                  onClick={() => setDriveBackupTab("mine")}
-                  className={`rounded-xl px-2 py-2 text-xs font-black transition ${driveBackupTab === "mine" ? "bg-white text-[#102A43] shadow-sm" : "text-slate-500"}`}
-                >
-                  My Drive ({driveBackupChoices.mine.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDriveBackupTab("shared")}
-                  className={`rounded-xl px-2 py-2 text-xs font-black transition ${driveBackupTab === "shared" ? "bg-white text-[#102A43] shadow-sm" : "text-slate-500"}`}
-                >
-                  Shared with me ({driveBackupChoices.shared.length})
-                </button>
-              </div>
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
@@ -1749,7 +1796,7 @@ function App() {
                           {file.name}
                         </span>
                         <span className="mt-0.5 block truncate text-[11px] font-bold text-blue-700/75">
-                          {describeDriveFileSource(file, driveBackupTab)} · {formatDriveModifiedTime(file.modifiedTime)}
+                          {file.ownedByMe === false ? "Received copy" : "My backup"} · {formatDriveModifiedTime(file.modifiedTime)}
                         </span>
                       </span>
                       <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-lg font-black leading-none text-blue-400 shadow-sm">
@@ -1763,11 +1810,7 @@ function App() {
                   <div className="flex gap-2">
                     <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
                     <p className="text-xs font-semibold leading-snug text-amber-800">
-                      {totalDriveBackupChoices === 0
-                        ? "No Fair Teams backups were found. Save a backup first, or ask the owner to share the backup with this Google account."
-                        : driveBackupTab === "shared"
-                          ? "No shared Fair Teams backups found for this Google account."
-                          : "No Fair Teams backups found in My Drive."}
+                      No Fair Teams backups found. Save a backup first, or open a backup copy that someone sent to this Google account.
                     </p>
                   </div>
                 </div>
@@ -1794,17 +1837,17 @@ function App() {
           role="dialog"
           aria-modal="true"
         >
-          <div className="w-full max-w-sm overflow-hidden rounded-3xl border border-blue-100 bg-white shadow-2xl">
+          <div className="flex max-h-[calc(100dvh-2rem)] w-full max-w-sm flex-col overflow-hidden rounded-3xl border border-emerald-100 bg-white shadow-2xl">
             <div className="flex items-start justify-between gap-3 border-b border-slate-100 p-4 pb-3">
               <div className="min-w-0">
-                <div className="text-[10px] font-black uppercase tracking-wide text-blue-500">
-                  Google Drive sharing
+                <div className="text-[10px] font-black uppercase tracking-wide text-emerald-600">
+                  Drive Backup
                 </div>
                 <h2 className="mt-1 text-base font-black tracking-tight text-[#102A43]">
-                  Share current file
+                  Send backup copy
                 </h2>
-                <p className="mt-1 truncate text-xs font-semibold text-slate-500">
-                  {currentDriveBackup?.name || "No Drive file selected"}
+                <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
+                  Send a view-only copy to another organizer.
                 </p>
               </div>
               <Button
@@ -1822,49 +1865,116 @@ function App() {
               </Button>
             </div>
 
-            <div className="p-4">
-              <label className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-                Co-organizer email
-              </label>
-              <input
-                value={driveShareEmail}
-                onChange={(e) => setDriveShareEmail(e.target.value)}
-                inputMode="email"
-                autoCapitalize="none"
-                autoCorrect="off"
-                placeholder="sarah@example.com"
-                className="mt-2 h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm font-bold text-[#102A43] outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
-              />
-
-              <div className="mt-3 rounded-2xl border border-amber-100 bg-amber-50/80 p-3">
-                <div className="flex gap-2">
-                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-                  <p className="text-xs font-semibold leading-snug text-amber-800">
-                    They will be added as Editor and can update this Drive backup file. Make sure the email address is correct.
-                  </p>
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
+              <div className="rounded-2xl border border-slate-100 bg-slate-50/80 p-3">
+                <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+                  Add person
+                </div>
+                <div className="mt-2 grid gap-2">
+                  <input
+                    value={driveRecipientName}
+                    onChange={(e) => setDriveRecipientName(e.target.value)}
+                    placeholder="Name, e.g. Sarah"
+                    className="h-10 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm font-bold text-[#102A43] outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
+                  />
+                  <div className="flex gap-2">
+                    <input
+                      value={driveShareEmail}
+                      onChange={(e) => setDriveShareEmail(e.target.value)}
+                      inputMode="email"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      placeholder="email@example.com"
+                      className="h-10 min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-bold text-[#102A43] outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
+                    />
+                    <Button
+                      type="button"
+                      className="h-10 rounded-2xl bg-[#102A43] px-3 text-xs font-black text-white"
+                      onClick={addDriveRecipient}
+                    >
+                      Add
+                    </Button>
+                  </div>
                 </div>
               </div>
 
-              <div className="mt-4 grid gap-2">
-                <Button
-                  type="button"
-                  className="h-11 rounded-2xl bg-blue-600 text-white hover:bg-blue-700"
-                  onClick={prepareDriveShare}
-                >
-                  Continue
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="h-10 rounded-2xl text-slate-500"
-                  onClick={() => {
-                    setDriveShareOpen(false);
-                    setDriveShareConfirm(null);
-                  }}
-                >
-                  Cancel
-                </Button>
+              <div className="mt-3 rounded-2xl border border-emerald-100 bg-emerald-50/60 p-3">
+                <div className="mb-2 text-[10px] font-black uppercase tracking-wide text-emerald-700">
+                  Send to
+                </div>
+                {driveRecipients.length > 0 ? (
+                  <div className="space-y-2">
+                    {driveRecipients.map((recipient) => {
+                      const selected = selectedDriveRecipientIds.includes(recipient.id);
+                      return (
+                        <div
+                          key={recipient.id}
+                          className={`flex items-center gap-2 rounded-2xl border px-3 py-2 ${selected ? "border-emerald-200 bg-white" : "border-white/70 bg-white/65"}`}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => toggleDriveRecipient(recipient.id)}
+                            className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border ${selected ? "border-emerald-500 bg-emerald-500 text-white" : "border-slate-200 bg-white text-transparent"}`}
+                            aria-label={selected ? `Unselect ${recipient.name}` : `Select ${recipient.name}`}
+                          >
+                            <Check className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => toggleDriveRecipient(recipient.id)}
+                            className="min-w-0 flex-1 text-left"
+                          >
+                            <div className="truncate text-sm font-black text-[#102A43]">
+                              {recipient.name || recipient.email}
+                            </div>
+                            <div className="truncate text-[11px] font-bold text-slate-500">
+                              {recipient.email}
+                            </div>
+                          </button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 shrink-0 rounded-xl text-slate-400"
+                            onClick={() => removeDriveRecipient(recipient.id)}
+                            title="Remove person"
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-emerald-200 bg-white/75 p-3 text-xs font-bold text-slate-500">
+                    Add Sarah, Peter, or another organizer above.
+                  </div>
+                )}
               </div>
+
+              <div className="mt-3 rounded-2xl border border-amber-100 bg-amber-50/80 p-3">
+                <p className="text-xs font-semibold leading-snug text-amber-800">
+                  Fair Teams creates a new text-only Drive backup copy and shares it as Viewer. Recipients can import the copy, but cannot edit your active backup.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid gap-2 border-t border-slate-100 p-4">
+              <Button
+                type="button"
+                className="h-11 rounded-2xl bg-emerald-600 text-white hover:bg-emerald-700"
+                onClick={prepareDriveShare}
+              >
+                Continue
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                className="h-10 rounded-2xl text-slate-500"
+                onClick={() => setDriveShareOpen(false)}
+              >
+                Cancel
+              </Button>
             </div>
           </div>
         </div>
@@ -1883,26 +1993,30 @@ function App() {
               </div>
               <div className="min-w-0 flex-1">
                 <h2 className="text-base font-black tracking-tight text-[#102A43]">
-                  Share as Editor?
+                  Send backup copy?
                 </h2>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  {driveShareConfirm.email} can open and update this backup file. This backup contains roster text data only; no player photos or logo images.
+                  This creates a new Drive file and shares it as Viewer. Make sure these recipients are correct.
                 </p>
               </div>
             </div>
 
             <div className="mt-3 rounded-2xl border border-slate-100 bg-slate-50/80 p-3">
-              <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-                File
+              <div className="mb-2 text-[10px] font-black uppercase tracking-wide text-slate-400">
+                Recipients
               </div>
-              <div className="mt-1 truncate text-xs font-black text-[#102A43]">
-                {currentDriveBackup?.name}
+              <div className="space-y-1.5">
+                {driveShareConfirm.recipients.map((recipient) => (
+                  <div key={recipient.id} className="truncate text-xs font-bold text-slate-700">
+                    • {recipient.name || recipient.email} — {recipient.email}
+                  </div>
+                ))}
               </div>
             </div>
 
             <div className="mt-3 rounded-2xl border border-amber-100 bg-amber-50/80 p-3">
               <p className="text-xs font-semibold leading-snug text-amber-800">
-                After sharing, this file is no longer private. Save a local backup first if you want a safe copy.
+                The backup contains roster text data such as names, ratings, traits, and notes. It does not include player photos or logo images.
               </p>
             </div>
 
@@ -1917,11 +2031,11 @@ function App() {
               </Button>
               <Button
                 type="button"
-                className="h-11 rounded-2xl bg-blue-600 text-white hover:bg-blue-700"
+                className="h-11 rounded-2xl bg-emerald-600 text-white hover:bg-emerald-700"
                 onClick={confirmDriveShare}
                 disabled={googleDriveSharing}
               >
-                {googleDriveSharing ? "Sharing..." : "Share as Editor"}
+                {googleDriveSharing ? "Sending..." : "Send copy"}
               </Button>
               <Button
                 type="button"
@@ -1929,162 +2043,6 @@ function App() {
                 className="h-10 rounded-2xl text-slate-500"
                 onClick={() => setDriveShareConfirm(null)}
                 disabled={googleDriveSharing}
-              >
-                Cancel
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {driveAccessOpen && (
-        <div
-          className="fixed inset-0 z-[60] flex items-end justify-center bg-black/45 p-4 sm:items-center"
-          role="dialog"
-          aria-modal="true"
-        >
-          <div className="flex max-h-[calc(100dvh-2rem)] w-full max-w-sm flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
-            <div className="flex items-start justify-between gap-3 border-b border-slate-100 p-4 pb-3">
-              <div className="min-w-0">
-                <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-                  Google Drive sharing
-                </div>
-                <h2 className="mt-1 text-base font-black tracking-tight text-[#102A43]">
-                  Manage access
-                </h2>
-                <p className="mt-1 truncate text-xs font-semibold text-slate-500">
-                  {currentDriveBackup?.name}
-                </p>
-              </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 shrink-0 rounded-xl"
-                onClick={() => setDriveAccessOpen(false)}
-                title="Close"
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
-              {driveAccessLoading ? (
-                <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-3 text-xs font-bold text-blue-700">
-                  Loading access...
-                </div>
-              ) : driveAccessList && driveAccessList.length > 0 ? (
-                <div className="space-y-2">
-                  {driveAccessList.map((permission) => {
-                    const label = drivePermissionLabel(permission);
-                    const inherited = drivePermissionIsInherited(permission);
-                    const canRemove = canRemoveDrivePermission(permission);
-                    return (
-                      <div
-                        key={permission.id}
-                        className="rounded-2xl border border-slate-100 bg-slate-50/80 p-3"
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <div className="truncate text-sm font-black text-[#102A43]">
-                              {permission.displayName || label}
-                            </div>
-                            <div className="mt-0.5 truncate text-[11px] font-bold text-slate-500">
-                              {permission.emailAddress || label}
-                            </div>
-                            <div className="mt-1 text-[10px] font-black uppercase tracking-wide text-slate-400">
-                              {formatDrivePermissionRole(permission.role)}{inherited ? " from folder" : ""}
-                            </div>
-                          </div>
-                          {canRemove ? (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className="h-8 shrink-0 rounded-xl border-red-100 bg-red-50 px-2 text-[10px] font-black text-red-700 hover:bg-red-100"
-                              onClick={() => setDriveRemoveConfirm({ permission, label })}
-                              disabled={driveRemovingPermissionId === permission.id}
-                            >
-                              <UserMinus className="mr-1 h-3 w-3" />
-                              Remove
-                            </Button>
-                          ) : null}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="rounded-2xl border border-slate-100 bg-slate-50/80 p-3 text-xs font-bold text-slate-500">
-                  No sharing details found for this file.
-                </div>
-              )}
-
-              <div className="mt-3 rounded-2xl border border-amber-100 bg-amber-50/80 p-3">
-                <p className="text-xs font-semibold leading-snug text-amber-800">
-                  Shared editors can change this backup. Keep a private local backup if this roster is important.
-                </p>
-              </div>
-            </div>
-
-            <div className="grid gap-2 border-t border-slate-100 p-4">
-              <Button
-                type="button"
-                variant="outline"
-                className="h-10 rounded-2xl border-blue-100 bg-white text-blue-700 hover:bg-blue-50"
-                onClick={loadDriveAccessList}
-                disabled={driveAccessLoading}
-              >
-                Refresh access
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                className="h-10 rounded-2xl text-slate-500"
-                onClick={() => setDriveAccessOpen(false)}
-              >
-                Close
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {driveRemoveConfirm && (
-        <div
-          className="fixed inset-0 z-[70] flex items-end justify-center bg-black/50 p-4 sm:items-center"
-          role="dialog"
-          aria-modal="true"
-        >
-          <div className="w-full max-w-sm rounded-3xl border border-red-100 bg-white p-4 shadow-2xl">
-            <div className="flex items-start gap-3">
-              <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-red-50 text-red-600">
-                <AlertTriangle className="h-5 w-5" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <h2 className="text-base font-black tracking-tight text-[#102A43]">
-                  Remove access?
-                </h2>
-                <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  {driveRemoveConfirm.label} will no longer be able to open or update this Drive backup through this direct file permission.
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-4 grid gap-2">
-              <Button
-                type="button"
-                className="h-11 rounded-2xl bg-red-600 text-white hover:bg-red-700"
-                onClick={confirmRemoveDriveAccess}
-                disabled={Boolean(driveRemovingPermissionId)}
-              >
-                {driveRemovingPermissionId ? "Removing..." : "Remove access"}
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                className="h-10 rounded-2xl text-slate-500"
-                onClick={() => setDriveRemoveConfirm(null)}
-                disabled={Boolean(driveRemovingPermissionId)}
               >
                 Cancel
               </Button>

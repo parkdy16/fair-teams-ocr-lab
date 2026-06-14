@@ -565,7 +565,7 @@ function PlayerTags({ player, includeVibe = false, includeAbilityCount = false }
 
 function StatControl({ label, value, max = 10, onChange }: { label: string; value: number; max?: number; onChange: (value: number) => void }) {
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-0.5">
       <div className="flex justify-between items-center">
         <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">{label}</Label>
         <span className="text-xs font-black text-primary">{value}{max === 3 ? "" : max === 5 ? "★" : ""}</span>
@@ -859,7 +859,7 @@ function ProfileDialog({
           </button>
 
           {advancedOpen && (
-            <div className="rounded-2xl border border-primary/15 bg-primary/5 p-3 space-y-4">
+            <div className="rounded-2xl border border-primary/15 bg-primary/5 p-3 space-y-3">
               <div className="flex items-start gap-3">
                 <div className="relative shrink-0 pt-5">
                   <button
@@ -945,7 +945,7 @@ function ProfileDialog({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-2">
                 {STAT_FIELDS.map(({ key, label }) => (
                   <StatControl key={key} label={label} value={draft[key]} onChange={value => updateDraft({ [key]: value } as Partial<RoomPlayer>)} />
                 ))}
@@ -1689,7 +1689,7 @@ export function PlayersTab({
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-2 gap-2">
                     {STAT_FIELDS.map(({ key, label }) => (
                       <StatControl key={key} label={label} value={addDetails[key]} onChange={value => updateAddDetails({ [key]: value } as Partial<AddPlayerDetails>)} />
                     ))}

@@ -158,7 +158,7 @@
   --slider-fill: 0%;
   -webkit-appearance: none;
   appearance: none;
-  height: 30px;
+  height: 26px;
   cursor: pointer;
   background: transparent;
   touch-action: pan-y;
@@ -169,7 +169,7 @@
 }
 
 .fairteams-slider::-webkit-slider-runnable-track {
-  height: 12px;
+  height: 8px;
   border-radius: 999px;
   background: linear-gradient(
     to right,
@@ -184,70 +184,70 @@
 .fairteams-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 28px;
-  height: 28px;
-  margin-top: -9px;
+  width: 22px;
+  height: 22px;
+  margin-top: -7px;
   border-radius: 999px;
-  background: #fff;
-  border: 3px solid hsl(var(--primary));
-  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.22);
+  background: #102A43;
+  border: 2px solid rgba(255, 255, 255, 0.92);
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.18);
 }
 
 .fairteams-slider:active::-webkit-slider-thumb {
-  transform: scale(1.08);
+  transform: scale(1.04);
 }
 
 .fairteams-slider::-moz-range-track {
-  height: 12px;
+  height: 8px;
   border-radius: 999px;
   background: hsl(var(--muted));
   border: 1px solid hsl(var(--border));
 }
 
 .fairteams-slider::-moz-range-progress {
-  height: 12px;
+  height: 8px;
   border-radius: 999px;
   background: hsl(var(--primary));
 }
 
 .fairteams-slider::-moz-range-thumb {
-  width: 28px;
-  height: 28px;
+  width: 22px;
+  height: 22px;
   border-radius: 999px;
-  background: #fff;
-  border: 3px solid hsl(var(--primary));
-  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.22);
+  background: #102A43;
+  border: 2px solid rgba(255, 255, 255, 0.92);
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.18);
 }
 
 /* Smaller advanced-stat slider styling. Quick Skill keeps the larger touch target above. */
 .fairteams-slider-compact {
-  height: 24px;
+  height: 20px;
 }
 
 .fairteams-slider-compact::-webkit-slider-runnable-track {
-  height: 8px;
+  height: 6px;
 }
 
 .fairteams-slider-compact::-webkit-slider-thumb {
-  width: 22px;
-  height: 22px;
-  margin-top: -8px;
-  border-width: 2px;
-  box-shadow: 0 2px 7px rgba(15, 23, 42, 0.18);
+  width: 16px;
+  height: 16px;
+  margin-top: -5px;
+  border-width: 1.5px;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.14);
 }
 
 .fairteams-slider-compact:active::-webkit-slider-thumb {
-  transform: scale(1.05);
+  transform: scale(1.04);
 }
 
 .fairteams-slider-compact::-moz-range-track,
 .fairteams-slider-compact::-moz-range-progress {
-  height: 8px;
+  height: 6px;
 }
 
 .fairteams-slider-compact::-moz-range-thumb {
-  width: 22px;
-  height: 22px;
-  border-width: 2px;
-  box-shadow: 0 2px 7px rgba(15, 23, 42, 0.18);
+  width: 16px;
+  height: 16px;
+  border-width: 1.5px;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.14);
 }

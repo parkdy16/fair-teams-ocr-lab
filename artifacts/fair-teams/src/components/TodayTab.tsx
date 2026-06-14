@@ -2612,30 +2612,53 @@ export function TodayTab({
           sourceIndex < sources.length;
           sourceIndex += 1
         ) {
+          const recognizeOptions =
+            screenshotImportMode === "other"
+              ? ({
+                  tessedit_pageseg_mode: "6",
+                  preserve_interword_spaces: "1",
+                  logger: (message) => {
+                    if (message.status)
+                      setOcrStatus(
+                        `${message.status} (${index + 1}/${selectedScreenshots.length})`,
+                      );
+                    if (typeof message.progress === "number") {
+                      const totalPasses =
+                        selectedScreenshots.length * sources.length;
+                      const completedPasses =
+                        index * sources.length + sourceIndex;
+                      setOcrProgress(
+                        Math.round(
+                          ((completedPasses + message.progress) / totalPasses) *
+                            100,
+                        ),
+                      );
+                    }
+                  },
+                } as any)
+              : {
+                  logger: (message) => {
+                    if (message.status)
+                      setOcrStatus(
+                        `${message.status} (${index + 1}/${selectedScreenshots.length})`,
+                      );
+                    if (typeof message.progress === "number") {
+                      const imageShare = 1 / selectedScreenshots.length;
+                      const completedShare = index / selectedScreenshots.length;
+                      setOcrProgress(
+                        Math.round(
+                          (completedShare + message.progress * imageShare) *
+                            100,
+                        ),
+                      );
+                    }
+                  },
+                };
+
           const result = await Tesseract.recognize(
             sources[sourceIndex],
             "eng",
-            {
-              tessedit_pageseg_mode: "6",
-              preserve_interword_spaces: "1",
-              logger: (message) => {
-                if (message.status)
-                  setOcrStatus(
-                    `${message.status} (${index + 1}/${selectedScreenshots.length})`,
-                  );
-                if (typeof message.progress === "number") {
-                  const totalPasses =
-                    selectedScreenshots.length * sources.length;
-                  const completedPasses = index * sources.length + sourceIndex;
-                  setOcrProgress(
-                    Math.round(
-                      ((completedPasses + message.progress) / totalPasses) *
-                        100,
-                    ),
-                  );
-                }
-              },
-            } as any,
+            recognizeOptions,
           );
           imageTexts.push(result.data.text.trim());
         }

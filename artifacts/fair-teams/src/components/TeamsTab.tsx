@@ -62,7 +62,7 @@ function GenderBadge({ gender }: { gender?: string }) {
   return <span className="text-[8px] font-medium lowercase text-purple-500/45">o</span>;
 }
 
-function averageStat(players: Player[], key: keyof Pick<Player, "attack" | "passing" | "defense" | "speed" | "stamina" | "teamPlay">) {
+function averageStat(players: Player[], key: keyof Pick<Player, "attack" | "passing" | "defense" | "speed" | "stamina">) {
   if (players.length === 0) return 0;
   return Number((players.reduce((sum, player) => sum + Number(player[key] || 0), 0) / players.length).toFixed(1));
 }
@@ -74,7 +74,6 @@ function teamStatRows(players: Player[]) {
     { key: "defense", label: "Def", value: averageStat(players, "defense"), max: 10 },
     { key: "speed", label: "Speed", value: averageStat(players, "speed"), max: 10 },
     { key: "stamina", label: "Stam", value: averageStat(players, "stamina"), max: 10 },
-    { key: "teamPlay", label: "Team", value: averageStat(players, "teamPlay"), max: 3 },
   ];
 }
 
@@ -766,21 +765,16 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
 
                 {showingStats ? (
                   <div className="bg-card border-t border-border px-3 py-3">
-                    <div className="mb-2 grid grid-cols-2 gap-2">
-                      <div className="rounded-lg border border-slate-100 bg-slate-50/80 px-2 py-1.5 text-center">
-                        <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Avg</div>
-                        <div className="text-base font-black text-[#102A43]">{avgSkill}</div>
-                      </div>
-                      <div className="rounded-lg border border-slate-100 bg-slate-50/80 px-2 py-1.5 text-center">
-                        <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Players</div>
-                        <div className="text-base font-black text-[#102A43]">{team.players.length}</div>
-                      </div>
+                    <div className="mb-2 flex items-center justify-between gap-2 rounded-xl border border-slate-100 bg-slate-50/70 px-2.5 py-1.5">
+                      <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Team balance</span>
+                      <span className="text-[10px] font-black tabular-nums text-[#102A43]">
+                        Avg {avgSkill} · {team.players.length} player{team.players.length === 1 ? "" : "s"}
+                      </span>
                     </div>
 
                     <div className="space-y-1.5">
                       {statsRows.map((stat) => {
                         const pct = stat.max > 0 ? Math.max(0, Math.min(100, (stat.value / stat.max) * 100)) : 0;
-                        const displayValue = stat.key === "teamPlay" ? `${stat.value.toFixed(1)}/3` : stat.value.toFixed(1);
                         return (
                           <div key={stat.key} className="grid grid-cols-[2.4rem_1fr_2rem] items-center gap-1.5">
                             <span className="text-[9px] font-black uppercase tracking-tight text-slate-500">{stat.label}</span>
@@ -790,14 +784,14 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
                                 style={{ width: `${pct}%`, backgroundColor: accentColor }}
                               />
                             </div>
-                            <span className="text-right text-[9px] font-black tabular-nums text-slate-600">{displayValue}</span>
+                            <span className="text-right text-[9px] font-black tabular-nums text-slate-600">{stat.value.toFixed(1)}</span>
                           </div>
                         );
                       })}
                     </div>
 
                     <p className="mt-2 text-[9px] font-semibold leading-snug text-slate-400">
-                      Team averages. Use this to spot big style gaps after generating.
+                      Style averages for attack, passing, defense, speed, and stamina.
                     </p>
                   </div>
                 ) : (

@@ -180,6 +180,21 @@ type DriveImportPreview = {
   rosterNames: string[];
 };
 
+type LocalImportPreview = {
+  mode: "shared" | "backup";
+  sourceName: string;
+  rosters: RoomRoster[];
+  rosterCount: number;
+  playerCount: number;
+  rosterNames: string[];
+};
+
+type RosterToolsNotice = {
+  title: string;
+  message: string;
+  tone?: "info" | "success" | "warning" | "error";
+};
+
 function App() {
   const [showSplash, setShowSplash] = useState(true);
   const [splashVisible, setSplashVisible] = useState(false);
@@ -240,6 +255,8 @@ function App() {
   const [googleDriveOpening, setGoogleDriveOpening] = useState(false);
   const [currentDriveBackup, setCurrentDriveBackup] = useState<GoogleDriveFileResult | null>(null);
   const [driveImportPreview, setDriveImportPreview] = useState<DriveImportPreview | null>(null);
+  const [localImportPreview, setLocalImportPreview] = useState<LocalImportPreview | null>(null);
+  const [rosterToolsNotice, setRosterToolsNotice] = useState<RosterToolsNotice | null>(null);
   const googleDriveConnected = Boolean(googleDriveAccessToken);
   const googleDriveStatusText = !googleDriveConfig.isConfigured
     ? "Add Google Client ID and API key to .env.local"
@@ -261,6 +278,10 @@ function App() {
     "shared",
   );
 
+  const showRosterToolsNotice = (title: string, message: string, tone: RosterToolsNotice["tone"] = "info") => {
+    setRosterToolsNotice({ title, message, tone });
+  };
+
   useEffect(() => {
     saveRosterState(rosterState);
   }, [rosterState]);
@@ -271,7 +292,9 @@ function App() {
       rosterFilesOpen ||
       rosterPickerOpen ||
       clearRosterOpen ||
-      Boolean(driveImportPreview);
+      Boolean(driveImportPreview) ||
+      Boolean(localImportPreview) ||
+      Boolean(rosterToolsNotice);
     if (!shouldLockScroll) return;
 
     const previousOverflow = document.body.style.overflow;
@@ -279,7 +302,7 @@ function App() {
     return () => {
       document.body.style.overflow = previousOverflow;
     };
-  }, [groupSettingsOpen, rosterFilesOpen, rosterPickerOpen, clearRosterOpen, driveImportPreview]);
+  }, [groupSettingsOpen, rosterFilesOpen, rosterPickerOpen, clearRosterOpen, driveImportPreview, localImportPreview, rosterToolsNotice]);
 
   const openGroupSettings = () => {
     setDraftGroupName(activeRosterName);
@@ -391,7 +414,7 @@ function App() {
 
   const connectGoogleDrive = async () => {
     if (!googleDriveConfig.isConfigured) {
-      window.alert("Google Drive keys are not configured yet. Add VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_API_KEY to .env.local first.");
+      showRosterToolsNotice("Google Drive not configured", "Add VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_API_KEY before using Google Drive backup.", "warning");
       return;
     }
 
@@ -399,9 +422,9 @@ function App() {
     try {
       const result = await requestGoogleDriveAccessToken(googleDriveAccessToken ? "" : "consent");
       setGoogleDriveAccessToken(result.accessToken);
-      window.alert("Google Drive connected.");
+      showRosterToolsNotice("Google Drive connected", "Your browser session is now connected to Google Drive.", "success");
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : "Could not connect Google Drive.");
+      showRosterToolsNotice("Could not connect Google Drive", error instanceof Error ? error.message : "Please try again.", "error");
     } finally {
       setGoogleDriveConnecting(false);
     }
@@ -410,7 +433,7 @@ function App() {
   const disconnectGoogleDrive = () => {
     setGoogleDriveAccessToken("");
     setCurrentDriveBackup(null);
-    window.alert("Google Drive disconnected from this browser session.");
+    showRosterToolsNotice("Google Drive disconnected", "This browser session is no longer connected to Google Drive.", "info");
   };
 
   const preserveLocalImagesForDriveRosters = (
@@ -491,11 +514,11 @@ function App() {
 
   const openGoogleDriveBackup = async () => {
     if (!googleDriveConfig.isConfigured) {
-      window.alert("Google Drive keys are not configured yet. Add VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_API_KEY to .env.local first.");
+      showRosterToolsNotice("Google Drive not configured", "Add VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_API_KEY before using Google Drive backup.", "warning");
       return;
     }
     if (!googleDriveAccessToken) {
-      window.alert("Connect Google Drive first.");
+      showRosterToolsNotice("Connect Google Drive first", "Connect your Google account before using Drive backup.", "warning");
       return;
     }
 
@@ -505,7 +528,7 @@ function App() {
       if (!picked) return;
 
       if (!picked.name.toLowerCase().endsWith(".json")) {
-        window.alert("Please choose a Fair Teams .json backup file.");
+        showRosterToolsNotice("Choose a Fair Teams backup", "Please select a Fair Teams .json backup file.", "warning");
         return;
       }
 
@@ -523,7 +546,7 @@ function App() {
         rosterNames: backup.rosters.map((roster) => roster.name),
       });
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : "Could not open Google Drive backup.");
+      showRosterToolsNotice("Could not open Google Drive backup", error instanceof Error ? error.message : "Please try again.", "error");
     } finally {
       setGoogleDriveOpening(false);
     }
@@ -539,7 +562,7 @@ function App() {
     setCurrentDriveBackup(driveImportPreview.file);
     const rosterCount = driveImportPreview.rosterCount;
     setDriveImportPreview(null);
-    window.alert(`Opened from Google Drive and added ${rosterCount} roster${rosterCount === 1 ? "" : "s"}.`);
+    showRosterToolsNotice("Google Drive import complete", `Added ${rosterCount} roster${rosterCount === 1 ? "" : "s"} from Google Drive.`, "success");
   };
 
   const confirmReplaceDriveImport = () => {
@@ -548,21 +571,21 @@ function App() {
     setCurrentDriveBackup(driveImportPreview.file);
     const rosterCount = driveImportPreview.rosterCount;
     setDriveImportPreview(null);
-    window.alert(`Opened from Google Drive and replaced local rosters with ${rosterCount} roster${rosterCount === 1 ? "" : "s"}.`);
+    showRosterToolsNotice("Google Drive import complete", `Replaced local rosters with ${rosterCount} roster${rosterCount === 1 ? "" : "s"} from Google Drive.`, "success");
   };
 
 
   const saveAllRostersToGoogleDrive = async () => {
     if (!googleDriveConfig.isConfigured) {
-      window.alert("Google Drive keys are not configured yet. Add VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_API_KEY to .env.local first.");
+      showRosterToolsNotice("Google Drive not configured", "Add VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_API_KEY before using Google Drive backup.", "warning");
       return;
     }
     if (!googleDriveAccessToken) {
-      window.alert("Connect Google Drive first.");
+      showRosterToolsNotice("Connect Google Drive first", "Connect your Google account before using Drive backup.", "warning");
       return;
     }
     if (isEmptyStarterRoster) {
-      window.alert("Create or import a roster before saving to Google Drive.");
+      showRosterToolsNotice("No roster yet", "Create or import a roster first, then save it to Google Drive.", "warning");
       return;
     }
 
@@ -576,9 +599,9 @@ function App() {
       );
       setCurrentDriveBackup(file);
       const openText = file.webViewLink ? "\n\nYou can open it from Google Drive later." : "";
-      window.alert(`Saved to Google Drive:\n${file.name}${openText}`);
+      showRosterToolsNotice("Saved to Google Drive", `${file.name}${openText}`, "success");
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : "Could not save to Google Drive.");
+      showRosterToolsNotice("Could not save to Google Drive", error instanceof Error ? error.message : "Please try again.", "error");
     } finally {
       setGoogleDriveSaving(false);
     }
@@ -586,19 +609,19 @@ function App() {
 
   const updateCurrentGoogleDriveBackup = async () => {
     if (!googleDriveConfig.isConfigured) {
-      window.alert("Google Drive keys are not configured yet. Add VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_API_KEY to .env.local first.");
+      showRosterToolsNotice("Google Drive not configured", "Add VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_API_KEY before using Google Drive backup.", "warning");
       return;
     }
     if (!googleDriveAccessToken) {
-      window.alert("Connect Google Drive first.");
+      showRosterToolsNotice("Connect Google Drive first", "Connect your Google account before using Drive backup.", "warning");
       return;
     }
     if (!currentDriveBackup) {
-      window.alert("Open a Drive backup or save a new Drive backup first. Then Fair Teams can update that same Drive file.");
+      showRosterToolsNotice("No Drive file selected", "Open a Drive backup or save a new Drive backup first. Then Fair Teams can update that same Drive file.", "warning");
       return;
     }
     if (isEmptyStarterRoster) {
-      window.alert("Create or import a roster before updating the Drive backup.");
+      showRosterToolsNotice("No roster yet", "Create or import a roster first, then update the Drive backup.", "warning");
       return;
     }
 
@@ -611,9 +634,9 @@ function App() {
         jsonText,
       );
       setCurrentDriveBackup(file);
-      window.alert(`Updated Google Drive backup:\n${file.name}`);
+      showRosterToolsNotice("Google Drive backup updated", file.name, "success");
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : "Could not update the Google Drive backup.");
+      showRosterToolsNotice("Could not update Google Drive backup", error instanceof Error ? error.message : "Please try again.", "error");
     } finally {
       setGoogleDriveUpdating(false);
     }
@@ -654,6 +677,7 @@ function App() {
   const addImportedRosters = (
     incomingRosters: RoomRoster[],
     mode: "shared" | "backup",
+    sourceName: string,
   ) => {
     const normalizedIncoming = incomingRosters
       .map((roster) => ({
@@ -665,24 +689,26 @@ function App() {
       .filter((roster) => roster.players.length > 0 || mode === "backup");
 
     if (normalizedIncoming.length === 0) {
-      alert("No players found in that file.");
+      showRosterToolsNotice("Nothing to import", "No players or rosters were found in that file.", "warning");
       return;
     }
 
-    const namesPreview = normalizedIncoming
-      .slice(0, 4)
-      .map((roster) => `• ${roster.name}`)
-      .join("\n");
-    const moreText =
-      normalizedIncoming.length > 4
-        ? `\n…and ${normalizedIncoming.length - 4} more`
-        : "";
-    const ok = window.confirm(
-      mode === "backup"
-        ? `Add ${normalizedIncoming.length} roster${normalizedIncoming.length === 1 ? "" : "s"} from this backup?\n\n${namesPreview}${moreText}\n\nYour current rosters will stay.`
-        : `Import this as a separate roster?\n\n${namesPreview}\n\nYour current roster “${activeRosterName}” will stay unchanged.`,
-    );
-    if (!ok) return;
+    setLocalImportPreview({
+      mode,
+      sourceName,
+      rosters: normalizedIncoming,
+      rosterCount: normalizedIncoming.length,
+      playerCount: normalizedIncoming.reduce((sum, roster) => sum + roster.players.length, 0),
+      rosterNames: normalizedIncoming.map((roster) => roster.name),
+    });
+  };
+
+  const closeLocalImportPreview = () => {
+    setLocalImportPreview(null);
+  };
+
+  const confirmLocalImport = () => {
+    if (!localImportPreview) return;
 
     setRosterState((current) => {
       const currentIsStarter =
@@ -690,7 +716,7 @@ function App() {
         current.rosters[0]?.players.length === 0 &&
         current.rosters[0]?.name === EMPTY_ROSTER_NAME;
       const nextRosters = currentIsStarter ? [] : [...current.rosters];
-      const added = normalizedIncoming.map((roster) => {
+      const added = localImportPreview.rosters.map((roster) => {
         const copied = createRoster(
           uniqueRosterName(roster.name, nextRosters),
           roster.players,
@@ -704,12 +730,23 @@ function App() {
         activeRosterId: added[0]?.id || current.activeRosterId,
       };
     });
+
+    const rosterCount = localImportPreview.rosterCount;
+    const mode = localImportPreview.mode;
+    setLocalImportPreview(null);
+    showRosterToolsNotice(
+      mode === "backup" ? "Backup imported" : "Roster imported",
+      mode === "backup"
+        ? `Added ${rosterCount} roster${rosterCount === 1 ? "" : "s"} from the backup file.`
+        : `Added ${rosterCount} imported roster${rosterCount === 1 ? "" : "s"}.`,
+      "success",
+    );
   };
 
   const importFile = async (file: File) => {
     const text = await file.text();
     const importedRosters = parseRosterFile(text, file.name);
-    addImportedRosters(importedRosters, fileImportMode);
+    addImportedRosters(importedRosters, fileImportMode, file.name);
   };
 
   const readLogoFile = (file: File) => {
@@ -848,8 +885,10 @@ function App() {
                   try {
                     await importFile(file);
                   } catch (error) {
-                    alert(
+                    showRosterToolsNotice(
+                      "Import failed",
                       error instanceof Error ? error.message : "Import failed.",
+                      "error",
                     );
                   }
                 }}
@@ -1388,6 +1427,142 @@ function App() {
                   </button>
                 );
               })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {localImportPreview && (
+        <div
+          className="fixed inset-0 z-[60] flex items-end justify-center bg-black/45 p-4 sm:items-center"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="flex max-h-[calc(100dvh-2rem)] w-full max-w-sm flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
+            <div className="flex items-start justify-between gap-3 border-b border-slate-100 p-4 pb-3">
+              <div className="min-w-0">
+                <div className="text-[10px] font-black uppercase tracking-wide text-[#102A43]/55">
+                  {localImportPreview.mode === "backup" ? "Local backup" : "Local roster file"}
+                </div>
+                <h2 className="mt-1 truncate text-base font-black tracking-tight text-[#102A43]">
+                  Import this file?
+                </h2>
+                <p className="mt-1 truncate text-xs font-semibold text-slate-500">
+                  {localImportPreview.sourceName}
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 shrink-0 rounded-xl"
+                onClick={closeLocalImportPreview}
+                title="Close"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-3 text-center">
+                  <div className="text-xl font-black text-[#102A43]">
+                    {localImportPreview.rosterCount}
+                  </div>
+                  <div className="text-[10px] font-black uppercase tracking-wide text-blue-500">
+                    Rosters
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-3 text-center">
+                  <div className="text-xl font-black text-[#102A43]">
+                    {localImportPreview.playerCount}
+                  </div>
+                  <div className="text-[10px] font-black uppercase tracking-wide text-emerald-600">
+                    Players
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-3 rounded-2xl border border-slate-100 bg-slate-50/80 p-3">
+                <div className="mb-2 text-[10px] font-black uppercase tracking-wide text-slate-400">
+                  Included rosters
+                </div>
+                <div className="space-y-1.5">
+                  {localImportPreview.rosterNames.slice(0, 5).map((name, index) => (
+                    <div key={`${name}-${index}`} className="truncate text-xs font-bold text-slate-700">
+                      • {name}
+                    </div>
+                  ))}
+                  {localImportPreview.rosterNames.length > 5 ? (
+                    <div className="text-xs font-bold text-slate-400">
+                      …and {localImportPreview.rosterNames.length - 5} more
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="mt-3 rounded-2xl border border-amber-100 bg-amber-50/80 p-3">
+                <div className="flex gap-2">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                  <p className="text-xs font-semibold leading-snug text-amber-800">
+                    {localImportPreview.mode === "backup"
+                      ? "This adds rosters from the backup file. Your current rosters stay in the app."
+                      : `This imports the file as a separate roster. Your current roster “${activeRosterName}” stays unchanged.`}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-2 border-t border-slate-100 p-4">
+              <Button
+                type="button"
+                className="h-11 rounded-2xl bg-[#102A43] text-white hover:bg-[#0b2036]"
+                onClick={confirmLocalImport}
+              >
+                {localImportPreview.mode === "backup" ? "Add rosters from backup" : "Import as new roster"}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                className="h-10 rounded-2xl text-slate-500"
+                onClick={closeLocalImportPreview}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {rosterToolsNotice && (
+        <div
+          className="fixed inset-0 z-[60] flex items-end justify-center bg-black/45 p-4 sm:items-center"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="w-full max-w-sm rounded-3xl border border-slate-200 bg-white p-4 shadow-2xl">
+            <div className="flex items-start gap-3">
+              <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl ${rosterToolsNotice.tone === "success" ? "bg-emerald-50 text-emerald-600" : rosterToolsNotice.tone === "warning" ? "bg-amber-50 text-amber-600" : rosterToolsNotice.tone === "error" ? "bg-red-50 text-red-600" : "bg-blue-50 text-blue-600"}`}>
+                {rosterToolsNotice.tone === "success" ? <Check className="h-5 w-5" /> : <AlertTriangle className="h-5 w-5" />}
+              </div>
+              <div className="min-w-0 flex-1">
+                <h2 className="text-base font-black tracking-tight text-[#102A43]">
+                  {rosterToolsNotice.title}
+                </h2>
+                <p className="mt-1 whitespace-pre-line text-xs font-semibold leading-snug text-slate-500">
+                  {rosterToolsNotice.message}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <Button
+                type="button"
+                className="h-11 w-full rounded-2xl bg-[#102A43] text-white hover:bg-[#0b2036]"
+                onClick={() => setRosterToolsNotice(null)}
+              >
+                OK
+              </Button>
             </div>
           </div>
         </div>

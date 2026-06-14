@@ -1804,7 +1804,26 @@ export function TodayTab({
         const alreadyPromoted = possibleNames.some(
           (candidate) => normalizeForMatch(candidate.name) === normalizedLine,
         );
-        const cleanedSuggestedName = cleanDetectedNameCandidate(cleaned);
+
+        const rawSuggestions = splitOtherScreenshotNameSegments(cleaned)
+          .map((segment) =>
+            cleanDetectedNameCandidate(stripOtherScreenshotListPrefix(segment)),
+          )
+          .filter((name) => {
+            const normalizedName = normalizeForMatch(name);
+            if (!name || !normalizedName) return false;
+            if (OTHER_SCREENSHOT_JUNK_WORDS.has(normalizedName)) return false;
+            if (possibleNames.some((candidate) => normalizeForMatch(candidate.name) === normalizedName)) return false;
+            return isManuallyTypedOcrName(name);
+          });
+
+        const uniqueRawSuggestions = Array.from(new Map(
+          rawSuggestions.map((name) => [normalizeForMatch(name), name]),
+        ).values());
+
+        const cleanedSuggestedName = cleanDetectedNameCandidate(
+          stripOtherScreenshotListPrefix(cleaned),
+        );
         const looksLikeStandaloneName =
           isProbablyName(cleanedSuggestedName) && !alreadyPromoted;
 
@@ -1813,7 +1832,8 @@ export function TodayTab({
           text: cleaned,
           normalized: normalizedLine,
           foundCandidates,
-          suggestedName: looksLikeStandaloneName ? cleanedSuggestedName : "",
+          suggestedName: looksLikeStandaloneName ? cleanedSuggestedName : uniqueRawSuggestions[0] ?? "",
+          rawSuggestions: uniqueRawSuggestions,
         };
       })
       .filter(Boolean) as Array<{
@@ -1822,6 +1842,7 @@ export function TodayTab({
       normalized: string;
       foundCandidates: OcrNameCandidate[];
       suggestedName: string;
+      rawSuggestions: string[];
     }>;
   }, [ocrText, possibleNames]);
   const [selectedOcrCandidateKeys, setSelectedOcrCandidateKeys] = useState<
@@ -3878,29 +3899,64 @@ export function TodayTab({
                                 </Button>
                               )}
                             </div>
-                            {entry.foundCandidates.length > 0 && (
+                            {(entry.rawSuggestions.length > 0 || entry.foundCandidates.length > 0) && (
                               <div className="mt-1 flex flex-wrap gap-1">
+                                {entry.rawSuggestions.map((name) => {
+                                  const normalizedName = normalizeForMatch(name);
+                                  const alreadyAddedSuggestion =
+                                    rawOcrAddedNames.includes(normalizedName);
+                                  return (
+                                    <Button
+                                      key={`raw-suggest-${entry.index}-${normalizedName}`}
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => addRawOcrName(name)}
+                                      disabled={alreadyAddedSuggestion}
+                                      className="h-6 rounded-full border-sky-200 bg-sky-50 px-2 text-[9px] font-black text-sky-800"
+                                    >
+                                      {alreadyAddedSuggestion ? "Added" : `Add ${name}`}
+                                    </Button>
+                                  );
+                                })}
                                 {entry.foundCandidates.map((candidate) => {
                                   const reviewStatus =
                                     getOcrReviewStatus(candidate);
+                                  const candidateKey = ocrCandidateKey(candidate);
+                                  const alreadySelected =
+                                    selectedOcrCandidateKeySet.has(candidateKey);
                                   return (
-                                    <span
-                                      key={ocrCandidateKey(candidate)}
-                                      className={`rounded-full px-1.5 py-0.5 text-[9px] font-black ${
+                                    <Button
+                                      key={candidateKey}
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => {
+                                        setSelectedOcrCandidateKeys((current) =>
+                                          current.includes(candidateKey)
+                                            ? current
+                                            : [...current, candidateKey],
+                                        );
+                                        setRawOcrAddedNames((current) => {
+                                          const normalizedName = normalizeForMatch(candidate.name);
+                                          return current.includes(normalizedName)
+                                            ? current
+                                            : [...current, normalizedName];
+                                        });
+                                        setOcrStatus(`${candidate.name} is now selected in Review Names.`);
+                                      }}
+                                      disabled={alreadySelected}
+                                      className={`h-6 rounded-full px-2 text-[9px] font-black ${
                                         reviewStatus === "match"
-                                          ? "bg-emerald-100 text-emerald-800"
+                                          ? "border-emerald-200 bg-emerald-50 text-emerald-800"
                                           : reviewStatus === "suggest"
-                                            ? "bg-amber-100 text-amber-800"
-                                            : "bg-sky-100 text-sky-800"
+                                            ? "border-amber-200 bg-amber-50 text-amber-800"
+                                            : "border-sky-200 bg-sky-50 text-sky-800"
                                       }`}
                                     >
-                                      {reviewStatus === "match"
-                                        ? "MATCH"
-                                        : reviewStatus === "suggest"
-                                          ? "CHECK"
-                                          : "NEW"}{" "}
+                                      {alreadySelected ? "Selected" : "Add"}{" "}
                                       {candidate.name}
-                                    </span>
+                                    </Button>
                                   );
                                 })}
                               </div>

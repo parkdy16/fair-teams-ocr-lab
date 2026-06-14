@@ -136,13 +136,7 @@ export async function readGoogleDriveJsonFile(accessToken: string, fileId: strin
   return { file, text: await contentResponse.text() };
 }
 
-export async function listGoogleDriveBackupFiles(accessToken: string): Promise<GoogleDriveFileResult[]> {
-  const query = [
-    "trashed = false",
-    `mimeType = '${FAIR_TEAMS_DRIVE_MIME_TYPE}'`,
-    "(name contains 'Fair Teams' or appProperties has { key='fairTeamsBackup' and value='true' })",
-  ].join(" and ");
-
+async function fetchGoogleDriveBackupList(accessToken: string, query: string): Promise<GoogleDriveFileResult[]> {
   const params = new URLSearchParams({
     q: query,
     pageSize: "30",
@@ -169,6 +163,37 @@ export async function listGoogleDriveBackupFiles(accessToken: string): Promise<G
 
   const result = await response.json();
   return Array.isArray(result?.files) ? (result.files as GoogleDriveFileResult[]) : [];
+}
+
+export async function listGoogleDriveBackupFiles(accessToken: string): Promise<GoogleDriveFileResult[]> {
+  const backupFileQuery = [
+    "trashed = false",
+    `mimeType = '${FAIR_TEAMS_DRIVE_MIME_TYPE}'`,
+    "(name contains 'Fair Teams' or appProperties has { key='fairTeamsBackup' and value='true' })",
+  ].join(" and ");
+
+  const sharedBackupFileQuery = [
+    "trashed = false",
+    "sharedWithMe = true",
+    `mimeType = '${FAIR_TEAMS_DRIVE_MIME_TYPE}'`,
+    "name contains 'Fair Teams'",
+  ].join(" and ");
+
+  const [ownedOrOpenedFiles, sharedFiles] = await Promise.all([
+    fetchGoogleDriveBackupList(accessToken, backupFileQuery),
+    fetchGoogleDriveBackupList(accessToken, sharedBackupFileQuery),
+  ]);
+
+  const byId = new Map<string, GoogleDriveFileResult>();
+  [...ownedOrOpenedFiles, ...sharedFiles].forEach((file) => {
+    if (file.id) byId.set(file.id, file);
+  });
+
+  return [...byId.values()].sort((a, b) => {
+    const aTime = a.modifiedTime ? Date.parse(a.modifiedTime) : 0;
+    const bTime = b.modifiedTime ? Date.parse(b.modifiedTime) : 0;
+    return bTime - aTime;
+  });
 }
 
 export async function updateGoogleDriveJsonFile(

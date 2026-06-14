@@ -55,7 +55,6 @@ import {
   type GoogleDriveFileResult,
   type GoogleDrivePermissionResult,
 } from "@/lib/googleDriveFiles";
-import { pickGoogleDriveBackupFile } from "@/lib/googleDrivePicker";
 
 const GROUP_NAME_STORAGE_KEY = "fair-teams-group-name";
 const HEADER_COLOR_STORAGE_KEY = "fair-teams-header-color-v2";
@@ -615,35 +614,6 @@ function App() {
       });
     } catch (error) {
       showRosterToolsNotice("Could not open Google Drive backup", error instanceof Error ? error.message : "Please try again.", "error");
-    } finally {
-      setGoogleDriveOpening(false);
-    }
-  };
-
-  const browseGoogleDriveBackupWithPicker = async () => {
-    if (!googleDriveConfig.isConfigured) {
-      showRosterToolsNotice("Google Drive not configured", "Add VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_API_KEY before using Google Drive backup.", "warning");
-      return;
-    }
-    if (!googleDriveAccessToken) {
-      showRosterToolsNotice("Connect Google Drive first", "Connect your Google account before using Drive backup.", "warning");
-      return;
-    }
-
-    setDriveBackupChoices(null);
-    setGoogleDriveOpening(true);
-    try {
-      const picked = await pickGoogleDriveBackupFile(googleDriveAccessToken);
-      if (!picked) return;
-      await previewGoogleDriveBackupFile(picked);
-    } catch (error) {
-      showRosterToolsNotice(
-        "Could not open Google Drive picker",
-        error instanceof Error
-          ? error.message
-          : "On phone, open Fair Teams from Chrome and use the stable app link, then try again.",
-        "error",
-      );
     } finally {
       setGoogleDriveOpening(false);
     }
@@ -1492,19 +1462,8 @@ function App() {
                     <CloudDownload className="h-4 w-4" />
                     <span className="font-black">{googleDriveOpening ? "Opening Drive backup..." : "Open Drive backup"}</span>
                   </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-11 justify-start rounded-2xl gap-3 border-blue-100 bg-white/80 text-blue-700"
-                    onClick={browseGoogleDriveBackupWithPicker}
-                    disabled={!googleDriveConnected || googleDriveOpening}
-                    title="Use this if someone shared a Fair Teams backup file with you"
-                  >
-                    <CloudDownload className="h-4 w-4" />
-                    <span className="font-black">Browse Drive / Shared with me</span>
-                  </Button>
                   <p className="-mt-1 px-1 text-[10px] font-semibold leading-snug text-slate-500">
-                    Use Browse Drive if a co-organizer shared a backup file with you.
+                    Opens Fair Teams backup files this Google account can access, including shared files when Drive allows them.
                   </p>
                   <Button
                     type="button"
@@ -1790,7 +1749,7 @@ function App() {
                   <div className="flex gap-2">
                     <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
                     <p className="text-xs font-semibold leading-snug text-amber-800">
-                      No Fair Teams Drive backups were found for this Google account yet. Save a backup first, or browse Drive manually if someone shared a backup file with you.
+                      No Fair Teams Drive backups were found for this Google account yet. Save a backup first, or ask the owner to share the Fair Teams backup file with this exact Google account as Editor.
                     </p>
                   </div>
                 </div>
@@ -1798,14 +1757,6 @@ function App() {
             </div>
 
             <div className="grid gap-2 border-t border-slate-100 p-4">
-              <Button
-                type="button"
-                variant="outline"
-                className="h-11 rounded-2xl border-blue-100 bg-white text-blue-700 hover:bg-blue-50"
-                onClick={browseGoogleDriveBackupWithPicker}
-              >
-                Browse Drive manually
-              </Button>
               <Button
                 type="button"
                 variant="ghost"

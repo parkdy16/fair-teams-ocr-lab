@@ -370,16 +370,23 @@ function quickSkillFromPlayer(player: Partial<RoomPlayer>) {
   return Math.round(Math.max(1, Math.min(10, average)) * 2) / 2;
 }
 
+function roundSkillStep(value: number) {
+  return Math.max(1, Math.min(10, Math.round(value * 2) / 2));
+}
+
 function applyQuickSkillToPlayer(player: RoomPlayer, skillLevel: number): RoomPlayer {
+  const nextSkillLevel = roundSkillStep(skillLevel);
   return normalizePlayer({
     ...player,
-    attack: skillLevel,
-    defense: skillLevel,
-    speed: skillLevel,
-    passing: skillLevel,
-    stamina: skillLevel,
-    physical: skillLevel,
-    teamPlay: skillLevel >= 7.5 ? 3 : skillLevel <= 3.5 ? 1 : 2,
+    attack: nextSkillLevel,
+    defense: nextSkillLevel,
+    speed: nextSkillLevel,
+    passing: nextSkillLevel,
+    stamina: nextSkillLevel,
+    physical: nextSkillLevel,
+    // Quick skill should not silently change teamwork.
+    // Otherwise choosing 9 can push teamwork to 3 and save as 9.6.
+    teamPlay: player.teamPlay || 2,
   });
 }
 
@@ -787,7 +794,7 @@ function ProfileDialog({
               max={10}
               step={0.5}
               value={quickSkill}
-              onChange={e => applyQuickSkill(Number(e.target.value))}
+              onChange={e => applyQuickSkill(roundSkillStep(Number(e.target.value)))}
               className="w-full accent-primary"
               data-testid={`input-player-quick-skill-${player.id}`}
             />
@@ -1461,7 +1468,7 @@ export function PlayersTab({
                   step={0.5}
                   value={skillLevel}
                   onChange={e => {
-                    const next = Number(e.target.value);
+                    const next = roundSkillStep(Number(e.target.value));
                     setSkillLevel(next);
                     setAddDetails(prev => applySkillLevelToDetails(prev, next));
                   }}

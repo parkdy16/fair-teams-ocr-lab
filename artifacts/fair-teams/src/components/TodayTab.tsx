@@ -3255,11 +3255,9 @@ export function TodayTab({
                       : "border-border bg-background text-muted-foreground"
                   }`}
                 >
-                  <div className="text-xs font-black">
-                    Meetup / attendee list
-                  </div>
+                  <div className="text-xs font-black">Meetup screenshot</div>
                   <div className="mt-1 text-[10px] font-medium">
-                    Fast scan using the current safe filter.
+                    Fast scan for Meetup attendee screenshots.
                   </div>
                 </button>
                 <button
@@ -3974,19 +3972,45 @@ export function TodayTab({
           <DialogFooter className="shrink-0 border-t pt-3 sm:gap-2">
             {!ocrText ? (
               ocrImportContext === "roster" ? (
-                <div className="flex w-full items-center justify-end gap-2">
-                  <Button
-                    type="button"
-                    onClick={runOcr}
-                    disabled={selectedScreenshots.length === 0 || ocrRunning}
-                    className="h-10 rounded-xl px-4 text-xs font-black"
-                  >
-                    {ocrRunning
-                      ? "Scanning…"
-                      : screenshotImportMode === "other"
-                        ? "Scan Crops"
-                        : "Scan Screenshot"}
-                  </Button>
+                <div className="w-full space-y-2">
+                  <div className="grid grid-cols-[1fr_auto] items-end gap-2">
+                    <div>
+                      <label
+                        htmlFor="expected-player-count"
+                        className="mb-1 block text-[10px] font-black uppercase tracking-wider text-muted-foreground"
+                      >
+                        Expected players
+                        <span className="font-bold normal-case tracking-normal text-muted-foreground/80">
+                          {" "}
+                          (optional)
+                        </span>
+                      </label>
+                      <Input
+                        id="expected-player-count"
+                        type="number"
+                        inputMode="numeric"
+                        min="1"
+                        value={expectedAttendeeCount}
+                        onChange={(event) =>
+                          setExpectedAttendeeCount(event.target.value)
+                        }
+                        placeholder="Example: 20"
+                        className="h-10 rounded-xl text-sm font-bold"
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      onClick={runOcr}
+                      disabled={selectedScreenshots.length === 0 || ocrRunning}
+                      className="h-10 rounded-xl px-4 text-xs font-black"
+                    >
+                      {ocrRunning
+                        ? "Scanning…"
+                        : screenshotImportMode === "other"
+                          ? "Scan Crops"
+                          : "Scan Screenshot"}
+                    </Button>
+                  </div>
                 </div>
               ) : (
                 <div className="w-full space-y-2">

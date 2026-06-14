@@ -3938,8 +3938,8 @@ export function TodayTab({
                   <div className="mt-2 space-y-2">
                     <div className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-[10px] font-bold text-amber-800">
                       Green = roster match, amber = check, blue = new. If a real
-                      name is visible but was missed, type it below or use Add
-                      on a clean raw line.
+                      name is visible but was missed, type it below or use the
+                      right-side Add button on a clean raw line.
                     </div>
                     <div className="grid grid-cols-[1fr_auto] gap-2">
                       <Input
@@ -3962,8 +3962,11 @@ export function TodayTab({
                     </div>
                     <div className="max-h-56 space-y-1 overflow-y-auto rounded-lg bg-muted/50 p-2 text-[11px] leading-relaxed text-foreground">
                       {rawOcrLineEntries.map((entry) => {
+                        const suggestedNormalized = normalizeForMatch(
+                          entry.suggestedName || entry.text,
+                        );
                         const alreadyAdded = rawOcrAddedNames.includes(
-                          entry.normalized,
+                          suggestedNormalized,
                         );
                         return (
                           <div
@@ -3992,54 +3995,14 @@ export function TodayTab({
                                 </Button>
                               )}
                             </div>
-                            {(entry.rawSuggestions.length > 0 || entry.foundCandidates.length > 0) && (
+                            {entry.foundCandidates.length > 0 && (
                               <div className="mt-1 flex flex-wrap gap-1">
-                                {entry.rawSuggestions.map((name) => {
-                                  const normalizedName = normalizeForMatch(name);
-                                  const alreadyAddedSuggestion =
-                                    rawOcrAddedNames.includes(normalizedName);
-                                  return (
-                                    <Button
-                                      key={`raw-suggest-${entry.index}-${normalizedName}`}
-                                      type="button"
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => addRawOcrName(name)}
-                                      disabled={alreadyAddedSuggestion}
-                                      className="h-6 rounded-full border-sky-200 bg-sky-50 px-2 text-[9px] font-black text-sky-800"
-                                    >
-                                      {alreadyAddedSuggestion ? "Added" : `Add ${name}`}
-                                    </Button>
-                                  );
-                                })}
                                 {entry.foundCandidates.map((candidate) => {
-                                  const candidateKey = ocrCandidateKey(candidate);
-                                  const reviewStatus =
-                                    getOcrReviewStatus(candidate);
-                                  const alreadySelected =
-                                    selectedOcrCandidateKeySet.has(candidateKey);
+                                  const reviewStatus = getOcrReviewStatus(candidate);
                                   return (
-                                    <Button
-                                      key={candidateKey}
-                                      type="button"
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => {
-                                        setSelectedOcrCandidateKeys((current) =>
-                                          current.includes(candidateKey)
-                                            ? current
-                                            : [...current, candidateKey],
-                                        );
-                                        setRawOcrAddedNames((current) => {
-                                          const normalizedName = normalizeForMatch(candidate.name);
-                                          return current.includes(normalizedName)
-                                            ? current
-                                            : [...current, normalizedName];
-                                        });
-                                        setOcrStatus(`${candidate.name} is now selected in Review Names.`);
-                                      }}
-                                      disabled={alreadySelected}
-                                      className={`h-6 rounded-full px-2 text-[9px] font-black ${
+                                    <span
+                                      key={ocrCandidateKey(candidate)}
+                                      className={`rounded-full border px-2 py-0.5 text-[9px] font-black ${
                                         reviewStatus === "match"
                                           ? "border-emerald-200 bg-emerald-50 text-emerald-800"
                                           : reviewStatus === "suggest"
@@ -4047,9 +4010,8 @@ export function TodayTab({
                                             : "border-sky-200 bg-sky-50 text-sky-800"
                                       }`}
                                     >
-                                      {alreadySelected ? "Selected" : "Add"}{" "}
-                                      {candidate.name}
-                                    </Button>
+                                      In Review: {candidate.name}
+                                    </span>
                                   );
                                 })}
                               </div>

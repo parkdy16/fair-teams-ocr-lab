@@ -47,11 +47,12 @@ import { requestGoogleDriveAccessToken } from "@/lib/googleDriveAuth";
 import {
   createGoogleDriveJsonFile,
   deleteGoogleDriveFilePermission,
-  listGoogleDriveBackupFiles,
+  listGoogleDriveBackupFileGroups,
   listGoogleDriveFilePermissions,
   readGoogleDriveJsonFile,
   shareGoogleDriveFileWithEditor,
   updateGoogleDriveJsonFile,
+  type GoogleDriveBackupFileGroups,
   type GoogleDriveFileResult,
   type GoogleDrivePermissionResult,
 } from "@/lib/googleDriveFiles";
@@ -201,6 +202,8 @@ type RosterToolsNotice = {
   tone?: "info" | "success" | "warning" | "error";
 };
 
+type DriveBackupTab = "mine" | "shared";
+
 type DriveShareConfirm = {
   email: string;
 };
@@ -270,7 +273,8 @@ function App() {
   const [googleDriveOpening, setGoogleDriveOpening] = useState(false);
   const [currentDriveBackup, setCurrentDriveBackup] = useState<GoogleDriveFileResult | null>(null);
   const [driveImportPreview, setDriveImportPreview] = useState<DriveImportPreview | null>(null);
-  const [driveBackupChoices, setDriveBackupChoices] = useState<GoogleDriveFileResult[] | null>(null);
+  const [driveBackupChoices, setDriveBackupChoices] = useState<GoogleDriveBackupFileGroups | null>(null);
+  const [driveBackupTab, setDriveBackupTab] = useState<DriveBackupTab>("mine");
   const [localImportPreview, setLocalImportPreview] = useState<LocalImportPreview | null>(null);
   const [rosterToolsNotice, setRosterToolsNotice] = useState<RosterToolsNotice | null>(null);
   const [driveShareOpen, setDriveShareOpen] = useState(false);
@@ -308,10 +312,18 @@ function App() {
   };
 
   const formatDriveModifiedTime = (value?: string) => {
-    if (!value) return "Modified time unavailable";
+    if (!value) return "Updated time unknown";
     const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return "Modified time unavailable";
-    return `Updated ${date.toLocaleDateString(undefined, { month: "short", day: "numeric" })} ${date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`;
+    if (Number.isNaN(date.getTime())) return "Updated time unknown";
+    return `Updated ${date.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+  };
+
+  const describeDriveFileSource = (file: GoogleDriveFileResult, tab: DriveBackupTab) => {
+    if (tab === "shared") {
+      const sharedBy = file.sharingUser?.displayName || file.sharingUser?.emailAddress;
+      return sharedBy ? `Shared by ${sharedBy}` : "Shared with me";
+    }
+    return "My Drive";
   };
 
   const normalizeShareEmail = (value: string) => value.trim().toLowerCase();
@@ -631,8 +643,9 @@ function App() {
 
     setGoogleDriveOpening(true);
     try {
-      const files = await listGoogleDriveBackupFiles(googleDriveAccessToken);
-      setDriveBackupChoices(files);
+      const groups = await listGoogleDriveBackupFileGroups(googleDriveAccessToken);
+      setDriveBackupChoices(groups);
+      setDriveBackupTab(groups.mine.length > 0 ? "mine" : "shared");
     } catch (error) {
       showRosterToolsNotice("Could not list Google Drive backups", error instanceof Error ? error.message : "Please try again.", "error");
     } finally {
@@ -969,6 +982,15 @@ function App() {
     });
     closeClearRoster();
   };
+
+  const visibleDriveBackupChoices = driveBackupChoices
+    ? driveBackupTab === "shared"
+      ? driveBackupChoices.shared
+      : driveBackupChoices.mine
+    : [];
+  const totalDriveBackupChoices = driveBackupChoices
+    ? driveBackupChoices.mine.length + driveBackupChoices.shared.length
+    : 0;
 
   if (showSplash) {
     return (
@@ -1406,23 +1428,22 @@ function App() {
                     <Cloud className="h-4 w-4" />
                   </span>
                   <div className="min-w-0 flex-1">
-                    <div className="text-[10px] font-black uppercase tracking-wide text-blue-500">
-                      Google Drive backup
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="text-[10px] font-black uppercase tracking-wide text-blue-500">
+                        Google Drive
+                      </div>
+                      <div className={`rounded-full px-2 py-0.5 text-[10px] font-black ${googleDriveConnected ? "bg-emerald-50 text-emerald-700" : "bg-white text-slate-500"}`}>
+                        {googleDriveConnected ? "Connected" : "Not connected"}
+                      </div>
                     </div>
-                    <p className="mt-1 text-xs font-bold leading-snug text-slate-600">
-                      Direct Drive connection. Text-only backups: no player photos or logo images.
-                    </p>
-                    <div className={`mt-2 rounded-2xl px-2.5 py-1.5 text-[11px] font-black ${googleDriveConfig.isConfigured ? "bg-white text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
-                      {googleDriveStatusText}
+                    <div className="mt-2 rounded-2xl bg-white/80 px-3 py-2">
+                      <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+                        Current file
+                      </div>
+                      <div className={`mt-0.5 truncate text-xs font-black ${currentDriveBackup ? "text-[#102A43]" : "text-slate-400"}`}>
+                        {currentDriveBackup?.name || "None selected"}
+                      </div>
                     </div>
-                    <div className={`mt-1 truncate text-[11px] font-bold ${currentDriveBackup ? "text-blue-700" : "text-slate-500"}`}>
-                      Current Drive file: {currentDriveBackup?.name || "None selected"}
-                    </div>
-                    {googleDriveConnected && !currentDriveBackup ? (
-                      <p className="mt-1 text-[10px] font-semibold leading-snug text-slate-500">
-                        Open or save a Drive backup before updating, sharing, or managing access.
-                      </p>
-                    ) : null}
                   </div>
                 </div>
 
@@ -1438,33 +1459,32 @@ function App() {
                       {googleDriveConnecting
                         ? "Connecting..."
                         : googleDriveConnected
-                          ? "Disconnect Google Drive"
+                          ? "Disconnect"
                           : "Connect Google Drive"}
                     </span>
                   </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-11 justify-start rounded-2xl gap-3 border-blue-100 bg-white/90"
-                    onClick={saveAllRostersToGoogleDrive}
-                    disabled={isEmptyStarterRoster || !googleDriveConnected || googleDriveSaving}
-                  >
-                    <CloudUpload className="h-4 w-4" />
-                    <span className="font-black">{googleDriveSaving ? "Saving to Drive..." : "Save all rosters to Drive"}</span>
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-11 justify-start rounded-2xl gap-3 border-blue-100 bg-white/90"
-                    onClick={openGoogleDriveBackup}
-                    disabled={!googleDriveConnected || googleDriveOpening}
-                  >
-                    <CloudDownload className="h-4 w-4" />
-                    <span className="font-black">{googleDriveOpening ? "Opening Drive backup..." : "Open Drive backup"}</span>
-                  </Button>
-                  <p className="-mt-1 px-1 text-[10px] font-semibold leading-snug text-slate-500">
-                    Opens Fair Teams backup files this Google account can access, including shared files when Drive allows them.
-                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-11 justify-start rounded-2xl gap-2 border-blue-100 bg-white/90 px-3"
+                      onClick={saveAllRostersToGoogleDrive}
+                      disabled={isEmptyStarterRoster || !googleDriveConnected || googleDriveSaving}
+                    >
+                      <CloudUpload className="h-4 w-4" />
+                      <span className="truncate text-xs font-black">{googleDriveSaving ? "Saving..." : "Save backup"}</span>
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-11 justify-start rounded-2xl gap-2 border-blue-100 bg-white/90 px-3"
+                      onClick={openGoogleDriveBackup}
+                      disabled={!googleDriveConnected || googleDriveOpening}
+                    >
+                      <CloudDownload className="h-4 w-4" />
+                      <span className="truncate text-xs font-black">{googleDriveOpening ? "Opening..." : "Open backup"}</span>
+                    </Button>
+                  </div>
                   <Button
                     type="button"
                     variant="outline"
@@ -1482,81 +1502,56 @@ function App() {
                   >
                     <RefreshCw className={`h-4 w-4 ${googleDriveUpdating ? "animate-spin" : ""}`} />
                     <span className="font-black">
-                      {googleDriveUpdating ? "Updating Drive backup..." : "Update current Drive backup"}
+                      {googleDriveUpdating ? "Updating..." : "Update current backup"}
                     </span>
                   </Button>
                 </div>
 
                 {googleDriveConnected ? (
-                  <div className={`mt-3 rounded-2xl border p-2.5 ${currentDriveBackup ? "border-blue-100 bg-white/75" : "border-slate-100 bg-slate-50/75"}`}>
+                  <div className="mt-3 rounded-2xl border border-blue-100 bg-white/75 p-2.5">
                     <div className="mb-2 flex items-center justify-between gap-2">
-                      <span className={`text-[10px] font-black uppercase tracking-wide ${currentDriveBackup ? "text-blue-500" : "text-slate-400"}`}>
+                      <span className="text-[10px] font-black uppercase tracking-wide text-blue-500">
                         Sharing
                       </span>
-                      <span className="truncate text-[10px] font-bold text-slate-400">
-                        Current file only
-                      </span>
+                      {!currentDriveBackup ? (
+                        <span className="truncate text-[10px] font-bold text-slate-400">
+                          Select a file first
+                        </span>
+                      ) : null}
                     </div>
-                    {currentDriveBackup ? (
-                      <>
-                        <div className="grid grid-cols-2 gap-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="h-10 rounded-2xl border-blue-100 bg-blue-50/70 text-xs font-black text-blue-700 hover:bg-blue-100"
-                            onClick={openDriveShareModal}
-                            disabled={!googleDriveConnected || googleDriveSharing}
-                          >
-                            <Share2 className="mr-1.5 h-3.5 w-3.5" />
-                            Share file
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="h-10 rounded-2xl border-slate-100 bg-slate-50/80 text-xs font-black text-slate-700 hover:bg-slate-100"
-                            onClick={openDriveAccessManager}
-                            disabled={!googleDriveConnected || driveAccessLoading}
-                          >
-                            Manage access
-                          </Button>
-                        </div>
-                        <p className="mt-2 text-[10px] font-semibold leading-snug text-slate-500">
-                          Shared editors can update this backup. Keep a private local backup for important rosters.
-                        </p>
-                      </>
-                    ) : (
-                      <>
-                        <div className="grid grid-cols-2 gap-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="h-10 rounded-2xl border-slate-100 bg-white/70 text-xs font-black text-slate-400"
-                            disabled
-                          >
-                            <Share2 className="mr-1.5 h-3.5 w-3.5" />
-                            Share file
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="h-10 rounded-2xl border-slate-100 bg-white/70 text-xs font-black text-slate-400"
-                            disabled
-                          >
-                            Manage access
-                          </Button>
-                        </div>
-                        <p className="mt-2 text-[10px] font-semibold leading-snug text-slate-500">
-                          Open, browse, or save a Drive backup first. Then you can share that selected file.
-                        </p>
-                      </>
-                    )}
+                    <div className="grid grid-cols-2 gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className={`h-10 rounded-2xl text-xs font-black ${currentDriveBackup ? "border-blue-100 bg-blue-50/70 text-blue-700 hover:bg-blue-100" : "border-slate-100 bg-white/70 text-slate-400"}`}
+                        onClick={openDriveShareModal}
+                        disabled={!currentDriveBackup || !googleDriveConnected || googleDriveSharing}
+                      >
+                        <Share2 className="mr-1.5 h-3.5 w-3.5" />
+                        Share file
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className={`h-10 rounded-2xl text-xs font-black ${currentDriveBackup ? "border-slate-100 bg-slate-50/80 text-slate-700 hover:bg-slate-100" : "border-slate-100 bg-white/70 text-slate-400"}`}
+                        onClick={openDriveAccessManager}
+                        disabled={!currentDriveBackup || !googleDriveConnected || driveAccessLoading}
+                      >
+                        Manage access
+                      </Button>
+                    </div>
+                    <p className="mt-2 text-[10px] font-semibold leading-snug text-slate-500">
+                      {currentDriveBackup
+                        ? "Shared editors can update this backup. Keep a private local backup if needed."
+                        : "Open or save a backup first."}
+                    </p>
                   </div>
                 ) : null}
               </div>
 
               <div className="grid gap-2 border-t border-slate-100 pt-3">
                 <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-                  Local file backup
+                  Local backup
                 </div>
                 <Button
                   type="button"
@@ -1566,7 +1561,7 @@ function App() {
                   disabled={players.length === 0}
                 >
                   <Download className="h-4 w-4" />
-                  <span className="font-black">Export current roster</span>
+                  <span className="font-black">Export current</span>
                 </Button>
                 <Button
                   type="button"
@@ -1575,7 +1570,7 @@ function App() {
                   onClick={() => openImportPicker("shared")}
                 >
                   <Upload className="h-4 w-4" />
-                  <span className="font-black">Import single roster</span>
+                  <span className="font-black">Import single</span>
                 </Button>
                 <div className="my-1 h-px bg-slate-100" />
                 <Button
@@ -1586,7 +1581,7 @@ function App() {
                   disabled={isEmptyStarterRoster}
                 >
                   <Archive className="h-4 w-4" />
-                  <span className="font-black">Export all rosters</span>
+                  <span className="font-black">Export all</span>
                 </Button>
                 <Button
                   type="button"
@@ -1595,7 +1590,7 @@ function App() {
                   onClick={() => openImportPicker("backup")}
                 >
                   <ArchiveRestore className="h-4 w-4" />
-                  <span className="font-black">Import all rosters</span>
+                  <span className="font-black">Import all</span>
                 </Button>
                 {!isEmptyStarterRoster && (
                   <>
@@ -1699,13 +1694,13 @@ function App() {
             <div className="flex items-start justify-between gap-3 border-b border-slate-100 p-4 pb-3">
               <div className="min-w-0">
                 <div className="text-[10px] font-black uppercase tracking-wide text-blue-500">
-                  Google Drive backup
+                  Google Drive
                 </div>
                 <h2 className="mt-1 truncate text-base font-black tracking-tight text-[#102A43]">
-                  Choose a backup
+                  Open backup
                 </h2>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  These are Fair Teams backups this app can already access.
+                  Choose a Fair Teams backup file.
                 </p>
               </div>
               <Button
@@ -1720,10 +1715,29 @@ function App() {
               </Button>
             </div>
 
+            <div className="border-b border-slate-100 p-3 pb-0">
+              <div className="grid grid-cols-2 gap-1 rounded-2xl bg-slate-100 p-1">
+                <button
+                  type="button"
+                  onClick={() => setDriveBackupTab("mine")}
+                  className={`rounded-xl px-2 py-2 text-xs font-black transition ${driveBackupTab === "mine" ? "bg-white text-[#102A43] shadow-sm" : "text-slate-500"}`}
+                >
+                  My Drive ({driveBackupChoices.mine.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDriveBackupTab("shared")}
+                  className={`rounded-xl px-2 py-2 text-xs font-black transition ${driveBackupTab === "shared" ? "bg-white text-[#102A43] shadow-sm" : "text-slate-500"}`}
+                >
+                  Shared with me ({driveBackupChoices.shared.length})
+                </button>
+              </div>
+            </div>
+
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
-              {driveBackupChoices.length > 0 ? (
+              {visibleDriveBackupChoices.length > 0 ? (
                 <div className="space-y-2">
-                  {driveBackupChoices.map((file) => (
+                  {visibleDriveBackupChoices.map((file) => (
                     <button
                       key={file.id}
                       type="button"
@@ -1734,8 +1748,8 @@ function App() {
                         <span className="block truncate text-sm font-black text-[#102A43]">
                           {file.name}
                         </span>
-                        <span className="mt-0.5 block text-[11px] font-bold text-blue-700/70">
-                          {formatDriveModifiedTime(file.modifiedTime)}
+                        <span className="mt-0.5 block truncate text-[11px] font-bold text-blue-700/75">
+                          {describeDriveFileSource(file, driveBackupTab)} · {formatDriveModifiedTime(file.modifiedTime)}
                         </span>
                       </span>
                       <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-lg font-black leading-none text-blue-400 shadow-sm">
@@ -1749,7 +1763,11 @@ function App() {
                   <div className="flex gap-2">
                     <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
                     <p className="text-xs font-semibold leading-snug text-amber-800">
-                      No Fair Teams Drive backups were found for this Google account yet. Save a backup first, or ask the owner to share the Fair Teams backup file with this exact Google account as Editor.
+                      {totalDriveBackupChoices === 0
+                        ? "No Fair Teams backups were found. Save a backup first, or ask the owner to share the backup with this Google account."
+                        : driveBackupTab === "shared"
+                          ? "No shared Fair Teams backups found for this Google account."
+                          : "No Fair Teams backups found in My Drive."}
                     </p>
                   </div>
                 </div>

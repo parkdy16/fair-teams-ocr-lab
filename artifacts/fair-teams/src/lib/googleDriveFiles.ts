@@ -1,10 +1,24 @@
 import { FAIR_TEAMS_DRIVE_MIME_TYPE } from "@/lib/googleDriveConfig";
 
+export interface GoogleDriveUserSummary {
+  displayName?: string;
+  emailAddress?: string;
+  me?: boolean;
+}
+
 export interface GoogleDriveFileResult {
   id: string;
   name: string;
   webViewLink?: string;
   modifiedTime?: string;
+  ownedByMe?: boolean;
+  shared?: boolean;
+  sharingUser?: GoogleDriveUserSummary;
+}
+
+export interface GoogleDriveBackupFileGroups {
+  mine: GoogleDriveFileResult[];
+  shared: GoogleDriveFileResult[];
 }
 
 export interface GoogleDrivePermissionDetail {
@@ -141,7 +155,7 @@ async function fetchGoogleDriveBackupList(accessToken: string, query: string): P
     q: query,
     pageSize: "30",
     orderBy: "modifiedTime desc",
-    fields: "files(id,name,webViewLink,modifiedTime)",
+    fields: "files(id,name,webViewLink,modifiedTime,ownedByMe,shared,sharingUser(displayName,emailAddress,me))",
     spaces: "drive",
     includeItemsFromAllDrives: "true",
     supportsAllDrives: "true",
@@ -165,7 +179,15 @@ async function fetchGoogleDriveBackupList(accessToken: string, query: string): P
   return Array.isArray(result?.files) ? (result.files as GoogleDriveFileResult[]) : [];
 }
 
-export async function listGoogleDriveBackupFiles(accessToken: string): Promise<GoogleDriveFileResult[]> {
+function sortDriveFilesByModifiedTime(files: GoogleDriveFileResult[]) {
+  return [...files].sort((a, b) => {
+    const aTime = a.modifiedTime ? Date.parse(a.modifiedTime) : 0;
+    const bTime = b.modifiedTime ? Date.parse(b.modifiedTime) : 0;
+    return bTime - aTime;
+  });
+}
+
+export async function listGoogleDriveBackupFileGroups(accessToken: string): Promise<GoogleDriveBackupFileGroups> {
   const backupFileQuery = [
     "trashed = false",
     `mimeType = '${FAIR_TEAMS_DRIVE_MIME_TYPE}'`,
@@ -179,21 +201,44 @@ export async function listGoogleDriveBackupFiles(accessToken: string): Promise<G
     "name contains 'Fair Teams'",
   ].join(" and ");
 
-  const [ownedOrOpenedFiles, sharedFiles] = await Promise.all([
+  const [accessibleFiles, sharedFiles] = await Promise.all([
     fetchGoogleDriveBackupList(accessToken, backupFileQuery),
     fetchGoogleDriveBackupList(accessToken, sharedBackupFileQuery),
   ]);
 
+  const sharedIds = new Set(sharedFiles.map((file) => file.id).filter(Boolean));
   const byId = new Map<string, GoogleDriveFileResult>();
-  [...ownedOrOpenedFiles, ...sharedFiles].forEach((file) => {
-    if (file.id) byId.set(file.id, file);
+
+  [...accessibleFiles, ...sharedFiles].forEach((file) => {
+    if (!file.id) return;
+    const previous = byId.get(file.id);
+    byId.set(file.id, {
+      ...previous,
+      ...file,
+      shared: Boolean(file.shared || previous?.shared || sharedIds.has(file.id)),
+    });
   });
 
-  return [...byId.values()].sort((a, b) => {
-    const aTime = a.modifiedTime ? Date.parse(a.modifiedTime) : 0;
-    const bTime = b.modifiedTime ? Date.parse(b.modifiedTime) : 0;
-    return bTime - aTime;
+  const mine: GoogleDriveFileResult[] = [];
+  const shared: GoogleDriveFileResult[] = [];
+
+  byId.forEach((file) => {
+    if (file.ownedByMe === false || sharedIds.has(file.id)) {
+      shared.push(file);
+    } else {
+      mine.push(file);
+    }
   });
+
+  return {
+    mine: sortDriveFilesByModifiedTime(mine),
+    shared: sortDriveFilesByModifiedTime(shared),
+  };
+}
+
+export async function listGoogleDriveBackupFiles(accessToken: string): Promise<GoogleDriveFileResult[]> {
+  const groups = await listGoogleDriveBackupFileGroups(accessToken);
+  return sortDriveFilesByModifiedTime([...groups.mine, ...groups.shared]);
 }
 
 export async function updateGoogleDriveJsonFile(

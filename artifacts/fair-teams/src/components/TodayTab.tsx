@@ -3132,46 +3132,74 @@ export function TodayTab({
               !ocrText &&
               !ocrRunning &&
               screenshotImportMode === "other" && (
-                <div className="fixed inset-0 z-[9999] flex h-[100dvh] flex-col bg-background p-3 shadow-2xl">
-                  <div className="mb-2 flex shrink-0 items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="text-sm font-black text-foreground">
-                        Crop names area {activeCropIndex + 1}/
-                        {selectedScreenshotPreviews.length}
+                <div className="fixed inset-0 z-[9999] flex h-[100svh] flex-col overflow-hidden bg-background px-2 py-2 shadow-2xl sm:px-3">
+                  <div className="shrink-0 pb-2 pt-[env(safe-area-inset-top)]">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="text-sm font-black text-foreground">
+                          Crop names area {activeCropIndex + 1}/
+                          {selectedScreenshotPreviews.length}
+                        </div>
+                        <div className="truncate text-[10px] font-medium text-muted-foreground">
+                          Drag around names only. Tap numbers to switch screenshots.
+                        </div>
                       </div>
-                      <div className="truncate text-[10px] font-medium text-muted-foreground">
-                        Drag around names only. Clear box if it feels wrong.
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={clearOcrSelection}
+                          className="h-8 px-2 text-[10px] font-black"
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={runOcr}
+                          disabled={
+                            ocrRunning ||
+                            !selectedScreenshots.every((_, screenshotIndex) =>
+                              Boolean(cropBoxes[screenshotIndex]),
+                            )
+                          }
+                          className="h-8 px-2.5 text-[10px] font-black"
+                        >
+                          Scan
+                        </Button>
                       </div>
                     </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={clearOcrSelection}
-                      className="h-8 shrink-0 px-2 text-[10px] font-black"
-                    >
-                      Cancel
-                    </Button>
-                  </div>
 
-                  <div className="mb-2 flex shrink-0 gap-1 overflow-x-auto pb-1">
-                    {selectedScreenshotPreviews.map((preview, index) => (
-                      <button
-                        key={`${preview.name}-tab-${index}`}
+                    <div className="mt-2 flex items-center gap-1 overflow-x-auto pb-1">
+                      {selectedScreenshotPreviews.map((preview, index) => (
+                        <button
+                          key={`${preview.name}-tab-${index}`}
+                          type="button"
+                          onClick={() => setActiveCropIndex(index)}
+                          className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-black ${
+                            activeCropIndex === index
+                              ? "border-primary bg-primary/10 text-primary"
+                              : cropBoxes[index]
+                                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                                : "border-border bg-background text-muted-foreground"
+                          }`}
+                        >
+                          {cropBoxes[index] ? "✓ " : ""}
+                          {index + 1}
+                        </button>
+                      ))}
+                      <Button
                         type="button"
-                        onClick={() => setActiveCropIndex(index)}
-                        className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-black ${
-                          activeCropIndex === index
-                            ? "border-primary bg-primary/10 text-primary"
-                            : cropBoxes[index]
-                              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                              : "border-border bg-background text-muted-foreground"
-                        }`}
+                        variant="outline"
+                        size="sm"
+                        onClick={clearActiveCrop}
+                        disabled={!cropBoxes[activeCropIndex]}
+                        className="ml-auto h-7 shrink-0 px-2 text-[10px] font-black"
                       >
-                        {cropBoxes[index] ? "✓ " : ""}
-                        {index + 1}
-                      </button>
-                    ))}
+                        Clear box
+                      </Button>
+                    </div>
                   </div>
 
                   {selectedScreenshotPreviews[activeCropIndex] && (
@@ -3212,70 +3240,8 @@ export function TodayTab({
                         })()}
                       </div>
 
-                      <div className="mt-2 shrink-0 space-y-2 pb-[env(safe-area-inset-bottom)]">
-                        <div className="truncate text-center text-[10px] font-bold text-muted-foreground">
-                          {selectedScreenshotPreviews[activeCropIndex].name}
-                        </div>
-                        <div className="grid grid-cols-3 gap-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={clearActiveCrop}
-                            disabled={!cropBoxes[activeCropIndex]}
-                            className="h-10 px-2 text-[11px] font-black"
-                          >
-                            Clear box
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() =>
-                              setActiveCropIndex(
-                                Math.max(0, activeCropIndex - 1),
-                              )
-                            }
-                            disabled={activeCropIndex <= 0}
-                            className="h-10 px-2 text-[11px] font-black"
-                          >
-                            Back
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() =>
-                              setActiveCropIndex(
-                                Math.min(
-                                  selectedScreenshotPreviews.length - 1,
-                                  activeCropIndex + 1,
-                                ),
-                              )
-                            }
-                            disabled={
-                              activeCropIndex >=
-                              selectedScreenshotPreviews.length - 1
-                            }
-                            className="h-10 px-2 text-[11px] font-black"
-                          >
-                            Next
-                          </Button>
-                        </div>
-                        <Button
-                          type="button"
-                          size="sm"
-                          onClick={runOcr}
-                          disabled={
-                            ocrRunning ||
-                            !selectedScreenshots.every((_, screenshotIndex) =>
-                              Boolean(cropBoxes[screenshotIndex]),
-                            )
-                          }
-                          className="h-11 w-full px-3 text-xs font-black"
-                        >
-                          Scan all crops
-                        </Button>
+                      <div className="mt-1 shrink-0 truncate pb-[env(safe-area-inset-bottom)] text-center text-[9px] font-bold text-muted-foreground">
+                        {selectedScreenshotPreviews[activeCropIndex].name}
                       </div>
                     </>
                   )}

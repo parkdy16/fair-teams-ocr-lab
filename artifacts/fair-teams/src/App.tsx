@@ -68,6 +68,7 @@ const DEFAULT_HEADER_COLOR = "#3B82F6";
 const EMPTY_ROSTER_NAME = "New roster";
 const ROSTERS_STORAGE_KEY = "fair-teams-rosters-v1";
 const DRIVE_RECIPIENTS_STORAGE_KEY = "fair-teams-drive-backup-recipients-v1";
+const DRIVE_ACTIVE_BACKUP_STORAGE_KEY = "fair-teams-drive-active-backup-v1";
 
 function hasSavedRosterState() {
   try {
@@ -223,6 +224,26 @@ type DriveRemoveAccessConfirm = {
   label: string;
 };
 
+type DriveBackupSummary = {
+  rosterCount: number;
+  playerCount: number;
+};
+
+type ActiveDriveBackupFile = GoogleDriveFileResult & {
+  rosterCount?: number;
+  playerCount?: number;
+  checkedAt?: string;
+  connectedEmail?: string;
+};
+
+type DriveUpdateConfirm = {
+  file: ActiveDriveBackupFile;
+  previous: DriveBackupSummary | null;
+  next: DriveBackupSummary;
+  checkedAt?: string;
+  readFailed?: boolean;
+};
+
 function readStoredDriveRecipients(): DriveBackupRecipient[] {
   try {
     const raw = window.localStorage.getItem(DRIVE_RECIPIENTS_STORAGE_KEY);
@@ -247,6 +268,53 @@ function writeStoredDriveRecipients(recipients: DriveBackupRecipient[]) {
   } catch {
     // Local recipient storage is optional.
   }
+}
+
+function readStoredActiveDriveBackup(): ActiveDriveBackupFile | null {
+  try {
+    const raw = window.localStorage.getItem(DRIVE_ACTIVE_BACKUP_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed?.id || !parsed?.name) return null;
+    return {
+      id: String(parsed.id),
+      name: String(parsed.name),
+      webViewLink: typeof parsed.webViewLink === "string" ? parsed.webViewLink : undefined,
+      modifiedTime: typeof parsed.modifiedTime === "string" ? parsed.modifiedTime : undefined,
+      ownedByMe: typeof parsed.ownedByMe === "boolean" ? parsed.ownedByMe : undefined,
+      shared: typeof parsed.shared === "boolean" ? parsed.shared : undefined,
+      rosterCount: Number.isFinite(Number(parsed.rosterCount)) ? Number(parsed.rosterCount) : undefined,
+      playerCount: Number.isFinite(Number(parsed.playerCount)) ? Number(parsed.playerCount) : undefined,
+      checkedAt: typeof parsed.checkedAt === "string" ? parsed.checkedAt : undefined,
+      connectedEmail: typeof parsed.connectedEmail === "string" ? parsed.connectedEmail : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredActiveDriveBackup(file: ActiveDriveBackupFile | null) {
+  try {
+    if (!file) {
+      window.localStorage.removeItem(DRIVE_ACTIVE_BACKUP_STORAGE_KEY);
+      return;
+    }
+    window.localStorage.setItem(DRIVE_ACTIVE_BACKUP_STORAGE_KEY, JSON.stringify(file));
+  } catch {
+    // Active Drive backup storage is optional.
+  }
+}
+
+function countBackupRosters(rosters: RoomRoster[]): DriveBackupSummary {
+  return {
+    rosterCount: rosters.length,
+    playerCount: rosters.reduce((sum, roster) => sum + roster.players.length, 0),
+  };
+}
+
+function formatBackupSummary(summary: DriveBackupSummary | null | undefined) {
+  if (!summary) return "Unknown";
+  return `${summary.rosterCount} roster${summary.rosterCount === 1 ? "" : "s"} · ${summary.playerCount} player${summary.playerCount === 1 ? "" : "s"}`;
 }
 
 function App() {
@@ -301,13 +369,14 @@ function App() {
   const groupLogo = rosterLogo(activeRoster);
   const isEmptyStarterRoster =
     rosters.length === 1 && players.length === 0 && activeRosterName === EMPTY_ROSTER_NAME;
+  const deviceBackupSummary = isEmptyStarterRoster ? { rosterCount: 0, playerCount: 0 } : countBackupRosters(rosters);
   const googleDriveConfig = getGoogleDriveConfig();
   const [googleDriveAccessToken, setGoogleDriveAccessToken] = useState("");
   const [googleDriveConnecting, setGoogleDriveConnecting] = useState(false);
   const [googleDriveSaving, setGoogleDriveSaving] = useState(false);
   const [googleDriveUpdating, setGoogleDriveUpdating] = useState(false);
   const [googleDriveOpening, setGoogleDriveOpening] = useState(false);
-  const [currentDriveBackup, setCurrentDriveBackup] = useState<GoogleDriveFileResult | null>(null);
+  const [currentDriveBackup, setCurrentDriveBackup] = useState<ActiveDriveBackupFile | null>(() => readStoredActiveDriveBackup());
   const [connectedDriveUser, setConnectedDriveUser] = useState<{ displayName?: string; emailAddress?: string } | null>(null);
   const [driveImportPreview, setDriveImportPreview] = useState<DriveImportPreview | null>(null);
   const [driveBackupChoices, setDriveBackupChoices] = useState<GoogleDriveBackupFileGroups | null>(null);
@@ -327,6 +396,7 @@ function App() {
   const [driveRemoveConfirm, setDriveRemoveConfirm] = useState<DriveRemoveAccessConfirm | null>(null);
   const [driveRemovingPermissionId, setDriveRemovingPermissionId] = useState("");
   const [driveHelpOpen, setDriveHelpOpen] = useState(false);
+  const [driveUpdateConfirm, setDriveUpdateConfirm] = useState<DriveUpdateConfirm | null>(null);
   const googleDriveConnected = Boolean(googleDriveAccessToken);
   const googleDriveStatusText = !googleDriveConfig.isConfigured
     ? "Add Google Client ID and API key to .env.local"
@@ -350,6 +420,18 @@ function App() {
 
   const showRosterToolsNotice = (title: string, message: string, tone: RosterToolsNotice["tone"] = "info") => {
     setRosterToolsNotice({ title, message, tone });
+  };
+
+  const rememberDriveBackup = (file: GoogleDriveFileResult, summary?: DriveBackupSummary) => {
+    const next: ActiveDriveBackupFile = {
+      ...currentDriveBackup,
+      ...file,
+      rosterCount: summary?.rosterCount ?? currentDriveBackup?.rosterCount,
+      playerCount: summary?.playerCount ?? currentDriveBackup?.playerCount,
+      checkedAt: new Date().toISOString(),
+      connectedEmail: connectedDriveUser?.emailAddress || currentDriveBackup?.connectedEmail,
+    };
+    setCurrentDriveBackup(next);
   };
 
   const formatDriveModifiedTime = (value?: string) => {
@@ -417,6 +499,10 @@ function App() {
   }, [driveRecipients]);
 
   useEffect(() => {
+    writeStoredActiveDriveBackup(currentDriveBackup);
+  }, [currentDriveBackup]);
+
+  useEffect(() => {
     const shouldLockScroll =
       groupSettingsOpen ||
       rosterFilesOpen ||
@@ -430,7 +516,8 @@ function App() {
       Boolean(driveShareConfirm) ||
       driveAccessOpen ||
       Boolean(driveRemoveConfirm) ||
-      driveHelpOpen;
+      driveHelpOpen ||
+      Boolean(driveUpdateConfirm);
     if (!shouldLockScroll) return;
 
     const previousOverflow = document.body.style.overflow;
@@ -438,7 +525,7 @@ function App() {
     return () => {
       document.body.style.overflow = previousOverflow;
     };
-  }, [groupSettingsOpen, rosterFilesOpen, rosterPickerOpen, clearRosterOpen, driveImportPreview, driveBackupChoices, localImportPreview, rosterToolsNotice, driveShareOpen, driveShareConfirm, driveAccessOpen, driveRemoveConfirm, driveHelpOpen]);
+  }, [groupSettingsOpen, rosterFilesOpen, rosterPickerOpen, clearRosterOpen, driveImportPreview, driveBackupChoices, localImportPreview, rosterToolsNotice, driveShareOpen, driveShareConfirm, driveAccessOpen, driveRemoveConfirm, driveHelpOpen, driveUpdateConfirm]);
 
   const openGroupSettings = () => {
     setDraftGroupName(activeRosterName);
@@ -559,7 +646,11 @@ function App() {
       const result = await requestGoogleDriveAccessToken(googleDriveAccessToken ? "" : "consent");
       setGoogleDriveAccessToken(result.accessToken);
       try {
-        setConnectedDriveUser(await getGoogleDriveUserSummary(result.accessToken));
+        const user = await getGoogleDriveUserSummary(result.accessToken);
+        setConnectedDriveUser(user);
+        if (currentDriveBackup && user.emailAddress) {
+          setCurrentDriveBackup((file) => file ? { ...file, connectedEmail: user.emailAddress } : file);
+        }
       } catch {
         setConnectedDriveUser(null);
       }
@@ -712,7 +803,7 @@ function App() {
   const confirmAddDriveImport = () => {
     if (!driveImportPreview) return;
     addDriveImportedRosters(driveImportPreview.rosters);
-    setCurrentDriveBackup(driveImportPreview.file);
+    rememberDriveBackup(driveImportPreview.file, { rosterCount: driveImportPreview.rosterCount, playerCount: driveImportPreview.playerCount });
     const rosterCount = driveImportPreview.rosterCount;
     setDriveImportPreview(null);
     showRosterToolsNotice("Google Drive import complete", `Added ${rosterCount} roster${rosterCount === 1 ? "" : "s"} from Google Drive.`, "success");
@@ -721,14 +812,14 @@ function App() {
   const confirmReplaceDriveImport = () => {
     if (!driveImportPreview) return;
     replaceWithDriveImportedRosters(driveImportPreview.rosters, driveImportPreview.activeRosterId);
-    setCurrentDriveBackup(driveImportPreview.file);
+    rememberDriveBackup(driveImportPreview.file, { rosterCount: driveImportPreview.rosterCount, playerCount: driveImportPreview.playerCount });
     const rosterCount = driveImportPreview.rosterCount;
     setDriveImportPreview(null);
     showRosterToolsNotice("Google Drive import complete", `Replaced local rosters with ${rosterCount} roster${rosterCount === 1 ? "" : "s"} from Google Drive.`, "success");
   };
 
 
-  const saveAllRostersToGoogleDrive = async () => {
+  const createNewGoogleDriveBackupCopy = async (successTitle = "Saved to Google Drive") => {
     if (!googleDriveConfig.isConfigured) {
       showRosterToolsNotice("Google Drive not configured", "Add VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_API_KEY before using Google Drive backup.", "warning");
       return;
@@ -750,9 +841,9 @@ function App() {
         allRostersDriveBackupFilename(rosters),
         jsonText,
       );
-      setCurrentDriveBackup(file);
-      const openText = file.webViewLink ? "\n\nYou can open it from Google Drive later." : "";
-      showRosterToolsNotice("Saved to Google Drive", `${file.name}${openText}`, "success");
+      rememberDriveBackup(file, deviceBackupSummary);
+      const openText = file.webViewLink ? "\n\nThis is now the active Drive backup." : "";
+      showRosterToolsNotice(successTitle, `${file.name}${openText}`, "success");
     } catch (error) {
       showRosterToolsNotice("Could not save to Google Drive", error instanceof Error ? error.message : "Please try again.", "error");
     } finally {
@@ -760,7 +851,7 @@ function App() {
     }
   };
 
-  const updateCurrentGoogleDriveBackup = async () => {
+  const prepareDriveBackupUpdate = async () => {
     if (!googleDriveConfig.isConfigured) {
       showRosterToolsNotice("Google Drive not configured", "Add VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_API_KEY before using Google Drive backup.", "warning");
       return;
@@ -770,7 +861,7 @@ function App() {
       return;
     }
     if (!currentDriveBackup) {
-      showRosterToolsNotice("No Drive file selected", "Open a Drive backup or save a new Drive backup first. Then Fair Teams can update that same Drive file.", "warning");
+      await createNewGoogleDriveBackupCopy();
       return;
     }
     if (isEmptyStarterRoster) {
@@ -780,20 +871,73 @@ function App() {
 
     setGoogleDriveUpdating(true);
     try {
+      let previous: DriveBackupSummary | null = currentDriveBackup.rosterCount !== undefined && currentDriveBackup.playerCount !== undefined
+        ? { rosterCount: currentDriveBackup.rosterCount, playerCount: currentDriveBackup.playerCount }
+        : null;
+      let fileDetails: GoogleDriveFileResult = currentDriveBackup;
+      let readFailed = false;
+
+      try {
+        const { file, text } = await readGoogleDriveJsonFile(googleDriveAccessToken, currentDriveBackup.id);
+        const backup = parseDriveBackupJson(text);
+        fileDetails = file;
+        previous = countBackupRosters(backup.rosters);
+      } catch {
+        readFailed = true;
+      }
+
+      setDriveUpdateConfirm({
+        file: {
+          ...currentDriveBackup,
+          ...fileDetails,
+          rosterCount: previous?.rosterCount ?? currentDriveBackup.rosterCount,
+          playerCount: previous?.playerCount ?? currentDriveBackup.playerCount,
+          checkedAt: new Date().toISOString(),
+          connectedEmail: connectedDriveUser?.emailAddress || currentDriveBackup.connectedEmail,
+        },
+        previous,
+        next: deviceBackupSummary,
+        checkedAt: new Date().toISOString(),
+        readFailed,
+      });
+    } finally {
+      setGoogleDriveUpdating(false);
+    }
+  };
+
+  const saveAllRostersToGoogleDrive = async () => {
+    if (currentDriveBackup) {
+      await prepareDriveBackupUpdate();
+      return;
+    }
+    await createNewGoogleDriveBackupCopy();
+  };
+
+  const saveDriveBackupAsNewCopy = async () => {
+    await createNewGoogleDriveBackupCopy("Saved as new Drive copy");
+  };
+
+  const confirmUpdateCurrentGoogleDriveBackup = async () => {
+    if (!driveUpdateConfirm) return;
+    setGoogleDriveUpdating(true);
+    try {
       const jsonText = allRostersToDriveBackupJson(rosterState);
       const file = await updateGoogleDriveJsonFile(
         googleDriveAccessToken,
-        currentDriveBackup.id,
+        driveUpdateConfirm.file.id,
         jsonText,
       );
-      setCurrentDriveBackup(file);
-      showRosterToolsNotice("Google Drive backup updated", file.name, "success");
+      rememberDriveBackup(file, deviceBackupSummary);
+      setDriveUpdateConfirm(null);
+      showRosterToolsNotice("Drive backup updated", `${file.name}\n\nNow contains ${formatBackupSummary(deviceBackupSummary)}.`, "success");
     } catch (error) {
       showRosterToolsNotice("Could not update Google Drive backup", error instanceof Error ? error.message : "Please try again.", "error");
     } finally {
       setGoogleDriveUpdating(false);
     }
   };
+
+  const updateCurrentGoogleDriveBackup = prepareDriveBackupUpdate;
 
   const openDriveShareModal = () => {
     if (!googleDriveConnected) {
@@ -1527,16 +1671,27 @@ function App() {
                     </div>
                     <div className="mt-2 rounded-2xl bg-white/80 px-3 py-2">
                       <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+                        This device
+                      </div>
+                      <div className="mt-0.5 text-xs font-black text-[#102A43]">
+                        {formatBackupSummary(deviceBackupSummary)}
+                      </div>
+                      <div className="mt-2 text-[10px] font-black uppercase tracking-wide text-slate-400">
                         Connected account
                       </div>
                       <div className={`mt-0.5 truncate text-xs font-black ${connectedDriveUser?.emailAddress ? "text-[#102A43]" : "text-slate-400"}`}>
                         {connectedDriveUser?.emailAddress || (googleDriveConnected ? "Connected" : "Not connected")}
                       </div>
                       <div className="mt-2 text-[10px] font-black uppercase tracking-wide text-slate-400">
-                        Active backup
+                        Active Drive backup
                       </div>
                       <div className={`mt-0.5 truncate text-xs font-black ${currentDriveBackup ? "text-[#102A43]" : "text-slate-400"}`}>
                         {currentDriveBackup?.name || "None selected"}
+                      </div>
+                      <div className="mt-0.5 text-[11px] font-semibold text-slate-500">
+                        {currentDriveBackup
+                          ? `Backup has ${formatBackupSummary(currentDriveBackup.rosterCount !== undefined && currentDriveBackup.playerCount !== undefined ? { rosterCount: currentDriveBackup.rosterCount, playerCount: currentDriveBackup.playerCount } : null)}`
+                          : "Save backup will create a new Drive file."}
                       </div>
                     </div>
                   </div>
@@ -1564,10 +1719,10 @@ function App() {
                       variant="outline"
                       className="h-11 justify-start rounded-2xl gap-2 border-blue-100 bg-white/90 px-3"
                       onClick={saveAllRostersToGoogleDrive}
-                      disabled={isEmptyStarterRoster || !googleDriveConnected || googleDriveSaving}
+                      disabled={isEmptyStarterRoster || !googleDriveConnected || googleDriveSaving || googleDriveUpdating}
                     >
                       <CloudUpload className="h-4 w-4" />
-                      <span className="truncate text-xs font-black">{googleDriveSaving ? "Saving..." : "Save backup"}</span>
+                      <span className="truncate text-xs font-black">{googleDriveSaving || googleDriveUpdating ? "Saving..." : "Save backup"}</span>
                     </Button>
                     <Button
                       type="button"
@@ -1584,20 +1739,19 @@ function App() {
                     type="button"
                     variant="outline"
                     className="h-11 justify-start rounded-2xl gap-3 border-blue-100 bg-white/90"
-                    onClick={updateCurrentGoogleDriveBackup}
+                    onClick={saveDriveBackupAsNewCopy}
                     disabled={
                       isEmptyStarterRoster ||
                       !googleDriveConnected ||
-                      !currentDriveBackup ||
                       googleDriveSaving ||
                       googleDriveOpening ||
                       googleDriveUpdating
                     }
-                    title={currentDriveBackup ? "Update the active Drive backup file" : "Open or save a Drive backup first"}
+                    title="Create a separate Drive backup copy"
                   >
-                    <RefreshCw className={`h-4 w-4 ${googleDriveUpdating ? "animate-spin" : ""}`} />
+                    <RefreshCw className={`h-4 w-4 ${googleDriveSaving ? "animate-spin" : ""}`} />
                     <span className="font-black">
-                      {googleDriveUpdating ? "Updating..." : "Update backup"}
+                      {googleDriveSaving ? "Saving copy..." : "Save as new copy"}
                     </span>
                   </Button>
                   <Button
@@ -1614,7 +1768,7 @@ function App() {
                   </Button>
                   <div className="rounded-2xl bg-white/70 px-3 py-2">
                     <p className="text-[10px] font-semibold leading-snug text-slate-500">
-                      Save, open, update, or send a text-only backup copy.
+                      Save updates the active backup. Use Save as new copy for a separate archive.
                     </p>
                     <button
                       type="button"
@@ -2053,6 +2207,83 @@ function App() {
                 variant="ghost"
                 className="h-10 rounded-2xl text-slate-500"
                 onClick={() => setDriveShareOpen(false)}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {driveUpdateConfirm && (
+        <div
+          className="fixed inset-0 z-[70] flex items-end justify-center bg-black/50 p-4 sm:items-center"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="w-full max-w-sm rounded-3xl border border-amber-100 bg-white p-4 shadow-2xl">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-amber-50 text-amber-600">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h2 className="text-base font-black tracking-tight text-[#102A43]">
+                  Update active Drive backup?
+                </h2>
+                <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
+                  This will overwrite the selected Drive backup file.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-3 rounded-2xl border border-slate-100 bg-slate-50/80 p-3">
+              <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+                Active Drive backup
+              </div>
+              <div className="mt-1 truncate text-sm font-black text-[#102A43]">
+                {driveUpdateConfirm.file.name}
+              </div>
+            </div>
+
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <div className="rounded-2xl border border-amber-100 bg-amber-50/80 p-3 text-center">
+                <div className="text-[10px] font-black uppercase tracking-wide text-amber-700">
+                  Backup now
+                </div>
+                <div className="mt-1 text-xs font-black text-[#102A43]">
+                  {driveUpdateConfirm.readFailed ? "Could not check" : formatBackupSummary(driveUpdateConfirm.previous)}
+                </div>
+              </div>
+              <div className="rounded-2xl border border-emerald-100 bg-emerald-50/80 p-3 text-center">
+                <div className="text-[10px] font-black uppercase tracking-wide text-emerald-700">
+                  This device
+                </div>
+                <div className="mt-1 text-xs font-black text-[#102A43]">
+                  {formatBackupSummary(driveUpdateConfirm.next)}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-3 rounded-2xl border border-amber-100 bg-amber-50/80 p-3">
+              <p className="text-xs font-semibold leading-snug text-amber-800">
+                Make sure this is the correct backup file before updating. Use “Save as new copy” if you want a separate archive instead.
+              </p>
+            </div>
+
+            <div className="mt-4 grid gap-2">
+              <Button
+                type="button"
+                className="h-11 rounded-2xl bg-blue-600 text-white hover:bg-blue-700"
+                onClick={confirmUpdateCurrentGoogleDriveBackup}
+                disabled={googleDriveUpdating}
+              >
+                {googleDriveUpdating ? "Updating..." : "Update this backup"}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                className="h-10 rounded-2xl text-slate-500"
+                onClick={() => setDriveUpdateConfirm(null)}
               >
                 Cancel
               </Button>

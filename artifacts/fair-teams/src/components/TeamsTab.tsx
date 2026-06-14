@@ -740,7 +740,11 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
                     </div>
                   </div>
                   <div className="flex items-center gap-1.5 text-[10px] font-semibold leading-tight text-muted-foreground">
-                    <span>Avg {avgSkill} · Total {totalSkill}</span>
+                    <span>
+                      {showingStats
+                        ? `Avg ${avgSkill} · ${team.players.length} player${team.players.length === 1 ? "" : "s"}`
+                        : `Avg ${avgSkill} · Total ${totalSkill}`}
+                    </span>
                     {notHereCount > 0 && (
                       <span
                         className="inline-flex items-center gap-0.5 rounded-full border border-amber-200 bg-amber-100 px-1 py-0.5 text-[8px] font-black text-amber-800"
@@ -765,13 +769,6 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
 
                 {showingStats ? (
                   <div className="bg-card border-t border-border px-3 py-3">
-                    <div className="mb-2 flex items-center justify-between gap-2 rounded-xl border border-slate-100 bg-slate-50/70 px-2.5 py-1.5">
-                      <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Team balance</span>
-                      <span className="text-[10px] font-black tabular-nums text-[#102A43]">
-                        Avg {avgSkill} · {team.players.length} player{team.players.length === 1 ? "" : "s"}
-                      </span>
-                    </div>
-
                     <div className="space-y-1.5">
                       {statsRows.map((stat) => {
                         const pct = stat.max > 0 ? Math.max(0, Math.min(100, (stat.value / stat.max) * 100)) : 0;

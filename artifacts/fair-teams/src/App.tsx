@@ -1700,7 +1700,8 @@ function App() {
                 <div className="mt-3 grid gap-2">
                   <Button
                     type="button"
-                    className="h-11 justify-start rounded-2xl gap-3 bg-blue-600 text-white hover:bg-blue-700"
+                    variant={googleDriveConnected ? "outline" : "default"}
+                    className={`h-11 justify-start rounded-2xl gap-3 ${googleDriveConnected ? "border-slate-200 bg-white/90 text-slate-600 hover:bg-slate-50 hover:text-slate-700" : "bg-blue-600 text-white hover:bg-blue-700"}`}
                     onClick={googleDriveConnected ? disconnectGoogleDrive : connectGoogleDrive}
                     disabled={!googleDriveConfig.isConfigured || googleDriveConnecting}
                   >
@@ -1715,7 +1716,7 @@ function App() {
                   </Button>
                   <Button
                     type="button"
-                    className="h-12 justify-start rounded-2xl gap-3 bg-blue-600 text-white shadow-sm hover:bg-blue-700"
+                    className="h-12 justify-start rounded-2xl gap-3 bg-emerald-600 text-white shadow-sm hover:bg-emerald-700"
                     onClick={saveAllRostersToGoogleDrive}
                     disabled={isEmptyStarterRoster || !googleDriveConnected || googleDriveSaving || googleDriveUpdating}
                     title={currentDriveBackup ? "Update the active Drive backup" : "Create a new Drive backup"}
@@ -1756,11 +1757,11 @@ function App() {
                         googleDriveOpening ||
                         googleDriveUpdating
                       }
-                      title="Create a separate Drive backup copy"
+                      title="Save as a separate Drive backup file"
                     >
                       <Archive className="h-4 w-4" />
                       <span className="truncate text-xs font-black">
-                        {googleDriveSaving ? "Saving..." : "New copy"}
+                        {googleDriveSaving ? "Saving..." : "Save as copy"}
                       </span>
                     </Button>
                   </div>
@@ -1778,7 +1779,7 @@ function App() {
                   </Button>
                   <div className="rounded-2xl bg-white/70 px-3 py-2">
                     <p className="text-[10px] font-semibold leading-snug text-slate-500">
-                      Save backup is the normal action. It updates the active backup, or creates one if none is selected. Use New copy only for a separate archive.
+                      Save backup is the normal action. It updates the active backup, or creates one if none is selected. Use Save as copy only for a separate archive.
                     </p>
                     <button
                       type="button"
@@ -2276,7 +2277,7 @@ function App() {
 
             <div className="mt-3 rounded-2xl border border-amber-100 bg-amber-50/80 p-3">
               <p className="text-xs font-semibold leading-snug text-amber-800">
-                Make sure this is the correct backup file before updating. Use “Save as new copy” if you want a separate archive instead.
+                Make sure this is the correct backup file before updating. Use “Save as copy” if you want a separate archive instead.
               </p>
             </div>
 

@@ -42,7 +42,12 @@ import {
 import { getGoogleDriveConfig } from "@/lib/googleDriveConfig";
 import { allRostersToDriveBackupJson, parseDriveBackupJson } from "@/lib/googleDriveBackup";
 import { requestGoogleDriveAccessToken } from "@/lib/googleDriveAuth";
-import { createGoogleDriveJsonFile, readGoogleDriveJsonFile, type GoogleDriveFileResult } from "@/lib/googleDriveFiles";
+import {
+  createGoogleDriveJsonFile,
+  readGoogleDriveJsonFile,
+  updateGoogleDriveJsonFile,
+  type GoogleDriveFileResult,
+} from "@/lib/googleDriveFiles";
 import { pickGoogleDriveBackupFile } from "@/lib/googleDrivePicker";
 
 const GROUP_NAME_STORAGE_KEY = "fair-teams-group-name";
@@ -231,6 +236,7 @@ function App() {
   const [googleDriveAccessToken, setGoogleDriveAccessToken] = useState("");
   const [googleDriveConnecting, setGoogleDriveConnecting] = useState(false);
   const [googleDriveSaving, setGoogleDriveSaving] = useState(false);
+  const [googleDriveUpdating, setGoogleDriveUpdating] = useState(false);
   const [googleDriveOpening, setGoogleDriveOpening] = useState(false);
   const [currentDriveBackup, setCurrentDriveBackup] = useState<GoogleDriveFileResult | null>(null);
   const [driveImportPreview, setDriveImportPreview] = useState<DriveImportPreview | null>(null);
@@ -545,17 +551,6 @@ function App() {
     window.alert(`Opened from Google Drive and replaced local rosters with ${rosterCount} roster${rosterCount === 1 ? "" : "s"}.`);
   };
 
-  const showGoogleDriveComingSoon = (action: string) => {
-    if (!googleDriveConfig.isConfigured) {
-      window.alert("Google Drive keys are not configured yet. Add VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_API_KEY to .env.local first.");
-      return;
-    }
-    if (!googleDriveConnected) {
-      window.alert("Connect Google Drive first, then this action can be added in the next patch.");
-      return;
-    }
-    window.alert(`${action} will be connected in the next Google Drive patch.`);
-  };
 
   const saveAllRostersToGoogleDrive = async () => {
     if (!googleDriveConfig.isConfigured) {
@@ -586,6 +581,41 @@ function App() {
       window.alert(error instanceof Error ? error.message : "Could not save to Google Drive.");
     } finally {
       setGoogleDriveSaving(false);
+    }
+  };
+
+  const updateCurrentGoogleDriveBackup = async () => {
+    if (!googleDriveConfig.isConfigured) {
+      window.alert("Google Drive keys are not configured yet. Add VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_API_KEY to .env.local first.");
+      return;
+    }
+    if (!googleDriveAccessToken) {
+      window.alert("Connect Google Drive first.");
+      return;
+    }
+    if (!currentDriveBackup) {
+      window.alert("Open a Drive backup or save a new Drive backup first. Then Fair Teams can update that same Drive file.");
+      return;
+    }
+    if (isEmptyStarterRoster) {
+      window.alert("Create or import a roster before updating the Drive backup.");
+      return;
+    }
+
+    setGoogleDriveUpdating(true);
+    try {
+      const jsonText = allRostersToDriveBackupJson(rosterState);
+      const file = await updateGoogleDriveJsonFile(
+        googleDriveAccessToken,
+        currentDriveBackup.id,
+        jsonText,
+      );
+      setCurrentDriveBackup(file);
+      window.alert(`Updated Google Drive backup:\n${file.name}`);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Could not update the Google Drive backup.");
+    } finally {
+      setGoogleDriveUpdating(false);
     }
   };
 
@@ -1163,7 +1193,7 @@ function App() {
                     </div>
                     {currentDriveBackup ? (
                       <div className="mt-1 truncate text-[11px] font-bold text-blue-700">
-                        Last saved: {currentDriveBackup.name}
+                        Current Drive file: {currentDriveBackup.name}
                       </div>
                     ) : null}
                   </div>
@@ -1209,12 +1239,21 @@ function App() {
                     type="button"
                     variant="outline"
                     className="h-11 justify-start rounded-2xl gap-3 border-blue-100 bg-white/90"
-                    onClick={() => showGoogleDriveComingSoon("Update the current Google Drive backup")}
-                    disabled
-                    title="Available after a Drive backup has been opened"
+                    onClick={updateCurrentGoogleDriveBackup}
+                    disabled={
+                      isEmptyStarterRoster ||
+                      !googleDriveConnected ||
+                      !currentDriveBackup ||
+                      googleDriveSaving ||
+                      googleDriveOpening ||
+                      googleDriveUpdating
+                    }
+                    title={currentDriveBackup ? "Update the selected Google Drive backup file" : "Open or save a Drive backup first"}
                   >
-                    <RefreshCw className="h-4 w-4" />
-                    <span className="font-black">Update current Drive backup</span>
+                    <RefreshCw className={`h-4 w-4 ${googleDriveUpdating ? "animate-spin" : ""}`} />
+                    <span className="font-black">
+                      {googleDriveUpdating ? "Updating Drive backup..." : "Update current Drive backup"}
+                    </span>
                   </Button>
                 </div>
               </div>

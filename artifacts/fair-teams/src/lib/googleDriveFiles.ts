@@ -118,3 +118,39 @@ export async function readGoogleDriveJsonFile(accessToken: string, fileId: strin
 
   return { file, text: await contentResponse.text() };
 }
+
+export async function updateGoogleDriveJsonFile(
+  accessToken: string,
+  fileId: string,
+  jsonText: string,
+): Promise<GoogleDriveFileResult> {
+  const response = await fetch(
+    `https://www.googleapis.com/upload/drive/v3/files/${encodeURIComponent(fileId)}?uploadType=media&fields=id,name,webViewLink,modifiedTime`,
+    {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": `${FAIR_TEAMS_DRIVE_MIME_TYPE}; charset=UTF-8`,
+      },
+      body: jsonText,
+    },
+  );
+
+  if (!response.ok) {
+    const message = await readDriveError(response);
+    if (response.status === 401) {
+      throw new Error("Google Drive connection expired. Disconnect and connect Google Drive again, then retry.");
+    }
+    if (response.status === 403) {
+      throw new Error("Fair Teams cannot update this Drive file. Open the file from Drive again, or ask the file owner for edit access.");
+    }
+    throw new Error(message);
+  }
+
+  const result = await response.json();
+  if (!result?.id || !result?.name) {
+    throw new Error("Google Drive updated the file but did not return file details.");
+  }
+
+  return result as GoogleDriveFileResult;
+}

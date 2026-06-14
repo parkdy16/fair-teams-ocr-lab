@@ -3929,13 +3929,13 @@ export function TodayTab({
 
             {ocrInputSource === "screenshot" && ocrText && (
               <div className="rounded-xl border bg-card p-3">
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center justify-between gap-3">
                   <div>
-                    <div className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
-                      Advanced
+                    <div className="text-sm font-black text-foreground">
+                      Check missed names
                     </div>
-                    <div className="text-[10px] font-medium text-muted-foreground">
-                      Raw scan text is mainly for troubleshooting.
+                    <div className="text-[11px] font-medium text-muted-foreground">
+                      Use Add to rescue names the scanner missed.
                     </div>
                   </div>
                   <Button
@@ -3943,17 +3943,15 @@ export function TodayTab({
                     variant="outline"
                     size="sm"
                     onClick={() => setShowRawOcrText((value) => !value)}
-                    className="h-7 px-2 text-[10px] font-black"
+                    className="h-8 shrink-0 px-3 text-[10px] font-black"
                   >
-                    {showRawOcrText ? "Hide raw text" : "Show raw text"}
+                    {showRawOcrText ? "Hide words" : "Show words"}
                   </Button>
                 </div>
                 {showRawOcrText && (
                   <div className="mt-2 space-y-2">
-                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-[10px] font-bold text-amber-800">
-                      Green = roster match, amber = check, blue = new. If a real
-                      name is visible but was missed, type it below or use the
-                      right-side Add button on a clean raw line.
+                    <div className="text-[11px] font-semibold text-muted-foreground">
+                      Possible missed names appear first. Already reviewed names are marked as In Review.
                     </div>
                     <div className="grid grid-cols-[1fr_auto] gap-2">
                       <Input

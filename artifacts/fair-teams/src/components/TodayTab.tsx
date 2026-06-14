@@ -3318,8 +3318,8 @@ export function TodayTab({
           onOpenAutoFocus={(e) => e.preventDefault()}
           className={
             isCropWorkspaceOpen
-              ? "!fixed !left-0 !top-0 !flex !h-[100dvh] !max-h-[100dvh] !w-[100dvw] !max-w-none !translate-x-0 !translate-y-0 overflow-hidden !rounded-none !border-0 !p-0 [&>button]:hidden"
-              : "!fixed !left-1/2 !top-1/2 !-translate-x-1/2 !-translate-y-1/2 !flex h-[92dvh] max-h-[calc(100dvh-1rem)] w-[94vw] max-w-lg flex-col overflow-hidden rounded-2xl p-4 sm:h-[90dvh] sm:max-h-[90dvh] sm:p-6 md:max-w-3xl"
+              ? "!left-0 !top-0 !h-[100dvh] !max-h-[100dvh] !w-[100dvw] !max-w-none !translate-x-0 !translate-y-0 overflow-hidden !rounded-none !border-0 !p-0 [&>button]:hidden"
+              : "relative flex h-[92svh] max-h-[calc(100svh-1rem)] w-[94vw] max-w-lg flex-col overflow-hidden rounded-2xl p-4 sm:h-[90dvh] sm:max-h-[90dvh] sm:p-6 md:max-w-3xl"
           }
         >
           <DialogHeader>
@@ -3483,21 +3483,21 @@ export function TodayTab({
               screenshotImportMode === "other" && (
                 <div className="fixed inset-0 z-[9999] h-[100dvh] w-[100dvw] overflow-hidden bg-background shadow-2xl">
                   <div className="flex h-full w-full flex-col gap-0 landscape:flex-row">
-                    <div className="shrink-0 border-b bg-background/95 px-1 pb-1 pt-[calc(env(safe-area-inset-top)+2px)] landscape:flex landscape:w-20 landscape:flex-col landscape:gap-1 landscape:border-b-0 landscape:border-r landscape:px-1 landscape:pb-[calc(env(safe-area-inset-bottom)+2px)] landscape:pl-[calc(env(safe-area-inset-left)+2px)] landscape:pt-1">
-                      <div className="flex items-center justify-between gap-1 landscape:flex-col landscape:items-stretch">
+                    <div className="shrink-0 border-b bg-background/95 px-3 pb-2 pt-[calc(env(safe-area-inset-top)+6px)] shadow-sm backdrop-blur landscape:flex landscape:w-28 landscape:flex-col landscape:gap-2 landscape:border-b-0 landscape:border-r landscape:px-2 landscape:pb-[calc(env(safe-area-inset-bottom)+8px)] landscape:pl-[calc(env(safe-area-inset-left)+8px)] landscape:pt-2">
+                      <div className="flex items-center justify-between gap-2 landscape:flex-col landscape:items-stretch">
                         <div className="min-w-0 landscape:text-center">
-                          <div className="text-[11px] font-black leading-tight text-foreground landscape:text-[10px]">
+                          <div className="text-sm font-black leading-tight text-foreground landscape:text-xs">
                             Crop {activeCropIndex + 1}/
                             {selectedScreenshotPreviews.length}
                           </div>
                         </div>
-                        <div className="flex shrink-0 items-center gap-1 landscape:grid landscape:grid-cols-1">
+                        <div className="flex shrink-0 items-center gap-2 landscape:grid landscape:grid-cols-1 landscape:gap-1.5">
                           <Button
                             type="button"
                             variant="ghost"
                             size="sm"
                             onClick={clearOcrSelection}
-                            className="h-8 px-2 text-[10px] font-black"
+                            className="h-10 rounded-2xl px-3 text-xs font-black landscape:w-full landscape:px-2"
                           >
                             Cancel
                           </Button>
@@ -3511,20 +3511,20 @@ export function TodayTab({
                                 Boolean(cropBoxes[screenshotIndex]),
                               )
                             }
-                            className="h-8 px-2.5 text-[10px] font-black"
+                            className="h-10 rounded-2xl px-4 text-xs font-black shadow-sm landscape:w-full landscape:px-2"
                           >
                             Scan
                           </Button>
                         </div>
                       </div>
 
-                      <div className="mt-0.5 flex items-center gap-1 overflow-x-auto pb-0.5 landscape:mt-0 landscape:flex-1 landscape:flex-col landscape:items-stretch landscape:overflow-x-hidden landscape:overflow-y-auto landscape:pb-0">
+                      <div className="mt-2 flex items-center gap-1.5 overflow-x-auto pb-1 landscape:mt-0 landscape:flex-1 landscape:flex-col landscape:items-stretch landscape:gap-1.5 landscape:overflow-x-hidden landscape:overflow-y-auto landscape:pb-0">
                         {selectedScreenshotPreviews.map((preview, index) => (
                           <button
                             key={`${preview.name}-tab-${index}`}
                             type="button"
                             onClick={() => setActiveCropIndex(index)}
-                            className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-black ${
+                            className={`h-8 min-w-8 shrink-0 rounded-full border px-3 text-xs font-black shadow-sm transition landscape:w-full landscape:px-2 ${
                               activeCropIndex === index
                                 ? "border-primary bg-primary/10 text-primary"
                                 : cropBoxes[index]
@@ -3542,7 +3542,7 @@ export function TodayTab({
                           size="sm"
                           onClick={clearActiveCrop}
                           disabled={!cropBoxes[activeCropIndex]}
-                          className="ml-auto h-6 shrink-0 px-2 text-[10px] font-black landscape:ml-0 landscape:h-7 landscape:w-full landscape:px-1"
+                          className="ml-auto h-9 shrink-0 rounded-2xl px-3 text-xs font-black shadow-sm landscape:ml-0 landscape:mt-auto landscape:w-full landscape:px-2"
                         >
                           Clear box
                         </Button>

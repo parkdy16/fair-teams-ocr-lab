@@ -1969,16 +1969,68 @@ export function TodayTab({
     setEditedOcrCandidateNames((current) => ({ ...current, [key]: nextName }));
   };
 
-  const safeMatches = possibleNames.filter(
+  const reviewNames = useMemo(() => {
+    const byReviewIdentity = new Map<string, OcrNameCandidate>();
+
+    for (const candidate of possibleNames) {
+      const resolvedMatch = resolveOcrMatch(candidate);
+      const editedName = getEditedOcrCandidateName(candidate);
+      const normalizedEditedName = normalizeForMatch(editedName);
+      const reviewIdentity = resolvedMatch
+        ? `roster:${resolvedMatch.id}`
+        : `new:${normalizedEditedName || normalizeForMatch(candidate.name)}`;
+      if (!reviewIdentity || reviewIdentity === "new:") continue;
+
+      const existing = byReviewIdentity.get(reviewIdentity);
+      if (!existing) {
+        byReviewIdentity.set(reviewIdentity, candidate);
+        continue;
+      }
+
+      const existingStatus = getOcrReviewStatus(existing);
+      const candidateStatus = getOcrReviewStatus(candidate);
+      const statusRank: Record<OcrMatchStatus, number> = {
+        match: 3,
+        suggest: 2,
+        new: 1,
+      };
+      const existingScore = existing.score ?? 0;
+      const candidateScore = candidate.score ?? 0;
+      const existingNameLength = getEditedOcrCandidateName(existing).length;
+      const candidateNameLength = editedName.length;
+
+      if (
+        statusRank[candidateStatus] > statusRank[existingStatus] ||
+        (statusRank[candidateStatus] === statusRank[existingStatus] &&
+          candidateScore > existingScore) ||
+        (statusRank[candidateStatus] === statusRank[existingStatus] &&
+          candidateScore === existingScore &&
+          candidateNameLength < existingNameLength)
+      ) {
+        byReviewIdentity.set(reviewIdentity, candidate);
+      }
+    }
+
+    return Array.from(byReviewIdentity.values());
+  }, [
+    possibleNames,
+    chosenOcrMatchIds,
+    editedOcrCandidateNames,
+    editedOcrTokenSelections,
+    rawOcrCreatedPlayerIds,
+    players,
+  ]);
+
+  const safeMatches = reviewNames.filter(
     (candidate) => getOcrReviewStatus(candidate) === "match",
   ).length;
-  const suggestions = possibleNames.filter(
+  const suggestions = reviewNames.filter(
     (candidate) => getOcrReviewStatus(candidate) === "suggest",
   ).length;
-  const newNames = possibleNames.filter(
+  const newNames = reviewNames.filter(
     (candidate) => getOcrReviewStatus(candidate) === "new",
   ).length;
-  const selectedOcrCandidates = possibleNames.filter((candidate) =>
+  const selectedOcrCandidates = reviewNames.filter((candidate) =>
     selectedOcrCandidateKeySet.has(ocrCandidateKey(candidate)),
   );
   const selectedRosterMatches = selectedOcrCandidates.filter((candidate) =>
@@ -1990,10 +2042,10 @@ export function TodayTab({
   );
   const selectedOcrTotal =
     selectedRosterMatches.length + selectedNewCandidates.length;
-  const allRosterCandidates = possibleNames.filter((candidate) =>
+  const allRosterCandidates = reviewNames.filter((candidate) =>
     Boolean(resolveOcrMatch(candidate)),
   );
-  const allNewCandidates = possibleNames.filter(
+  const allNewCandidates = reviewNames.filter(
     (candidate) =>
       getOcrReviewStatus(candidate) === "new" && !resolveOcrMatch(candidate),
   );
@@ -2012,7 +2064,7 @@ export function TodayTab({
     expectedAttendeeCount.trim() !== "" &&
     Number.isFinite(expectedAttendeeNumber) &&
     expectedAttendeeNumber > 0;
-  const scannedNameCount = possibleNames.length;
+  const scannedNameCount = reviewNames.length;
   const ocrRawLineCount = ocrText
     ? ocrText
         .split(/\r?\n/)
@@ -2375,7 +2427,7 @@ export function TodayTab({
         .filter(Boolean),
     );
     setSelectedOcrCandidateKeys(
-      possibleNames
+      reviewNames
         .filter((candidate) => {
           if (manualCandidateKeySet.has(normalizeForMatch(candidate.name)))
             return true;
@@ -2390,7 +2442,7 @@ export function TodayTab({
         })
         .map(ocrCandidateKey),
     );
-  }, [possibleNames, voiceOpen, ocrInputSource, manualOcrCandidateNames]);
+  }, [reviewNames, voiceOpen, ocrInputSource, manualOcrCandidateNames]);
 
   const clearOcrSelection = () => {
     setSelectedScreenshots([]);
@@ -3635,7 +3687,7 @@ export function TodayTab({
                   <div className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
                     Review Names
                   </div>
-                  {possibleNames.length > 0 && (
+                  {reviewNames.length > 0 && (
                     <div className="text-[10px] font-black text-muted-foreground">
                       {safeMatches} match · {suggestions} check · {newNames} new
                     </div>
@@ -3644,12 +3696,12 @@ export function TodayTab({
                 {ocrInputSource === "screenshot" && (
                   <div className="mb-2 rounded-lg border bg-muted/30 px-2 py-1.5 text-[10px] font-bold text-muted-foreground">
                     OCR debug: {ocrRawWordCount} raw words · {ocrRawLineCount}{" "}
-                    raw lines · {possibleNames.length} review names
+                    raw lines · {reviewNames.length} review names
                   </div>
                 )}
-                {possibleNames.length > 0 ? (
+                {reviewNames.length > 0 ? (
                   <div className="space-y-2 pr-1">
-                    {possibleNames.map((candidate, index) => {
+                    {reviewNames.map((candidate, index) => {
                       const candidateKey = ocrCandidateKey(candidate);
                       const isSelectedMatch =
                         selectedOcrCandidateKeySet.has(candidateKey);
@@ -3951,9 +4003,9 @@ export function TodayTab({
                                   );
                                 })}
                                 {entry.foundCandidates.map((candidate) => {
+                                  const candidateKey = ocrCandidateKey(candidate);
                                   const reviewStatus =
                                     getOcrReviewStatus(candidate);
-                                  const candidateKey = ocrCandidateKey(candidate);
                                   const alreadySelected =
                                     selectedOcrCandidateKeySet.has(candidateKey);
                                   return (
@@ -4314,16 +4366,16 @@ export function TodayTab({
                     Smart match review
                   </div>
                 </div>
-                {possibleNames.length > 0 && (
+                {reviewNames.length > 0 && (
                   <div className="shrink-0 text-[10px] font-black text-muted-foreground">
                     {safeMatches} match · {suggestions} check · {newNames} new
                   </div>
                 )}
               </div>
 
-              {possibleNames.length > 0 ? (
+              {reviewNames.length > 0 ? (
                 <div className="space-y-2">
-                  {possibleNames.map((candidate, index) => {
+                  {reviewNames.map((candidate, index) => {
                     const candidateKey = ocrCandidateKey(candidate);
                     const isSelectedMatch =
                       selectedOcrCandidateKeySet.has(candidateKey);

@@ -44,6 +44,7 @@ import { allRostersToDriveBackupJson, parseDriveBackupJson } from "@/lib/googleD
 import { requestGoogleDriveAccessToken } from "@/lib/googleDriveAuth";
 import {
   createGoogleDriveJsonFile,
+  listGoogleDriveBackupFiles,
   readGoogleDriveJsonFile,
   updateGoogleDriveJsonFile,
   type GoogleDriveFileResult,
@@ -255,6 +256,7 @@ function App() {
   const [googleDriveOpening, setGoogleDriveOpening] = useState(false);
   const [currentDriveBackup, setCurrentDriveBackup] = useState<GoogleDriveFileResult | null>(null);
   const [driveImportPreview, setDriveImportPreview] = useState<DriveImportPreview | null>(null);
+  const [driveBackupChoices, setDriveBackupChoices] = useState<GoogleDriveFileResult[] | null>(null);
   const [localImportPreview, setLocalImportPreview] = useState<LocalImportPreview | null>(null);
   const [rosterToolsNotice, setRosterToolsNotice] = useState<RosterToolsNotice | null>(null);
   const googleDriveConnected = Boolean(googleDriveAccessToken);
@@ -282,6 +284,13 @@ function App() {
     setRosterToolsNotice({ title, message, tone });
   };
 
+  const formatDriveModifiedTime = (value?: string) => {
+    if (!value) return "Modified time unavailable";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "Modified time unavailable";
+    return `Updated ${date.toLocaleDateString(undefined, { month: "short", day: "numeric" })} ${date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`;
+  };
+
   useEffect(() => {
     saveRosterState(rosterState);
   }, [rosterState]);
@@ -293,6 +302,7 @@ function App() {
       rosterPickerOpen ||
       clearRosterOpen ||
       Boolean(driveImportPreview) ||
+      Boolean(driveBackupChoices) ||
       Boolean(localImportPreview) ||
       Boolean(rosterToolsNotice);
     if (!shouldLockScroll) return;
@@ -302,7 +312,7 @@ function App() {
     return () => {
       document.body.style.overflow = previousOverflow;
     };
-  }, [groupSettingsOpen, rosterFilesOpen, rosterPickerOpen, clearRosterOpen, driveImportPreview, localImportPreview, rosterToolsNotice]);
+  }, [groupSettingsOpen, rosterFilesOpen, rosterPickerOpen, clearRosterOpen, driveImportPreview, driveBackupChoices, localImportPreview, rosterToolsNotice]);
 
   const openGroupSettings = () => {
     setDraftGroupName(activeRosterName);
@@ -512,26 +522,15 @@ function App() {
     });
   };
 
-  const openGoogleDriveBackup = async () => {
-    if (!googleDriveConfig.isConfigured) {
-      showRosterToolsNotice("Google Drive not configured", "Add VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_API_KEY before using Google Drive backup.", "warning");
-      return;
-    }
-    if (!googleDriveAccessToken) {
-      showRosterToolsNotice("Connect Google Drive first", "Connect your Google account before using Drive backup.", "warning");
+  const previewGoogleDriveBackupFile = async (picked: { id: string; name: string; mimeType?: string }) => {
+    if (!picked.name.toLowerCase().endsWith(".json") && picked.mimeType !== "application/json") {
+      showRosterToolsNotice("Choose a Fair Teams backup", "Please select a Fair Teams .json backup file.", "warning");
       return;
     }
 
+    setDriveBackupChoices(null);
     setGoogleDriveOpening(true);
     try {
-      const picked = await pickGoogleDriveBackupFile(googleDriveAccessToken);
-      if (!picked) return;
-
-      if (!picked.name.toLowerCase().endsWith(".json")) {
-        showRosterToolsNotice("Choose a Fair Teams backup", "Please select a Fair Teams .json backup file.", "warning");
-        return;
-      }
-
       const { file, text } = await readGoogleDriveJsonFile(googleDriveAccessToken, picked.id);
       const backup = parseDriveBackupJson(text);
       const rosterCount = backup.rosters.length;
@@ -547,6 +546,56 @@ function App() {
       });
     } catch (error) {
       showRosterToolsNotice("Could not open Google Drive backup", error instanceof Error ? error.message : "Please try again.", "error");
+    } finally {
+      setGoogleDriveOpening(false);
+    }
+  };
+
+  const browseGoogleDriveBackupWithPicker = async () => {
+    if (!googleDriveConfig.isConfigured) {
+      showRosterToolsNotice("Google Drive not configured", "Add VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_API_KEY before using Google Drive backup.", "warning");
+      return;
+    }
+    if (!googleDriveAccessToken) {
+      showRosterToolsNotice("Connect Google Drive first", "Connect your Google account before using Drive backup.", "warning");
+      return;
+    }
+
+    setDriveBackupChoices(null);
+    setGoogleDriveOpening(true);
+    try {
+      const picked = await pickGoogleDriveBackupFile(googleDriveAccessToken);
+      if (!picked) return;
+      await previewGoogleDriveBackupFile(picked);
+    } catch (error) {
+      showRosterToolsNotice(
+        "Could not open Google Drive picker",
+        error instanceof Error
+          ? error.message
+          : "On phone, open Fair Teams from Chrome and use the stable app link, then try again.",
+        "error",
+      );
+    } finally {
+      setGoogleDriveOpening(false);
+    }
+  };
+
+  const openGoogleDriveBackup = async () => {
+    if (!googleDriveConfig.isConfigured) {
+      showRosterToolsNotice("Google Drive not configured", "Add VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_API_KEY before using Google Drive backup.", "warning");
+      return;
+    }
+    if (!googleDriveAccessToken) {
+      showRosterToolsNotice("Connect Google Drive first", "Connect your Google account before using Drive backup.", "warning");
+      return;
+    }
+
+    setGoogleDriveOpening(true);
+    try {
+      const files = await listGoogleDriveBackupFiles(googleDriveAccessToken);
+      setDriveBackupChoices(files);
+    } catch (error) {
+      showRosterToolsNotice("Could not list Google Drive backups", error instanceof Error ? error.message : "Please try again.", "error");
     } finally {
       setGoogleDriveOpening(false);
     }
@@ -1427,6 +1476,95 @@ function App() {
                   </button>
                 );
               })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {driveBackupChoices && (
+        <div
+          className="fixed inset-0 z-[60] flex items-end justify-center bg-black/45 p-4 sm:items-center"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="flex max-h-[calc(100dvh-2rem)] w-full max-w-sm flex-col overflow-hidden rounded-3xl border border-blue-100 bg-white shadow-2xl">
+            <div className="flex items-start justify-between gap-3 border-b border-slate-100 p-4 pb-3">
+              <div className="min-w-0">
+                <div className="text-[10px] font-black uppercase tracking-wide text-blue-500">
+                  Google Drive backup
+                </div>
+                <h2 className="mt-1 truncate text-base font-black tracking-tight text-[#102A43]">
+                  Choose a backup
+                </h2>
+                <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
+                  These are Fair Teams backups this app can already access.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 shrink-0 rounded-xl"
+                onClick={() => setDriveBackupChoices(null)}
+                title="Close"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
+              {driveBackupChoices.length > 0 ? (
+                <div className="space-y-2">
+                  {driveBackupChoices.map((file) => (
+                    <button
+                      key={file.id}
+                      type="button"
+                      onClick={() => previewGoogleDriveBackupFile(file)}
+                      className="flex w-full items-center justify-between gap-3 rounded-2xl border border-blue-100 bg-blue-50/60 px-3 py-3 text-left transition active:scale-[0.99]"
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-black text-[#102A43]">
+                          {file.name}
+                        </span>
+                        <span className="mt-0.5 block text-[11px] font-bold text-blue-700/70">
+                          {formatDriveModifiedTime(file.modifiedTime)}
+                        </span>
+                      </span>
+                      <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-lg font-black leading-none text-blue-400 shadow-sm">
+                        ›
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-amber-100 bg-amber-50/80 p-3">
+                  <div className="flex gap-2">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                    <p className="text-xs font-semibold leading-snug text-amber-800">
+                      No Fair Teams Drive backups were found for this Google account yet. Save a backup first, or browse Drive manually if someone shared a backup file with you.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="grid gap-2 border-t border-slate-100 p-4">
+              <Button
+                type="button"
+                variant="outline"
+                className="h-11 rounded-2xl border-blue-100 bg-white text-blue-700 hover:bg-blue-50"
+                onClick={browseGoogleDriveBackupWithPicker}
+              >
+                Browse Drive manually
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                className="h-10 rounded-2xl text-slate-500"
+                onClick={() => setDriveBackupChoices(null)}
+              >
+                Cancel
+              </Button>
             </div>
           </div>
         </div>

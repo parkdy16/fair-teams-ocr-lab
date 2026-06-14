@@ -119,6 +119,41 @@ export async function readGoogleDriveJsonFile(accessToken: string, fileId: strin
   return { file, text: await contentResponse.text() };
 }
 
+export async function listGoogleDriveBackupFiles(accessToken: string): Promise<GoogleDriveFileResult[]> {
+  const query = [
+    "trashed = false",
+    `mimeType = '${FAIR_TEAMS_DRIVE_MIME_TYPE}'`,
+    "(name contains 'Fair Teams' or appProperties has { key='fairTeamsBackup' and value='true' })",
+  ].join(" and ");
+
+  const params = new URLSearchParams({
+    q: query,
+    pageSize: "30",
+    orderBy: "modifiedTime desc",
+    fields: "files(id,name,webViewLink,modifiedTime)",
+    spaces: "drive",
+    includeItemsFromAllDrives: "true",
+    supportsAllDrives: "true",
+  });
+
+  const response = await fetch(`https://www.googleapis.com/drive/v3/files?${params.toString()}`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+
+  if (!response.ok) {
+    const message = await readDriveError(response);
+    if (response.status === 401) {
+      throw new Error("Google Drive connection expired. Disconnect and connect Google Drive again, then retry.");
+    }
+    throw new Error(message);
+  }
+
+  const result = await response.json();
+  return Array.isArray(result?.files) ? (result.files as GoogleDriveFileResult[]) : [];
+}
+
 export async function updateGoogleDriveJsonFile(
   accessToken: string,
   fileId: string,

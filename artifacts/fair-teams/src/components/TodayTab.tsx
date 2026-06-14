@@ -1272,7 +1272,6 @@ export function TodayTab({
   const [ocrProgress, setOcrProgress] = useState(0);
   const [ocrStatus, setOcrStatus] = useState("");
   const [confirmNewPlayersOpen, setConfirmNewPlayersOpen] = useState(false);
-  const [confirmAddAllOpen, setConfirmAddAllOpen] = useState(false);
   const [expectedAttendeeCount, setExpectedAttendeeCount] = useState("");
   const [showRawOcrText, setShowRawOcrText] = useState(false);
   const [manualRawOcrName, setManualRawOcrName] = useState("");
@@ -1580,9 +1579,10 @@ export function TodayTab({
     (candidate) => getOcrReviewStatus(candidate) === "new" && !resolveOcrMatch(candidate),
   );
   const allOcrTotal = allRosterCandidates.length + allNewCandidates.length;
-  const allCheckCandidates = possibleNames.filter(
-    (candidate) => candidate.status === "suggest",
-  );
+  const allSelectableOcrCandidateKeys = [...allRosterCandidates, ...allNewCandidates].map(ocrCandidateKey);
+  const allSelectableOcrSelected =
+    allSelectableOcrCandidateKeys.length > 0 &&
+    allSelectableOcrCandidateKeys.every((key) => selectedOcrCandidateKeySet.has(key));
   const expectedAttendeeNumber = Number(expectedAttendeeCount);
   const hasExpectedAttendeeNumber =
     expectedAttendeeCount.trim() !== "" &&
@@ -2155,7 +2155,6 @@ export function TodayTab({
       `Added ${playerIds.size} existing player${playerIds.size === 1 ? "" : "s"} and created ${newPlayers.length} new player${newPlayers.length === 1 ? "" : "s"}.`,
     );
     setConfirmNewPlayersOpen(false);
-    setConfirmAddAllOpen(false);
     setOcrOpen(false);
     setVoiceOpen(false);
   };
@@ -2169,9 +2168,6 @@ export function TodayTab({
     finalizeOcrCandidates(selectedOcrCandidates);
   };
 
-  const finalizeAddAllOcrMatches = () => {
-    finalizeOcrCandidates(possibleNames);
-  };
 
   const addSelectedOcrMatches = () => {
     if (selectedOcrTotal === 0) return;
@@ -2182,10 +2178,21 @@ export function TodayTab({
     finalizeAddSelectedOcrMatches();
   };
 
-  const addAllOcrMatches = () => {
+  const selectAllOcrMatches = () => {
     if (allOcrTotal === 0) return;
-    setConfirmAddAllOpen(true);
+
+    if (allSelectableOcrSelected) {
+      setSelectedOcrCandidateKeys((current) =>
+        current.filter((key) => !allSelectableOcrCandidateKeys.includes(key)),
+      );
+      setOcrStatus("Review Names selection cleared.");
+      return;
+    }
+
+    setSelectedOcrCandidateKeys(allSelectableOcrCandidateKeys);
+    setOcrStatus("All usable Review Names are selected. Press Add Selected to confirm.");
   };
+
 
   const togglePlayer = (player: RoomPlayer) => {
     setPlayers(
@@ -2942,14 +2949,6 @@ export function TodayTab({
                 <div className="flex w-full items-center justify-end gap-2">
                   <Button
                     type="button"
-                    variant="outline"
-                    onClick={() => setOcrOpen(false)}
-                    className="h-10 rounded-xl px-4 text-xs font-bold"
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    type="button"
                     onClick={runOcr}
                     disabled={selectedScreenshots.length === 0 || ocrRunning}
                     className="h-10 rounded-xl px-4 text-xs font-black"
@@ -3002,20 +3001,12 @@ export function TodayTab({
               <div className="flex w-full items-center justify-end gap-2">
                 <Button
                   type="button"
-                  variant="outline"
-                  onClick={() => setOcrOpen(false)}
-                  className="h-9 shrink-0 rounded-xl px-3 text-xs font-bold whitespace-nowrap"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="button"
                   variant="secondary"
-                  onClick={addAllOcrMatches}
+                  onClick={selectAllOcrMatches}
                   disabled={allOcrTotal === 0}
                   className="h-9 shrink-0 rounded-xl px-3 text-xs font-black whitespace-nowrap"
                 >
-                  Add All ({allOcrTotal})
+                  {allSelectableOcrSelected ? `Clear All (${allOcrTotal})` : `Select All (${allOcrTotal})`}
                 </Button>
                 <Button
                   type="button"
@@ -3099,81 +3090,6 @@ export function TodayTab({
               className="h-9 text-xs font-black"
             >
               Yes, create and add
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={confirmAddAllOpen} onOpenChange={setConfirmAddAllOpen}>
-        <DialogContent className="w-[92vw] max-w-md rounded-2xl p-4 sm:p-6">
-          <DialogHeader>
-            <DialogTitle className="text-base font-black">
-              Add All Scan Results?
-            </DialogTitle>
-            <DialogDescription className="text-xs">
-              This will add every detected scan result, including unchecked
-              CHECK suggestions and NEW players.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2 rounded-xl border bg-muted/40 p-3 text-xs">
-            <div className="flex justify-between gap-3 font-bold">
-              <span>Safe matches</span>
-              <span>{safeMatches}</span>
-            </div>
-            <div className="flex justify-between gap-3 font-bold text-amber-700">
-              <span>CHECK suggestions</span>
-              <span>{allCheckCandidates.length}</span>
-            </div>
-            <div className="flex justify-between gap-3 font-bold text-sky-700">
-              <span>New players to create</span>
-              <span>{allNewCandidates.length}</span>
-            </div>
-            {hasExpectedAttendeeNumber && (
-              <div className="flex justify-between gap-3 font-bold text-muted-foreground">
-                <span>Missing from scan</span>
-                <span>{missingFromScan}</span>
-              </div>
-            )}
-          </div>
-          {(allCheckCandidates.length > 0 || allNewCandidates.length > 0) && (
-            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[11px] font-medium text-amber-800">
-              Review carefully: CHECK names use the suggested roster match, and
-              NEW names will be created with Skill Level 5.
-            </div>
-          )}
-          {allNewCandidates.length > 0 && (
-            <div className="max-h-40 space-y-1 overflow-y-auto rounded-xl border bg-muted/40 p-3">
-              <div className="mb-1 text-[10px] font-black uppercase tracking-wider text-muted-foreground">
-                New Players
-              </div>
-              {allNewCandidates.map((candidate) => {
-                const finalName = getEditedOcrCandidateName(candidate) || candidate.name;
-                return (
-                  <div
-                    key={ocrCandidateKey(candidate)}
-                    className="rounded-lg bg-card px-3 py-2 text-xs font-black text-foreground"
-                  >
-                    {finalName}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-          <DialogFooter className="gap-2 sm:gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setConfirmAddAllOpen(false)}
-              className="h-9 text-xs font-bold"
-            >
-              No, go back
-            </Button>
-            <Button
-              type="button"
-              onClick={finalizeAddAllOcrMatches}
-              className="h-9 text-xs font-black"
-            >
-              Yes, add all
             </Button>
           </DialogFooter>
         </DialogContent>

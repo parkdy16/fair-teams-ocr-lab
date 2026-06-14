@@ -1832,7 +1832,21 @@ export function TodayTab({
           rawSuggestions: uniqueRawSuggestions,
         };
       })
-      .filter(Boolean) as Array<{
+      .filter(Boolean)
+      .sort((a, b) => {
+        const aEntry = a as { suggestedName: string; foundCandidates: OcrNameCandidate[]; index: number };
+        const bEntry = b as { suggestedName: string; foundCandidates: OcrNameCandidate[]; index: number };
+        const aHasAdd = Boolean(aEntry.suggestedName);
+        const bHasAdd = Boolean(bEntry.suggestedName);
+        if (aHasAdd !== bHasAdd) return aHasAdd ? -1 : 1;
+
+        // Keep already-detected review lines useful, but below missed-name Add rows.
+        const aInReview = aEntry.foundCandidates.length > 0;
+        const bInReview = bEntry.foundCandidates.length > 0;
+        if (aInReview !== bInReview) return aInReview ? -1 : 1;
+
+        return aEntry.index - bEntry.index;
+      }) as Array<{
       index: number;
       text: string;
       normalized: string;
@@ -3305,7 +3319,7 @@ export function TodayTab({
           className={
             isCropWorkspaceOpen
               ? "!left-0 !top-0 !h-[100dvh] !max-h-[100dvh] !w-[100dvw] !max-w-none !translate-x-0 !translate-y-0 overflow-hidden !rounded-none !border-0 !p-0 [&>button]:hidden"
-              : "relative flex h-[90dvh] max-h-[90dvh] w-[94vw] max-w-lg flex-col overflow-hidden rounded-2xl p-4 sm:p-6 md:max-w-3xl"
+              : "relative flex !top-2 !translate-y-0 h-[calc(100dvh-1rem)] max-h-[calc(100dvh-1rem)] w-[94vw] max-w-lg flex-col overflow-hidden rounded-2xl p-4 sm:!top-[50%] sm:!translate-y-[-50%] sm:h-[90dvh] sm:max-h-[90dvh] sm:p-6 md:max-w-3xl"
           }
         >
           <DialogHeader>

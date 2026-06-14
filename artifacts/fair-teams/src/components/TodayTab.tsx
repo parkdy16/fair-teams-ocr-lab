@@ -1240,6 +1240,7 @@ export function TodayTab({
   ocrImportContext = "today",
   onOcrImportContextChange,
   onAddPlayerManually,
+  onReviewNewPlayers,
 }: {
   players: RoomPlayer[];
   setPlayers: (players: RoomPlayer[]) => void;
@@ -1248,6 +1249,7 @@ export function TodayTab({
   ocrImportContext?: "today" | "roster";
   onOcrImportContextChange?: (context: "today" | "roster") => void;
   onAddPlayerManually?: () => void;
+  onReviewNewPlayers?: (playerIds: string[]) => void;
 }) {
   const [search, setSearch] = useState("");
   const [ocrOpen, setOcrOpen] = useState(false);
@@ -1300,6 +1302,10 @@ export function TodayTab({
   const [selectedScreenshotPreviews, setSelectedScreenshotPreviews] = useState<
     Array<{ name: string; url: string }>
   >([]);
+  const [newPlayerReviewPrompt, setNewPlayerReviewPrompt] = useState<{
+    playerIds: string[];
+    count: number;
+  } | null>(null);
 
   const sorted = [...players].sort((a, b) => {
     if (Boolean(a.attending) !== Boolean(b.attending)) {
@@ -2157,6 +2163,12 @@ export function TodayTab({
     setConfirmNewPlayersOpen(false);
     setOcrOpen(false);
     setVoiceOpen(false);
+    if (newPlayers.length > 0 && onReviewNewPlayers) {
+      setNewPlayerReviewPrompt({
+        playerIds: newPlayers.map((player) => player.id),
+        count: newPlayers.length,
+      });
+    }
   };
 
   const setNewOcrPlayerGender = (candidate: OcrNameCandidate, gender: Gender) => {
@@ -3018,6 +3030,48 @@ export function TodayTab({
                 </Button>
               </div>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(newPlayerReviewPrompt)}
+        onOpenChange={(next) => {
+          if (!next) setNewPlayerReviewPrompt(null);
+        }}
+      >
+        <DialogContent className="max-w-xs rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-base font-black">
+              Review new players?
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              {newPlayerReviewPrompt?.count ?? 0} new player{newPlayerReviewPrompt?.count === 1 ? "" : "s"} were created with default Skill Level 5. You can quickly adjust skill and traits now.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-xl border border-sky-100 bg-sky-50 p-3 text-[11px] font-semibold leading-snug text-sky-800">
+            This opens the Roster tab and starts with the first new player profile.
+          </div>
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setNewPlayerReviewPrompt(null)}
+              className="h-9 text-xs font-bold"
+            >
+              Later
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                const ids = newPlayerReviewPrompt?.playerIds ?? [];
+                setNewPlayerReviewPrompt(null);
+                if (ids.length > 0) onReviewNewPlayers?.(ids);
+              }}
+              className="h-9 text-xs font-black"
+            >
+              Review now
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -334,6 +334,7 @@ function App() {
   }, []);
 
   const [activeTab, setActiveTab] = useState("today");
+  const [reviewPlayerId, setReviewPlayerId] = useState<string | null>(null);
   const [todayOcrOpenToken, setTodayOcrOpenToken] = useState(0);
   const [ocrImportContext, setOcrImportContext] = useState<"today" | "roster">(
     "today",
@@ -1385,6 +1386,8 @@ function App() {
                   setActiveTab("today");
                   setTodayOcrOpenToken((token) => token + 1);
                 }}
+                reviewPlayerId={reviewPlayerId}
+                onReviewPlayerHandled={() => setReviewPlayerId(null)}
               />
             </TabsContent>
             <TabsContent
@@ -1399,6 +1402,11 @@ function App() {
                 ocrImportContext={ocrImportContext}
                 onOcrImportContextChange={setOcrImportContext}
                 onAddPlayerManually={() => setActiveTab("players")}
+                onReviewNewPlayers={(playerIds) => {
+                  if (!playerIds.length) return;
+                  setActiveTab("players");
+                  setReviewPlayerId(playerIds[0]);
+                }}
               />
             </TabsContent>
             <TabsContent

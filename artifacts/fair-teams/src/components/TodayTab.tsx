@@ -640,24 +640,6 @@ function isProbablyName(value: string) {
   return true;
 }
 
-function isManualOcrName(value: string) {
-  const clean = cleanOcrLine(value);
-  const normalized = normalizeForMatch(clean);
-  if (!clean || !normalized) return false;
-  if (OCR_JUNK_WORDS.has(normalized)) return false;
-  if (/\d/.test(clean)) return false;
-  if (clean.length > 36) return false;
-  if (
-    /\b(we|you|he|she|they|it|this|that|but|would|like|come|join|plan|moved|time|thing|attend|club|anymore|gathering|question|list|event|search|checked|attendees?)\b/i.test(
-      clean,
-    )
-  )
-    return false;
-  const words = clean.split(/\s+/).filter(Boolean);
-  if (words.length < 1 || words.length > 4) return false;
-  return words.every((word) => /^[A-Za-z][A-Za-z.'_-]*$/.test(word));
-}
-
 function isProbablyVoicePlayerName(value: string) {
   const clean = cleanOcrLine(value);
   const normalized = normalizeForMatch(clean);
@@ -1047,6 +1029,98 @@ function extractOcrNames(
   return Array.from(byFinalIdentity.values());
 }
 
+function makeOcrReviewCandidateFromName(
+  name: string,
+  roster: RoomPlayer[],
+): OcrNameCandidate {
+  const normalized = normalizeForMatch(name);
+  const wordCount = normalized.split(" ").filter(Boolean).length;
+  const ranked = roster
+    .map((player) => ({ player, score: scorePlayerMatch(name, player) }))
+    .filter((match) => match.score > 0)
+    .sort((a, b) => b.score - a.score);
+
+  const best = ranked[0];
+  const exactMatches = ranked.filter((match) =>
+    playerSearchNames(match.player).includes(normalized),
+  );
+  const matchThreshold = wordCount === 1 ? 95 : 88;
+  const suggestThreshold = wordCount === 1 ? 78 : 72;
+
+  if (exactMatches.length === 1) {
+    return {
+      name,
+      status: "match",
+      bestMatch: exactMatches[0].player,
+      score: 100,
+      suggestions: ranked.slice(0, 5),
+    };
+  }
+
+  if (exactMatches.length > 1) {
+    return {
+      name,
+      status: "suggest",
+      bestMatch: exactMatches[0].player,
+      score: 100,
+      suggestions: exactMatches.slice(0, 5),
+    };
+  }
+
+  if (best && best.score >= matchThreshold) {
+    return {
+      name,
+      status: "match",
+      bestMatch: best.player,
+      score: best.score,
+      suggestions: ranked.slice(0, 5),
+    };
+  }
+
+  if (best && best.score >= suggestThreshold) {
+    return {
+      name,
+      status: "suggest",
+      bestMatch: best.player,
+      score: best.score,
+      suggestions: ranked.slice(0, 5),
+    };
+  }
+
+  return { name, status: "new", suggestions: ranked.slice(0, 5) };
+}
+
+function isManuallyTypedOcrName(value: string) {
+  const clean = cleanOcrLine(value);
+  const normalized = normalizeForMatch(clean);
+  if (!clean || !normalized) return false;
+  if (OCR_JUNK_WORDS.has(normalized)) return false;
+  if (/\d/.test(clean)) return false;
+  if (clean.length > 36) return false;
+
+  // Manual rescue should allow real short nicknames such as “Q”.
+  // Keep this permission only for user-typed names, not automatic OCR.
+  if (/^[A-Za-zÀ-ÖØ-öø-ÿ]$/.test(clean)) return true;
+
+  if (clean.length < 2) return false;
+  if (isProbablyName(clean) || isProbablySingleUsername(clean) || isProbablyVoicePlayerName(clean)) {
+    return true;
+  }
+
+  const words = normalized.split(" ").filter(Boolean);
+  if (words.length < 1 || words.length > 4) return false;
+  if (words.some((word) => word.length === 1 && words.length > 1)) return false;
+  if (
+    /\b(i|we|you|he|she|they|it|this|that|but|would|like|come|join|plan|moved|time|thing|attend|club|anymore|gathering|question|list|event|search|checked|attendees?)\b/i.test(
+      clean,
+    )
+  ) {
+    return false;
+  }
+
+  return /^[A-Za-zÀ-ÖØ-öø-ÿ][A-Za-zÀ-ÖØ-öø-ÿ .'-]{1,35}$/.test(clean);
+}
+
 function splitSpeechChunkIntoNames(text: string, roster: RoomPlayer[]) {
   const output: string[] = [];
   const words = normalizeForMatch(text).split(" ").filter(Boolean);
@@ -1202,6 +1276,7 @@ export function TodayTab({
   const [expectedAttendeeCount, setExpectedAttendeeCount] = useState("");
   const [showRawOcrText, setShowRawOcrText] = useState(false);
   const [manualRawOcrName, setManualRawOcrName] = useState("");
+  const [manualOcrCandidateNames, setManualOcrCandidateNames] = useState<string[]>([]);
   const [rawOcrAddedNames, setRawOcrAddedNames] = useState<string[]>([]);
   const [rawOcrCreatedPlayerIds, setRawOcrCreatedPlayerIds] = useState<
     string[]
@@ -1303,10 +1378,21 @@ export function TodayTab({
       previews.forEach((preview) => URL.revokeObjectURL(preview.url));
     };
   }, [selectedScreenshots]);
-  const possibleNames = useMemo(
-    () => (ocrText ? extractOcrNames(ocrText, players) : []),
-    [ocrText, players],
-  );
+  const possibleNames = useMemo(() => {
+    const extractedCandidates = ocrText ? extractOcrNames(ocrText, players) : [];
+    const manualCandidates = manualOcrCandidateNames
+      .map((name) => makeOcrReviewCandidateFromName(name, players))
+      .filter((candidate) => Boolean(normalizeForMatch(candidate.name)));
+
+    const byKey = new Map<string, OcrNameCandidate>();
+    for (const candidate of extractedCandidates) {
+      byKey.set(ocrCandidateKey(candidate), candidate);
+    }
+    for (const candidate of manualCandidates) {
+      byKey.set(ocrCandidateKey(candidate), candidate);
+    }
+    return Array.from(byKey.values());
+  }, [ocrText, players, manualOcrCandidateNames]);
   const voiceParsedNames = useMemo(
     () => splitVoiceTextIntoNameLines(voiceText, players),
     [voiceText, players],
@@ -1527,6 +1613,7 @@ export function TodayTab({
     setOcrStatus("");
     setShowRawOcrText(false);
     setManualRawOcrName("");
+    setManualOcrCandidateNames([]);
     setRawOcrAddedNames([]);
     setRawOcrCreatedPlayerIds([]);
     setNewOcrPlayerGenders({});
@@ -1803,16 +1890,20 @@ export function TodayTab({
   }, [voiceOpen, voiceText, players]);
 
   useEffect(() => {
+    const manualCandidateKeySet = new Set(
+      manualOcrCandidateNames.map((name) => normalizeForMatch(name)).filter(Boolean),
+    );
     setSelectedOcrCandidateKeys(
       possibleNames
         .filter((candidate) => {
+          if (manualCandidateKeySet.has(normalizeForMatch(candidate.name))) return true;
           if (candidate.status === "match" && candidate.bestMatch) return true;
           if (voiceOpen && ocrInputSource === "voiceText" && candidate.status === "new") return true;
           return false;
         })
         .map(ocrCandidateKey),
     );
-  }, [possibleNames, voiceOpen, ocrInputSource]);
+  }, [possibleNames, voiceOpen, ocrInputSource, manualOcrCandidateNames]);
 
   const clearOcrSelection = () => {
     setSelectedScreenshots([]);
@@ -1824,6 +1915,7 @@ export function TodayTab({
     setExpectedAttendeeCount("");
     setShowRawOcrText(false);
     setManualRawOcrName("");
+    setManualOcrCandidateNames([]);
     setRawOcrAddedNames([]);
     setRawOcrCreatedPlayerIds([]);
     setNewOcrPlayerGenders({});
@@ -1840,6 +1932,7 @@ export function TodayTab({
     setOcrProgress(0);
     setOcrStatus("Starting scan…");
     setManualRawOcrName("");
+    setManualOcrCandidateNames([]);
     setRawOcrAddedNames([]);
     setRawOcrCreatedPlayerIds([]);
     setNewOcrPlayerGenders({});
@@ -1915,84 +2008,46 @@ export function TodayTab({
     );
   };
 
-  const addRawOcrName = (
-    rawName: string,
-    options: { allowManualShortName?: boolean } = {},
-  ) => {
+  const addRawOcrName = (rawName: string) => {
     const cleanedName = cleanDetectedNameCandidate(rawName);
     const normalizedName = normalizeForMatch(cleanedName);
-    const acceptedName =
-      isProbablyName(cleanedName) ||
-      (options.allowManualShortName && isManualOcrName(cleanedName));
-    if (!cleanedName || !normalizedName || !acceptedName) {
+    if (!cleanedName || !normalizedName || !isManuallyTypedOcrName(cleanedName)) {
       setOcrStatus("Type a clean player name from the raw OCR text first.");
       return;
     }
 
-    const existingPlayer = players.find((player) =>
-      playerSearchNames(player).includes(normalizedName),
+    const existingReviewCandidate = possibleNames.find(
+      (candidate) => normalizeForMatch(candidate.name) === normalizedName,
     );
 
-    if (existingPlayer) {
-      setPlayers(
-        players.map((player) =>
-          player.id === existingPlayer.id
-            ? { ...player, attending: true, todayStatus: "here" }
-            : player,
-        ),
+    if (existingReviewCandidate) {
+      const key = ocrCandidateKey(existingReviewCandidate);
+      setSelectedOcrCandidateKeys((current) =>
+        current.includes(key) ? current : [...current, key],
       );
-      setPrioritizeScannedPlayers(true);
       setRawOcrAddedNames((current) =>
-        current.includes(normalizedName)
-          ? current
-          : [...current, normalizedName],
+        current.includes(normalizedName) ? current : [...current, normalizedName],
       );
       setManualRawOcrName("");
-      setOcrStatus(
-        `${displayName(existingPlayer)} marked attending from raw OCR text.`,
-      );
+      setOcrStatus(`${cleanedName} is now selected in Review Names.`);
       return;
     }
 
-    if (rawOcrAddedNames.includes(normalizedName)) {
-      setOcrStatus(`${cleanedName} was already added from raw OCR text.`);
-      return;
-    }
+    const reviewCandidate = makeOcrReviewCandidateFromName(cleanedName, players);
+    const reviewKey = ocrCandidateKey(reviewCandidate);
 
-    const now = new Date().toISOString();
-    const newPlayerId = createOcrPlayerId();
-    const newPlayer: RoomPlayer = {
-      id: newPlayerId,
-      roomId: 1,
-      name: cleanedName,
-      gender: "other",
-      skill: 5,
-      attack: 5,
-      defense: 5,
-      speed: 5,
-      passing: 5,
-      stamina: 5,
-      physical: 5,
-      teamPlay: 2,
-      isNew: true,
-      attending: true,
-      todayStatus: "here",
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    setPlayers(
-      [...players, newPlayer].sort((a, b) =>
-        displayName(a).localeCompare(displayName(b)),
-      ),
+    setManualOcrCandidateNames((current) => {
+      const existing = current.some((name) => normalizeForMatch(name) === normalizedName);
+      return existing ? current : [...current, cleanedName];
+    });
+    setSelectedOcrCandidateKeys((current) =>
+      current.includes(reviewKey) ? current : [...current, reviewKey],
     );
-    setPrioritizeScannedPlayers(true);
-    setRawOcrAddedNames((current) => [...current, normalizedName]);
-    setRawOcrCreatedPlayerIds((current) => [...current, newPlayerId]);
+    setRawOcrAddedNames((current) =>
+      current.includes(normalizedName) ? current : [...current, normalizedName],
+    );
     setManualRawOcrName("");
-    setOcrStatus(
-      `Created ${cleanedName} from raw OCR text as NEW and attending.`,
-    );
+    setOcrStatus(`${cleanedName} added to Review Names. Press Add Selected to confirm.`);
   };
 
   const renderHighlightedRawOcrText = (
@@ -2437,6 +2492,7 @@ export function TodayTab({
                   setChosenOcrMatchIds({});
                   setShowRawOcrText(false);
                   setManualRawOcrName("");
+                  setManualOcrCandidateNames([]);
                   setRawOcrAddedNames([]);
                   setRawOcrCreatedPlayerIds([]);
                 }}
@@ -2804,11 +2860,7 @@ export function TodayTab({
                       <Button
                         type="button"
                         size="sm"
-                        onClick={() =>
-                          addRawOcrName(manualRawOcrName, {
-                            allowManualShortName: true,
-                          })
-                        }
+                        onClick={() => addRawOcrName(manualRawOcrName)}
                         disabled={!manualRawOcrName.trim()}
                         className="h-9 rounded-xl px-3 text-[10px] font-black"
                       >

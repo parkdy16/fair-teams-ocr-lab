@@ -179,29 +179,6 @@ const OCR_JUNK_WORDS = new Set([
   "good vibes guaranteed",
   "goals not so much",
   "i think i got well into both categories",
-  "team",
-  "teams",
-  "team one",
-  "team two",
-  "done",
-  "shake",
-  "shot",
-  "shots",
-  "score",
-  "scores",
-  "player",
-  "players",
-  "total",
-  "settings",
-  "back",
-  "next",
-  "save",
-  "saved",
-  "edit",
-  "class",
-  "classes",
-  "present",
-  "absent",
 ]);
 
 function stripDiacritics(value: string) {
@@ -705,6 +682,20 @@ const OTHER_SCREENSHOT_JUNK_WORDS = new Set([
   "next",
   "scan",
   "use this area",
+  "shake",
+  "shot",
+  "shots",
+  "score",
+  "scores",
+  "total",
+  "settings",
+  "save",
+  "saved",
+  "edit",
+  "class",
+  "classes",
+  "present",
+  "absent",
 ]);
 
 const OTHER_SCREENSHOT_LABEL_PATTERN =
@@ -1139,8 +1130,9 @@ function extractOcrNames(
     names.push(...extractTeamSheetNames(text, roster));
   }
 
-  for (let index = 0; index < lines.length; index += 1) {
-    const current = normalizeForMatch(lines[index]);
+  if (mode === "meetup") {
+    for (let index = 0; index < lines.length; index += 1) {
+      const current = normalizeForMatch(lines[index]);
     const isMeetupRoleLine =
       current === "member" ||
       current === "event host" ||
@@ -1174,6 +1166,8 @@ function extractOcrNames(
         if (cleanedNext) names.push(cleanedNext);
       }
     }
+  }
+
   }
 
   // Conservative fallback: only keep standalone lines when they strongly match

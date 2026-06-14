@@ -5,7 +5,7 @@ import { generateTeams, recomputeStats } from "@/lib/teamGenerator";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Shuffle, ArrowLeftRight, Download, HelpCircle, Clock, Palette, Zap, Sparkles } from "lucide-react";
+import { Shuffle, ArrowLeftRight, Download, HelpCircle, Clock, Palette, Zap, Sparkles, BarChart3, List } from "lucide-react";
 import fairTeamsLogo from "@/assets/fairteams-logo.png";
 
 const COLOR_OPTIONS: { value: TeamColor; label: string; hex: string; textHex: string }[] = [
@@ -60,6 +60,22 @@ function GenderBadge({ gender }: { gender?: string }) {
     return <span className="text-[8px] font-medium lowercase text-blue-500/50">m</span>;
   }
   return <span className="text-[8px] font-medium lowercase text-purple-500/45">o</span>;
+}
+
+function averageStat(players: Player[], key: keyof Pick<Player, "attack" | "passing" | "defense" | "speed" | "stamina" | "teamPlay">) {
+  if (players.length === 0) return 0;
+  return Number((players.reduce((sum, player) => sum + Number(player[key] || 0), 0) / players.length).toFixed(1));
+}
+
+function teamStatRows(players: Player[]) {
+  return [
+    { key: "attack", label: "Atk", value: averageStat(players, "attack"), max: 10 },
+    { key: "passing", label: "Pass", value: averageStat(players, "passing"), max: 10 },
+    { key: "defense", label: "Def", value: averageStat(players, "defense"), max: 10 },
+    { key: "speed", label: "Speed", value: averageStat(players, "speed"), max: 10 },
+    { key: "stamina", label: "Stam", value: averageStat(players, "stamina"), max: 10 },
+    { key: "teamPlay", label: "Team", value: averageStat(players, "teamPlay"), max: 3 },
+  ];
 }
 
 const FIELD_SIZE_STORAGE_KEY = "fair-teams-field-size-v1";
@@ -348,6 +364,7 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
   const [fieldSize, setFieldSize] = useState<FieldSize>(() => loadFieldSize());
   const [showFieldHelp, setShowFieldHelp] = useState(false);
   const [teams, setTeams] = useState<Team[]>([]);
+  const [teamStatsOpen, setTeamStatsOpen] = useState<Record<string, boolean>>({});
   const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
   const [editingTeamName, setEditingTeamName] = useState("");
   const [history, setHistory] = useState<TeamHistoryEntry[]>(() => loadTeamHistory());
@@ -404,7 +421,7 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
           <button
             key={entry.id}
             type="button"
-            onClick={() => { setTeams(entry.teams); setFieldSize(entry.fieldSize); setNumTeams(entry.numTeams); setSwap(null); }}
+            onClick={() => { setTeams(entry.teams); setFieldSize(entry.fieldSize); setNumTeams(entry.numTeams); setSwap(null); setTeamStatsOpen({}); }}
             className="min-w-[142px] rounded-lg border border-border bg-muted/30 px-3 py-2 text-left active:scale-[0.98] transition-transform"
             data-testid={`button-history-${entry.id}`}
           >
@@ -420,6 +437,7 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
   const handleGenerate = (shuffleEquals = false) => {
     if (attendingPlayers.length < 2 || isGenerating) return;
     setSwap(null);
+    setTeamStatsOpen({});
     setJustGenerated(false);
     setIsGenerating(true);
     setDrawStep(0);
@@ -519,6 +537,13 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
     if (!swap) return;
     movePlayerToTeam(swap.fromTeamId, swap.playerId, toTeamId);
     setSwap(null);
+  };
+
+  const toggleTeamStats = (teamId: string) => {
+    setTeamStatsOpen((current) => ({
+      ...current,
+      [teamId]: !current[teamId],
+    }));
   };
 
   if (attendingPlayers.length < 2 && teams.length === 0) {
@@ -638,6 +663,8 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
             const notHereCount = team.players.filter(isNotHereYet).length;
             const avgSkill = team.averageSkill.toFixed(1);
             const totalSkill = team.totalSkill.toFixed(1);
+            const showingStats = Boolean(teamStatsOpen[team.id]);
+            const statsRows = teamStatRows(team.players);
 
             return (
               <div
@@ -681,24 +708,37 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
                       )}
                     </div>
 
-                    {/* Team color selector */}
-                    <Select value={team.color} onValueChange={v => handleColorChange(team.id, v as TeamColor)}>
-                      <SelectTrigger
-                        className="h-7 w-7 border-0 p-0 shadow-none bg-transparent hover:bg-transparent text-muted-foreground hover:text-foreground outline-none ring-0 focus:outline-none focus:ring-0 focus:ring-offset-0 focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 data-[state=open]:bg-transparent data-[state=open]:ring-0 [&>svg:last-child]:hidden"
-                        style={{ color: accentColor }}
-                        title={`Change team color (${col.label})`}
-                        data-testid={`select-team-color-${team.id}`}
+                    <div className="flex shrink-0 items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => toggleTeamStats(team.id)}
+                        className="inline-flex h-7 items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-1.5 text-[9px] font-black text-slate-600 active:scale-[0.97]"
+                        title={showingStats ? "Show players" : "Show team stats"}
+                        data-testid={`button-team-stats-${team.id}`}
                       >
-                        <Palette className="h-4 w-4" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {COLOR_OPTIONS.map(c => (
-                          <SelectItem key={c.value} value={c.value} data-testid={`color-${team.id}-${c.value}`}>
-                            {c.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                        {showingStats ? <List className="h-3.5 w-3.5" /> : <BarChart3 className="h-3.5 w-3.5" />}
+                        <span className="hidden sm:inline">{showingStats ? "List" : "Stats"}</span>
+                      </button>
+
+                      {/* Team color selector */}
+                      <Select value={team.color} onValueChange={v => handleColorChange(team.id, v as TeamColor)}>
+                        <SelectTrigger
+                          className="h-7 w-7 border-0 p-0 shadow-none bg-transparent hover:bg-transparent text-muted-foreground hover:text-foreground outline-none ring-0 focus:outline-none focus:ring-0 focus:ring-offset-0 focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 data-[state=open]:bg-transparent data-[state=open]:ring-0 [&>svg:last-child]:hidden"
+                          style={{ color: accentColor }}
+                          title={`Change team color (${col.label})`}
+                          data-testid={`select-team-color-${team.id}`}
+                        >
+                          <Palette className="h-4 w-4" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {COLOR_OPTIONS.map(c => (
+                            <SelectItem key={c.value} value={c.value} data-testid={`color-${team.id}-${c.value}`}>
+                              {c.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                   <div className="flex items-center gap-1.5 text-[10px] font-semibold leading-tight text-muted-foreground">
                     <span>Avg {avgSkill} · Total {totalSkill}</span>
@@ -724,49 +764,86 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
                   )}
                 </div>
 
-                {/* Player list */}
-                <div className="bg-card divide-y divide-border">
-                  {team.players.length === 0 ? (
-                    <p className="py-3 text-center text-[10px] text-muted-foreground italic">Empty</p>
-                  ) : (
-                    team.players.map(player => {
-                      const isSelected = swap?.playerId === player.id && swap?.fromTeamId === team.id;
-                      return (
-                        <button
-                          key={player.id}
-                          className="relative w-full flex select-none items-center gap-1.5 px-2.5 py-1.5 text-left transition-colors"
-                          style={{
-                            backgroundColor: isSelected ? `${accentColor}20` : undefined,
-                            borderLeft: isSelected ? `3px solid ${accentColor}` : "3px solid transparent",
-                          }}
-                          onClick={() => handleSelectPlayer(player.id, team.id)}
-                          data-testid={`player-row-${player.id}-team-${team.id}`}
-                        >
-                          {isSelected && (
-                            <ArrowLeftRight className="absolute left-1 top-1/2 w-2.5 h-2.5 -translate-y-1/2" style={{ color: accentColor }} />
-                          )}
-                          <div className={`min-w-0 flex-1 ${isSelected ? "pl-3" : ""}`}>
-                            <div className="font-bold text-xs truncate text-left">{displayName(player)}</div>
-                            {(player.isNew || player.isGoalkeeper || player.isOrganizer || isNotHereYet(player)) && (
-                              <div className="mt-0.5 flex flex-wrap items-center gap-0.5">
-                                {player.isNew && <NewBadge />}
-                                {player.isGoalkeeper && <GKBadge />}
-                                {player.isOrganizer && <ORGBadge />}
-                                {isNotHereYet(player) && <NotHereBadge />}
-                              </div>
+                {showingStats ? (
+                  <div className="bg-card border-t border-border px-3 py-3">
+                    <div className="mb-2 grid grid-cols-2 gap-2">
+                      <div className="rounded-lg border border-slate-100 bg-slate-50/80 px-2 py-1.5 text-center">
+                        <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Avg</div>
+                        <div className="text-base font-black text-[#102A43]">{avgSkill}</div>
+                      </div>
+                      <div className="rounded-lg border border-slate-100 bg-slate-50/80 px-2 py-1.5 text-center">
+                        <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Players</div>
+                        <div className="text-base font-black text-[#102A43]">{team.players.length}</div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      {statsRows.map((stat) => {
+                        const pct = stat.max > 0 ? Math.max(0, Math.min(100, (stat.value / stat.max) * 100)) : 0;
+                        const displayValue = stat.key === "teamPlay" ? `${stat.value.toFixed(1)}/3` : stat.value.toFixed(1);
+                        return (
+                          <div key={stat.key} className="grid grid-cols-[2.4rem_1fr_2rem] items-center gap-1.5">
+                            <span className="text-[9px] font-black uppercase tracking-tight text-slate-500">{stat.label}</span>
+                            <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                              <div
+                                className="h-full rounded-full transition-all duration-300"
+                                style={{ width: `${pct}%`, backgroundColor: accentColor }}
+                              />
+                            </div>
+                            <span className="text-right text-[9px] font-black tabular-nums text-slate-600">{displayValue}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <p className="mt-2 text-[9px] font-semibold leading-snug text-slate-400">
+                      Team averages. Use this to spot big style gaps after generating.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="bg-card divide-y divide-border">
+                    {team.players.length === 0 ? (
+                      <p className="py-3 text-center text-[10px] text-muted-foreground italic">Empty</p>
+                    ) : (
+                      team.players.map(player => {
+                        const isSelected = swap?.playerId === player.id && swap?.fromTeamId === team.id;
+                        return (
+                          <button
+                            key={player.id}
+                            className="relative w-full flex select-none items-center gap-1.5 px-2.5 py-1.5 text-left transition-colors"
+                            style={{
+                              backgroundColor: isSelected ? `${accentColor}20` : undefined,
+                              borderLeft: isSelected ? `3px solid ${accentColor}` : "3px solid transparent",
+                            }}
+                            onClick={() => handleSelectPlayer(player.id, team.id)}
+                            data-testid={`player-row-${player.id}-team-${team.id}`}
+                          >
+                            {isSelected && (
+                              <ArrowLeftRight className="absolute left-1 top-1/2 w-2.5 h-2.5 -translate-y-1/2" style={{ color: accentColor }} />
                             )}
-                          </div>
-                          <div className="flex items-center gap-1 shrink-0">
-                            <GenderBadge gender={player.gender} />
-                            <span className="min-w-7 h-5 px-1 flex items-center justify-center rounded bg-gradient-to-br from-slate-100 to-slate-200 text-[#102A43] text-[10px] font-black border border-slate-200">
-                              {player.skill === 0 ? "N" : player.skill}
-                            </span>
-                          </div>
-                        </button>
-                      );
-                    })
-                  )}
-                </div>
+                            <div className={`min-w-0 flex-1 ${isSelected ? "pl-3" : ""}`}>
+                              <div className="font-bold text-xs truncate text-left">{displayName(player)}</div>
+                              {(player.isNew || player.isGoalkeeper || player.isOrganizer || isNotHereYet(player)) && (
+                                <div className="mt-0.5 flex flex-wrap items-center gap-0.5">
+                                  {player.isNew && <NewBadge />}
+                                  {player.isGoalkeeper && <GKBadge />}
+                                  {player.isOrganizer && <ORGBadge />}
+                                  {isNotHereYet(player) && <NotHereBadge />}
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <GenderBadge gender={player.gender} />
+                              <span className="min-w-7 h-5 px-1 flex items-center justify-center rounded bg-gradient-to-br from-slate-100 to-slate-200 text-[#102A43] text-[10px] font-black border border-slate-200">
+                                {player.skill === 0 ? "N" : player.skill}
+                              </span>
+                            </div>
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}

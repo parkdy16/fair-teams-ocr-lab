@@ -80,6 +80,8 @@ declare global {
 }
 
 type OcrMatchStatus = "match" | "suggest" | "new";
+type ScreenshotImportMode = "meetup" | "other";
+type CropBox = { x: number; y: number; w: number; h: number };
 
 type OcrNameCandidate = {
   name: string;
@@ -169,6 +171,29 @@ const OCR_JUNK_WORDS = new Set([
   "good vibes guaranteed",
   "goals not so much",
   "i think i got well into both categories",
+  "team",
+  "teams",
+  "team one",
+  "team two",
+  "done",
+  "shake",
+  "shot",
+  "shots",
+  "score",
+  "scores",
+  "player",
+  "players",
+  "total",
+  "settings",
+  "back",
+  "next",
+  "save",
+  "saved",
+  "edit",
+  "class",
+  "classes",
+  "present",
+  "absent",
 ]);
 
 function stripDiacritics(value: string) {
@@ -600,6 +625,74 @@ function extractTeamSheetNames(text: string, roster: RoomPlayer[]) {
   return names;
 }
 
+
+function isProbablyCroppedName(value: string) {
+  const clean = cleanDetectedNameCandidate(value);
+  const normalized = normalizeForMatch(clean);
+  if (!clean || !normalized) return false;
+  if (OCR_JUNK_WORDS.has(normalized)) return false;
+  if (/\d/.test(clean)) return false;
+  if (clean.length < 3 || clean.length > 36) return false;
+  if (/^[A-Z\s]{4,}$/.test(clean) && clean.split(/\s+/).length > 1) return false;
+  if (
+    /\b(i|we|you|he|she|they|it|this|that|but|would|like|come|join|plan|moved|time|thing|attend|club|anymore|gathering|question|list|event|search|checked|attendees?|team|teams|done|share|players?)\b/i.test(
+      clean,
+    )
+  ) {
+    return false;
+  }
+  const words = normalized.split(" ").filter(Boolean);
+  if (words.length < 1 || words.length > 3) return false;
+  if (words.some((word) => word.length === 1 && words.length > 1)) return false;
+  return true;
+}
+
+function extractOtherScreenshotNames(text: string, roster: RoomPlayer[]) {
+  const lines = text.split(/\r?\n/).map(cleanOcrLine).filter(Boolean);
+  const names: string[] = [];
+
+  for (const line of lines) {
+    const cleaned = cleanDetectedNameCandidate(line);
+    const normalized = normalizeForMatch(cleaned);
+    if (!cleaned || !normalized) continue;
+
+    if (isProbablyCroppedName(cleaned)) {
+      names.push(cleaned);
+      continue;
+    }
+
+    // Some cropped screenshots OCR several first names onto one line.
+    // If the line looks like a compact name list, split it into single-name chips.
+    const words = cleaned.split(/\s+/).filter(Boolean);
+    if (words.length >= 4 && words.length <= 14) {
+      const nameLikeWords = words
+        .map((word) => cleanDetectedNameCandidate(word))
+        .filter((word) => isProbablyCroppedName(word));
+      if (nameLikeWords.length >= Math.max(3, Math.floor(words.length * 0.65))) {
+        names.push(...nameLikeWords);
+      }
+    }
+  }
+
+  // Roster rescue is useful in crop mode too, especially when OCR joins names.
+  const normalizedFullText = ` ${normalizeForMatch(text)} `;
+  for (const player of roster) {
+    const searchNames = playerSearchNames(player).filter(Boolean);
+    for (const searchName of searchNames) {
+      if (searchName.length < 3) continue;
+      const safePattern = new RegExp(
+        `(^|\\s)${searchName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?=\\s|$)`,
+      );
+      if (safePattern.test(normalizedFullText)) {
+        names.push(player.name);
+        break;
+      }
+    }
+  }
+
+  return names;
+}
+
 function hasRosterSignal(value: string, roster: RoomPlayer[]) {
   const normalized = normalizeForMatch(value);
   if (!normalized) return false;
@@ -819,12 +912,16 @@ function scorePlayerMatch(ocrName: string, player: RoomPlayer) {
 function extractOcrNames(
   text: string,
   roster: RoomPlayer[],
+  mode: ScreenshotImportMode = "meetup",
 ): OcrNameCandidate[] {
   const lines = text.split(/\r?\n/).map(cleanOcrLine).filter(Boolean);
   const names: string[] = [];
 
   names.push(...extractInlineMeetupNames(text));
   names.push(...extractTeamSheetNames(text, roster));
+  if (mode === "other") {
+    names.push(...extractOtherScreenshotNames(text, roster));
+  }
 
   for (let index = 0; index < lines.length; index += 1) {
     const current = normalizeForMatch(lines[index]);
@@ -1268,6 +1365,7 @@ export function TodayTab({
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const voiceShouldListenRef = useRef(false);
   const [ocrInputSource, setOcrInputSource] = useState<"screenshot" | "voiceText">("screenshot");
+  const [screenshotImportMode, setScreenshotImportMode] = useState<ScreenshotImportMode>("meetup");
   const [selectedScreenshots, setSelectedScreenshots] = useState<File[]>([]);
   const [ocrText, setOcrText] = useState("");
   const [ocrRunning, setOcrRunning] = useState(false);
@@ -1302,6 +1400,10 @@ export function TodayTab({
   const [selectedScreenshotPreviews, setSelectedScreenshotPreviews] = useState<
     Array<{ name: string; url: string }>
   >([]);
+  const [activeCropIndex, setActiveCropIndex] = useState(0);
+  const [cropBoxes, setCropBoxes] = useState<Record<number, CropBox>>({});
+  const [cropDragStart, setCropDragStart] = useState<{ index: number; x: number; y: number } | null>(null);
+  const [draftCropBox, setDraftCropBox] = useState<CropBox | null>(null);
   const [newPlayerReviewPrompt, setNewPlayerReviewPrompt] = useState<{
     playerIds: string[];
     count: number;
@@ -1384,7 +1486,13 @@ export function TodayTab({
     };
   }, [selectedScreenshots]);
   const possibleNames = useMemo(() => {
-    const extractedCandidates = ocrText ? extractOcrNames(ocrText, players) : [];
+    const extractedCandidates = ocrText
+      ? extractOcrNames(
+          ocrText,
+          players,
+          ocrInputSource === "screenshot" ? screenshotImportMode : "other",
+        )
+      : [];
     const manualCandidates = manualOcrCandidateNames
       .map((name) => makeOcrReviewCandidateFromName(name, players))
       .filter((candidate) => Boolean(normalizeForMatch(candidate.name)));
@@ -1397,7 +1505,7 @@ export function TodayTab({
       byKey.set(ocrCandidateKey(candidate), candidate);
     }
     return Array.from(byKey.values());
-  }, [ocrText, players, manualOcrCandidateNames]);
+  }, [ocrText, players, manualOcrCandidateNames, ocrInputSource, screenshotImportMode]);
   const voiceParsedNames = useMemo(
     () => splitVoiceTextIntoNameLines(voiceText, players),
     [voiceText, players],
@@ -1913,6 +2021,10 @@ export function TodayTab({
 
   const clearOcrSelection = () => {
     setSelectedScreenshots([]);
+    setActiveCropIndex(0);
+    setCropBoxes({});
+    setCropDragStart(null);
+    setDraftCropBox(null);
     setOcrText("");
     setOcrProgress(0);
     setOcrStatus("");
@@ -1929,6 +2041,105 @@ export function TodayTab({
     setEditedOcrTokenSelections({});
   };
 
+
+
+  const getPointerCropPoint = (
+    event: React.PointerEvent<HTMLDivElement>,
+  ) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = Math.min(100, Math.max(0, ((event.clientX - rect.left) / rect.width) * 100));
+    const y = Math.min(100, Math.max(0, ((event.clientY - rect.top) / rect.height) * 100));
+    return { x, y };
+  };
+
+  const startCropDrag = (
+    index: number,
+    event: React.PointerEvent<HTMLDivElement>,
+  ) => {
+    if (screenshotImportMode !== "other" || ocrRunning || ocrText) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    const point = getPointerCropPoint(event);
+    setActiveCropIndex(index);
+    setCropDragStart({ index, ...point });
+    setDraftCropBox({ x: point.x, y: point.y, w: 0, h: 0 });
+  };
+
+  const moveCropDrag = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!cropDragStart) return;
+    event.preventDefault();
+    const point = getPointerCropPoint(event);
+    const x = Math.min(cropDragStart.x, point.x);
+    const y = Math.min(cropDragStart.y, point.y);
+    const w = Math.abs(point.x - cropDragStart.x);
+    const h = Math.abs(point.y - cropDragStart.y);
+    setDraftCropBox({ x, y, w, h });
+  };
+
+  const finishCropDrag = () => {
+    if (!cropDragStart || !draftCropBox) return;
+    if (draftCropBox.w >= 3 && draftCropBox.h >= 3) {
+      setCropBoxes((current) => ({ ...current, [cropDragStart.index]: draftCropBox }));
+    }
+    setCropDragStart(null);
+    setDraftCropBox(null);
+  };
+
+  const clearActiveCrop = () => {
+    setCropBoxes((current) => {
+      const next = { ...current };
+      delete next[activeCropIndex];
+      return next;
+    });
+  };
+
+  const cropScreenshotForOcr = async (file: File, cropBox?: CropBox) => {
+    if (!cropBox || cropBox.w < 3 || cropBox.h < 3) return file;
+
+    const url = URL.createObjectURL(file);
+    try {
+      const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = url;
+      });
+
+      const sx = Math.round((cropBox.x / 100) * image.naturalWidth);
+      const sy = Math.round((cropBox.y / 100) * image.naturalHeight);
+      const sw = Math.max(1, Math.round((cropBox.w / 100) * image.naturalWidth));
+      const sh = Math.max(1, Math.round((cropBox.h / 100) * image.naturalHeight));
+      const scale = 3;
+      const canvas = document.createElement("canvas");
+      canvas.width = sw * scale;
+      canvas.height = sh * scale;
+      const context = canvas.getContext("2d");
+      if (!context) return file;
+      context.imageSmoothingEnabled = true;
+      context.drawImage(image, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+
+      // Crop mode is for name lists selected by the user. Upscale and turn
+      // colored/grey app fonts into high-contrast text before OCR. This helps
+      // TeamShake-style green names without changing the Meetup pipeline.
+      const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+      const data = imageData.data;
+      for (let offset = 0; offset < data.length; offset += 4) {
+        const gray = 0.299 * data[offset] + 0.587 * data[offset + 1] + 0.114 * data[offset + 2];
+        const value = gray < 225 ? 0 : 255;
+        data[offset] = value;
+        data[offset + 1] = value;
+        data[offset + 2] = value;
+      }
+      context.putImageData(imageData, 0, 0);
+
+      const blob = await new Promise<Blob | null>((resolve) =>
+        canvas.toBlob(resolve, "image/png", 1),
+      );
+      return blob ?? file;
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  };
   const runOcr = async () => {
     if (selectedScreenshots.length === 0 || ocrRunning) return;
 
@@ -1954,7 +2165,11 @@ export function TodayTab({
           `Reading ${index + 1} of ${selectedScreenshots.length}: ${file.name}`,
         );
 
-        const result = await Tesseract.recognize(file, "eng", {
+        const ocrSource = screenshotImportMode === "other"
+          ? await cropScreenshotForOcr(file, cropBoxes[index])
+          : file;
+
+        const result = await Tesseract.recognize(ocrSource, "eng", {
           logger: (message) => {
             if (message.status)
               setOcrStatus(
@@ -1977,7 +2192,11 @@ export function TodayTab({
 
       setOcrText(chunks.join("\n\n"));
       setOcrProgress(100);
-      setOcrStatus("Scan complete. Review names below.");
+      setOcrStatus(
+        screenshotImportMode === "other"
+          ? "Crop scan complete. Review names below."
+          : "Scan complete. Review names below.",
+      );
     } catch (error) {
       console.error(error);
       setOcrStatus("Scan failed. Try a clearer screenshot or fewer images.");
@@ -2485,6 +2704,35 @@ export function TodayTab({
           </DialogHeader>
 
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain pr-1 pb-2">
+            {ocrInputSource === "screenshot" && !ocrText && (
+              <div className="grid grid-cols-2 gap-2 rounded-xl border bg-card p-2">
+                <button
+                  type="button"
+                  onClick={() => setScreenshotImportMode("meetup")}
+                  className={`rounded-lg border p-3 text-left transition ${
+                    screenshotImportMode === "meetup"
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border bg-background text-muted-foreground"
+                  }`}
+                >
+                  <div className="text-xs font-black">Meetup / attendee list</div>
+                  <div className="mt-1 text-[10px] font-medium">Fast scan using the current safe filter.</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setScreenshotImportMode("other")}
+                  className={`rounded-lg border p-3 text-left transition ${
+                    screenshotImportMode === "other"
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border bg-background text-muted-foreground"
+                  }`}
+                >
+                  <div className="text-xs font-black">Other screenshot</div>
+                  <div className="mt-1 text-[10px] font-medium">Crop the name area before scanning.</div>
+                </button>
+              </div>
+            )}
+
             {ocrInputSource === "screenshot" && (
             <label className="flex min-h-28 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-muted/40 p-4 text-center transition-colors hover:bg-muted/70">
               <Upload className="h-6 w-6 text-muted-foreground" />
@@ -2494,8 +2742,9 @@ export function TodayTab({
                   : "Upload Screenshot(s)"}
               </div>
               <div className="text-[10px] font-medium text-muted-foreground">
-                Select all screenshots for one attendee list. You can select
-                multiple screenshots from one attendee list.
+                {screenshotImportMode === "other"
+                  ? "Select one or more screenshots. You will crop each image before scanning."
+                  : "Select all screenshots for one attendee list. You can select multiple screenshots from one attendee list."}
               </div>
               <input
                 type="file"
@@ -2504,6 +2753,10 @@ export function TodayTab({
                 className="hidden"
                 onChange={(event) => {
                   setSelectedScreenshots(Array.from(event.target.files ?? []));
+                  setActiveCropIndex(0);
+                  setCropBoxes({});
+                  setCropDragStart(null);
+                  setDraftCropBox(null);
                   setOcrText("");
                   setOcrProgress(0);
                   setOcrStatus("");
@@ -2520,7 +2773,7 @@ export function TodayTab({
             </label>
             )}
 
-            {ocrInputSource === "screenshot" && selectedScreenshotNames.length > 0 && !ocrText && !ocrRunning && !ocrStatus && (
+            {ocrInputSource === "screenshot" && selectedScreenshotNames.length > 0 && !ocrText && !ocrRunning && !ocrStatus && screenshotImportMode === "meetup" && (
               <div className="rounded-xl border bg-card p-3">
                 <div className="mb-2 flex items-center justify-between gap-3">
                   <div className="min-w-0">
@@ -2555,6 +2808,112 @@ export function TodayTab({
                     </div>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {ocrInputSource === "screenshot" && selectedScreenshotPreviews.length > 0 && !ocrText && !ocrRunning && screenshotImportMode === "other" && (
+              <div className="rounded-xl border bg-card p-3">
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-xs font-black text-foreground">
+                      Crop names area {activeCropIndex + 1}/{selectedScreenshotPreviews.length}
+                    </div>
+                    <div className="text-[10px] font-medium text-muted-foreground">
+                      Drag a box around only the names. Repeat for each screenshot, then scan once.
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={clearOcrSelection}
+                    className="h-7 shrink-0 px-2 text-[10px] font-black"
+                  >
+                    Clear
+                  </Button>
+                </div>
+
+                <div className="mb-2 flex flex-wrap gap-1">
+                  {selectedScreenshotPreviews.map((preview, index) => (
+                    <button
+                      key={`${preview.name}-tab-${index}`}
+                      type="button"
+                      onClick={() => setActiveCropIndex(index)}
+                      className={`rounded-full border px-2 py-1 text-[10px] font-black ${
+                        activeCropIndex === index
+                          ? "border-primary bg-primary/10 text-primary"
+                          : cropBoxes[index]
+                            ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                            : "border-border bg-background text-muted-foreground"
+                      }`}
+                    >
+                      {cropBoxes[index] ? "✓ " : ""}{index + 1}
+                    </button>
+                  ))}
+                </div>
+
+                {selectedScreenshotPreviews[activeCropIndex] && (
+                  <div className="space-y-2">
+                    <div
+                      className="relative max-h-[46dvh] touch-none overflow-hidden rounded-xl border bg-muted/30"
+                      onPointerDown={(event) => startCropDrag(activeCropIndex, event)}
+                      onPointerMove={moveCropDrag}
+                      onPointerUp={finishCropDrag}
+                      onPointerCancel={finishCropDrag}
+                    >
+                      <img
+                        src={selectedScreenshotPreviews[activeCropIndex].url}
+                        alt={selectedScreenshotPreviews[activeCropIndex].name}
+                        className="max-h-[46dvh] w-full select-none object-contain"
+                        draggable={false}
+                      />
+                      {(() => {
+                        const box = cropDragStart?.index === activeCropIndex && draftCropBox
+                          ? draftCropBox
+                          : cropBoxes[activeCropIndex];
+                        if (!box) return null;
+                        return (
+                          <div
+                            className="pointer-events-none absolute border-2 border-primary bg-primary/15 shadow-[0_0_0_9999px_rgba(15,23,42,0.28)]"
+                            style={{
+                              left: `${box.x}%`,
+                              top: `${box.y}%`,
+                              width: `${box.w}%`,
+                              height: `${box.h}%`,
+                            }}
+                          />
+                        );
+                      })()}
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="truncate text-[10px] font-bold text-muted-foreground">
+                        {selectedScreenshotPreviews[activeCropIndex].name}
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={clearActiveCrop}
+                          disabled={!cropBoxes[activeCropIndex]}
+                          className="h-7 px-2 text-[10px] font-black"
+                        >
+                          Reset crop
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setActiveCropIndex(Math.min(selectedScreenshotPreviews.length - 1, activeCropIndex + 1))}
+                          disabled={activeCropIndex >= selectedScreenshotPreviews.length - 1}
+                          className="h-7 px-2 text-[10px] font-black"
+                        >
+                          Next
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -2965,7 +3324,7 @@ export function TodayTab({
                     disabled={selectedScreenshots.length === 0 || ocrRunning}
                     className="h-10 rounded-xl px-4 text-xs font-black"
                   >
-                    {ocrRunning ? "Scanning…" : "Scan Screenshot"}
+                    {ocrRunning ? "Scanning…" : screenshotImportMode === "other" ? "Scan Crops" : "Scan Screenshot"}
                   </Button>
                 </div>
               ) : (
@@ -3001,7 +3360,7 @@ export function TodayTab({
                       disabled={selectedScreenshots.length === 0 || ocrRunning}
                       className="h-10 rounded-xl px-4 text-xs font-black"
                     >
-                      {ocrRunning ? "Scanning…" : "Screenshot Import"}
+                      {ocrRunning ? "Scanning…" : screenshotImportMode === "other" ? "Scan Crops" : "Screenshot Import"}
                     </Button>
                   </div>
                   <div className="text-[10px] font-medium text-muted-foreground">

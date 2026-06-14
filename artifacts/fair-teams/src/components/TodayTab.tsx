@@ -1746,7 +1746,7 @@ export function TodayTab({
       id: createOcrPlayerId(),
       roomId: 1,
       name: cleanedName,
-      gender: "other",
+      gender: "male",
       skill: 5,
       attack: 5,
       defense: 5,
@@ -2132,7 +2132,7 @@ export function TodayTab({
       id: createOcrPlayerId(),
       roomId: 1,
       name: name.trim(),
-      gender: newOcrPlayerGenders[ocrCandidateKey(candidate)] ?? "other",
+      gender: newOcrPlayerGenders[ocrCandidateKey(candidate)] ?? "male",
       skill: 5,
       attack: 5,
       defense: 5,
@@ -3093,7 +3093,6 @@ export function TodayTab({
           <div className="max-h-56 space-y-2 overflow-y-auto rounded-xl border bg-muted/40 p-3">
             {selectedNewCandidates.map((candidate) => {
               const key = ocrCandidateKey(candidate);
-              const selectedGender = newOcrPlayerGenders[key] ?? "other";
               const finalName = getEditedOcrCandidateName(candidate) || candidate.name;
               return (
                 <div
@@ -3101,33 +3100,16 @@ export function TodayTab({
                   className="flex items-center gap-2 rounded-lg bg-card px-3 py-2 text-xs font-black text-foreground"
                 >
                   <span className="min-w-0 flex-1 truncate">{finalName}</span>
-                  <div className="flex shrink-0 rounded-full border bg-muted/40 p-0.5" aria-label={`Gender for ${finalName}`}>
-                    {[
-                      { value: "other" as Gender, label: "?" },
-                      { value: "male" as Gender, label: "M" },
-                      { value: "female" as Gender, label: "F" },
-                    ].map((option) => (
-                      <button
-                        key={option.value}
-                        type="button"
-                        onClick={() => setNewOcrPlayerGender(candidate, option.value)}
-                        className={`h-6 min-w-6 rounded-full px-2 text-[10px] font-black transition ${
-                          selectedGender === option.value
-                            ? "bg-primary text-primary-foreground shadow-sm"
-                            : "text-muted-foreground hover:bg-background"
-                        }`}
-                      >
-                        {option.label}
-                      </button>
-                    ))}
-                  </div>
+                  <span className="shrink-0 rounded-full bg-sky-50 px-2 py-1 text-[10px] font-black text-sky-700">
+                    Skill 5
+                  </span>
                 </div>
               );
             })}
           </div>
           <div className="rounded-xl bg-sky-50 p-3 text-[11px] font-medium text-sky-800 border border-sky-100">
             New players will start with Skill Level 5 and the NEW badge. You can
-            edit them later in the Roster tab.
+            review skill and player type next in the Roster tab.
           </div>
           <DialogFooter className="gap-2 sm:gap-2">
             <Button

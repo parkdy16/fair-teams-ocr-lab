@@ -665,6 +665,12 @@ function VibePicker({ value, onChange }: { value?: FunBadge; onChange: (value?: 
   );
 }
 
+function blurOnDoneKey(event: React.KeyboardEvent<HTMLInputElement>) {
+  if (event.key !== "Enter") return;
+  event.preventDefault();
+  event.currentTarget.blur();
+}
+
 function ProfileDialog({
   player,
   onUpdate,
@@ -725,7 +731,10 @@ function ProfileDialog({
           <Pencil className="w-4 h-4" />
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-sm md:max-w-xl max-h-[90dvh] overflow-y-auto rounded-3xl">
+      <DialogContent
+        onOpenAutoFocus={(event) => event.preventDefault()}
+        className="max-w-sm md:max-w-xl max-h-[90dvh] overflow-y-auto rounded-3xl"
+      >
         <DialogHeader>
           <DialogTitle>Player Setup</DialogTitle>
           <div className="text-xs font-semibold text-muted-foreground">Quick edit first. Open Advanced only when you need detailed stats or photos.</div>
@@ -735,7 +744,13 @@ function ProfileDialog({
           <div className="grid grid-cols-1 gap-3">
             <div className="space-y-1.5">
               <Label className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider">Player Name</Label>
-              <Input value={draft.name} onChange={e => updateDraft({ name: e.target.value })} className="h-11 text-sm font-semibold" />
+              <Input
+                value={draft.name}
+                onChange={e => updateDraft({ name: e.target.value })}
+                onKeyDown={blurOnDoneKey}
+                enterKeyHint="done"
+                className="h-11 text-sm font-semibold"
+              />
             </div>
           </div>
 
@@ -778,34 +793,6 @@ function ProfileDialog({
             />
             <div className="rounded-xl border border-primary/10 bg-background/70 px-3 py-2 text-[11px] font-semibold leading-snug text-muted-foreground">
               {quickSkillExplanation}
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-amber-100 bg-amber-50/75 p-3 space-y-2">
-            <div className="flex items-center justify-between">
-              <Label className="text-[10px] uppercase font-bold text-amber-800 tracking-wider flex items-center gap-1"><Star className="w-3 h-3" /> Special traits</Label>
-              <span className="text-[10px] font-bold text-amber-700">Optional</span>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              {SPECIAL_ABILITIES.map(ability => {
-                const selected = Boolean(draft[ability.key]);
-                const Icon = ability.icon ?? Star;
-                return (
-                  <button
-                    key={ability.key}
-                    type="button"
-                    onClick={() => updateDraft({ [ability.key]: !selected } as Partial<RoomPlayer>)}
-                    className={`flex h-9 items-center gap-2 rounded-xl border px-2.5 text-left transition-colors ${selected ? "border-amber-400 bg-white text-amber-900 shadow-sm" : "border-amber-100 bg-white/70 text-foreground"}`}
-                  >
-                    {ability.badge === "GK" ? (
-                      <span className="text-[11px] font-semibold text-amber-700 w-5 text-center">GK</span>
-                    ) : (
-                      <Icon className="w-4 h-4 shrink-0 text-amber-700" />
-                    )}
-                    <span className="text-xs font-medium leading-tight truncate">{ability.label}</span>
-                  </button>
-                );
-              })}
             </div>
           </div>
 
@@ -912,6 +899,34 @@ function ProfileDialog({
                 ))}
                 <StatControl label="Team Play" value={draft.teamPlay} max={3} onChange={value => updateDraft({ teamPlay: value })} />
                 <div />
+              </div>
+
+              <div className="space-y-2 rounded-2xl border border-amber-100 bg-amber-50/75 p-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-[10px] uppercase font-bold text-amber-800 tracking-wider flex items-center gap-1"><Star className="w-3 h-3" /> Special traits</Label>
+                  <span className="text-[10px] font-bold text-amber-700">Optional</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {SPECIAL_ABILITIES.map(ability => {
+                    const selected = Boolean(draft[ability.key]);
+                    const Icon = ability.icon ?? Star;
+                    return (
+                      <button
+                        key={ability.key}
+                        type="button"
+                        onClick={() => updateDraft({ [ability.key]: !selected } as Partial<RoomPlayer>)}
+                        className={`flex h-8 items-center gap-1.5 rounded-xl border px-2 text-left transition-colors ${selected ? "border-amber-400 bg-amber-50 text-amber-900 shadow-sm" : "border-border bg-background/70 text-foreground"}`}
+                      >
+                        {ability.badge === "GK" ? (
+                          <span className="text-[10px] font-semibold text-amber-700 w-5 text-center">GK</span>
+                        ) : (
+                          <Icon className="w-3.5 h-3.5 shrink-0 text-amber-700" />
+                        )}
+                        <span className="text-[11px] font-semibold leading-tight truncate">{ability.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
               <div className="rounded-xl border border-border p-3 bg-background/70 text-[11px] text-muted-foreground font-semibold space-y-1">
@@ -1127,7 +1142,7 @@ export function PlayersTab({
       id: createPlayerId(),
       roomId: 1,
       name: cleanedName,
-      gender: "other",
+      gender: "male",
       skill: calculateOverall(profileDetails),
       ...profileDetails,
       isOrganizer: false,
@@ -1325,6 +1340,8 @@ export function PlayersTab({
                 <Input
                   value={voiceAddCleanName}
                   onChange={(event) => setVoiceAddHeard(event.target.value)}
+                  onKeyDown={blurOnDoneKey}
+                  enterKeyHint="done"
                   className="h-9 rounded-xl bg-background text-sm font-black"
                   placeholder="Type one player name"
                 />
@@ -1388,6 +1405,7 @@ export function PlayersTab({
                     placeholder="e.g. Paul"
                     value={name}
                     onChange={e => setName(e.target.value)}
+                    onKeyDown={blurOnDoneKey}
                     className="h-11 text-sm font-semibold"
                     data-testid="input-player-name"
                     enterKeyHint="done"
@@ -1509,6 +1527,7 @@ export function PlayersTab({
                           placeholder="Player name"
                           value={name}
                           onChange={e => setName(e.target.value)}
+                          onKeyDown={blurOnDoneKey}
                           className="h-10 text-sm font-semibold"
                           enterKeyHint="done"
                         />

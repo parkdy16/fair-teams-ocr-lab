@@ -3330,7 +3330,7 @@ export function TodayTab({
               !ocrRunning &&
               !ocrStatus &&
               screenshotImportMode === "meetup" && (
-                <div className="fixed inset-0 z-[9999] flex flex-col bg-background p-3 shadow-2xl">
+                <div className="fixed inset-0 z-[9999] flex h-[100dvh] flex-col overflow-hidden bg-background p-3 pb-[calc(env(safe-area-inset-bottom)+12px)] shadow-2xl">
                   <div className="mb-2 flex items-center justify-between gap-3">
                     <div className="min-w-0">
                       <div className="text-xs font-black text-foreground">
@@ -3342,17 +3342,28 @@ export function TodayTab({
                         Check for duplicates before scanning.
                       </div>
                     </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={clearOcrSelection}
-                      className="h-7 shrink-0 px-2 text-[10px] font-black"
-                    >
-                      Clear
-                    </Button>
+                    <div className="flex shrink-0 items-center gap-1">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={clearOcrSelection}
+                        className="h-7 px-2 text-[10px] font-black"
+                      >
+                        Clear
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={runOcr}
+                        disabled={ocrRunning || selectedScreenshots.length === 0}
+                        className="h-7 px-3 text-[10px] font-black"
+                      >
+                        Scan
+                      </Button>
+                    </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <div className="grid min-h-0 flex-1 grid-cols-2 content-start gap-2 overflow-y-auto sm:grid-cols-4">
                     {selectedScreenshotPreviews.map((preview, index) => (
                       <div
                         key={`${preview.name}-${index}`}
@@ -3361,7 +3372,7 @@ export function TodayTab({
                         <img
                           src={preview.url}
                           alt={preview.name}
-                          className="h-24 w-full object-cover sm:h-28"
+                          className="h-24 w-full object-cover object-top sm:h-28"
                         />
                         <div className="truncate px-2 py-1 text-[9px] font-bold text-muted-foreground">
                           {index + 1}. {preview.name}

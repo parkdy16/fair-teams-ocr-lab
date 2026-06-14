@@ -718,13 +718,16 @@ function stripOtherScreenshotListPrefix(value: string) {
 }
 
 function isProbablyOtherScreenshotName(value: string, roster: RoomPlayer[]) {
-  const clean = cleanDetectedNameCandidate(stripOtherScreenshotListPrefix(value));
+  const clean = cleanDetectedNameCandidate(
+    stripOtherScreenshotListPrefix(value),
+  );
   const normalized = normalizeForMatch(clean);
   if (!clean || !normalized) return false;
   if (OTHER_SCREENSHOT_JUNK_WORDS.has(normalized)) return false;
   if (
     [...OTHER_SCREENSHOT_JUNK_WORDS].some(
-      (word) => normalized.includes(word) && normalized.length <= word.length + 8,
+      (word) =>
+        normalized.includes(word) && normalized.length <= word.length + 8,
     )
   ) {
     return false;
@@ -768,24 +771,33 @@ function splitOtherScreenshotNameSegments(rawLine: string) {
   const withoutPrefix = stripOtherScreenshotListPrefix(rawLine.trim());
   if (!withoutPrefix) return [];
 
-  const labelMatch = rawLine.match(/\b(?:attending|players?|participants?|names?|lineup|roster|confirmed|coming|available)\b\s*[:\-–—]\s*(.+)$/i);
+  const labelMatch = rawLine.match(
+    /\b(?:attending|players?|participants?|names?|lineup|roster|confirmed|coming|available)\b\s*[:\-–—]\s*(.+)$/i,
+  );
   const source = labelMatch?.[1] ?? withoutPrefix;
 
   // Email/WhatsApp screenshots often contain comma-separated lists, while
   // roster apps usually show one name per line. Do not split plain space-only
   // lines into loose OCR words; that was the source of junk like "UI"/"Lz".
   if (/[;,/|]/.test(source)) {
-    return source.split(/[;,/|]+/).map((part) => part.trim()).filter(Boolean);
+    return source
+      .split(/[;,/|]+/)
+      .map((part) => part.trim())
+      .filter(Boolean);
   }
 
   return [source];
 }
 
 function extractOtherScreenshotNames(text: string, roster: RoomPlayer[]) {
-  const rawLines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const rawLines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
   const names: string[] = [];
   const structuredListDetected =
-    rawLines.filter((line) => /^\s*\d{1,3}\s*[.)\]:\-–—]+\s+/.test(line)).length >= 3;
+    rawLines.filter((line) => /^\s*\d{1,3}\s*[.)\]:\-–—]+\s+/.test(line))
+      .length >= 3;
 
   for (const rawLine of rawLines) {
     const isStructuredNameLine =
@@ -1055,10 +1067,11 @@ function extractOcrNames(
   const lines = text.split(/\r?\n/).map(cleanOcrLine).filter(Boolean);
   const names: string[] = [];
 
-  names.push(...extractInlineMeetupNames(text));
-  names.push(...extractTeamSheetNames(text, roster));
   if (mode === "other") {
     names.push(...extractOtherScreenshotNames(text, roster));
+  } else {
+    names.push(...extractInlineMeetupNames(text));
+    names.push(...extractTeamSheetNames(text, roster));
   }
 
   for (let index = 0; index < lines.length; index += 1) {
@@ -2827,6 +2840,13 @@ export function TodayTab({
     );
   };
 
+  const isCropWorkspaceOpen =
+    ocrInputSource === "screenshot" &&
+    selectedScreenshotPreviews.length > 0 &&
+    !ocrText &&
+    !ocrRunning &&
+    screenshotImportMode === "other";
+
   return (
     <div className="flex flex-col gap-4">
       {players.length === 0 ? (
@@ -3114,7 +3134,11 @@ export function TodayTab({
       <Dialog open={ocrOpen} onOpenChange={setOcrOpen}>
         <DialogContent
           onOpenAutoFocus={(e) => e.preventDefault()}
-          className="flex h-[90dvh] max-h-[90dvh] w-[94vw] max-w-lg md:max-w-3xl flex-col overflow-hidden rounded-2xl p-4 sm:p-6"
+          className={
+            isCropWorkspaceOpen
+              ? "!left-0 !top-0 !h-[100dvh] !max-h-[100dvh] !w-[100dvw] !max-w-none !translate-x-0 !translate-y-0 overflow-hidden !rounded-none !border-0 !p-0 [&>button]:hidden"
+              : "flex h-[90dvh] max-h-[90dvh] w-[94vw] max-w-lg flex-col overflow-hidden rounded-2xl p-4 sm:p-6 md:max-w-3xl"
+          }
         >
           <DialogHeader>
             <DialogTitle className="text-base font-black">
@@ -3264,120 +3288,123 @@ export function TodayTab({
               !ocrText &&
               !ocrRunning &&
               screenshotImportMode === "other" && (
-                <div className="fixed inset-0 z-[9999] h-[100dvh] w-[100dvw] overflow-hidden bg-background p-1 shadow-2xl">
-                  <div className="flex h-full w-full flex-col gap-1 landscape:flex-row">
-                  <div className="shrink-0 pb-1 pt-[env(safe-area-inset-top)] landscape:flex landscape:w-28 landscape:flex-col landscape:gap-2 landscape:pb-[env(safe-area-inset-bottom)] landscape:pl-[env(safe-area-inset-left)] landscape:pt-1">
-                    <div className="flex items-center justify-between gap-1 landscape:flex-col landscape:items-stretch">
-                      <div className="min-w-0">
-                        <div className="text-xs font-black text-foreground landscape:text-[11px]">
-                          Crop names area {activeCropIndex + 1}/
-                          {selectedScreenshotPreviews.length}
-                        </div>
-                        <div className="truncate text-[10px] font-medium text-muted-foreground landscape:hidden">
-                          Drag around names only. Tap numbers to switch screenshots.
-                        </div>
-                      </div>
-                      <div className="flex shrink-0 items-center gap-1 landscape:grid landscape:grid-cols-1">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={clearOcrSelection}
-                          className="h-8 px-2 text-[10px] font-black"
-                        >
-                          Cancel
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          onClick={runOcr}
-                          disabled={
-                            ocrRunning ||
-                            !selectedScreenshots.every((_, screenshotIndex) =>
-                              Boolean(cropBoxes[screenshotIndex]),
-                            )
-                          }
-                          className="h-8 px-2.5 text-[10px] font-black"
-                        >
-                          Scan
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div className="mt-1 flex items-center gap-1 overflow-x-auto pb-1 landscape:mt-0 landscape:flex-1 landscape:flex-col landscape:items-stretch landscape:overflow-x-hidden landscape:overflow-y-auto landscape:pb-0">
-                      {selectedScreenshotPreviews.map((preview, index) => (
-                        <button
-                          key={`${preview.name}-tab-${index}`}
-                          type="button"
-                          onClick={() => setActiveCropIndex(index)}
-                          className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-black ${
-                            activeCropIndex === index
-                              ? "border-primary bg-primary/10 text-primary"
-                              : cropBoxes[index]
-                                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                                : "border-border bg-background text-muted-foreground"
-                          }`}
-                        >
-                          {cropBoxes[index] ? "✓ " : ""}
-                          {index + 1}
-                        </button>
-                      ))}
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={clearActiveCrop}
-                        disabled={!cropBoxes[activeCropIndex]}
-                        className="ml-auto h-7 shrink-0 px-2 text-[10px] font-black landscape:ml-0 landscape:w-full"
-                      >
-                        Clear box
-                      </Button>
-                    </div>
-                  </div>
-
-                  {selectedScreenshotPreviews[activeCropIndex] && (
-                    <>
-                      <div className="min-h-0 min-w-0 flex-1 overflow-hidden rounded-xl border bg-muted/30 p-1">
-                        <div className="flex h-full w-full items-center justify-center overflow-hidden">
-                          <div
-                            className="relative touch-none"
-                            onPointerDown={(event) =>
-                              startCropDrag(activeCropIndex, event)
-                            }
-                            onPointerMove={moveCropDrag}
-                            onPointerUp={finishCropDrag}
-                            onPointerCancel={finishCropDrag}
-                          >
-                            <img
-                              src={selectedScreenshotPreviews[activeCropIndex].url}
-                              alt={selectedScreenshotPreviews[activeCropIndex].name}
-                              className="block max-h-full max-w-full select-none object-contain"
-                              draggable={false}
-                            />
-                            {(() => {
-                              const box =
-                                cropDragStart?.index === activeCropIndex &&
-                                draftCropBox
-                                  ? draftCropBox
-                                  : cropBoxes[activeCropIndex];
-                              if (!box) return null;
-                              return (
-                                <div
-                                  className="pointer-events-none absolute border-2 border-primary bg-primary/15 shadow-[0_0_0_9999px_rgba(15,23,42,0.28)]"
-                                  style={{
-                                    left: `${box.x}%`,
-                                    top: `${box.y}%`,
-                                    width: `${box.w}%`,
-                                    height: `${box.h}%`,
-                                  }}
-                                />
-                              );
-                            })()}
+                <div className="fixed inset-0 z-[9999] h-[100dvh] w-[100dvw] overflow-hidden bg-background shadow-2xl">
+                  <div className="flex h-full w-full flex-col gap-0 landscape:flex-row">
+                    <div className="shrink-0 border-b bg-background/95 px-1 pb-1 pt-[calc(env(safe-area-inset-top)+2px)] landscape:flex landscape:w-20 landscape:flex-col landscape:gap-1 landscape:border-b-0 landscape:border-r landscape:px-1 landscape:pb-[calc(env(safe-area-inset-bottom)+2px)] landscape:pl-[calc(env(safe-area-inset-left)+2px)] landscape:pt-1">
+                      <div className="flex items-center justify-between gap-1 landscape:flex-col landscape:items-stretch">
+                        <div className="min-w-0 landscape:text-center">
+                          <div className="text-[11px] font-black leading-tight text-foreground landscape:text-[10px]">
+                            Crop {activeCropIndex + 1}/
+                            {selectedScreenshotPreviews.length}
                           </div>
                         </div>
+                        <div className="flex shrink-0 items-center gap-1 landscape:grid landscape:grid-cols-1">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={clearOcrSelection}
+                            className="h-8 px-2 text-[10px] font-black"
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={runOcr}
+                            disabled={
+                              ocrRunning ||
+                              !selectedScreenshots.every((_, screenshotIndex) =>
+                                Boolean(cropBoxes[screenshotIndex]),
+                              )
+                            }
+                            className="h-8 px-2.5 text-[10px] font-black"
+                          >
+                            Scan
+                          </Button>
+                        </div>
                       </div>
-                    </>
-                  )}
+
+                      <div className="mt-0.5 flex items-center gap-1 overflow-x-auto pb-0.5 landscape:mt-0 landscape:flex-1 landscape:flex-col landscape:items-stretch landscape:overflow-x-hidden landscape:overflow-y-auto landscape:pb-0">
+                        {selectedScreenshotPreviews.map((preview, index) => (
+                          <button
+                            key={`${preview.name}-tab-${index}`}
+                            type="button"
+                            onClick={() => setActiveCropIndex(index)}
+                            className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-black ${
+                              activeCropIndex === index
+                                ? "border-primary bg-primary/10 text-primary"
+                                : cropBoxes[index]
+                                  ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                                  : "border-border bg-background text-muted-foreground"
+                            }`}
+                          >
+                            {cropBoxes[index] ? "✓ " : ""}
+                            {index + 1}
+                          </button>
+                        ))}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={clearActiveCrop}
+                          disabled={!cropBoxes[activeCropIndex]}
+                          className="ml-auto h-6 shrink-0 px-2 text-[10px] font-black landscape:ml-0 landscape:h-7 landscape:w-full landscape:px-1"
+                        >
+                          Clear box
+                        </Button>
+                      </div>
+                    </div>
+
+                    {selectedScreenshotPreviews[activeCropIndex] && (
+                      <>
+                        <div className="min-h-0 min-w-0 flex-1 overflow-hidden bg-slate-950 p-0.5">
+                          <div className="flex h-full w-full items-center justify-center overflow-hidden">
+                            <div
+                              className="relative touch-none"
+                              onPointerDown={(event) =>
+                                startCropDrag(activeCropIndex, event)
+                              }
+                              onPointerMove={moveCropDrag}
+                              onPointerUp={finishCropDrag}
+                              onPointerCancel={finishCropDrag}
+                            >
+                              <img
+                                src={
+                                  selectedScreenshotPreviews[activeCropIndex]
+                                    .url
+                                }
+                                alt={
+                                  selectedScreenshotPreviews[activeCropIndex]
+                                    .name
+                                }
+                                className="block max-h-full max-w-full select-none object-contain"
+                                draggable={false}
+                              />
+                              {(() => {
+                                const box =
+                                  cropDragStart?.index === activeCropIndex &&
+                                  draftCropBox
+                                    ? draftCropBox
+                                    : cropBoxes[activeCropIndex];
+                                if (!box) return null;
+                                return (
+                                  <div
+                                    className="pointer-events-none absolute border-2 border-primary bg-primary/15 shadow-[0_0_0_9999px_rgba(15,23,42,0.28)]"
+                                    style={{
+                                      left: `${box.x}%`,
+                                      top: `${box.y}%`,
+                                      width: `${box.w}%`,
+                                      height: `${box.h}%`,
+                                    }}
+                                  />
+                                );
+                              })()}
+                            </div>
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
               )}

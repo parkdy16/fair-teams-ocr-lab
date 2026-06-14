@@ -3319,7 +3319,7 @@ export function TodayTab({
           className={
             isCropWorkspaceOpen
               ? "!left-0 !top-0 !h-[100dvh] !max-h-[100dvh] !w-[100dvw] !max-w-none !translate-x-0 !translate-y-0 overflow-hidden !rounded-none !border-0 !p-0 [&>button]:hidden"
-              : "relative flex !top-2 !translate-y-0 h-[calc(100dvh-1rem)] max-h-[calc(100dvh-1rem)] w-[94vw] max-w-lg flex-col overflow-hidden rounded-2xl p-4 sm:!top-[50%] sm:!translate-y-[-50%] sm:h-[90dvh] sm:max-h-[90dvh] sm:p-6 md:max-w-3xl"
+              : "relative flex h-[92svh] max-h-[calc(100svh-1rem)] w-[94vw] max-w-lg flex-col overflow-hidden rounded-2xl p-4 sm:h-[90dvh] sm:max-h-[90dvh] sm:p-6 md:max-w-3xl"
           }
         >
           <DialogHeader>

@@ -576,7 +576,7 @@ function StatControl({ label, value, max = 10, onChange }: { label: string; valu
         max={max}
         value={value}
         onChange={e => onChange(Number(e.target.value))}
-        className="fairteams-slider w-full"
+        className="fairteams-slider fairteams-slider-compact w-full"
         style={{ "--slider-fill": `${((value - 1) / Math.max(1, max - 1)) * 100}%` } as React.CSSProperties}
       />
     </div>

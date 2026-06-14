@@ -218,3 +218,36 @@
   border: 3px solid hsl(var(--primary));
   box-shadow: 0 3px 10px rgba(15, 23, 42, 0.22);
 }
+
+/* Smaller advanced-stat slider styling. Quick Skill keeps the larger touch target above. */
+.fairteams-slider-compact {
+  height: 24px;
+}
+
+.fairteams-slider-compact::-webkit-slider-runnable-track {
+  height: 8px;
+}
+
+.fairteams-slider-compact::-webkit-slider-thumb {
+  width: 22px;
+  height: 22px;
+  margin-top: -8px;
+  border-width: 2px;
+  box-shadow: 0 2px 7px rgba(15, 23, 42, 0.18);
+}
+
+.fairteams-slider-compact:active::-webkit-slider-thumb {
+  transform: scale(1.05);
+}
+
+.fairteams-slider-compact::-moz-range-track,
+.fairteams-slider-compact::-moz-range-progress {
+  height: 8px;
+}
+
+.fairteams-slider-compact::-moz-range-thumb {
+  width: 22px;
+  height: 22px;
+  border-width: 2px;
+  box-shadow: 0 2px 7px rgba(15, 23, 42, 0.18);
+}

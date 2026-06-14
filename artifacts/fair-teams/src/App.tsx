@@ -334,7 +334,32 @@ function App() {
   }, []);
 
   const [activeTab, setActiveTab] = useState("today");
-  const [reviewPlayerId, setReviewPlayerId] = useState<string | null>(null);
+  const [reviewPlayerQueue, setReviewPlayerQueue] = useState<string[]>([]);
+  const [reviewPlayerIndex, setReviewPlayerIndex] = useState(0);
+  const [reviewAutoOpenPlayerId, setReviewAutoOpenPlayerId] = useState<string | null>(null);
+  const reviewActivePlayerId = reviewPlayerQueue[reviewPlayerIndex] ?? null;
+  const startReviewPlayerQueue = (playerIds: string[]) => {
+    const cleanIds = playerIds.filter(Boolean);
+    if (cleanIds.length === 0) return;
+    setReviewPlayerQueue(cleanIds);
+    setReviewPlayerIndex(0);
+    setReviewAutoOpenPlayerId(cleanIds[0]);
+  };
+  const finishReviewPlayerQueue = () => {
+    setReviewPlayerQueue([]);
+    setReviewPlayerIndex(0);
+    setReviewAutoOpenPlayerId(null);
+  };
+  const openNextReviewPlayer = () => {
+    const nextIndex = reviewPlayerIndex + 1;
+    const nextPlayerId = reviewPlayerQueue[nextIndex];
+    if (!nextPlayerId) {
+      finishReviewPlayerQueue();
+      return;
+    }
+    setReviewPlayerIndex(nextIndex);
+    setReviewAutoOpenPlayerId(nextPlayerId);
+  };
   const [todayOcrOpenToken, setTodayOcrOpenToken] = useState(0);
   const [ocrImportContext, setOcrImportContext] = useState<"today" | "roster">(
     "today",
@@ -1386,8 +1411,13 @@ function App() {
                   setActiveTab("today");
                   setTodayOcrOpenToken((token) => token + 1);
                 }}
-                reviewPlayerId={reviewPlayerId}
-                onReviewPlayerHandled={() => setReviewPlayerId(null)}
+                reviewPlayerId={reviewAutoOpenPlayerId}
+                reviewActivePlayerId={reviewActivePlayerId}
+                reviewPlayerIndex={reviewPlayerIndex}
+                reviewPlayerTotal={reviewPlayerQueue.length}
+                onReviewPlayerHandled={() => setReviewAutoOpenPlayerId(null)}
+                onReviewNext={openNextReviewPlayer}
+                onReviewDone={finishReviewPlayerQueue}
               />
             </TabsContent>
             <TabsContent
@@ -1405,7 +1435,7 @@ function App() {
                 onReviewNewPlayers={(playerIds) => {
                   if (!playerIds.length) return;
                   setActiveTab("players");
-                  setReviewPlayerId(playerIds[0]);
+                  startReviewPlayerQueue(playerIds);
                 }}
               />
             </TabsContent>

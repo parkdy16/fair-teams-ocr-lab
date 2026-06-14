@@ -688,11 +688,21 @@ function ProfileDialog({
   onUpdate,
   autoOpen = false,
   onAutoOpenHandled,
+  reviewMode = false,
+  reviewIndex = 0,
+  reviewTotal = 0,
+  onReviewNext,
+  onReviewDone,
 }: {
   player: RoomPlayer;
   onUpdate: (data: Partial<RoomPlayer>) => void;
   autoOpen?: boolean;
   onAutoOpenHandled?: () => void;
+  reviewMode?: boolean;
+  reviewIndex?: number;
+  reviewTotal?: number;
+  onReviewNext?: () => void;
+  onReviewDone?: () => void;
 }) {
   const [draft, setDraft] = useState<RoomPlayer>(() => normalizePlayer(player));
   const [open, setOpen] = useState(false);
@@ -703,6 +713,7 @@ function ProfileDialog({
   const overall = calculateOverall(draft);
   const quickSkill = quickSkillFromPlayer(draft);
   const quickSkillExplanation = skillLevelExplanation(quickSkill);
+  const reviewIsLast = reviewMode && reviewIndex >= reviewTotal - 1;
 
   const updateDraft = (data: Partial<RoomPlayer>) => {
     setDraft(prev => normalizePlayer({ ...prev, ...data }));
@@ -726,6 +737,25 @@ function ProfileDialog({
     setOpen(false);
   };
 
+  const saveReviewAndContinue = () => {
+    onUpdate({ ...draft, skill: overall, updatedAt: new Date().toISOString() });
+    setOpen(false);
+    if (reviewIsLast) {
+      onReviewDone?.();
+    } else {
+      onReviewNext?.();
+    }
+  };
+
+  const skipReviewPlayer = () => {
+    setOpen(false);
+    if (reviewIsLast) {
+      onReviewDone?.();
+    } else {
+      onReviewNext?.();
+    }
+  };
+
   return (
     <Dialog
       open={open}
@@ -735,6 +765,8 @@ function ProfileDialog({
         if (next) {
           setDraft(normalizePlayer(player));
           setAdvancedOpen(false);
+        } else if (reviewMode) {
+          onReviewDone?.();
         }
       }}
     >
@@ -751,6 +783,12 @@ function ProfileDialog({
           <DialogTitle>Player Setup</DialogTitle>
           <div className="text-xs font-semibold text-muted-foreground">Quick edit first. Open Advanced only when you need detailed stats or photos.</div>
         </DialogHeader>
+
+        {reviewMode && (
+          <div className="rounded-2xl border border-sky-100 bg-sky-50 px-3 py-2 text-xs font-bold text-sky-800">
+            Reviewing new players · {reviewIndex + 1} of {reviewTotal}
+          </div>
+        )}
 
         <div className="flex flex-col gap-3.5 pt-1">
           <div className="grid grid-cols-1 gap-3">
@@ -970,7 +1008,27 @@ function ProfileDialog({
             </div>
           )}
 
-          <Button onClick={save} className="h-11 rounded-xl font-black uppercase tracking-wide">Save Profile</Button>
+          {reviewMode ? (
+            <div className="grid grid-cols-[0.8fr_1.2fr] gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={skipReviewPlayer}
+                className="h-11 rounded-xl font-black"
+              >
+                {reviewIsLast ? "Done" : "Skip"}
+              </Button>
+              <Button
+                type="button"
+                onClick={saveReviewAndContinue}
+                className="h-11 rounded-xl font-black"
+              >
+                {reviewIsLast ? "Save & Done" : "Save & Next"}
+              </Button>
+            </div>
+          ) : (
+            <Button onClick={save} className="h-11 rounded-xl font-black uppercase tracking-wide">Save Profile</Button>
+          )}
         </div>
       </DialogContent>
     </Dialog>
@@ -1027,13 +1085,23 @@ export function PlayersTab({
   setPlayers,
   onScreenshotImport,
   reviewPlayerId,
+  reviewActivePlayerId,
+  reviewPlayerIndex = 0,
+  reviewPlayerTotal = 0,
   onReviewPlayerHandled,
+  onReviewNext,
+  onReviewDone,
 }: {
   players: RoomPlayer[];
   setPlayers: (players: RoomPlayer[]) => void;
   onScreenshotImport?: () => void;
   reviewPlayerId?: string | null;
+  reviewActivePlayerId?: string | null;
+  reviewPlayerIndex?: number;
+  reviewPlayerTotal?: number;
   onReviewPlayerHandled?: () => void;
+  onReviewNext?: () => void;
+  onReviewDone?: () => void;
 }) {
   const [name, setName] = useState("");
   const [aka, setAka] = useState("");
@@ -1071,6 +1139,10 @@ export function PlayersTab({
     }
     catch { return "recent"; }
   });
+
+  useEffect(() => {
+    if (reviewPlayerId || reviewActivePlayerId) setSearch("");
+  }, [reviewPlayerId, reviewActivePlayerId]);
 
   const resetAddPlayerForm = () => {
     setName("");
@@ -1812,6 +1884,11 @@ export function PlayersTab({
                           if (autoEditPlayerId === player.id) setAutoEditPlayerId(null);
                           if (reviewPlayerId === player.id) onReviewPlayerHandled?.();
                         }}
+                        reviewMode={reviewActivePlayerId === player.id && reviewPlayerTotal > 0}
+                        reviewIndex={reviewPlayerIndex}
+                        reviewTotal={reviewPlayerTotal}
+                        onReviewNext={onReviewNext}
+                        onReviewDone={onReviewDone}
                       />
                       <AlertDialog>
                         <AlertDialogTrigger asChild>

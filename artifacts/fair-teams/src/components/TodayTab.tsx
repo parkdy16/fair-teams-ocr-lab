@@ -3007,6 +3007,14 @@ export function TodayTab({
     !ocrRunning &&
     screenshotImportMode === "other";
 
+  const isMeetupScreenshotReviewOpen =
+    ocrInputSource === "screenshot" &&
+    selectedScreenshotNames.length > 0 &&
+    !ocrText &&
+    !ocrRunning &&
+    !ocrStatus &&
+    screenshotImportMode === "meetup";
+
   return (
     <div className="flex flex-col gap-4">
       {players.length === 0 ? (
@@ -3297,7 +3305,7 @@ export function TodayTab({
           className={
             isCropWorkspaceOpen
               ? "!left-0 !top-0 !h-[100dvh] !max-h-[100dvh] !w-[100dvw] !max-w-none !translate-x-0 !translate-y-0 overflow-hidden !rounded-none !border-0 !p-0 [&>button]:hidden"
-              : "flex h-[90dvh] max-h-[90dvh] w-[94vw] max-w-lg flex-col overflow-hidden rounded-2xl p-4 sm:p-6 md:max-w-3xl"
+              : "relative flex h-[90dvh] max-h-[90dvh] w-[94vw] max-w-lg flex-col overflow-hidden rounded-2xl p-4 sm:p-6 md:max-w-3xl"
           }
         >
           <DialogHeader>
@@ -3351,7 +3359,7 @@ export function TodayTab({
               </div>
             )}
 
-            {ocrInputSource === "screenshot" && (
+            {ocrInputSource === "screenshot" && !isMeetupScreenshotReviewOpen && (
               <label className="flex min-h-28 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-muted/40 p-4 text-center transition-colors hover:bg-muted/70">
                 <Upload className="h-6 w-6 text-muted-foreground" />
                 <div className="text-xs font-black text-foreground">
@@ -3393,66 +3401,66 @@ export function TodayTab({
               </label>
             )}
 
-            {ocrInputSource === "screenshot" &&
-              selectedScreenshotNames.length > 0 &&
-              !ocrText &&
-              !ocrRunning &&
-              !ocrStatus &&
-              screenshotImportMode === "meetup" && (
-                <div className="fixed inset-0 z-[9999] flex h-[100dvh] flex-col overflow-hidden bg-background shadow-2xl">
-                  <div className="sticky top-0 z-10 border-b bg-background/95 px-3 pb-3 pt-[calc(env(safe-area-inset-top)+10px)] shadow-sm backdrop-blur">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="text-sm font-black text-foreground">
-                          {selectedScreenshotNames.length} screenshot
-                          {selectedScreenshotNames.length === 1 ? "" : "s"}{" "}
-                          selected
-                        </div>
-                        <div className="truncate text-[11px] font-medium text-muted-foreground">
-                          Quickly check the attendee-count area, then scan.
-                        </div>
+            {isMeetupScreenshotReviewOpen && (
+              <div className="absolute inset-0 z-20 flex min-h-0 flex-col overflow-hidden bg-background">
+                <div className="shrink-0 border-b bg-background/95 px-4 py-3 shadow-sm backdrop-blur">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-base font-black text-foreground">
+                        {selectedScreenshotNames.length} screenshot
+                        {selectedScreenshotNames.length === 1 ? "" : "s"}{" "}
+                        selected
                       </div>
-                      <div className="flex shrink-0 items-center gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={clearOcrSelection}
-                          className="h-10 rounded-xl px-4 text-xs font-black"
-                        >
-                          Clear
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          onClick={runOcr}
-                          disabled={ocrRunning || selectedScreenshots.length === 0}
-                          className="h-10 rounded-xl px-5 text-xs font-black"
-                        >
-                          Scan
-                        </Button>
+                      <div className="truncate text-xs font-semibold text-muted-foreground">
+                        Check the full previews, then scan.
                       </div>
                     </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={clearOcrSelection}
+                        className="h-11 rounded-2xl px-5 text-xs font-black shadow-sm"
+                      >
+                        Clear
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={runOcr}
+                        disabled={ocrRunning || selectedScreenshots.length === 0}
+                        className="h-11 rounded-2xl px-6 text-xs font-black shadow-sm"
+                      >
+                        Scan
+                      </Button>
+                    </div>
                   </div>
-                  <div className="grid min-h-0 flex-1 grid-cols-2 content-start gap-3 overflow-y-auto p-3 pb-[calc(env(safe-area-inset-bottom)+16px)] sm:grid-cols-3 lg:grid-cols-4">
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 pb-[calc(env(safe-area-inset-bottom)+16px)]">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                     {selectedScreenshotPreviews.map((preview, index) => (
                       <div
                         key={`${preview.name}-${index}`}
-                        className="overflow-hidden rounded-xl border bg-muted/30 shadow-sm"
+                        className="overflow-hidden rounded-2xl border bg-muted/30 shadow-sm"
                       >
+                        <div className="border-b bg-background/90 px-3 py-2 text-[11px] font-black text-muted-foreground">
+                          Screenshot {index + 1} of {selectedScreenshotPreviews.length}
+                        </div>
                         <img
                           src={preview.url}
                           alt={preview.name}
                           className="block h-auto w-full object-contain"
                         />
-                        <div className="truncate border-t bg-background/90 px-2 py-1.5 text-[10px] font-bold text-muted-foreground">
-                          {index + 1}. {preview.name}
+                        <div className="truncate border-t bg-background/90 px-3 py-2 text-[10px] font-bold text-muted-foreground">
+                          {preview.name}
                         </div>
                       </div>
                     ))}
                   </div>
                 </div>
-              )}
+              </div>
+            )}
 
             {ocrInputSource === "screenshot" &&
               selectedScreenshotPreviews.length > 0 &&

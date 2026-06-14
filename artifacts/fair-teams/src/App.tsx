@@ -1445,10 +1445,13 @@ function App() {
                     <div className={`mt-2 rounded-2xl px-2.5 py-1.5 text-[11px] font-black ${googleDriveConfig.isConfigured ? "bg-white text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
                       {googleDriveStatusText}
                     </div>
-                    {currentDriveBackup ? (
-                      <div className="mt-1 truncate text-[11px] font-bold text-blue-700">
-                        Current Drive file: {currentDriveBackup.name}
-                      </div>
+                    <div className={`mt-1 truncate text-[11px] font-bold ${currentDriveBackup ? "text-blue-700" : "text-slate-500"}`}>
+                      Current Drive file: {currentDriveBackup?.name || "None selected"}
+                    </div>
+                    {googleDriveConnected && !currentDriveBackup ? (
+                      <p className="mt-1 text-[10px] font-semibold leading-snug text-slate-500">
+                        Open or save a Drive backup before updating, sharing, or managing access.
+                      </p>
                     ) : null}
                   </div>
                 </div>
@@ -1492,6 +1495,20 @@ function App() {
                   <Button
                     type="button"
                     variant="outline"
+                    className="h-11 justify-start rounded-2xl gap-3 border-blue-100 bg-white/80 text-blue-700"
+                    onClick={browseGoogleDriveBackupWithPicker}
+                    disabled={!googleDriveConnected || googleDriveOpening}
+                    title="Use this if someone shared a Fair Teams backup file with you"
+                  >
+                    <CloudDownload className="h-4 w-4" />
+                    <span className="font-black">Browse Drive / Shared with me</span>
+                  </Button>
+                  <p className="-mt-1 px-1 text-[10px] font-semibold leading-snug text-slate-500">
+                    Use Browse Drive if a co-organizer shared a backup file with you.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
                     className="h-11 justify-start rounded-2xl gap-3 border-blue-100 bg-white/90"
                     onClick={updateCurrentGoogleDriveBackup}
                     disabled={
@@ -1511,40 +1528,69 @@ function App() {
                   </Button>
                 </div>
 
-                {currentDriveBackup ? (
-                  <div className="mt-3 rounded-2xl border border-blue-100 bg-white/75 p-2.5">
+                {googleDriveConnected ? (
+                  <div className={`mt-3 rounded-2xl border p-2.5 ${currentDriveBackup ? "border-blue-100 bg-white/75" : "border-slate-100 bg-slate-50/75"}`}>
                     <div className="mb-2 flex items-center justify-between gap-2">
-                      <span className="text-[10px] font-black uppercase tracking-wide text-blue-500">
+                      <span className={`text-[10px] font-black uppercase tracking-wide ${currentDriveBackup ? "text-blue-500" : "text-slate-400"}`}>
                         Sharing
                       </span>
                       <span className="truncate text-[10px] font-bold text-slate-400">
                         Current file only
                       </span>
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="h-10 rounded-2xl border-blue-100 bg-blue-50/70 text-xs font-black text-blue-700 hover:bg-blue-100"
-                        onClick={openDriveShareModal}
-                        disabled={!googleDriveConnected || googleDriveSharing}
-                      >
-                        <Share2 className="mr-1.5 h-3.5 w-3.5" />
-                        Share file
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="h-10 rounded-2xl border-slate-100 bg-slate-50/80 text-xs font-black text-slate-700 hover:bg-slate-100"
-                        onClick={openDriveAccessManager}
-                        disabled={!googleDriveConnected || driveAccessLoading}
-                      >
-                        Manage access
-                      </Button>
-                    </div>
-                    <p className="mt-2 text-[10px] font-semibold leading-snug text-slate-500">
-                      Shared editors can update this backup. Keep a private local backup for important rosters.
-                    </p>
+                    {currentDriveBackup ? (
+                      <>
+                        <div className="grid grid-cols-2 gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-10 rounded-2xl border-blue-100 bg-blue-50/70 text-xs font-black text-blue-700 hover:bg-blue-100"
+                            onClick={openDriveShareModal}
+                            disabled={!googleDriveConnected || googleDriveSharing}
+                          >
+                            <Share2 className="mr-1.5 h-3.5 w-3.5" />
+                            Share file
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-10 rounded-2xl border-slate-100 bg-slate-50/80 text-xs font-black text-slate-700 hover:bg-slate-100"
+                            onClick={openDriveAccessManager}
+                            disabled={!googleDriveConnected || driveAccessLoading}
+                          >
+                            Manage access
+                          </Button>
+                        </div>
+                        <p className="mt-2 text-[10px] font-semibold leading-snug text-slate-500">
+                          Shared editors can update this backup. Keep a private local backup for important rosters.
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <div className="grid grid-cols-2 gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-10 rounded-2xl border-slate-100 bg-white/70 text-xs font-black text-slate-400"
+                            disabled
+                          >
+                            <Share2 className="mr-1.5 h-3.5 w-3.5" />
+                            Share file
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-10 rounded-2xl border-slate-100 bg-white/70 text-xs font-black text-slate-400"
+                            disabled
+                          >
+                            Manage access
+                          </Button>
+                        </div>
+                        <p className="mt-2 text-[10px] font-semibold leading-snug text-slate-500">
+                          Open, browse, or save a Drive backup first. Then you can share that selected file.
+                        </p>
+                      </>
+                    )}
                   </div>
                 ) : null}
               </div>

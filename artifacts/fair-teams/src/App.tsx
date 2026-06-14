@@ -1431,6 +1431,7 @@ function App() {
                 openOcrToken={todayOcrOpenToken}
                 ocrImportContext={ocrImportContext}
                 onOcrImportContextChange={setOcrImportContext}
+                onOcrOpenHandled={() => setTodayOcrOpenToken(0)}
                 onAddPlayerManually={() => setActiveTab("players")}
                 onReviewNewPlayers={(playerIds) => {
                   if (!playerIds.length) return;

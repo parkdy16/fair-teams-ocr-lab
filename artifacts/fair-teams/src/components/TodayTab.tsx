@@ -1582,6 +1582,7 @@ export function TodayTab({
   onOcrImportContextChange,
   onAddPlayerManually,
   onReviewNewPlayers,
+  onOcrOpenHandled,
 }: {
   players: RoomPlayer[];
   setPlayers: (players: RoomPlayer[]) => void;
@@ -1591,6 +1592,7 @@ export function TodayTab({
   onOcrImportContextChange?: (context: "today" | "roster") => void;
   onAddPlayerManually?: () => void;
   onReviewNewPlayers?: (playerIds: string[]) => void;
+  onOcrOpenHandled?: () => void;
 }) {
   const [search, setSearch] = useState("");
   const [ocrOpen, setOcrOpen] = useState(false);
@@ -2352,7 +2354,10 @@ export function TodayTab({
   };
 
   useEffect(() => {
-    if (openOcrToken > 0) openOcrImport();
+    if (openOcrToken > 0) {
+      openOcrImport();
+      onOcrOpenHandled?.();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openOcrToken]);
 

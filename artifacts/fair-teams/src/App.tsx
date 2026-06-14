@@ -21,6 +21,7 @@ import {
   RefreshCw,
   Share2,
   UserMinus,
+  Info,
 } from "lucide-react";
 import { PlayersTab } from "@/components/PlayersTab";
 import { TodayTab } from "@/components/TodayTab";
@@ -325,6 +326,7 @@ function App() {
   const [driveAccessLoading, setDriveAccessLoading] = useState(false);
   const [driveRemoveConfirm, setDriveRemoveConfirm] = useState<DriveRemoveAccessConfirm | null>(null);
   const [driveRemovingPermissionId, setDriveRemovingPermissionId] = useState("");
+  const [driveHelpOpen, setDriveHelpOpen] = useState(false);
   const googleDriveConnected = Boolean(googleDriveAccessToken);
   const googleDriveStatusText = !googleDriveConfig.isConfigured
     ? "Add Google Client ID and API key to .env.local"
@@ -427,7 +429,8 @@ function App() {
       driveShareOpen ||
       Boolean(driveShareConfirm) ||
       driveAccessOpen ||
-      Boolean(driveRemoveConfirm);
+      Boolean(driveRemoveConfirm) ||
+      driveHelpOpen;
     if (!shouldLockScroll) return;
 
     const previousOverflow = document.body.style.overflow;
@@ -435,7 +438,7 @@ function App() {
     return () => {
       document.body.style.overflow = previousOverflow;
     };
-  }, [groupSettingsOpen, rosterFilesOpen, rosterPickerOpen, clearRosterOpen, driveImportPreview, driveBackupChoices, localImportPreview, rosterToolsNotice, driveShareOpen, driveShareConfirm, driveAccessOpen, driveRemoveConfirm]);
+  }, [groupSettingsOpen, rosterFilesOpen, rosterPickerOpen, clearRosterOpen, driveImportPreview, driveBackupChoices, localImportPreview, rosterToolsNotice, driveShareOpen, driveShareConfirm, driveAccessOpen, driveRemoveConfirm, driveHelpOpen]);
 
   const openGroupSettings = () => {
     setDraftGroupName(activeRosterName);
@@ -1609,9 +1612,19 @@ function App() {
                       {googleDriveSharing ? "Sending..." : "Send backup copy"}
                     </span>
                   </Button>
-                  <p className="rounded-2xl bg-white/70 px-3 py-2 text-[10px] font-semibold leading-snug text-slate-500">
-                    Drive backup saves text-only roster files. Use Send backup copy to hand off the latest roster to another organizer.
-                  </p>
+                  <div className="rounded-2xl bg-white/70 px-3 py-2">
+                    <p className="text-[10px] font-semibold leading-snug text-slate-500">
+                      Save, open, update, or send a text-only backup copy.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setDriveHelpOpen(true)}
+                      className="mt-1 inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wide text-blue-600"
+                    >
+                      <Info className="h-3 w-3" />
+                      How it works
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -1746,6 +1759,74 @@ function App() {
                 );
               })}
             </div>
+          </div>
+        </div>
+      )}
+
+      {driveHelpOpen && (
+        <div
+          className="fixed inset-0 z-[60] flex items-end justify-center bg-black/45 p-4 sm:items-center"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="w-full max-w-sm rounded-3xl border border-blue-100 bg-white p-4 shadow-2xl">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-[10px] font-black uppercase tracking-wide text-blue-500">
+                  Drive Backup
+                </div>
+                <h2 className="mt-1 text-base font-black tracking-tight text-[#102A43]">
+                  How it works
+                </h2>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 shrink-0 rounded-xl"
+                onClick={() => setDriveHelpOpen(false)}
+                title="Close"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              <div className="rounded-2xl border border-slate-100 bg-slate-50/80 p-3">
+                <div className="text-xs font-black text-[#102A43]">
+                  Backup and handoff
+                </div>
+                <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
+                  Drive Backup saves roster text data to Google Drive. Use it to restore rosters, move between devices, or send a copy to another organizer.
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-amber-100 bg-amber-50/80 p-3">
+                <div className="text-xs font-black text-amber-800">
+                  Not live sync
+                </div>
+                <p className="mt-1 text-xs font-semibold leading-snug text-amber-800/85">
+                  Only one person should edit the latest roster at a time. If someone changes a copy, they should send the newest backup back.
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-3">
+                <div className="text-xs font-black text-[#102A43]">
+                  Tip for trusted groups
+                </div>
+                <p className="mt-1 text-xs font-semibold leading-snug text-slate-600">
+                  If your club already has a team Drive account, trusted organizers can connect Fair Teams to that same account on each device. Backups stay in one place, but it is still not live sync.
+                </p>
+              </div>
+            </div>
+
+            <Button
+              type="button"
+              className="mt-4 h-11 w-full rounded-2xl bg-[#102A43] text-white hover:bg-[#0b2036]"
+              onClick={() => setDriveHelpOpen(false)}
+            >
+              Got it
+            </Button>
           </div>
         </div>
       )}

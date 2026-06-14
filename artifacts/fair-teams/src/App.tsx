@@ -1713,17 +1713,27 @@ function App() {
                           : "Connect Google Drive"}
                     </span>
                   </Button>
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="h-11 justify-start rounded-2xl gap-2 border-blue-100 bg-white/90 px-3"
-                      onClick={saveAllRostersToGoogleDrive}
-                      disabled={isEmptyStarterRoster || !googleDriveConnected || googleDriveSaving || googleDriveUpdating}
-                    >
+                  <Button
+                    type="button"
+                    className="h-12 justify-start rounded-2xl gap-3 bg-blue-600 text-white shadow-sm hover:bg-blue-700"
+                    onClick={saveAllRostersToGoogleDrive}
+                    disabled={isEmptyStarterRoster || !googleDriveConnected || googleDriveSaving || googleDriveUpdating}
+                    title={currentDriveBackup ? "Update the active Drive backup" : "Create a new Drive backup"}
+                  >
+                    {currentDriveBackup ? (
+                      <RefreshCw className={`h-4 w-4 ${googleDriveUpdating ? "animate-spin" : ""}`} />
+                    ) : (
                       <CloudUpload className="h-4 w-4" />
-                      <span className="truncate text-xs font-black">{googleDriveSaving || googleDriveUpdating ? "Saving..." : "Save backup"}</span>
-                    </Button>
+                    )}
+                    <span className="font-black">
+                      {googleDriveSaving || googleDriveUpdating
+                        ? "Saving..."
+                        : currentDriveBackup
+                          ? "Save backup"
+                          : "Save first backup"}
+                    </span>
+                  </Button>
+                  <div className="grid grid-cols-2 gap-2">
                     <Button
                       type="button"
                       variant="outline"
@@ -1734,26 +1744,26 @@ function App() {
                       <CloudDownload className="h-4 w-4" />
                       <span className="truncate text-xs font-black">{googleDriveOpening ? "Opening..." : "Open backup"}</span>
                     </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-11 justify-start rounded-2xl gap-2 border-slate-100 bg-white/90 px-3 text-slate-700"
+                      onClick={saveDriveBackupAsNewCopy}
+                      disabled={
+                        isEmptyStarterRoster ||
+                        !googleDriveConnected ||
+                        googleDriveSaving ||
+                        googleDriveOpening ||
+                        googleDriveUpdating
+                      }
+                      title="Create a separate Drive backup copy"
+                    >
+                      <Archive className="h-4 w-4" />
+                      <span className="truncate text-xs font-black">
+                        {googleDriveSaving ? "Saving..." : "New copy"}
+                      </span>
+                    </Button>
                   </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-11 justify-start rounded-2xl gap-3 border-blue-100 bg-white/90"
-                    onClick={saveDriveBackupAsNewCopy}
-                    disabled={
-                      isEmptyStarterRoster ||
-                      !googleDriveConnected ||
-                      googleDriveSaving ||
-                      googleDriveOpening ||
-                      googleDriveUpdating
-                    }
-                    title="Create a separate Drive backup copy"
-                  >
-                    <RefreshCw className={`h-4 w-4 ${googleDriveSaving ? "animate-spin" : ""}`} />
-                    <span className="font-black">
-                      {googleDriveSaving ? "Saving copy..." : "Save as new copy"}
-                    </span>
-                  </Button>
                   <Button
                     type="button"
                     variant="outline"
@@ -1768,7 +1778,7 @@ function App() {
                   </Button>
                   <div className="rounded-2xl bg-white/70 px-3 py-2">
                     <p className="text-[10px] font-semibold leading-snug text-slate-500">
-                      Save updates the active backup. Use Save as new copy for a separate archive.
+                      Save backup is the normal action. It updates the active backup, or creates one if none is selected. Use New copy only for a separate archive.
                     </p>
                     <button
                       type="button"

@@ -117,6 +117,28 @@ export async function pickGoogleDriveBackupFile(accessToken: string): Promise<Go
   if (!picker) throw new Error("Google Picker is not ready.");
 
   return new Promise((resolve, reject) => {
+    let settled = false;
+    const settle = (pickedFile: GoogleDrivePickedFile | null) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeoutId);
+      resolve(pickedFile);
+    };
+    const fail = (error: Error) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeoutId);
+      reject(error);
+    };
+
+    const timeoutId = window.setTimeout(() => {
+      fail(
+        new Error(
+          "Google Drive picker did not respond. On phone, close this app and open Fair Teams from Chrome, then try Open Drive backup again.",
+        ),
+      );
+    }, 90000);
+
     try {
       const view = createDocsView();
       const builder = new picker.PickerBuilder();
@@ -127,31 +149,32 @@ export async function pickGoogleDriveBackupFile(accessToken: string): Promise<Go
       builder.setOrigin(window.location.origin);
       builder.setCallback((response: PickerResponse) => {
         if (response.action === picker.Action.CANCEL) {
-          resolve(null);
+          settle(null);
           return;
         }
         if (response.action !== picker.Action.PICKED) return;
 
         const picked = response.docs?.[0];
         if (!picked?.id) {
-          reject(new Error("Google Picker did not return a file."));
+          fail(new Error("Google Picker did not return a file."));
           return;
         }
         const name = picked.name || "Fair Teams Drive backup.json";
         const mimeType = picked.mimeType || "";
         if (!name.toLowerCase().endsWith(".json") && mimeType !== FAIR_TEAMS_DRIVE_MIME_TYPE) {
-          reject(new Error("Please choose a Fair Teams .json backup file."));
+          fail(new Error("Please choose a Fair Teams .json backup file."));
           return;
         }
-        resolve({
+        settle({
           id: picked.id,
           name,
           mimeType,
         });
       });
-      builder.build().setVisible(true);
+      const pickerInstance = builder.build();
+      pickerInstance.setVisible(true);
     } catch (error) {
-      reject(error);
+      fail(error instanceof Error ? error : new Error("Could not open Google Drive picker."));
     }
   });
 }

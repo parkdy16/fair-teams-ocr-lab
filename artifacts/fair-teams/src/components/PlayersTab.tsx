@@ -374,6 +374,11 @@ function roundSkillStep(value: number) {
   return Math.max(1, Math.min(10, Math.round(value * 2) / 2));
 }
 
+function formatSkillStep(value: number) {
+  const rounded = roundSkillStep(value);
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+}
+
 function applyQuickSkillToPlayer(player: RoomPlayer, skillLevel: number): RoomPlayer {
   const nextSkillLevel = roundSkillStep(skillLevel);
   return normalizePlayer({
@@ -785,7 +790,7 @@ function ProfileDialog({
               </div>
               <div className="rounded-xl bg-primary text-primary-foreground px-3 py-1.5 text-center shadow-sm">
                 <div className="text-[8px] uppercase font-black opacity-75 leading-none">Skill</div>
-                <div className="text-xl font-black leading-none">{quickSkill}</div>
+                <div className="text-xl font-black leading-none">{formatSkillStep(quickSkill)}</div>
               </div>
             </div>
             <input
@@ -798,6 +803,28 @@ function ProfileDialog({
               className="w-full accent-primary"
               data-testid={`input-player-quick-skill-${player.id}`}
             />
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9 rounded-xl border-primary/15 text-xs font-black"
+                onClick={() => applyQuickSkill(quickSkill - 0.5)}
+                disabled={quickSkill <= 1}
+                aria-label="Decrease skill by 0.5"
+              >
+                −0.5
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9 rounded-xl border-primary/15 text-xs font-black"
+                onClick={() => applyQuickSkill(quickSkill + 0.5)}
+                disabled={quickSkill >= 10}
+                aria-label="Increase skill by 0.5"
+              >
+                +0.5
+              </Button>
+            </div>
             <div className="rounded-xl border border-primary/10 bg-background/70 px-3 py-2 text-[11px] font-semibold leading-snug text-muted-foreground">
               {quickSkillExplanation}
             </div>
@@ -1458,7 +1485,7 @@ export function PlayersTab({
                   </div>
                   <div className="rounded-xl bg-primary text-primary-foreground px-3 py-1.5 text-center shadow-sm">
                     <div className="text-[8px] uppercase font-black opacity-75 leading-none">Skill</div>
-                    <div className="text-xl font-black leading-none">{skillLevel}</div>
+                    <div className="text-xl font-black leading-none">{formatSkillStep(skillLevel)}</div>
                   </div>
                 </div>
                 <input
@@ -1475,6 +1502,36 @@ export function PlayersTab({
                   className="w-full accent-primary"
                   data-testid="input-player-skill-level"
                 />
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-9 rounded-xl border-primary/15 text-xs font-black"
+                    onClick={() => {
+                      const next = roundSkillStep(skillLevel - 0.5);
+                      setSkillLevel(next);
+                      setAddDetails(prev => applySkillLevelToDetails(prev, next));
+                    }}
+                    disabled={skillLevel <= 1}
+                    aria-label="Decrease skill by 0.5"
+                  >
+                    −0.5
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-9 rounded-xl border-primary/15 text-xs font-black"
+                    onClick={() => {
+                      const next = roundSkillStep(skillLevel + 0.5);
+                      setSkillLevel(next);
+                      setAddDetails(prev => applySkillLevelToDetails(prev, next));
+                    }}
+                    disabled={skillLevel >= 10}
+                    aria-label="Increase skill by 0.5"
+                  >
+                    +0.5
+                  </Button>
+                </div>
                 <div className="rounded-xl border border-primary/10 bg-background/70 px-3 py-2 text-[11px] font-semibold leading-snug text-muted-foreground">
                   {addSkillExplanation}
                 </div>

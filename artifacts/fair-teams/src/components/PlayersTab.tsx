@@ -982,8 +982,8 @@ function ProfileDialog({
                         </button>
                         <button
                           type="button"
-                          onClick={(event) => { event.stopPropagation(); setTraitHelp(ability); }}
-                          className="flex h-full w-7 shrink-0 items-center justify-center border-l border-amber-100/80 text-[11px] font-black text-amber-700/80"
+                          onClick={(event) => { event.stopPropagation(); setTraitHelp(current => current?.key === ability.key ? null : ability); }}
+                          className="flex h-full w-7 shrink-0 items-center justify-center border-l border-amber-100/80 text-[11px] font-black text-amber-700/80 active:bg-amber-100"
                           aria-label={`What does ${ability.label} mean?`}
                           title={`What does ${ability.label} mean?`}
                         >
@@ -993,6 +993,7 @@ function ProfileDialog({
                     );
                   })}
                 </div>
+                {traitHelp ? <TraitHelpHint ability={traitHelp} onClose={() => setTraitHelp(null)} /> : null}
               </div>
 
               <div className="rounded-xl border border-border p-3 bg-background/70 text-[11px] text-muted-foreground font-semibold space-y-1">
@@ -1024,45 +1025,43 @@ function ProfileDialog({
             <Button onClick={save} className="h-11 rounded-xl font-black uppercase tracking-wide">Save Profile</Button>
           )}
         </div>
-      {traitHelp && <TraitHelpSheet ability={traitHelp} onClose={() => setTraitHelp(null)} />}
       </DialogContent>
     </Dialog>
   );
 }
 
-function TraitHelpSheet({ ability, onClose }: { ability: (typeof SPECIAL_ABILITIES)[number]; onClose: () => void }) {
+function TraitHelpHint({ ability, onClose }: { ability: (typeof SPECIAL_ABILITIES)[number]; onClose: () => void }) {
   const Icon = ability.icon ?? Star;
+
+  useEffect(() => {
+    const timer = window.setTimeout(onClose, 6500);
+    return () => window.clearTimeout(timer);
+  }, [ability.key, onClose]);
+
   return (
-    <div
-      className="fixed inset-0 z-[80] flex items-end justify-center bg-black/45 p-4 sm:items-center"
-      role="dialog"
-      aria-modal="true"
-      onClick={(event) => {
-        event.stopPropagation();
-        onClose();
-      }}
-    >
-      <div
-        className="w-full max-w-sm rounded-3xl border border-border bg-background p-4 shadow-2xl"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="flex items-start gap-3">
-          <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-amber-100 bg-amber-50 text-amber-700">
-            {ability.badge === "GK" ? <span className="text-xs font-black">GK</span> : <Icon className="h-5 w-5" />}
-          </div>
-          <div className="min-w-0 flex-1">
-            <h2 className="text-base font-black tracking-tight text-[#102A43]">{ability.label}</h2>
-            <p className="mt-1 text-xs font-semibold leading-snug text-muted-foreground">{ability.description}</p>
-          </div>
+    <div className="rounded-2xl border border-amber-200 bg-white/95 p-3 shadow-sm animate-in fade-in-50 slide-in-from-top-1">
+      <div className="flex items-start gap-2.5">
+        <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-700">
+          {ability.badge === "GK" ? <span className="text-[10px] font-black">GK</span> : <Icon className="h-4 w-4" />}
         </div>
-        <Button type="button" className="mt-4 h-11 w-full rounded-2xl font-black" onClick={onClose}>
-          Got it
-        </Button>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <h3 className="text-xs font-black tracking-tight text-[#102A43]">{ability.label}</h3>
+            <button
+              type="button"
+              onClick={onClose}
+              className="-mr-1 -mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+              aria-label="Close trait help"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          <p className="mt-0.5 text-[11px] font-semibold leading-snug text-slate-600">{ability.description}</p>
+        </div>
       </div>
     </div>
   );
 }
-
 
 function OverallBadge({ player }: { player: RoomPlayer }) {
   return (
@@ -1772,8 +1771,8 @@ export function PlayersTab({
                             </button>
                             <button
                               type="button"
-                              onClick={(event) => { event.stopPropagation(); setAddTraitHelp(ability); }}
-                              className="flex h-full w-7 shrink-0 items-center justify-center border-l border-amber-100/80 text-[11px] font-black text-amber-700/80"
+                              onClick={(event) => { event.stopPropagation(); setAddTraitHelp(current => current?.key === ability.key ? null : ability); }}
+                              className="flex h-full w-7 shrink-0 items-center justify-center border-l border-amber-100/80 text-[11px] font-black text-amber-700/80 active:bg-amber-100"
                               aria-label={`What does ${ability.label} mean?`}
                               title={`What does ${ability.label} mean?`}
                             >
@@ -1783,6 +1782,7 @@ export function PlayersTab({
                         );
                       })}
                     </div>
+                    {addTraitHelp ? <TraitHelpHint ability={addTraitHelp} onClose={() => setAddTraitHelp(null)} /> : null}
                   </div>
                 </div>
               )}
@@ -1795,7 +1795,6 @@ export function PlayersTab({
                 <Plus className="w-3.5 h-3.5 mr-1.5" /> Add Player
               </Button>
             </form>
-          {addTraitHelp && <TraitHelpSheet ability={addTraitHelp} onClose={() => setAddTraitHelp(null)} />}
           </DialogContent>
         </Dialog>
 

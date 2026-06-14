@@ -640,58 +640,164 @@ function extractTeamSheetNames(text: string, roster: RoomPlayer[]) {
   return names;
 }
 
-function isProbablyCroppedName(value: string) {
-  const clean = cleanDetectedNameCandidate(value);
+const OTHER_SCREENSHOT_JUNK_WORDS = new Set([
+  ...OCR_JUNK_WORDS,
+  "football",
+  "soccer",
+  "futsal",
+  "game",
+  "match",
+  "training",
+  "tonight",
+  "tomorrow",
+  "today",
+  "players",
+  "player",
+  "attending",
+  "available",
+  "confirmed",
+  "coming",
+  "maybe",
+  "waiting",
+  "meeting",
+  "bring",
+  "shirt",
+  "shirts",
+  "white",
+  "dark",
+  "black",
+  "blue",
+  "red",
+  "green",
+  "yellow",
+  "team",
+  "teams",
+  "roster",
+  "lineup",
+  "group",
+  "chat",
+  "message",
+  "messages",
+  "online",
+  "typing",
+  "reply",
+  "forward",
+  "today football",
+  "tuesday football",
+  "wednesday football",
+  "thursday football",
+  "friday football",
+  "saturday football",
+  "sunday football",
+  "monday football",
+  "see you",
+  "see you all",
+  "thanks",
+  "thank you",
+  "hello",
+  "hi",
+  "hey",
+  "ok",
+  "okay",
+  "done",
+  "clear",
+  "back",
+  "next",
+  "scan",
+  "use this area",
+]);
+
+const OTHER_SCREENSHOT_LABEL_PATTERN =
+  /^\s*(?:attending|players?|participants?|names?|lineup|roster|team|confirmed|coming|available|list)\b\s*(?:tonight|today)?\s*[:\-–—]+\s*/i;
+
+function stripOtherScreenshotListPrefix(value: string) {
+  return value
+    .replace(/^\s*(?:\d{1,3}|[a-z])\s*[.)\]:\-–—]+\s*/i, "")
+    .replace(/^\s*[•●▪︎◆◇▶︎►✓✔☑-]+\s*/i, "")
+    .replace(OTHER_SCREENSHOT_LABEL_PATTERN, "");
+}
+
+function isProbablyOtherScreenshotName(value: string, roster: RoomPlayer[]) {
+  const clean = cleanDetectedNameCandidate(stripOtherScreenshotListPrefix(value));
   const normalized = normalizeForMatch(clean);
   if (!clean || !normalized) return false;
-  if (OCR_JUNK_WORDS.has(normalized)) return false;
+  if (OTHER_SCREENSHOT_JUNK_WORDS.has(normalized)) return false;
+  if (
+    [...OTHER_SCREENSHOT_JUNK_WORDS].some(
+      (word) => normalized.includes(word) && normalized.length <= word.length + 8,
+    )
+  ) {
+    return false;
+  }
   if (/\d/.test(clean)) return false;
   if (clean.length < 3 || clean.length > 36) return false;
-  if (/^[A-Z\s]{4,}$/.test(clean) && clean.split(/\s+/).length > 1)
-    return false;
+
+  const words = normalized.split(" ").filter(Boolean);
+  if (words.length < 1 || words.length > 3) return false;
+
+  // Do not let multi-pass OCR fragments such as "UI", "vo", "Lz", "Oo",
+  // "Si", or "Ra" become players. Short saved roster names can still be
+  // rescued by the roster-signal pass below.
+  if (words.some((word) => word.length < 3 && !NAME_PARTICLES.has(word))) {
+    return hasRosterSignal(clean, roster);
+  }
+
+  if (words.length === 1) {
+    const word = words[0];
+    if (word.length < 3) return hasRosterSignal(clean, roster);
+    if (/^(ui|vo|oo|lz|si|ra|pm|am|www|com|de|app|ios)$/i.test(word)) {
+      return hasRosterSignal(clean, roster);
+    }
+  }
+
   if (
-    /\b(i|we|you|he|she|they|it|this|that|but|would|like|come|join|plan|moved|time|thing|attend|club|anymore|gathering|question|list|event|search|checked|attendees?|team|teams|done|share|players?)\b/i.test(
+    /\b(i|we|you|he|she|they|it|this|that|but|would|like|come|join|plan|moved|time|thing|attend|club|anymore|gathering|question|list|event|search|checked|attendees?|team|teams|done|share|players?|message|chat|football|soccer|shirt|shirts|bring|meeting|tonight|tomorrow|today)\b/i.test(
       clean,
     )
   ) {
     return false;
   }
-  const words = normalized.split(" ").filter(Boolean);
-  if (words.length < 1 || words.length > 3) return false;
-  if (words.some((word) => word.length === 1 && words.length > 1)) return false;
+
+  // All-caps multi-word OCR is usually header/UI text rather than names.
+  if (/^[A-Z\s]{4,}$/.test(clean) && words.length > 1) return false;
+
   return true;
 }
 
+function splitOtherScreenshotNameSegments(rawLine: string) {
+  const withoutPrefix = stripOtherScreenshotListPrefix(rawLine.trim());
+  if (!withoutPrefix) return [];
+
+  const labelMatch = rawLine.match(/\b(?:attending|players?|participants?|names?|lineup|roster|confirmed|coming|available)\b\s*[:\-–—]\s*(.+)$/i);
+  const source = labelMatch?.[1] ?? withoutPrefix;
+
+  // Email/WhatsApp screenshots often contain comma-separated lists, while
+  // roster apps usually show one name per line. Do not split plain space-only
+  // lines into loose OCR words; that was the source of junk like "UI"/"Lz".
+  if (/[;,/|]/.test(source)) {
+    return source.split(/[;,/|]+/).map((part) => part.trim()).filter(Boolean);
+  }
+
+  return [source];
+}
+
 function extractOtherScreenshotNames(text: string, roster: RoomPlayer[]) {
-  const lines = text.split(/\r?\n/).map(cleanOcrLine).filter(Boolean);
+  const rawLines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   const names: string[] = [];
 
-  for (const line of lines) {
-    const cleaned = cleanDetectedNameCandidate(line);
-    const normalized = normalizeForMatch(cleaned);
-    if (!cleaned || !normalized) continue;
-
-    if (isProbablyCroppedName(cleaned)) {
-      names.push(cleaned);
-      continue;
-    }
-
-    // Some cropped screenshots OCR several first names onto one line.
-    // If the line looks like a compact name list, split it into single-name chips.
-    const words = cleaned.split(/\s+/).filter(Boolean);
-    if (words.length >= 4 && words.length <= 14) {
-      const nameLikeWords = words
-        .map((word) => cleanDetectedNameCandidate(word))
-        .filter((word) => isProbablyCroppedName(word));
-      if (
-        nameLikeWords.length >= Math.max(3, Math.floor(words.length * 0.65))
-      ) {
-        names.push(...nameLikeWords);
+  for (const rawLine of rawLines) {
+    for (const segment of splitOtherScreenshotNameSegments(rawLine)) {
+      const cleaned = cleanDetectedNameCandidate(
+        stripOtherScreenshotListPrefix(segment),
+      );
+      if (cleaned && isProbablyOtherScreenshotName(cleaned, roster)) {
+        names.push(cleaned);
       }
     }
   }
 
-  // Roster rescue is useful in crop mode too, especially when OCR joins names.
+  // Roster rescue is useful in crop mode too, especially when OCR joins names
+  // or reads a short saved name in a noisy line.
   const normalizedFullText = ` ${normalizeForMatch(text)} `;
   for (const player of roster) {
     const searchNames = playerSearchNames(player).filter(Boolean);

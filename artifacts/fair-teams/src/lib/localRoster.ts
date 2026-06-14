@@ -1,4 +1,5 @@
 import { FunBadge, Gender, TodayStatus } from "@/lib/types";
+import { getSpecialSkillStatBoosts } from "@/lib/playerAbilityEffects";
 
 export interface RoomPlayer {
   id: string;
@@ -57,59 +58,8 @@ function clamp(num: unknown, min: number, max: number, fallback: number, step = 
   return Math.min(max, Math.max(min, Math.round(rounded * 10) / 10));
 }
 
-function getSpecialSkillStatBoosts(player: Partial<RoomPlayer>) {
-  const boosts = { attack: 0, defense: 0, passing: 0, physical: 0, stamina: 0, speed: 0, teamPlay: 0 };
-
-  if (player.isLongPass) {
-    boosts.passing += 2;
-    boosts.attack += 1;
-  }
-  if (player.isTikiTaka) {
-    boosts.passing += 2;
-    boosts.attack += 1;
-    boosts.stamina += 0.5;
-  }
-  // Internal compatibility: older saved rosters used isCrossing for Crossing.
-  // It now represents Technician.
-  if (player.isCrossing) {
-    boosts.teamPlay += 1;
-    boosts.passing += 1;
-  }
-  // Internal compatibility: older saved rosters used isAerial for Aerial.
-  // It now represents Header.
-  if (player.isAerial) {
-    boosts.physical += 2;
-    boosts.defense += 1;
-    boosts.attack += 1;
-  }
-  if (player.isPowerShot) {
-    boosts.attack += 2;
-    boosts.physical += 1;
-  }
-  if (player.isBulldog) {
-    boosts.stamina += 2;
-    boosts.defense += 1;
-  }
-
-  return boosts;
-}
-
-function specialAbilityBonus(player: Partial<RoomPlayer>) {
-  let bonus = 0;
-  if (player.isPlaymaker) bonus += 0.3;
-  if (player.isFinisher) bonus += 0.3;
-  if (player.isSentinel) bonus += 0.3;
-  if (player.isDribbler) bonus += 0.2;
-  if (player.isEngine) bonus += 0.2;
-  if (player.isVersatile) bonus += 0.2;
-  if (player.isSpaceFinder) bonus += 0.3;
-  if (player.isLongPass) bonus += 0.2;
-  if (player.isTikiTaka) bonus += 0.2;
-  if (player.isCrossing) bonus += 0.2;
-  if (player.isAerial) bonus += 0.2;
-  if (player.isPowerShot) bonus += 0.2;
-  if (player.isBulldog) bonus += 0.2;
-  return Math.min(0.9, bonus);
+function specialAbilityBonus(_player: Partial<RoomPlayer>) {
+  return 0;
 }
 
 export function calculateOverall(player: Partial<RoomPlayer>) {
@@ -127,7 +77,7 @@ export function calculateOverall(player: Partial<RoomPlayer>) {
   const effectiveSpeed = Math.min(10, speed + boosts.speed);
   const effectiveStamina = Math.min(10, stamina + boosts.stamina);
   const effectivePhysical = Math.min(10, physical + boosts.physical);
-  const effectiveTeamPlay = Math.min(3, teamPlay + boosts.teamPlay);
+  const effectiveTeamPlay = teamPlay;
 
   // Casual football OVA: football skills matter most; raw strength is only a small tie-breaker.
   const baseOverall =

@@ -225,26 +225,26 @@ function BulldogBadgeIcon({ className }: { className?: string }) {
 type AbilityKey = "isGoalkeeper" | "isPlaymaker" | "isFinisher" | "isDribbler" | "isSentinel" | "isEngine" | "isVersatile" | "isSpaceFinder" | "isLongPass" | "isTikiTaka" | "isCrossing" | "isAerial" | "isPowerShot" | "isBulldog";
 
 const SPECIAL_ABILITIES: { key: AbilityKey; label: string; badge: string; description: string; icon?: React.ComponentType<{ className?: string }> }[] = [
-  { key: "isGoalkeeper", label: "Goalkeeper", badge: "GK", description: "Comfortable in goal; helps spread keeper options across teams." },
+  { key: "isGoalkeeper", label: "Goalkeeper", badge: "GK", description: "Comfortable in goal; useful when you want keeper options spread across teams." },
 
   // Attack-first traits
-  { key: "isFinisher", label: "Finisher", badge: "FIN", description: "Reliable scorer who turns chances into goals.", icon: FinisherBadgeIcon },
-  { key: "isPowerShot", label: "Power Shot", badge: "PWR", description: "Boosts Attack +2 and Strength +1. Dangerous hard shooter.", icon: PowerShotBadgeIcon },
-  { key: "isDribbler", label: "Dribbler", badge: "DRB", description: "Strong 1v1 player; keeps the ball under pressure.", icon: DribblerBadgeIcon },
-  { key: "isSpaceFinder", label: "Space Finder", badge: "SPC", description: "Finds smart spaces in attack and defense.", icon: Search },
+  { key: "isFinisher", label: "Finisher", badge: "FIN", description: "Looks for goals, times runs well, and finishes chances.", icon: FinisherBadgeIcon },
+  { key: "isPowerShot", label: "Power Shot", badge: "PWR", description: "Shoots hard from distance or tight angles.", icon: PowerShotBadgeIcon },
+  { key: "isDribbler", label: "Dribbler", badge: "DRB", description: "Strong 1v1 player who can carry the ball under pressure.", icon: DribblerBadgeIcon },
+  { key: "isSpaceFinder", label: "Space Finder", badge: "SPC", description: "Finds useful spaces and helps create passing options.", icon: Search },
 
   // Midfield / control traits
-  { key: "isPlaymaker", label: "Playmaker", badge: "PM", description: "Controls passing and creates chances for teammates.", icon: MagicWandBadgeIcon },
-  { key: "isCrossing", label: "Technician", badge: "TECH", description: "Boosts Team Play and Passing. Clean touch, control, and technical skill.", icon: TechnicianBadgeIcon },
-  { key: "isTikiTaka", label: "Tiki-Taka", badge: "TIKI", description: "Boosts Passing +2, Attack +1, and a tiny Stamina bonus. Quick short passing and combinations.", icon: TikiTakaBadgeIcon },
-  { key: "isVersatile", label: "Versatile", badge: "ALL", description: "All-rounder who can fill weak spots in a team.", icon: VersatileBadgeIcon },
-  { key: "isLongPass", label: "Long Pass", badge: "L-PAS", description: "Boosts Passing +2 and Attack +1. Good for switching play and longer through balls.", icon: LongPassBadgeIcon },
-  { key: "isEngine", label: "Engine", badge: "ENG", description: "High work rate; keeps running, pressing, and covering.", icon: EngineBadgeIcon },
+  { key: "isPlaymaker", label: "Playmaker", badge: "PM", description: "Controls passing rhythm and creates chances for teammates.", icon: MagicWandBadgeIcon },
+  { key: "isCrossing", label: "Technician", badge: "TECH", description: "Good first touch, close control, and calm passing under pressure.", icon: TechnicianBadgeIcon },
+  { key: "isTikiTaka", label: "Tiki-Taka", badge: "TIKI", description: "Quick short passing, simple combinations, and good movement after the pass.", icon: TikiTakaBadgeIcon },
+  { key: "isVersatile", label: "Versatile", badge: "ALL", description: "All-rounder who can fill different roles when a team needs balance.", icon: VersatileBadgeIcon },
+  { key: "isLongPass", label: "Long Pass", badge: "L-PAS", description: "Good for switching play, longer passes, and through balls.", icon: LongPassBadgeIcon },
+  { key: "isEngine", label: "Engine", badge: "ENG", description: "High work rate; keeps running, pressing, and covering space.", icon: EngineBadgeIcon },
 
   // Defense-first traits
-  { key: "isAerial", label: "Header", badge: "HEAD", description: "Boosts Strength +2, Defense +1, and Attack +1. Strong with headers and clearances.", icon: HeaderBadgeIcon },
-  { key: "isSentinel", label: "Sentinel", badge: "SEN", description: "Defensive guardian; holds shape, marks, and protects space.", icon: Shield },
-  { key: "isBulldog", label: "Bulldog", badge: "DOG", description: "Boosts Stamina +2 and Defense +1. Relentless presser who hounds opponents and fights for loose balls.", icon: BulldogBadgeIcon },
+  { key: "isAerial", label: "Header", badge: "HEAD", description: "Strong in the air for headers, clearances, and set pieces.", icon: HeaderBadgeIcon },
+  { key: "isSentinel", label: "Sentinel", badge: "SEN", description: "Defensive guardian who holds shape, marks, and protects space.", icon: Shield },
+  { key: "isBulldog", label: "Bulldog", badge: "DOG", description: "Relentless presser who hounds opponents and fights for loose balls.", icon: BulldogBadgeIcon },
 ];
 
 
@@ -711,6 +711,7 @@ function ProfileDialog({
   const photoCameraInput = useRef<HTMLInputElement | null>(null);
   const photoGalleryInput = useRef<HTMLInputElement | null>(null);
   const [photoActionsOpen, setPhotoActionsOpen] = useState(false);
+  const [traitHelp, setTraitHelp] = useState<(typeof SPECIAL_ABILITIES)[number] | null>(null);
   const overall = calculateOverall(draft);
   const quickSkill = quickSkillFromPlayer(draft);
   const quickSkillExplanation = skillLevelExplanation(quickSkill);
@@ -963,19 +964,32 @@ function ProfileDialog({
                     const selected = Boolean(draft[ability.key]);
                     const Icon = ability.icon ?? Star;
                     return (
-                      <button
+                      <div
                         key={ability.key}
-                        type="button"
-                        onClick={() => updateDraft({ [ability.key]: !selected } as Partial<RoomPlayer>)}
-                        className={`flex h-8 items-center gap-1.5 rounded-xl border px-2 text-left transition-colors ${selected ? "border-amber-400 bg-amber-50 text-amber-900 shadow-sm" : "border-border bg-background/70 text-foreground"}`}
+                        className={`flex h-8 items-center overflow-hidden rounded-xl border transition-colors ${selected ? "border-amber-400 bg-amber-50 text-amber-900 shadow-sm" : "border-border bg-background/70 text-foreground"}`}
                       >
-                        {ability.badge === "GK" ? (
-                          <span className="text-[10px] font-semibold text-amber-700 w-5 text-center">GK</span>
-                        ) : (
-                          <Icon className="w-3.5 h-3.5 shrink-0 text-amber-700" />
-                        )}
-                        <span className="text-[11px] font-semibold leading-tight truncate">{ability.label}</span>
-                      </button>
+                        <button
+                          type="button"
+                          onClick={() => updateDraft({ [ability.key]: !selected } as Partial<RoomPlayer>)}
+                          className="flex min-w-0 flex-1 items-center gap-1.5 px-2 text-left"
+                        >
+                          {ability.badge === "GK" ? (
+                            <span className="w-5 text-center text-[10px] font-semibold text-amber-700">GK</span>
+                          ) : (
+                            <Icon className="h-3.5 w-3.5 shrink-0 text-amber-700" />
+                          )}
+                          <span className="truncate text-[11px] font-semibold leading-tight">{ability.label}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(event) => { event.stopPropagation(); setTraitHelp(ability); }}
+                          className="flex h-full w-7 shrink-0 items-center justify-center border-l border-amber-100/80 text-[11px] font-black text-amber-700/80"
+                          aria-label={`What does ${ability.label} mean?`}
+                          title={`What does ${ability.label} mean?`}
+                        >
+                          ?
+                        </button>
+                      </div>
                     );
                   })}
                 </div>
@@ -1010,10 +1024,45 @@ function ProfileDialog({
             <Button onClick={save} className="h-11 rounded-xl font-black uppercase tracking-wide">Save Profile</Button>
           )}
         </div>
+      {traitHelp && <TraitHelpSheet ability={traitHelp} onClose={() => setTraitHelp(null)} />}
       </DialogContent>
     </Dialog>
   );
 }
+
+function TraitHelpSheet({ ability, onClose }: { ability: (typeof SPECIAL_ABILITIES)[number]; onClose: () => void }) {
+  const Icon = ability.icon ?? Star;
+  return (
+    <div
+      className="fixed inset-0 z-[80] flex items-end justify-center bg-black/45 p-4 sm:items-center"
+      role="dialog"
+      aria-modal="true"
+      onClick={(event) => {
+        event.stopPropagation();
+        onClose();
+      }}
+    >
+      <div
+        className="w-full max-w-sm rounded-3xl border border-border bg-background p-4 shadow-2xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-start gap-3">
+          <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-amber-100 bg-amber-50 text-amber-700">
+            {ability.badge === "GK" ? <span className="text-xs font-black">GK</span> : <Icon className="h-5 w-5" />}
+          </div>
+          <div className="min-w-0 flex-1">
+            <h2 className="text-base font-black tracking-tight text-[#102A43]">{ability.label}</h2>
+            <p className="mt-1 text-xs font-semibold leading-snug text-muted-foreground">{ability.description}</p>
+          </div>
+        </div>
+        <Button type="button" className="mt-4 h-11 w-full rounded-2xl font-black" onClick={onClose}>
+          Got it
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 
 function OverallBadge({ player }: { player: RoomPlayer }) {
   return (
@@ -1107,6 +1156,7 @@ export function PlayersTab({
   const [voiceAddHeard, setVoiceAddHeard] = useState("");
   const [voiceAddListening, setVoiceAddListening] = useState(false);
   const [voiceAddStatus, setVoiceAddStatus] = useState("");
+  const [addTraitHelp, setAddTraitHelp] = useState<(typeof SPECIAL_ABILITIES)[number] | null>(null);
   const voiceAddRecognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const [hideOverall, setHideOverall] = useState(() => {
     try { return window.localStorage.getItem("fair-teams-hide-roster-skill") !== "false"; }
@@ -1704,19 +1754,32 @@ export function PlayersTab({
                         const selected = Boolean(addDetails[ability.key]);
                         const Icon = ability.icon ?? Star;
                         return (
-                          <button
+                          <div
                             key={ability.key}
-                            type="button"
-                            onClick={() => updateAddDetails({ [ability.key]: !selected } as Partial<AddPlayerDetails>)}
-                            className={`flex h-8 items-center gap-1.5 rounded-xl border px-2 text-left transition-colors ${selected ? "border-amber-400 bg-amber-50 text-amber-900" : "border-border bg-background/70 text-foreground"}`}
+                            className={`flex h-8 items-center overflow-hidden rounded-xl border transition-colors ${selected ? "border-amber-400 bg-amber-50 text-amber-900" : "border-border bg-background/70 text-foreground"}`}
                           >
-                            {ability.badge === "GK" ? (
-                              <span className="text-[10px] font-semibold text-amber-700 w-5 text-center">GK</span>
-                            ) : (
-                              <Icon className="w-3.5 h-3.5 shrink-0 text-amber-700" />
-                            )}
-                            <span className="text-[11px] font-semibold leading-tight truncate">{ability.label}</span>
-                          </button>
+                            <button
+                              type="button"
+                              onClick={() => updateAddDetails({ [ability.key]: !selected } as Partial<AddPlayerDetails>)}
+                              className="flex min-w-0 flex-1 items-center gap-1.5 px-2 text-left"
+                            >
+                              {ability.badge === "GK" ? (
+                                <span className="w-5 text-center text-[10px] font-semibold text-amber-700">GK</span>
+                              ) : (
+                                <Icon className="h-3.5 w-3.5 shrink-0 text-amber-700" />
+                              )}
+                              <span className="truncate text-[11px] font-semibold leading-tight">{ability.label}</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(event) => { event.stopPropagation(); setAddTraitHelp(ability); }}
+                              className="flex h-full w-7 shrink-0 items-center justify-center border-l border-amber-100/80 text-[11px] font-black text-amber-700/80"
+                              aria-label={`What does ${ability.label} mean?`}
+                              title={`What does ${ability.label} mean?`}
+                            >
+                              ?
+                            </button>
+                          </div>
                         );
                       })}
                     </div>
@@ -1732,6 +1795,7 @@ export function PlayersTab({
                 <Plus className="w-3.5 h-3.5 mr-1.5" /> Add Player
               </Button>
             </form>
+          {addTraitHelp && <TraitHelpSheet ability={addTraitHelp} onClose={() => setAddTraitHelp(null)} />}
           </DialogContent>
         </Dialog>
 

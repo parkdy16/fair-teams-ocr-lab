@@ -1,3 +1,4 @@
+import { getSpecialSkillStatBoosts } from "./playerAbilityEffects";
 import { FieldSize, Player, Team, TeamColor } from "./types";
 
 const DEFAULT_COLORS: TeamColor[] = ["red", "blue", "lime", "yellow", "orange", "black"];
@@ -9,21 +10,18 @@ export function getWeightedSkill(player: Player, fieldSize: FieldSize = "medium"
       ? { attack: 0.16, passing: 0.18, defense: 0.20, speed: 0.22, stamina: 0.24 }
       : { attack: 0.20, passing: 0.20, defense: 0.20, speed: 0.20, stamina: 0.20 };
 
-  const attackBoost = (player.isSpaceFinder ? 0.3 : 0) + (player.isLongPass ? 1 : 0) + (player.isTikiTaka ? 1 : 0) + (player.isAerial ? 1 : 0) + (player.isPowerShot ? 2 : 0);
-  const defenseBoost = (player.isSpaceFinder ? 0.3 : 0) + (player.isAerial ? 1 : 0) + (player.isBulldog ? 1 : 0);
-  const passingBoost = (player.isLongPass ? 2 : 0) + (player.isTikiTaka ? 2 : 0) + (player.isCrossing ? 1 : 0);
-  const staminaBoost = (player.isTikiTaka ? 0.5 : 0) + (player.isBulldog ? 2 : 0);
-
-  const attack = Math.min(10, player.attack + attackBoost);
-  const defense = Math.min(10, player.defense + defenseBoost);
-  const passing = Math.min(10, player.passing + passingBoost);
-  const stamina = Math.min(10, player.stamina + staminaBoost);
+  const boosts = getSpecialSkillStatBoosts(player);
+  const attack = Math.min(10, player.attack + boosts.attack);
+  const defense = Math.min(10, player.defense + boosts.defense);
+  const passing = Math.min(10, player.passing + boosts.passing);
+  const speed = Math.min(10, player.speed + boosts.speed);
+  const stamina = Math.min(10, player.stamina + boosts.stamina);
 
   return Number((
     attack * weights.attack +
     passing * weights.passing +
     defense * weights.defense +
-    player.speed * weights.speed +
+    speed * weights.speed +
     stamina * weights.stamina
   ).toFixed(1));
 }

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import type { RoomPlayer } from "@/lib/localRoster";
 import { FieldSize, Player, Team, TeamColor } from "@/lib/types";
+import { getSpecialSkillStatBoosts } from "@/lib/playerAbilityEffects";
 import { generateTeams, recomputeStats } from "@/lib/teamGenerator";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -62,9 +63,14 @@ function GenderBadge({ gender }: { gender?: string }) {
   return <span className="text-[8px] font-medium lowercase text-purple-500/45">o</span>;
 }
 
+function playerEffectiveStat(player: Player, key: keyof Pick<Player, "attack" | "passing" | "defense" | "speed" | "stamina">) {
+  const boosts = getSpecialSkillStatBoosts(player);
+  return Math.min(10, Number(player[key] || 0) + boosts[key]);
+}
+
 function averageStat(players: Player[], key: keyof Pick<Player, "attack" | "passing" | "defense" | "speed" | "stamina">) {
   if (players.length === 0) return 0;
-  return Number((players.reduce((sum, player) => sum + Number(player[key] || 0), 0) / players.length).toFixed(1));
+  return Number((players.reduce((sum, player) => sum + playerEffectiveStat(player, key), 0) / players.length).toFixed(1));
 }
 
 function teamStatRows(players: Player[]) {

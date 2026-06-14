@@ -3399,51 +3399,53 @@ export function TodayTab({
               !ocrRunning &&
               !ocrStatus &&
               screenshotImportMode === "meetup" && (
-                <div className="fixed inset-0 z-[9999] flex h-[100dvh] flex-col overflow-hidden bg-background p-3 pb-[calc(env(safe-area-inset-bottom)+12px)] shadow-2xl">
-                  <div className="mb-2 flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="text-xs font-black text-foreground">
-                        {selectedScreenshotNames.length} screenshot
-                        {selectedScreenshotNames.length === 1 ? "" : "s"}{" "}
-                        selected
+                <div className="fixed inset-0 z-[9999] flex h-[100dvh] flex-col overflow-hidden bg-background shadow-2xl">
+                  <div className="sticky top-0 z-10 border-b bg-background/95 px-3 pb-3 pt-[calc(env(safe-area-inset-top)+10px)] shadow-sm backdrop-blur">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-sm font-black text-foreground">
+                          {selectedScreenshotNames.length} screenshot
+                          {selectedScreenshotNames.length === 1 ? "" : "s"}{" "}
+                          selected
+                        </div>
+                        <div className="truncate text-[11px] font-medium text-muted-foreground">
+                          Quickly check the attendee-count area, then scan.
+                        </div>
                       </div>
-                      <div className="truncate text-[10px] font-medium text-muted-foreground landscape:hidden">
-                        Check for duplicates before scanning.
+                      <div className="flex shrink-0 items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={clearOcrSelection}
+                          className="h-10 rounded-xl px-4 text-xs font-black"
+                        >
+                          Clear
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={runOcr}
+                          disabled={ocrRunning || selectedScreenshots.length === 0}
+                          className="h-10 rounded-xl px-5 text-xs font-black"
+                        >
+                          Scan
+                        </Button>
                       </div>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-1">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={clearOcrSelection}
-                        className="h-7 px-2 text-[10px] font-black"
-                      >
-                        Clear
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        onClick={runOcr}
-                        disabled={ocrRunning || selectedScreenshots.length === 0}
-                        className="h-7 px-3 text-[10px] font-black"
-                      >
-                        Scan
-                      </Button>
                     </div>
                   </div>
-                  <div className="grid min-h-0 flex-1 grid-cols-2 content-start gap-2 overflow-y-auto sm:grid-cols-4">
+                  <div className="grid min-h-0 flex-1 grid-cols-2 content-start gap-3 overflow-y-auto p-3 pb-[calc(env(safe-area-inset-bottom)+16px)] sm:grid-cols-3 lg:grid-cols-4">
                     {selectedScreenshotPreviews.map((preview, index) => (
                       <div
                         key={`${preview.name}-${index}`}
-                        className="overflow-hidden rounded-lg border bg-muted/30"
+                        className="overflow-hidden rounded-xl border bg-muted/30 shadow-sm"
                       >
                         <img
                           src={preview.url}
                           alt={preview.name}
-                          className="h-24 w-full object-cover object-top sm:h-28"
+                          className="block h-auto w-full object-contain"
                         />
-                        <div className="truncate px-2 py-1 text-[9px] font-bold text-muted-foreground">
+                        <div className="truncate border-t bg-background/90 px-2 py-1.5 text-[10px] font-bold text-muted-foreground">
                           {index + 1}. {preview.name}
                         </div>
                       </div>

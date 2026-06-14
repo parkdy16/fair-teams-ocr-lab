@@ -3318,8 +3318,8 @@ export function TodayTab({
           onOpenAutoFocus={(e) => e.preventDefault()}
           className={
             isCropWorkspaceOpen
-              ? "!left-0 !top-0 !h-[100dvh] !max-h-[100dvh] !w-[100dvw] !max-w-none !translate-x-0 !translate-y-0 overflow-hidden !rounded-none !border-0 !p-0 [&>button]:hidden"
-              : "relative flex h-[92svh] max-h-[calc(100svh-1rem)] w-[94vw] max-w-lg flex-col overflow-hidden rounded-2xl p-4 sm:h-[90dvh] sm:max-h-[90dvh] sm:p-6 md:max-w-3xl"
+              ? "!fixed !left-0 !top-0 !flex !h-[100dvh] !max-h-[100dvh] !w-[100dvw] !max-w-none !translate-x-0 !translate-y-0 overflow-hidden !rounded-none !border-0 !p-0 [&>button]:hidden"
+              : "!fixed !left-1/2 !top-1/2 !-translate-x-1/2 !-translate-y-1/2 !flex h-[92svh] max-h-[calc(100svh-1rem)] w-[94vw] max-w-lg flex-col overflow-hidden rounded-2xl p-4 sm:h-[90dvh] sm:max-h-[90dvh] sm:p-6 md:max-w-3xl"
           }
         >
           <DialogHeader>

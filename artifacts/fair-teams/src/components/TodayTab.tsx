@@ -640,6 +640,24 @@ function isProbablyName(value: string) {
   return true;
 }
 
+function isManualOcrName(value: string) {
+  const clean = cleanOcrLine(value);
+  const normalized = normalizeForMatch(clean);
+  if (!clean || !normalized) return false;
+  if (OCR_JUNK_WORDS.has(normalized)) return false;
+  if (/\d/.test(clean)) return false;
+  if (clean.length > 36) return false;
+  if (
+    /\b(we|you|he|she|they|it|this|that|but|would|like|come|join|plan|moved|time|thing|attend|club|anymore|gathering|question|list|event|search|checked|attendees?)\b/i.test(
+      clean,
+    )
+  )
+    return false;
+  const words = clean.split(/\s+/).filter(Boolean);
+  if (words.length < 1 || words.length > 4) return false;
+  return words.every((word) => /^[A-Za-z][A-Za-z.'_-]*$/.test(word));
+}
+
 function isProbablyVoicePlayerName(value: string) {
   const clean = cleanOcrLine(value);
   const normalized = normalizeForMatch(clean);
@@ -1897,10 +1915,16 @@ export function TodayTab({
     );
   };
 
-  const addRawOcrName = (rawName: string) => {
+  const addRawOcrName = (
+    rawName: string,
+    options: { allowManualShortName?: boolean } = {},
+  ) => {
     const cleanedName = cleanDetectedNameCandidate(rawName);
     const normalizedName = normalizeForMatch(cleanedName);
-    if (!cleanedName || !normalizedName || !isProbablyName(cleanedName)) {
+    const acceptedName =
+      isProbablyName(cleanedName) ||
+      (options.allowManualShortName && isManualOcrName(cleanedName));
+    if (!cleanedName || !normalizedName || !acceptedName) {
       setOcrStatus("Type a clean player name from the raw OCR text first.");
       return;
     }
@@ -2780,7 +2804,11 @@ export function TodayTab({
                       <Button
                         type="button"
                         size="sm"
-                        onClick={() => addRawOcrName(manualRawOcrName)}
+                        onClick={() =>
+                          addRawOcrName(manualRawOcrName, {
+                            allowManualShortName: true,
+                          })
+                        }
                         disabled={!manualRawOcrName.trim()}
                         className="h-9 rounded-xl px-3 text-[10px] font-black"
                       >

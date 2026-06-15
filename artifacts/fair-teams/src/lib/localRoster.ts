@@ -237,12 +237,25 @@ export function savePlayers(players: RoomPlayer[]) {
 }
 
 
+export type RosterCloudProvider = "google-sheets";
+
+export interface RosterCloudSource {
+  provider: RosterCloudProvider;
+  spreadsheetId: string;
+  spreadsheetName?: string;
+  webViewLink?: string;
+  lastSyncedAt?: string;
+  lastRemoteModifiedAt?: string;
+  syncMode?: "manual";
+}
+
 export interface RoomRoster {
   id: string;
   name: string;
   players: RoomPlayer[];
   themeColor?: string;
   logo?: string;
+  cloudSource?: RosterCloudSource;
   createdAt: string;
   updatedAt?: string;
 }
@@ -295,6 +308,35 @@ function pickRosterLogo(roster: unknown) {
   return cleanRosterLogo(readStringField(roster, ["logo", "groupLogo", "teamLogo", "crest", "badge"]));
 }
 
+function cleanRosterCloudSource(value: unknown): RosterCloudSource | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const record = value as Record<string, unknown>;
+  if (record.provider !== "google-sheets") return undefined;
+  const spreadsheetId = typeof record.spreadsheetId === "string" ? record.spreadsheetId.trim() : "";
+  if (!spreadsheetId) return undefined;
+
+  const source: RosterCloudSource = {
+    provider: "google-sheets",
+    spreadsheetId,
+    syncMode: record.syncMode === "manual" ? "manual" : "manual",
+  };
+
+  if (typeof record.spreadsheetName === "string" && record.spreadsheetName.trim()) {
+    source.spreadsheetName = record.spreadsheetName.trim();
+  }
+  if (typeof record.webViewLink === "string" && record.webViewLink.trim()) {
+    source.webViewLink = record.webViewLink.trim();
+  }
+  if (typeof record.lastSyncedAt === "string" && record.lastSyncedAt.trim()) {
+    source.lastSyncedAt = record.lastSyncedAt.trim();
+  }
+  if (typeof record.lastRemoteModifiedAt === "string" && record.lastRemoteModifiedAt.trim()) {
+    source.lastRemoteModifiedAt = record.lastRemoteModifiedAt.trim();
+  }
+
+  return source;
+}
+
 export function createRoster(
   name: string,
   players: Partial<RoomPlayer>[] = [],
@@ -323,6 +365,7 @@ export function normalizeRoster(roster: Partial<RoomRoster> & { rosterName?: str
       : [],
     themeColor: pickRosterColor(roster),
     logo: pickRosterLogo(roster),
+    cloudSource: cleanRosterCloudSource((roster as { cloudSource?: unknown }).cloudSource),
     createdAt: typeof roster.createdAt === "string" ? roster.createdAt : now,
     updatedAt: typeof roster.updatedAt === "string" ? roster.updatedAt : now,
   };

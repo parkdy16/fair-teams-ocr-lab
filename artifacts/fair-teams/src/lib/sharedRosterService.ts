@@ -514,6 +514,11 @@ export async function saveFirebaseSharedRoster(roster: RoomRoster): Promise<Fire
   return saved;
 }
 
+export function getSharedRosterBackendLabel() {
+  const projectId = getFirebaseProjectId();
+  return projectId ? `Firebase (${projectId})` : "Firebase not configured";
+}
+
 export function getFirebaseSharedRosterDebugLabel() {
   return getFirebaseProjectId() || "Firebase project not configured";
 }

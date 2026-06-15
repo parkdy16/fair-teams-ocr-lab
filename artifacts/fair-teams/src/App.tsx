@@ -910,10 +910,11 @@ function App() {
           ? {
               provider: "firebase",
               firebaseRosterId: firebaseSummary.id,
+              firebaseGroupId: firebaseSummary.groupId,
+              firebaseGroupName: firebaseSummary.groupName,
               firebaseVersion: firebaseSummary.version,
               firebaseOwnerUid: firebaseSummary.ownerUid,
               firebaseOwnerEmail: firebaseSummary.ownerEmail,
-              firebaseGroupName: firebaseSummary.groupName,
               firebaseRole: firebaseSummary.currentUserRole,
               firebaseLastSavedByEmail: firebaseSummary.lastSavedByEmail,
               lastSyncedAt: new Date().toISOString(),
@@ -930,7 +931,7 @@ function App() {
     setRosterToolsNotice({
       tone: "success",
       title: "Firebase roster opened",
-      message: `${sourceName || sharedRoster.name || "Shared roster"} was opened as a linked local copy. You can now save changes back to Firebase.`,
+      message: `${firebaseSummary?.groupName ? `${firebaseSummary.groupName} · ` : ""}${sourceName || sharedRoster.name || "Shared roster"} was opened as a linked local copy. You can now save changes back to Firebase.`,
     });
   };
 
@@ -944,10 +945,11 @@ function App() {
               cloudSource: {
                 provider: "firebase",
                 firebaseRosterId: summary.id,
+                firebaseGroupId: summary.groupId,
+                firebaseGroupName: summary.groupName,
                 firebaseVersion: summary.version,
                 firebaseOwnerUid: summary.ownerUid,
                 firebaseOwnerEmail: summary.ownerEmail,
-                firebaseGroupName: summary.groupName,
                 firebaseRole: summary.currentUserRole,
                 firebaseLastSavedByEmail: summary.lastSavedByEmail,
                 lastSyncedAt: summary.updatedAt || new Date().toISOString(),
@@ -962,7 +964,7 @@ function App() {
     setRosterToolsNotice({
       tone: "success",
       title: "Firebase roster saved",
-      message: `${summary.name} was saved to Firebase as version ${summary.version}.`,
+      message: `${summary.groupName ? `${summary.groupName} · ` : ""}${summary.name} was saved to Firebase as version ${summary.version}.`,
     });
   };
 
@@ -997,10 +999,11 @@ function App() {
           cloudSource: {
             provider: "firebase",
             firebaseRosterId: summary.id,
+            firebaseGroupId: summary.groupId,
+            firebaseGroupName: summary.groupName,
             firebaseVersion: summary.version,
             firebaseOwnerUid: summary.ownerUid,
             firebaseOwnerEmail: summary.ownerEmail,
-            firebaseGroupName: summary.groupName,
             firebaseRole: summary.currentUserRole,
             firebaseLastSavedByEmail: summary.lastSavedByEmail,
             lastSyncedAt: summary.updatedAt || new Date().toISOString(),
@@ -1014,7 +1017,7 @@ function App() {
     setRosterToolsNotice({
       tone: "success",
       title: "Firebase roster refreshed",
-      message: `${sourceName || remoteRoster.name || "Shared roster"} was refreshed from Firebase version ${summary.version}. Local player photos were preserved where possible.`,
+      message: `${summary.groupName ? `${summary.groupName} · ` : ""}${sourceName || remoteRoster.name || "Shared roster"} was refreshed from Firebase version ${summary.version}. Local player photos were preserved where possible.`,
     });
   };
 

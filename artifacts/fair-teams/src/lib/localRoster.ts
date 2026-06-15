@@ -248,10 +248,11 @@ export interface RosterCloudSource {
 
   // Firebase shared-roster fields.
   firebaseRosterId?: string;
+  firebaseGroupId?: string;
+  firebaseGroupName?: string;
   firebaseVersion?: number;
   firebaseOwnerUid?: string;
   firebaseOwnerEmail?: string;
-  firebaseGroupName?: string;
   firebaseRole?: "owner" | "editor" | "viewer" | "member";
   firebaseLastSavedByEmail?: string;
 
@@ -379,6 +380,12 @@ function cleanRosterCloudSource(value: unknown): RosterCloudSource | undefined {
       syncMode: "manual",
     };
 
+    if (typeof record.firebaseGroupId === "string" && record.firebaseGroupId.trim()) {
+      source.firebaseGroupId = record.firebaseGroupId.trim();
+    }
+    if (typeof record.firebaseGroupName === "string" && record.firebaseGroupName.trim()) {
+      source.firebaseGroupName = record.firebaseGroupName.trim();
+    }
     if (typeof record.firebaseVersion === "number" && Number.isFinite(record.firebaseVersion)) {
       source.firebaseVersion = Math.max(1, Math.round(record.firebaseVersion));
     }

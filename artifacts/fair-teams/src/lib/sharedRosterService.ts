@@ -18,6 +18,7 @@ import {
   runTransaction,
   serverTimestamp,
   where,
+  writeBatch,
   type DocumentData,
   type Timestamp,
 } from "firebase/firestore";
@@ -34,12 +35,28 @@ export type FirebaseSharedRosterSnapshot = FirebaseSharedRosterSummary & {
   roster: RoomRoster;
 };
 
-export type FirebaseSharedRosterSummary = {
+export type FirebaseSharedGroupSummary = {
   id: string;
   name: string;
   ownerUid: string;
   ownerEmail: string;
+  rosterCount: number;
+  memberCount: number;
+  currentUserRole?: "owner" | "editor" | "viewer" | "member";
+  lastSavedByEmail?: string;
+  lastSavedRosterName?: string;
+  lastSavedAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type FirebaseSharedRosterSummary = {
+  id: string;
+  groupId?: string;
   groupName?: string;
+  name: string;
+  ownerUid: string;
+  ownerEmail: string;
   version: number;
   playerCount: number;
   createdAt?: string;
@@ -48,7 +65,7 @@ export type FirebaseSharedRosterSummary = {
   lastSavedByEmail?: string;
 };
 
-export type FirebaseRosterInvite = FirebaseSharedRosterSummary & {
+export type FirebaseGroupInvite = FirebaseSharedGroupSummary & {
   inviteeEmail: string;
 };
 
@@ -116,6 +133,25 @@ function currentUserRoleFromData(data: DocumentData): "owner" | "editor" | "view
   return memberUids.includes(user.uid) ? "member" : undefined;
 }
 
+function toGroupSummary(id: string, data: DocumentData): FirebaseSharedGroupSummary {
+  const rosterIds = Array.isArray(data.rosterIds) ? data.rosterIds.filter((value) => typeof value === "string") : [];
+  const memberUids = Array.isArray(data.memberUids) ? data.memberUids : [];
+  return {
+    id,
+    name: typeof data.name === "string" && data.name.trim() ? data.name : "My Fair Teams group",
+    ownerUid: typeof data.ownerUid === "string" ? data.ownerUid : "",
+    ownerEmail: typeof data.ownerEmail === "string" ? data.ownerEmail : "",
+    rosterCount: rosterIds.length,
+    memberCount: memberUids.length,
+    currentUserRole: currentUserRoleFromData(data),
+    lastSavedByEmail: typeof data.lastSavedByEmail === "string" ? data.lastSavedByEmail : undefined,
+    lastSavedRosterName: typeof data.lastSavedRosterName === "string" ? data.lastSavedRosterName : undefined,
+    lastSavedAt: timestampToIso(data.lastSavedAt) || (typeof data.lastSavedAtIso === "string" ? data.lastSavedAtIso : undefined),
+    createdAt: timestampToIso(data.createdAt) || (typeof data.createdAtIso === "string" ? data.createdAtIso : undefined),
+    updatedAt: timestampToIso(data.updatedAt) || (typeof data.updatedAtIso === "string" ? data.updatedAtIso : undefined),
+  };
+}
+
 function toRosterSummary(id: string, data: DocumentData): FirebaseSharedRosterSummary {
   const rosterData = data.rosterData && typeof data.rosterData === "object" ? data.rosterData as { players?: unknown[] } : undefined;
   const playerCount = typeof data.playerCount === "number"
@@ -126,14 +162,15 @@ function toRosterSummary(id: string, data: DocumentData): FirebaseSharedRosterSu
 
   return {
     id,
+    groupId: typeof data.groupId === "string" ? data.groupId : undefined,
+    groupName: typeof data.groupName === "string" && data.groupName.trim() ? data.groupName : undefined,
     name: typeof data.name === "string" && data.name.trim() ? data.name : "Shared roster",
     ownerUid: typeof data.ownerUid === "string" ? data.ownerUid : "",
     ownerEmail: typeof data.ownerEmail === "string" ? data.ownerEmail : "",
-    groupName: typeof data.groupName === "string" && data.groupName.trim() ? data.groupName : "My Fair Teams group",
     version: typeof data.version === "number" ? data.version : 1,
     playerCount,
-    createdAt: timestampToIso(data.createdAt),
-    updatedAt: timestampToIso(data.updatedAt),
+    createdAt: timestampToIso(data.createdAt) || (typeof data.createdAtIso === "string" ? data.createdAtIso : undefined),
+    updatedAt: timestampToIso(data.updatedAt) || (typeof data.updatedAtIso === "string" ? data.updatedAtIso : undefined),
     currentUserRole: currentUserRoleFromData(data),
     lastSavedByEmail: typeof data.lastSavedByEmail === "string" ? data.lastSavedByEmail : undefined,
   };
@@ -163,24 +200,80 @@ export async function signOutOfSharedRosters() {
   await signOut(getFairTeamsAuth());
 }
 
-export async function createFirebaseSharedRoster(roster: RoomRoster, groupName?: string): Promise<FirebaseSharedRosterSummary> {
+export async function createFirebaseSharedGroup(groupName: string): Promise<FirebaseSharedGroupSummary> {
   const user = getCurrentSharedRosterUser();
-  if (!roster.players.length) throw new Error("Add players before creating a shared roster.");
-
   const now = new Date().toISOString();
-  const rosterData = cleanForFirestore(makePhotoFreeRosterSnapshot(roster));
-  const playerCount = Array.isArray(rosterData.players) ? rosterData.players.length : 0;
+  const name = cleanGroupName(groupName);
   const payload = {
     app: "Fair Teams",
-    schemaVersion: 1,
-    groupName: cleanGroupName(groupName),
-    name: roster.name || "Shared roster",
+    schemaVersion: 2,
+    name,
     ownerUid: user.uid,
     ownerEmail: user.email,
     memberUids: [user.uid],
     memberEmails: [normalizeEmail(user.email)],
     pendingInviteEmails: [],
     roleByUid: { [user.uid]: "owner" },
+    rosterIds: [],
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+    createdAtIso: now,
+    updatedAtIso: now,
+  };
+  const docRef = await addDoc(collection(getFairTeamsFirestore(), "sharedGroups"), payload);
+  return toGroupSummary(docRef.id, payload);
+}
+
+export async function listFirebaseSharedGroups(): Promise<FirebaseSharedGroupSummary[]> {
+  const user = getCurrentSharedRosterUser();
+  const groupsQuery = query(
+    collection(getFairTeamsFirestore(), "sharedGroups"),
+    where("memberUids", "array-contains", user.uid),
+  );
+  const snapshot = await getDocs(groupsQuery);
+  return snapshot.docs
+    .map((docSnap) => toGroupSummary(docSnap.id, docSnap.data()))
+    .sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime());
+}
+
+async function requireGroupForRoster(groupId?: string, fallbackName?: string) {
+  const user = getCurrentSharedRosterUser();
+  if (!groupId) return createFirebaseSharedGroup(fallbackName || "My Fair Teams group");
+  const groupRef = doc(getFairTeamsFirestore(), "sharedGroups", groupId);
+  const groupSnap = await getDoc(groupRef);
+  if (!groupSnap.exists()) throw new Error("Shared group was not found.");
+  const data = groupSnap.data();
+  const memberUids = Array.isArray(data.memberUids) ? data.memberUids : [];
+  if (!memberUids.includes(user.uid)) throw new Error("You are not a member of this shared group.");
+  return toGroupSummary(groupSnap.id, data);
+}
+
+export async function createFirebaseSharedRoster(roster: RoomRoster, groupId?: string, groupName?: string): Promise<FirebaseSharedRosterSummary> {
+  const user = getCurrentSharedRosterUser();
+  if (!roster.players.length) throw new Error("Add players before creating a shared roster.");
+
+  const group = await requireGroupForRoster(groupId, groupName);
+  const groupSnap = await getDoc(doc(getFairTeamsFirestore(), "sharedGroups", group.id));
+  const groupData = groupSnap.exists() ? groupSnap.data() : {};
+  const groupMemberUids = Array.isArray(groupData.memberUids) ? groupData.memberUids.filter((id): id is string => typeof id === "string") : [user.uid];
+  const groupMemberEmails = Array.isArray(groupData.memberEmails) ? groupData.memberEmails.filter((email): email is string => typeof email === "string") : [normalizeEmail(user.email)];
+  const groupPendingInviteEmails = Array.isArray(groupData.pendingInviteEmails) ? groupData.pendingInviteEmails.filter((email): email is string => typeof email === "string") : [];
+  const groupRoleByUid = groupData.roleByUid && typeof groupData.roleByUid === "object" ? groupData.roleByUid as Record<string, unknown> : { [user.uid]: "owner" };
+  const now = new Date().toISOString();
+  const rosterData = cleanForFirestore(makePhotoFreeRosterSnapshot(roster));
+  const playerCount = Array.isArray(rosterData.players) ? rosterData.players.length : 0;
+  const payload = {
+    app: "Fair Teams",
+    schemaVersion: 2,
+    groupId: group.id,
+    groupName: group.name,
+    name: roster.name || "Shared roster",
+    ownerUid: user.uid,
+    ownerEmail: user.email,
+    memberUids: groupMemberUids,
+    memberEmails: groupMemberEmails,
+    pendingInviteEmails: groupPendingInviteEmails,
+    roleByUid: groupRoleByUid,
     version: 1,
     playerCount,
     rosterData,
@@ -188,23 +281,31 @@ export async function createFirebaseSharedRoster(roster: RoomRoster, groupName?:
     updatedAt: serverTimestamp(),
     createdAtIso: now,
     updatedAtIso: now,
+    lastSavedByUid: user.uid,
+    lastSavedByEmail: user.email,
+    lastSavedAt: serverTimestamp(),
+    lastSavedAtIso: now,
   };
 
   const docRef = await addDoc(collection(getFairTeamsFirestore(), "sharedRosters"), payload);
-  return {
-    id: docRef.id,
-    name: payload.name,
-    ownerUid: payload.ownerUid,
-    ownerEmail: payload.ownerEmail,
-    groupName: payload.groupName,
-    version: payload.version,
-    playerCount: payload.playerCount,
-    createdAt: now,
-    updatedAt: now,
-  };
+  const groupRef = doc(getFairTeamsFirestore(), "sharedGroups", group.id);
+  const batch = writeBatch(getFairTeamsFirestore());
+  batch.update(groupRef, {
+    rosterIds: arrayUnion(docRef.id),
+    lastSavedByUid: user.uid,
+    lastSavedByEmail: user.email,
+    lastSavedRosterId: docRef.id,
+    lastSavedRosterName: payload.name,
+    lastSavedAt: serverTimestamp(),
+    lastSavedAtIso: now,
+    updatedAt: serverTimestamp(),
+    updatedAtIso: now,
+  });
+  await batch.commit();
+  return toRosterSummary(docRef.id, payload);
 }
 
-export async function listFirebaseSharedRosters(): Promise<FirebaseSharedRosterSummary[]> {
+export async function listFirebaseSharedRosters(groupId?: string): Promise<FirebaseSharedRosterSummary[]> {
   const user = getCurrentSharedRosterUser();
   const sharedRosterQuery = query(
     collection(getFairTeamsFirestore(), "sharedRosters"),
@@ -212,80 +313,98 @@ export async function listFirebaseSharedRosters(): Promise<FirebaseSharedRosterS
   );
   const snapshot = await getDocs(sharedRosterQuery);
   return snapshot.docs
-    .map((doc) => toRosterSummary(doc.id, doc.data()))
+    .map((docSnap) => toRosterSummary(docSnap.id, docSnap.data()))
+    .filter((summary) => !groupId || summary.groupId === groupId)
     .sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime());
 }
 
-
-export async function inviteEmailToFirebaseSharedRoster(rosterId: string, inviteeEmail: string): Promise<void> {
+export async function inviteEmailToFirebaseSharedGroup(groupId: string, inviteeEmail: string): Promise<void> {
   const user = getCurrentSharedRosterUser();
   const email = normalizeEmail(inviteeEmail);
   if (!email || !email.includes("@")) throw new Error("Enter a valid email address to invite.");
   if (email === normalizeEmail(user.email)) throw new Error("You are already signed in with that email.");
 
-  const docRef = doc(getFairTeamsFirestore(), "sharedRosters", rosterId);
-  await runTransaction(getFairTeamsFirestore(), async (transaction) => {
-    const snapshot = await transaction.get(docRef);
-    if (!snapshot.exists()) throw new Error("Firebase shared roster was not found.");
-    const data = snapshot.data();
-    if (data.ownerUid !== user.uid) throw new Error("Only the owner can invite people in this first version.");
+  const groupRef = doc(getFairTeamsFirestore(), "sharedGroups", groupId);
+  const groupSnap = await getDoc(groupRef);
+  if (!groupSnap.exists()) throw new Error("Shared group was not found.");
+  const groupData = groupSnap.data();
+  const role = currentUserRoleFromData(groupData);
+  if (role !== "owner" && role !== "editor") throw new Error("Only owners/editors can invite members to this group.");
 
-    const memberEmails = Array.isArray(data.memberEmails) ? data.memberEmails.map((value) => String(value).toLowerCase()) : [];
-    if (memberEmails.includes(email)) throw new Error("That email is already a member of this shared roster.");
-
-    transaction.update(docRef, {
+  const rosterIds = Array.isArray(groupData.rosterIds) ? groupData.rosterIds.filter((id): id is string => typeof id === "string") : [];
+  const now = new Date().toISOString();
+  const batch = writeBatch(getFairTeamsFirestore());
+  batch.update(groupRef, {
+    pendingInviteEmails: arrayUnion(email),
+    updatedAt: serverTimestamp(),
+    updatedAtIso: now,
+  });
+  rosterIds.forEach((rosterId) => {
+    batch.update(doc(getFairTeamsFirestore(), "sharedRosters", rosterId), {
       pendingInviteEmails: arrayUnion(email),
       updatedAt: serverTimestamp(),
-      updatedAtIso: new Date().toISOString(),
+      updatedAtIso: now,
     });
   });
+  await batch.commit();
 }
 
-export async function listFirebaseRosterInvites(): Promise<FirebaseRosterInvite[]> {
+export async function listFirebaseGroupInvites(): Promise<FirebaseGroupInvite[]> {
   const user = getCurrentSharedRosterUser();
   const email = normalizeEmail(user.email);
-  const invitesQuery = query(
-    collection(getFairTeamsFirestore(), "sharedRosters"),
+  const inviteQuery = query(
+    collection(getFairTeamsFirestore(), "sharedGroups"),
     where("pendingInviteEmails", "array-contains", email),
   );
-  const snapshot = await getDocs(invitesQuery);
+  const snapshot = await getDocs(inviteQuery);
   return snapshot.docs
-    .map((doc) => ({
-      ...toRosterSummary(doc.id, doc.data()),
-      inviteeEmail: email,
-    }))
+    .map((docSnap) => ({ ...toGroupSummary(docSnap.id, docSnap.data()), inviteeEmail: email }))
     .sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime());
 }
 
-export async function acceptFirebaseRosterInvite(rosterId: string): Promise<FirebaseSharedRosterSummary> {
+export async function acceptFirebaseGroupInvite(groupId: string): Promise<FirebaseSharedGroupSummary> {
   const user = getCurrentSharedRosterUser();
   const email = normalizeEmail(user.email);
-  const docRef = doc(getFairTeamsFirestore(), "sharedRosters", rosterId);
+  const groupRef = doc(getFairTeamsFirestore(), "sharedGroups", groupId);
+  const groupSnap = await getDoc(groupRef);
+  if (!groupSnap.exists()) throw new Error("Shared group invite was not found.");
+  const groupData = groupSnap.data();
+  const pendingEmails = Array.isArray(groupData.pendingInviteEmails) ? groupData.pendingInviteEmails : [];
+  if (!pendingEmails.includes(email)) throw new Error("This invite is not for the signed-in email address.");
 
-  return runTransaction(getFairTeamsFirestore(), async (transaction) => {
-    const snapshot = await transaction.get(docRef);
-    if (!snapshot.exists()) throw new Error("Firebase shared roster was not found.");
-    const data = snapshot.data();
-    const pendingInviteEmails = Array.isArray(data.pendingInviteEmails) ? data.pendingInviteEmails.map((value) => String(value).toLowerCase()) : [];
-    if (!pendingInviteEmails.includes(email)) throw new Error("No pending invite was found for this signed-in email.");
+  const rosterIds = Array.isArray(groupData.rosterIds) ? groupData.rosterIds.filter((id): id is string => typeof id === "string") : [];
+  const now = new Date().toISOString();
+  const nextRoleByUid = {
+    ...(groupData.roleByUid && typeof groupData.roleByUid === "object" ? groupData.roleByUid as Record<string, unknown> : {}),
+    [user.uid]: "editor",
+  };
 
-    const currentRoleByUid = data.roleByUid && typeof data.roleByUid === "object" ? data.roleByUid as Record<string, unknown> : {};
-    const nextRoleByUid = {
-      ...currentRoleByUid,
-      [user.uid]: "editor",
-    };
-
-    transaction.update(docRef, {
+  const batch = writeBatch(getFairTeamsFirestore());
+  batch.update(groupRef, {
+    memberUids: arrayUnion(user.uid),
+    memberEmails: arrayUnion(email),
+    pendingInviteEmails: arrayRemove(email),
+    roleByUid: nextRoleByUid,
+    updatedAt: serverTimestamp(),
+    updatedAtIso: now,
+  });
+  rosterIds.forEach((rosterId) => {
+    batch.update(doc(getFairTeamsFirestore(), "sharedRosters", rosterId), {
       memberUids: arrayUnion(user.uid),
       memberEmails: arrayUnion(email),
       pendingInviteEmails: arrayRemove(email),
       roleByUid: nextRoleByUid,
       updatedAt: serverTimestamp(),
-      updatedAtIso: new Date().toISOString(),
+      updatedAtIso: now,
     });
-
-    return toRosterSummary(snapshot.id, data);
   });
+  await batch.commit();
+  return {
+    ...toGroupSummary(groupId, groupData),
+    currentUserRole: "editor",
+    memberCount: (Array.isArray(groupData.memberUids) ? groupData.memberUids.length : 0) + 1,
+    updatedAt: now,
+  };
 }
 
 export async function readFirebaseSharedRoster(rosterId: string): Promise<FirebaseSharedRosterSnapshot> {
@@ -308,7 +427,6 @@ export async function readFirebaseSharedRoster(rosterId: string): Promise<Fireba
     roster,
   };
 }
-
 
 export async function saveFirebaseSharedRoster(roster: RoomRoster): Promise<FirebaseSharedRosterSummary> {
   const user = getCurrentSharedRosterUser();
@@ -346,8 +464,12 @@ export async function saveFirebaseSharedRoster(roster: RoomRoster): Promise<Fire
     }
 
     const nextVersion = remoteVersion + 1;
+    const groupId = typeof data.groupId === "string" ? data.groupId : source.firebaseGroupId;
+    const groupName = typeof data.groupName === "string" ? data.groupName : source.firebaseGroupName;
     const payload = {
       name: roster.name || data.name || "Shared roster",
+      groupId,
+      groupName,
       version: nextVersion,
       playerCount,
       rosterData,
@@ -355,32 +477,43 @@ export async function saveFirebaseSharedRoster(roster: RoomRoster): Promise<Fire
       updatedAtIso: now,
       lastSavedByUid: user.uid,
       lastSavedByEmail: user.email,
+      lastSavedAt: serverTimestamp(),
+      lastSavedAtIso: now,
     };
 
     transaction.update(docRef, payload);
+    if (groupId) {
+      transaction.update(doc(getFairTeamsFirestore(), "sharedGroups", groupId), {
+        lastSavedByUid: user.uid,
+        lastSavedByEmail: user.email,
+        lastSavedRosterId: rosterId,
+        lastSavedRosterName: payload.name,
+        lastSavedAt: serverTimestamp(),
+        lastSavedAtIso: now,
+        updatedAt: serverTimestamp(),
+        updatedAtIso: now,
+      });
+    }
 
     return {
-      id: rosterId,
+      id: snapshot.id,
+      groupId,
+      groupName,
       name: payload.name,
       ownerUid: typeof data.ownerUid === "string" ? data.ownerUid : "",
       ownerEmail: typeof data.ownerEmail === "string" ? data.ownerEmail : "",
-      groupName: typeof data.groupName === "string" && data.groupName.trim() ? data.groupName : "My Fair Teams group",
       version: nextVersion,
       playerCount,
       createdAt: timestampToIso(data.createdAt),
       updatedAt: now,
       currentUserRole: role === "owner" || role === "editor" || role === "viewer" ? role : "member",
       lastSavedByEmail: user.email,
-    };
+    } as FirebaseSharedRosterSummary;
   });
 
   return saved;
 }
 
-export async function readFirebaseSharedRosterWithSource(rosterId: string): Promise<FirebaseSharedRosterSnapshot> {
-  return readFirebaseSharedRoster(rosterId);
-}
-
-export function getSharedRosterBackendLabel() {
-  return `Firebase · ${getFirebaseProjectId()}`;
+export function getFirebaseSharedRosterDebugLabel() {
+  return getFirebaseProjectId() || "Firebase project not configured";
 }

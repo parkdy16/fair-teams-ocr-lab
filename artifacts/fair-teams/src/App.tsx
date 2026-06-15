@@ -2305,7 +2305,7 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
                   Roster Tools
                 </h2>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  Manage rosters, sharing, and backups.
+                  Choose what you want to manage.
                 </p>
               </div>
               <Button
@@ -2320,7 +2320,7 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
               </Button>
             </div>
 
-            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain p-4">
+            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain p-4">
               <button
                 type="button"
                 onClick={() => {
@@ -2328,7 +2328,7 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
                     setRosterPickerOpen(true);
                   }
                 }}
-                className={`flex w-full items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-slate-50/80 px-3 py-3 text-left transition ${!isEmptyStarterRoster && rosters.length > 1 ? "active:scale-[0.99]" : "cursor-default"}`}
+                className={`sticky top-0 z-20 flex w-full items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white/95 px-3 py-3 text-left shadow-sm backdrop-blur transition ${!isEmptyStarterRoster && rosters.length > 1 ? "active:scale-[0.99]" : "cursor-default"}`}
               >
                 <span className="min-w-0">
                   <span className="block text-[10px] font-black uppercase tracking-wide text-slate-400">
@@ -2350,9 +2350,9 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
                 )}
               </button>
 
-              <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-3">
+              <div className="rounded-2xl border border-slate-100 bg-white p-3">
                 <div className="mb-2 text-[10px] font-black uppercase tracking-wide text-slate-400">
-                  New roster
+                  Create roster
                 </div>
                 <div className="flex gap-2">
                   <input
@@ -2379,80 +2379,53 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex min-w-0 items-center gap-2.5">
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-2xl bg-slate-50 text-[#102A43] shadow-sm">
-                      <Cloud className="h-4 w-4" />
-                    </span>
-                    <div className="min-w-0">
-                      <div className="text-[10px] font-black uppercase tracking-wide text-slate-500">
-                        Google Account
-                      </div>
-                      <div className="mt-0.5 truncate text-xs font-black text-[#102A43]">
-                        {connectedDriveUser?.emailAddress || (googleDriveConnected ? "Google connected" : "Not signed in")}
-                      </div>
-                    </div>
-                  </div>
-                  <div className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black ${googleDriveConnected ? "bg-emerald-50 text-emerald-700" : "bg-slate-50 text-slate-500"}`}>
-                    {googleDriveConnected ? "Signed in" : "Required"}
-                  </div>
-                </div>
-                <Button
+              <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+                <button
                   type="button"
-                  variant={googleDriveConnected ? "outline" : "default"}
-                  className={`mt-3 h-10 w-full justify-start rounded-2xl gap-3 ${googleDriveConnected ? "border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-700" : "bg-[#102A43] text-white hover:bg-[#0b2036]"}`}
-                  onClick={googleDriveConnected ? disconnectGoogleDrive : connectGoogleDrive}
-                  disabled={!googleDriveConfig.isConfigured || googleDriveConnecting}
-                >
-                  <Cloud className="h-4 w-4" />
-                  <span className="font-black">
-                    {googleDriveConnecting
-                      ? "Connecting..."
-                      : googleDriveConnected
-                        ? "Disconnect Google"
-                        : "Sign in with Google"}
-                  </span>
-                </Button>
-              </div>
-
-              <div className="rounded-2xl border border-blue-100 bg-blue-50/55 p-3 shadow-sm">
-                <div className="flex items-start gap-2.5">
-                  <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-2xl bg-white text-blue-600 shadow-sm">
-                    <Archive className="h-4 w-4" />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="text-[10px] font-black uppercase tracking-wide text-blue-500">
-                        Backup & Restore
-                      </div>
-                      <div className={`rounded-full px-2 py-0.5 text-[10px] font-black ${googleDriveConnected ? "bg-emerald-50 text-emerald-700" : "bg-white text-slate-500"}`}>
-                        {googleDriveConnected ? "Cloud ready" : "Local only"}
-                      </div>
-                    </div>
-                    <p className="mt-1 text-xs font-semibold leading-snug text-slate-600">
-                      For solo organizers, safety copies, and moving rosters between devices.
-                    </p>
-                    <div className="mt-2 text-[11px] font-black text-[#102A43]">
-                      {formatBackupSummary(deviceBackupSummary)}
-                    </div>
-                  </div>
-                </div>
-
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="mt-3 h-11 w-full justify-start rounded-2xl gap-3 border-blue-100 bg-white/90"
+                  className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left transition active:scale-[0.99]"
                   onClick={() => setRosterBackupToolsOpen((open) => !open)}
                 >
-                  <ArchiveRestore className="h-4 w-4" />
-                  <span className="font-black">
-                    {rosterBackupToolsOpen ? "Hide backup tools" : "Open backup tools"}
+                  <span className="flex min-w-0 items-center gap-2.5">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
+                      <Archive className="h-4 w-4" />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-[10px] font-black uppercase tracking-wide text-blue-500">
+                        Backup & Restore
+                      </span>
+                      <span className="mt-0.5 block truncate text-xs font-semibold text-slate-600">
+                        Safety copies and file import/export.
+                      </span>
+                    </span>
                   </span>
-                </Button>
+                  <span className="shrink-0 rounded-full bg-slate-50 px-2.5 py-1 text-lg font-black leading-none text-slate-400">
+                    {rosterBackupToolsOpen ? "−" : "›"}
+                  </span>
+                </button>
 
                 {rosterBackupToolsOpen && (
-                  <div className="mt-3 grid gap-3">
+                  <div className="grid gap-3 border-t border-slate-100 p-3">
+                    <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+                            Google
+                          </div>
+                          <div className="mt-0.5 truncate text-xs font-black text-[#102A43]">
+                            {connectedDriveUser?.emailAddress || (googleDriveConnected ? "Connected" : "Sign in for cloud backup")}
+                          </div>
+                        </div>
+                        <Button
+                          type="button"
+                          variant={googleDriveConnected ? "ghost" : "default"}
+                          className={`h-9 shrink-0 rounded-2xl px-3 text-xs font-black ${googleDriveConnected ? "text-slate-500 hover:bg-white hover:text-slate-700" : "bg-[#102A43] text-white hover:bg-[#0b2036]"}`}
+                          onClick={googleDriveConnected ? disconnectGoogleDrive : connectGoogleDrive}
+                          disabled={!googleDriveConfig.isConfigured || googleDriveConnecting}
+                        >
+                          {googleDriveConnecting ? "Connecting..." : googleDriveConnected ? "Disconnect" : "Sign in"}
+                        </Button>
+                      </div>
+                    </div>
                     <div className="rounded-2xl bg-white/80 p-3">
                       <div className="text-[10px] font-black uppercase tracking-wide text-blue-500">
                         Cloud backup
@@ -2595,50 +2568,53 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
                 )}
               </div>
 
-              <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-3 shadow-sm">
-                <div className="flex items-start gap-2.5">
-                  <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-2xl bg-white text-emerald-600 shadow-sm">
-                    <Share2 className="h-4 w-4" />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="text-[10px] font-black uppercase tracking-wide text-emerald-600">
-                        Shared Roster
-                      </div>
-                      <div className={`rounded-full px-2 py-0.5 text-[10px] font-black ${activeRosterIsShared ? "bg-emerald-600 text-white" : "bg-white text-slate-500"}`}>
-                        {activeRosterIsShared ? "Shared" : "Local"}
-                      </div>
-                    </div>
-                    <p className="mt-1 text-xs font-semibold leading-snug text-emerald-800/80">
-                      For co-organizers who work on the same roster.
-                    </p>
-                    <div className="mt-2 rounded-2xl bg-white/80 px-3 py-2">
-                      <div className="truncate text-sm font-black text-[#102A43]">
-                        {isEmptyStarterRoster ? "No roster yet" : activeRosterName}
-                      </div>
-                      <div className="mt-0.5 text-[11px] font-semibold text-slate-500">
-                        {activeRosterIsShared
-                          ? `Shared · Last saved ${formatSheetSyncTime(activeGoogleSheetSource?.lastSyncedAt).replace("Synced ", "")}`
-                          : `${sharedRosterCountLabel} on this device`}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <Button
+              <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+                <button
                   type="button"
-                  variant="outline"
-                  className="mt-3 h-11 w-full justify-start rounded-2xl gap-3 border-emerald-100 bg-white/90"
+                  className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left transition active:scale-[0.99]"
                   onClick={() => setRosterSharedToolsOpen((open) => !open)}
                 >
-                  <Share2 className="h-4 w-4" />
-                  <span className="font-black">
-                    {rosterSharedToolsOpen ? "Hide sharing tools" : "Open sharing tools"}
+                  <span className="flex min-w-0 items-center gap-2.5">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
+                      <Share2 className="h-4 w-4" />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-[10px] font-black uppercase tracking-wide text-emerald-600">
+                        Shared Roster
+                      </span>
+                      <span className="mt-0.5 block truncate text-xs font-semibold text-slate-600">
+                        {activeRosterIsShared ? "Shared · co-organizer mode" : "Work with co-organizers."}
+                      </span>
+                    </span>
                   </span>
-                </Button>
+                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black ${activeRosterIsShared ? "bg-emerald-600 text-white" : "bg-slate-50 text-slate-500"}`}>
+                    {activeRosterIsShared ? "Shared" : rosterSharedToolsOpen ? "Open" : "Local"}
+                  </span>
+                </button>
 
                 {rosterSharedToolsOpen && (
-                  <div className="mt-3 grid gap-3">
+                  <div className="grid gap-3 border-t border-slate-100 p-3">
+                    <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+                            Google
+                          </div>
+                          <div className="mt-0.5 truncate text-xs font-black text-[#102A43]">
+                            {connectedDriveUser?.emailAddress || (googleDriveConnected ? "Connected" : "Sign in to share rosters")}
+                          </div>
+                        </div>
+                        <Button
+                          type="button"
+                          variant={googleDriveConnected ? "ghost" : "default"}
+                          className={`h-9 shrink-0 rounded-2xl px-3 text-xs font-black ${googleDriveConnected ? "text-slate-500 hover:bg-white hover:text-slate-700" : "bg-[#102A43] text-white hover:bg-[#0b2036]"}`}
+                          onClick={googleDriveConnected ? disconnectGoogleDrive : connectGoogleDrive}
+                          disabled={!googleDriveConfig.isConfigured || googleDriveConnecting}
+                        >
+                          {googleDriveConnecting ? "Connecting..." : googleDriveConnected ? "Disconnect" : "Sign in"}
+                        </Button>
+                      </div>
+                    </div>
                     <div className="rounded-2xl bg-white/85 p-3">
                       <div className="text-[10px] font-black uppercase tracking-wide text-emerald-600">
                         This roster

@@ -68,6 +68,7 @@ import {
   shareGoogleSheetRosterWithEditor,
   trashGoogleSheetRoster,
   updateGoogleSheetRoster,
+  updateGoogleSheetRosterAccessLabels,
   type GoogleSheetRosterFile,
 } from "@/lib/googleSheetsFiles";
 
@@ -449,11 +450,11 @@ function App() {
   const [googleSheetSharing, setGoogleSheetSharing] = useState(false);
   const [googleSheetChoices, setGoogleSheetChoices] = useState<GoogleSheetRosterFile[] | null>(null);
   const [googleSheetActionFile, setGoogleSheetActionFile] = useState<GoogleSheetRosterFile | null>(null);
-  const [googleSheetOwnerEmailVisible, setGoogleSheetOwnerEmailVisible] = useState(false);
   const [googleSheetDeleteConfirm, setGoogleSheetDeleteConfirm] = useState<GoogleSheetDeleteConfirm | null>(null);
   const [googleSheetDeleteSlide, setGoogleSheetDeleteSlide] = useState(0);
   const [googleSheetDeleting, setGoogleSheetDeleting] = useState(false);
   const [googleSheetShareOpen, setGoogleSheetShareOpen] = useState(false);
+  const [googleSheetShareName, setGoogleSheetShareName] = useState("");
   const [googleSheetShareEmail, setGoogleSheetShareEmail] = useState("");
   const [googleSheetAccessList, setGoogleSheetAccessList] = useState<GoogleDrivePermissionResult[] | null>(null);
   const [googleSheetAccessLoading, setGoogleSheetAccessLoading] = useState(false);
@@ -544,20 +545,10 @@ function App() {
     return `Updated ${date.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
   };
 
-  const firstDisplayName = (value?: string) => {
-    const clean = (value || "").trim().replace(/\s+/g, " ");
+  const cleanPersonName = (value?: string) => {
+    const clean = (value || "").replace(/\s+/g, " ").trim();
     if (!clean || clean.includes("@")) return "";
-    return clean.split(" ")[0] || clean;
-  };
-
-  const maskEmail = (value?: string) => {
-    const clean = (value || "").trim();
-    const atIndex = clean.indexOf("@");
-    if (atIndex <= 0) return "";
-    const local = clean.slice(0, atIndex);
-    const domain = clean.slice(atIndex + 1);
-    if (!domain) return "";
-    return `${local.slice(0, 1)}***@${domain}`;
+    return clean.slice(0, 80);
   };
 
   const getGoogleSheetOwner = (file?: GoogleSheetRosterFile | null) => {
@@ -572,21 +563,22 @@ function App() {
     return owner?.me === true;
   };
 
-  const getGoogleSheetOwnerLabel = (file?: GoogleSheetRosterFile | null) => {
-    if (!file) return "Owner unknown";
+  const getGoogleSheetOwnerEmail = (file?: GoogleSheetRosterFile | null) => {
     const owner = getGoogleSheetOwner(file);
-    if (isGoogleSheetOwnedByMe(file)) return "Owner: You";
-    const displayName = firstDisplayName(owner?.displayName);
-    if (displayName) return `Owner: ${displayName}`;
-    const maskedEmail = maskEmail(owner?.emailAddress);
-    if (maskedEmail) return `Owner: ${maskedEmail}`;
-    return "Owner: Another organizer";
+    return owner?.emailAddress?.trim() || (isGoogleSheetOwnedByMe(file) ? connectedDriveUser?.emailAddress?.trim() || "" : "");
   };
 
-  const getGoogleSheetOwnerEmail = (file?: GoogleSheetRosterFile | null) => {
-    if (isGoogleSheetOwnedByMe(file)) return "";
+  const getGoogleSheetOwnerName = (file?: GoogleSheetRosterFile | null) => {
     const owner = getGoogleSheetOwner(file);
-    return owner?.emailAddress?.trim() || "";
+    const name = cleanPersonName(owner?.displayName || (isGoogleSheetOwnedByMe(file) ? connectedDriveUser?.displayName : ""));
+    if (name) return name;
+    const email = getGoogleSheetOwnerEmail(file);
+    return email || "Another organizer";
+  };
+
+  const getGoogleSheetOwnerLabel = (file?: GoogleSheetRosterFile | null) => {
+    if (!file) return "Owner unknown";
+    return `Owner: ${getGoogleSheetOwnerName(file)}`;
   };
 
   const formatSheetSyncTime = (value?: string) => {
@@ -611,7 +603,7 @@ function App() {
     return remoteTime > knownTime + 3000;
   };
 
-  const sheetCloudSourceFromFile = (file: GoogleSheetRosterFile) => ({
+  const sheetCloudSourceFromFile = (file: GoogleSheetRosterFile, accessLabels?: Record<string, string>) => ({
     provider: "google-sheets" as const,
     spreadsheetId: file.id,
     spreadsheetName: file.name,
@@ -619,6 +611,7 @@ function App() {
     lastSyncedAt: new Date().toISOString(),
     lastRemoteModifiedAt: file.modifiedTime,
     syncMode: "manual" as const,
+    ...(accessLabels && Object.keys(accessLabels).length ? { accessLabels } : {}),
   });
 
   const googleSheetPromptKey = (spreadsheetId?: string, modifiedTime?: string) =>
@@ -705,6 +698,22 @@ function App() {
       connectedEmail &&
       normalizeShareEmail(permission.emailAddress) === normalizeShareEmail(connectedEmail),
     );
+  };
+
+  const googleSheetAccessLabels = activeGoogleSheetSource?.accessLabels || {};
+
+  const googleSheetAccessLabelForEmail = (email?: string) => {
+    const normalized = email ? normalizeShareEmail(email) : "";
+    return normalized ? cleanPersonName(googleSheetAccessLabels[normalized]) : "";
+  };
+
+  const drivePermissionDisplay = (permission: GoogleDrivePermissionResult) => {
+    const email = permission.emailAddress?.trim() || "";
+    const savedName = googleSheetAccessLabelForEmail(email);
+    const googleName = cleanPersonName(permission.displayName);
+    const connectedName = permissionEmailMatchesConnectedUser(permission) ? cleanPersonName(connectedDriveUser?.displayName) : "";
+    const name = savedName || googleName || connectedName || email || drivePermissionLabel(permission);
+    return { name, email };
   };
 
   const googleSheetOwnerPermissions = (googleSheetAccessList || []).filter((permission) => permission.role === "owner");
@@ -1219,14 +1228,14 @@ function App() {
     );
   };
 
-  const updateActiveRosterGoogleSheetSource = (file: GoogleSheetRosterFile) => {
+  const updateActiveRosterGoogleSheetSource = (file: GoogleSheetRosterFile, accessLabels = activeGoogleSheetSource?.accessLabels) => {
     setRosterState((current) => ({
       ...current,
       rosters: current.rosters.map((roster) =>
         roster.id === current.activeRosterId
           ? normalizeRoster({
               ...roster,
-              cloudSource: sheetCloudSourceFromFile(file),
+              cloudSource: sheetCloudSourceFromFile(file, accessLabels),
               updatedAt: new Date().toISOString(),
             })
           : roster,
@@ -1379,7 +1388,7 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
           ...withLocalImages,
           id: currentRoster?.id || withLocalImages.id,
           logo: withLocalImages.logo || currentRoster?.logo,
-          cloudSource: sheetCloudSourceFromFile(file),
+          cloudSource: sheetCloudSourceFromFile(file, withLocalImages.cloudSource?.accessLabels),
         });
         return {
           ...current,
@@ -1442,7 +1451,7 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
             continue;
           }
           const file = await updateGoogleSheetRoster(googleDriveAccessToken, spreadsheetId, roster);
-          sourceUpdates.set(roster.id, sheetCloudSourceFromFile(file));
+          sourceUpdates.set(roster.id, sheetCloudSourceFromFile(file, source.accessLabels));
           savedCount += 1;
         } catch (error) {
           if (isMissingSharedRosterError(error)) {
@@ -1535,7 +1544,7 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
               ...withLocalImages,
               id: currentRoster?.id || withLocalImages.id,
               logo: withLocalImages.logo || currentRoster?.logo,
-              cloudSource: sheetCloudSourceFromFile(item.file),
+              cloudSource: sheetCloudSourceFromFile(item.file, withLocalImages.cloudSource?.accessLabels),
             });
             nextRosters = nextRosters.map((roster) =>
               roster.id === item.localRosterId ? nextRoster : roster,
@@ -1611,7 +1620,7 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
         );
         const baseRoster = normalizeRoster({
           ...withLocalImages,
-          cloudSource: sheetCloudSourceFromFile(file),
+          cloudSource: sheetCloudSourceFromFile(file, withLocalImages.cloudSource?.accessLabels),
         });
 
         if (currentIsStarter) {
@@ -1643,7 +1652,6 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
         };
       });
       setGoogleSheetChoices(null);
-      setGoogleSheetOwnerEmailVisible(false);
       setGoogleSheetActionFile(null);
       setRosterFilesOpen(false);
       showRosterToolsNotice("Shared roster opened", `${file.name} is now available in Fair Teams.`, "success");
@@ -1669,7 +1677,6 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
       );
       return;
     }
-    setGoogleSheetOwnerEmailVisible(false);
     setGoogleSheetActionFile(null);
     setGoogleSheetDeleteSlide(0);
     setGoogleSheetDeleteConfirm({ file });
@@ -1738,6 +1745,7 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
       showRosterToolsNotice("Make it shared first", "Create or open a shared roster before managing access.", "warning");
       return;
     }
+    setGoogleSheetShareName("");
     setGoogleSheetShareEmail("");
     setGoogleSheetAccessList(null);
     setGoogleSheetShareOpen(true);
@@ -1755,14 +1763,28 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
     setGoogleSheetSharing(true);
     try {
       const email = normalizeShareEmail(googleSheetShareEmail);
+      const editorName = cleanPersonName(googleSheetShareName);
+      const nextAccessLabels = { ...(activeGoogleSheetSource.accessLabels || {}) };
+      if (editorName) {
+        nextAccessLabels[email] = editorName;
+      }
+
       await shareGoogleSheetRosterWithEditor(
         googleDriveAccessToken,
         activeGoogleSheetSource.spreadsheetId,
         email,
       );
+
+      const updatedFile = await updateGoogleSheetRosterAccessLabels(
+        googleDriveAccessToken,
+        activeGoogleSheetSource.spreadsheetId,
+        nextAccessLabels,
+      );
+      updateActiveRosterGoogleSheetSource(updatedFile, nextAccessLabels);
+      setGoogleSheetShareName("");
       setGoogleSheetShareEmail("");
       await loadGoogleSheetAccessList();
-      showRosterToolsNotice("Editor added", `${email} can now edit this shared roster through Fair Teams.`, "success");
+      showRosterToolsNotice("Editor added", `${editorName || email} can now edit this shared roster through Fair Teams.`, "success");
     } catch (error) {
       if (isMissingSharedRosterError(error)) {
         handleMissingActiveGoogleSheetLink();
@@ -2863,7 +2885,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                           >
                             <Share2 className="h-4 w-4" />
                             <span className="truncate text-xs font-black">
-                              {googleSheetAccessLoading ? "Loading access..." : "Manage sharing"}
+                              {googleSheetAccessLoading ? "Loading access..." : "People & access"}
                             </span>
                           </Button>
                           <Button
@@ -3055,7 +3077,6 @@ They will no longer be able to open or edit this shared roster unless it is shar
                       key={file.id}
                       type="button"
                       onClick={() => {
-                        setGoogleSheetOwnerEmailVisible(false);
                         setGoogleSheetActionFile(file);
                       }}
                       className="flex w-full items-center justify-between gap-3 rounded-2xl border border-emerald-100 bg-emerald-50/60 px-3 py-3 text-left transition active:scale-[0.99]"
@@ -3065,7 +3086,10 @@ They will no longer be able to open or edit this shared roster unless it is shar
                           {file.name}
                         </span>
                         <span className="mt-0.5 block truncate text-[11px] font-bold text-emerald-700/75">
-                          {isGoogleSheetOwnedByMe(file) ? "Role: Owner" : "Role: Editor"} · {getGoogleSheetOwnerLabel(file)} · Updated {formatDriveModifiedTime(file.modifiedTime)}
+                          {isGoogleSheetOwnedByMe(file) ? "Role: Owner" : "Role: Editor"} · {formatDriveModifiedTime(file.modifiedTime)}
+                        </span>
+                        <span className="mt-0.5 block truncate text-[10px] font-semibold text-slate-500">
+                          Owner: {getGoogleSheetOwnerName(file)}{getGoogleSheetOwnerEmail(file) ? ` · ${getGoogleSheetOwnerEmail(file)}` : ""}
                         </span>
                       </span>
                       <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-lg font-black leading-none text-emerald-400 shadow-sm">
@@ -3116,7 +3140,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   {googleSheetActionFile.name}
                 </h2>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  {getGoogleSheetOwnerLabel(googleSheetActionFile)} · {isGoogleSheetOwnedByMe(googleSheetActionFile) ? "Owned by this Google account" : "Shared with this Google account"} · {formatDriveModifiedTime(googleSheetActionFile.modifiedTime)}
+                  {isGoogleSheetOwnedByMe(googleSheetActionFile) ? "Role: Owner" : "Role: Editor"} · {formatDriveModifiedTime(googleSheetActionFile.modifiedTime)}
                 </p>
               </div>
               <Button
@@ -3125,7 +3149,6 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 size="icon"
                 className="h-8 w-8 shrink-0 rounded-xl"
                 onClick={() => {
-                  setGoogleSheetOwnerEmailVisible(false);
                   setGoogleSheetActionFile(null);
                 }}
                 title="Close"
@@ -3144,33 +3167,12 @@ They will no longer be able to open or edit this shared roster unless it is shar
               <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
                 Owner
               </div>
-              <div className="mt-1 text-xs font-black text-[#102A43]">
-                {getGoogleSheetOwnerLabel(googleSheetActionFile).replace("Owner: ", "")}
+              <div className="mt-1 truncate text-xs font-black text-[#102A43]">
+                {getGoogleSheetOwnerName(googleSheetActionFile)}
               </div>
-              {!isGoogleSheetOwnedByMe(googleSheetActionFile) && getGoogleSheetOwnerEmail(googleSheetActionFile) && (
-                <div className="mt-2">
-                  {googleSheetOwnerEmailVisible ? (
-                    <div className="rounded-2xl bg-white px-3 py-2">
-                      <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-                        Owner email
-                      </div>
-                      <div className="mt-0.5 truncate text-xs font-black text-[#102A43]">
-                        {getGoogleSheetOwnerEmail(googleSheetActionFile)}
-                      </div>
-                      <p className="mt-1 text-[10px] font-semibold leading-snug text-slate-500">
-                        Use this only to identify who can manage or delete this shared roster.
-                      </p>
-                    </div>
-                  ) : (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      className="h-8 rounded-xl px-0 text-[11px] font-black text-emerald-700 hover:bg-transparent hover:text-emerald-800"
-                      onClick={() => setGoogleSheetOwnerEmailVisible(true)}
-                    >
-                      Show owner email
-                    </Button>
-                  )}
+              {getGoogleSheetOwnerEmail(googleSheetActionFile) && (
+                <div className="mt-0.5 truncate text-[10px] font-semibold text-slate-500">
+                  {getGoogleSheetOwnerEmail(googleSheetActionFile)}
                 </div>
               )}
             </div>
@@ -3208,7 +3210,6 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 variant="ghost"
                 className="h-10 rounded-2xl text-slate-500"
                 onClick={() => {
-                  setGoogleSheetOwnerEmailVisible(false);
                   setGoogleSheetActionFile(null);
                 }}
               >
@@ -3427,7 +3428,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   Shared Roster
                 </div>
                 <h2 className="mt-1 text-base font-black tracking-tight text-[#102A43]">
-                  Sharing & access
+                  People & access
                 </h2>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
                   See who can use this shared roster.
@@ -3503,16 +3504,26 @@ They will no longer be able to open or edit this shared roster unless it is shar
                         Owner
                       </div>
                       <div className="mt-1 grid gap-1.5">
-                        {googleSheetOwnerPermissions.length > 0 ? googleSheetOwnerPermissions.map((permission) => (
-                          <div key={permission.id} className="flex items-center justify-between gap-2 rounded-2xl bg-white px-3 py-2">
-                            <span className="min-w-0 truncate text-xs font-black text-[#102A43]">
-                              {permissionEmailMatchesConnectedUser(permission) ? "You" : drivePermissionLabel(permission)}
-                            </span>
-                            <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-black text-emerald-700">
-                              Owner
-                            </span>
-                          </div>
-                        )) : (
+                        {googleSheetOwnerPermissions.length > 0 ? googleSheetOwnerPermissions.map((permission) => {
+                          const display = drivePermissionDisplay(permission);
+                          return (
+                            <div key={permission.id} className="flex items-center justify-between gap-2 rounded-2xl bg-white px-3 py-2">
+                              <div className="min-w-0">
+                                <div className="truncate text-xs font-black text-[#102A43]">
+                                  {display.name}
+                                </div>
+                                {display.email && (
+                                  <div className="mt-0.5 truncate text-[10px] font-semibold text-slate-400">
+                                    {display.email}
+                                  </div>
+                                )}
+                              </div>
+                              <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-black text-emerald-700">
+                                Owner
+                              </span>
+                            </div>
+                          );
+                        }) : (
                           <div className="rounded-2xl bg-white px-3 py-2 text-xs font-semibold text-slate-500">
                             Owner not shown by Google Drive.
                           </div>
@@ -3528,12 +3539,18 @@ They will no longer be able to open or edit this shared roster unless it is shar
                         {googleSheetEditorPermissions.length > 0 ? googleSheetEditorPermissions.map((permission) => {
                           const removing = googleSheetRemovingPermissionId === permission.id;
                           const canRemove = connectedGoogleUserOwnsActiveSheet && canRemoveDrivePermission(permission) && !permissionEmailMatchesConnectedUser(permission);
+                          const display = drivePermissionDisplay(permission);
                           return (
                             <div key={permission.id} className="flex items-center justify-between gap-2 rounded-2xl bg-white px-3 py-2">
                               <div className="min-w-0">
                                 <div className="truncate text-xs font-black text-[#102A43]">
-                                  {permissionEmailMatchesConnectedUser(permission) ? "You" : drivePermissionLabel(permission)}
+                                  {display.name}
                                 </div>
+                                {display.email && (
+                                  <div className="mt-0.5 truncate text-[10px] font-semibold text-slate-400">
+                                    {display.email}
+                                  </div>
+                                )}
                                 {drivePermissionIsInherited(permission) && (
                                   <div className="mt-0.5 truncate text-[10px] font-semibold text-slate-400">
                                     From shared folder access
@@ -3573,16 +3590,26 @@ They will no longer be able to open or edit this shared roster unless it is shar
                           Other access
                         </div>
                         <div className="mt-1 grid gap-1.5">
-                          {googleSheetOtherPermissions.map((permission) => (
-                            <div key={permission.id} className="flex items-center justify-between gap-2 rounded-2xl bg-white px-3 py-2">
-                              <span className="min-w-0 truncate text-xs font-black text-[#102A43]">
-                                {drivePermissionLabel(permission)}
-                              </span>
-                              <span className="shrink-0 rounded-full bg-slate-50 px-2 py-0.5 text-[10px] font-black text-slate-500">
-                                {formatDrivePermissionRole(permission.role)}
-                              </span>
-                            </div>
-                          ))}
+                          {googleSheetOtherPermissions.map((permission) => {
+                            const display = drivePermissionDisplay(permission);
+                            return (
+                              <div key={permission.id} className="flex items-center justify-between gap-2 rounded-2xl bg-white px-3 py-2">
+                                <div className="min-w-0">
+                                  <div className="truncate text-xs font-black text-[#102A43]">
+                                    {display.name}
+                                  </div>
+                                  {display.email && (
+                                    <div className="mt-0.5 truncate text-[10px] font-semibold text-slate-400">
+                                      {display.email}
+                                    </div>
+                                  )}
+                                </div>
+                                <span className="shrink-0 rounded-full bg-slate-50 px-2 py-0.5 text-[10px] font-black text-slate-500">
+                                  {formatDrivePermissionRole(permission.role)}
+                                </span>
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
                     )}
@@ -3598,6 +3625,15 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 <label className="text-[10px] font-black uppercase tracking-wide text-slate-400">
                   Add editor
                 </label>
+                <input
+                  value={googleSheetShareName}
+                  onChange={(e) => setGoogleSheetShareName(e.target.value)}
+                  type="text"
+                  autoCapitalize="words"
+                  autoCorrect="off"
+                  placeholder="Name, optional"
+                  className="mt-2 h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm font-bold text-[#102A43] outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
+                />
                 <input
                   value={googleSheetShareEmail}
                   onChange={(e) => setGoogleSheetShareEmail(e.target.value)}
@@ -3623,7 +3659,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   {googleSheetSharing ? "Sharing..." : "Add editor"}
                 </Button>
                 <p className="mt-2 text-[10px] font-semibold leading-snug text-slate-500">
-                  Editors can save changes to this shared roster through Fair Teams.
+                  Name is only a friendly label. Email is the real Google access.
                 </p>
               </div>
 
@@ -3780,7 +3816,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   Share one roster
                 </div>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  Shared Roster lets trusted co-organizers open the same roster in Fair Teams. You can see the owner and editors in Sharing & access.
+                  Shared Roster lets trusted co-organizers open the same roster in Fair Teams. You can see the owner and editors in People & access.
                 </p>
               </div>
 

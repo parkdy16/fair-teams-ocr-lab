@@ -124,6 +124,36 @@ function metadataValueMap(metadataValues: GoogleSheetValues) {
   return result;
 }
 
+function cleanAccessLabels(value: unknown): Record<string, string> | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const source = value as Record<string, unknown>;
+  const labels: Record<string, string> = {};
+
+  Object.entries(source).forEach(([email, label]) => {
+    const cleanEmail = String(email || "").trim().toLowerCase();
+    const cleanLabel = String(label || "").replace(/\s+/g, " ").trim();
+    if (!cleanEmail || !cleanEmail.includes("@") || !cleanLabel) return;
+    labels[cleanEmail] = cleanLabel.slice(0, 80);
+  });
+
+  return Object.keys(labels).length ? labels : undefined;
+}
+
+export function parseGoogleSheetAccessLabels(value: unknown): Record<string, string> | undefined {
+  const text = readSheetString(value);
+  if (!text) return undefined;
+  try {
+    return cleanAccessLabels(JSON.parse(text));
+  } catch {
+    return undefined;
+  }
+}
+
+export function googleSheetAccessLabelsToCellValue(value?: Record<string, string>) {
+  const cleaned = cleanAccessLabels(value);
+  return cleaned ? JSON.stringify(cleaned) : "";
+}
+
 function playerToSheetRow(player: RoomPlayer): GoogleSheetCellValue[] {
   const normalized = normalizePlayer(player);
   const rowByColumn: Record<PlayerColumnKey, GoogleSheetCellValue> = {
@@ -234,6 +264,7 @@ export function rosterToGoogleSheetValues(roster: RoomRoster): GoogleSheetRoster
     ["updatedAt", normalized.updatedAt || normalized.createdAt],
     ["exportedAt", now],
     ["imagesIncluded", "FALSE"],
+    ["accessLabels", googleSheetAccessLabelsToCellValue(normalized.cloudSource?.accessLabels)],
     ["notes", "This sheet is managed by Fair Teams. Manual editing is not recommended."],
   ];
 
@@ -275,6 +306,7 @@ export function googleSheetValuesToRoster(
     .filter((player): player is RoomPlayer => Boolean(player));
 
   const now = new Date().toISOString();
+  const accessLabels = parseGoogleSheetAccessLabels(metadata.accessLabels);
   return normalizeRoster({
     id: metadata.rosterId || undefined,
     name: metadata.rosterName || spreadsheetInfo.spreadsheetName || "Shared roster",
@@ -290,6 +322,7 @@ export function googleSheetValuesToRoster(
           lastSyncedAt: now,
           lastRemoteModifiedAt: spreadsheetInfo.modifiedTime,
           syncMode: "manual",
+          accessLabels,
         }
       : undefined,
     createdAt: metadata.createdAt || now,

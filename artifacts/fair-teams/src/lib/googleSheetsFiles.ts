@@ -2,6 +2,7 @@ import type { RoomRoster } from "@/lib/localRoster";
 import {
   FAIR_TEAMS_GOOGLE_SHEET_METADATA_TAB,
   FAIR_TEAMS_GOOGLE_SHEET_PLAYERS_TAB,
+  googleSheetAccessLabelsToCellValue,
   googleSheetRosterTitle,
   googleSheetValuesToRoster,
   rosterToGoogleSheetValues,
@@ -313,6 +314,42 @@ export async function updateGoogleSheetRoster(
   await clearGoogleSheetValues(accessToken, spreadsheetId);
   await writeGoogleSheetValues(accessToken, spreadsheetId, metadataValues, playerValues);
   await renameGoogleSheetRosterFile(accessToken, spreadsheetId, googleSheetRosterTitle(roster));
+  return getGoogleDriveFileMetadata(accessToken, spreadsheetId);
+}
+
+
+export async function updateGoogleSheetRosterAccessLabels(
+  accessToken: string,
+  spreadsheetId: string,
+  accessLabels: Record<string, string> | undefined,
+): Promise<GoogleSheetRosterFile> {
+  await ensureFairTeamsSheetStructure(accessToken, spreadsheetId);
+  const response = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values/${encodeURIComponent(`'${FAIR_TEAMS_GOOGLE_SHEET_METADATA_TAB}'!A12:B13`)}?valueInputOption=RAW`,
+    {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json; charset=UTF-8",
+      },
+      body: JSON.stringify({
+        values: [
+          ["accessLabels", googleSheetAccessLabelsToCellValue(accessLabels)],
+          ["notes", "This sheet is managed by Fair Teams. Manual editing is not recommended."],
+        ],
+      }),
+    },
+  );
+
+  if (!response.ok) {
+    const message = await readGoogleApiError(response, "Google Sheets could not save the sharing names.");
+    throwGoogleSheetFileError(
+      response.status,
+      message,
+      "Fair Teams cannot update sharing names. Ask the owner for editor access.",
+    );
+  }
+
   return getGoogleDriveFileMetadata(accessToken, spreadsheetId);
 }
 

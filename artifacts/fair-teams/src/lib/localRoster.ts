@@ -247,6 +247,7 @@ export interface RosterCloudSource {
   lastSyncedAt?: string;
   lastRemoteModifiedAt?: string;
   syncMode?: "manual";
+  accessLabels?: Record<string, string>;
 }
 
 export interface RoomRoster {
@@ -308,6 +309,21 @@ function pickRosterLogo(roster: unknown) {
   return cleanRosterLogo(readStringField(roster, ["logo", "groupLogo", "teamLogo", "crest", "badge"]));
 }
 
+function cleanAccessLabels(value: unknown): Record<string, string> | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const source = value as Record<string, unknown>;
+  const labels: Record<string, string> = {};
+
+  Object.entries(source).forEach(([email, label]) => {
+    const cleanEmail = String(email || "").trim().toLowerCase();
+    const cleanLabel = String(label || "").replace(/\s+/g, " ").trim();
+    if (!cleanEmail || !cleanEmail.includes("@") || !cleanLabel) return;
+    labels[cleanEmail] = cleanLabel.slice(0, 80);
+  });
+
+  return Object.keys(labels).length ? labels : undefined;
+}
+
 function cleanRosterCloudSource(value: unknown): RosterCloudSource | undefined {
   if (!value || typeof value !== "object") return undefined;
   const record = value as Record<string, unknown>;
@@ -332,6 +348,10 @@ function cleanRosterCloudSource(value: unknown): RosterCloudSource | undefined {
   }
   if (typeof record.lastRemoteModifiedAt === "string" && record.lastRemoteModifiedAt.trim()) {
     source.lastRemoteModifiedAt = record.lastRemoteModifiedAt.trim();
+  }
+  const accessLabels = cleanAccessLabels(record.accessLabels);
+  if (accessLabels) {
+    source.accessLabels = accessLabels;
   }
 
   return source;

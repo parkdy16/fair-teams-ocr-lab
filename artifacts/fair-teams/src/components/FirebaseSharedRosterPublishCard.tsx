@@ -119,7 +119,7 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, isEmptyRoster, o
       ]);
       setSharedRosters(rosters);
       setIncomingInvites(invites);
-      setNotice({ tone: "success", text: `Accepted invite to ${accepted.name}. It is now in My Firebase rosters.` });
+      setNotice({ tone: "success", text: `Accepted invite to ${accepted.name}. It is now in My shared rosters.` });
     } catch (error) {
       setNotice({ tone: "error", text: friendlyFirestoreError(error) });
     } finally {
@@ -135,7 +135,7 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, isEmptyRoster, o
     try {
       const snapshot = await readFirebaseSharedRoster(rosterId);
       onOpenRoster?.(snapshot.roster, snapshot.name, snapshot);
-      setNotice({ tone: "success", text: `Opened ${snapshot.name} as a linked local copy. You can save changes back to Firebase now.` });
+      setNotice({ tone: "success", text: `Opened ${snapshot.name} as a linked local copy. Save changes when you want to update the shared roster.` });
     } catch (error) {
       setNotice({ tone: "error", text: friendlyFirestoreError(error) });
     } finally {
@@ -154,7 +154,7 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, isEmptyRoster, o
       onRefreshActiveRoster?.(snapshot.roster, snapshot.name, snapshot);
       const rosters = await listFirebaseSharedRosters();
       setSharedRosters(rosters);
-      setNotice({ tone: "success", text: `Refreshed ${snapshot.name} from Firebase version ${snapshot.version}.` });
+      setNotice({ tone: "success", text: `Got latest ${snapshot.name} from shared roster version ${snapshot.version}.` });
     } catch (error) {
       setNotice({ tone: "error", text: friendlyFirestoreError(error) });
     } finally {
@@ -172,7 +172,7 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, isEmptyRoster, o
       onRosterSaved?.(saved);
       const rosters = await listFirebaseSharedRosters();
       setSharedRosters(rosters);
-      setNotice({ tone: "success", text: `Saved ${saved.name} to Firebase as version ${saved.version}.` });
+      setNotice({ tone: "success", text: `Saved ${saved.name} to shared roster version ${saved.version}.` });
     } catch (error) {
       setNotice({ tone: "error", text: friendlyFirestoreError(error) });
     } finally {
@@ -186,7 +186,7 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, isEmptyRoster, o
     setNotice(null);
     try {
       const created = await createFirebaseSharedRoster(activeRoster);
-      setNotice({ tone: "success", text: `Created Firebase shared roster: ${created.name}. Invites and sync come next.` });
+      setNotice({ tone: "success", text: `Created shared roster: ${created.name}. Open it as a linked copy before saving edits back online.` });
       const rosters = await listFirebaseSharedRosters();
       setSharedRosters(rosters);
     } catch (error) {
@@ -199,12 +199,12 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, isEmptyRoster, o
   const disabledReason = !authReady
     ? "Checking Firebase sign-in…"
     : !user
-      ? "Sign in above to create a Firebase shared roster."
+      ? "Sign in above to create an online shared roster."
       : !activeRoster
         ? "No active roster found."
         : isEmptyRoster
           ? "Add players before creating a shared roster."
-          : "Ready to create a Firebase shared roster test.";
+          : "Ready to create an online shared roster.";
 
   const activeFirebaseSource = activeRoster?.cloudSource?.provider === "firebase" ? activeRoster.cloudSource : null;
   const canSaveActiveRoster = Boolean(user && activeRoster && activeFirebaseSource?.firebaseRosterId && !busy);
@@ -225,20 +225,20 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, isEmptyRoster, o
         </div>
         <div className="min-w-0 flex-1">
           <div className="text-[10px] font-black uppercase tracking-wide text-violet-700">
-            Firebase Firestore test
+            Online shared rosters
           </div>
           <div className="mt-0.5 text-sm font-black tracking-tight text-[#102A43]">
-            Create shared roster document
+            Share, sync, and invite
           </div>
           <p className="mt-1 text-[11px] font-semibold leading-snug text-slate-600">
-            This publishes a photo-free copy of the current roster to Firestore. It does not replace your local roster yet.
+            Firebase is now the app-native collaboration backend. Local rosters stay on this device until you open or save a linked shared roster.
           </p>
         </div>
       </div>
 
       <div className="rounded-2xl border border-white/70 bg-white/80 px-3 py-2">
         <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-          Current roster
+          Active roster
         </div>
         <div className="mt-0.5 truncate text-xs font-black text-[#102A43]">
           {activeRoster?.name || "No roster"}
@@ -256,7 +256,7 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, isEmptyRoster, o
           disabled={!user || !activeRoster || isEmptyRoster || Boolean(busy)}
         >
           <CloudUpload className="h-4 w-4" />
-          {busy === "publish" ? "Creating…" : "Create Firebase shared roster"}
+          {busy === "publish" ? "Creating…" : "Create online shared roster"}
         </Button>
 
         <Button
@@ -267,7 +267,7 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, isEmptyRoster, o
           disabled={!canSaveActiveRoster}
         >
           <Save className="h-4 w-4" />
-          {busy === "save" ? "Saving…" : "Save active Firebase roster"}
+          {busy === "save" ? "Saving…" : "Save changes to shared roster"}
         </Button>
 
         <Button
@@ -278,20 +278,25 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, isEmptyRoster, o
           disabled={!canRefreshActiveRoster}
         >
           <CloudDownload className="h-4 w-4" />
-          {busy === "reload" ? "Refreshing…" : "Refresh active Firebase roster"}
+          {busy === "reload" ? "Refreshing…" : "Get latest from shared roster"}
         </Button>
       </div>
 
-      {activeFirebaseSource?.firebaseRosterId ? (
-        <div className="rounded-2xl bg-white/75 px-3 py-2 text-[11px] font-bold leading-snug text-slate-600">
-          Active roster is linked to Firebase version {activeFirebaseSource.firebaseVersion || 1}. Save will check the remote version before overwriting.
+      <div className={`rounded-2xl border px-3 py-2 ${activeFirebaseSource?.firebaseRosterId ? "border-emerald-100 bg-emerald-50/80" : "border-white/70 bg-white/75"}`}>
+        <div className={`text-[10px] font-black uppercase tracking-wide ${activeFirebaseSource?.firebaseRosterId ? "text-emerald-700" : "text-slate-400"}`}>
+          {activeFirebaseSource?.firebaseRosterId ? "Linked shared roster" : "Local-only roster"}
         </div>
-      ) : null}
+        <div className="mt-1 text-[11px] font-bold leading-snug text-slate-600">
+          {activeFirebaseSource?.firebaseRosterId
+            ? `Version ${activeFirebaseSource.firebaseVersion || 1} · ${activeFirebaseSource.firebaseOwnerUid === user?.uid ? "Owner" : "Editor/member"}. Save checks the remote version before overwriting.`
+            : "Create or open a shared roster before using save, refresh, or invites."}
+        </div>
+      </div>
 
       <div className="grid gap-2 rounded-2xl bg-white/75 p-2">
         <div className="flex items-center gap-1.5 px-1 text-[10px] font-black uppercase tracking-wide text-slate-400">
           <UserPlus className="h-3.5 w-3.5" />
-          Invite editor
+          Invite co-organizer
         </div>
         <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
           <input
@@ -314,7 +319,7 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, isEmptyRoster, o
           </Button>
         </div>
         <div className="px-1 text-[10px] font-semibold leading-snug text-slate-500">
-          First invite version: owner invites by email. The invited person signs in with that exact email and accepts inside Fair Teams.
+          Invite by email. The other person signs in with that exact email, accepts inside Fair Teams, then opens the shared roster.
         </div>
       </div>
 
@@ -378,7 +383,7 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, isEmptyRoster, o
         <div className="flex items-center justify-between gap-2 px-1">
           <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wide text-slate-400">
             <ListChecks className="h-3.5 w-3.5" />
-            My Firebase rosters
+            My shared rosters
           </div>
           <Button
             type="button"
@@ -394,11 +399,11 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, isEmptyRoster, o
 
         {!user ? (
           <div className="rounded-2xl bg-slate-50 px-3 py-2 text-[11px] font-bold text-slate-500">
-            Sign in above to list Firebase shared rosters.
+            Sign in above to list shared rosters.
           </div>
         ) : sharedRosters.length === 0 ? (
           <div className="rounded-2xl bg-slate-50 px-3 py-2 text-[11px] font-bold text-slate-500">
-            No Firebase shared rosters yet.
+            No shared rosters yet.
           </div>
         ) : (
           <div className="grid gap-1.5">
@@ -408,7 +413,8 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, isEmptyRoster, o
                   <div className="flex items-center gap-1.5 text-xs font-black text-[#102A43]">
                     <Share2 className="h-3.5 w-3.5 text-violet-600" />
                     <span className="min-w-0 flex-1 truncate">{roster.name}</span>
-                    <span className="shrink-0 rounded-full bg-violet-50 px-2 py-0.5 text-[10px] text-violet-700">v{roster.version}</span>
+                    <span className="shrink-0 rounded-full bg-violet-50 px-2 py-0.5 text-[10px] text-violet-700">{roster.ownerUid === user?.uid ? "owner" : "editor"}</span>
+                    <span className="shrink-0 rounded-full bg-slate-50 px-2 py-0.5 text-[10px] text-slate-600">v{roster.version}</span>
                   </div>
                   <div className="mt-0.5 text-[10px] font-semibold text-slate-500">
                     {roster.playerCount} player{roster.playerCount === 1 ? "" : "s"} · {formatWhen(roster.updatedAt)}
@@ -422,7 +428,7 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, isEmptyRoster, o
                   disabled={!user || Boolean(busy)}
                 >
                   <CloudDownload className="h-3.5 w-3.5" />
-                  {busy === `open:${roster.id}` ? "Opening…" : "Open local copy"}
+                  {busy === `open:${roster.id}` ? "Opening…" : "Open linked copy"}
                 </Button>
               </div>
             ))}

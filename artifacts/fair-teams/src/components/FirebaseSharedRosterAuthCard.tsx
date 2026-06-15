@@ -46,7 +46,7 @@ export function FirebaseSharedRosterAuthCard() {
     try {
       await createSharedRosterAccount(trimmedEmail, password);
       setPassword("");
-      setNotice({ tone: "success", text: "Firebase account created. Shared roster invites will use this email later." });
+      setNotice({ tone: "success", text: "Account created. You can now create, open, and accept shared roster invites." });
     } catch (error) {
       setNotice({ tone: "error", text: friendlyAuthError(error) });
     } finally {
@@ -61,7 +61,7 @@ export function FirebaseSharedRosterAuthCard() {
     try {
       await signInToSharedRosters(trimmedEmail, password);
       setPassword("");
-      setNotice({ tone: "success", text: "Signed in. Next step will be shared roster creation." });
+      setNotice({ tone: "success", text: "Signed in. Shared rosters and invites are available below." });
     } catch (error) {
       setNotice({ tone: "error", text: friendlyAuthError(error) });
     } finally {
@@ -93,10 +93,10 @@ export function FirebaseSharedRosterAuthCard() {
             New shared roster system
           </div>
           <div className="mt-0.5 text-sm font-black tracking-tight text-[#102A43]">
-            Firebase account test
+            Shared roster account
           </div>
           <p className="mt-1 text-[11px] font-semibold leading-snug text-slate-600">
-            This only tests sign in. It does not upload or sync roster data yet.
+            Use this account only for online shared rosters. Local rosters still work without signing in.
           </p>
         </div>
       </div>

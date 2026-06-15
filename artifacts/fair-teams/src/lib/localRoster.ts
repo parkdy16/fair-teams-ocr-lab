@@ -251,6 +251,7 @@ export interface RosterCloudSource {
   firebaseVersion?: number;
   firebaseOwnerUid?: string;
   firebaseOwnerEmail?: string;
+  firebaseGroupName?: string;
   firebaseRole?: "owner" | "editor" | "viewer" | "member";
   firebaseLastSavedByEmail?: string;
 

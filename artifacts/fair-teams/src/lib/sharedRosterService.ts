@@ -39,6 +39,7 @@ export type FirebaseSharedRosterSummary = {
   name: string;
   ownerUid: string;
   ownerEmail: string;
+  groupName?: string;
   version: number;
   playerCount: number;
   createdAt?: string;
@@ -62,6 +63,11 @@ function toSharedRosterUser(user: User | null): SharedRosterUser | null {
 
 function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
+}
+
+function cleanGroupName(value?: string) {
+  const name = (value || "").trim();
+  return name || "My Fair Teams group";
 }
 
 function getCurrentSharedRosterUser() {
@@ -123,6 +129,7 @@ function toRosterSummary(id: string, data: DocumentData): FirebaseSharedRosterSu
     name: typeof data.name === "string" && data.name.trim() ? data.name : "Shared roster",
     ownerUid: typeof data.ownerUid === "string" ? data.ownerUid : "",
     ownerEmail: typeof data.ownerEmail === "string" ? data.ownerEmail : "",
+    groupName: typeof data.groupName === "string" && data.groupName.trim() ? data.groupName : "My Fair Teams group",
     version: typeof data.version === "number" ? data.version : 1,
     playerCount,
     createdAt: timestampToIso(data.createdAt),
@@ -156,7 +163,7 @@ export async function signOutOfSharedRosters() {
   await signOut(getFairTeamsAuth());
 }
 
-export async function createFirebaseSharedRoster(roster: RoomRoster): Promise<FirebaseSharedRosterSummary> {
+export async function createFirebaseSharedRoster(roster: RoomRoster, groupName?: string): Promise<FirebaseSharedRosterSummary> {
   const user = getCurrentSharedRosterUser();
   if (!roster.players.length) throw new Error("Add players before creating a shared roster.");
 
@@ -166,6 +173,7 @@ export async function createFirebaseSharedRoster(roster: RoomRoster): Promise<Fi
   const payload = {
     app: "Fair Teams",
     schemaVersion: 1,
+    groupName: cleanGroupName(groupName),
     name: roster.name || "Shared roster",
     ownerUid: user.uid,
     ownerEmail: user.email,
@@ -188,6 +196,7 @@ export async function createFirebaseSharedRoster(roster: RoomRoster): Promise<Fi
     name: payload.name,
     ownerUid: payload.ownerUid,
     ownerEmail: payload.ownerEmail,
+    groupName: payload.groupName,
     version: payload.version,
     playerCount: payload.playerCount,
     createdAt: now,
@@ -355,6 +364,7 @@ export async function saveFirebaseSharedRoster(roster: RoomRoster): Promise<Fire
       name: payload.name,
       ownerUid: typeof data.ownerUid === "string" ? data.ownerUid : "",
       ownerEmail: typeof data.ownerEmail === "string" ? data.ownerEmail : "",
+      groupName: typeof data.groupName === "string" && data.groupName.trim() ? data.groupName : "My Fair Teams group",
       version: nextVersion,
       playerCount,
       createdAt: timestampToIso(data.createdAt),

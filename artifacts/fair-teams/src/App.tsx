@@ -1024,9 +1024,9 @@ function App() {
       return;
     }
     const confirmed = window.confirm(
-      "Disconnect this roster from the shared Google Sheet?
+      `Disconnect this roster from the shared Google Sheet?
 
-The Google Sheet will not be deleted. This device will keep a local copy of the roster.",
+The Google Sheet will not be deleted. This device will keep a local copy of the roster.`,
     );
     if (!confirmed) return;
 

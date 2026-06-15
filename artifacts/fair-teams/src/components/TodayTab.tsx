@@ -32,7 +32,7 @@ function displayName(player: Pick<RoomPlayer, "name" | "aka">) {
 function StatusDot({ label, className }: { label: string; className: string }) {
   return (
     <span
-      className={`h-2 w-2 shrink-0 rounded-full ring-1 ring-offset-1 ring-offset-card ${className}`}
+      className={`h-2.5 w-2.5 shrink-0 rounded-full border ${className}`}
       title={label}
       aria-label={label}
     />
@@ -59,13 +59,13 @@ function TodayStatusDots({
       aria-label={labels.join(", ")}
     >
       {player.isNew && (
-        <StatusDot label="New player" className="bg-sky-800 ring-sky-200" />
+        <StatusDot label="New player" className="border-sky-200 bg-sky-100" />
       )}
       {player.isGoalkeeper && (
-        <StatusDot label="Goalkeeper" className="bg-emerald-800 ring-emerald-200" />
+        <StatusDot label="Goalkeeper" className="border-emerald-200 bg-emerald-100" />
       )}
       {player.isOrganizer && (
-        <StatusDot label="Organizer" className="bg-orange-800 ring-orange-200" />
+        <StatusDot label="Organizer" className="border-orange-200 bg-orange-100" />
       )}
     </span>
   );

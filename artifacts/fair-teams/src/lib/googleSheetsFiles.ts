@@ -370,13 +370,7 @@ export async function readGoogleSheetRoster(accessToken: string, spreadsheetId: 
   };
 }
 
-export async function listGoogleSheetRosterFiles(accessToken: string): Promise<GoogleSheetRosterFile[]> {
-  const query = [
-    "trashed = false",
-    `mimeType = '${FAIR_TEAMS_GOOGLE_SHEET_MIME_TYPE}'`,
-    "(name contains 'Fair Teams Shared Roster' or name contains ' - Fair Teams' or appProperties has { key='fairTeamsSharedRoster' and value='true' })",
-  ].join(" and ");
-
+async function fetchGoogleSheetRosterFileList(accessToken: string, query: string): Promise<GoogleSheetRosterFile[]> {
   const params = new URLSearchParams({
     q: query,
     pageSize: "30",
@@ -399,6 +393,52 @@ export async function listGoogleSheetRosterFiles(accessToken: string): Promise<G
 
   const result = await response.json();
   return Array.isArray(result?.files) ? (result.files as GoogleSheetRosterFile[]) : [];
+}
+
+function sortGoogleSheetRosterFiles(files: GoogleSheetRosterFile[]) {
+  return [...files].sort((a, b) => {
+    const aTime = a.modifiedTime ? Date.parse(a.modifiedTime) : 0;
+    const bTime = b.modifiedTime ? Date.parse(b.modifiedTime) : 0;
+    return bTime - aTime;
+  });
+}
+
+export async function listGoogleSheetRosterFiles(accessToken: string): Promise<GoogleSheetRosterFile[]> {
+  const accessibleRosterQuery = [
+    "trashed = false",
+    `mimeType = '${FAIR_TEAMS_GOOGLE_SHEET_MIME_TYPE}'`,
+    "(name contains 'Fair Teams Shared Roster' or name contains ' - Fair Teams' or appProperties has { key='fairTeamsSharedRoster' and value='true' })",
+  ].join(" and ");
+
+  // With the safer drive.file scope, shared files may not appear in the normal app-created-file list.
+  // Search the user's shared-with-me Sheets separately, then keep the filter tight so unrelated Drive files do not appear.
+  const sharedRosterQuery = [
+    "trashed = false",
+    "sharedWithMe = true",
+    `mimeType = '${FAIR_TEAMS_GOOGLE_SHEET_MIME_TYPE}'`,
+    "(name contains 'Fair Teams Shared Roster' or name contains ' - Fair Teams')",
+  ].join(" and ");
+
+  const [accessibleFiles, sharedFiles] = await Promise.all([
+    fetchGoogleSheetRosterFileList(accessToken, accessibleRosterQuery),
+    fetchGoogleSheetRosterFileList(accessToken, sharedRosterQuery),
+  ]);
+
+  const sharedIds = new Set(sharedFiles.map((file) => file.id).filter(Boolean));
+  const byId = new Map<string, GoogleSheetRosterFile>();
+
+  [...accessibleFiles, ...sharedFiles].forEach((file) => {
+    if (!file.id) return;
+    const previous = byId.get(file.id);
+    byId.set(file.id, {
+      ...previous,
+      ...file,
+      shared: Boolean(file.shared || previous?.shared || sharedIds.has(file.id)),
+      ownedByMe: file.ownedByMe ?? previous?.ownedByMe,
+    });
+  });
+
+  return sortGoogleSheetRosterFiles([...byId.values()]);
 }
 
 export function shareGoogleSheetRosterWithEditor(

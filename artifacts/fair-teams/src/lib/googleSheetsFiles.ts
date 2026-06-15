@@ -370,7 +370,7 @@ export async function readGoogleSheetRoster(accessToken: string, spreadsheetId: 
   };
 }
 
-async function fetchGoogleSheetRosterFileList(accessToken: string, query: string): Promise<GoogleSheetRosterFile[]> {
+async function fetchGoogleSheetRosterFiles(accessToken: string, query: string): Promise<GoogleSheetRosterFile[]> {
   const params = new URLSearchParams({
     q: query,
     pageSize: "30",
@@ -404,15 +404,16 @@ function sortGoogleSheetRosterFiles(files: GoogleSheetRosterFile[]) {
 }
 
 export async function listGoogleSheetRosterFiles(accessToken: string): Promise<GoogleSheetRosterFile[]> {
+  const fairTeamsNameOrMarker =
+    "(name contains 'Fair Teams Shared Roster' or name contains ' - Fair Teams' or appProperties has { key='fairTeamsSharedRoster' and value='true' })";
+
   const accessibleRosterQuery = [
     "trashed = false",
     `mimeType = '${FAIR_TEAMS_GOOGLE_SHEET_MIME_TYPE}'`,
-    "(name contains 'Fair Teams Shared Roster' or name contains ' - Fair Teams' or appProperties has { key='fairTeamsSharedRoster' and value='true' })",
+    fairTeamsNameOrMarker,
   ].join(" and ");
 
-  // With the safer drive.file scope, shared files may not appear in the normal app-created-file list.
-  // Search the user's shared-with-me Sheets separately, then keep the filter tight so unrelated Drive files do not appear.
-  const sharedRosterQuery = [
+  const sharedWithMeRosterQuery = [
     "trashed = false",
     "sharedWithMe = true",
     `mimeType = '${FAIR_TEAMS_GOOGLE_SHEET_MIME_TYPE}'`,
@@ -420,8 +421,8 @@ export async function listGoogleSheetRosterFiles(accessToken: string): Promise<G
   ].join(" and ");
 
   const [accessibleFiles, sharedFiles] = await Promise.all([
-    fetchGoogleSheetRosterFileList(accessToken, accessibleRosterQuery),
-    fetchGoogleSheetRosterFileList(accessToken, sharedRosterQuery),
+    fetchGoogleSheetRosterFiles(accessToken, accessibleRosterQuery),
+    fetchGoogleSheetRosterFiles(accessToken, sharedWithMeRosterQuery),
   ]);
 
   const sharedIds = new Set(sharedFiles.map((file) => file.id).filter(Boolean));
@@ -434,11 +435,10 @@ export async function listGoogleSheetRosterFiles(accessToken: string): Promise<G
       ...previous,
       ...file,
       shared: Boolean(file.shared || previous?.shared || sharedIds.has(file.id)),
-      ownedByMe: file.ownedByMe ?? previous?.ownedByMe,
     });
   });
 
-  return sortGoogleSheetRosterFiles([...byId.values()]);
+  return sortGoogleSheetRosterFiles(Array.from(byId.values()));
 }
 
 export function shareGoogleSheetRosterWithEditor(

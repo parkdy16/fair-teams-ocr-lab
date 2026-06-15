@@ -43,6 +43,8 @@ export type FirebaseSharedGroupSummary = {
   rosterCount: number;
   memberCount: number;
   currentUserRole?: "owner" | "editor" | "viewer" | "member";
+  memberEmails?: string[];
+  pendingInviteEmails?: string[];
   lastSavedByEmail?: string;
   lastSavedRosterName?: string;
   lastSavedAt?: string;
@@ -62,6 +64,8 @@ export type FirebaseSharedRosterSummary = {
   createdAt?: string;
   updatedAt?: string;
   currentUserRole?: "owner" | "editor" | "viewer" | "member";
+  memberEmails?: string[];
+  pendingInviteEmails?: string[];
   lastSavedByEmail?: string;
 };
 
@@ -136,6 +140,8 @@ function currentUserRoleFromData(data: DocumentData): "owner" | "editor" | "view
 function toGroupSummary(id: string, data: DocumentData): FirebaseSharedGroupSummary {
   const rosterIds = Array.isArray(data.rosterIds) ? data.rosterIds.filter((value) => typeof value === "string") : [];
   const memberUids = Array.isArray(data.memberUids) ? data.memberUids : [];
+  const memberEmails = Array.isArray(data.memberEmails) ? data.memberEmails.filter((value): value is string => typeof value === "string") : [];
+  const pendingInviteEmails = Array.isArray(data.pendingInviteEmails) ? data.pendingInviteEmails.filter((value): value is string => typeof value === "string") : [];
   return {
     id,
     name: typeof data.name === "string" && data.name.trim() ? data.name : "My Fair Teams group",
@@ -144,6 +150,8 @@ function toGroupSummary(id: string, data: DocumentData): FirebaseSharedGroupSumm
     rosterCount: rosterIds.length,
     memberCount: memberUids.length,
     currentUserRole: currentUserRoleFromData(data),
+    memberEmails,
+    pendingInviteEmails,
     lastSavedByEmail: typeof data.lastSavedByEmail === "string" ? data.lastSavedByEmail : undefined,
     lastSavedRosterName: typeof data.lastSavedRosterName === "string" ? data.lastSavedRosterName : undefined,
     lastSavedAt: timestampToIso(data.lastSavedAt) || (typeof data.lastSavedAtIso === "string" ? data.lastSavedAtIso : undefined),
@@ -303,6 +311,68 @@ export async function createFirebaseSharedRoster(roster: RoomRoster, groupId?: s
   });
   await batch.commit();
   return toRosterSummary(docRef.id, payload);
+}
+
+
+export async function deleteFirebaseSharedRoster(rosterId: string): Promise<void> {
+  const user = getCurrentSharedRosterUser();
+  const rosterRef = doc(getFairTeamsFirestore(), "sharedRosters", rosterId);
+  const rosterSnap = await getDoc(rosterRef);
+  if (!rosterSnap.exists()) throw new Error("Shared roster was not found.");
+  const data = rosterSnap.data();
+  const groupId = typeof data.groupId === "string" ? data.groupId : undefined;
+  if (data.ownerUid !== user.uid) throw new Error("Only the roster owner can remove this shared roster.");
+  const batch = writeBatch(getFairTeamsFirestore());
+  batch.delete(rosterRef);
+  if (groupId) {
+    batch.update(doc(getFairTeamsFirestore(), "sharedGroups", groupId), {
+      rosterIds: arrayRemove(rosterId),
+      updatedAt: serverTimestamp(),
+      updatedAtIso: new Date().toISOString(),
+    });
+  }
+  await batch.commit();
+}
+
+export async function deleteFirebaseSharedGroup(groupId: string): Promise<void> {
+  const user = getCurrentSharedRosterUser();
+  const groupRef = doc(getFairTeamsFirestore(), "sharedGroups", groupId);
+  const groupSnap = await getDoc(groupRef);
+  if (!groupSnap.exists()) throw new Error("Shared group was not found.");
+  const groupData = groupSnap.data();
+  if (groupData.ownerUid !== user.uid) throw new Error("Only the group owner can delete this group.");
+  const rostersQuery = query(collection(getFairTeamsFirestore(), "sharedRosters"), where("groupId", "==", groupId));
+  const rosters = await getDocs(rostersQuery);
+  const batch = writeBatch(getFairTeamsFirestore());
+  rosters.docs.forEach((rosterDoc) => batch.delete(rosterDoc.ref));
+  batch.delete(groupRef);
+  await batch.commit();
+}
+
+export async function cancelFirebaseGroupInvite(groupId: string, inviteeEmail: string): Promise<void> {
+  const user = getCurrentSharedRosterUser();
+  const email = normalizeEmail(inviteeEmail);
+  const groupRef = doc(getFairTeamsFirestore(), "sharedGroups", groupId);
+  const groupSnap = await getDoc(groupRef);
+  if (!groupSnap.exists()) throw new Error("Shared group was not found.");
+  const groupData = groupSnap.data();
+  const role = currentUserRoleFromData(groupData);
+  if (role !== "owner" && role !== "editor") throw new Error("Only owners/editors can cancel invites.");
+  const rosterIds = Array.isArray(groupData.rosterIds) ? groupData.rosterIds.filter((id): id is string => typeof id === "string") : [];
+  const batch = writeBatch(getFairTeamsFirestore());
+  batch.update(groupRef, {
+    pendingInviteEmails: arrayRemove(email),
+    updatedAt: serverTimestamp(),
+    updatedAtIso: new Date().toISOString(),
+  });
+  rosterIds.forEach((rosterId) => {
+    batch.update(doc(getFairTeamsFirestore(), "sharedRosters", rosterId), {
+      pendingInviteEmails: arrayRemove(email),
+      updatedAt: serverTimestamp(),
+      updatedAtIso: new Date().toISOString(),
+    });
+  });
+  await batch.commit();
 }
 
 export async function listFirebaseSharedRosters(groupId?: string): Promise<FirebaseSharedRosterSummary[]> {

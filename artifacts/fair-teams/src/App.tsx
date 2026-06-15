@@ -3026,6 +3026,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                     <FirebaseSharedRosterAuthCard />
                     <FirebaseSharedRosterPublishCard
                       activeRoster={activeRoster}
+                      rosters={rosters}
                       isEmptyRoster={isEmptyStarterRoster}
                       onOpenRoster={openFirebaseSharedRosterAsLocalCopy}
                       onRosterSaved={markActiveFirebaseRosterSaved}

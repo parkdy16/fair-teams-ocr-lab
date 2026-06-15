@@ -1,11 +1,14 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Check, CloudDownload, CloudUpload, Database, Inbox, ListChecks, Mail, RefreshCw, Save, Share2, Users, UserPlus } from "lucide-react";
+import { Check, ChevronDown, CloudDownload, Inbox, ListChecks, Mail, RefreshCw, Save, Settings, Trash2, UserPlus, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { RoomRoster } from "@/lib/localRoster";
 import {
   acceptFirebaseGroupInvite,
+  cancelFirebaseGroupInvite,
   createFirebaseSharedGroup,
   createFirebaseSharedRoster,
+  deleteFirebaseSharedGroup,
+  deleteFirebaseSharedRoster,
   inviteEmailToFirebaseSharedGroup,
   listenToSharedRosterUser,
   listFirebaseGroupInvites,
@@ -21,6 +24,7 @@ import {
 
 type Props = {
   activeRoster: RoomRoster | undefined;
+  rosters?: RoomRoster[];
   isEmptyRoster: boolean;
   onOpenRoster?: (roster: RoomRoster, sourceName: string, summary: FirebaseSharedRosterSummary) => void;
   onRosterSaved?: (summary: FirebaseSharedRosterSummary) => void;
@@ -29,21 +33,15 @@ type Props = {
 
 function friendlyFirestoreError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error || "Something went wrong.");
-  if (/permission-denied|Missing or insufficient permissions/i.test(message)) {
-    return "Firestore rules are still locked. Add the shared group rules in Firebase Console, then try again.";
-  }
-  if (/network/i.test(message)) return "Network error. Check your connection and try again.";
-  if (/saved by someone else|changed elsewhere|Remote version/i.test(message)) {
-    return message.replace(/^Firebase:\s*/i, "");
-  }
+  if (/permission-denied|Missing or insufficient permissions/i.test(message)) return "Permission denied.";
+  if (/network/i.test(message)) return "Network error.";
+  if (/saved by someone else|changed elsewhere|Remote version/i.test(message)) return "Saved elsewhere. Get latest first.";
   return message.replace(/^Firebase:\s*/i, "");
 }
 
-function formatWhen(value?: string) {
-  if (!value) return "Not saved yet";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Recently";
-  return date.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+function shortName(email?: string) {
+  if (!email) return "—";
+  return email.split("@")[0] || email;
 }
 
 function labelRole(role?: string, isOwner?: boolean) {
@@ -57,7 +55,23 @@ function canRoleSave(role?: string, isOwner?: boolean) {
   return role === "editor" || role === "owner" || Boolean(isOwner);
 }
 
-export function FirebaseSharedRosterPublishCard({ activeRoster, isEmptyRoster, onOpenRoster, onRosterSaved, onRefreshActiveRoster }: Props) {
+function modalShell(title: string, onClose: () => void, body: React.ReactNode) {
+  return (
+    <div className="fixed inset-0 z-[80] flex items-end justify-center bg-slate-950/35 p-3 sm:items-center">
+      <div className="w-full max-w-md rounded-3xl bg-white p-3 shadow-2xl">
+        <div className="mb-2 flex items-center justify-between gap-3 px-1">
+          <div className="text-sm font-black text-[#102A43]">{title}</div>
+          <button type="button" onClick={onClose} className="rounded-full bg-slate-50 p-2 text-slate-500 active:scale-95">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        {body}
+      </div>
+    </div>
+  );
+}
+
+export function FirebaseSharedRosterPublishCard({ activeRoster, rosters = [], isEmptyRoster, onOpenRoster, onRosterSaved, onRefreshActiveRoster }: Props) {
   const [user, setUser] = useState<SharedRosterUser | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [busy, setBusy] = useState<"publish" | "refresh" | "save" | "reload" | string>("");
@@ -65,8 +79,10 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, isEmptyRoster, o
   const [selectedGroupId, setSelectedGroupId] = useState("");
   const [sharedRosters, setSharedRosters] = useState<FirebaseSharedRosterSummary[]>([]);
   const [incomingInvites, setIncomingInvites] = useState<FirebaseGroupInvite[]>([]);
-  const [groupName, setGroupName] = useState("My Fair Teams group");
+  const [newGroupName, setNewGroupName] = useState("My group");
   const [inviteEmail, setInviteEmail] = useState("");
+  const [selectedLocalRosterIds, setSelectedLocalRosterIds] = useState<string[]>([]);
+  const [modal, setModal] = useState<"groups" | "rosters" | "collaborators" | "" >("");
   const [notice, setNotice] = useState<{ tone: "success" | "error" | "info"; text: string } | null>(null);
 
   useEffect(() => {
@@ -83,33 +99,26 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, isEmptyRoster, o
     return unsubscribe;
   }, []);
 
-  const selectedGroup = useMemo(
-    () => sharedGroups.find((group) => group.id === selectedGroupId) || null,
-    [selectedGroupId, sharedGroups],
-  );
-
-  const visibleRosters = useMemo(
-    () => selectedGroupId ? sharedRosters.filter((roster) => roster.groupId === selectedGroupId) : sharedRosters,
-    [selectedGroupId, sharedRosters],
-  );
+  const selectedGroup = useMemo(() => sharedGroups.find((group) => group.id === selectedGroupId) || null, [selectedGroupId, sharedGroups]);
+  const visibleRosters = useMemo(() => selectedGroupId ? sharedRosters.filter((roster) => roster.groupId === selectedGroupId) : [], [selectedGroupId, sharedRosters]);
+  const activeFirebaseSource = activeRoster?.cloudSource?.provider === "firebase" ? activeRoster.cloudSource : null;
+  const activeFirebaseRole = activeFirebaseSource?.firebaseRole || (activeFirebaseSource?.firebaseOwnerUid === user?.uid ? "owner" : activeFirebaseSource?.firebaseRosterId ? "editor" : undefined);
+  const activeCanSave = canRoleSave(activeFirebaseRole, activeFirebaseSource?.firebaseOwnerUid === user?.uid);
+  const canSaveActiveRoster = Boolean(user && activeRoster && activeFirebaseSource?.firebaseRosterId && activeCanSave && !busy);
+  const canRefreshActiveRoster = Boolean(user && activeRoster && activeFirebaseSource?.firebaseRosterId && !busy);
+  const collaboratorCount = selectedGroup ? selectedGroup.memberCount + (selectedGroup.pendingInviteEmails?.length || 0) : 0;
 
   const refreshSharedData = async (nextUser = user) => {
     if (!nextUser) return;
     setBusy("refresh");
     setNotice(null);
     try {
-      const [groups, rosters, invites] = await Promise.all([
-        listFirebaseSharedGroups(),
-        listFirebaseSharedRosters(),
-        listFirebaseGroupInvites(),
-      ]);
+      const [groups, rosters, invites] = await Promise.all([listFirebaseSharedGroups(), listFirebaseSharedRosters(), listFirebaseGroupInvites()]);
       setSharedGroups(groups);
       setSharedRosters(rosters);
       setIncomingInvites(invites);
-      if (!selectedGroupId && groups[0]) {
-        setSelectedGroupId(groups[0].id);
-      }
-      setNotice({ tone: "info", text: `${groups.length ? `Found ${groups.length} shared group${groups.length === 1 ? "" : "s"}` : "No shared groups yet"} · ${rosters.length} roster${rosters.length === 1 ? "" : "s"}${invites.length ? ` · ${invites.length} group invite${invites.length === 1 ? "" : "s"}` : ""}.` });
+      const stillExists = groups.some((group) => group.id === selectedGroupId);
+      if (!stillExists) setSelectedGroupId(groups[0]?.id || "");
     } catch (error) {
       setNotice({ tone: "error", text: friendlyFirestoreError(error) });
     } finally {
@@ -118,23 +127,78 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, isEmptyRoster, o
   };
 
   useEffect(() => {
-    if (user) {
-      void refreshSharedData(user);
-    }
-    // Intentionally refresh when the signed-in Firebase user changes only.
+    if (user) void refreshSharedData(user);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.uid]);
 
+  useEffect(() => {
+    if (activeRoster?.id) setSelectedLocalRosterIds([activeRoster.id]);
+  }, [activeRoster?.id]);
+
   const handleCreateGroup = async () => {
-    if (!user || busy) return;
+    if (!user || busy || !newGroupName.trim()) return;
     setBusy("group");
     setNotice(null);
     try {
-      const created = await createFirebaseSharedGroup(groupName);
+      const created = await createFirebaseSharedGroup(newGroupName);
       const groups = await listFirebaseSharedGroups();
       setSharedGroups(groups);
       setSelectedGroupId(created.id);
-      setNotice({ tone: "success", text: `Created shared group: ${created.name}. Add rosters inside this group, then invite co-organizers once.` });
+      setNewGroupName("My group");
+      setModal("");
+    } catch (error) {
+      setNotice({ tone: "error", text: friendlyFirestoreError(error) });
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const handleDeleteSelectedGroup = async () => {
+    if (!selectedGroup || busy) return;
+    const ok = window.confirm(`Delete ${selectedGroup.name}? Shared rosters in this group will be removed online.`);
+    if (!ok) return;
+    setBusy("delete-group");
+    setNotice(null);
+    try {
+      await deleteFirebaseSharedGroup(selectedGroup.id);
+      await refreshSharedData();
+      setModal("");
+    } catch (error) {
+      setNotice({ tone: "error", text: friendlyFirestoreError(error) });
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const handleAddSelectedRosters = async () => {
+    if (!user || !selectedGroup || busy) return;
+    const picked = rosters.filter((roster) => selectedLocalRosterIds.includes(roster.id) && roster.players.length > 0);
+    if (!picked.length) return;
+    setBusy("publish");
+    setNotice(null);
+    try {
+      for (const roster of picked) await createFirebaseSharedRoster(roster, selectedGroup.id, selectedGroup.name);
+      const [groups, shared] = await Promise.all([listFirebaseSharedGroups(), listFirebaseSharedRosters()]);
+      setSharedGroups(groups);
+      setSharedRosters(shared);
+      setModal("");
+    } catch (error) {
+      setNotice({ tone: "error", text: friendlyFirestoreError(error) });
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const handleRemoveSharedRoster = async (rosterId: string) => {
+    const ok = window.confirm("Remove this shared roster from the group?");
+    if (!ok) return;
+    setBusy(`delete-roster:${rosterId}`);
+    setNotice(null);
+    try {
+      await deleteFirebaseSharedRoster(rosterId);
+      const [groups, shared] = await Promise.all([listFirebaseSharedGroups(), listFirebaseSharedRosters()]);
+      setSharedGroups(groups);
+      setSharedRosters(shared);
     } catch (error) {
       setNotice({ tone: "error", text: friendlyFirestoreError(error) });
     } finally {
@@ -143,18 +207,30 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, isEmptyRoster, o
   };
 
   const handleInviteToSelectedGroup = async () => {
-    const groupId = selectedGroupId || activeRoster?.cloudSource?.firebaseGroupId;
-    if (!user || !groupId || busy) return;
+    if (!user || !selectedGroup || busy || !inviteEmail.trim()) return;
     setBusy("invite");
     setNotice(null);
     try {
-      await inviteEmailToFirebaseSharedGroup(groupId, inviteEmail);
-      const invitedEmail = inviteEmail.trim().toLowerCase();
+      await inviteEmailToFirebaseSharedGroup(selectedGroup.id, inviteEmail);
       setInviteEmail("");
       const [groups, rosters] = await Promise.all([listFirebaseSharedGroups(), listFirebaseSharedRosters()]);
       setSharedGroups(groups);
       setSharedRosters(rosters);
-      setNotice({ tone: "success", text: `Invite saved for ${invitedEmail}. They can sign in and accept the group invite inside Fair Teams.` });
+    } catch (error) {
+      setNotice({ tone: "error", text: friendlyFirestoreError(error) });
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const handleCancelInvite = async (email: string) => {
+    if (!selectedGroup || busy) return;
+    setBusy(`cancel:${email}`);
+    setNotice(null);
+    try {
+      await cancelFirebaseGroupInvite(selectedGroup.id, email);
+      const groups = await listFirebaseSharedGroups();
+      setSharedGroups(groups);
     } catch (error) {
       setNotice({ tone: "error", text: friendlyFirestoreError(error) });
     } finally {
@@ -168,16 +244,8 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, isEmptyRoster, o
     setNotice(null);
     try {
       const accepted = await acceptFirebaseGroupInvite(groupId);
-      const [groups, rosters, invites] = await Promise.all([
-        listFirebaseSharedGroups(),
-        listFirebaseSharedRosters(),
-        listFirebaseGroupInvites(),
-      ]);
-      setSharedGroups(groups);
-      setSharedRosters(rosters);
-      setIncomingInvites(invites);
+      await refreshSharedData();
       setSelectedGroupId(accepted.id);
-      setNotice({ tone: "success", text: `Accepted invite to ${accepted.name}. Its shared rosters are now available in Fair Teams.` });
     } catch (error) {
       setNotice({ tone: "error", text: friendlyFirestoreError(error) });
     } finally {
@@ -192,7 +260,6 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, isEmptyRoster, o
     try {
       const snapshot = await readFirebaseSharedRoster(rosterId);
       onOpenRoster?.(snapshot.roster, snapshot.name, snapshot);
-      setNotice({ tone: "success", text: `Opened ${snapshot.groupName ? `${snapshot.groupName} · ` : ""}${snapshot.name} as a linked local copy. Save changes when you want to update the shared roster.` });
     } catch (error) {
       setNotice({ tone: "error", text: friendlyFirestoreError(error) });
     } finally {
@@ -212,7 +279,6 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, isEmptyRoster, o
       setSharedGroups(groups);
       setSharedRosters(rosters);
       if (snapshot.groupId) setSelectedGroupId(snapshot.groupId);
-      setNotice({ tone: "success", text: `Got latest ${snapshot.groupName ? `${snapshot.groupName} · ` : ""}${snapshot.name} from shared roster version ${snapshot.version}.` });
     } catch (error) {
       setNotice({ tone: "error", text: friendlyFirestoreError(error) });
     } finally {
@@ -231,7 +297,6 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, isEmptyRoster, o
       setSharedGroups(groups);
       setSharedRosters(rosters);
       if (saved.groupId) setSelectedGroupId(saved.groupId);
-      setNotice({ tone: "success", text: `Saved ${saved.groupName ? `${saved.groupName} · ` : ""}${saved.name} to version ${saved.version}. Group members can use Get latest to see this update.` });
     } catch (error) {
       setNotice({ tone: "error", text: friendlyFirestoreError(error) });
     } finally {
@@ -239,332 +304,162 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, isEmptyRoster, o
     }
   };
 
-  const handlePublish = async () => {
-    if (!user || !activeRoster || isEmptyRoster || busy) return;
-    setBusy("publish");
-    setNotice(null);
-    try {
-      const created = await createFirebaseSharedRoster(activeRoster, selectedGroupId || undefined, groupName);
-      const [groups, rosters] = await Promise.all([listFirebaseSharedGroups(), listFirebaseSharedRosters()]);
-      setSharedGroups(groups);
-      setSharedRosters(rosters);
-      if (created.groupId) setSelectedGroupId(created.groupId);
-      setNotice({ tone: "success", text: `Created ${created.groupName ? `${created.groupName} · ` : ""}${created.name}. Open it as a linked copy before saving edits back online.` });
-    } catch (error) {
-      setNotice({ tone: "error", text: friendlyFirestoreError(error) });
-    } finally {
-      setBusy("");
-    }
+  const toggleLocalRoster = (rosterId: string) => {
+    setSelectedLocalRosterIds((current) => current.includes(rosterId) ? current.filter((id) => id !== rosterId) : [...current, rosterId]);
   };
-
-  const disabledReason = !authReady
-    ? "Checking Firebase sign-in…"
-    : !user
-      ? "Sign in above to create or join shared groups."
-      : !activeRoster
-        ? "No active roster found."
-        : isEmptyRoster
-          ? "Add players before creating a shared roster."
-          : "Ready to add this roster to a shared group.";
-
-  const activeFirebaseSource = activeRoster?.cloudSource?.provider === "firebase" ? activeRoster.cloudSource : null;
-  const activeFirebaseRole = activeFirebaseSource?.firebaseRole || (activeFirebaseSource?.firebaseOwnerUid === user?.uid ? "owner" : activeFirebaseSource?.firebaseRosterId ? "editor" : undefined);
-  const activeCanSave = canRoleSave(activeFirebaseRole, activeFirebaseSource?.firebaseOwnerUid === user?.uid);
-  const canSaveActiveRoster = Boolean(user && activeRoster && activeFirebaseSource?.firebaseRosterId && activeCanSave && !busy);
-  const canRefreshActiveRoster = Boolean(user && activeRoster && activeFirebaseSource?.firebaseRosterId && !busy);
-  const canInviteToGroup = Boolean(user && (selectedGroupId || activeFirebaseSource?.firebaseGroupId) && !busy);
 
   return (
-    <div className="grid gap-3 rounded-3xl border border-violet-100 bg-violet-50/60 p-3 shadow-sm">
-      <div className="flex items-start gap-2">
-        <div className="mt-0.5 rounded-2xl bg-white p-2 text-violet-700 shadow-sm">
-          <Database className="h-4 w-4" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="text-[10px] font-black uppercase tracking-wide text-violet-700">
-            Shared groups
+    <div className="grid gap-3 rounded-3xl border border-slate-100 bg-white p-3 shadow-sm">
+      <div className="grid gap-1.5">
+        <div className="text-[10px] font-black uppercase tracking-wide text-emerald-600">Shared group</div>
+        <div className="grid grid-cols-[1fr_auto] gap-2">
+          <div className="relative">
+            <select
+              value={selectedGroupId}
+              onChange={(event) => setSelectedGroupId(event.target.value)}
+              disabled={!user || !sharedGroups.length || Boolean(busy)}
+              className="h-11 w-full appearance-none rounded-2xl border border-slate-100 bg-slate-50 px-3 pr-9 text-sm font-black text-[#102A43] outline-none focus:border-emerald-200 focus:ring-2 focus:ring-emerald-50"
+            >
+              <option value="">No shared group</option>
+              {sharedGroups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-3 top-3.5 h-4 w-4 text-slate-400" />
           </div>
-          <div className="mt-0.5 text-sm font-black tracking-tight text-[#102A43]">
-            Groups, organizers, and rosters
-          </div>
-          <p className="mt-1 text-[11px] font-semibold leading-snug text-slate-600">
-            Build collaboration around real groups like LazyLousy Berlin or Nicole’s Classes. Invite organizers once, then share rosters inside the group.
-          </p>
+          <Button type="button" variant="outline" className="h-11 w-11 rounded-2xl border-slate-100 bg-slate-50 p-0" onClick={() => setModal("groups")} disabled={!user}>
+            <Settings className="h-4 w-4" />
+          </Button>
         </div>
       </div>
 
-      <div className="grid gap-2 rounded-2xl bg-white/75 p-2">
-        <div className="flex items-center gap-1.5 px-1 text-[10px] font-black uppercase tracking-wide text-slate-400">
-          <Users className="h-3.5 w-3.5" />
-          Create or choose group
+      <div className="flex items-center justify-between gap-2 rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-600">
+        <span className="min-w-0 truncate">{!authReady ? "Checking sign-in…" : user ? user.email : "Not signed in"}</span>
+        <Button type="button" variant="ghost" className="h-7 rounded-xl px-2 text-[10px] font-black text-emerald-700" onClick={() => refreshSharedData()} disabled={!user || Boolean(busy)}>
+          <RefreshCw className={`mr-1 h-3 w-3 ${busy === "refresh" ? "animate-spin" : ""}`} />
+          Sync
+        </Button>
+      </div>
+
+      {incomingInvites.length > 0 && (
+        <div className="grid gap-1.5 rounded-2xl border border-emerald-100 bg-emerald-50/70 p-2">
+          {incomingInvites.slice(0, 3).map((invite) => (
+            <div key={invite.id} className="flex items-center justify-between gap-2 rounded-xl bg-white px-2 py-2">
+              <div className="min-w-0 truncate text-xs font-black text-[#102A43]">{invite.name}</div>
+              <Button type="button" variant="outline" className="h-8 rounded-xl border-emerald-100 px-2 text-[10px] font-black text-emerald-700" onClick={() => handleAcceptInvite(invite.id)} disabled={Boolean(busy)}>
+                {busy === `accept:${invite.id}` ? "Accepting…" : "Accept"}
+              </Button>
+            </div>
+          ))}
         </div>
-        <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
-          <input
-            type="text"
-            value={groupName}
-            onChange={(event) => setGroupName(event.target.value)}
-            placeholder="LazyLousy Berlin"
-            className="h-10 rounded-2xl border border-violet-100 bg-white px-3 text-xs font-bold text-[#102A43] outline-none placeholder:text-slate-300 focus:border-violet-300 focus:ring-2 focus:ring-violet-100"
-            disabled={!user || Boolean(busy)}
-          />
-          <Button
-            type="button"
-            variant="outline"
-            className="h-10 justify-start rounded-2xl gap-1.5 border-violet-200 bg-white px-3 text-xs font-black text-violet-700 shadow-sm hover:bg-violet-50"
-            onClick={handleCreateGroup}
-            disabled={!user || !groupName.trim() || Boolean(busy)}
-          >
-            <Users className="h-3.5 w-3.5" />
-            {busy === "group" ? "Creating…" : "Create group"}
+      )}
+
+      <div className="grid gap-2 rounded-2xl border border-slate-100 bg-slate-50/70 p-2">
+        <div className="flex items-center justify-between gap-2 px-1">
+          <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Rosters</div>
+          <Button type="button" variant="ghost" className="h-7 rounded-xl px-2 text-[10px] font-black text-emerald-700" onClick={() => setModal("rosters")} disabled={!user || !selectedGroup}>
+            Manage
           </Button>
         </div>
-        {sharedGroups.length > 0 ? (
-          <div className="flex gap-1.5 overflow-x-auto px-1 pb-1">
-            {sharedGroups.map((group) => (
-              <button
-                key={group.id}
-                type="button"
-                onClick={() => setSelectedGroupId(group.id)}
-                className={`shrink-0 rounded-full px-3 py-1.5 text-[10px] font-black shadow-sm ${selectedGroupId === group.id ? "bg-violet-600 text-white" : "bg-white text-violet-700"}`}
-              >
-                {group.name}
+        {visibleRosters.length === 0 ? (
+          <div className="rounded-2xl bg-white px-3 py-2 text-[11px] font-bold text-slate-500">No rosters</div>
+        ) : (
+          <div className="grid gap-1.5">
+            {visibleRosters.slice(0, 8).map((roster) => (
+              <button key={roster.id} type="button" onClick={() => handleOpenRoster(roster.id)} disabled={Boolean(busy)} className="grid gap-0.5 rounded-2xl bg-white px-3 py-2 text-left shadow-sm active:scale-[0.99]">
+                <div className="truncate text-xs font-black text-[#102A43]">{roster.name}</div>
+                <div className="truncate text-[10px] font-semibold text-slate-500">last saved by {shortName(roster.lastSavedByEmail || roster.ownerEmail)}</div>
               </button>
             ))}
           </div>
-        ) : null}
-      </div>
-
-      <div className="rounded-2xl border border-white/70 bg-white/80 px-3 py-2">
-        <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-          Selected group
-        </div>
-        <div className="mt-0.5 truncate text-xs font-black text-[#102A43]">
-          {selectedGroup?.name || "No shared group selected"}
-        </div>
-        <div className="mt-0.5 text-[11px] font-semibold text-slate-500">
-          {selectedGroup
-            ? `${labelRole(selectedGroup.currentUserRole, selectedGroup.ownerUid === user?.uid)} · ${selectedGroup.memberCount} member${selectedGroup.memberCount === 1 ? "" : "s"} · ${selectedGroup.rosterCount} roster${selectedGroup.rosterCount === 1 ? "" : "s"}${selectedGroup.lastSavedByEmail ? ` · Last saved by ${selectedGroup.lastSavedByEmail}` : ""}`
-            : "Create a group first, or accept a group invite."}
-        </div>
-      </div>
-
-      <div className="rounded-2xl border border-white/70 bg-white/80 px-3 py-2">
-        <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-          Active local roster
-        </div>
-        <div className="mt-0.5 truncate text-xs font-black text-[#102A43]">
-          {activeRoster?.name || "No roster"}
-        </div>
-        <div className="mt-0.5 text-[11px] font-semibold text-slate-500">
-          {activeRoster ? `${activeRoster.players.length} player${activeRoster.players.length === 1 ? "" : "s"}` : disabledReason}
-        </div>
-      </div>
-
-      <div className="grid gap-2 sm:grid-cols-2">
-        <Button
-          type="button"
-          className="h-11 justify-start rounded-2xl gap-2 bg-violet-600 px-3 text-xs font-black text-white shadow-sm hover:bg-violet-700"
-          onClick={handlePublish}
-          disabled={!user || !activeRoster || isEmptyRoster || Boolean(busy)}
-        >
-          <CloudUpload className="h-4 w-4" />
-          {busy === "publish" ? "Adding…" : selectedGroup ? "Add roster to selected group" : "Create group + add roster"}
-        </Button>
-
-        <Button
-          type="button"
-          variant="outline"
-          className="h-11 justify-start rounded-2xl gap-2 border-violet-200 bg-white px-3 text-xs font-black text-violet-700 shadow-sm hover:bg-violet-50"
-          onClick={handleSaveActiveRoster}
-          disabled={!canSaveActiveRoster}
-        >
-          <Save className="h-4 w-4" />
-          {busy === "save" ? "Saving…" : activeCanSave ? "Save changes to group roster" : "View-only — cannot save"}
-        </Button>
-
-        <Button
-          type="button"
-          variant="outline"
-          className="h-11 justify-start rounded-2xl gap-2 border-violet-200 bg-white px-3 text-xs font-black text-violet-700 shadow-sm hover:bg-violet-50 sm:col-span-2"
-          onClick={handleRefreshActiveRoster}
-          disabled={!canRefreshActiveRoster}
-        >
-          <CloudDownload className="h-4 w-4" />
-          {busy === "reload" ? "Refreshing…" : "Get latest from group roster"}
-        </Button>
-      </div>
-
-      <div className={`rounded-2xl border px-3 py-2 ${activeFirebaseSource?.firebaseRosterId ? "border-emerald-100 bg-emerald-50/80" : "border-white/70 bg-white/75"}`}>
-        <div className={`text-[10px] font-black uppercase tracking-wide ${activeFirebaseSource?.firebaseRosterId ? "text-emerald-700" : "text-slate-400"}`}>
-          {activeFirebaseSource?.firebaseRosterId ? "Linked group roster" : "Local-only roster"}
-        </div>
-        <div className="mt-1 text-[11px] font-bold leading-snug text-slate-600">
-          {activeFirebaseSource?.firebaseRosterId
-            ? `${activeFirebaseSource.firebaseGroupName ? `${activeFirebaseSource.firebaseGroupName} · ` : ""}Version ${activeFirebaseSource.firebaseVersion || 1} · ${labelRole(activeFirebaseRole, activeFirebaseSource.firebaseOwnerUid === user?.uid)}${activeFirebaseSource.firebaseLastSavedByEmail ? ` · Last saved by ${activeFirebaseSource.firebaseLastSavedByEmail}` : ""}. Save checks the remote version before overwriting.`
-            : "Create or open a group roster before using save, refresh, or invites."}
-        </div>
-      </div>
-
-      <div className="grid gap-2 rounded-2xl bg-white/75 p-2">
-        <div className="flex items-center gap-1.5 px-1 text-[10px] font-black uppercase tracking-wide text-slate-400">
-          <UserPlus className="h-3.5 w-3.5" />
-          Invite co-organizer to group
-        </div>
-        <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
-          <input
-            type="email"
-            value={inviteEmail}
-            onChange={(event) => setInviteEmail(event.target.value)}
-            placeholder="sarah@example.com"
-            className="h-10 rounded-2xl border border-violet-100 bg-white px-3 text-xs font-bold text-[#102A43] outline-none placeholder:text-slate-300 focus:border-violet-300 focus:ring-2 focus:ring-violet-100"
-            disabled={!canInviteToGroup}
-          />
-          <Button
-            type="button"
-            variant="outline"
-            className="h-10 justify-start rounded-2xl gap-1.5 border-violet-200 bg-white px-3 text-xs font-black text-violet-700 shadow-sm hover:bg-violet-50"
-            onClick={handleInviteToSelectedGroup}
-            disabled={!canInviteToGroup || !inviteEmail.trim()}
-          >
-            <Mail className="h-3.5 w-3.5" />
-            {busy === "invite" ? "Inviting…" : "Invite"}
-          </Button>
-        </div>
-        <div className="px-1 text-[10px] font-semibold leading-snug text-slate-500">
-          Invites now belong to the group. Sarah accepts once, then sees all rosters inside that group.
-        </div>
-      </div>
-
-      <div className="grid gap-2 rounded-2xl bg-white/75 p-2">
-        <div className="flex items-center justify-between gap-2 px-1">
-          <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wide text-slate-400">
-            <Inbox className="h-3.5 w-3.5" />
-            Group invites for me
-          </div>
-          <Button
-            type="button"
-            variant="ghost"
-            className="h-7 rounded-xl px-2 text-[10px] font-black text-violet-700"
-            onClick={() => refreshSharedData()}
-            disabled={!user || Boolean(busy)}
-          >
-            <RefreshCw className={`mr-1 h-3 w-3 ${busy === "refresh" ? "animate-spin" : ""}`} />
-            Check
-          </Button>
-        </div>
-
-        {!user ? (
-          <div className="rounded-2xl bg-slate-50 px-3 py-2 text-[11px] font-bold text-slate-500">
-            Sign in above to check invites.
-          </div>
-        ) : incomingInvites.length === 0 ? (
-          <div className="rounded-2xl bg-slate-50 px-3 py-2 text-[11px] font-bold text-slate-500">
-            No pending group invites for this email.
-          </div>
-        ) : (
-          <div className="grid gap-1.5">
-            {incomingInvites.slice(0, 4).map((invite) => (
-              <div key={invite.id} className="grid gap-2 rounded-2xl border border-emerald-100 bg-emerald-50/70 px-3 py-2">
-                <div>
-                  <div className="flex items-center gap-1.5 text-xs font-black text-[#102A43]">
-                    <Mail className="h-3.5 w-3.5 text-emerald-600" />
-                    <span className="min-w-0 flex-1 truncate">{invite.name}</span>
-                    <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-[10px] text-emerald-700">group invite</span>
-                  </div>
-                  <div className="mt-0.5 text-[10px] font-semibold text-slate-500">
-                    From {invite.ownerEmail || "owner"} · {invite.rosterCount} roster{invite.rosterCount === 1 ? "" : "s"}
-                  </div>
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-8 justify-start rounded-xl gap-1.5 border-emerald-100 bg-white px-2 text-[10px] font-black text-emerald-700"
-                  onClick={() => handleAcceptInvite(invite.id)}
-                  disabled={!user || Boolean(busy)}
-                >
-                  <Check className="h-3.5 w-3.5" />
-                  {busy === `accept:${invite.id}` ? "Accepting…" : "Accept group invite"}
-                </Button>
-              </div>
-            ))}
-          </div>
         )}
       </div>
 
-      <div className="grid gap-2 rounded-2xl bg-white/75 p-2">
-        <div className="flex items-center justify-between gap-2 px-1">
-          <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wide text-slate-400">
-            <ListChecks className="h-3.5 w-3.5" />
-            Rosters in selected group
-          </div>
-          <Button
-            type="button"
-            variant="ghost"
-            className="h-7 rounded-xl px-2 text-[10px] font-black text-violet-700"
-            onClick={() => refreshSharedData()}
-            disabled={!user || Boolean(busy)}
-          >
-            <RefreshCw className={`mr-1 h-3 w-3 ${busy === "refresh" ? "animate-spin" : ""}`} />
-            Refresh
-          </Button>
-        </div>
-
-        {!user ? (
-          <div className="rounded-2xl bg-slate-50 px-3 py-2 text-[11px] font-bold text-slate-500">
-            Sign in above to list group rosters.
-          </div>
-        ) : visibleRosters.length === 0 ? (
-          <div className="rounded-2xl bg-slate-50 px-3 py-2 text-[11px] font-bold text-slate-500">
-            No rosters in this group yet.
-          </div>
-        ) : (
-          <div className="grid gap-1.5">
-            {visibleRosters.slice(0, 6).map((roster) => (
-              <div key={roster.id} className="grid gap-2 rounded-2xl border border-slate-100 bg-white px-3 py-2">
-                <div>
-                  <div className="flex items-center gap-1.5 text-xs font-black text-[#102A43]">
-                    <Share2 className="h-3.5 w-3.5 text-violet-600" />
-                    <span className="min-w-0 flex-1 truncate">{roster.name}</span>
-                    <span className="shrink-0 rounded-full bg-violet-50 px-2 py-0.5 text-[10px] text-violet-700">{labelRole(roster.currentUserRole, roster.ownerUid === user?.uid).toLowerCase()}</span>
-                    <span className="shrink-0 rounded-full bg-slate-50 px-2 py-0.5 text-[10px] text-slate-600">v{roster.version}</span>
-                  </div>
-                  <div className="mt-0.5 text-[10px] font-semibold text-slate-500">
-                    {roster.groupName ? `${roster.groupName} · ` : ""}{roster.playerCount} player{roster.playerCount === 1 ? "" : "s"} · {formatWhen(roster.updatedAt)}{roster.lastSavedByEmail ? ` · saved by ${roster.lastSavedByEmail}` : ""}
-                  </div>
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-8 justify-start rounded-xl gap-1.5 border-violet-100 bg-violet-50/60 px-2 text-[10px] font-black text-violet-700"
-                  onClick={() => handleOpenRoster(roster.id)}
-                  disabled={!user || Boolean(busy)}
-                >
-                  <CloudDownload className="h-3.5 w-3.5" />
-                  {busy === `open:${roster.id}` ? "Opening…" : "Open linked copy"}
-                </Button>
-              </div>
-            ))}
-          </div>
-        )}
+      <div className="grid grid-cols-2 gap-2">
+        <Button type="button" className="h-10 rounded-2xl bg-emerald-600 text-xs font-black text-white hover:bg-emerald-700" onClick={handleSaveActiveRoster} disabled={!canSaveActiveRoster}>
+          <Save className="mr-1.5 h-4 w-4" />
+          {busy === "save" ? "Saving…" : "Save changes"}
+        </Button>
+        <Button type="button" variant="outline" className="h-10 rounded-2xl border-slate-100 bg-white text-xs font-black" onClick={handleRefreshActiveRoster} disabled={!canRefreshActiveRoster}>
+          <CloudDownload className="mr-1.5 h-4 w-4" />
+          {busy === "reload" ? "Getting…" : "Get latest"}
+        </Button>
       </div>
 
-      {notice ? (
-        <div
-          className={`rounded-2xl px-3 py-2 text-[11px] font-bold leading-snug ${
-            notice.tone === "success"
-              ? "bg-emerald-50 text-emerald-700"
-              : notice.tone === "error"
-                ? "bg-rose-50 text-rose-700"
-                : "bg-white/80 text-slate-600"
-          }`}
-        >
-          {notice.text}
+      <button type="button" onClick={() => setModal("collaborators")} disabled={!user || !selectedGroup} className="flex items-center justify-between rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2 text-left active:scale-[0.99] disabled:opacity-60">
+        <span>
+          <span className="block text-[10px] font-black uppercase tracking-wide text-slate-400">Collaborators</span>
+          <span className="block text-xs font-black text-[#102A43]">{selectedGroup ? `${selectedGroup.memberCount} active${selectedGroup.pendingInviteEmails?.length ? ` · ${selectedGroup.pendingInviteEmails.length} pending` : ""}` : "No group selected"}</span>
+        </span>
+        <Users className="h-4 w-4 text-emerald-600" />
+      </button>
+
+      {notice && <div className={`rounded-2xl px-3 py-2 text-[11px] font-bold ${notice.tone === "error" ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>{notice.text}</div>}
+
+      {modal === "groups" && modalShell("Groups", () => setModal(""), (
+        <div className="grid gap-3">
+          <div className="grid gap-2">
+            <input value={newGroupName} onChange={(event) => setNewGroupName(event.target.value)} className="h-10 rounded-2xl border border-slate-100 bg-slate-50 px-3 text-sm font-bold outline-none" placeholder="New group name" />
+            <Button type="button" className="h-10 rounded-2xl bg-emerald-600 text-xs font-black text-white" onClick={handleCreateGroup} disabled={!newGroupName.trim() || Boolean(busy)}>
+              Create group
+            </Button>
+          </div>
+          {sharedGroups.length > 0 && <div className="grid gap-1.5">{sharedGroups.map((group) => (
+            <button key={group.id} type="button" onClick={() => { setSelectedGroupId(group.id); setModal(""); }} className={`rounded-2xl px-3 py-2 text-left text-xs font-black ${group.id === selectedGroupId ? "bg-emerald-50 text-emerald-700" : "bg-slate-50 text-[#102A43]"}`}>{group.name}</button>
+          ))}</div>}
+          {selectedGroup && selectedGroup.ownerUid === user?.uid && (
+            <Button type="button" variant="outline" className="h-10 rounded-2xl border-rose-100 text-xs font-black text-rose-700" onClick={handleDeleteSelectedGroup} disabled={Boolean(busy)}>
+              <Trash2 className="mr-1.5 h-4 w-4" />
+              Delete group
+            </Button>
+          )}
         </div>
-      ) : (
-        <div className="rounded-2xl bg-white/70 px-3 py-2 text-[11px] font-bold leading-snug text-slate-500">
-          {disabledReason}
+      ))}
+
+      {modal === "rosters" && modalShell("Rosters", () => setModal(""), (
+        <div className="grid gap-3">
+          <div className="grid gap-1.5">
+            {rosters.filter((roster) => roster.players.length > 0).map((roster) => (
+              <label key={roster.id} className="flex items-center gap-2 rounded-2xl bg-slate-50 px-3 py-2 text-xs font-bold text-[#102A43]">
+                <input type="checkbox" checked={selectedLocalRosterIds.includes(roster.id)} onChange={() => toggleLocalRoster(roster.id)} />
+                <span className="min-w-0 flex-1 truncate">{roster.name}</span>
+                <span className="text-[10px] text-slate-400">{roster.players.length}</span>
+              </label>
+            ))}
+          </div>
+          <Button type="button" className="h-10 rounded-2xl bg-emerald-600 text-xs font-black text-white" onClick={handleAddSelectedRosters} disabled={!selectedGroup || !selectedLocalRosterIds.length || Boolean(busy)}>
+            Add selected
+          </Button>
+          {visibleRosters.length > 0 && <div className="grid gap-1.5 border-t border-slate-100 pt-2">{visibleRosters.map((roster) => (
+            <div key={roster.id} className="flex items-center justify-between gap-2 rounded-2xl bg-white px-3 py-2 text-xs font-bold text-[#102A43] shadow-sm">
+              <span className="min-w-0 truncate">{roster.name}</span>
+              <button type="button" onClick={() => handleRemoveSharedRoster(roster.id)} className="rounded-full bg-rose-50 p-1.5 text-rose-600" disabled={Boolean(busy)}><Trash2 className="h-3.5 w-3.5" /></button>
+            </div>
+          ))}</div>}
         </div>
-      )}
+      ))}
+
+      {modal === "collaborators" && modalShell("Collaborators", () => setModal(""), (
+        <div className="grid gap-3">
+          <div className="grid grid-cols-[1fr_auto] gap-2">
+            <input value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} type="email" className="h-10 rounded-2xl border border-slate-100 bg-slate-50 px-3 text-sm font-bold outline-none" placeholder="email@example.com" />
+            <Button type="button" className="h-10 rounded-2xl bg-emerald-600 px-3 text-xs font-black text-white" onClick={handleInviteToSelectedGroup} disabled={!inviteEmail.trim() || Boolean(busy)}>
+              <UserPlus className="mr-1.5 h-4 w-4" />
+              Add
+            </Button>
+          </div>
+          <div className="grid gap-1.5">
+            {(selectedGroup?.memberEmails || []).map((email) => (
+              <div key={email} className="flex items-center justify-between rounded-2xl bg-slate-50 px-3 py-2 text-xs font-bold text-[#102A43]"><span className="truncate">{email}</span><span className="text-[10px] text-emerald-700">active</span></div>
+            ))}
+            {(selectedGroup?.pendingInviteEmails || []).map((email) => (
+              <div key={email} className="flex items-center justify-between gap-2 rounded-2xl bg-amber-50 px-3 py-2 text-xs font-bold text-[#102A43]">
+                <span className="min-w-0 truncate">{email}</span>
+                <button type="button" onClick={() => handleCancelInvite(email)} className="rounded-full bg-white p-1.5 text-amber-700" disabled={Boolean(busy)}><X className="h-3.5 w-3.5" /></button>
+              </div>
+            ))}
+            {!selectedGroup?.memberEmails?.length && !selectedGroup?.pendingInviteEmails?.length && <div className="rounded-2xl bg-slate-50 px-3 py-2 text-xs font-bold text-slate-500">No collaborators</div>}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

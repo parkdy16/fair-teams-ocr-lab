@@ -478,6 +478,8 @@ function App() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const logoInputRef = useRef<HTMLInputElement | null>(null);
   const [rosterFilesOpen, setRosterFilesOpen] = useState(false);
+  const [rosterSharedToolsOpen, setRosterSharedToolsOpen] = useState(false);
+  const [rosterBackupToolsOpen, setRosterBackupToolsOpen] = useState(false);
   const [rosterPickerOpen, setRosterPickerOpen] = useState(false);
   const [clearRosterOpen, setClearRosterOpen] = useState(false);
   const [clearRosterSlide, setClearRosterSlide] = useState(0);
@@ -2378,33 +2380,28 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
               </div>
 
               <div className="rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
-                <div className="flex items-start gap-2.5">
-                  <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-2xl bg-slate-50 text-[#102A43] shadow-sm">
-                    <Cloud className="h-4 w-4" />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-2xl bg-slate-50 text-[#102A43] shadow-sm">
+                      <Cloud className="h-4 w-4" />
+                    </span>
+                    <div className="min-w-0">
                       <div className="text-[10px] font-black uppercase tracking-wide text-slate-500">
                         Google Account
                       </div>
-                      <div className={`rounded-full px-2 py-0.5 text-[10px] font-black ${googleDriveConnected ? "bg-emerald-50 text-emerald-700" : "bg-slate-50 text-slate-500"}`}>
-                        {googleDriveConnected ? "Signed in" : "Not signed in"}
+                      <div className="mt-0.5 truncate text-xs font-black text-[#102A43]">
+                        {connectedDriveUser?.emailAddress || (googleDriveConnected ? "Google connected" : "Not signed in")}
                       </div>
                     </div>
-                    <div className="mt-2 rounded-2xl bg-slate-50/80 px-3 py-2">
-                      <div className="truncate text-xs font-black text-[#102A43]">
-                        {connectedDriveUser?.emailAddress || (googleDriveConnected ? "Google connected" : "Sign in once for shared rosters and backups")}
-                      </div>
-                      <p className="mt-1 text-[11px] font-semibold leading-snug text-slate-500">
-                        One Google sign-in is used for Shared Roster and Advanced Backup.
-                      </p>
-                    </div>
+                  </div>
+                  <div className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black ${googleDriveConnected ? "bg-emerald-50 text-emerald-700" : "bg-slate-50 text-slate-500"}`}>
+                    {googleDriveConnected ? "Signed in" : "Required"}
                   </div>
                 </div>
                 <Button
                   type="button"
                   variant={googleDriveConnected ? "outline" : "default"}
-                  className={`mt-3 h-11 w-full justify-start rounded-2xl gap-3 ${googleDriveConnected ? "border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-700" : "bg-[#102A43] text-white hover:bg-[#0b2036]"}`}
+                  className={`mt-3 h-10 w-full justify-start rounded-2xl gap-3 ${googleDriveConnected ? "border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-700" : "bg-[#102A43] text-white hover:bg-[#0b2036]"}`}
                   onClick={googleDriveConnected ? disconnectGoogleDrive : connectGoogleDrive}
                   disabled={!googleDriveConfig.isConfigured || googleDriveConnecting}
                 >
@@ -2419,6 +2416,185 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
                 </Button>
               </div>
 
+              <div className="rounded-2xl border border-blue-100 bg-blue-50/55 p-3 shadow-sm">
+                <div className="flex items-start gap-2.5">
+                  <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-2xl bg-white text-blue-600 shadow-sm">
+                    <Archive className="h-4 w-4" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="text-[10px] font-black uppercase tracking-wide text-blue-500">
+                        Backup & Restore
+                      </div>
+                      <div className={`rounded-full px-2 py-0.5 text-[10px] font-black ${googleDriveConnected ? "bg-emerald-50 text-emerald-700" : "bg-white text-slate-500"}`}>
+                        {googleDriveConnected ? "Cloud ready" : "Local only"}
+                      </div>
+                    </div>
+                    <p className="mt-1 text-xs font-semibold leading-snug text-slate-600">
+                      For solo organizers, safety copies, and moving rosters between devices.
+                    </p>
+                    <div className="mt-2 text-[11px] font-black text-[#102A43]">
+                      {formatBackupSummary(deviceBackupSummary)}
+                    </div>
+                  </div>
+                </div>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="mt-3 h-11 w-full justify-start rounded-2xl gap-3 border-blue-100 bg-white/90"
+                  onClick={() => setRosterBackupToolsOpen((open) => !open)}
+                >
+                  <ArchiveRestore className="h-4 w-4" />
+                  <span className="font-black">
+                    {rosterBackupToolsOpen ? "Hide backup tools" : "Open backup tools"}
+                  </span>
+                </Button>
+
+                {rosterBackupToolsOpen && (
+                  <div className="mt-3 grid gap-3">
+                    <div className="rounded-2xl bg-white/80 p-3">
+                      <div className="text-[10px] font-black uppercase tracking-wide text-blue-500">
+                        Cloud backup
+                      </div>
+                      <div className="mt-1 truncate text-xs font-black text-[#102A43]">
+                        {currentDriveBackup?.name || "No safety backup selected"}
+                      </div>
+                      <div className="mt-0.5 text-[11px] font-semibold text-slate-500">
+                        {currentDriveBackup
+                          ? `Backup has ${formatBackupSummary(currentDriveBackup.rosterCount !== undefined && currentDriveBackup.playerCount !== undefined ? { rosterCount: currentDriveBackup.rosterCount, playerCount: currentDriveBackup.playerCount } : null)}`
+                          : googleDriveConnected
+                            ? "Create a safety copy in Google Drive."
+                            : "Sign in above to use cloud backup."}
+                      </div>
+                    </div>
+
+                    <Button
+                      type="button"
+                      className="h-12 justify-start rounded-2xl gap-3 bg-blue-600 text-white shadow-sm hover:bg-blue-700"
+                      onClick={saveAllRostersToGoogleDrive}
+                      disabled={isEmptyStarterRoster || !googleDriveConnected || googleDriveSaving || googleDriveUpdating}
+                      title={currentDriveBackup ? "Update the active Drive backup" : "Create a new Drive backup"}
+                    >
+                      {currentDriveBackup ? (
+                        <RefreshCw className={`h-4 w-4 ${googleDriveUpdating ? "animate-spin" : ""}`} />
+                      ) : (
+                        <CloudUpload className="h-4 w-4" />
+                      )}
+                      <span className="font-black">
+                        {googleDriveSaving || googleDriveUpdating
+                          ? "Saving..."
+                          : currentDriveBackup
+                            ? "Save safety backup"
+                            : "Create safety backup"}
+                      </span>
+                    </Button>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-11 justify-start rounded-2xl gap-2 border-blue-100 bg-white/90 px-3"
+                        onClick={openGoogleDriveBackup}
+                        disabled={!googleDriveConnected || googleDriveOpening}
+                      >
+                        <CloudDownload className="h-4 w-4" />
+                        <span className="truncate text-xs font-black">{googleDriveOpening ? "Opening..." : "Restore"}</span>
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-11 justify-start rounded-2xl gap-2 border-blue-100 bg-white/90 px-3"
+                        onClick={saveDriveBackupAsNewCopy}
+                        disabled={
+                          isEmptyStarterRoster ||
+                          !googleDriveConnected ||
+                          googleDriveSaving ||
+                          googleDriveOpening ||
+                          googleDriveUpdating
+                        }
+                        title="Save as a separate Drive backup file"
+                      >
+                        <Archive className="h-4 w-4" />
+                        <span className="truncate text-xs font-black">
+                          {googleDriveSaving ? "Saving..." : "Archive copy"}
+                        </span>
+                      </Button>
+                    </div>
+
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-11 justify-start rounded-2xl gap-3 border-blue-100 bg-white/90"
+                      onClick={openDriveShareModal}
+                      disabled={isEmptyStarterRoster || !googleDriveConnected || googleDriveSharing}
+                    >
+                      <Share2 className="h-4 w-4" />
+                      <span className="font-black">
+                        {googleDriveSharing ? "Sending..." : "Send copy"}
+                      </span>
+                    </Button>
+
+                    <div className="rounded-2xl border border-slate-100 bg-white/80 p-3">
+                      <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+                        Local files
+                      </div>
+                      <div className="mt-2 grid gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-11 justify-start rounded-2xl gap-3"
+                          onClick={exportSharedRoster}
+                          disabled={players.length === 0}
+                        >
+                          <Download className="h-4 w-4" />
+                          <span className="font-black">Export this roster</span>
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-11 justify-start rounded-2xl gap-3"
+                          onClick={() => openImportPicker("shared")}
+                        >
+                          <Upload className="h-4 w-4" />
+                          <span className="font-black">Import one roster</span>
+                        </Button>
+                        <div className="grid grid-cols-2 gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-11 justify-start rounded-2xl gap-2 px-3"
+                            onClick={exportAllRostersBackup}
+                            disabled={isEmptyStarterRoster}
+                          >
+                            <Archive className="h-4 w-4" />
+                            <span className="truncate text-xs font-black">Export all</span>
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-11 justify-start rounded-2xl gap-2 px-3"
+                            onClick={() => openImportPicker("backup")}
+                          >
+                            <ArchiveRestore className="h-4 w-4" />
+                            <span className="truncate text-xs font-black">Import all</span>
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setDriveHelpOpen(true)}
+                      className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wide text-blue-600"
+                    >
+                      <Info className="h-3 w-3" />
+                      How backup works
+                    </button>
+                  </div>
+                )}
+              </div>
+
               <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-3 shadow-sm">
                 <div className="flex items-start gap-2.5">
                   <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-2xl bg-white text-emerald-600 shadow-sm">
@@ -2430,12 +2606,41 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
                         Shared Roster
                       </div>
                       <div className={`rounded-full px-2 py-0.5 text-[10px] font-black ${activeRosterIsShared ? "bg-emerald-600 text-white" : "bg-white text-slate-500"}`}>
-                        {activeRosterIsShared ? "Linked" : "Local"}
+                        {activeRosterIsShared ? "Shared" : "Local"}
                       </div>
                     </div>
+                    <p className="mt-1 text-xs font-semibold leading-snug text-emerald-800/80">
+                      For co-organizers who work on the same roster.
+                    </p>
+                    <div className="mt-2 rounded-2xl bg-white/80 px-3 py-2">
+                      <div className="truncate text-sm font-black text-[#102A43]">
+                        {isEmptyStarterRoster ? "No roster yet" : activeRosterName}
+                      </div>
+                      <div className="mt-0.5 text-[11px] font-semibold text-slate-500">
+                        {activeRosterIsShared
+                          ? `Shared · Last saved ${formatSheetSyncTime(activeGoogleSheetSource?.lastSyncedAt).replace("Synced ", "")}`
+                          : `${sharedRosterCountLabel} on this device`}
+                      </div>
+                    </div>
+                  </div>
+                </div>
 
-                    <div className="mt-2 rounded-2xl bg-white/85 px-3 py-2">
-                      <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="mt-3 h-11 w-full justify-start rounded-2xl gap-3 border-emerald-100 bg-white/90"
+                  onClick={() => setRosterSharedToolsOpen((open) => !open)}
+                >
+                  <Share2 className="h-4 w-4" />
+                  <span className="font-black">
+                    {rosterSharedToolsOpen ? "Hide sharing tools" : "Open sharing tools"}
+                  </span>
+                </Button>
+
+                {rosterSharedToolsOpen && (
+                  <div className="mt-3 grid gap-3">
+                    <div className="rounded-2xl bg-white/85 p-3">
+                      <div className="text-[10px] font-black uppercase tracking-wide text-emerald-600">
                         This roster
                       </div>
                       <div className="mt-0.5 truncate text-sm font-black text-[#102A43]">
@@ -2446,339 +2651,151 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
                           ? `Shared · Last saved ${formatSheetSyncTime(activeGoogleSheetSource?.lastSyncedAt).replace("Synced ", "")}`
                           : "Saved on this device"}
                       </div>
-                      {activeGoogleSheetSource?.spreadsheetName && (
-                        <div className="mt-1 truncate text-[10px] font-bold text-slate-400">
-                          File: {activeGoogleSheetSource.spreadsheetName}
-                        </div>
-                      )}
                     </div>
-                  </div>
-                </div>
 
-                <div className="mt-3 grid gap-2">
-                  {activeRosterIsShared ? (
-                    <>
+                    {activeRosterIsShared ? (
+                      <>
+                        <Button
+                          type="button"
+                          className="h-12 justify-start rounded-2xl gap-3 bg-emerald-600 text-white shadow-sm hover:bg-emerald-700"
+                          onClick={() => saveActiveRosterToGoogleSheet()}
+                          disabled={!googleDriveConnected || googleSheetSyncing || googleSheetOpening || isEmptyStarterRoster}
+                        >
+                          <RefreshCw className={`h-4 w-4 ${googleSheetSyncing ? "animate-spin" : ""}`} />
+                          <span className="min-w-0 truncate font-black">
+                            {googleSheetSyncing ? "Saving..." : "Save changes"}
+                          </span>
+                        </Button>
+                        <div className="grid grid-cols-2 gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-11 justify-start rounded-2xl gap-2 border-emerald-100 bg-white/90 px-3"
+                            onClick={reloadActiveRosterFromGoogleSheet}
+                            disabled={!googleDriveConnected || googleSheetOpening || googleSheetSyncing}
+                          >
+                            <CloudDownload className="h-4 w-4" />
+                            <span className="truncate text-xs font-black">
+                              {googleSheetOpening ? "Getting latest..." : "Get latest"}
+                            </span>
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-11 justify-start rounded-2xl gap-2 border-emerald-100 bg-white/90 px-3"
+                            onClick={openGoogleSheetShareModal}
+                            disabled={!googleDriveConnected || googleSheetSharing}
+                          >
+                            <Share2 className="h-4 w-4" />
+                            <span className="truncate text-xs font-black">
+                              {googleSheetSharing ? "Sharing..." : "Share"}
+                            </span>
+                          </Button>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          className="h-9 justify-start rounded-2xl gap-2 px-3 text-[11px] font-black text-slate-500 hover:bg-white/80 hover:text-slate-700"
+                          onClick={disconnectActiveRosterFromGoogleSheet}
+                          disabled={googleSheetSyncing || googleSheetOpening || googleSheetSharing}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                          Disconnect from shared roster
+                        </Button>
+                      </>
+                    ) : (
                       <Button
                         type="button"
                         className="h-12 justify-start rounded-2xl gap-3 bg-emerald-600 text-white shadow-sm hover:bg-emerald-700"
-                        onClick={() => saveActiveRosterToGoogleSheet()}
-                        disabled={!googleDriveConnected || googleSheetSyncing || googleSheetOpening || isEmptyStarterRoster}
+                        onClick={makeActiveRosterShared}
+                        disabled={!googleDriveConnected || googleSheetSyncing || isEmptyStarterRoster}
                       >
-                        <RefreshCw className={`h-4 w-4 ${googleSheetSyncing ? "animate-spin" : ""}`} />
+                        <Share2 className="h-4 w-4" />
                         <span className="min-w-0 truncate font-black">
-                          {googleSheetSyncing ? "Saving..." : `Save changes for ${activeRosterActionName}`}
+                          {googleSheetSyncing ? "Creating..." : "Make this roster shared"}
                         </span>
                       </Button>
-                      <div className="grid grid-cols-2 gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="h-11 justify-start rounded-2xl gap-2 border-emerald-100 bg-white/90 px-3"
-                          onClick={reloadActiveRosterFromGoogleSheet}
-                          disabled={!googleDriveConnected || googleSheetOpening || googleSheetSyncing}
-                        >
-                          <CloudDownload className="h-4 w-4" />
-                          <span className="truncate text-xs font-black">
-                            {googleSheetOpening ? "Getting latest..." : `Get latest for ${activeRosterActionName}`}
-                          </span>
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="h-11 justify-start rounded-2xl gap-2 border-emerald-100 bg-white/90 px-3"
-                          onClick={openGoogleSheetShareModal}
-                          disabled={!googleDriveConnected || googleSheetSharing}
-                        >
-                          <Share2 className="h-4 w-4" />
-                          <span className="truncate text-xs font-black">
-                            {googleSheetSharing ? "Sharing..." : `Share ${activeRosterActionName}`}
-                          </span>
-                        </Button>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        className="h-9 justify-start rounded-2xl gap-2 px-3 text-[11px] font-black text-slate-500 hover:bg-white/80 hover:text-slate-700"
-                        onClick={disconnectActiveRosterFromGoogleSheet}
-                        disabled={googleSheetSyncing || googleSheetOpening || googleSheetSharing}
-                      >
-                        <X className="h-3.5 w-3.5" />
-                        Disconnect shared roster
-                      </Button>
-                    </>
-                  ) : (
-                    <Button
-                      type="button"
-                      className="h-12 justify-start rounded-2xl gap-3 bg-emerald-600 text-white shadow-sm hover:bg-emerald-700"
-                      onClick={makeActiveRosterShared}
-                      disabled={!googleDriveConnected || googleSheetSyncing || isEmptyStarterRoster}
-                    >
-                      <Share2 className="h-4 w-4" />
-                      <span className="min-w-0 truncate font-black">
-                        {googleSheetSyncing ? "Creating..." : `Make ${activeRosterActionName} shared`}
-                      </span>
-                    </Button>
-                  )}
+                    )}
 
-                  <div className="mt-2 rounded-2xl border border-emerald-100 bg-white/70 p-3">
-                    <div className="text-[10px] font-black uppercase tracking-wide text-emerald-600">
-                      All shared rosters
-                    </div>
-                    <div className="mt-1 text-xs font-black text-[#102A43]">
-                      {sharedRosterCountLabel} on this device
-                    </div>
-                    <div className="mt-3 grid gap-2">
-                      <div className="grid grid-cols-2 gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="h-11 justify-start rounded-2xl gap-2 border-emerald-100 bg-white/90 px-3"
-                          onClick={saveAllSharedRostersToGoogleSheets}
-                          disabled={!googleDriveConnected || googleSheetSyncing || googleSheetOpening || sharedGoogleSheetRosterCount === 0}
-                        >
-                          <RefreshCw className={`h-4 w-4 ${googleSheetSyncing ? "animate-spin" : ""}`} />
-                          <span className="truncate text-xs font-black">
-                            {googleSheetSyncing ? "Saving..." : `Save changes for ${sharedGoogleSheetRosterCount} roster${sharedGoogleSheetRosterCount === 1 ? "" : "s"}`}
-                          </span>
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="h-11 justify-start rounded-2xl gap-2 border-emerald-100 bg-white/90 px-3"
-                          onClick={getLatestForAllSharedRosters}
-                          disabled={!googleDriveConnected || googleSheetOpening || googleSheetSyncing || sharedGoogleSheetRosterCount === 0}
-                        >
-                          <CloudDownload className="h-4 w-4" />
-                          <span className="truncate text-xs font-black">
-                            {googleSheetOpening ? "Getting latest..." : `Get latest for ${sharedGoogleSheetRosterCount} roster${sharedGoogleSheetRosterCount === 1 ? "" : "s"}`}
-                          </span>
-                        </Button>
+                    <div className="rounded-2xl border border-emerald-100 bg-white/70 p-3">
+                      <div className="text-[10px] font-black uppercase tracking-wide text-emerald-600">
+                        All shared rosters
                       </div>
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="mt-1 text-xs font-black text-[#102A43]">
+                        {sharedRosterCountLabel} on this device
+                      </div>
+                      <div className="mt-3 grid gap-2">
+                        <div className="grid grid-cols-2 gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-11 justify-start rounded-2xl gap-2 border-emerald-100 bg-white/90 px-3"
+                            onClick={saveAllSharedRostersToGoogleSheets}
+                            disabled={!googleDriveConnected || googleSheetSyncing || googleSheetOpening || sharedGoogleSheetRosterCount === 0}
+                          >
+                            <RefreshCw className={`h-4 w-4 ${googleSheetSyncing ? "animate-spin" : ""}`} />
+                            <span className="truncate text-xs font-black">
+                              {googleSheetSyncing ? "Saving..." : "Save all"}
+                            </span>
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-11 justify-start rounded-2xl gap-2 border-emerald-100 bg-white/90 px-3"
+                            onClick={getLatestForAllSharedRosters}
+                            disabled={!googleDriveConnected || googleSheetOpening || googleSheetSyncing || sharedGoogleSheetRosterCount === 0}
+                          >
+                            <CloudDownload className="h-4 w-4" />
+                            <span className="truncate text-xs font-black">
+                              {googleSheetOpening ? "Getting latest..." : "Get latest for all"}
+                            </span>
+                          </Button>
+                        </div>
                         <Button
                           type="button"
                           variant="outline"
-                          className="h-11 justify-start rounded-2xl gap-2 border-emerald-100 bg-white/90 px-3"
+                          className="h-11 justify-start rounded-2xl gap-3 border-emerald-100 bg-white/90"
                           onClick={openGoogleSheetRosterList}
                           disabled={!googleDriveConnected || googleSheetOpening}
                         >
                           <CloudDownload className="h-4 w-4" />
-                          <span className="truncate text-xs font-black">
+                          <span className="font-black">
                             {googleSheetOpening ? "Opening..." : "Open shared roster"}
                           </span>
                         </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="h-11 justify-start rounded-2xl gap-2 border-emerald-100 bg-white/90 px-3"
-                          onClick={() => showRosterToolsNotice("Share multiple rosters", "This is the next collaboration step: choose several rosters and add the same organizer once. For now, share each roster from its This roster section.", "info")}
-                          disabled={!googleDriveConnected || sharedGoogleSheetRosterCount === 0}
-                        >
-                          <Share2 className="h-4 w-4" />
-                          <span className="truncate text-xs font-black">Share multiple rosters</span>
-                        </Button>
                       </div>
                     </div>
-                  </div>
 
-                  <div className="rounded-2xl bg-white/70 px-3 py-2">
-                    <p className="text-[10px] font-semibold leading-snug text-slate-500">
-                      {googleDriveConnected
-                        ? "Before editing, get latest changes. After editing, save your changes. Use the top buttons for this roster or the bottom buttons for all shared rosters on this device."
-                        : "Sign in with Google above to make, open, save, get latest, or share rosters."}
-                    </p>
+                    <div className="rounded-2xl bg-white/70 px-3 py-2">
+                      <p className="text-[10px] font-semibold leading-snug text-slate-500">
+                        {googleDriveConnected
+                          ? "Get latest before editing. Save changes after editing."
+                          : "Sign in with Google above to share rosters."}
+                      </p>
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
 
-              <div className="rounded-2xl border border-blue-100 bg-blue-50/55 p-3 shadow-sm">
-                <div className="flex items-start gap-2.5">
-                  <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-2xl bg-white text-blue-600 shadow-sm">
-                    <Cloud className="h-4 w-4" />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="text-[10px] font-black uppercase tracking-wide text-blue-500">
-                        Advanced Backup
-                      </div>
-                      <div className={`rounded-full px-2 py-0.5 text-[10px] font-black ${googleDriveConnected ? "bg-emerald-50 text-emerald-700" : "bg-white text-slate-500"}`}>
-                        {googleDriveConnected ? "Connected" : "Not connected"}
-                      </div>
-                    </div>
-                    <div className="mt-2 rounded-2xl bg-white/80 px-3 py-2">
-                      <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-                        This device
-                      </div>
-                      <div className="mt-0.5 text-xs font-black text-[#102A43]">
-                        {formatBackupSummary(deviceBackupSummary)}
-                      </div>
-                      <div className="mt-2 text-[10px] font-black uppercase tracking-wide text-slate-400">
-                        Connected account
-                      </div>
-                      <div className={`mt-0.5 truncate text-xs font-black ${connectedDriveUser?.emailAddress ? "text-[#102A43]" : "text-slate-400"}`}>
-                        {connectedDriveUser?.emailAddress || (googleDriveConnected ? "Connected" : "Not connected")}
-                      </div>
-                      <div className="mt-2 text-[10px] font-black uppercase tracking-wide text-slate-400">
-                        Safety backup file
-                      </div>
-                      <div className={`mt-0.5 truncate text-xs font-black ${currentDriveBackup ? "text-[#102A43]" : "text-slate-400"}`}>
-                        {currentDriveBackup?.name || "No backup selected"}
-                      </div>
-                      <div className="mt-0.5 text-[11px] font-semibold text-slate-500">
-                        {currentDriveBackup
-                          ? `Backup has ${formatBackupSummary(currentDriveBackup.rosterCount !== undefined && currentDriveBackup.playerCount !== undefined ? { rosterCount: currentDriveBackup.rosterCount, playerCount: currentDriveBackup.playerCount } : null)}`
-                          : "Optional safety copies for moving or restoring rosters."}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-3 grid gap-2">
-                  <Button
-                    type="button"
-                    className="h-12 justify-start rounded-2xl gap-3 bg-emerald-600 text-white shadow-sm hover:bg-emerald-700"
-                    onClick={saveAllRostersToGoogleDrive}
-                    disabled={isEmptyStarterRoster || !googleDriveConnected || googleDriveSaving || googleDriveUpdating}
-                    title={currentDriveBackup ? "Update the active Drive backup" : "Create a new Drive backup"}
-                  >
-                    {currentDriveBackup ? (
-                      <RefreshCw className={`h-4 w-4 ${googleDriveUpdating ? "animate-spin" : ""}`} />
-                    ) : (
-                      <CloudUpload className="h-4 w-4" />
-                    )}
-                    <span className="font-black">
-                      {googleDriveSaving || googleDriveUpdating
-                        ? "Saving..."
-                        : currentDriveBackup
-                          ? "Save safety backup"
-                          : "Create safety backup"}
-                    </span>
-                  </Button>
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="h-11 justify-start rounded-2xl gap-2 border-blue-100 bg-white/90 px-3"
-                      onClick={openGoogleDriveBackup}
-                      disabled={!googleDriveConnected || googleDriveOpening}
-                    >
-                      <CloudDownload className="h-4 w-4" />
-                      <span className="truncate text-xs font-black">{googleDriveOpening ? "Opening..." : "Restore backup"}</span>
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="h-11 justify-start rounded-2xl gap-2 border-slate-100 bg-white/90 px-3 text-slate-700"
-                      onClick={saveDriveBackupAsNewCopy}
-                      disabled={
-                        isEmptyStarterRoster ||
-                        !googleDriveConnected ||
-                        googleDriveSaving ||
-                        googleDriveOpening ||
-                        googleDriveUpdating
-                      }
-                      title="Save as a separate Drive backup file"
-                    >
-                      <Archive className="h-4 w-4" />
-                      <span className="truncate text-xs font-black">
-                        {googleDriveSaving ? "Saving..." : "Archive copy"}
-                      </span>
-                    </Button>
-                  </div>
+              {!isEmptyStarterRoster && (
+                <div className="border-t border-slate-100 pt-3">
                   <Button
                     type="button"
                     variant="outline"
-                    className="h-11 justify-start rounded-2xl gap-3 border-emerald-100 bg-white/90"
-                    onClick={openDriveShareModal}
-                    disabled={isEmptyStarterRoster || !googleDriveConnected || googleDriveSharing}
+                    className="h-11 w-full justify-start rounded-2xl gap-3 border-red-100 bg-red-50/70 text-red-700 hover:bg-red-100 hover:text-red-800"
+                    onClick={openClearRoster}
                   >
-                    <Share2 className="h-4 w-4" />
+                    <Trash2 className="h-4 w-4" />
                     <span className="font-black">
-                      {googleDriveSharing ? "Sending..." : "Send copy"}
+                      {activeRosterIsShared
+                        ? "Remove shared roster from this device"
+                        : rosters.length > 1
+                          ? "Delete current roster"
+                          : "Clear current roster"}
                     </span>
                   </Button>
-                  <div className="rounded-2xl bg-white/70 px-3 py-2">
-                    <p className="text-[10px] font-semibold leading-snug text-slate-500">
-                      {googleDriveConnected
-                        ? "Optional backup files are for safety or transfer. Shared Roster is the simpler choice when multiple organizers use the same roster."
-                        : "Sign in with the Google Account section above to use Drive backup."}
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => setDriveHelpOpen(true)}
-                      className="mt-1 inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wide text-blue-600"
-                    >
-                      <Info className="h-3 w-3" />
-                      How it works
-                    </button>
-                  </div>
                 </div>
-              </div>
-
-              <div className="grid gap-2 border-t border-slate-100 pt-3">
-                <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-                  Local backup files
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-11 justify-start rounded-2xl gap-3"
-                  onClick={exportSharedRoster}
-                  disabled={players.length === 0}
-                >
-                  <Download className="h-4 w-4" />
-                  <span className="font-black">Export this roster</span>
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-11 justify-start rounded-2xl gap-3"
-                  onClick={() => openImportPicker("shared")}
-                >
-                  <Upload className="h-4 w-4" />
-                  <span className="font-black">Import one roster</span>
-                </Button>
-                <div className="my-1 h-px bg-slate-100" />
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-11 justify-start rounded-2xl gap-3"
-                  onClick={exportAllRostersBackup}
-                  disabled={isEmptyStarterRoster}
-                >
-                  <Archive className="h-4 w-4" />
-                  <span className="font-black">Export all rosters</span>
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-11 justify-start rounded-2xl gap-3"
-                  onClick={() => openImportPicker("backup")}
-                >
-                  <ArchiveRestore className="h-4 w-4" />
-                  <span className="font-black">Import all rosters</span>
-                </Button>
-                {!isEmptyStarterRoster && (
-                  <>
-                    <div className="my-1 h-px bg-slate-100" />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="h-11 justify-start rounded-2xl gap-3 border-red-100 bg-red-50/70 text-red-700 hover:bg-red-100 hover:text-red-800"
-                      onClick={openClearRoster}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      <span className="font-black">
-                        {activeRosterIsShared
-                          ? "Remove shared roster from this device"
-                          : rosters.length > 1
-                            ? "Delete current roster"
-                            : "Clear current roster"}
-                      </span>
-                    </Button>
-                  </>
-                )}
-              </div>
+              )}
             </div>
           </div>
         </div>

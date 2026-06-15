@@ -3110,9 +3110,9 @@ export function TodayTab({
                   {selectedCount} attending
                 </span>
                 {notHereYetCount > 0 && (
-                  <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-100 px-1.5 py-0.5 text-[11px] font-black leading-none text-amber-800">
-                    <span className="uppercase tracking-wide">Late</span>
-                    {notHereYetCount}
+                  <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-100 px-1.5 py-0.5 leading-none text-amber-800">
+                    <span className="text-[9px] font-extrabold uppercase tracking-wide text-amber-700/80">Late</span>
+                    <span className="text-[11px] font-black text-amber-900">{notHereYetCount}</span>
                   </span>
                 )}
                 <span className="text-xs font-semibold text-slate-500">

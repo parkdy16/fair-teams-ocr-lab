@@ -309,7 +309,7 @@ function writeStoredActiveDriveBackup(file: ActiveDriveBackupFile | null) {
     }
     window.localStorage.setItem(DRIVE_ACTIVE_BACKUP_STORAGE_KEY, JSON.stringify(file));
   } catch {
-    // Active Drive backup storage is optional.
+    // Safety backup file storage is optional.
   }
 }
 
@@ -844,7 +844,7 @@ function App() {
       return;
     }
     if (!googleDriveAccessToken) {
-      showRosterToolsNotice("Connect Google Drive first", "Connect your Google account before using Drive backup.", "warning");
+      showRosterToolsNotice("Connect Google first", "Connect your Google account before using Drive backup.", "warning");
       return;
     }
 
@@ -889,7 +889,7 @@ function App() {
       return;
     }
     if (!googleDriveAccessToken) {
-      showRosterToolsNotice("Connect Google Drive first", "Connect your Google account before using Drive backup.", "warning");
+      showRosterToolsNotice("Connect Google first", "Connect your Google account before using Drive backup.", "warning");
       return;
     }
     if (isEmptyStarterRoster) {
@@ -921,7 +921,7 @@ function App() {
       return;
     }
     if (!googleDriveAccessToken) {
-      showRosterToolsNotice("Connect Google Drive first", "Connect your Google account before using Drive backup.", "warning");
+      showRosterToolsNotice("Connect Google first", "Connect your Google account before using Drive backup.", "warning");
       return;
     }
     if (!currentDriveBackup) {
@@ -1238,7 +1238,7 @@ function App() {
 
   const openDriveShareModal = () => {
     if (!googleDriveConnected) {
-      showRosterToolsNotice("Connect Google Drive first", "Connect your Google account before sending a backup copy.", "warning");
+      showRosterToolsNotice("Connect Google first", "Connect your Google account before sending a backup copy.", "warning");
       return;
     }
     if (isEmptyStarterRoster) {
@@ -1341,7 +1341,7 @@ function App() {
 
   const openDriveAccessManager = async () => {
     if (!googleDriveConnected) {
-      showRosterToolsNotice("Connect Google Drive first", "Connect your Google account before managing Drive access.", "warning");
+      showRosterToolsNotice("Connect Google first", "Connect your Google account before managing Drive access.", "warning");
       return;
     }
     if (!currentDriveBackup) {
@@ -1990,12 +1990,12 @@ function App() {
                         Shared file
                       </div>
                       <div className={`mt-0.5 truncate text-xs font-black ${activeGoogleSheetSource?.spreadsheetName ? "text-[#102A43]" : "text-slate-400"}`}>
-                        {activeGoogleSheetSource?.spreadsheetName || "Not linked yet"}
+                        {activeGoogleSheetSource?.spreadsheetName || "Saved on this device"}
                       </div>
                       <div className="mt-0.5 text-[11px] font-semibold text-slate-500">
                         {activeRosterIsShared
                           ? formatSheetSyncTime(activeGoogleSheetSource?.lastSyncedAt)
-                          : "Make this roster shared when another organizer needs access."}
+                          : "Share this roster when another organizer needs access."}
                       </div>
                     </div>
                   </div>
@@ -2011,7 +2011,7 @@ function App() {
                     >
                       <Cloud className="h-4 w-4" />
                       <span className="font-black">
-                        {googleDriveConnecting ? "Connecting..." : "Connect Google"}
+                        {googleDriveConnecting ? "Connecting..." : "Sign in with Google"}
                       </span>
                     </Button>
                   )}
@@ -2026,7 +2026,7 @@ function App() {
                       >
                         <RefreshCw className={`h-4 w-4 ${googleSheetSyncing ? "animate-spin" : ""}`} />
                         <span className="font-black">
-                          {googleSheetSyncing ? "Saving..." : "Save changes"}
+                          {googleSheetSyncing ? "Syncing..." : "Sync now"}
                         </span>
                       </Button>
                       <div className="grid grid-cols-2 gap-2">
@@ -2039,7 +2039,7 @@ function App() {
                         >
                           <CloudDownload className="h-4 w-4" />
                           <span className="truncate text-xs font-black">
-                            {googleSheetOpening ? "Reloading..." : "Reload"}
+                            {googleSheetOpening ? "Getting latest..." : "Get latest"}
                           </span>
                         </Button>
                         <Button
@@ -2065,7 +2065,7 @@ function App() {
                     >
                       <Share2 className="h-4 w-4" />
                       <span className="font-black">
-                        {googleSheetSyncing ? "Creating..." : "Make shared roster"}
+                        {googleSheetSyncing ? "Creating..." : "Make this roster shared"}
                       </span>
                     </Button>
                   )}
@@ -2079,13 +2079,13 @@ function App() {
                   >
                     <CloudDownload className="h-4 w-4" />
                     <span className="font-black">
-                      {googleSheetOpening ? "Opening..." : "Open shared roster"}
+                      {googleSheetOpening ? "Opening..." : "Open a shared roster"}
                     </span>
                   </Button>
 
                   <div className="rounded-2xl bg-white/70 px-3 py-2">
                     <p className="text-[10px] font-semibold leading-snug text-slate-500">
-                      Shared rosters use a Google Sheet behind the scenes. Fair Teams saves text data there; photos and logos stay local on each device.
+                      Shared rosters let another organizer use the same roster in Fair Teams. Photos and logos stay private on each device.
                     </p>
                   </div>
                 </div>
@@ -2099,7 +2099,7 @@ function App() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
                       <div className="text-[10px] font-black uppercase tracking-wide text-blue-500">
-                        Drive Backup
+                        Advanced Backup
                       </div>
                       <div className={`rounded-full px-2 py-0.5 text-[10px] font-black ${googleDriveConnected ? "bg-emerald-50 text-emerald-700" : "bg-white text-slate-500"}`}>
                         {googleDriveConnected ? "Connected" : "Not connected"}
@@ -2119,15 +2119,15 @@ function App() {
                         {connectedDriveUser?.emailAddress || (googleDriveConnected ? "Connected" : "Not connected")}
                       </div>
                       <div className="mt-2 text-[10px] font-black uppercase tracking-wide text-slate-400">
-                        Active Drive backup
+                        Safety backup file
                       </div>
                       <div className={`mt-0.5 truncate text-xs font-black ${currentDriveBackup ? "text-[#102A43]" : "text-slate-400"}`}>
-                        {currentDriveBackup?.name || "None selected"}
+                        {currentDriveBackup?.name || "No backup selected"}
                       </div>
                       <div className="mt-0.5 text-[11px] font-semibold text-slate-500">
                         {currentDriveBackup
                           ? `Backup has ${formatBackupSummary(currentDriveBackup.rosterCount !== undefined && currentDriveBackup.playerCount !== undefined ? { rosterCount: currentDriveBackup.rosterCount, playerCount: currentDriveBackup.playerCount } : null)}`
-                          : "Save backup will create a new Drive file."}
+                          : "Optional safety copies for moving or restoring rosters."}
                       </div>
                     </div>
                   </div>
@@ -2147,7 +2147,7 @@ function App() {
                         ? "Connecting..."
                         : googleDriveConnected
                           ? "Disconnect"
-                          : "Connect Google Drive"}
+                          : "Connect Google"}
                     </span>
                   </Button>
                   <Button
@@ -2166,8 +2166,8 @@ function App() {
                       {googleDriveSaving || googleDriveUpdating
                         ? "Saving..."
                         : currentDriveBackup
-                          ? "Save backup"
-                          : "Save first backup"}
+                          ? "Save safety backup"
+                          : "Create safety backup"}
                     </span>
                   </Button>
                   <div className="grid grid-cols-2 gap-2">
@@ -2179,7 +2179,7 @@ function App() {
                       disabled={!googleDriveConnected || googleDriveOpening}
                     >
                       <CloudDownload className="h-4 w-4" />
-                      <span className="truncate text-xs font-black">{googleDriveOpening ? "Opening..." : "Open backup"}</span>
+                      <span className="truncate text-xs font-black">{googleDriveOpening ? "Opening..." : "Restore backup"}</span>
                     </Button>
                     <Button
                       type="button"
@@ -2197,7 +2197,7 @@ function App() {
                     >
                       <Archive className="h-4 w-4" />
                       <span className="truncate text-xs font-black">
-                        {googleDriveSaving ? "Saving..." : "Save as copy"}
+                        {googleDriveSaving ? "Saving..." : "Archive copy"}
                       </span>
                     </Button>
                   </div>
@@ -2210,12 +2210,12 @@ function App() {
                   >
                     <Share2 className="h-4 w-4" />
                     <span className="font-black">
-                      {googleDriveSharing ? "Sending..." : "Send backup copy"}
+                      {googleDriveSharing ? "Sending..." : "Send copy"}
                     </span>
                   </Button>
                   <div className="rounded-2xl bg-white/70 px-3 py-2">
                     <p className="text-[10px] font-semibold leading-snug text-slate-500">
-                      Save backup is the normal action. It updates the active backup, or creates one if none is selected. Use Save as copy only for a separate archive.
+                      Optional backup files are for safety or transfer. Shared Roster is the simpler choice when multiple organizers use the same roster.
                     </p>
                     <button
                       type="button"
@@ -2231,7 +2231,7 @@ function App() {
 
               <div className="grid gap-2 border-t border-slate-100 pt-3">
                 <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-                  Local backup
+                  Local backup files
                 </div>
                 <Button
                   type="button"
@@ -2241,7 +2241,7 @@ function App() {
                   disabled={players.length === 0}
                 >
                   <Download className="h-4 w-4" />
-                  <span className="font-black">Export current</span>
+                  <span className="font-black">Export this roster</span>
                 </Button>
                 <Button
                   type="button"
@@ -2250,7 +2250,7 @@ function App() {
                   onClick={() => openImportPicker("shared")}
                 >
                   <Upload className="h-4 w-4" />
-                  <span className="font-black">Import single</span>
+                  <span className="font-black">Import one roster</span>
                 </Button>
                 <div className="my-1 h-px bg-slate-100" />
                 <Button
@@ -2261,7 +2261,7 @@ function App() {
                   disabled={isEmptyStarterRoster}
                 >
                   <Archive className="h-4 w-4" />
-                  <span className="font-black">Export all</span>
+                  <span className="font-black">Export all rosters</span>
                 </Button>
                 <Button
                   type="button"
@@ -2270,7 +2270,7 @@ function App() {
                   onClick={() => openImportPicker("backup")}
                 >
                   <ArchiveRestore className="h-4 w-4" />
-                  <span className="font-black">Import all</span>
+                  <span className="font-black">Import all rosters</span>
                 </Button>
                 {!isEmptyStarterRoster && (
                   <>
@@ -2545,7 +2545,7 @@ function App() {
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="text-[10px] font-black uppercase tracking-wide text-blue-500">
-                  Drive Backup
+                  Advanced Backup
                 </div>
                 <h2 className="mt-1 text-base font-black tracking-tight text-[#102A43]">
                   How it works
@@ -2569,7 +2569,7 @@ function App() {
                   Backup and handoff
                 </div>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  Drive Backup saves roster text data to Google Drive. Use it to restore rosters, move between devices, or send a copy to another organizer.
+                  Advanced Backup saves roster text data to Google Drive. Use it to restore rosters, move between devices, or send a copy to another organizer.
                 </p>
               </div>
 
@@ -2613,7 +2613,7 @@ function App() {
             <div className="flex items-start justify-between gap-3 border-b border-slate-100 p-4 pb-3">
               <div className="min-w-0">
                 <div className="text-[10px] font-black uppercase tracking-wide text-blue-500">
-                  Drive Backup
+                  Advanced Backup
                 </div>
                 <h2 className="mt-1 truncate text-base font-black tracking-tight text-[#102A43]">
                   Open backup
@@ -2694,7 +2694,7 @@ function App() {
             <div className="flex items-start justify-between gap-3 border-b border-slate-100 p-4 pb-3">
               <div className="min-w-0">
                 <div className="text-[10px] font-black uppercase tracking-wide text-emerald-600">
-                  Drive Backup
+                  Advanced Backup
                 </div>
                 <h2 className="mt-1 text-base font-black tracking-tight text-[#102A43]">
                   Send backup copy
@@ -2856,7 +2856,7 @@ function App() {
 
             <div className="mt-3 rounded-2xl border border-slate-100 bg-slate-50/80 p-3">
               <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-                Active Drive backup
+                Safety backup file
               </div>
               <div className="mt-1 truncate text-sm font-black text-[#102A43]">
                 {driveUpdateConfirm.file.name}
@@ -2991,7 +2991,7 @@ function App() {
             <div className="flex items-start justify-between gap-3 border-b border-slate-100 p-4 pb-3">
               <div className="min-w-0">
                 <div className="text-[10px] font-black uppercase tracking-wide text-[#102A43]/55">
-                  {localImportPreview.mode === "backup" ? "Local backup" : "Local roster file"}
+                  {localImportPreview.mode === "backup" ? "Local backup files" : "Local roster file"}
                 </div>
                 <h2 className="mt-1 truncate text-base font-black tracking-tight text-[#102A43]">
                   Import this file?

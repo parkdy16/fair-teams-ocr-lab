@@ -960,6 +960,56 @@ function App() {
     });
   };
 
+
+
+  const refreshActiveFirebaseRosterFromRemote = (remoteRoster: RoomRoster, sourceName: string, summary: FirebaseSharedRosterSummary) => {
+    setRosterState((current) => ({
+      ...current,
+      rosters: current.rosters.map((roster) => {
+        if (roster.id !== current.activeRosterId) return roster;
+
+        const photoById = new Map(roster.players.filter((player) => player.profilePhoto).map((player) => [player.id, player.profilePhoto]));
+        const photoByName = new Map(
+          roster.players
+            .filter((player) => player.profilePhoto)
+            .map((player) => [player.name.trim().toLowerCase(), player.profilePhoto]),
+        );
+
+        const refreshedPlayers = remoteRoster.players.map((player, index) =>
+          normalizePlayer({
+            ...player,
+            profilePhoto: photoById.get(player.id) || photoByName.get(player.name.trim().toLowerCase()) || player.profilePhoto,
+          }, index),
+        );
+
+        return normalizeRoster({
+          ...roster,
+          name: sourceName || remoteRoster.name || roster.name,
+          players: refreshedPlayers,
+          themeColor: remoteRoster.themeColor || roster.themeColor,
+          logo: roster.logo || remoteRoster.logo,
+          cloudSource: {
+            provider: "firebase",
+            firebaseRosterId: summary.id,
+            firebaseVersion: summary.version,
+            firebaseOwnerUid: summary.ownerUid,
+            firebaseOwnerEmail: summary.ownerEmail,
+            lastSyncedAt: summary.updatedAt || new Date().toISOString(),
+            lastRemoteModifiedAt: summary.updatedAt,
+            syncMode: "manual",
+          },
+          updatedAt: summary.updatedAt || new Date().toISOString(),
+        });
+      }),
+    }));
+    setRosterToolsNotice({
+      tone: "success",
+      title: "Firebase roster refreshed",
+      message: `${sourceName || remoteRoster.name || "Shared roster"} was refreshed from Firebase version ${summary.version}. Local player photos were preserved where possible.`,
+    });
+  };
+
+
   const switchRoster = (rosterId: string) => {
     setRosterState((current) =>
       current.rosters.some((roster) => roster.id === rosterId)
@@ -2966,6 +3016,8 @@ They will no longer be able to open or edit this shared roster unless it is shar
                       activeRoster={activeRoster}
                       isEmptyRoster={isEmptyStarterRoster}
                       onOpenRoster={openFirebaseSharedRosterAsLocalCopy}
+                      onRosterSaved={markActiveFirebaseRosterSaved}
+                      onRefreshActiveRoster={refreshActiveFirebaseRosterFromRemote}
                     />
 
                     <div className="rounded-2xl border border-amber-100 bg-amber-50/70 px-3 py-2">

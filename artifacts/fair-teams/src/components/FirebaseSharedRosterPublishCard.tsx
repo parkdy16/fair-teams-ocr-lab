@@ -17,6 +17,7 @@ type Props = {
   isEmptyRoster: boolean;
   onOpenRoster?: (roster: RoomRoster, sourceName: string, summary: FirebaseSharedRosterSummary) => void;
   onRosterSaved?: (summary: FirebaseSharedRosterSummary) => void;
+  onRefreshActiveRoster?: (roster: RoomRoster, sourceName: string, summary: FirebaseSharedRosterSummary) => void;
 };
 
 function friendlyFirestoreError(error: unknown) {
@@ -35,10 +36,10 @@ function formatWhen(value?: string) {
   return date.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
-export function FirebaseSharedRosterPublishCard({ activeRoster, isEmptyRoster, onOpenRoster, onRosterSaved }: Props) {
+export function FirebaseSharedRosterPublishCard({ activeRoster, isEmptyRoster, onOpenRoster, onRosterSaved, onRefreshActiveRoster }: Props) {
   const [user, setUser] = useState<SharedRosterUser | null>(null);
   const [authReady, setAuthReady] = useState(false);
-  const [busy, setBusy] = useState<"publish" | "refresh" | "save" | string>("");
+  const [busy, setBusy] = useState<"publish" | "refresh" | "save" | "reload" | string>("");
   const [sharedRosters, setSharedRosters] = useState<FirebaseSharedRosterSummary[]>([]);
   const [notice, setNotice] = useState<{ tone: "success" | "error" | "info"; text: string } | null>(null);
 
@@ -93,6 +94,25 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, isEmptyRoster, o
   };
 
 
+  const handleRefreshActiveRoster = async () => {
+    const rosterId = activeRoster?.cloudSource?.provider === "firebase" ? activeRoster.cloudSource.firebaseRosterId : undefined;
+    if (!user || !rosterId || busy) return;
+    setBusy("reload");
+    setNotice(null);
+    try {
+      const snapshot = await readFirebaseSharedRoster(rosterId);
+      onRefreshActiveRoster?.(snapshot.roster, snapshot.name, snapshot);
+      const rosters = await listFirebaseSharedRosters();
+      setSharedRosters(rosters);
+      setNotice({ tone: "success", text: `Refreshed ${snapshot.name} from Firebase version ${snapshot.version}.` });
+    } catch (error) {
+      setNotice({ tone: "error", text: friendlyFirestoreError(error) });
+    } finally {
+      setBusy("");
+    }
+  };
+
+
   const handleSaveActiveRoster = async () => {
     if (!user || !activeRoster || busy) return;
     setBusy("save");
@@ -138,6 +158,7 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, isEmptyRoster, o
 
   const activeFirebaseSource = activeRoster?.cloudSource?.provider === "firebase" ? activeRoster.cloudSource : null;
   const canSaveActiveRoster = Boolean(user && activeRoster && activeFirebaseSource?.firebaseRosterId && !busy);
+  const canRefreshActiveRoster = canSaveActiveRoster;
 
   return (
     <div className="grid gap-3 rounded-3xl border border-violet-100 bg-violet-50/60 p-3 shadow-sm">
@@ -190,6 +211,17 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, isEmptyRoster, o
         >
           <Save className="h-4 w-4" />
           {busy === "save" ? "Saving…" : "Save active Firebase roster"}
+        </Button>
+
+        <Button
+          type="button"
+          variant="outline"
+          className="h-11 justify-start rounded-2xl gap-2 border-violet-200 bg-white px-3 text-xs font-black text-violet-700 shadow-sm hover:bg-violet-50 sm:col-span-2"
+          onClick={handleRefreshActiveRoster}
+          disabled={!canRefreshActiveRoster}
+        >
+          <CloudDownload className="h-4 w-4" />
+          {busy === "reload" ? "Refreshing…" : "Refresh active Firebase roster"}
         </Button>
       </div>
 

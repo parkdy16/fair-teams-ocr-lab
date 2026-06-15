@@ -2737,18 +2737,21 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
 
                       {activeRosterIsShared ? (
                       <>
-                        <Button
-                          type="button"
-                          className="h-12 justify-start rounded-2xl gap-3 bg-emerald-600 text-white shadow-sm hover:bg-emerald-700"
-                          onClick={() => saveActiveRosterToGoogleSheet()}
-                          disabled={!googleDriveConnected || googleSheetSyncing || googleSheetOpening || isEmptyStarterRoster}
-                        >
-                          <RefreshCw className={`h-4 w-4 ${googleSheetSyncing ? "animate-spin" : ""}`} />
-                          <span className="min-w-0 truncate font-black">
-                            {googleSheetSyncing ? "Saving..." : "Save changes"}
-                          </span>
-                        </Button>
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid gap-2">
+                          <div className="px-1 text-[10px] font-black uppercase tracking-wide text-emerald-600">
+                            Sync
+                          </div>
+                          <Button
+                            type="button"
+                            className="h-12 justify-start rounded-2xl gap-3 bg-emerald-600 text-white shadow-sm hover:bg-emerald-700"
+                            onClick={() => saveActiveRosterToGoogleSheet()}
+                            disabled={!googleDriveConnected || googleSheetSyncing || googleSheetOpening || isEmptyStarterRoster}
+                          >
+                            <RefreshCw className={`h-4 w-4 ${googleSheetSyncing ? "animate-spin" : ""}`} />
+                            <span className="min-w-0 truncate font-black">
+                              {googleSheetSyncing ? "Saving..." : "Save changes"}
+                            </span>
+                          </Button>
                           <Button
                             type="button"
                             variant="outline"
@@ -2761,39 +2764,51 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
                               {googleSheetOpening ? "Getting latest..." : "Get latest changes"}
                             </span>
                           </Button>
+                        </div>
+
+                        <div className="grid gap-2 rounded-2xl border border-slate-100 bg-white/70 p-2">
+                          <div className="px-1 text-[10px] font-black uppercase tracking-wide text-slate-400">
+                            Sharing
+                          </div>
                           <Button
                             type="button"
                             variant="outline"
-                            className="h-11 justify-start rounded-2xl gap-2 border-emerald-100 bg-white/90 px-3"
+                            className="h-11 justify-start rounded-2xl gap-2 border-slate-100 bg-white/90 px-3"
                             onClick={openGoogleSheetShareModal}
                             disabled={!googleDriveConnected || googleSheetSharing}
                           >
                             <Share2 className="h-4 w-4" />
                             <span className="truncate text-xs font-black">
-                              {googleSheetSharing ? "Sharing..." : "Share"}
+                              {googleSheetSharing ? "Sharing..." : "Share with editor"}
                             </span>
                           </Button>
                         </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          className="h-9 justify-start rounded-2xl gap-2 px-3 text-[11px] font-black text-slate-500 hover:bg-white/80 hover:text-slate-700"
-                          onClick={disconnectActiveRosterFromGoogleSheet}
-                          disabled={googleSheetSyncing || googleSheetOpening || googleSheetSharing}
-                        >
-                          <X className="h-3.5 w-3.5" />
-                          Disconnect from shared roster
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="h-10 justify-start rounded-2xl gap-2 border-red-100 bg-red-50/70 px-3 text-red-700 hover:bg-red-100 hover:text-red-800"
-                          onClick={openClearRoster}
-                          disabled={googleSheetSyncing || googleSheetOpening || googleSheetSharing}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                          <span className="text-xs font-black">Remove shared roster from this device</span>
-                        </Button>
+
+                        <div className="grid gap-2 rounded-2xl border border-red-100 bg-red-50/40 p-2">
+                          <div className="px-1 text-[10px] font-black uppercase tracking-wide text-red-400">
+                            Leave shared roster
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-10 justify-start rounded-2xl gap-2 border-slate-200 bg-white/90 px-3 text-slate-600 hover:bg-white hover:text-slate-800"
+                            onClick={disconnectActiveRosterFromGoogleSheet}
+                            disabled={googleSheetSyncing || googleSheetOpening || googleSheetSharing}
+                          >
+                            <X className="h-3.5 w-3.5" />
+                            <span className="truncate text-xs font-black">Disconnect from shared roster</span>
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-10 justify-start rounded-2xl gap-2 border-red-100 bg-red-50/70 px-3 text-red-700 hover:bg-red-100 hover:text-red-800"
+                            onClick={openClearRoster}
+                            disabled={googleSheetSyncing || googleSheetOpening || googleSheetSharing}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            <span className="truncate text-xs font-black">Remove from this device</span>
+                          </Button>
+                        </div>
                       </>
                     ) : (
                       <Button

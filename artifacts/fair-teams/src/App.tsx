@@ -721,6 +721,17 @@ function App() {
   const googleSheetOtherPermissions = (googleSheetAccessList || []).filter(
     (permission) => permission.role !== "owner" && permission.role !== "writer",
   );
+  const googleSheetPermissionEmails = new Set(
+    (googleSheetAccessList || [])
+      .map((permission) => permission.emailAddress ? normalizeShareEmail(permission.emailAddress) : "")
+      .filter(Boolean),
+  );
+  const googleSheetSavedEditorEntries = Object.entries(googleSheetAccessLabels)
+    .map(([email, name]) => ({ email: normalizeShareEmail(email), name: cleanPersonName(name) }))
+    .filter((entry) => entry.email && entry.name && !googleSheetPermissionEmails.has(entry.email));
+  const googleSheetHasPeopleAccessInfo = Boolean(
+    (googleSheetAccessList && googleSheetAccessList.length > 0) || googleSheetSavedEditorEntries.length > 0,
+  );
   const connectedGoogleUserOwnsActiveSheet = googleSheetOwnerPermissions.some(permissionEmailMatchesConnectedUser);
 
   const downloadAllRostersBackup = () => {
@@ -1808,6 +1819,17 @@ They will no longer be able to open or edit this shared roster unless it is shar
     setGoogleSheetRemovingPermissionId(permission.id);
     try {
       await deleteGoogleDriveFilePermission(googleDriveAccessToken, activeGoogleSheetSource.spreadsheetId, permission.id);
+      const email = permission.emailAddress ? normalizeShareEmail(permission.emailAddress) : "";
+      if (email && activeGoogleSheetSource.accessLabels?.[email]) {
+        const nextAccessLabels = { ...activeGoogleSheetSource.accessLabels };
+        delete nextAccessLabels[email];
+        const updatedFile = await updateGoogleSheetRosterAccessLabels(
+          googleDriveAccessToken,
+          activeGoogleSheetSource.spreadsheetId,
+          nextAccessLabels,
+        );
+        updateActiveRosterGoogleSheetSource(updatedFile, nextAccessLabels);
+      }
       setGoogleSheetAccessList((current) => current ? current.filter((item) => item.id !== permission.id) : current);
       showRosterToolsNotice("Access removed", `${label} can no longer access this shared roster through this direct file permission.`, "success");
     } catch (error) {
@@ -3497,7 +3519,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   <div className="mt-3 rounded-2xl bg-white px-3 py-2 text-xs font-semibold text-slate-500">
                     Loading sharing access…
                   </div>
-                ) : googleSheetAccessList && googleSheetAccessList.length > 0 ? (
+                ) : googleSheetHasPeopleAccessInfo ? (
                   <div className="mt-3 grid gap-2">
                     <div>
                       <div className="px-1 text-[10px] font-black uppercase tracking-wide text-slate-400">
@@ -3536,47 +3558,66 @@ They will no longer be able to open or edit this shared roster unless it is shar
                         Editors
                       </div>
                       <div className="mt-1 grid gap-1.5">
-                        {googleSheetEditorPermissions.length > 0 ? googleSheetEditorPermissions.map((permission) => {
-                          const removing = googleSheetRemovingPermissionId === permission.id;
-                          const canRemove = connectedGoogleUserOwnsActiveSheet && canRemoveDrivePermission(permission) && !permissionEmailMatchesConnectedUser(permission);
-                          const display = drivePermissionDisplay(permission);
-                          return (
-                            <div key={permission.id} className="flex items-center justify-between gap-2 rounded-2xl bg-white px-3 py-2">
-                              <div className="min-w-0">
-                                <div className="truncate text-xs font-black text-[#102A43]">
-                                  {display.name}
+                        {googleSheetEditorPermissions.length > 0 || googleSheetSavedEditorEntries.length > 0 ? (
+                          <>
+                            {googleSheetEditorPermissions.map((permission) => {
+                              const removing = googleSheetRemovingPermissionId === permission.id;
+                              const canRemove = connectedGoogleUserOwnsActiveSheet && canRemoveDrivePermission(permission) && !permissionEmailMatchesConnectedUser(permission);
+                              const display = drivePermissionDisplay(permission);
+                              return (
+                                <div key={permission.id} className="flex items-center justify-between gap-2 rounded-2xl bg-white px-3 py-2">
+                                  <div className="min-w-0">
+                                    <div className="truncate text-xs font-black text-[#102A43]">
+                                      {display.name}
+                                    </div>
+                                    {display.email && (
+                                      <div className="mt-0.5 truncate text-[10px] font-semibold text-slate-400">
+                                        {display.email}
+                                      </div>
+                                    )}
+                                    {drivePermissionIsInherited(permission) && (
+                                      <div className="mt-0.5 truncate text-[10px] font-semibold text-slate-400">
+                                        From shared folder access
+                                      </div>
+                                    )}
+                                  </div>
+                                  {canRemove ? (
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      className="h-8 shrink-0 rounded-xl px-2 text-[10px] font-black text-red-600 hover:bg-red-50 hover:text-red-700"
+                                      onClick={() => removeGoogleSheetEditorAccess(permission)}
+                                      disabled={Boolean(googleSheetRemovingPermissionId)}
+                                      title="Remove editor access"
+                                    >
+                                      <UserMinus className="mr-1 h-3 w-3" />
+                                      {removing ? "Removing..." : "Remove"}
+                                    </Button>
+                                  ) : (
+                                    <span className="shrink-0 rounded-full bg-slate-50 px-2 py-0.5 text-[10px] font-black text-slate-500">
+                                      Editor
+                                    </span>
+                                  )}
                                 </div>
-                                {display.email && (
-                                  <div className="mt-0.5 truncate text-[10px] font-semibold text-slate-400">
-                                    {display.email}
+                              );
+                            })}
+                            {googleSheetSavedEditorEntries.map((entry) => (
+                              <div key={`saved-${entry.email}`} className="flex items-center justify-between gap-2 rounded-2xl bg-white px-3 py-2">
+                                <div className="min-w-0">
+                                  <div className="truncate text-xs font-black text-[#102A43]">
+                                    {entry.name}
                                   </div>
-                                )}
-                                {drivePermissionIsInherited(permission) && (
                                   <div className="mt-0.5 truncate text-[10px] font-semibold text-slate-400">
-                                    From shared folder access
+                                    {entry.email}
                                   </div>
-                                )}
-                              </div>
-                              {canRemove ? (
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  className="h-8 shrink-0 rounded-xl px-2 text-[10px] font-black text-red-600 hover:bg-red-50 hover:text-red-700"
-                                  onClick={() => removeGoogleSheetEditorAccess(permission)}
-                                  disabled={Boolean(googleSheetRemovingPermissionId)}
-                                  title="Remove editor access"
-                                >
-                                  <UserMinus className="mr-1 h-3 w-3" />
-                                  {removing ? "Removing..." : "Remove"}
-                                </Button>
-                              ) : (
-                                <span className="shrink-0 rounded-full bg-slate-50 px-2 py-0.5 text-[10px] font-black text-slate-500">
+                                </div>
+                                <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-black text-emerald-700">
                                   Editor
                                 </span>
-                              )}
-                            </div>
-                          );
-                        }) : (
+                              </div>
+                            ))}
+                          </>
+                        ) : (
                           <div className="rounded-2xl bg-white px-3 py-2 text-xs font-semibold text-slate-500">
                             No editors added yet.
                           </div>

@@ -164,10 +164,10 @@ export async function pickGoogleDriveBackupFile(accessToken: string): Promise<Go
     const timeoutId = window.setTimeout(() => {
       fail(
         new Error(
-          "Google Drive picker did not respond. On phone, close this app and open Fair Teams from Chrome, then try Open Drive backup again.",
+          "Google Drive picker did not open. Try again from Chrome and make sure pop-ups are allowed for Fair Teams.",
         ),
       );
-    }, 90000);
+    }, 25000);
 
     try {
       const view = createDriveBackupDocsView();
@@ -239,10 +239,10 @@ export async function pickGoogleSheetRosterFile(accessToken: string): Promise<Go
     const timeoutId = window.setTimeout(() => {
       fail(
         new Error(
-          "Google Drive picker did not respond. Try again from Chrome. If you use several Google accounts, make sure the picker opens with the account that received the shared roster.",
+          "Google Drive picker did not open. Try again from Chrome, allow pop-ups for Fair Teams, and make sure the picker uses the Google account that received the shared roster.",
         ),
       );
-    }, 90000);
+    }, 25000);
 
     try {
       const view = createGoogleSheetRosterDocsView();

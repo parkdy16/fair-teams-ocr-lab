@@ -1652,11 +1652,16 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
 
     setGoogleSheetOpening(true);
     try {
+      // Close Fair Teams modals before opening Google Picker.
+      // Otherwise the Picker can appear behind our modal overlay or lose focus,
+      // which makes the app look frozen while it waits for a Picker callback.
+      setGoogleSheetChoices(null);
+      setGoogleSheetShareOpen(false);
+      await new Promise((resolve) => window.setTimeout(resolve, 80));
+
       const picked = await pickGoogleSheetRosterFile(googleDriveAccessToken);
       if (!picked) return;
       const file = await getGoogleSheetRosterFileMetadata(googleDriveAccessToken, picked.id);
-      setGoogleSheetChoices(null);
-      setGoogleSheetShareOpen(false);
       setGoogleSheetActionFile(file);
     } catch (error) {
       showRosterToolsNotice("Could not find shared roster", error instanceof Error ? error.message : "Please try again.", "error");

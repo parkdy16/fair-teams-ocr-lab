@@ -84,7 +84,7 @@ async function ensurePickerApi() {
   return pickerApiPromise;
 }
 
-function createDocsView() {
+function createDriveBackupDocsView() {
   const picker = getPicker();
   if (!picker) throw new Error("Google Picker is not ready.");
 
@@ -99,6 +99,26 @@ function createDocsView() {
   }
 
   // JSON backup files do not benefit from thumbnail/grid browsing.
+  if (picker.DocsViewMode?.LIST) {
+    view.setMode(picker.DocsViewMode.LIST);
+  }
+
+  return view;
+}
+
+const FAIR_TEAMS_GOOGLE_SHEET_MIME_TYPE = "application/vnd.google-apps.spreadsheet";
+
+function createGoogleSheetRosterDocsView() {
+  const picker = getPicker();
+  if (!picker) throw new Error("Google Picker is not ready.");
+
+  const view = new picker.DocsView(picker.ViewId.DOCS);
+  view.setIncludeFolders(false);
+  view.setSelectFolderEnabled(false);
+  view.setMimeTypes(FAIR_TEAMS_GOOGLE_SHEET_MIME_TYPE);
+  if (typeof view.setQuery === "function") {
+    view.setQuery("Fair Teams");
+  }
   if (picker.DocsViewMode?.LIST) {
     view.setMode(picker.DocsViewMode.LIST);
   }
@@ -140,7 +160,7 @@ export async function pickGoogleDriveBackupFile(accessToken: string): Promise<Go
     }, 90000);
 
     try {
-      const view = createDocsView();
+      const view = createDriveBackupDocsView();
       const builder = new picker.PickerBuilder();
       builder.addView(view);
       builder.setDeveloperKey(config.apiKey);
@@ -163,6 +183,84 @@ export async function pickGoogleDriveBackupFile(accessToken: string): Promise<Go
         const mimeType = picked.mimeType || "";
         if (!name.toLowerCase().endsWith(".json") && mimeType !== FAIR_TEAMS_DRIVE_MIME_TYPE) {
           fail(new Error("Please choose a Fair Teams .json backup file."));
+          return;
+        }
+        settle({
+          id: picked.id,
+          name,
+          mimeType,
+        });
+      });
+      const pickerInstance = builder.build();
+      pickerInstance.setVisible(true);
+    } catch (error) {
+      fail(error instanceof Error ? error : new Error("Could not open Google Drive picker."));
+    }
+  });
+}
+
+
+export async function pickGoogleSheetRosterFile(accessToken: string): Promise<GoogleDrivePickedFile | null> {
+  const config = getGoogleDriveConfig();
+  if (!config.isConfigured) {
+    throw new Error("Google Drive keys are missing. Check VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_API_KEY in .env.local.");
+  }
+
+  await ensurePickerApi();
+  const picker = getPicker();
+  if (!picker) throw new Error("Google Picker is not ready.");
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const settle = (pickedFile: GoogleDrivePickedFile | null) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeoutId);
+      resolve(pickedFile);
+    };
+    const fail = (error: Error) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeoutId);
+      reject(error);
+    };
+
+    const timeoutId = window.setTimeout(() => {
+      fail(
+        new Error(
+          "Google Drive picker did not respond. On phone, close this app and open Fair Teams from Chrome, then try Find shared roster in Drive again.",
+        ),
+      );
+    }, 90000);
+
+    try {
+      const view = createGoogleSheetRosterDocsView();
+      const builder = new picker.PickerBuilder();
+      builder.addView(view);
+      builder.setDeveloperKey(config.apiKey);
+      builder.setOAuthToken(accessToken);
+      builder.setTitle("Find shared Fair Teams roster");
+      builder.setOrigin(window.location.origin);
+      builder.setCallback((response: PickerResponse) => {
+        if (response.action === picker.Action.CANCEL) {
+          settle(null);
+          return;
+        }
+        if (response.action !== picker.Action.PICKED) return;
+
+        const picked = response.docs?.[0];
+        if (!picked?.id) {
+          fail(new Error("Google Picker did not return a file."));
+          return;
+        }
+        const name = picked.name || "Fair Teams shared roster";
+        const mimeType = picked.mimeType || "";
+        if (mimeType && mimeType !== FAIR_TEAMS_GOOGLE_SHEET_MIME_TYPE) {
+          fail(new Error("Please choose a Fair Teams shared roster Google Sheet."));
+          return;
+        }
+        if (!name.toLowerCase().includes("fair teams")) {
+          fail(new Error("Please choose a Fair Teams shared roster file."));
           return;
         }
         settle({

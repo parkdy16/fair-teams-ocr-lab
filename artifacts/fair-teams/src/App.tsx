@@ -442,6 +442,7 @@ function App() {
   const [driveRemoveConfirm, setDriveRemoveConfirm] = useState<DriveRemoveAccessConfirm | null>(null);
   const [driveRemovingPermissionId, setDriveRemovingPermissionId] = useState("");
   const [driveHelpOpen, setDriveHelpOpen] = useState(false);
+  const [googleSheetHelpOpen, setGoogleSheetHelpOpen] = useState(false);
   const [driveUpdateConfirm, setDriveUpdateConfirm] = useState<DriveUpdateConfirm | null>(null);
   const [googleSheetSyncing, setGoogleSheetSyncing] = useState(false);
   const [googleSheetOpening, setGoogleSheetOpening] = useState(false);
@@ -748,6 +749,7 @@ function App() {
       driveAccessOpen ||
       Boolean(driveRemoveConfirm) ||
       driveHelpOpen ||
+      googleSheetHelpOpen ||
       Boolean(driveUpdateConfirm) ||
       Boolean(googleSheetChoices) ||
       Boolean(googleSheetActionFile) ||
@@ -762,7 +764,7 @@ function App() {
     return () => {
       document.body.style.overflow = previousOverflow;
     };
-  }, [groupSettingsOpen, rosterFilesOpen, rosterPickerOpen, clearRosterOpen, driveImportPreview, driveBackupChoices, localImportPreview, rosterToolsNotice, driveShareOpen, driveShareConfirm, driveAccessOpen, driveRemoveConfirm, driveHelpOpen, driveUpdateConfirm, googleSheetChoices, googleSheetActionFile, googleSheetDeleteConfirm, googleSheetShareOpen, googleSheetConflictConfirm, googleSheetUpdatePrompt]);
+  }, [groupSettingsOpen, rosterFilesOpen, rosterPickerOpen, clearRosterOpen, driveImportPreview, driveBackupChoices, localImportPreview, rosterToolsNotice, driveShareOpen, driveShareConfirm, driveAccessOpen, driveRemoveConfirm, driveHelpOpen, googleSheetHelpOpen, driveUpdateConfirm, googleSheetChoices, googleSheetActionFile, googleSheetDeleteConfirm, googleSheetShareOpen, googleSheetConflictConfirm, googleSheetUpdatePrompt]);
 
   const openGroupSettings = () => {
     setDraftGroupName(activeRosterName);
@@ -2598,6 +2600,26 @@ They will no longer be able to open or edit this shared roster unless it is shar
                         <span className="truncate text-xs font-black">Import all</span>
                       </Button>
                     </div>
+
+                    {!isEmptyStarterRoster && (
+                      <div className="border-t border-slate-100 pt-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-11 w-full justify-start rounded-2xl gap-3 border-red-100 bg-red-50/70 text-red-700 hover:bg-red-100 hover:text-red-800"
+                          onClick={openClearRoster}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          <span className="font-black">
+                            {activeRosterIsShared
+                              ? "Remove local copy"
+                              : rosters.length > 1
+                                ? "Delete current roster"
+                                : "Clear current roster"}
+                          </span>
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -2880,25 +2902,19 @@ They will no longer be able to open or edit this shared roster unless it is shar
                         </p>
                       </div>
                     </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setGoogleSheetHelpOpen(true)}
+                      className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wide text-emerald-600"
+                    >
+                      <Info className="h-3 w-3" />
+                      How shared roster works
+                    </button>
                   </div>
                 )}
               </div>
 
-              {!rosterToolsActivePanel && !isEmptyStarterRoster && !activeRosterIsShared && (
-                <div className="border-t border-slate-100 pt-3">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-11 w-full justify-start rounded-2xl gap-3 border-red-100 bg-red-50/70 text-red-700 hover:bg-red-100 hover:text-red-800"
-                    onClick={openClearRoster}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    <span className="font-black">
-                      {rosters.length > 1 ? "Delete current roster" : "Clear current roster"}
-                    </span>
-                  </Button>
-                </div>
-              )}
             </div>
           </div>
         </div>
@@ -3685,6 +3701,65 @@ They will no longer be able to open or edit this shared roster unless it is shar
               type="button"
               className="mt-4 h-11 w-full rounded-2xl bg-[#102A43] text-white hover:bg-[#0b2036]"
               onClick={() => setDriveHelpOpen(false)}
+            >
+              Got it
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {googleSheetHelpOpen && (
+        <div
+          className="fixed inset-0 z-[60] flex items-end justify-center bg-black/45 p-4 sm:items-center"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="w-full max-w-sm rounded-3xl border border-emerald-100 bg-white p-4 shadow-2xl">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-[10px] font-black uppercase tracking-wide text-emerald-600">
+                  Shared Roster
+                </div>
+                <h2 className="mt-1 text-base font-black tracking-tight text-[#102A43]">
+                  How it works
+                </h2>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 shrink-0 rounded-xl"
+                onClick={() => setGoogleSheetHelpOpen(false)}
+                title="Close"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              <div className="rounded-2xl border border-slate-100 bg-slate-50/80 p-3">
+                <div className="text-xs font-black text-[#102A43]">
+                  Share one roster
+                </div>
+                <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
+                  Shared Roster lets trusted co-organizers open the same roster in Fair Teams. You can see the owner and editors in Sharing & access.
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-emerald-100 bg-emerald-50/80 p-3">
+                <div className="text-xs font-black text-emerald-800">
+                  Save and get latest
+                </div>
+                <p className="mt-1 text-xs font-semibold leading-snug text-emerald-800/85">
+                  It does not update automatically. Get latest before editing, then save changes when you finish. Player photos stay on each device.
+                </p>
+              </div>
+            </div>
+
+            <Button
+              type="button"
+              className="mt-4 h-11 w-full rounded-2xl bg-[#102A43] text-white hover:bg-[#0b2036]"
+              onClick={() => setGoogleSheetHelpOpen(false)}
             >
               Got it
             </Button>

@@ -1011,11 +1011,41 @@ function App() {
           ? normalizeRoster({
               ...roster,
               cloudSource: sheetCloudSourceFromFile(file),
-              updatedAt: roster.updatedAt || new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
             })
           : roster,
       ),
     }));
+  };
+
+  const disconnectActiveRosterFromGoogleSheet = () => {
+    if (!activeGoogleSheetSource?.spreadsheetId) {
+      showRosterToolsNotice("No shared roster linked", "This roster is already saved only on this device.", "info");
+      return;
+    }
+    const confirmed = window.confirm(
+      "Disconnect this roster from the shared Google Sheet?
+
+The Google Sheet will not be deleted. This device will keep a local copy of the roster.",
+    );
+    if (!confirmed) return;
+
+    setRosterState((current) => ({
+      ...current,
+      rosters: current.rosters.map((roster) => {
+        if (roster.id !== current.activeRosterId) return roster;
+        const { cloudSource: _cloudSource, ...localRoster } = roster;
+        return normalizeRoster({
+          ...localRoster,
+          updatedAt: new Date().toISOString(),
+        });
+      }),
+    }));
+    showRosterToolsNotice(
+      "Shared roster disconnected",
+      "This device now keeps a local copy only. The Google Sheet still exists and can be opened again later.",
+      "success",
+    );
   };
 
   const makeActiveRosterShared = async () => {
@@ -1992,9 +2022,12 @@ function App() {
                       <div className={`mt-0.5 truncate text-xs font-black ${activeGoogleSheetSource?.spreadsheetName ? "text-[#102A43]" : "text-slate-400"}`}>
                         {activeGoogleSheetSource?.spreadsheetName || "Saved on this device"}
                       </div>
+                      <div className="mt-2 text-[10px] font-black uppercase tracking-wide text-slate-400">
+                        Sync status
+                      </div>
                       <div className="mt-0.5 text-[11px] font-semibold text-slate-500">
                         {activeRosterIsShared
-                          ? formatSheetSyncTime(activeGoogleSheetSource?.lastSyncedAt)
+                          ? `Manual sync · ${formatSheetSyncTime(activeGoogleSheetSource?.lastSyncedAt)}`
                           : "Share this roster when another organizer needs access."}
                       </div>
                     </div>
@@ -2055,6 +2088,16 @@ function App() {
                           </span>
                         </Button>
                       </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        className="h-9 justify-start rounded-2xl gap-2 px-3 text-[11px] font-black text-slate-500 hover:bg-white/80 hover:text-slate-700"
+                        onClick={disconnectActiveRosterFromGoogleSheet}
+                        disabled={googleSheetSyncing || googleSheetOpening || googleSheetSharing}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                        Disconnect shared roster
+                      </Button>
                     </>
                   ) : (
                     <Button
@@ -2085,7 +2128,7 @@ function App() {
 
                   <div className="rounded-2xl bg-white/70 px-3 py-2">
                     <p className="text-[10px] font-semibold leading-snug text-slate-500">
-                      Shared rosters let another organizer use the same roster in Fair Teams. Photos and logos stay private on each device.
+                      Shared rosters sync manually through Google Sheets. Use Sync now before you close the app, and Get latest before another organizer edits.
                     </p>
                   </div>
                 </div>

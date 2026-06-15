@@ -15,6 +15,15 @@ import {
 
 export const FAIR_TEAMS_GOOGLE_SHEET_MIME_TYPE = "application/vnd.google-apps.spreadsheet";
 
+const MISSING_SHARED_ROSTER_MESSAGE = "Shared roster file not found. It may have been deleted, moved to trash, or not shared with this Google account.";
+
+function throwGoogleSheetFileError(status: number, message: string, fallback403: string) {
+  if (status === 401) throw new Error("Google connection expired. Sign in with Google again, then retry.");
+  if (status === 403) throw new Error(fallback403);
+  if (status === 404) throw new Error(MISSING_SHARED_ROSTER_MESSAGE);
+  throw new Error(message);
+}
+
 export interface GoogleSheetRosterFile extends GoogleDriveFileResult {
   mimeType?: string;
 }
@@ -55,9 +64,11 @@ async function getGoogleDriveFileMetadata(accessToken: string, fileId: string): 
 
   if (!response.ok) {
     const message = await readGoogleApiError(response, "Google Drive could not read this shared roster file.");
-    if (response.status === 401) throw new Error("Google connection expired. Reconnect Google Drive, then retry.");
-    if (response.status === 403) throw new Error("Fair Teams cannot open this shared roster. Ask the owner for access or open it with Google Picker again.");
-    throw new Error(message);
+    throwGoogleSheetFileError(
+      response.status,
+      message,
+      "Fair Teams cannot open this shared roster. Ask the owner for access or open it again from Shared Roster.",
+    );
   }
 
   const result = await response.json();
@@ -92,8 +103,11 @@ async function createEmptyGoogleSpreadsheet(accessToken: string, title: string):
 
   if (!response.ok) {
     const message = await readGoogleApiError(response, "Google Drive could not create the shared roster sheet.");
-    if (response.status === 401) throw new Error("Google connection expired. Reconnect Google Drive, then retry.");
-    throw new Error(message);
+    throwGoogleSheetFileError(
+      response.status,
+      message,
+      "Fair Teams cannot create this shared roster. Check Google Drive access, then retry.",
+    );
   }
 
   const result = await response.json();
@@ -111,9 +125,11 @@ async function getSpreadsheetSummary(accessToken: string, spreadsheetId: string)
 
   if (!response.ok) {
     const message = await readGoogleApiError(response, "Google Sheets could not open this shared roster.");
-    if (response.status === 401) throw new Error("Google connection expired. Reconnect Google Drive, then retry.");
-    if (response.status === 403) throw new Error("Fair Teams cannot edit this shared roster. Ask the owner for editor access.");
-    throw new Error(message);
+    throwGoogleSheetFileError(
+      response.status,
+      message,
+      "Fair Teams cannot edit this shared roster. Ask the owner for editor access.",
+    );
   }
 
   return (await response.json()) as GoogleSpreadsheetSummary;
@@ -132,9 +148,11 @@ async function batchUpdateSpreadsheet(accessToken: string, spreadsheetId: string
 
   if (!response.ok) {
     const message = await readGoogleApiError(response, "Google Sheets could not prepare this shared roster.");
-    if (response.status === 401) throw new Error("Google connection expired. Reconnect Google Drive, then retry.");
-    if (response.status === 403) throw new Error("Fair Teams cannot edit this shared roster. Ask the owner for editor access.");
-    throw new Error(message);
+    throwGoogleSheetFileError(
+      response.status,
+      message,
+      "Fair Teams cannot edit this shared roster. Ask the owner for editor access.",
+    );
   }
 }
 
@@ -189,9 +207,11 @@ async function clearGoogleSheetValues(accessToken: string, spreadsheetId: string
 
   if (!response.ok) {
     const message = await readGoogleApiError(response, "Google Sheets could not clear old roster data.");
-    if (response.status === 401) throw new Error("Google connection expired. Reconnect Google Drive, then retry.");
-    if (response.status === 403) throw new Error("Fair Teams cannot edit this shared roster. Ask the owner for editor access.");
-    throw new Error(message);
+    throwGoogleSheetFileError(
+      response.status,
+      message,
+      "Fair Teams cannot edit this shared roster. Ask the owner for editor access.",
+    );
   }
 }
 
@@ -218,9 +238,11 @@ async function writeGoogleSheetValues(
 
   if (!response.ok) {
     const message = await readGoogleApiError(response, "Google Sheets could not save this shared roster.");
-    if (response.status === 401) throw new Error("Google connection expired. Reconnect Google Drive, then retry.");
-    if (response.status === 403) throw new Error("Fair Teams cannot edit this shared roster. Ask the owner for editor access.");
-    throw new Error(message);
+    throwGoogleSheetFileError(
+      response.status,
+      message,
+      "Fair Teams cannot edit this shared roster. Ask the owner for editor access.",
+    );
   }
 }
 
@@ -241,9 +263,11 @@ async function readGoogleSheetValues(accessToken: string, spreadsheetId: string)
 
   if (!response.ok) {
     const message = await readGoogleApiError(response, "Google Sheets could not read this shared roster.");
-    if (response.status === 401) throw new Error("Google connection expired. Reconnect Google Drive, then retry.");
-    if (response.status === 403) throw new Error("Fair Teams cannot read this shared roster. Ask the owner for access.");
-    throw new Error(message);
+    throwGoogleSheetFileError(
+      response.status,
+      message,
+      "Fair Teams cannot read this shared roster. Ask the owner for access.",
+    );
   }
 
   const result = await response.json();

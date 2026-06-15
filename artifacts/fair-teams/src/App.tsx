@@ -867,7 +867,7 @@ function App() {
       return;
     }
     if (!googleDriveAccessToken) {
-      showRosterToolsNotice("Connect Google first", "Connect your Google account before using Drive backup.", "warning");
+      showRosterToolsNotice("Sign in with Google first", "Sign in with your Google account before using Drive backup.", "warning");
       return;
     }
 
@@ -912,7 +912,7 @@ function App() {
       return;
     }
     if (!googleDriveAccessToken) {
-      showRosterToolsNotice("Connect Google first", "Connect your Google account before using Drive backup.", "warning");
+      showRosterToolsNotice("Sign in with Google first", "Sign in with your Google account before using Drive backup.", "warning");
       return;
     }
     if (isEmptyStarterRoster) {
@@ -944,7 +944,7 @@ function App() {
       return;
     }
     if (!googleDriveAccessToken) {
-      showRosterToolsNotice("Connect Google first", "Connect your Google account before using Drive backup.", "warning");
+      showRosterToolsNotice("Sign in with Google first", "Sign in with your Google account before using Drive backup.", "warning");
       return;
     }
     if (!currentDriveBackup) {
@@ -1026,6 +1026,34 @@ function App() {
 
   const updateCurrentGoogleDriveBackup = prepareDriveBackupUpdate;
 
+  const isMissingSharedRosterError = (error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error || "");
+    return /shared roster file not found|file not found|not found|requested entity was not found|404/i.test(message);
+  };
+
+  const removeActiveRosterGoogleSheetLink = () => {
+    setRosterState((current) => ({
+      ...current,
+      rosters: current.rosters.map((roster) => {
+        if (roster.id !== current.activeRosterId) return roster;
+        const { cloudSource: _cloudSource, ...localRoster } = roster;
+        return normalizeRoster({
+          ...localRoster,
+          updatedAt: new Date().toISOString(),
+        });
+      }),
+    }));
+  };
+
+  const handleMissingActiveGoogleSheetLink = () => {
+    removeActiveRosterGoogleSheetLink();
+    showRosterToolsNotice(
+      "Shared file not found",
+      "This Google account cannot find the linked shared roster. It may have been deleted, moved to trash, or not shared with this account. Fair Teams kept the local roster on this device and removed the broken link. Use Open a shared roster to connect again.",
+      "warning",
+    );
+  };
+
   const updateActiveRosterGoogleSheetSource = (file: GoogleSheetRosterFile) => {
     setRosterState((current) => ({
       ...current,
@@ -1053,17 +1081,7 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
     );
     if (!confirmed) return;
 
-    setRosterState((current) => ({
-      ...current,
-      rosters: current.rosters.map((roster) => {
-        if (roster.id !== current.activeRosterId) return roster;
-        const { cloudSource: _cloudSource, ...localRoster } = roster;
-        return normalizeRoster({
-          ...localRoster,
-          updatedAt: new Date().toISOString(),
-        });
-      }),
-    }));
+    removeActiveRosterGoogleSheetLink();
     showRosterToolsNotice(
       "Shared roster disconnected",
       "This device now keeps a local copy only. The Google Sheet still exists and can be opened again later.",
@@ -1077,7 +1095,7 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
       return;
     }
     if (!googleDriveAccessToken) {
-      showRosterToolsNotice("Connect Google first", "Connect your Google account before creating a shared roster.", "warning");
+      showRosterToolsNotice("Sign in with Google first", "Sign in with your Google account before creating a shared roster.", "warning");
       return;
     }
     if (!activeRoster || isEmptyStarterRoster) {
@@ -1104,7 +1122,7 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
   const saveActiveRosterToGoogleSheet = async (options: { force?: boolean } = {}) => {
     if (!activeRoster) return;
     if (!googleDriveAccessToken) {
-      showRosterToolsNotice("Connect Google first", "Connect your Google account before saving a shared roster.", "warning");
+      showRosterToolsNotice("Sign in with Google first", "Sign in with your Google account before saving a shared roster.", "warning");
       return;
     }
     if (!activeGoogleSheetSource?.spreadsheetId) {
@@ -1144,6 +1162,10 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
       updateActiveRosterGoogleSheetSource(file);
       showRosterToolsNotice("Shared roster saved", "Your latest roster changes were saved to the shared Google Sheet.", "success");
     } catch (error) {
+      if (isMissingSharedRosterError(error)) {
+        handleMissingActiveGoogleSheetLink();
+        return;
+      }
       showRosterToolsNotice("Could not save shared roster", error instanceof Error ? error.message : "Please try again.", "error");
     } finally {
       setGoogleSheetSyncing(false);
@@ -1162,7 +1184,7 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
 
   const reloadActiveRosterFromGoogleSheet = async () => {
     if (!googleDriveAccessToken) {
-      showRosterToolsNotice("Connect Google first", "Connect your Google account before reloading a shared roster.", "warning");
+      showRosterToolsNotice("Sign in with Google first", "Sign in with your Google account before reloading a shared roster.", "warning");
       return;
     }
     if (!activeGoogleSheetSource?.spreadsheetId) {
@@ -1192,6 +1214,10 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
       });
       showRosterToolsNotice("Shared roster reloaded", "Pulled the latest roster text data from Google Sheets. Local photos were preserved.", "success");
     } catch (error) {
+      if (isMissingSharedRosterError(error)) {
+        handleMissingActiveGoogleSheetLink();
+        return;
+      }
       showRosterToolsNotice("Could not reload shared roster", error instanceof Error ? error.message : "Please try again.", "error");
     } finally {
       setGoogleSheetOpening(false);
@@ -1204,7 +1230,7 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
       return;
     }
     if (!googleDriveAccessToken) {
-      showRosterToolsNotice("Connect Google first", "Connect your Google account before opening shared rosters.", "warning");
+      showRosterToolsNotice("Sign in with Google first", "Sign in with your Google account before opening shared rosters.", "warning");
       return;
     }
 
@@ -1221,7 +1247,7 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
 
   const openGoogleSheetRosterFile = async (picked: GoogleSheetRosterFile) => {
     if (!googleDriveAccessToken) {
-      showRosterToolsNotice("Connect Google first", "Connect your Google account before opening shared rosters.", "warning");
+      showRosterToolsNotice("Sign in with Google first", "Sign in with your Google account before opening shared rosters.", "warning");
       return;
     }
 
@@ -1284,7 +1310,7 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
 
   const openGoogleSheetShareModal = () => {
     if (!googleDriveAccessToken) {
-      showRosterToolsNotice("Connect Google first", "Connect your Google account before sharing this roster.", "warning");
+      showRosterToolsNotice("Sign in with Google first", "Sign in with your Google account before sharing this roster.", "warning");
       return;
     }
     if (!activeGoogleSheetSource?.spreadsheetId) {
@@ -1315,6 +1341,11 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
       setGoogleSheetShareEmail("");
       showRosterToolsNotice("Editor added", `${email} can now edit this shared roster through Fair Teams.`, "success");
     } catch (error) {
+      if (isMissingSharedRosterError(error)) {
+        handleMissingActiveGoogleSheetLink();
+        setGoogleSheetShareOpen(false);
+        return;
+      }
       showRosterToolsNotice("Could not share roster", error instanceof Error ? error.message : "Please try again.", "error");
     } finally {
       setGoogleSheetSharing(false);
@@ -1323,7 +1354,7 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
 
   const openDriveShareModal = () => {
     if (!googleDriveConnected) {
-      showRosterToolsNotice("Connect Google first", "Connect your Google account before sending a backup copy.", "warning");
+      showRosterToolsNotice("Sign in with Google first", "Sign in with your Google account before sending a backup copy.", "warning");
       return;
     }
     if (isEmptyStarterRoster) {
@@ -1426,7 +1457,7 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
 
   const openDriveAccessManager = async () => {
     if (!googleDriveConnected) {
-      showRosterToolsNotice("Connect Google first", "Connect your Google account before managing Drive access.", "warning");
+      showRosterToolsNotice("Sign in with Google first", "Sign in with your Google account before managing Drive access.", "warning");
       return;
     }
     if (!currentDriveBackup) {
@@ -1984,7 +2015,7 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
                   Roster Tools
                 </h2>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  Manage roster files and backups.
+                  Manage rosters, sharing, and backups.
                 </p>
               </div>
               <Button
@@ -2058,6 +2089,48 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
                 </div>
               </div>
 
+              <div className="rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
+                <div className="flex items-start gap-2.5">
+                  <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-2xl bg-slate-50 text-[#102A43] shadow-sm">
+                    <Cloud className="h-4 w-4" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="text-[10px] font-black uppercase tracking-wide text-slate-500">
+                        Google Account
+                      </div>
+                      <div className={`rounded-full px-2 py-0.5 text-[10px] font-black ${googleDriveConnected ? "bg-emerald-50 text-emerald-700" : "bg-slate-50 text-slate-500"}`}>
+                        {googleDriveConnected ? "Signed in" : "Not signed in"}
+                      </div>
+                    </div>
+                    <div className="mt-2 rounded-2xl bg-slate-50/80 px-3 py-2">
+                      <div className="truncate text-xs font-black text-[#102A43]">
+                        {connectedDriveUser?.emailAddress || (googleDriveConnected ? "Google connected" : "Sign in once for shared rosters and backups")}
+                      </div>
+                      <p className="mt-1 text-[11px] font-semibold leading-snug text-slate-500">
+                        One Google sign-in is used for Shared Roster and Advanced Backup.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  variant={googleDriveConnected ? "outline" : "default"}
+                  className={`mt-3 h-11 w-full justify-start rounded-2xl gap-3 ${googleDriveConnected ? "border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-700" : "bg-[#102A43] text-white hover:bg-[#0b2036]"}`}
+                  onClick={googleDriveConnected ? disconnectGoogleDrive : connectGoogleDrive}
+                  disabled={!googleDriveConfig.isConfigured || googleDriveConnecting}
+                >
+                  <Cloud className="h-4 w-4" />
+                  <span className="font-black">
+                    {googleDriveConnecting
+                      ? "Connecting..."
+                      : googleDriveConnected
+                        ? "Disconnect Google"
+                        : "Sign in with Google"}
+                  </span>
+                </Button>
+              </div>
+
               <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-3 shadow-sm">
                 <div className="flex items-start gap-2.5">
                   <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-2xl bg-white text-emerald-600 shadow-sm">
@@ -2098,20 +2171,6 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
                 </div>
 
                 <div className="mt-3 grid gap-2">
-                  {!googleDriveConnected && (
-                    <Button
-                      type="button"
-                      className="h-11 justify-start rounded-2xl gap-3 bg-emerald-600 text-white hover:bg-emerald-700"
-                      onClick={connectGoogleDrive}
-                      disabled={!googleDriveConfig.isConfigured || googleDriveConnecting}
-                    >
-                      <Cloud className="h-4 w-4" />
-                      <span className="font-black">
-                        {googleDriveConnecting ? "Connecting..." : "Sign in with Google"}
-                      </span>
-                    </Button>
-                  )}
-
                   {activeRosterIsShared ? (
                     <>
                       <Button
@@ -2191,7 +2250,9 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
 
                   <div className="rounded-2xl bg-white/70 px-3 py-2">
                     <p className="text-[10px] font-semibold leading-snug text-slate-500">
-                      Shared rosters sync manually through Google Sheets. Use Sync now before you close the app, and Get latest before another organizer edits.
+                      {googleDriveConnected
+                        ? "Shared rosters sync manually through Google Sheets. Use Sync now before you close the app, and Get latest before another organizer edits."
+                        : "Sign in with Google above to make, open, sync, or share a roster."}
                     </p>
                   </div>
                 </div>
@@ -2240,22 +2301,6 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
                 </div>
 
                 <div className="mt-3 grid gap-2">
-                  <Button
-                    type="button"
-                    variant={googleDriveConnected ? "outline" : "default"}
-                    className={`h-11 justify-start rounded-2xl gap-3 ${googleDriveConnected ? "border-slate-200 bg-white/90 text-slate-600 hover:bg-slate-50 hover:text-slate-700" : "bg-blue-600 text-white hover:bg-blue-700"}`}
-                    onClick={googleDriveConnected ? disconnectGoogleDrive : connectGoogleDrive}
-                    disabled={!googleDriveConfig.isConfigured || googleDriveConnecting}
-                  >
-                    <Cloud className="h-4 w-4" />
-                    <span className="font-black">
-                      {googleDriveConnecting
-                        ? "Connecting..."
-                        : googleDriveConnected
-                          ? "Disconnect"
-                          : "Connect Google"}
-                    </span>
-                  </Button>
                   <Button
                     type="button"
                     className="h-12 justify-start rounded-2xl gap-3 bg-emerald-600 text-white shadow-sm hover:bg-emerald-700"
@@ -2321,7 +2366,9 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
                   </Button>
                   <div className="rounded-2xl bg-white/70 px-3 py-2">
                     <p className="text-[10px] font-semibold leading-snug text-slate-500">
-                      Optional backup files are for safety or transfer. Shared Roster is the simpler choice when multiple organizers use the same roster.
+                      {googleDriveConnected
+                        ? "Optional backup files are for safety or transfer. Shared Roster is the simpler choice when multiple organizers use the same roster."
+                        : "Sign in with the Google Account section above to use Drive backup."}
                     </p>
                     <button
                       type="button"

@@ -21,6 +21,7 @@ import {
   RefreshCw,
   Share2,
   UserMinus,
+  FolderOpen,
   Info,
 } from "lucide-react";
 import { PlayersTab } from "@/components/PlayersTab";
@@ -2691,8 +2692,8 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
                       </span>
                     </span>
                   </span>
-                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black ${activeRosterIsShared ? "bg-emerald-600 text-white" : "bg-slate-50 text-slate-500"}`}>
-                    {activeRosterIsShared ? "Shared" : rosterSharedToolsOpen ? "Open" : "Local"}
+                  <span className="shrink-0 rounded-full bg-slate-50 px-2.5 py-1 text-lg font-black leading-none text-slate-400">
+                    {rosterSharedToolsOpen ? "−" : "›"}
                   </span>
                 </button>
 
@@ -2739,7 +2740,7 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
                       <>
                         <div className="grid gap-2">
                           <div className="px-1 text-[10px] font-black uppercase tracking-wide text-emerald-600">
-                            Sync
+                            Shared roster
                           </div>
                           <Button
                             type="button"
@@ -2747,9 +2748,9 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
                             onClick={() => saveActiveRosterToGoogleSheet()}
                             disabled={!googleDriveConnected || googleSheetSyncing || googleSheetOpening || isEmptyStarterRoster}
                           >
-                            <RefreshCw className={`h-4 w-4 ${googleSheetSyncing ? "animate-spin" : ""}`} />
+                            <CloudUpload className="h-4 w-4" />
                             <span className="min-w-0 truncate font-black">
-                              {googleSheetSyncing ? "Saving..." : "Save changes"}
+                              {googleSheetSyncing ? "Saving..." : "Save to shared roster"}
                             </span>
                           </Button>
                           <Button
@@ -2761,7 +2762,7 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
                           >
                             <CloudDownload className="h-4 w-4" />
                             <span className="truncate text-xs font-black">
-                              {googleSheetOpening ? "Getting latest..." : "Get latest changes"}
+                              {googleSheetOpening ? "Getting..." : "Get latest"}
                             </span>
                           </Button>
                         </div>
@@ -2786,7 +2787,7 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
 
                         <div className="grid gap-2 rounded-2xl border border-red-100 bg-red-50/40 p-2">
                           <div className="px-1 text-[10px] font-black uppercase tracking-wide text-red-400">
-                            Leave shared roster
+                            Connection
                           </div>
                           <Button
                             type="button"
@@ -2794,19 +2795,10 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
                             className="h-10 justify-start rounded-2xl gap-2 border-slate-200 bg-white/90 px-3 text-slate-600 hover:bg-white hover:text-slate-800"
                             onClick={disconnectActiveRosterFromGoogleSheet}
                             disabled={googleSheetSyncing || googleSheetOpening || googleSheetSharing}
+                            title="Keep this roster locally, but stop connecting it to the shared Google Sheet."
                           >
                             <X className="h-3.5 w-3.5" />
-                            <span className="truncate text-xs font-black">Disconnect from shared roster</span>
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="h-10 justify-start rounded-2xl gap-2 border-red-100 bg-red-50/70 px-3 text-red-700 hover:bg-red-100 hover:text-red-800"
-                            onClick={openClearRoster}
-                            disabled={googleSheetSyncing || googleSheetOpening || googleSheetSharing}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                            <span className="truncate text-xs font-black">Remove from this device</span>
+                            <span className="truncate text-xs font-black">Stop syncing this roster</span>
                           </Button>
                         </div>
                       </>
@@ -2824,59 +2816,28 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
                       </Button>
                     )}
 
-                    <div className="rounded-2xl border border-emerald-100 bg-white/70 p-3">
-                      <div className="text-[10px] font-black uppercase tracking-wide text-emerald-600">
-                        All shared rosters
+                    <div className="grid gap-2 rounded-2xl border border-slate-100 bg-white/70 p-2">
+                      <div className="px-1 text-[10px] font-black uppercase tracking-wide text-slate-400">
+                        Open
                       </div>
-                      <div className="mt-1 text-xs font-black text-[#102A43]">
-                        {sharedRosterCountLabel} on this device
-                      </div>
-                      <div className="mt-3 grid gap-2">
-                        <div className="grid grid-cols-2 gap-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="h-11 justify-start rounded-2xl gap-2 border-emerald-100 bg-white/90 px-3"
-                            onClick={saveAllSharedRostersToGoogleSheets}
-                            disabled={!googleDriveConnected || googleSheetSyncing || googleSheetOpening || sharedGoogleSheetRosterCount === 0}
-                          >
-                            <RefreshCw className={`h-4 w-4 ${googleSheetSyncing ? "animate-spin" : ""}`} />
-                            <span className="truncate text-xs font-black">
-                              {googleSheetSyncing ? "Saving..." : "Save all"}
-                            </span>
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="h-11 justify-start rounded-2xl gap-2 border-emerald-100 bg-white/90 px-3"
-                            onClick={getLatestForAllSharedRosters}
-                            disabled={!googleDriveConnected || googleSheetOpening || googleSheetSyncing || sharedGoogleSheetRosterCount === 0}
-                          >
-                            <CloudDownload className="h-4 w-4" />
-                            <span className="truncate text-xs font-black">
-                              {googleSheetOpening ? "Getting latest..." : "Get latest for all"}
-                            </span>
-                          </Button>
-                        </div>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="h-11 justify-start rounded-2xl gap-3 border-emerald-100 bg-white/90"
-                          onClick={openGoogleSheetRosterList}
-                          disabled={!googleDriveConnected || googleSheetOpening}
-                        >
-                          <CloudDownload className="h-4 w-4" />
-                          <span className="font-black">
-                            {googleSheetOpening ? "Opening..." : "Open shared roster"}
-                          </span>
-                        </Button>
-                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-11 justify-start rounded-2xl gap-2 border-slate-100 bg-white/90 px-3"
+                        onClick={openGoogleSheetRosterList}
+                        disabled={!googleDriveConnected || googleSheetOpening}
+                      >
+                        <FolderOpen className="h-4 w-4" />
+                        <span className="truncate text-xs font-black">
+                          {googleSheetOpening ? "Opening..." : "Open shared roster"}
+                        </span>
+                      </Button>
                     </div>
 
                       <div className="rounded-2xl bg-white/70 px-3 py-2">
                         <p className="text-[10px] font-semibold leading-snug text-slate-500">
                           {googleDriveConnected
-                            ? "Get latest before editing. Save changes after editing."
+                            ? "Get latest before editing. Save to shared roster after editing."
                             : "Sign in with Google above to share rosters."}
                         </p>
                       </div>

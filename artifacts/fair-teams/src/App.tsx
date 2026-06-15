@@ -2853,18 +2853,32 @@ They will no longer be able to open or edit this shared roster unless it is shar
                           </Button>
                         </div>
 
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="h-11 justify-start rounded-2xl gap-2 border-slate-100 bg-white/90 px-3"
-                          onClick={openGoogleSheetShareModal}
-                          disabled={!googleDriveConnected || googleSheetSharing || googleSheetAccessLoading}
-                        >
-                          <Share2 className="h-4 w-4" />
-                          <span className="truncate text-xs font-black">
-                            {googleSheetAccessLoading ? "Loading access..." : "Sharing & access"}
-                          </span>
-                        </Button>
+                        <div className="grid gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-11 justify-start rounded-2xl gap-2 border-slate-100 bg-white/90 px-3"
+                            onClick={openGoogleSheetShareModal}
+                            disabled={!googleDriveConnected || googleSheetSharing || googleSheetAccessLoading}
+                          >
+                            <Share2 className="h-4 w-4" />
+                            <span className="truncate text-xs font-black">
+                              {googleSheetAccessLoading ? "Loading access..." : "Manage sharing"}
+                            </span>
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-11 justify-start rounded-2xl gap-2 border-slate-100 bg-white/90 px-3"
+                            onClick={openGoogleSheetRosterList}
+                            disabled={!googleDriveConnected || googleSheetOpening}
+                          >
+                            <FolderOpen className="h-4 w-4" />
+                            <span className="truncate text-xs font-black">
+                              {googleSheetOpening ? "Opening..." : "Open shared roster library"}
+                            </span>
+                          </Button>
+                        </div>
                       </>
                     ) : (
                       <>
@@ -3611,6 +3625,30 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 <p className="mt-2 text-[10px] font-semibold leading-snug text-slate-500">
                   Editors can save changes to this shared roster through Fair Teams.
                 </p>
+              </div>
+
+              <div className="mt-3 rounded-2xl border border-slate-100 bg-white p-3">
+                <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+                  Other shared rosters
+                </div>
+                <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
+                  Open a roster that was shared with this Google account.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="mt-3 h-10 w-full justify-start rounded-2xl gap-2 border-slate-200 bg-white/90 px-3 text-slate-700 hover:bg-white"
+                  onClick={() => {
+                    setGoogleSheetShareOpen(false);
+                    void openGoogleSheetRosterList();
+                  }}
+                  disabled={googleSheetOpening}
+                >
+                  <FolderOpen className="h-3.5 w-3.5" />
+                  <span className="truncate text-xs font-black">
+                    {googleSheetOpening ? "Opening..." : "Open shared roster library"}
+                  </span>
+                </Button>
               </div>
 
               <div className="mt-3 rounded-2xl border border-slate-100 bg-white p-3">

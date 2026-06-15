@@ -1111,6 +1111,14 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
       await makeActiveRosterShared();
       return;
     }
+    if (activeRoster.players.length === 0) {
+      showRosterToolsNotice(
+        "Sync blocked",
+        "This shared roster has no players on this device. To avoid erasing the shared roster for everyone, use Get latest or Disconnect shared roster first.",
+        "warning",
+      );
+      return;
+    }
 
     setGoogleSheetSyncing(true);
     try {
@@ -1576,6 +1584,7 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
 
   const confirmClearRoster = () => {
     if (clearRosterSlide < 95) return;
+    const removingSharedRoster = activeRosterIsShared;
     setRosterState((current) => {
       if (current.rosters.length <= 1) {
         const empty = createRoster(EMPTY_ROSTER_NAME, []);
@@ -1590,6 +1599,13 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
       };
     });
     closeClearRoster();
+    if (removingSharedRoster) {
+      showRosterToolsNotice(
+        "Shared roster removed from this device",
+        "The Google Sheet was not changed or deleted. Open the shared roster again to get the latest version.",
+        "success",
+      );
+    }
   };
 
   const visibleDriveBackupChoices = driveBackupChoices
@@ -2373,9 +2389,11 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
                     >
                       <Trash2 className="h-4 w-4" />
                       <span className="font-black">
-                        {rosters.length > 1
-                          ? "Delete current roster"
-                          : "Clear current roster"}
+                        {activeRosterIsShared
+                          ? "Remove shared roster from this device"
+                          : rosters.length > 1
+                            ? "Delete current roster"
+                            : "Clear current roster"}
                       </span>
                     </Button>
                   </>
@@ -3409,14 +3427,18 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
               </div>
               <div className="min-w-0 flex-1">
                 <h2 className="text-base font-black tracking-tight text-[#102A43]">
-                  {rosters.length > 1
-                    ? `Delete “${activeRosterName}”?`
-                    : `Clear “${activeRosterName}”?`}
+                  {activeRosterIsShared
+                    ? `Remove “${activeRosterName}” from this device?`
+                    : rosters.length > 1
+                      ? `Delete “${activeRosterName}”?`
+                      : `Clear “${activeRosterName}”?`}
                 </h2>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  {rosters.length > 1
-                    ? "This deletes only the active roster. Your other rosters will stay."
-                    : `You need at least one roster, so this removes all ${players.length} player profiles from this roster only.`}
+                  {activeRosterIsShared
+                    ? "This removes only the local copy from this device. It will not delete, clear, or overwrite the shared Google Sheet."
+                    : rosters.length > 1
+                      ? "This deletes only the active roster. Your other rosters will stay."
+                      : `You need at least one roster, so this removes all ${players.length} player profiles from this roster only.`}
                 </p>
               </div>
             </div>
@@ -3457,7 +3479,11 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
                 onClick={confirmClearRoster}
                 disabled={clearRosterSlide < 95}
               >
-                {rosters.length > 1 ? "Delete roster" : "Clear roster"}
+                {activeRosterIsShared
+                  ? "Remove from this device"
+                  : rosters.length > 1
+                    ? "Delete roster"
+                    : "Clear roster"}
               </Button>
             </div>
           </div>

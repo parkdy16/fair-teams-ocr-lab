@@ -491,6 +491,7 @@ function App() {
   const [rosterLocalBackupToolsOpen, setRosterLocalBackupToolsOpen] = useState(false);
   const [rosterCloudBackupToolsOpen, setRosterCloudBackupToolsOpen] = useState(false);
   const [rosterPickerOpen, setRosterPickerOpen] = useState(false);
+  const [rosterSwitchingName, setRosterSwitchingName] = useState("");
   const [clearRosterOpen, setClearRosterOpen] = useState(false);
   const [clearRosterSlide, setClearRosterSlide] = useState(0);
   const [newRosterName, setNewRosterName] = useState("");
@@ -826,6 +827,19 @@ function App() {
         ? { ...current, activeRosterId: rosterId }
         : current,
     );
+  };
+
+  const switchRosterWithPause = (roster: RoomRoster) => {
+    if (roster.id === activeRosterId) {
+      setRosterPickerOpen(false);
+      return;
+    }
+    setRosterPickerOpen(false);
+    setRosterSwitchingName(roster.name);
+    window.setTimeout(() => {
+      switchRoster(roster.id);
+      setRosterSwitchingName("");
+    }, 520);
   };
 
   const createNewRoster = () => {
@@ -2897,6 +2911,24 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
         </div>
       )}
 
+      {rosterSwitchingName && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/35 p-4"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="w-full max-w-[240px] rounded-3xl border border-slate-100 bg-white p-4 text-center shadow-2xl">
+            <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-4 border-slate-100 border-t-[#102A43]" />
+            <div className="text-sm font-black tracking-tight text-[#102A43]">
+              Switching roster…
+            </div>
+            <div className="mt-1 truncate text-xs font-semibold text-slate-500">
+              {rosterSwitchingName}
+            </div>
+          </div>
+        </div>
+      )}
+
       {rosterPickerOpen && (
         <div
           className="fixed inset-0 z-[60] flex items-center justify-center bg-black/45 p-4"
@@ -2932,11 +2964,7 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
                   <button
                     key={roster.id}
                     type="button"
-                    onClick={() => {
-                      switchRoster(roster.id);
-                      setRosterPickerOpen(false);
-                      setRosterFilesOpen(false);
-                    }}
+                    onClick={() => switchRosterWithPause(roster)}
                     className={`flex w-full items-center justify-between gap-3 rounded-2xl border px-3 py-3 text-left transition active:scale-[0.99] ${selected ? "border-blue-200 bg-blue-50/80" : "border-slate-100 bg-slate-50/70"}`}
                   >
                     <span className="min-w-0">

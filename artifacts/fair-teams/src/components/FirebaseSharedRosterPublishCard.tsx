@@ -1,13 +1,17 @@
 import React, { useEffect, useState } from "react";
-import { CloudDownload, CloudUpload, Database, ListChecks, RefreshCw, Save, Share2 } from "lucide-react";
+import { Check, CloudDownload, CloudUpload, Database, Inbox, ListChecks, Mail, RefreshCw, Save, Share2, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { RoomRoster } from "@/lib/localRoster";
 import {
+  acceptFirebaseRosterInvite,
   createFirebaseSharedRoster,
+  inviteEmailToFirebaseSharedRoster,
   listenToSharedRosterUser,
+  listFirebaseRosterInvites,
   listFirebaseSharedRosters,
   readFirebaseSharedRoster,
   saveFirebaseSharedRoster,
+  type FirebaseRosterInvite,
   type FirebaseSharedRosterSummary,
   type SharedRosterUser,
 } from "@/lib/sharedRosterService";
@@ -41,6 +45,8 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, isEmptyRoster, o
   const [authReady, setAuthReady] = useState(false);
   const [busy, setBusy] = useState<"publish" | "refresh" | "save" | "reload" | string>("");
   const [sharedRosters, setSharedRosters] = useState<FirebaseSharedRosterSummary[]>([]);
+  const [incomingInvites, setIncomingInvites] = useState<FirebaseRosterInvite[]>([]);
+  const [inviteEmail, setInviteEmail] = useState("");
   const [notice, setNotice] = useState<{ tone: "success" | "error" | "info"; text: string } | null>(null);
 
   useEffect(() => {
@@ -49,6 +55,7 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, isEmptyRoster, o
       setAuthReady(true);
       if (!nextUser) {
         setSharedRosters([]);
+        setIncomingInvites([]);
       }
     });
     return unsubscribe;
@@ -59,9 +66,13 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, isEmptyRoster, o
     setBusy("refresh");
     setNotice(null);
     try {
-      const rosters = await listFirebaseSharedRosters();
+      const [rosters, invites] = await Promise.all([
+        listFirebaseSharedRosters(),
+        listFirebaseRosterInvites(),
+      ]);
       setSharedRosters(rosters);
-      setNotice({ tone: "info", text: rosters.length ? `Found ${rosters.length} Firebase shared roster${rosters.length === 1 ? "" : "s"}.` : "No Firebase shared rosters yet." });
+      setIncomingInvites(invites);
+      setNotice({ tone: "info", text: `${rosters.length ? `Found ${rosters.length} Firebase shared roster${rosters.length === 1 ? "" : "s"}` : "No Firebase shared rosters"}${invites.length ? ` · ${invites.length} pending invite${invites.length === 1 ? "" : "s"}` : ""}.` });
     } catch (error) {
       setNotice({ tone: "error", text: friendlyFirestoreError(error) });
     } finally {
@@ -76,6 +87,45 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, isEmptyRoster, o
     // Intentionally refresh when the signed-in Firebase user changes only.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.uid]);
+
+
+  const handleInviteToActiveRoster = async () => {
+    const rosterId = activeRoster?.cloudSource?.provider === "firebase" ? activeRoster.cloudSource.firebaseRosterId : undefined;
+    if (!user || !rosterId || busy) return;
+    setBusy("invite");
+    setNotice(null);
+    try {
+      await inviteEmailToFirebaseSharedRoster(rosterId, inviteEmail);
+      setInviteEmail("");
+      setNotice({ tone: "success", text: `Invite saved for ${inviteEmail.trim().toLowerCase()}. They can sign in and accept it inside Fair Teams.` });
+      const rosters = await listFirebaseSharedRosters();
+      setSharedRosters(rosters);
+    } catch (error) {
+      setNotice({ tone: "error", text: friendlyFirestoreError(error) });
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const handleAcceptInvite = async (rosterId: string) => {
+    if (!user || busy) return;
+    setBusy(`accept:${rosterId}`);
+    setNotice(null);
+    try {
+      const accepted = await acceptFirebaseRosterInvite(rosterId);
+      const [rosters, invites] = await Promise.all([
+        listFirebaseSharedRosters(),
+        listFirebaseRosterInvites(),
+      ]);
+      setSharedRosters(rosters);
+      setIncomingInvites(invites);
+      setNotice({ tone: "success", text: `Accepted invite to ${accepted.name}. It is now in My Firebase rosters.` });
+    } catch (error) {
+      setNotice({ tone: "error", text: friendlyFirestoreError(error) });
+    } finally {
+      setBusy("");
+    }
+  };
 
 
   const handleOpenRoster = async (rosterId: string) => {
@@ -159,6 +209,13 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, isEmptyRoster, o
   const activeFirebaseSource = activeRoster?.cloudSource?.provider === "firebase" ? activeRoster.cloudSource : null;
   const canSaveActiveRoster = Boolean(user && activeRoster && activeFirebaseSource?.firebaseRosterId && !busy);
   const canRefreshActiveRoster = canSaveActiveRoster;
+  const canInviteFromActiveRoster = Boolean(
+    user &&
+    activeRoster &&
+    activeFirebaseSource?.firebaseRosterId &&
+    activeFirebaseSource.firebaseOwnerUid === user.uid &&
+    !busy
+  );
 
   return (
     <div className="grid gap-3 rounded-3xl border border-violet-100 bg-violet-50/60 p-3 shadow-sm">
@@ -230,6 +287,92 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, isEmptyRoster, o
           Active roster is linked to Firebase version {activeFirebaseSource.firebaseVersion || 1}. Save will check the remote version before overwriting.
         </div>
       ) : null}
+
+      <div className="grid gap-2 rounded-2xl bg-white/75 p-2">
+        <div className="flex items-center gap-1.5 px-1 text-[10px] font-black uppercase tracking-wide text-slate-400">
+          <UserPlus className="h-3.5 w-3.5" />
+          Invite editor
+        </div>
+        <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+          <input
+            type="email"
+            value={inviteEmail}
+            onChange={(event) => setInviteEmail(event.target.value)}
+            placeholder="sarah@example.com"
+            className="h-10 rounded-2xl border border-violet-100 bg-white px-3 text-xs font-bold text-[#102A43] outline-none placeholder:text-slate-300 focus:border-violet-300 focus:ring-2 focus:ring-violet-100"
+            disabled={!canInviteFromActiveRoster}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            className="h-10 justify-start rounded-2xl gap-1.5 border-violet-200 bg-white px-3 text-xs font-black text-violet-700 shadow-sm hover:bg-violet-50"
+            onClick={handleInviteToActiveRoster}
+            disabled={!canInviteFromActiveRoster || !inviteEmail.trim()}
+          >
+            <Mail className="h-3.5 w-3.5" />
+            {busy === "invite" ? "Inviting…" : "Invite"}
+          </Button>
+        </div>
+        <div className="px-1 text-[10px] font-semibold leading-snug text-slate-500">
+          First invite version: owner invites by email. The invited person signs in with that exact email and accepts inside Fair Teams.
+        </div>
+      </div>
+
+      <div className="grid gap-2 rounded-2xl bg-white/75 p-2">
+        <div className="flex items-center justify-between gap-2 px-1">
+          <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wide text-slate-400">
+            <Inbox className="h-3.5 w-3.5" />
+            Invites for me
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            className="h-7 rounded-xl px-2 text-[10px] font-black text-violet-700"
+            onClick={() => refreshSharedRosters()}
+            disabled={!user || Boolean(busy)}
+          >
+            <RefreshCw className={`mr-1 h-3 w-3 ${busy === "refresh" ? "animate-spin" : ""}`} />
+            Check
+          </Button>
+        </div>
+
+        {!user ? (
+          <div className="rounded-2xl bg-slate-50 px-3 py-2 text-[11px] font-bold text-slate-500">
+            Sign in above to check invites.
+          </div>
+        ) : incomingInvites.length === 0 ? (
+          <div className="rounded-2xl bg-slate-50 px-3 py-2 text-[11px] font-bold text-slate-500">
+            No pending invites for this email.
+          </div>
+        ) : (
+          <div className="grid gap-1.5">
+            {incomingInvites.slice(0, 4).map((invite) => (
+              <div key={invite.id} className="grid gap-2 rounded-2xl border border-emerald-100 bg-emerald-50/70 px-3 py-2">
+                <div>
+                  <div className="flex items-center gap-1.5 text-xs font-black text-[#102A43]">
+                    <Mail className="h-3.5 w-3.5 text-emerald-600" />
+                    <span className="min-w-0 flex-1 truncate">{invite.name}</span>
+                    <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-[10px] text-emerald-700">invite</span>
+                  </div>
+                  <div className="mt-0.5 text-[10px] font-semibold text-slate-500">
+                    From {invite.ownerEmail || "owner"} · {invite.playerCount} player{invite.playerCount === 1 ? "" : "s"}
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-8 justify-start rounded-xl gap-1.5 border-emerald-100 bg-white px-2 text-[10px] font-black text-emerald-700"
+                  onClick={() => handleAcceptInvite(invite.id)}
+                  disabled={!user || Boolean(busy)}
+                >
+                  <Check className="h-3.5 w-3.5" />
+                  {busy === `accept:${invite.id}` ? "Accepting…" : "Accept invite"}
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       <div className="grid gap-2 rounded-2xl bg-white/75 p-2">
         <div className="flex items-center justify-between gap-2 px-1">

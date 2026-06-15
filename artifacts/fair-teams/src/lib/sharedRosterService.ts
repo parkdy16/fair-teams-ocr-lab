@@ -8,6 +8,8 @@ import {
 } from "firebase/auth";
 import {
   addDoc,
+  arrayRemove,
+  arrayUnion,
   collection,
   doc,
   getDoc,
@@ -43,6 +45,10 @@ export type FirebaseSharedRosterSummary = {
   updatedAt?: string;
 };
 
+export type FirebaseRosterInvite = FirebaseSharedRosterSummary & {
+  inviteeEmail: string;
+};
+
 function toSharedRosterUser(user: User | null): SharedRosterUser | null {
   if (!user || !user.email) return null;
   return {
@@ -50,6 +56,10 @@ function toSharedRosterUser(user: User | null): SharedRosterUser | null {
     email: user.email,
     displayName: user.displayName || undefined,
   };
+}
+
+function normalizeEmail(email: string) {
+  return email.trim().toLowerCase();
 }
 
 function getCurrentSharedRosterUser() {
@@ -145,7 +155,8 @@ export async function createFirebaseSharedRoster(roster: RoomRoster): Promise<Fi
     ownerUid: user.uid,
     ownerEmail: user.email,
     memberUids: [user.uid],
-    memberEmails: [user.email.toLowerCase()],
+    memberEmails: [normalizeEmail(user.email)],
+    pendingInviteEmails: [],
     roleByUid: { [user.uid]: "owner" },
     version: 1,
     playerCount,
@@ -181,6 +192,77 @@ export async function listFirebaseSharedRosters(): Promise<FirebaseSharedRosterS
     .sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime());
 }
 
+
+export async function inviteEmailToFirebaseSharedRoster(rosterId: string, inviteeEmail: string): Promise<void> {
+  const user = getCurrentSharedRosterUser();
+  const email = normalizeEmail(inviteeEmail);
+  if (!email || !email.includes("@")) throw new Error("Enter a valid email address to invite.");
+  if (email === normalizeEmail(user.email)) throw new Error("You are already signed in with that email.");
+
+  const docRef = doc(getFairTeamsFirestore(), "sharedRosters", rosterId);
+  await runTransaction(getFairTeamsFirestore(), async (transaction) => {
+    const snapshot = await transaction.get(docRef);
+    if (!snapshot.exists()) throw new Error("Firebase shared roster was not found.");
+    const data = snapshot.data();
+    if (data.ownerUid !== user.uid) throw new Error("Only the owner can invite people in this first version.");
+
+    const memberEmails = Array.isArray(data.memberEmails) ? data.memberEmails.map((value) => String(value).toLowerCase()) : [];
+    if (memberEmails.includes(email)) throw new Error("That email is already a member of this shared roster.");
+
+    transaction.update(docRef, {
+      pendingInviteEmails: arrayUnion(email),
+      updatedAt: serverTimestamp(),
+      updatedAtIso: new Date().toISOString(),
+    });
+  });
+}
+
+export async function listFirebaseRosterInvites(): Promise<FirebaseRosterInvite[]> {
+  const user = getCurrentSharedRosterUser();
+  const email = normalizeEmail(user.email);
+  const invitesQuery = query(
+    collection(getFairTeamsFirestore(), "sharedRosters"),
+    where("pendingInviteEmails", "array-contains", email),
+  );
+  const snapshot = await getDocs(invitesQuery);
+  return snapshot.docs
+    .map((doc) => ({
+      ...toRosterSummary(doc.id, doc.data()),
+      inviteeEmail: email,
+    }))
+    .sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime());
+}
+
+export async function acceptFirebaseRosterInvite(rosterId: string): Promise<FirebaseSharedRosterSummary> {
+  const user = getCurrentSharedRosterUser();
+  const email = normalizeEmail(user.email);
+  const docRef = doc(getFairTeamsFirestore(), "sharedRosters", rosterId);
+
+  return runTransaction(getFairTeamsFirestore(), async (transaction) => {
+    const snapshot = await transaction.get(docRef);
+    if (!snapshot.exists()) throw new Error("Firebase shared roster was not found.");
+    const data = snapshot.data();
+    const pendingInviteEmails = Array.isArray(data.pendingInviteEmails) ? data.pendingInviteEmails.map((value) => String(value).toLowerCase()) : [];
+    if (!pendingInviteEmails.includes(email)) throw new Error("No pending invite was found for this signed-in email.");
+
+    const currentRoleByUid = data.roleByUid && typeof data.roleByUid === "object" ? data.roleByUid as Record<string, unknown> : {};
+    const nextRoleByUid = {
+      ...currentRoleByUid,
+      [user.uid]: "editor",
+    };
+
+    transaction.update(docRef, {
+      memberUids: arrayUnion(user.uid),
+      memberEmails: arrayUnion(email),
+      pendingInviteEmails: arrayRemove(email),
+      roleByUid: nextRoleByUid,
+      updatedAt: serverTimestamp(),
+      updatedAtIso: new Date().toISOString(),
+    });
+
+    return toRosterSummary(snapshot.id, data);
+  });
+}
 
 export async function readFirebaseSharedRoster(rosterId: string): Promise<FirebaseSharedRosterSnapshot> {
   getCurrentSharedRosterUser();

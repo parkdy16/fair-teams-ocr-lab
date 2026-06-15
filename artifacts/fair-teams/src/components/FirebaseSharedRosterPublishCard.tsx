@@ -309,7 +309,7 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, rosters = [], is
   };
 
   return (
-    <div className="grid gap-3 rounded-3xl border border-slate-100 bg-white p-3 shadow-sm">
+    <div className="grid gap-3">
       <div className="grid gap-1.5">
         <div className="text-[10px] font-black uppercase tracking-wide text-emerald-600">Shared group</div>
         <div className="grid grid-cols-[1fr_auto] gap-2">
@@ -331,7 +331,7 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, rosters = [], is
         </div>
       </div>
 
-      <div className="flex items-center justify-between gap-2 rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-600">
+      <div className="flex items-center justify-between gap-2 px-1 text-xs font-bold text-slate-600">
         <span className="min-w-0 truncate">{!authReady ? "Checking sign-in…" : user ? user.email : "Not signed in"}</span>
         <Button type="button" variant="ghost" className="h-7 rounded-xl px-2 text-[10px] font-black text-emerald-700" onClick={() => refreshSharedData()} disabled={!user || Boolean(busy)}>
           <RefreshCw className={`mr-1 h-3 w-3 ${busy === "refresh" ? "animate-spin" : ""}`} />
@@ -352,7 +352,7 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, rosters = [], is
         </div>
       )}
 
-      <div className="grid gap-2 rounded-2xl border border-slate-100 bg-slate-50/70 p-2">
+      <div className="grid gap-2">
         <div className="flex items-center justify-between gap-2 px-1">
           <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Rosters</div>
           <Button type="button" variant="ghost" className="h-7 rounded-xl px-2 text-[10px] font-black text-emerald-700" onClick={() => setModal("rosters")} disabled={!user || !selectedGroup}>
@@ -360,13 +360,13 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, rosters = [], is
           </Button>
         </div>
         {visibleRosters.length === 0 ? (
-          <div className="rounded-2xl bg-white px-3 py-2 text-[11px] font-bold text-slate-500">No rosters</div>
+          <div className="px-1 py-1 text-[11px] font-bold text-slate-500">No rosters</div>
         ) : (
-          <div className="grid gap-1.5">
+          <div className="grid gap-1">
             {visibleRosters.slice(0, 8).map((roster) => (
-              <button key={roster.id} type="button" onClick={() => handleOpenRoster(roster.id)} disabled={Boolean(busy)} className="grid gap-0.5 rounded-2xl bg-white px-3 py-2 text-left shadow-sm active:scale-[0.99]">
-                <div className="truncate text-xs font-black text-[#102A43]">{roster.name}</div>
-                <div className="truncate text-[10px] font-semibold text-slate-500">last saved by {shortName(roster.lastSavedByEmail || roster.ownerEmail)}</div>
+              <button key={roster.id} type="button" onClick={() => handleOpenRoster(roster.id)} disabled={Boolean(busy)} className="flex items-center justify-between gap-3 rounded-2xl bg-slate-50 px-3 py-2 text-left active:scale-[0.99]">
+                <span className="min-w-0 truncate text-xs font-black text-[#102A43]">{roster.name}</span>
+                <span className="shrink-0 truncate text-[10px] font-semibold text-slate-500">saved by {shortName(roster.lastSavedByEmail || roster.ownerEmail)}</span>
               </button>
             ))}
           </div>
@@ -384,7 +384,7 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, rosters = [], is
         </Button>
       </div>
 
-      <button type="button" onClick={() => setModal("collaborators")} disabled={!user || !selectedGroup} className="flex items-center justify-between rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2 text-left active:scale-[0.99] disabled:opacity-60">
+      <button type="button" onClick={() => setModal("collaborators")} disabled={!user || !selectedGroup} className="flex items-center justify-between rounded-2xl bg-slate-50 px-3 py-2 text-left active:scale-[0.99] disabled:opacity-60">
         <span>
           <span className="block text-[10px] font-black uppercase tracking-wide text-slate-400">Collaborators</span>
           <span className="block text-xs font-black text-[#102A43]">{selectedGroup ? `${selectedGroup.memberCount} active${selectedGroup.pendingInviteEmails?.length ? ` · ${selectedGroup.pendingInviteEmails.length} pending` : ""}` : "No group selected"}</span>

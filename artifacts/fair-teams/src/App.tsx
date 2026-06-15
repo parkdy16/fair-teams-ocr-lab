@@ -3640,7 +3640,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="text-[10px] font-black uppercase tracking-wide text-blue-500">
-                  Advanced Backup
+                  Cloud Backup
                 </div>
                 <h2 className="mt-1 text-base font-black tracking-tight text-[#102A43]">
                   How it works
@@ -3661,10 +3661,10 @@ They will no longer be able to open or edit this shared roster unless it is shar
             <div className="mt-4 space-y-3">
               <div className="rounded-2xl border border-slate-100 bg-slate-50/80 p-3">
                 <div className="text-xs font-black text-[#102A43]">
-                  Backup and handoff
+                  Backup and restore
                 </div>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  Advanced Backup saves roster text data to Google Drive. Use it to restore rosters, move between devices, or send a copy to another organizer.
+                  Cloud Backup saves roster text data to Google Drive. Use it to restore rosters or move between devices.
                 </p>
               </div>
 
@@ -3674,15 +3674,6 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 </div>
                 <p className="mt-1 text-xs font-semibold leading-snug text-amber-800/85">
                   Only one person should edit the latest roster at a time. If someone changes a copy, they should send the newest backup back.
-                </p>
-              </div>
-
-              <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-3">
-                <div className="text-xs font-black text-[#102A43]">
-                  Tip for trusted groups
-                </div>
-                <p className="mt-1 text-xs font-semibold leading-snug text-slate-600">
-                  If your club already has a team Drive account, trusted organizers can connect Fair Teams to that same account on each device. Backups stay in one place, but it is still not live sync.
                 </p>
               </div>
             </div>
@@ -3708,7 +3699,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
             <div className="flex items-start justify-between gap-3 border-b border-slate-100 p-4 pb-3">
               <div className="min-w-0">
                 <div className="text-[10px] font-black uppercase tracking-wide text-blue-500">
-                  Advanced Backup
+                  Cloud Backup
                 </div>
                 <h2 className="mt-1 truncate text-base font-black tracking-tight text-[#102A43]">
                   Open backup
@@ -3789,7 +3780,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
             <div className="flex items-start justify-between gap-3 border-b border-slate-100 p-4 pb-3">
               <div className="min-w-0">
                 <div className="text-[10px] font-black uppercase tracking-wide text-emerald-600">
-                  Advanced Backup
+                  Cloud Backup
                 </div>
                 <h2 className="mt-1 text-base font-black tracking-tight text-[#102A43]">
                   Send backup copy

@@ -600,7 +600,9 @@ function App() {
 
   const getGoogleSheetSharedByLine = (file?: GoogleSheetRosterFile | null) => {
     if (!file) return "Shared details unknown";
-    if (isGoogleSheetOwnedByMe(file)) return "Owned by this Google account";
+    if (isGoogleSheetOwnedByMe(file)) {
+      return connectedDriveUser?.emailAddress ? `Owned by ${connectedDriveUser.emailAddress}` : "Owned by this Google account";
+    }
     const sharedByName = getGoogleSheetSharedByName(file);
     const sharedByEmail = getGoogleSheetSharedByEmail(file);
     if (sharedByName) return `Shared by ${sharedByName}${sharedByEmail && sharedByEmail !== sharedByName ? ` · ${sharedByEmail}` : ""}`;
@@ -3130,7 +3132,9 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   Shared roster library
                 </h2>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  Choose a shared roster Fair Teams can already see. If one is missing, find it in Drive.
+                  {connectedDriveUser?.emailAddress
+                    ? `Signed in as ${connectedDriveUser.emailAddress}. Choose a roster Fair Teams can already see, or find one in Drive.`
+                    : "Choose a roster Fair Teams can already see, or find one in Drive."}
                 </p>
               </div>
               <Button
@@ -3179,7 +3183,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   <div className="flex gap-2">
                     <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
                     <p className="text-xs font-semibold leading-snug text-amber-800">
-                      No shared rosters opened yet. Ask the owner to share it with this Google account, then tap Find shared roster in Drive.
+                      No shared rosters opened yet. Ask the owner to share it with {connectedDriveUser?.emailAddress || "this Google account"}, then tap Find shared roster in Drive.
                     </p>
                   </div>
                 </div>

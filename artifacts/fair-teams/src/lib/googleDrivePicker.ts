@@ -84,6 +84,16 @@ async function ensurePickerApi() {
   return pickerApiPromise;
 }
 
+
+function applyPickerAppId(builder: any, appId: string) {
+  if (!appId) {
+    throw new Error("Google Drive app ID is missing. Check VITE_GOOGLE_CLIENT_ID or add VITE_GOOGLE_APP_ID.");
+  }
+  if (typeof builder.setAppId === "function") {
+    builder.setAppId(appId);
+  }
+}
+
 function createDriveBackupDocsView() {
   const picker = getPicker();
   if (!picker) throw new Error("Google Picker is not ready.");
@@ -112,7 +122,7 @@ function createGoogleSheetRosterDocsView() {
   const picker = getPicker();
   if (!picker) throw new Error("Google Picker is not ready.");
 
-  const view = new picker.DocsView(picker.ViewId.DOCS);
+  const view = new picker.DocsView(picker.ViewId.SPREADSHEETS || picker.ViewId.DOCS);
   view.setIncludeFolders(false);
   view.setSelectFolderEnabled(false);
   view.setMimeTypes(FAIR_TEAMS_GOOGLE_SHEET_MIME_TYPE);
@@ -164,6 +174,7 @@ export async function pickGoogleDriveBackupFile(accessToken: string): Promise<Go
       const builder = new picker.PickerBuilder();
       builder.addView(view);
       builder.setDeveloperKey(config.apiKey);
+      applyPickerAppId(builder, config.appId);
       builder.setOAuthToken(accessToken);
       builder.setTitle("Open Fair Teams Drive backup");
       builder.setOrigin(window.location.origin);
@@ -228,7 +239,7 @@ export async function pickGoogleSheetRosterFile(accessToken: string): Promise<Go
     const timeoutId = window.setTimeout(() => {
       fail(
         new Error(
-          "Google Drive picker did not respond. On phone, close this app and open Fair Teams from Chrome, then try Find shared roster in Drive again.",
+          "Google Drive picker did not respond. Try again from Chrome. If you use several Google accounts, make sure the picker opens with the account that received the shared roster.",
         ),
       );
     }, 90000);
@@ -238,6 +249,7 @@ export async function pickGoogleSheetRosterFile(accessToken: string): Promise<Go
       const builder = new picker.PickerBuilder();
       builder.addView(view);
       builder.setDeveloperKey(config.apiKey);
+      applyPickerAppId(builder, config.appId);
       builder.setOAuthToken(accessToken);
       builder.setTitle("Find shared Fair Teams roster");
       builder.setOrigin(window.location.origin);

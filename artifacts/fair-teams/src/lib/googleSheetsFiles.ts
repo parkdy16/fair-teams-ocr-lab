@@ -55,7 +55,7 @@ async function readGoogleApiError(response: Response, fallback: string) {
 
 async function getGoogleDriveFileMetadata(accessToken: string, fileId: string): Promise<GoogleSheetRosterFile> {
   const params = new URLSearchParams({
-    fields: "id,name,mimeType,webViewLink,modifiedTime,ownedByMe,shared,sharingUser(displayName,emailAddress,me)",
+    fields: "id,name,mimeType,webViewLink,modifiedTime,ownedByMe,shared,sharingUser(displayName,emailAddress,me),owners(displayName,emailAddress,me)",
     supportsAllDrives: "true",
   });
   const response = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?${params.toString()}`, {
@@ -324,7 +324,7 @@ export async function listGoogleSheetRosterFiles(accessToken: string): Promise<G
     q: query,
     pageSize: "30",
     orderBy: "modifiedTime desc",
-    fields: "files(id,name,mimeType,webViewLink,modifiedTime,ownedByMe,shared,sharingUser(displayName,emailAddress,me))",
+    fields: "files(id,name,mimeType,webViewLink,modifiedTime,ownedByMe,shared,sharingUser(displayName,emailAddress,me),owners(displayName,emailAddress,me))",
     spaces: "drive",
     includeItemsFromAllDrives: "true",
     supportsAllDrives: "true",
@@ -350,4 +350,38 @@ export function shareGoogleSheetRosterWithEditor(
   emailAddress: string,
 ): Promise<GoogleDrivePermissionResult> {
   return shareGoogleDriveFileWithEditor(accessToken, spreadsheetId, emailAddress);
+}
+
+export async function trashGoogleSheetRoster(
+  accessToken: string,
+  spreadsheetId: string,
+): Promise<GoogleSheetRosterFile> {
+  const params = new URLSearchParams({
+    fields: "id,name,mimeType,webViewLink,modifiedTime,ownedByMe,trashed",
+    supportsAllDrives: "true",
+  });
+  const response = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(spreadsheetId)}?${params.toString()}`,
+    {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json; charset=UTF-8",
+      },
+      body: JSON.stringify({ trashed: true }),
+    },
+  );
+
+  if (!response.ok) {
+    const message = await readGoogleApiError(response, "Google Drive could not delete this shared roster.");
+    throwGoogleSheetFileError(
+      response.status,
+      message,
+      "Fair Teams cannot delete this shared roster. Only the owner can delete it.",
+    );
+  }
+
+  const result = await response.json();
+  if (!result?.id || !result?.name) throw new Error("Google Drive moved the shared roster to trash but did not return file details.");
+  return result as GoogleSheetRosterFile;
 }

@@ -65,6 +65,7 @@ import {
   listGoogleSheetRosterFiles,
   readGoogleSheetRoster,
   shareGoogleSheetRosterWithEditor,
+  trashGoogleSheetRoster,
   updateGoogleSheetRoster,
   type GoogleSheetRosterFile,
 } from "@/lib/googleSheetsFiles";
@@ -258,6 +259,10 @@ type GoogleSheetConflictConfirm = {
   lastKnownRemoteModifiedAt?: string;
 };
 
+type GoogleSheetDeleteConfirm = {
+  file: GoogleSheetRosterFile;
+};
+
 function readStoredDriveRecipients(): DriveBackupRecipient[] {
   try {
     const raw = window.localStorage.getItem(DRIVE_RECIPIENTS_STORAGE_KEY);
@@ -441,6 +446,11 @@ function App() {
   const [googleSheetOpening, setGoogleSheetOpening] = useState(false);
   const [googleSheetSharing, setGoogleSheetSharing] = useState(false);
   const [googleSheetChoices, setGoogleSheetChoices] = useState<GoogleSheetRosterFile[] | null>(null);
+  const [googleSheetActionFile, setGoogleSheetActionFile] = useState<GoogleSheetRosterFile | null>(null);
+  const [googleSheetOwnerEmailVisible, setGoogleSheetOwnerEmailVisible] = useState(false);
+  const [googleSheetDeleteConfirm, setGoogleSheetDeleteConfirm] = useState<GoogleSheetDeleteConfirm | null>(null);
+  const [googleSheetDeleteSlide, setGoogleSheetDeleteSlide] = useState(0);
+  const [googleSheetDeleting, setGoogleSheetDeleting] = useState(false);
   const [googleSheetShareOpen, setGoogleSheetShareOpen] = useState(false);
   const [googleSheetShareEmail, setGoogleSheetShareEmail] = useState("");
   const [googleSheetConflictConfirm, setGoogleSheetConflictConfirm] = useState<GoogleSheetConflictConfirm | null>(null);
@@ -491,6 +501,48 @@ function App() {
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return "Updated time unknown";
     return `Updated ${date.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+  };
+
+  const firstDisplayName = (value?: string) => {
+    const clean = (value || "").trim().replace(/\s+/g, " ");
+    if (!clean || clean.includes("@")) return "";
+    return clean.split(" ")[0] || clean;
+  };
+
+  const maskEmail = (value?: string) => {
+    const clean = (value || "").trim();
+    const atIndex = clean.indexOf("@");
+    if (atIndex <= 0) return "";
+    const local = clean.slice(0, atIndex);
+    const domain = clean.slice(atIndex + 1);
+    if (!domain) return "";
+    return `${local.slice(0, 1)}***@${domain}`;
+  };
+
+  const getGoogleSheetOwner = (file?: GoogleSheetRosterFile | null) => {
+    if (!file) return null;
+    return (
+      file.owners?.find((owner) => owner.me) ||
+      file.owners?.[0] ||
+      file.sharingUser ||
+      null
+    );
+  };
+
+  const getGoogleSheetOwnerLabel = (file?: GoogleSheetRosterFile | null) => {
+    if (!file) return "Owner unknown";
+    const owner = getGoogleSheetOwner(file);
+    if (file.ownedByMe !== false || owner?.me) return "Owner: You";
+    const displayName = firstDisplayName(owner?.displayName);
+    if (displayName) return `Owner: ${displayName}`;
+    const maskedEmail = maskEmail(owner?.emailAddress);
+    if (maskedEmail) return `Owner: ${maskedEmail}`;
+    return "Owner: Another organizer";
+  };
+
+  const getGoogleSheetOwnerEmail = (file?: GoogleSheetRosterFile | null) => {
+    const owner = getGoogleSheetOwner(file);
+    return owner?.emailAddress?.trim() || "";
   };
 
   const formatSheetSyncTime = (value?: string) => {
@@ -603,6 +655,8 @@ function App() {
       driveHelpOpen ||
       Boolean(driveUpdateConfirm) ||
       Boolean(googleSheetChoices) ||
+      Boolean(googleSheetActionFile) ||
+      Boolean(googleSheetDeleteConfirm) ||
       googleSheetShareOpen ||
       Boolean(googleSheetConflictConfirm);
     if (!shouldLockScroll) return;
@@ -612,7 +666,7 @@ function App() {
     return () => {
       document.body.style.overflow = previousOverflow;
     };
-  }, [groupSettingsOpen, rosterFilesOpen, rosterPickerOpen, clearRosterOpen, driveImportPreview, driveBackupChoices, localImportPreview, rosterToolsNotice, driveShareOpen, driveShareConfirm, driveAccessOpen, driveRemoveConfirm, driveHelpOpen, driveUpdateConfirm, googleSheetChoices, googleSheetShareOpen, googleSheetConflictConfirm]);
+  }, [groupSettingsOpen, rosterFilesOpen, rosterPickerOpen, clearRosterOpen, driveImportPreview, driveBackupChoices, localImportPreview, rosterToolsNotice, driveShareOpen, driveShareConfirm, driveAccessOpen, driveRemoveConfirm, driveHelpOpen, driveUpdateConfirm, googleSheetChoices, googleSheetActionFile, googleSheetDeleteConfirm, googleSheetShareOpen, googleSheetConflictConfirm]);
 
   const openGroupSettings = () => {
     setDraftGroupName(activeRosterName);
@@ -1299,12 +1353,70 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
         };
       });
       setGoogleSheetChoices(null);
+      setGoogleSheetOwnerEmailVisible(false);
+      setGoogleSheetActionFile(null);
       setRosterFilesOpen(false);
       showRosterToolsNotice("Shared roster opened", `${file.name} is now available in Fair Teams.`, "success");
     } catch (error) {
       showRosterToolsNotice("Could not open shared roster", error instanceof Error ? error.message : "Please try again.", "error");
     } finally {
       setGoogleSheetOpening(false);
+    }
+  };
+
+  const closeGoogleSheetDeleteConfirm = () => {
+    if (googleSheetDeleting) return;
+    setGoogleSheetDeleteConfirm(null);
+    setGoogleSheetDeleteSlide(0);
+  };
+
+  const startGoogleSheetDeleteConfirm = (file: GoogleSheetRosterFile) => {
+    if (file.ownedByMe === false) {
+      showRosterToolsNotice(
+        "Only the owner can delete it",
+        "This shared roster belongs to another Google account. You can open it or remove your local copy, but only the owner can delete the shared Google Sheet.",
+        "warning",
+      );
+      return;
+    }
+    setGoogleSheetOwnerEmailVisible(false);
+    setGoogleSheetActionFile(null);
+    setGoogleSheetDeleteSlide(0);
+    setGoogleSheetDeleteConfirm({ file });
+  };
+
+  const confirmDeleteGoogleSheetRoster = async () => {
+    if (googleSheetDeleteSlide < 95 || !googleSheetDeleteConfirm || googleSheetDeleting) return;
+    if (!googleDriveAccessToken) {
+      showRosterToolsNotice("Sign in with Google first", "Sign in with the owner account before deleting a shared roster.", "warning");
+      return;
+    }
+
+    const file = googleSheetDeleteConfirm.file;
+    setGoogleSheetDeleting(true);
+    try {
+      await trashGoogleSheetRoster(googleDriveAccessToken, file.id);
+      setGoogleSheetChoices((choices) => choices ? choices.filter((item) => item.id !== file.id) : choices);
+      setRosterState((current) => ({
+        ...current,
+        rosters: current.rosters.map((roster) => {
+          if (roster.cloudSource?.provider === "google-sheets" && roster.cloudSource.spreadsheetId === file.id) {
+            return normalizeRoster({ ...roster, cloudSource: undefined, updatedAt: new Date().toISOString() });
+          }
+          return roster;
+        }),
+      }));
+      setGoogleSheetDeleteConfirm(null);
+      setGoogleSheetDeleteSlide(0);
+      showRosterToolsNotice(
+        "Shared roster moved to trash",
+        "The Google Sheet was moved to your Google Drive trash. Local copies already on devices are not deleted, but they are no longer linked to that shared roster.",
+        "success",
+      );
+    } catch (error) {
+      showRosterToolsNotice("Could not delete shared roster", error instanceof Error ? error.message : "Please try again.", "error");
+    } finally {
+      setGoogleSheetDeleting(false);
     }
   };
 
@@ -2557,7 +2669,10 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
                     <button
                       key={file.id}
                       type="button"
-                      onClick={() => openGoogleSheetRosterFile(file)}
+                      onClick={() => {
+                        setGoogleSheetOwnerEmailVisible(false);
+                        setGoogleSheetActionFile(file);
+                      }}
                       className="flex w-full items-center justify-between gap-3 rounded-2xl border border-emerald-100 bg-emerald-50/60 px-3 py-3 text-left transition active:scale-[0.99]"
                     >
                       <span className="min-w-0">
@@ -2565,7 +2680,7 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
                           {file.name}
                         </span>
                         <span className="mt-0.5 block truncate text-[11px] font-bold text-emerald-700/75">
-                          {file.ownedByMe === false ? "Shared with me" : "My shared roster"} · {formatDriveModifiedTime(file.modifiedTime)}
+                          {file.ownedByMe === false ? "Shared with me" : "My shared roster"} · {getGoogleSheetOwnerLabel(file)} · {formatDriveModifiedTime(file.modifiedTime)}
                         </span>
                       </span>
                       <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-lg font-black leading-none text-emerald-400 shadow-sm">
@@ -2592,6 +2707,192 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
                 variant="ghost"
                 className="h-10 rounded-2xl text-slate-500"
                 onClick={() => setGoogleSheetChoices(null)}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {googleSheetActionFile && (
+        <div
+          className="fixed inset-0 z-[65] flex items-end justify-center bg-black/45 p-4 sm:items-center"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="w-full max-w-sm rounded-3xl border border-emerald-100 bg-white p-4 shadow-2xl">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-[10px] font-black uppercase tracking-wide text-emerald-600">
+                  Shared Roster
+                </div>
+                <h2 className="mt-1 truncate text-base font-black tracking-tight text-[#102A43]">
+                  {googleSheetActionFile.name}
+                </h2>
+                <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
+                  {getGoogleSheetOwnerLabel(googleSheetActionFile)} · {googleSheetActionFile.ownedByMe === false ? "Shared with this Google account" : "Owned by this Google account"} · {formatDriveModifiedTime(googleSheetActionFile.modifiedTime)}
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 shrink-0 rounded-xl"
+                onClick={() => {
+                  setGoogleSheetOwnerEmailVisible(false);
+                  setGoogleSheetActionFile(null);
+                }}
+                title="Close"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-emerald-100 bg-emerald-50/70 p-3">
+              <p className="text-xs font-semibold leading-snug text-emerald-900/80">
+                Recover/Open brings this shared roster back into Fair Teams on this device. It does not overwrite the Google Sheet.
+              </p>
+            </div>
+
+            <div className="mt-3 rounded-2xl border border-slate-100 bg-slate-50/80 p-3">
+              <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+                Owner
+              </div>
+              <div className="mt-1 text-xs font-black text-[#102A43]">
+                {getGoogleSheetOwnerLabel(googleSheetActionFile).replace("Owner: ", "")}
+              </div>
+              {googleSheetActionFile.ownedByMe === false && getGoogleSheetOwnerEmail(googleSheetActionFile) && (
+                <div className="mt-2">
+                  {googleSheetOwnerEmailVisible ? (
+                    <div className="rounded-2xl bg-white px-3 py-2">
+                      <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+                        Owner email
+                      </div>
+                      <div className="mt-0.5 truncate text-xs font-black text-[#102A43]">
+                        {getGoogleSheetOwnerEmail(googleSheetActionFile)}
+                      </div>
+                      <p className="mt-1 text-[10px] font-semibold leading-snug text-slate-500">
+                        Use this only to identify who can manage or delete this shared roster.
+                      </p>
+                    </div>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="h-8 rounded-xl px-0 text-[11px] font-black text-emerald-700 hover:bg-transparent hover:text-emerald-800"
+                      onClick={() => setGoogleSheetOwnerEmailVisible(true)}
+                    >
+                      Show owner email
+                    </Button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="mt-4 grid gap-2">
+              <Button
+                type="button"
+                className="h-11 rounded-2xl bg-emerald-600 text-white hover:bg-emerald-700"
+                onClick={() => openGoogleSheetRosterFile(googleSheetActionFile)}
+                disabled={googleSheetOpening || googleSheetDeleting}
+              >
+                {googleSheetOpening ? "Opening..." : "Recover / Open this roster"}
+              </Button>
+              {googleSheetActionFile.ownedByMe !== false && (
+                <div className="rounded-2xl border border-red-100 bg-red-50/70 p-3">
+                  <div className="text-[10px] font-black uppercase tracking-wide text-red-700">
+                    Danger zone
+                  </div>
+                  <p className="mt-1 text-xs font-semibold leading-snug text-red-800/85">
+                    Delete shared roster for everyone moves the Google Sheet to trash. Other organizers will lose access to this shared roster.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="mt-3 h-10 w-full rounded-2xl border-red-200 bg-white text-xs font-black text-red-700 hover:bg-red-100 hover:text-red-800"
+                    onClick={() => startGoogleSheetDeleteConfirm(googleSheetActionFile)}
+                    disabled={googleSheetOpening || googleSheetDeleting}
+                  >
+                    Delete shared roster for everyone
+                  </Button>
+                </div>
+              )}
+              <Button
+                type="button"
+                variant="ghost"
+                className="h-10 rounded-2xl text-slate-500"
+                onClick={() => {
+                  setGoogleSheetOwnerEmailVisible(false);
+                  setGoogleSheetActionFile(null);
+                }}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {googleSheetDeleteConfirm && (
+        <div
+          className="fixed inset-0 z-[70] flex items-end justify-center bg-black/50 p-4 sm:items-center"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="w-full max-w-sm rounded-3xl border border-red-100 bg-white p-4 shadow-2xl">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-red-50 text-red-600">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-[10px] font-black uppercase tracking-wide text-red-600">
+                  Delete shared roster for everyone
+                </div>
+                <h2 className="mt-1 truncate text-base font-black tracking-tight text-[#102A43]">
+                  {googleSheetDeleteConfirm.file.name}
+                </h2>
+                <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
+                  This moves the Google Sheet to trash. Other organizers will lose access to this shared roster. Local copies already saved on devices are not deleted.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-red-100 bg-red-50/70 p-3">
+              <div className="mb-2 flex items-center justify-between gap-2 text-[11px] font-black uppercase tracking-wide text-red-700">
+                <span>Slide to confirm</span>
+                <span>{googleSheetDeleteSlide >= 95 ? "Ready" : `${googleSheetDeleteSlide}%`}</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={googleSheetDeleteSlide}
+                onChange={(e) => setGoogleSheetDeleteSlide(Number(e.target.value))}
+                className="w-full accent-red-600"
+                aria-label="Slide to confirm shared roster deletion"
+                disabled={googleSheetDeleting}
+              />
+              <p className="mt-2 text-[11px] font-semibold text-red-700/80">
+                Only the owner should do this. You can restore the Sheet from Google Drive trash for a limited time if this was a mistake.
+              </p>
+            </div>
+
+            <div className="mt-4 grid gap-2">
+              <Button
+                type="button"
+                className="h-11 rounded-2xl bg-red-600 text-white hover:bg-red-700"
+                onClick={confirmDeleteGoogleSheetRoster}
+                disabled={googleSheetDeleteSlide < 95 || googleSheetDeleting}
+              >
+                {googleSheetDeleting ? "Deleting..." : "Delete shared roster for everyone"}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                className="h-10 rounded-2xl text-slate-500"
+                onClick={closeGoogleSheetDeleteConfirm}
+                disabled={googleSheetDeleting}
               >
                 Cancel
               </Button>

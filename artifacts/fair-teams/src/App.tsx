@@ -479,7 +479,8 @@ function App() {
   const logoInputRef = useRef<HTMLInputElement | null>(null);
   const [rosterFilesOpen, setRosterFilesOpen] = useState(false);
   const [rosterSharedToolsOpen, setRosterSharedToolsOpen] = useState(false);
-  const [rosterBackupToolsOpen, setRosterBackupToolsOpen] = useState(false);
+  const [rosterLocalBackupToolsOpen, setRosterLocalBackupToolsOpen] = useState(false);
+  const [rosterCloudBackupToolsOpen, setRosterCloudBackupToolsOpen] = useState(false);
   const [rosterPickerOpen, setRosterPickerOpen] = useState(false);
   const [clearRosterOpen, setClearRosterOpen] = useState(false);
   const [clearRosterSlide, setClearRosterSlide] = useState(0);
@@ -2304,9 +2305,6 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
                 <h2 className="text-base font-black tracking-tight text-[#102A43]">
                   Roster Tools
                 </h2>
-                <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  Choose what you want to manage.
-                </p>
               </div>
               <Button
                 type="button"
@@ -2383,83 +2381,142 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
                 <button
                   type="button"
                   className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left transition active:scale-[0.99]"
-                  onClick={() => setRosterBackupToolsOpen((open) => !open)}
+                  onClick={() => setRosterLocalBackupToolsOpen((open) => !open)}
                 >
                   <span className="flex min-w-0 items-center gap-2.5">
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
-                      <Archive className="h-4 w-4" />
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-slate-600">
+                      <Download className="h-4 w-4" />
                     </span>
                     <span className="min-w-0">
-                      <span className="block text-[10px] font-black uppercase tracking-wide text-blue-500">
-                        Backup & Restore
+                      <span className="block text-[10px] font-black uppercase tracking-wide text-slate-500">
+                        Local Backup
                       </span>
                       <span className="mt-0.5 block truncate text-xs font-semibold text-slate-600">
-                        Safety copies and file import/export.
+                        Export or import roster files.
                       </span>
                     </span>
                   </span>
                   <span className="shrink-0 rounded-full bg-slate-50 px-2.5 py-1 text-lg font-black leading-none text-slate-400">
-                    {rosterBackupToolsOpen ? "−" : "›"}
+                    {rosterLocalBackupToolsOpen ? "−" : "›"}
                   </span>
                 </button>
 
-                {rosterBackupToolsOpen && (
-                  <div className="grid gap-3 border-t border-slate-100 p-3">
-                    <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-                            Google
-                          </div>
-                          <div className="mt-0.5 truncate text-xs font-black text-[#102A43]">
-                            {connectedDriveUser?.emailAddress || (googleDriveConnected ? "Connected" : "Sign in for cloud backup")}
-                          </div>
-                        </div>
-                        <Button
-                          type="button"
-                          variant={googleDriveConnected ? "ghost" : "default"}
-                          className={`h-9 shrink-0 rounded-2xl px-3 text-xs font-black ${googleDriveConnected ? "text-slate-500 hover:bg-white hover:text-slate-700" : "bg-[#102A43] text-white hover:bg-[#0b2036]"}`}
-                          onClick={googleDriveConnected ? disconnectGoogleDrive : connectGoogleDrive}
-                          disabled={!googleDriveConfig.isConfigured || googleDriveConnecting}
-                        >
-                          {googleDriveConnecting ? "Connecting..." : googleDriveConnected ? "Disconnect" : "Sign in"}
-                        </Button>
-                      </div>
+                {rosterLocalBackupToolsOpen && (
+                  <div className="grid gap-2 border-t border-slate-100 p-3">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-11 justify-start rounded-2xl gap-3"
+                      onClick={exportSharedRoster}
+                      disabled={players.length === 0}
+                    >
+                      <Download className="h-4 w-4" />
+                      <span className="font-black">Export this roster</span>
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-11 justify-start rounded-2xl gap-3"
+                      onClick={() => openImportPicker("shared")}
+                    >
+                      <Upload className="h-4 w-4" />
+                      <span className="font-black">Import one roster</span>
+                    </Button>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-11 justify-start rounded-2xl gap-2 px-3"
+                        onClick={exportAllRostersBackup}
+                        disabled={isEmptyStarterRoster}
+                      >
+                        <Archive className="h-4 w-4" />
+                        <span className="truncate text-xs font-black">Export all</span>
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-11 justify-start rounded-2xl gap-2 px-3"
+                        onClick={() => openImportPicker("backup")}
+                      >
+                        <ArchiveRestore className="h-4 w-4" />
+                        <span className="truncate text-xs font-black">Import all</span>
+                      </Button>
                     </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left transition active:scale-[0.99]"
+                  onClick={() => setRosterCloudBackupToolsOpen((open) => !open)}
+                >
+                  <span className="flex min-w-0 items-center gap-2.5">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
+                      <Cloud className="h-4 w-4" />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-[10px] font-black uppercase tracking-wide text-blue-500">
+                        Cloud Backup
+                      </span>
+                      <span className="mt-0.5 block truncate text-xs font-semibold text-slate-600">
+                        Save a safety copy in Google Drive.
+                      </span>
+                    </span>
+                  </span>
+                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black ${googleDriveConnected ? "bg-blue-600 text-white" : "bg-slate-50 text-slate-500"}`}>
+                    {googleDriveConnected ? "Connected" : rosterCloudBackupToolsOpen ? "Open" : "Off"}
+                  </span>
+                </button>
+
+                {rosterCloudBackupToolsOpen && (
+                  <div className="grid gap-3 border-t border-slate-100 p-3">
+                    <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-slate-50/70 p-3">
+                      <div className="min-w-0">
+                        <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+                          Google
+                        </div>
+                        <div className="mt-0.5 truncate text-xs font-black text-[#102A43]">
+                          {connectedDriveUser?.emailAddress || (googleDriveConnected ? "Connected" : "Not signed in")}
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant={googleDriveConnected ? "ghost" : "default"}
+                        className={`h-9 shrink-0 rounded-2xl px-3 text-xs font-black ${googleDriveConnected ? "text-slate-500 hover:bg-white hover:text-slate-700" : "bg-[#102A43] text-white hover:bg-[#0b2036]"}`}
+                        onClick={googleDriveConnected ? disconnectGoogleDrive : connectGoogleDrive}
+                        disabled={!googleDriveConfig.isConfigured || googleDriveConnecting}
+                      >
+                        {googleDriveConnecting ? "Connecting..." : googleDriveConnected ? "Disconnect" : "Sign in"}
+                      </Button>
+                    </div>
+
                     <div className="rounded-2xl bg-white/80 p-3">
                       <div className="text-[10px] font-black uppercase tracking-wide text-blue-500">
-                        Cloud backup
+                        Safety backup
                       </div>
                       <div className="mt-1 truncate text-xs font-black text-[#102A43]">
-                        {currentDriveBackup?.name || "No safety backup selected"}
+                        {currentDriveBackup?.name || "No backup selected"}
                       </div>
                       <div className="mt-0.5 text-[11px] font-semibold text-slate-500">
                         {currentDriveBackup
-                          ? `Backup has ${formatBackupSummary(currentDriveBackup.rosterCount !== undefined && currentDriveBackup.playerCount !== undefined ? { rosterCount: currentDriveBackup.rosterCount, playerCount: currentDriveBackup.playerCount } : null)}`
-                          : googleDriveConnected
-                            ? "Create a safety copy in Google Drive."
-                            : "Sign in above to use cloud backup."}
+                          ? `Backup has ${formatRosterSummary(currentDriveBackup.rosterCount !== undefined && currentDriveBackup.playerCount !== undefined ? { rosterCount: currentDriveBackup.rosterCount, playerCount: currentDriveBackup.playerCount } : null)}`
+                          : "Optional cloud safety copy."}
                       </div>
                     </div>
 
                     <Button
                       type="button"
                       className="h-12 justify-start rounded-2xl gap-3 bg-blue-600 text-white shadow-sm hover:bg-blue-700"
-                      onClick={saveAllRostersToGoogleDrive}
+                      onClick={createOrUpdateDriveBackup}
                       disabled={isEmptyStarterRoster || !googleDriveConnected || googleDriveSaving || googleDriveUpdating}
                       title={currentDriveBackup ? "Update the active Drive backup" : "Create a new Drive backup"}
                     >
-                      {currentDriveBackup ? (
-                        <RefreshCw className={`h-4 w-4 ${googleDriveUpdating ? "animate-spin" : ""}`} />
-                      ) : (
-                        <CloudUpload className="h-4 w-4" />
-                      )}
+                      {currentDriveBackup ? <RefreshCw className={`h-4 w-4 ${googleDriveUpdating ? "animate-spin" : ""}`} /> : <CloudUpload className="h-4 w-4" />}
                       <span className="font-black">
-                        {googleDriveSaving || googleDriveUpdating
-                          ? "Saving..."
-                          : currentDriveBackup
-                            ? "Save safety backup"
-                            : "Create safety backup"}
+                        {googleDriveSaving || googleDriveUpdating ? "Saving..." : currentDriveBackup ? "Save backup" : "Create backup"}
                       </span>
                     </Button>
 
@@ -2468,7 +2525,7 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
                         type="button"
                         variant="outline"
                         className="h-11 justify-start rounded-2xl gap-2 border-blue-100 bg-white/90 px-3"
-                        onClick={openGoogleDriveBackup}
+                        onClick={openGoogleDriveBackupList}
                         disabled={!googleDriveConnected || googleDriveOpening}
                       >
                         <CloudDownload className="h-4 w-4" />
@@ -2508,61 +2565,13 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
                       </span>
                     </Button>
 
-                    <div className="rounded-2xl border border-slate-100 bg-white/80 p-3">
-                      <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-                        Local files
-                      </div>
-                      <div className="mt-2 grid gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="h-11 justify-start rounded-2xl gap-3"
-                          onClick={exportSharedRoster}
-                          disabled={players.length === 0}
-                        >
-                          <Download className="h-4 w-4" />
-                          <span className="font-black">Export this roster</span>
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="h-11 justify-start rounded-2xl gap-3"
-                          onClick={() => openImportPicker("shared")}
-                        >
-                          <Upload className="h-4 w-4" />
-                          <span className="font-black">Import one roster</span>
-                        </Button>
-                        <div className="grid grid-cols-2 gap-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="h-11 justify-start rounded-2xl gap-2 px-3"
-                            onClick={exportAllRostersBackup}
-                            disabled={isEmptyStarterRoster}
-                          >
-                            <Archive className="h-4 w-4" />
-                            <span className="truncate text-xs font-black">Export all</span>
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="h-11 justify-start rounded-2xl gap-2 px-3"
-                            onClick={() => openImportPicker("backup")}
-                          >
-                            <ArchiveRestore className="h-4 w-4" />
-                            <span className="truncate text-xs font-black">Import all</span>
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-
                     <button
                       type="button"
                       onClick={() => setDriveHelpOpen(true)}
                       className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wide text-blue-600"
                     >
                       <Info className="h-3 w-3" />
-                      How backup works
+                      How cloud backup works
                     </button>
                   </div>
                 )}
@@ -2583,7 +2592,7 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
                         Shared Roster
                       </span>
                       <span className="mt-0.5 block truncate text-xs font-semibold text-slate-600">
-                        {activeRosterIsShared ? "Shared · co-organizer mode" : "Work with co-organizers."}
+                        {activeRosterIsShared ? "Shared with co-organizers." : "Work with co-organizers."}
                       </span>
                     </span>
                   </span>
@@ -2594,27 +2603,26 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
 
                 {rosterSharedToolsOpen && (
                   <div className="grid gap-3 border-t border-slate-100 p-3">
-                    <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-                            Google
-                          </div>
-                          <div className="mt-0.5 truncate text-xs font-black text-[#102A43]">
-                            {connectedDriveUser?.emailAddress || (googleDriveConnected ? "Connected" : "Sign in to share rosters")}
-                          </div>
+                    <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-slate-50/70 p-3">
+                      <div className="min-w-0">
+                        <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+                          Google
                         </div>
-                        <Button
-                          type="button"
-                          variant={googleDriveConnected ? "ghost" : "default"}
-                          className={`h-9 shrink-0 rounded-2xl px-3 text-xs font-black ${googleDriveConnected ? "text-slate-500 hover:bg-white hover:text-slate-700" : "bg-[#102A43] text-white hover:bg-[#0b2036]"}`}
-                          onClick={googleDriveConnected ? disconnectGoogleDrive : connectGoogleDrive}
-                          disabled={!googleDriveConfig.isConfigured || googleDriveConnecting}
-                        >
-                          {googleDriveConnecting ? "Connecting..." : googleDriveConnected ? "Disconnect" : "Sign in"}
-                        </Button>
+                        <div className="mt-0.5 truncate text-xs font-black text-[#102A43]">
+                          {connectedDriveUser?.emailAddress || (googleDriveConnected ? "Connected" : "Not signed in")}
+                        </div>
                       </div>
+                      <Button
+                        type="button"
+                        variant={googleDriveConnected ? "ghost" : "default"}
+                        className={`h-9 shrink-0 rounded-2xl px-3 text-xs font-black ${googleDriveConnected ? "text-slate-500 hover:bg-white hover:text-slate-700" : "bg-[#102A43] text-white hover:bg-[#0b2036]"}`}
+                        onClick={googleDriveConnected ? disconnectGoogleDrive : connectGoogleDrive}
+                        disabled={!googleDriveConfig.isConfigured || googleDriveConnecting}
+                      >
+                        {googleDriveConnecting ? "Connecting..." : googleDriveConnected ? "Disconnect" : "Sign in"}
+                      </Button>
                     </div>
+
                     <div className="rounded-2xl bg-white/85 p-3">
                       <div className="text-[10px] font-black uppercase tracking-wide text-emerald-600">
                         This roster
@@ -2677,6 +2685,16 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
                         >
                           <X className="h-3.5 w-3.5" />
                           Disconnect from shared roster
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-10 justify-start rounded-2xl gap-2 border-red-100 bg-red-50/70 px-3 text-red-700 hover:bg-red-100 hover:text-red-800"
+                          onClick={openClearRoster}
+                          disabled={googleSheetSyncing || googleSheetOpening || googleSheetSharing}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          <span className="text-xs font-black">Remove shared roster from this device</span>
                         </Button>
                       </>
                     ) : (
@@ -2753,7 +2771,7 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
                 )}
               </div>
 
-              {!isEmptyStarterRoster && (
+              {!isEmptyStarterRoster && !activeRosterIsShared && (
                 <div className="border-t border-slate-100 pt-3">
                   <Button
                     type="button"
@@ -2763,11 +2781,7 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
                   >
                     <Trash2 className="h-4 w-4" />
                     <span className="font-black">
-                      {activeRosterIsShared
-                        ? "Remove shared roster from this device"
-                        : rosters.length > 1
-                          ? "Delete current roster"
-                          : "Clear current roster"}
+                      {rosters.length > 1 ? "Delete current roster" : "Clear current roster"}
                     </span>
                   </Button>
                 </div>

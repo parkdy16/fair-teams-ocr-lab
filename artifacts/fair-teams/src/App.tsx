@@ -2493,13 +2493,6 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
 
                 {rosterLocalBackupToolsOpen && (
                   <div className="grid gap-2 border-t border-slate-100 p-3">
-                    <button
-                      type="button"
-                      onClick={closeRosterToolsPanel}
-                      className="mb-1 inline-flex h-8 items-center text-[11px] font-black uppercase tracking-wide text-slate-400"
-                    >
-                      ← Back to tools
-                    </button>
                     <Button
                       type="button"
                       variant="outline"
@@ -2570,13 +2563,6 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
 
                 {rosterCloudBackupToolsOpen && (
                   <div className="grid gap-3 border-t border-slate-100 p-3">
-                    <button
-                      type="button"
-                      onClick={closeRosterToolsPanel}
-                      className="mb-1 inline-flex h-8 items-center text-[11px] font-black uppercase tracking-wide text-slate-400"
-                    >
-                      ← Back to tools
-                    </button>
                     <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-slate-50/70 p-3">
                       <div className="min-w-0">
                         <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
@@ -2712,13 +2698,6 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
 
                 {rosterSharedToolsOpen && (
                   <div className="grid gap-3 border-t border-slate-100 p-3">
-                    <button
-                      type="button"
-                      onClick={closeRosterToolsPanel}
-                      className="mb-1 inline-flex h-8 items-center text-[11px] font-black uppercase tracking-wide text-slate-400"
-                    >
-                      ← Back to tools
-                    </button>
                     <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-slate-50/70 p-3">
                       <div className="min-w-0">
                         <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">

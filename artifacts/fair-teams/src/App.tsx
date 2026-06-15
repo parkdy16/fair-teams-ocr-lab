@@ -71,6 +71,7 @@ import {
   updateGoogleSheetRosterAccessLabels,
   type GoogleSheetRosterFile,
 } from "@/lib/googleSheetsFiles";
+import { pickGoogleSheetRosterFile, warmUpGoogleDrivePicker } from "@/lib/googleDrivePicker";
 
 const GROUP_NAME_STORAGE_KEY = "fair-teams-group-name";
 const HEADER_COLOR_STORAGE_KEY = "fair-teams-header-color-v2";
@@ -955,6 +956,7 @@ function App() {
       } catch {
         setConnectedDriveUser(null);
       }
+      void warmUpGoogleDrivePicker();
       showRosterToolsNotice("Google Drive connected", "Your browser session is now connected to Google Drive.", "success");
     } catch (error) {
       showRosterToolsNotice("Could not connect Google Drive", error instanceof Error ? error.message : "Please try again.", "error");
@@ -1640,10 +1642,26 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
 
 
   const findGoogleSheetRosterInDrive = async () => {
-    // Use the same reliable Drive-list pattern as Cloud Backup restore.
-    // Google Picker was unstable here, and shared rosters created by Fair Teams
-    // can be discovered through the filtered library list instead.
-    await openGoogleSheetRosterList();
+    if (!googleDriveConfig.isConfigured) {
+      showRosterToolsNotice("Google Drive not configured", "Add VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_API_KEY before opening shared rosters.", "warning");
+      return;
+    }
+    if (!googleDriveAccessToken) {
+      showRosterToolsNotice("Sign in with Google first", "Sign in with your Google account before opening shared rosters.", "warning");
+      return;
+    }
+
+    setGoogleSheetOpening(true);
+    try {
+      const picked = await pickGoogleSheetRosterFile(googleDriveAccessToken);
+      if (!picked) return;
+      const file = await getGoogleSheetRosterFileMetadata(googleDriveAccessToken, picked.id);
+      setGoogleSheetActionFile(file);
+    } catch (error) {
+      showRosterToolsNotice("Could not open shared roster file", error instanceof Error ? error.message : "Please try again.", "error");
+    } finally {
+      setGoogleSheetOpening(false);
+    }
   };
 
   const openGoogleSheetRosterFile = async (picked: GoogleSheetRosterFile) => {
@@ -3114,8 +3132,8 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 </h2>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
                   {connectedDriveUser?.emailAddress
-                    ? `Signed in as ${connectedDriveUser.emailAddress}. Choose a roster Fair Teams can already see, or find one in Drive.`
-                    : "Choose a roster Fair Teams can already see, or find one in Drive."}
+                    ? `Signed in as ${connectedDriveUser.emailAddress}. Rosters you opened in Fair Teams appear here.`
+                    : "Rosters you opened in Fair Teams appear here."}
                 </p>
               </div>
               <Button
@@ -3164,7 +3182,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   <div className="flex gap-2">
                     <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
                     <p className="text-xs font-semibold leading-snug text-amber-800">
-                      No shared rosters found yet. Ask the owner to share it with {connectedDriveUser?.emailAddress || "this Google account"}, then refresh the library.
+                      No shared rosters opened yet. Ask the owner to share it with {connectedDriveUser?.emailAddress || "this Google account"}, then tap Open shared roster file.
                     </p>
                   </div>
                 </div>
@@ -3181,7 +3199,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
               >
                 <FolderOpen className="h-4 w-4" />
                 <span className="truncate text-xs font-black">
-                  {googleSheetOpening ? "Refreshing..." : "Refresh shared roster library"}
+                  {googleSheetOpening ? "Opening..." : "Open shared roster file"}
                 </span>
               </Button>
               <Button
@@ -3531,7 +3549,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   className="h-8 w-8 rounded-xl text-emerald-700"
                   onClick={findGoogleSheetRosterInDrive}
                   disabled={googleSheetOpening}
-                  title="Refresh shared roster library"
+                  title="Open shared roster file"
                 >
                   <FolderOpen className="h-4 w-4" />
                 </Button>
@@ -3773,7 +3791,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   Other shared rosters
                 </div>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  Open rosters owned by or shared with this Google account.
+                  Open a roster someone shared with this Google account.
                 </p>
                 <Button
                   type="button"
@@ -3784,7 +3802,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 >
                   <FolderOpen className="h-3.5 w-3.5" />
                   <span className="truncate text-xs font-black">
-                    {googleSheetOpening ? "Refreshing..." : "Refresh shared roster library"}
+                    {googleSheetOpening ? "Opening..." : "Open shared roster file"}
                   </span>
                 </Button>
               </div>

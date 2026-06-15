@@ -122,18 +122,26 @@ function createGoogleSheetRosterDocsView() {
   const picker = getPicker();
   if (!picker) throw new Error("Google Picker is not ready.");
 
-  const view = new picker.DocsView(picker.ViewId.SPREADSHEETS || picker.ViewId.DOCS);
-  view.setIncludeFolders(false);
+  // Use the broad Docs view with a spreadsheet MIME filter. This behaves more
+  // like Google Drive's normal file-open dialog and is more reliable for files
+  // shared from another Google account than the dedicated SPREADSHEETS view.
+  const view = new picker.DocsView(picker.ViewId.DOCS);
+  view.setIncludeFolders(true);
   view.setSelectFolderEnabled(false);
   view.setMimeTypes(FAIR_TEAMS_GOOGLE_SHEET_MIME_TYPE);
-  if (typeof view.setQuery === "function") {
-    view.setQuery("Fair Teams");
-  }
   if (picker.DocsViewMode?.LIST) {
     view.setMode(picker.DocsViewMode.LIST);
   }
 
   return view;
+}
+
+export async function warmUpGoogleDrivePicker() {
+  try {
+    await ensurePickerApi();
+  } catch {
+    // Picker is optional until the user explicitly opens a Drive file.
+  }
 }
 
 export async function pickGoogleDriveBackupFile(accessToken: string): Promise<GoogleDrivePickedFile | null> {
@@ -239,7 +247,7 @@ export async function pickGoogleSheetRosterFile(accessToken: string): Promise<Go
     const timeoutId = window.setTimeout(() => {
       fail(
         new Error(
-          "Google Drive picker did not open. Try again from Chrome, allow pop-ups for Fair Teams, and make sure the picker uses the Google account that received the shared roster.",
+          "Google Drive file picker did not respond. Try again from Chrome, allow pop-ups, and make sure the picker is using the Google account that received the shared roster.",
         ),
       );
     }, 25000);
@@ -251,7 +259,7 @@ export async function pickGoogleSheetRosterFile(accessToken: string): Promise<Go
       builder.setDeveloperKey(config.apiKey);
       applyPickerAppId(builder, config.appId);
       builder.setOAuthToken(accessToken);
-      builder.setTitle("Find shared Fair Teams roster");
+      builder.setTitle("Open shared Fair Teams roster");
       builder.setOrigin(window.location.origin);
       builder.setCallback((response: PickerResponse) => {
         if (response.action === picker.Action.CANCEL) {
@@ -272,7 +280,7 @@ export async function pickGoogleSheetRosterFile(accessToken: string): Promise<Go
           return;
         }
         if (!name.toLowerCase().includes("fair teams")) {
-          fail(new Error("Please choose a Fair Teams shared roster file."));
+          fail(new Error("Please choose a Fair Teams shared roster file. The file name should include Fair Teams."));
           return;
         }
         settle({

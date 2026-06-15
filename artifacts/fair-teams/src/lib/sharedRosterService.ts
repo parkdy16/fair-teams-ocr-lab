@@ -13,6 +13,7 @@ import {
   getDoc,
   getDocs,
   query,
+  runTransaction,
   serverTimestamp,
   where,
   type DocumentData,
@@ -200,6 +201,75 @@ export async function readFirebaseSharedRoster(rosterId: string): Promise<Fireba
     ...summary,
     roster,
   };
+}
+
+
+export async function saveFirebaseSharedRoster(roster: RoomRoster): Promise<FirebaseSharedRosterSummary> {
+  const user = getCurrentSharedRosterUser();
+  const source = roster.cloudSource;
+  if (source?.provider !== "firebase" || !source.firebaseRosterId) {
+    throw new Error("Open a Firebase shared roster before saving changes back to Firebase.");
+  }
+
+  const rosterId = source.firebaseRosterId;
+  const expectedVersion = typeof source.firebaseVersion === "number" ? source.firebaseVersion : 1;
+  const now = new Date().toISOString();
+  const rosterData = cleanForFirestore(makePhotoFreeRosterSnapshot(roster));
+  const playerCount = Array.isArray(rosterData.players) ? rosterData.players.length : 0;
+  const docRef = doc(getFairTeamsFirestore(), "sharedRosters", rosterId);
+
+  const saved = await runTransaction(getFairTeamsFirestore(), async (transaction) => {
+    const snapshot = await transaction.get(docRef);
+    if (!snapshot.exists()) throw new Error("Firebase shared roster was not found.");
+
+    const data = snapshot.data();
+    const memberUids = Array.isArray(data.memberUids) ? data.memberUids : [];
+    if (!memberUids.includes(user.uid)) {
+      throw new Error("You are not a member of this Firebase shared roster.");
+    }
+
+    const roleByUid = data.roleByUid && typeof data.roleByUid === "object" ? data.roleByUid as Record<string, unknown> : {};
+    const role = roleByUid[user.uid];
+    if (role !== "owner" && role !== "editor") {
+      throw new Error("You can open this roster, but you do not have edit permission yet.");
+    }
+
+    const remoteVersion = typeof data.version === "number" ? data.version : 1;
+    if (remoteVersion !== expectedVersion) {
+      throw new Error(`Roster changed elsewhere. Refresh the Firebase roster before saving. Remote version is ${remoteVersion}, your local copy is ${expectedVersion}.`);
+    }
+
+    const nextVersion = remoteVersion + 1;
+    const payload = {
+      name: roster.name || data.name || "Shared roster",
+      version: nextVersion,
+      playerCount,
+      rosterData,
+      updatedAt: serverTimestamp(),
+      updatedAtIso: now,
+      lastSavedByUid: user.uid,
+      lastSavedByEmail: user.email,
+    };
+
+    transaction.update(docRef, payload);
+
+    return {
+      id: rosterId,
+      name: payload.name,
+      ownerUid: typeof data.ownerUid === "string" ? data.ownerUid : "",
+      ownerEmail: typeof data.ownerEmail === "string" ? data.ownerEmail : "",
+      version: nextVersion,
+      playerCount,
+      createdAt: timestampToIso(data.createdAt),
+      updatedAt: now,
+    };
+  });
+
+  return saved;
+}
+
+export async function readFirebaseSharedRosterWithSource(rosterId: string): Promise<FirebaseSharedRosterSnapshot> {
+  return readFirebaseSharedRoster(rosterId);
 }
 
 export function getSharedRosterBackendLabel() {

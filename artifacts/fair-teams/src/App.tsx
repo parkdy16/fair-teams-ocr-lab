@@ -74,6 +74,7 @@ import {
   type GoogleSheetRosterFile,
 } from "@/lib/googleSheetsFiles";
 import { pickGoogleSheetRosterFile, warmUpGoogleDrivePicker } from "@/lib/googleDrivePicker";
+import type { FirebaseSharedRosterSummary } from "@/lib/sharedRosterService";
 
 const GROUP_NAME_STORAGE_KEY = "fair-teams-group-name";
 const HEADER_COLOR_STORAGE_KEY = "fair-teams-header-color-v2";
@@ -896,22 +897,66 @@ function App() {
   };
 
 
-  const openFirebaseSharedRosterAsLocalCopy = (sharedRoster: RoomRoster, sourceName: string) => {
+  const openFirebaseSharedRosterAsLocalCopy = (sharedRoster: RoomRoster, sourceName: string, firebaseSummary?: FirebaseSharedRosterSummary) => {
     setRosterState((current) => {
       const imported = createRoster(
         uniqueRosterName(sourceName || sharedRoster.name || "Firebase roster", current.rosters),
         sharedRoster.players,
         { themeColor: sharedRoster.themeColor },
       );
+      const linkedRoster = normalizeRoster({
+        ...imported,
+        cloudSource: firebaseSummary
+          ? {
+              provider: "firebase",
+              firebaseRosterId: firebaseSummary.id,
+              firebaseVersion: firebaseSummary.version,
+              firebaseOwnerUid: firebaseSummary.ownerUid,
+              firebaseOwnerEmail: firebaseSummary.ownerEmail,
+              lastSyncedAt: new Date().toISOString(),
+              lastRemoteModifiedAt: firebaseSummary.updatedAt,
+              syncMode: "manual",
+            }
+          : undefined,
+      });
       return {
-        rosters: [...current.rosters, imported],
-        activeRosterId: imported.id,
+        rosters: [...current.rosters, linkedRoster],
+        activeRosterId: linkedRoster.id,
       };
     });
     setRosterToolsNotice({
       tone: "success",
       title: "Firebase roster opened",
-      message: `${sourceName || sharedRoster.name || "Shared roster"} was opened as a local copy. Saving changes back to Firebase comes next.`,
+      message: `${sourceName || sharedRoster.name || "Shared roster"} was opened as a linked local copy. You can now save changes back to Firebase.`,
+    });
+  };
+
+  const markActiveFirebaseRosterSaved = (summary: FirebaseSharedRosterSummary) => {
+    setRosterState((current) => ({
+      ...current,
+      rosters: current.rosters.map((roster) =>
+        roster.id === current.activeRosterId
+          ? normalizeRoster({
+              ...roster,
+              cloudSource: {
+                provider: "firebase",
+                firebaseRosterId: summary.id,
+                firebaseVersion: summary.version,
+                firebaseOwnerUid: summary.ownerUid,
+                firebaseOwnerEmail: summary.ownerEmail,
+                lastSyncedAt: summary.updatedAt || new Date().toISOString(),
+                lastRemoteModifiedAt: summary.updatedAt,
+                syncMode: "manual",
+              },
+              updatedAt: summary.updatedAt || new Date().toISOString(),
+            })
+          : roster,
+      ),
+    }));
+    setRosterToolsNotice({
+      tone: "success",
+      title: "Firebase roster saved",
+      message: `${summary.name} was saved to Firebase as version ${summary.version}.`,
     });
   };
 

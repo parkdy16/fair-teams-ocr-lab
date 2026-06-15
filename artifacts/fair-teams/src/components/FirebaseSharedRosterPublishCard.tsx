@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { CloudDownload, CloudUpload, Database, ListChecks, RefreshCw, Share2 } from "lucide-react";
+import { CloudDownload, CloudUpload, Database, ListChecks, RefreshCw, Save, Share2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { RoomRoster } from "@/lib/localRoster";
 import {
@@ -7,6 +7,7 @@ import {
   listenToSharedRosterUser,
   listFirebaseSharedRosters,
   readFirebaseSharedRoster,
+  saveFirebaseSharedRoster,
   type FirebaseSharedRosterSummary,
   type SharedRosterUser,
 } from "@/lib/sharedRosterService";
@@ -14,7 +15,8 @@ import {
 type Props = {
   activeRoster: RoomRoster | undefined;
   isEmptyRoster: boolean;
-  onOpenRoster?: (roster: RoomRoster, sourceName: string) => void;
+  onOpenRoster?: (roster: RoomRoster, sourceName: string, summary: FirebaseSharedRosterSummary) => void;
+  onRosterSaved?: (summary: FirebaseSharedRosterSummary) => void;
 };
 
 function friendlyFirestoreError(error: unknown) {
@@ -33,10 +35,10 @@ function formatWhen(value?: string) {
   return date.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
-export function FirebaseSharedRosterPublishCard({ activeRoster, isEmptyRoster, onOpenRoster }: Props) {
+export function FirebaseSharedRosterPublishCard({ activeRoster, isEmptyRoster, onOpenRoster, onRosterSaved }: Props) {
   const [user, setUser] = useState<SharedRosterUser | null>(null);
   const [authReady, setAuthReady] = useState(false);
-  const [busy, setBusy] = useState<"publish" | "refresh" | string>("");
+  const [busy, setBusy] = useState<"publish" | "refresh" | "save" | string>("");
   const [sharedRosters, setSharedRosters] = useState<FirebaseSharedRosterSummary[]>([]);
   const [notice, setNotice] = useState<{ tone: "success" | "error" | "info"; text: string } | null>(null);
 
@@ -81,8 +83,26 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, isEmptyRoster, o
     setNotice(null);
     try {
       const snapshot = await readFirebaseSharedRoster(rosterId);
-      onOpenRoster?.(snapshot.roster, snapshot.name);
-      setNotice({ tone: "success", text: `Opened ${snapshot.name} as a local copy. Sync/editing link comes next.` });
+      onOpenRoster?.(snapshot.roster, snapshot.name, snapshot);
+      setNotice({ tone: "success", text: `Opened ${snapshot.name} as a linked local copy. You can save changes back to Firebase now.` });
+    } catch (error) {
+      setNotice({ tone: "error", text: friendlyFirestoreError(error) });
+    } finally {
+      setBusy("");
+    }
+  };
+
+
+  const handleSaveActiveRoster = async () => {
+    if (!user || !activeRoster || busy) return;
+    setBusy("save");
+    setNotice(null);
+    try {
+      const saved = await saveFirebaseSharedRoster(activeRoster);
+      onRosterSaved?.(saved);
+      const rosters = await listFirebaseSharedRosters();
+      setSharedRosters(rosters);
+      setNotice({ tone: "success", text: `Saved ${saved.name} to Firebase as version ${saved.version}.` });
     } catch (error) {
       setNotice({ tone: "error", text: friendlyFirestoreError(error) });
     } finally {
@@ -116,6 +136,9 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, isEmptyRoster, o
           ? "Add players before creating a shared roster."
           : "Ready to create a Firebase shared roster test.";
 
+  const activeFirebaseSource = activeRoster?.cloudSource?.provider === "firebase" ? activeRoster.cloudSource : null;
+  const canSaveActiveRoster = Boolean(user && activeRoster && activeFirebaseSource?.firebaseRosterId && !busy);
+
   return (
     <div className="grid gap-3 rounded-3xl border border-violet-100 bg-violet-50/60 p-3 shadow-sm">
       <div className="flex items-start gap-2">
@@ -147,15 +170,34 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, isEmptyRoster, o
         </div>
       </div>
 
-      <Button
-        type="button"
-        className="h-11 justify-start rounded-2xl gap-2 bg-violet-600 px-3 text-xs font-black text-white shadow-sm hover:bg-violet-700"
-        onClick={handlePublish}
-        disabled={!user || !activeRoster || isEmptyRoster || Boolean(busy)}
-      >
-        <CloudUpload className="h-4 w-4" />
-        {busy === "publish" ? "Creating…" : "Create Firebase shared roster"}
-      </Button>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <Button
+          type="button"
+          className="h-11 justify-start rounded-2xl gap-2 bg-violet-600 px-3 text-xs font-black text-white shadow-sm hover:bg-violet-700"
+          onClick={handlePublish}
+          disabled={!user || !activeRoster || isEmptyRoster || Boolean(busy)}
+        >
+          <CloudUpload className="h-4 w-4" />
+          {busy === "publish" ? "Creating…" : "Create Firebase shared roster"}
+        </Button>
+
+        <Button
+          type="button"
+          variant="outline"
+          className="h-11 justify-start rounded-2xl gap-2 border-violet-200 bg-white px-3 text-xs font-black text-violet-700 shadow-sm hover:bg-violet-50"
+          onClick={handleSaveActiveRoster}
+          disabled={!canSaveActiveRoster}
+        >
+          <Save className="h-4 w-4" />
+          {busy === "save" ? "Saving…" : "Save active Firebase roster"}
+        </Button>
+      </div>
+
+      {activeFirebaseSource?.firebaseRosterId ? (
+        <div className="rounded-2xl bg-white/75 px-3 py-2 text-[11px] font-bold leading-snug text-slate-600">
+          Active roster is linked to Firebase version {activeFirebaseSource.firebaseVersion || 1}. Save will check the remote version before overwriting.
+        </div>
+      ) : null}
 
       <div className="grid gap-2 rounded-2xl bg-white/75 p-2">
         <div className="flex items-center justify-between gap-2 px-1">

@@ -237,13 +237,21 @@ export function savePlayers(players: RoomPlayer[]) {
 }
 
 
-export type RosterCloudProvider = "google-sheets";
+export type RosterCloudProvider = "google-sheets" | "firebase";
 
 export interface RosterCloudSource {
   provider: RosterCloudProvider;
-  spreadsheetId: string;
+  // Google Sheets cloud backup/shared-roster fields.
+  spreadsheetId?: string;
   spreadsheetName?: string;
   webViewLink?: string;
+
+  // Firebase shared-roster fields.
+  firebaseRosterId?: string;
+  firebaseVersion?: number;
+  firebaseOwnerUid?: string;
+  firebaseOwnerEmail?: string;
+
   lastSyncedAt?: string;
   lastRemoteModifiedAt?: string;
   syncMode?: "manual";
@@ -327,34 +335,67 @@ function cleanAccessLabels(value: unknown): Record<string, string> | undefined {
 function cleanRosterCloudSource(value: unknown): RosterCloudSource | undefined {
   if (!value || typeof value !== "object") return undefined;
   const record = value as Record<string, unknown>;
-  if (record.provider !== "google-sheets") return undefined;
-  const spreadsheetId = typeof record.spreadsheetId === "string" ? record.spreadsheetId.trim() : "";
-  if (!spreadsheetId) return undefined;
 
-  const source: RosterCloudSource = {
-    provider: "google-sheets",
-    spreadsheetId,
-    syncMode: record.syncMode === "manual" ? "manual" : "manual",
-  };
+  if (record.provider === "google-sheets") {
+    const spreadsheetId = typeof record.spreadsheetId === "string" ? record.spreadsheetId.trim() : "";
+    if (!spreadsheetId) return undefined;
 
-  if (typeof record.spreadsheetName === "string" && record.spreadsheetName.trim()) {
-    source.spreadsheetName = record.spreadsheetName.trim();
-  }
-  if (typeof record.webViewLink === "string" && record.webViewLink.trim()) {
-    source.webViewLink = record.webViewLink.trim();
-  }
-  if (typeof record.lastSyncedAt === "string" && record.lastSyncedAt.trim()) {
-    source.lastSyncedAt = record.lastSyncedAt.trim();
-  }
-  if (typeof record.lastRemoteModifiedAt === "string" && record.lastRemoteModifiedAt.trim()) {
-    source.lastRemoteModifiedAt = record.lastRemoteModifiedAt.trim();
-  }
-  const accessLabels = cleanAccessLabels(record.accessLabels);
-  if (accessLabels) {
-    source.accessLabels = accessLabels;
+    const source: RosterCloudSource = {
+      provider: "google-sheets",
+      spreadsheetId,
+      syncMode: record.syncMode === "manual" ? "manual" : "manual",
+    };
+
+    if (typeof record.spreadsheetName === "string" && record.spreadsheetName.trim()) {
+      source.spreadsheetName = record.spreadsheetName.trim();
+    }
+    if (typeof record.webViewLink === "string" && record.webViewLink.trim()) {
+      source.webViewLink = record.webViewLink.trim();
+    }
+    if (typeof record.lastSyncedAt === "string" && record.lastSyncedAt.trim()) {
+      source.lastSyncedAt = record.lastSyncedAt.trim();
+    }
+    if (typeof record.lastRemoteModifiedAt === "string" && record.lastRemoteModifiedAt.trim()) {
+      source.lastRemoteModifiedAt = record.lastRemoteModifiedAt.trim();
+    }
+    const accessLabels = cleanAccessLabels(record.accessLabels);
+    if (accessLabels) {
+      source.accessLabels = accessLabels;
+    }
+
+    return source;
   }
 
-  return source;
+  if (record.provider === "firebase") {
+    const firebaseRosterId = typeof record.firebaseRosterId === "string" ? record.firebaseRosterId.trim() : "";
+    if (!firebaseRosterId) return undefined;
+
+    const source: RosterCloudSource = {
+      provider: "firebase",
+      firebaseRosterId,
+      syncMode: "manual",
+    };
+
+    if (typeof record.firebaseVersion === "number" && Number.isFinite(record.firebaseVersion)) {
+      source.firebaseVersion = Math.max(1, Math.round(record.firebaseVersion));
+    }
+    if (typeof record.firebaseOwnerUid === "string" && record.firebaseOwnerUid.trim()) {
+      source.firebaseOwnerUid = record.firebaseOwnerUid.trim();
+    }
+    if (typeof record.firebaseOwnerEmail === "string" && record.firebaseOwnerEmail.trim()) {
+      source.firebaseOwnerEmail = record.firebaseOwnerEmail.trim();
+    }
+    if (typeof record.lastSyncedAt === "string" && record.lastSyncedAt.trim()) {
+      source.lastSyncedAt = record.lastSyncedAt.trim();
+    }
+    if (typeof record.lastRemoteModifiedAt === "string" && record.lastRemoteModifiedAt.trim()) {
+      source.lastRemoteModifiedAt = record.lastRemoteModifiedAt.trim();
+    }
+
+    return source;
+  }
+
+  return undefined;
 }
 
 export function createRoster(

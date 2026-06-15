@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from "react";
-import { CloudUpload, Database, ListChecks, RefreshCw, Share2 } from "lucide-react";
+import { CloudDownload, CloudUpload, Database, ListChecks, RefreshCw, Share2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { RoomRoster } from "@/lib/localRoster";
 import {
   createFirebaseSharedRoster,
   listenToSharedRosterUser,
   listFirebaseSharedRosters,
+  readFirebaseSharedRoster,
   type FirebaseSharedRosterSummary,
   type SharedRosterUser,
 } from "@/lib/sharedRosterService";
@@ -13,6 +14,7 @@ import {
 type Props = {
   activeRoster: RoomRoster | undefined;
   isEmptyRoster: boolean;
+  onOpenRoster?: (roster: RoomRoster, sourceName: string) => void;
 };
 
 function friendlyFirestoreError(error: unknown) {
@@ -31,10 +33,10 @@ function formatWhen(value?: string) {
   return date.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
-export function FirebaseSharedRosterPublishCard({ activeRoster, isEmptyRoster }: Props) {
+export function FirebaseSharedRosterPublishCard({ activeRoster, isEmptyRoster, onOpenRoster }: Props) {
   const [user, setUser] = useState<SharedRosterUser | null>(null);
   const [authReady, setAuthReady] = useState(false);
-  const [busy, setBusy] = useState<"publish" | "refresh" | "">("");
+  const [busy, setBusy] = useState<"publish" | "refresh" | string>("");
   const [sharedRosters, setSharedRosters] = useState<FirebaseSharedRosterSummary[]>([]);
   const [notice, setNotice] = useState<{ tone: "success" | "error" | "info"; text: string } | null>(null);
 
@@ -71,6 +73,22 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, isEmptyRoster }:
     // Intentionally refresh when the signed-in Firebase user changes only.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.uid]);
+
+
+  const handleOpenRoster = async (rosterId: string) => {
+    if (!user || busy) return;
+    setBusy(`open:${rosterId}`);
+    setNotice(null);
+    try {
+      const snapshot = await readFirebaseSharedRoster(rosterId);
+      onOpenRoster?.(snapshot.roster, snapshot.name);
+      setNotice({ tone: "success", text: `Opened ${snapshot.name} as a local copy. Sync/editing link comes next.` });
+    } catch (error) {
+      setNotice({ tone: "error", text: friendlyFirestoreError(error) });
+    } finally {
+      setBusy("");
+    }
+  };
 
   const handlePublish = async () => {
     if (!user || !activeRoster || isEmptyRoster || busy) return;
@@ -168,15 +186,27 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, isEmptyRoster }:
         ) : (
           <div className="grid gap-1.5">
             {sharedRosters.slice(0, 4).map((roster) => (
-              <div key={roster.id} className="rounded-2xl border border-slate-100 bg-white px-3 py-2">
-                <div className="flex items-center gap-1.5 text-xs font-black text-[#102A43]">
-                  <Share2 className="h-3.5 w-3.5 text-violet-600" />
-                  <span className="min-w-0 flex-1 truncate">{roster.name}</span>
-                  <span className="shrink-0 rounded-full bg-violet-50 px-2 py-0.5 text-[10px] text-violet-700">v{roster.version}</span>
+              <div key={roster.id} className="grid gap-2 rounded-2xl border border-slate-100 bg-white px-3 py-2">
+                <div>
+                  <div className="flex items-center gap-1.5 text-xs font-black text-[#102A43]">
+                    <Share2 className="h-3.5 w-3.5 text-violet-600" />
+                    <span className="min-w-0 flex-1 truncate">{roster.name}</span>
+                    <span className="shrink-0 rounded-full bg-violet-50 px-2 py-0.5 text-[10px] text-violet-700">v{roster.version}</span>
+                  </div>
+                  <div className="mt-0.5 text-[10px] font-semibold text-slate-500">
+                    {roster.playerCount} player{roster.playerCount === 1 ? "" : "s"} · {formatWhen(roster.updatedAt)}
+                  </div>
                 </div>
-                <div className="mt-0.5 text-[10px] font-semibold text-slate-500">
-                  {roster.playerCount} player{roster.playerCount === 1 ? "" : "s"} · {formatWhen(roster.updatedAt)}
-                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-8 justify-start rounded-xl gap-1.5 border-violet-100 bg-violet-50/60 px-2 text-[10px] font-black text-violet-700"
+                  onClick={() => handleOpenRoster(roster.id)}
+                  disabled={!user || Boolean(busy)}
+                >
+                  <CloudDownload className="h-3.5 w-3.5" />
+                  {busy === `open:${roster.id}` ? "Opening…" : "Open local copy"}
+                </Button>
               </div>
             ))}
           </div>

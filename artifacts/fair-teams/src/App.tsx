@@ -895,6 +895,26 @@ function App() {
     }));
   };
 
+
+  const openFirebaseSharedRosterAsLocalCopy = (sharedRoster: RoomRoster, sourceName: string) => {
+    setRosterState((current) => {
+      const imported = createRoster(
+        uniqueRosterName(sourceName || sharedRoster.name || "Firebase roster", current.rosters),
+        sharedRoster.players,
+        { themeColor: sharedRoster.themeColor },
+      );
+      return {
+        rosters: [...current.rosters, imported],
+        activeRosterId: imported.id,
+      };
+    });
+    setRosterToolsNotice({
+      tone: "success",
+      title: "Firebase roster opened",
+      message: `${sourceName || sharedRoster.name || "Shared roster"} was opened as a local copy. Saving changes back to Firebase comes next.`,
+    });
+  };
+
   const switchRoster = (rosterId: string) => {
     setRosterState((current) =>
       current.rosters.some((roster) => roster.id === rosterId)
@@ -2897,7 +2917,11 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 {rosterSharedToolsOpen && (
                   <div className="grid gap-3 border-t border-slate-100 p-3">
                     <FirebaseSharedRosterAuthCard />
-                    <FirebaseSharedRosterPublishCard activeRoster={activeRoster} isEmptyRoster={isEmptyStarterRoster} />
+                    <FirebaseSharedRosterPublishCard
+                      activeRoster={activeRoster}
+                      isEmptyRoster={isEmptyStarterRoster}
+                      onOpenRoster={openFirebaseSharedRosterAsLocalCopy}
+                    />
 
                     <div className="rounded-2xl border border-amber-100 bg-amber-50/70 px-3 py-2">
                       <div className="text-[10px] font-black uppercase tracking-wide text-amber-700">

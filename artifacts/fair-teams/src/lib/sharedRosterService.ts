@@ -9,6 +9,8 @@ import {
 import {
   addDoc,
   collection,
+  doc,
+  getDoc,
   getDocs,
   query,
   serverTimestamp,
@@ -16,13 +18,17 @@ import {
   type DocumentData,
   type Timestamp,
 } from "firebase/firestore";
-import type { RoomPlayer, RoomRoster } from "@/lib/localRoster";
+import { normalizeRoster, type RoomPlayer, type RoomRoster } from "@/lib/localRoster";
 import { getFirebaseProjectId, getFairTeamsAuth, getFairTeamsFirestore } from "@/lib/firebaseClient";
 
 export type SharedRosterUser = {
   uid: string;
   email: string;
   displayName?: string;
+};
+
+export type FirebaseSharedRosterSnapshot = FirebaseSharedRosterSummary & {
+  roster: RoomRoster;
 };
 
 export type FirebaseSharedRosterSummary = {
@@ -172,6 +178,28 @@ export async function listFirebaseSharedRosters(): Promise<FirebaseSharedRosterS
   return snapshot.docs
     .map((doc) => toRosterSummary(doc.id, doc.data()))
     .sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime());
+}
+
+
+export async function readFirebaseSharedRoster(rosterId: string): Promise<FirebaseSharedRosterSnapshot> {
+  getCurrentSharedRosterUser();
+  const docRef = doc(getFairTeamsFirestore(), "sharedRosters", rosterId);
+  const snapshot = await getDoc(docRef);
+  if (!snapshot.exists()) throw new Error("Firebase shared roster was not found.");
+  const data = snapshot.data();
+  const summary = toRosterSummary(snapshot.id, data);
+  const rawRoster = data.rosterData && typeof data.rosterData === "object" ? data.rosterData as Partial<RoomRoster> : undefined;
+  if (!rawRoster || !Array.isArray(rawRoster.players)) {
+    throw new Error("Firebase shared roster does not contain roster data yet.");
+  }
+  const roster = normalizeRoster({
+    ...rawRoster,
+    name: summary.name || rawRoster.name,
+  }, 0);
+  return {
+    ...summary,
+    roster,
+  };
 }
 
 export function getSharedRosterBackendLabel() {

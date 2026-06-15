@@ -454,6 +454,9 @@ function App() {
   const [googleSheetDeleting, setGoogleSheetDeleting] = useState(false);
   const [googleSheetShareOpen, setGoogleSheetShareOpen] = useState(false);
   const [googleSheetShareEmail, setGoogleSheetShareEmail] = useState("");
+  const [googleSheetAccessList, setGoogleSheetAccessList] = useState<GoogleDrivePermissionResult[] | null>(null);
+  const [googleSheetAccessLoading, setGoogleSheetAccessLoading] = useState(false);
+  const [googleSheetRemovingPermissionId, setGoogleSheetRemovingPermissionId] = useState("");
   const [googleSheetConflictConfirm, setGoogleSheetConflictConfirm] = useState<GoogleSheetConflictConfirm | null>(null);
   const [googleSheetUpdatePrompt, setGoogleSheetUpdatePrompt] = useState<GoogleSheetConflictConfirm | null>(null);
   const [googleSheetUpdatePromptDismissedKey, setGoogleSheetUpdatePromptDismissedKey] = useState("");
@@ -693,6 +696,22 @@ function App() {
     permission.type === "user" &&
     !permission.deleted &&
     !drivePermissionIsInherited(permission);
+
+  const permissionEmailMatchesConnectedUser = (permission: GoogleDrivePermissionResult) => {
+    const connectedEmail = connectedDriveUser?.emailAddress;
+    return Boolean(
+      permission.emailAddress &&
+      connectedEmail &&
+      normalizeShareEmail(permission.emailAddress) === normalizeShareEmail(connectedEmail),
+    );
+  };
+
+  const googleSheetOwnerPermissions = (googleSheetAccessList || []).filter((permission) => permission.role === "owner");
+  const googleSheetEditorPermissions = (googleSheetAccessList || []).filter((permission) => permission.role === "writer");
+  const googleSheetOtherPermissions = (googleSheetAccessList || []).filter(
+    (permission) => permission.role !== "owner" && permission.role !== "writer",
+  );
+  const connectedGoogleUserOwnsActiveSheet = googleSheetOwnerPermissions.some(permissionEmailMatchesConnectedUser);
 
   const downloadAllRostersBackup = () => {
     downloadText(
@@ -1216,21 +1235,22 @@ function App() {
   const disconnectActiveRosterFromGoogleSheet = () => {
     if (!activeGoogleSheetSource?.spreadsheetId) {
       showRosterToolsNotice("No shared roster linked", "This roster is already saved only on this device.", "info");
-      return;
+      return false;
     }
     const confirmed = window.confirm(
-      `Disconnect this roster from the shared Google Sheet?
+      `Stop syncing this roster?
 
-The Google Sheet will not be deleted. This device will keep a local copy of the roster.`,
+The shared Google Sheet will not be deleted. This device will keep a local copy only.`,
     );
-    if (!confirmed) return;
+    if (!confirmed) return false;
 
     removeActiveRosterGoogleSheetLink();
     showRosterToolsNotice(
-      "Shared roster disconnected",
-      "This device now keeps a local copy only. The Google Sheet still exists and can be opened again later.",
+      "Syncing stopped",
+      "This device now keeps a local copy only. The shared roster still exists and can be opened again later.",
       "success",
     );
+    return true;
   };
 
   const makeActiveRosterShared = async () => {
@@ -1688,17 +1708,38 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
     }
   };
 
-  const openGoogleSheetShareModal = () => {
+  const loadGoogleSheetAccessList = async () => {
+    if (!googleDriveAccessToken || !activeGoogleSheetSource?.spreadsheetId) return;
+    setGoogleSheetAccessLoading(true);
+    try {
+      const permissions = await listGoogleDriveFilePermissions(googleDriveAccessToken, activeGoogleSheetSource.spreadsheetId);
+      setGoogleSheetAccessList(permissions.filter((permission) => !permission.deleted));
+    } catch (error) {
+      if (isMissingSharedRosterError(error)) {
+        handleMissingActiveGoogleSheetLink();
+        setGoogleSheetShareOpen(false);
+        return;
+      }
+      setGoogleSheetAccessList([]);
+      showRosterToolsNotice("Could not load sharing access", error instanceof Error ? error.message : "Please try again.", "error");
+    } finally {
+      setGoogleSheetAccessLoading(false);
+    }
+  };
+
+  const openGoogleSheetShareModal = async () => {
     if (!googleDriveAccessToken) {
-      showRosterToolsNotice("Sign in with Google first", "Sign in with your Google account before sharing this roster.", "warning");
+      showRosterToolsNotice("Sign in with Google first", "Sign in with your Google account before managing sharing access.", "warning");
       return;
     }
     if (!activeGoogleSheetSource?.spreadsheetId) {
-      showRosterToolsNotice("Make it shared first", "Create a shared roster before adding another editor.", "warning");
+      showRosterToolsNotice("Make it shared first", "Create or open a shared roster before managing access.", "warning");
       return;
     }
     setGoogleSheetShareEmail("");
+    setGoogleSheetAccessList(null);
     setGoogleSheetShareOpen(true);
+    await loadGoogleSheetAccessList();
   };
 
   const confirmGoogleSheetShare = async () => {
@@ -1717,8 +1758,8 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
         activeGoogleSheetSource.spreadsheetId,
         email,
       );
-      setGoogleSheetShareOpen(false);
       setGoogleSheetShareEmail("");
+      await loadGoogleSheetAccessList();
       showRosterToolsNotice("Editor added", `${email} can now edit this shared roster through Fair Teams.`, "success");
     } catch (error) {
       if (isMissingSharedRosterError(error)) {
@@ -1729,6 +1770,26 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
       showRosterToolsNotice("Could not share roster", error instanceof Error ? error.message : "Please try again.", "error");
     } finally {
       setGoogleSheetSharing(false);
+    }
+  };
+
+  const removeGoogleSheetEditorAccess = async (permission: GoogleDrivePermissionResult) => {
+    if (!activeGoogleSheetSource?.spreadsheetId || !permission.id) return;
+    const label = drivePermissionLabel(permission);
+    const confirmed = window.confirm(`Remove access for ${label}?
+
+They will no longer be able to open or edit this shared roster unless it is shared with them again.`);
+    if (!confirmed) return;
+
+    setGoogleSheetRemovingPermissionId(permission.id);
+    try {
+      await deleteGoogleDriveFilePermission(googleDriveAccessToken, activeGoogleSheetSource.spreadsheetId, permission.id);
+      setGoogleSheetAccessList((current) => current ? current.filter((item) => item.id !== permission.id) : current);
+      showRosterToolsNotice("Access removed", `${label} can no longer access this shared roster through this direct file permission.`, "success");
+    } catch (error) {
+      showRosterToolsNotice("Could not remove access", error instanceof Error ? error.message : "Please try again.", "error");
+    } finally {
+      setGoogleSheetRemovingPermissionId("");
     }
   };
 
@@ -2767,72 +2828,46 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
                           </Button>
                         </div>
 
-                        <div className="grid gap-2 rounded-2xl border border-slate-100 bg-white/70 p-2">
-                          <div className="px-1 text-[10px] font-black uppercase tracking-wide text-slate-400">
-                            Sharing
-                          </div>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="h-11 justify-start rounded-2xl gap-2 border-slate-100 bg-white/90 px-3"
-                            onClick={openGoogleSheetShareModal}
-                            disabled={!googleDriveConnected || googleSheetSharing}
-                          >
-                            <Share2 className="h-4 w-4" />
-                            <span className="truncate text-xs font-black">
-                              {googleSheetSharing ? "Sharing..." : "Share with editor"}
-                            </span>
-                          </Button>
-                        </div>
-
-                        <div className="grid gap-2 rounded-2xl border border-red-100 bg-red-50/40 p-2">
-                          <div className="px-1 text-[10px] font-black uppercase tracking-wide text-red-400">
-                            Connection
-                          </div>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="h-10 justify-start rounded-2xl gap-2 border-slate-200 bg-white/90 px-3 text-slate-600 hover:bg-white hover:text-slate-800"
-                            onClick={disconnectActiveRosterFromGoogleSheet}
-                            disabled={googleSheetSyncing || googleSheetOpening || googleSheetSharing}
-                            title="Keep this roster locally, but stop connecting it to the shared Google Sheet."
-                          >
-                            <X className="h-3.5 w-3.5" />
-                            <span className="truncate text-xs font-black">Stop syncing this roster</span>
-                          </Button>
-                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-11 justify-start rounded-2xl gap-2 border-slate-100 bg-white/90 px-3"
+                          onClick={openGoogleSheetShareModal}
+                          disabled={!googleDriveConnected || googleSheetSharing || googleSheetAccessLoading}
+                        >
+                          <Share2 className="h-4 w-4" />
+                          <span className="truncate text-xs font-black">
+                            {googleSheetAccessLoading ? "Loading access..." : "Sharing & access"}
+                          </span>
+                        </Button>
                       </>
                     ) : (
-                      <Button
-                        type="button"
-                        className="h-12 justify-start rounded-2xl gap-3 bg-emerald-600 text-white shadow-sm hover:bg-emerald-700"
-                        onClick={makeActiveRosterShared}
-                        disabled={!googleDriveConnected || googleSheetSyncing || isEmptyStarterRoster}
-                      >
-                        <Share2 className="h-4 w-4" />
-                        <span className="min-w-0 truncate font-black">
-                          {googleSheetSyncing ? "Creating..." : "Make this roster shared"}
-                        </span>
-                      </Button>
+                      <>
+                        <Button
+                          type="button"
+                          className="h-12 justify-start rounded-2xl gap-3 bg-emerald-600 text-white shadow-sm hover:bg-emerald-700"
+                          onClick={makeActiveRosterShared}
+                          disabled={!googleDriveConnected || googleSheetSyncing || isEmptyStarterRoster}
+                        >
+                          <Share2 className="h-4 w-4" />
+                          <span className="min-w-0 truncate font-black">
+                            {googleSheetSyncing ? "Creating..." : "Make this roster shared"}
+                          </span>
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-11 justify-start rounded-2xl gap-2 border-slate-100 bg-white/90 px-3"
+                          onClick={openGoogleSheetRosterList}
+                          disabled={!googleDriveConnected || googleSheetOpening}
+                        >
+                          <FolderOpen className="h-4 w-4" />
+                          <span className="truncate text-xs font-black">
+                            {googleSheetOpening ? "Opening..." : "Open shared roster library"}
+                          </span>
+                        </Button>
+                      </>
                     )}
-
-                    <div className="grid gap-2 rounded-2xl border border-slate-100 bg-white/70 p-2">
-                      <div className="px-1 text-[10px] font-black uppercase tracking-wide text-slate-400">
-                        Open
-                      </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="h-11 justify-start rounded-2xl gap-2 border-slate-100 bg-white/90 px-3"
-                        onClick={openGoogleSheetRosterList}
-                        disabled={!googleDriveConnected || googleSheetOpening}
-                      >
-                        <FolderOpen className="h-4 w-4" />
-                        <span className="truncate text-xs font-black">
-                          {googleSheetOpening ? "Opening..." : "Open shared roster"}
-                        </span>
-                      </Button>
-                    </div>
 
                       <div className="rounded-2xl bg-white/70 px-3 py-2">
                         <p className="text-[10px] font-semibold leading-snug text-slate-500">
@@ -2961,10 +2996,10 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
                   Shared Roster
                 </div>
                 <h2 className="mt-1 truncate text-base font-black tracking-tight text-[#102A43]">
-                  Open shared roster
+                  Shared roster library
                 </h2>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  Choose a Fair Teams roster linked to this Google account.
+                  Choose a shared roster available to this Google account.
                 </p>
               </div>
               <Button
@@ -2997,7 +3032,7 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
                           {file.name}
                         </span>
                         <span className="mt-0.5 block truncate text-[11px] font-bold text-emerald-700/75">
-                          {isGoogleSheetOwnedByMe(file) ? "My shared roster" : "Shared with me"} · {getGoogleSheetOwnerLabel(file)} · {formatDriveModifiedTime(file.modifiedTime)}
+                          {isGoogleSheetOwnedByMe(file) ? "Role: Owner" : "Role: Editor"} · {getGoogleSheetOwnerLabel(file)} · Updated {formatDriveModifiedTime(file.modifiedTime)}
                         </span>
                       </span>
                       <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-lg font-black leading-none text-emerald-400 shadow-sm">
@@ -3011,7 +3046,7 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
                   <div className="flex gap-2">
                     <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
                     <p className="text-xs font-semibold leading-snug text-amber-800">
-                      No shared rosters found. Make a roster shared first, or ask the owner to share the Google Sheet with this account.
+                      No shared rosters found. Make a roster shared first, or ask the owner to share it with this Google account.
                     </p>
                   </div>
                 </div>
@@ -3068,7 +3103,7 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
 
             <div className="mt-4 rounded-2xl border border-emerald-100 bg-emerald-50/70 p-3">
               <p className="text-xs font-semibold leading-snug text-emerald-900/80">
-                Recover/Open brings this shared roster back into Fair Teams on this device. It does not overwrite the Google Sheet.
+                Opens this shared roster in Fair Teams on this device. It does not overwrite the Google Sheet.
               </p>
             </div>
 
@@ -3352,84 +3387,243 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
           role="dialog"
           aria-modal="true"
         >
-          <div className="w-full max-w-sm rounded-3xl border border-emerald-100 bg-white p-4 shadow-2xl">
-            <div className="flex items-start justify-between gap-3">
+          <div className="flex max-h-[calc(100dvh-2rem)] w-full max-w-sm flex-col overflow-hidden rounded-3xl border border-emerald-100 bg-white shadow-2xl">
+            <div className="flex items-start justify-between gap-3 border-b border-slate-100 p-4 pb-3">
               <div className="min-w-0">
                 <div className="text-[10px] font-black uppercase tracking-wide text-emerald-600">
                   Shared Roster
                 </div>
                 <h2 className="mt-1 text-base font-black tracking-tight text-[#102A43]">
-                  Share with editor
+                  Sharing & access
                 </h2>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  Add one trusted organizer who should edit this roster through Fair Teams.
+                  See who can use this shared roster.
                 </p>
               </div>
+              <div className="flex shrink-0 items-center gap-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 rounded-xl text-emerald-700"
+                  onClick={() => {
+                    setGoogleSheetShareOpen(false);
+                    void openGoogleSheetRosterList();
+                  }}
+                  disabled={googleSheetOpening}
+                  title="Open shared roster library"
+                >
+                  <FolderOpen className="h-4 w-4" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 rounded-xl"
+                  onClick={() => setGoogleSheetShareOpen(false)}
+                  title="Close"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
+              <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-3">
+                <div className="text-[10px] font-black uppercase tracking-wide text-emerald-700">
+                  Linked roster
+                </div>
+                <div className="mt-1 truncate text-sm font-black text-[#102A43]">
+                  {activeGoogleSheetSource?.spreadsheetName || activeRosterName}
+                </div>
+                <div className="mt-1 text-[10px] font-semibold leading-snug text-emerald-800/75">
+                  {formatSheetSyncTime(activeGoogleSheetSource?.lastSyncedAt)}
+                </div>
+              </div>
+
+              <div className="mt-3 rounded-2xl border border-slate-100 bg-slate-50/80 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+                    People with access
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="h-7 rounded-xl px-2 text-[10px] font-black text-slate-500 hover:bg-white"
+                    onClick={() => void loadGoogleSheetAccessList()}
+                    disabled={googleSheetAccessLoading}
+                    title="Refresh access list"
+                  >
+                    <RefreshCw className={`mr-1 h-3 w-3 ${googleSheetAccessLoading ? "animate-spin" : ""}`} />
+                    Refresh
+                  </Button>
+                </div>
+
+                {googleSheetAccessLoading && !googleSheetAccessList ? (
+                  <div className="mt-3 rounded-2xl bg-white px-3 py-2 text-xs font-semibold text-slate-500">
+                    Loading sharing access…
+                  </div>
+                ) : googleSheetAccessList && googleSheetAccessList.length > 0 ? (
+                  <div className="mt-3 grid gap-2">
+                    <div>
+                      <div className="px-1 text-[10px] font-black uppercase tracking-wide text-slate-400">
+                        Owner
+                      </div>
+                      <div className="mt-1 grid gap-1.5">
+                        {googleSheetOwnerPermissions.length > 0 ? googleSheetOwnerPermissions.map((permission) => (
+                          <div key={permission.id} className="flex items-center justify-between gap-2 rounded-2xl bg-white px-3 py-2">
+                            <span className="min-w-0 truncate text-xs font-black text-[#102A43]">
+                              {permissionEmailMatchesConnectedUser(permission) ? "You" : drivePermissionLabel(permission)}
+                            </span>
+                            <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-black text-emerald-700">
+                              Owner
+                            </span>
+                          </div>
+                        )) : (
+                          <div className="rounded-2xl bg-white px-3 py-2 text-xs font-semibold text-slate-500">
+                            Owner not shown by Google Drive.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="px-1 text-[10px] font-black uppercase tracking-wide text-slate-400">
+                        Editors
+                      </div>
+                      <div className="mt-1 grid gap-1.5">
+                        {googleSheetEditorPermissions.length > 0 ? googleSheetEditorPermissions.map((permission) => {
+                          const removing = googleSheetRemovingPermissionId === permission.id;
+                          const canRemove = connectedGoogleUserOwnsActiveSheet && canRemoveDrivePermission(permission) && !permissionEmailMatchesConnectedUser(permission);
+                          return (
+                            <div key={permission.id} className="flex items-center justify-between gap-2 rounded-2xl bg-white px-3 py-2">
+                              <div className="min-w-0">
+                                <div className="truncate text-xs font-black text-[#102A43]">
+                                  {permissionEmailMatchesConnectedUser(permission) ? "You" : drivePermissionLabel(permission)}
+                                </div>
+                                {drivePermissionIsInherited(permission) && (
+                                  <div className="mt-0.5 truncate text-[10px] font-semibold text-slate-400">
+                                    From shared folder access
+                                  </div>
+                                )}
+                              </div>
+                              {canRemove ? (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  className="h-8 shrink-0 rounded-xl px-2 text-[10px] font-black text-red-600 hover:bg-red-50 hover:text-red-700"
+                                  onClick={() => removeGoogleSheetEditorAccess(permission)}
+                                  disabled={Boolean(googleSheetRemovingPermissionId)}
+                                  title="Remove editor access"
+                                >
+                                  <UserMinus className="mr-1 h-3 w-3" />
+                                  {removing ? "Removing..." : "Remove"}
+                                </Button>
+                              ) : (
+                                <span className="shrink-0 rounded-full bg-slate-50 px-2 py-0.5 text-[10px] font-black text-slate-500">
+                                  Editor
+                                </span>
+                              )}
+                            </div>
+                          );
+                        }) : (
+                          <div className="rounded-2xl bg-white px-3 py-2 text-xs font-semibold text-slate-500">
+                            No editors added yet.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {googleSheetOtherPermissions.length > 0 && (
+                      <div>
+                        <div className="px-1 text-[10px] font-black uppercase tracking-wide text-slate-400">
+                          Other access
+                        </div>
+                        <div className="mt-1 grid gap-1.5">
+                          {googleSheetOtherPermissions.map((permission) => (
+                            <div key={permission.id} className="flex items-center justify-between gap-2 rounded-2xl bg-white px-3 py-2">
+                              <span className="min-w-0 truncate text-xs font-black text-[#102A43]">
+                                {drivePermissionLabel(permission)}
+                              </span>
+                              <span className="shrink-0 rounded-full bg-slate-50 px-2 py-0.5 text-[10px] font-black text-slate-500">
+                                {formatDrivePermissionRole(permission.role)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="mt-3 rounded-2xl bg-white px-3 py-2 text-xs font-semibold text-slate-500">
+                    Sharing access could not be loaded.
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-3 rounded-2xl border border-emerald-100 bg-white p-3">
+                <label className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+                  Add editor
+                </label>
+                <input
+                  value={googleSheetShareEmail}
+                  onChange={(e) => setGoogleSheetShareEmail(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      confirmGoogleSheetShare();
+                    }
+                  }}
+                  type="email"
+                  inputMode="email"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  placeholder="email@example.com"
+                  className="mt-2 h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm font-bold text-[#102A43] outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
+                />
+                <Button
+                  type="button"
+                  className="mt-2 h-11 w-full rounded-2xl bg-emerald-600 text-white hover:bg-emerald-700"
+                  onClick={confirmGoogleSheetShare}
+                  disabled={googleSheetSharing}
+                >
+                  {googleSheetSharing ? "Sharing..." : "Add editor"}
+                </Button>
+                <p className="mt-2 text-[10px] font-semibold leading-snug text-slate-500">
+                  Editors can save changes to this shared roster through Fair Teams.
+                </p>
+              </div>
+
+              <div className="mt-3 rounded-2xl border border-slate-100 bg-white p-3">
+                <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+                  Connection
+                </div>
+                <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
+                  Stop syncing keeps this roster locally on this device. The shared roster is not deleted.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="mt-3 h-10 w-full justify-start rounded-2xl gap-2 border-slate-200 bg-white/90 px-3 text-slate-600 hover:bg-white hover:text-slate-800"
+                  onClick={() => {
+                    if (disconnectActiveRosterFromGoogleSheet()) setGoogleSheetShareOpen(false);
+                  }}
+                  disabled={googleSheetSyncing || googleSheetOpening || googleSheetSharing}
+                >
+                  <X className="h-3.5 w-3.5" />
+                  <span className="truncate text-xs font-black">Stop syncing this roster</span>
+                </Button>
+              </div>
+            </div>
+
+            <div className="border-t border-slate-100 p-4">
               <Button
                 type="button"
                 variant="ghost"
-                size="icon"
-                className="h-8 w-8 shrink-0 rounded-xl"
-                onClick={() => setGoogleSheetShareOpen(false)}
-                title="Close"
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-
-            <div className="mt-4 rounded-2xl border border-emerald-100 bg-emerald-50/70 p-3">
-              <div className="text-[10px] font-black uppercase tracking-wide text-emerald-700">
-                Linked sheet
-              </div>
-              <div className="mt-1 truncate text-sm font-black text-[#102A43]">
-                {activeGoogleSheetSource?.spreadsheetName || activeRosterName}
-              </div>
-            </div>
-
-            <div className="mt-3">
-              <label className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-                Editor email
-              </label>
-              <input
-                value={googleSheetShareEmail}
-                onChange={(e) => setGoogleSheetShareEmail(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    confirmGoogleSheetShare();
-                  }
-                }}
-                type="email"
-                inputMode="email"
-                autoCapitalize="none"
-                autoCorrect="off"
-                placeholder="email@example.com"
-                className="mt-2 h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm font-bold text-[#102A43] outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
-              />
-            </div>
-
-            <div className="mt-3 rounded-2xl border border-amber-100 bg-amber-50/80 p-3">
-              <p className="text-xs font-semibold leading-snug text-amber-800">
-                This gives editor access to the hidden Google Sheet. Use this only with people you trust to manage the roster.
-              </p>
-            </div>
-
-            <div className="mt-4 grid gap-2">
-              <Button
-                type="button"
-                className="h-11 rounded-2xl bg-emerald-600 text-white hover:bg-emerald-700"
-                onClick={confirmGoogleSheetShare}
-                disabled={googleSheetSharing}
-              >
-                {googleSheetSharing ? "Sharing..." : "Share roster"}
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                className="h-10 rounded-2xl text-slate-500"
+                className="h-10 w-full rounded-2xl text-slate-500"
                 onClick={() => setGoogleSheetShareOpen(false)}
               >
-                Cancel
+                Done
               </Button>
             </div>
           </div>

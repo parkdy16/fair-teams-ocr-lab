@@ -29,25 +29,44 @@ function displayName(player: Pick<RoomPlayer, "name" | "aka">) {
   return aka ? `${player.name} (${aka})` : player.name;
 }
 
-function NewBadge() {
+function StatusDot({ label, className }: { label: string; className: string }) {
   return (
-    <span className="inline-flex items-center rounded-full bg-sky-100 px-1.5 py-0.5 text-[9px] font-black text-sky-800 border border-sky-200">
-      NEW
-    </span>
-  );
-}
-function GKBadge() {
-  return (
-    <span className="inline-flex items-center rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-black text-emerald-800 border border-emerald-200">
-      GK
-    </span>
+    <span
+      className={`h-2 w-2 shrink-0 rounded-full ring-1 ring-offset-1 ring-offset-card ${className}`}
+      title={label}
+      aria-label={label}
+    />
   );
 }
 
-function ORGBadge() {
+function TodayStatusDots({
+  player,
+}: {
+  player: Pick<RoomPlayer, "isNew" | "isGoalkeeper" | "isOrganizer">;
+}) {
+  const labels = [
+    player.isNew ? "New player" : null,
+    player.isGoalkeeper ? "Goalkeeper" : null,
+    player.isOrganizer ? "Organizer" : null,
+  ].filter(Boolean);
+
+  if (labels.length === 0) return null;
+
   return (
-    <span className="inline-flex items-center rounded-full bg-orange-100 px-1.5 py-0.5 text-[9px] font-black text-orange-800 border border-orange-200">
-      ORG
+    <span
+      className="ml-1 inline-flex shrink-0 items-center gap-1"
+      title={labels.join(", ")}
+      aria-label={labels.join(", ")}
+    >
+      {player.isNew && (
+        <StatusDot label="New player" className="bg-sky-800 ring-sky-200" />
+      )}
+      {player.isGoalkeeper && (
+        <StatusDot label="Goalkeeper" className="bg-emerald-800 ring-emerald-200" />
+      )}
+      {player.isOrganizer && (
+        <StatusDot label="Organizer" className="bg-orange-800 ring-orange-200" />
+      )}
     </span>
   );
 }
@@ -4548,22 +4567,16 @@ export function TodayTab({
                 className="w-4 h-4 rounded-full border-2 shrink-0 data-[state=checked]:bg-primary data-[state=checked]:border-primary"
                 data-testid={`attendance-check-${player.id}`}
               />
-              <div className="flex flex-col min-w-0 flex-1 overflow-hidden">
-                <div
-                  className={`block w-full max-w-full overflow-hidden text-ellipsis whitespace-nowrap font-bold text-xs leading-tight ${player.attending ? "text-primary" : "text-foreground"}`}
-                  title={displayName(player)}
-                >
-                  {displayName(player)}
+              <div className="min-w-0 flex-1 overflow-hidden">
+                <div className="flex w-full max-w-full items-center gap-1">
+                  <span
+                    className={`min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap font-bold text-xs leading-tight ${player.attending ? "text-primary" : "text-foreground"}`}
+                    title={displayName(player)}
+                  >
+                    {displayName(player)}
+                  </span>
+                  <TodayStatusDots player={player} />
                 </div>
-                {(player.isNew ||
-                  player.isGoalkeeper ||
-                  player.isOrganizer) && (
-                  <div className="mt-0.5 flex flex-wrap gap-1 min-w-0">
-                    {player.isNew && <NewBadge />}
-                    {player.isGoalkeeper && <GKBadge />}
-                    {player.isOrganizer && <ORGBadge />}
-                  </div>
-                )}
               </div>
               {player.attending && (
                 <button

@@ -65,6 +65,11 @@ async function getGoogleDriveFileMetadata(accessToken: string, fileId: string): 
   return result as GoogleSheetRosterFile;
 }
 
+
+export function getGoogleSheetRosterFileMetadata(accessToken: string, spreadsheetId: string): Promise<GoogleSheetRosterFile> {
+  return getGoogleDriveFileMetadata(accessToken, spreadsheetId);
+}
+
 async function createEmptyGoogleSpreadsheet(accessToken: string, title: string): Promise<GoogleSheetRosterFile> {
   const response = await fetch(
     "https://www.googleapis.com/drive/v3/files?fields=id,name,mimeType,webViewLink,modifiedTime",

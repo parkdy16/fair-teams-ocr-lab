@@ -61,6 +61,7 @@ import {
 } from "@/lib/googleDriveFiles";
 import {
   createGoogleSheetRoster,
+  getGoogleSheetRosterFileMetadata,
   listGoogleSheetRosterFiles,
   readGoogleSheetRoster,
   shareGoogleSheetRosterWithEditor,
@@ -252,6 +253,11 @@ type DriveUpdateConfirm = {
   readFailed?: boolean;
 };
 
+type GoogleSheetConflictConfirm = {
+  file: GoogleSheetRosterFile;
+  lastKnownRemoteModifiedAt?: string;
+};
+
 function readStoredDriveRecipients(): DriveBackupRecipient[] {
   try {
     const raw = window.localStorage.getItem(DRIVE_RECIPIENTS_STORAGE_KEY);
@@ -437,6 +443,7 @@ function App() {
   const [googleSheetChoices, setGoogleSheetChoices] = useState<GoogleSheetRosterFile[] | null>(null);
   const [googleSheetShareOpen, setGoogleSheetShareOpen] = useState(false);
   const [googleSheetShareEmail, setGoogleSheetShareEmail] = useState("");
+  const [googleSheetConflictConfirm, setGoogleSheetConflictConfirm] = useState<GoogleSheetConflictConfirm | null>(null);
   const googleDriveConnected = Boolean(googleDriveAccessToken);
   const googleDriveStatusText = !googleDriveConfig.isConfigured
     ? "Add Google Client ID and API key to .env.local"
@@ -491,6 +498,21 @@ function App() {
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return "Sync time unknown";
     return `Synced ${date.toLocaleDateString(undefined, { month: "short", day: "numeric" })} ${date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`;
+  };
+
+  const formatSheetModifiedTime = (value?: string) => {
+    if (!value) return "unknown time";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "unknown time";
+    return `${date.toLocaleDateString(undefined, { month: "short", day: "numeric" })} ${date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`;
+  };
+
+  const isGoogleSheetRemoteNewer = (remoteModifiedAt?: string, lastKnownRemoteModifiedAt?: string) => {
+    if (!remoteModifiedAt || !lastKnownRemoteModifiedAt) return false;
+    const remoteTime = new Date(remoteModifiedAt).getTime();
+    const knownTime = new Date(lastKnownRemoteModifiedAt).getTime();
+    if (Number.isNaN(remoteTime) || Number.isNaN(knownTime)) return false;
+    return remoteTime > knownTime + 3000;
   };
 
   const sheetCloudSourceFromFile = (file: GoogleSheetRosterFile) => ({
@@ -581,7 +603,8 @@ function App() {
       driveHelpOpen ||
       Boolean(driveUpdateConfirm) ||
       Boolean(googleSheetChoices) ||
-      googleSheetShareOpen;
+      googleSheetShareOpen ||
+      Boolean(googleSheetConflictConfirm);
     if (!shouldLockScroll) return;
 
     const previousOverflow = document.body.style.overflow;
@@ -589,7 +612,7 @@ function App() {
     return () => {
       document.body.style.overflow = previousOverflow;
     };
-  }, [groupSettingsOpen, rosterFilesOpen, rosterPickerOpen, clearRosterOpen, driveImportPreview, driveBackupChoices, localImportPreview, rosterToolsNotice, driveShareOpen, driveShareConfirm, driveAccessOpen, driveRemoveConfirm, driveHelpOpen, driveUpdateConfirm, googleSheetChoices, googleSheetShareOpen]);
+  }, [groupSettingsOpen, rosterFilesOpen, rosterPickerOpen, clearRosterOpen, driveImportPreview, driveBackupChoices, localImportPreview, rosterToolsNotice, driveShareOpen, driveShareConfirm, driveAccessOpen, driveRemoveConfirm, driveHelpOpen, driveUpdateConfirm, googleSheetChoices, googleSheetShareOpen, googleSheetConflictConfirm]);
 
   const openGroupSettings = () => {
     setDraftGroupName(activeRosterName);
@@ -1078,7 +1101,7 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
     }
   };
 
-  const saveActiveRosterToGoogleSheet = async () => {
+  const saveActiveRosterToGoogleSheet = async (options: { force?: boolean } = {}) => {
     if (!activeRoster) return;
     if (!googleDriveAccessToken) {
       showRosterToolsNotice("Connect Google first", "Connect your Google account before saving a shared roster.", "warning");
@@ -1091,6 +1114,20 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
 
     setGoogleSheetSyncing(true);
     try {
+      if (!options.force) {
+        const latestFile = await getGoogleSheetRosterFileMetadata(
+          googleDriveAccessToken,
+          activeGoogleSheetSource.spreadsheetId,
+        );
+        if (isGoogleSheetRemoteNewer(latestFile.modifiedTime, activeGoogleSheetSource.lastRemoteModifiedAt)) {
+          setGoogleSheetConflictConfirm({
+            file: latestFile,
+            lastKnownRemoteModifiedAt: activeGoogleSheetSource.lastRemoteModifiedAt,
+          });
+          return;
+        }
+      }
+
       const file = await updateGoogleSheetRoster(
         googleDriveAccessToken,
         activeGoogleSheetSource.spreadsheetId,
@@ -1103,6 +1140,16 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
     } finally {
       setGoogleSheetSyncing(false);
     }
+  };
+
+  const getLatestAfterGoogleSheetConflict = async () => {
+    setGoogleSheetConflictConfirm(null);
+    await reloadActiveRosterFromGoogleSheet();
+  };
+
+  const overwriteGoogleSheetAfterConflict = async () => {
+    setGoogleSheetConflictConfirm(null);
+    await saveActiveRosterToGoogleSheet({ force: true });
   };
 
   const reloadActiveRosterFromGoogleSheet = async () => {
@@ -2054,7 +2101,7 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
                       <Button
                         type="button"
                         className="h-12 justify-start rounded-2xl gap-3 bg-emerald-600 text-white shadow-sm hover:bg-emerald-700"
-                        onClick={saveActiveRosterToGoogleSheet}
+                        onClick={() => saveActiveRosterToGoogleSheet()}
                         disabled={!googleDriveConnected || googleSheetSyncing || googleSheetOpening || isEmptyStarterRoster}
                       >
                         <RefreshCw className={`h-4 w-4 ${googleSheetSyncing ? "animate-spin" : ""}`} />
@@ -2480,6 +2527,87 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
                 variant="ghost"
                 className="h-10 rounded-2xl text-slate-500"
                 onClick={() => setGoogleSheetChoices(null)}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {googleSheetConflictConfirm && (
+        <div
+          className="fixed inset-0 z-[65] flex items-end justify-center bg-black/45 p-4 sm:items-center"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="w-full max-w-sm rounded-3xl border border-amber-100 bg-white p-4 shadow-2xl">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-amber-50 text-amber-600">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-[10px] font-black uppercase tracking-wide text-amber-600">
+                  Shared Roster
+                </div>
+                <h2 className="mt-1 text-base font-black tracking-tight text-[#102A43]">
+                  Newer shared version found
+                </h2>
+                <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
+                  This Google Sheet was updated after your last sync. Get the latest roster first unless you are sure your local copy should replace it.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <div className="rounded-2xl border border-slate-100 bg-slate-50/80 p-3">
+                <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+                  Last sync here
+                </div>
+                <div className="mt-1 text-xs font-black text-[#102A43]">
+                  {formatSheetModifiedTime(googleSheetConflictConfirm.lastKnownRemoteModifiedAt)}
+                </div>
+              </div>
+              <div className="rounded-2xl border border-amber-100 bg-amber-50/80 p-3">
+                <div className="text-[10px] font-black uppercase tracking-wide text-amber-700">
+                  Sheet updated
+                </div>
+                <div className="mt-1 text-xs font-black text-[#102A43]">
+                  {formatSheetModifiedTime(googleSheetConflictConfirm.file.modifiedTime)}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-3 rounded-2xl border border-amber-100 bg-amber-50/80 p-3">
+              <p className="text-xs font-semibold leading-snug text-amber-800">
+                Recommended: choose “Get latest first,” review the roster, then sync again if needed.
+              </p>
+            </div>
+
+            <div className="mt-4 grid gap-2">
+              <Button
+                type="button"
+                className="h-11 rounded-2xl bg-emerald-600 text-white hover:bg-emerald-700"
+                onClick={getLatestAfterGoogleSheetConflict}
+                disabled={googleSheetOpening || googleSheetSyncing}
+              >
+                Get latest first
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-11 rounded-2xl border-red-100 bg-red-50/70 text-red-700 hover:bg-red-100 hover:text-red-800"
+                onClick={overwriteGoogleSheetAfterConflict}
+                disabled={googleSheetSyncing || googleSheetOpening}
+              >
+                Overwrite anyway
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                className="h-10 rounded-2xl text-slate-500"
+                onClick={() => setGoogleSheetConflictConfirm(null)}
+                disabled={googleSheetSyncing || googleSheetOpening}
               >
                 Cancel
               </Button>

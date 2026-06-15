@@ -251,6 +251,8 @@ export interface RosterCloudSource {
   firebaseVersion?: number;
   firebaseOwnerUid?: string;
   firebaseOwnerEmail?: string;
+  firebaseRole?: "owner" | "editor" | "viewer" | "member";
+  firebaseLastSavedByEmail?: string;
 
   lastSyncedAt?: string;
   lastRemoteModifiedAt?: string;
@@ -384,6 +386,12 @@ function cleanRosterCloudSource(value: unknown): RosterCloudSource | undefined {
     }
     if (typeof record.firebaseOwnerEmail === "string" && record.firebaseOwnerEmail.trim()) {
       source.firebaseOwnerEmail = record.firebaseOwnerEmail.trim();
+    }
+    if (["owner", "editor", "viewer", "member"].includes(String(record.firebaseRole || ""))) {
+      source.firebaseRole = record.firebaseRole as RosterCloudSource["firebaseRole"];
+    }
+    if (typeof record.firebaseLastSavedByEmail === "string" && record.firebaseLastSavedByEmail.trim()) {
+      source.firebaseLastSavedByEmail = record.firebaseLastSavedByEmail.trim();
     }
     if (typeof record.lastSyncedAt === "string" && record.lastSyncedAt.trim()) {
       source.lastSyncedAt = record.lastSyncedAt.trim();

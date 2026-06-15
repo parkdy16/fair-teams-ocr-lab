@@ -43,6 +43,8 @@ export type FirebaseSharedRosterSummary = {
   playerCount: number;
   createdAt?: string;
   updatedAt?: string;
+  currentUserRole?: "owner" | "editor" | "viewer" | "member";
+  lastSavedByEmail?: string;
 };
 
 export type FirebaseRosterInvite = FirebaseSharedRosterSummary & {
@@ -97,6 +99,17 @@ function timestampToIso(value: unknown): string | undefined {
   return undefined;
 }
 
+function currentUserRoleFromData(data: DocumentData): "owner" | "editor" | "viewer" | "member" | undefined {
+  const user = toSharedRosterUser(getFairTeamsAuth().currentUser);
+  if (!user) return undefined;
+  if (data.ownerUid === user.uid) return "owner";
+  const roleByUid = data.roleByUid && typeof data.roleByUid === "object" ? data.roleByUid as Record<string, unknown> : {};
+  const role = roleByUid[user.uid];
+  if (role === "owner" || role === "editor" || role === "viewer") return role;
+  const memberUids = Array.isArray(data.memberUids) ? data.memberUids : [];
+  return memberUids.includes(user.uid) ? "member" : undefined;
+}
+
 function toRosterSummary(id: string, data: DocumentData): FirebaseSharedRosterSummary {
   const rosterData = data.rosterData && typeof data.rosterData === "object" ? data.rosterData as { players?: unknown[] } : undefined;
   const playerCount = typeof data.playerCount === "number"
@@ -114,6 +127,8 @@ function toRosterSummary(id: string, data: DocumentData): FirebaseSharedRosterSu
     playerCount,
     createdAt: timestampToIso(data.createdAt),
     updatedAt: timestampToIso(data.updatedAt),
+    currentUserRole: currentUserRoleFromData(data),
+    lastSavedByEmail: typeof data.lastSavedByEmail === "string" ? data.lastSavedByEmail : undefined,
   };
 }
 
@@ -318,7 +333,7 @@ export async function saveFirebaseSharedRoster(roster: RoomRoster): Promise<Fire
 
     const remoteVersion = typeof data.version === "number" ? data.version : 1;
     if (remoteVersion !== expectedVersion) {
-      throw new Error(`Roster changed elsewhere. Refresh the Firebase roster before saving. Remote version is ${remoteVersion}, your local copy is ${expectedVersion}.`);
+      throw new Error(`This shared roster was already saved by someone else. Get latest from shared roster before saving. Remote version is ${remoteVersion}, your local copy is ${expectedVersion}.`);
     }
 
     const nextVersion = remoteVersion + 1;
@@ -344,6 +359,8 @@ export async function saveFirebaseSharedRoster(roster: RoomRoster): Promise<Fire
       playerCount,
       createdAt: timestampToIso(data.createdAt),
       updatedAt: now,
+      currentUserRole: role === "owner" || role === "editor" || role === "viewer" ? role : "member",
+      lastSavedByEmail: user.email,
     };
   });
 

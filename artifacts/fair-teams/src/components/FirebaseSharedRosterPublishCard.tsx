@@ -30,6 +30,9 @@ function friendlyFirestoreError(error: unknown) {
     return "Firestore rules are still locked. Add the shared roster rules in Firebase Console, then try again.";
   }
   if (/network/i.test(message)) return "Network error. Check your connection and try again.";
+  if (/saved by someone else|changed elsewhere|Remote version/i.test(message)) {
+    return message.replace(/^Firebase:\s*/i, "");
+  }
   return message.replace(/^Firebase:\s*/i, "");
 }
 
@@ -38,6 +41,17 @@ function formatWhen(value?: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "Recently";
   return date.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+function labelRole(role?: string, isOwner?: boolean) {
+  if (role === "owner" || isOwner) return "Owner";
+  if (role === "editor") return "Editor";
+  if (role === "viewer") return "Viewer";
+  return "Member";
+}
+
+function canRoleSave(role?: string, isOwner?: boolean) {
+  return role === "editor" || role === "owner" || Boolean(isOwner);
 }
 
 export function FirebaseSharedRosterPublishCard({ activeRoster, isEmptyRoster, onOpenRoster, onRosterSaved, onRefreshActiveRoster }: Props) {
@@ -172,7 +186,7 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, isEmptyRoster, o
       onRosterSaved?.(saved);
       const rosters = await listFirebaseSharedRosters();
       setSharedRosters(rosters);
-      setNotice({ tone: "success", text: `Saved ${saved.name} to shared roster version ${saved.version}.` });
+      setNotice({ tone: "success", text: `Saved ${saved.name} to shared roster version ${saved.version}. Other members can use Get latest to see this update.` });
     } catch (error) {
       setNotice({ tone: "error", text: friendlyFirestoreError(error) });
     } finally {
@@ -207,8 +221,10 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, isEmptyRoster, o
           : "Ready to create an online shared roster.";
 
   const activeFirebaseSource = activeRoster?.cloudSource?.provider === "firebase" ? activeRoster.cloudSource : null;
-  const canSaveActiveRoster = Boolean(user && activeRoster && activeFirebaseSource?.firebaseRosterId && !busy);
-  const canRefreshActiveRoster = canSaveActiveRoster;
+  const activeFirebaseRole = activeFirebaseSource?.firebaseRole || (activeFirebaseSource?.firebaseOwnerUid === user?.uid ? "owner" : activeFirebaseSource?.firebaseRosterId ? "editor" : undefined);
+  const activeCanSave = canRoleSave(activeFirebaseRole, activeFirebaseSource?.firebaseOwnerUid === user?.uid);
+  const canSaveActiveRoster = Boolean(user && activeRoster && activeFirebaseSource?.firebaseRosterId && activeCanSave && !busy);
+  const canRefreshActiveRoster = Boolean(user && activeRoster && activeFirebaseSource?.firebaseRosterId && !busy);
   const canInviteFromActiveRoster = Boolean(
     user &&
     activeRoster &&
@@ -267,7 +283,7 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, isEmptyRoster, o
           disabled={!canSaveActiveRoster}
         >
           <Save className="h-4 w-4" />
-          {busy === "save" ? "Saving…" : "Save changes to shared roster"}
+          {busy === "save" ? "Saving…" : activeCanSave ? "Save changes to shared roster" : "View-only — cannot save"}
         </Button>
 
         <Button
@@ -288,7 +304,7 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, isEmptyRoster, o
         </div>
         <div className="mt-1 text-[11px] font-bold leading-snug text-slate-600">
           {activeFirebaseSource?.firebaseRosterId
-            ? `Version ${activeFirebaseSource.firebaseVersion || 1} · ${activeFirebaseSource.firebaseOwnerUid === user?.uid ? "Owner" : "Editor/member"}. Save checks the remote version before overwriting.`
+            ? `Version ${activeFirebaseSource.firebaseVersion || 1} · ${labelRole(activeFirebaseRole, activeFirebaseSource.firebaseOwnerUid === user?.uid)}${activeFirebaseSource.firebaseLastSavedByEmail ? ` · Last saved by ${activeFirebaseSource.firebaseLastSavedByEmail}` : ""}. Save checks the remote version before overwriting.`
             : "Create or open a shared roster before using save, refresh, or invites."}
         </div>
       </div>
@@ -413,11 +429,11 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, isEmptyRoster, o
                   <div className="flex items-center gap-1.5 text-xs font-black text-[#102A43]">
                     <Share2 className="h-3.5 w-3.5 text-violet-600" />
                     <span className="min-w-0 flex-1 truncate">{roster.name}</span>
-                    <span className="shrink-0 rounded-full bg-violet-50 px-2 py-0.5 text-[10px] text-violet-700">{roster.ownerUid === user?.uid ? "owner" : "editor"}</span>
+                    <span className="shrink-0 rounded-full bg-violet-50 px-2 py-0.5 text-[10px] text-violet-700">{labelRole(roster.currentUserRole, roster.ownerUid === user?.uid).toLowerCase()}</span>
                     <span className="shrink-0 rounded-full bg-slate-50 px-2 py-0.5 text-[10px] text-slate-600">v{roster.version}</span>
                   </div>
                   <div className="mt-0.5 text-[10px] font-semibold text-slate-500">
-                    {roster.playerCount} player{roster.playerCount === 1 ? "" : "s"} · {formatWhen(roster.updatedAt)}
+                    {roster.playerCount} player{roster.playerCount === 1 ? "" : "s"} · {formatWhen(roster.updatedAt)}{roster.lastSavedByEmail ? ` · saved by ${roster.lastSavedByEmail}` : ""}
                   </div>
                 </div>
                 <Button

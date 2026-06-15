@@ -27,8 +27,8 @@ type Props = {
   rosters?: RoomRoster[];
   isEmptyRoster: boolean;
   onOpenRoster?: (roster: RoomRoster, sourceName: string, summary: FirebaseSharedRosterSummary) => void;
-  onRosterSaved?: (summary: FirebaseSharedRosterSummary) => void;
-  onRefreshActiveRoster?: (roster: RoomRoster, sourceName: string, summary: FirebaseSharedRosterSummary) => void;
+  onRosterSaved?: (summary: FirebaseSharedRosterSummary, localRosterId?: string) => void;
+  onRefreshActiveRoster?: (roster: RoomRoster, sourceName: string, summary: FirebaseSharedRosterSummary, localRosterId?: string) => void;
 };
 
 function friendlyFirestoreError(error: unknown) {
@@ -104,8 +104,42 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, rosters = [], is
   const activeFirebaseSource = activeRoster?.cloudSource?.provider === "firebase" ? activeRoster.cloudSource : null;
   const activeFirebaseRole = activeFirebaseSource?.firebaseRole || (activeFirebaseSource?.firebaseOwnerUid === user?.uid ? "owner" : activeFirebaseSource?.firebaseRosterId ? "editor" : undefined);
   const activeCanSave = canRoleSave(activeFirebaseRole, activeFirebaseSource?.firebaseOwnerUid === user?.uid);
-  const canSaveActiveRoster = Boolean(user && activeRoster && activeFirebaseSource?.firebaseRosterId && activeCanSave && !busy);
-  const canRefreshActiveRoster = Boolean(user && activeRoster && activeFirebaseSource?.firebaseRosterId && !busy);
+  const selectedGroupLinkedRosters = useMemo(() => rosters.filter((roster) => {
+    const source = roster.cloudSource;
+    return source?.provider === "firebase" && Boolean(source.firebaseRosterId) && source.firebaseGroupId === selectedGroupId;
+  }), [rosters, selectedGroupId]);
+  const selectedGroupLinkedRosterIds = useMemo(() => new Set(selectedGroupLinkedRosters.map((roster) => roster.cloudSource?.provider === "firebase" ? roster.cloudSource.firebaseRosterId : undefined).filter(Boolean)), [selectedGroupLinkedRosters]);
+  const sharedRosterById = useMemo(() => new Map(sharedRosters.map((roster) => [roster.id, roster])), [sharedRosters]);
+  const localRosterHasUnsavedFirebaseChanges = (roster: RoomRoster) => {
+    const source = roster.cloudSource;
+    if (source?.provider !== "firebase") return false;
+    const localTime = Date.parse(roster.updatedAt || roster.createdAt || "");
+    const syncedTime = Date.parse(source.lastSyncedAt || "");
+    if (!Number.isFinite(localTime)) return false;
+    if (!Number.isFinite(syncedTime)) return true;
+    return localTime > syncedTime + 1000;
+  };
+  const selectedGroupChangedLinkedRosters = useMemo(
+    () => selectedGroupLinkedRosters.filter(localRosterHasUnsavedFirebaseChanges),
+    [selectedGroupLinkedRosters],
+  );
+  const selectedGroupRemoteUpdatedLinkedRosters = useMemo(
+    () => selectedGroupLinkedRosters.filter((roster) => {
+      const source = roster.cloudSource;
+      if (source?.provider !== "firebase" || !source.firebaseRosterId) return false;
+      const remoteSummary = sharedRosterById.get(source.firebaseRosterId);
+      const localVersion = typeof source.firebaseVersion === "number" ? source.firebaseVersion : 0;
+      return Boolean(remoteSummary && remoteSummary.version > localVersion);
+    }),
+    [selectedGroupLinkedRosters, sharedRosterById],
+  );
+  const selectedGroupCanSave = selectedGroupChangedLinkedRosters.some((roster) => {
+    const source = roster.cloudSource;
+    const role = source?.provider === "firebase" ? source.firebaseRole || (source.firebaseOwnerUid === user?.uid ? "owner" : undefined) : undefined;
+    return canRoleSave(role, source?.provider === "firebase" && source.firebaseOwnerUid === user?.uid);
+  });
+  const canSaveActiveRoster = Boolean(user && selectedGroup && selectedGroupChangedLinkedRosters.length && selectedGroupCanSave && !busy);
+  const canRefreshActiveRoster = Boolean(user && selectedGroup && selectedGroupRemoteUpdatedLinkedRosters.length && !busy);
   const collaboratorCount = selectedGroup ? selectedGroup.memberCount + (selectedGroup.pendingInviteEmails?.length || 0) : 0;
 
   const refreshSharedData = async (nextUser = user) => {
@@ -268,17 +302,26 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, rosters = [], is
   };
 
   const handleRefreshActiveRoster = async () => {
-    const rosterId = activeRoster?.cloudSource?.provider === "firebase" ? activeRoster.cloudSource.firebaseRosterId : undefined;
-    if (!user || !rosterId || busy) return;
+    if (!user || !selectedGroup || busy) return;
+    if (!selectedGroupRemoteUpdatedLinkedRosters.length) {
+      setNotice({ tone: "info", text: "Already up to date." });
+      return;
+    }
     setBusy("reload");
     setNotice(null);
     try {
-      const snapshot = await readFirebaseSharedRoster(rosterId);
-      onRefreshActiveRoster?.(snapshot.roster, snapshot.name, snapshot);
+      let refreshedCount = 0;
+      for (const localRoster of selectedGroupRemoteUpdatedLinkedRosters) {
+        const rosterId = localRoster.cloudSource?.provider === "firebase" ? localRoster.cloudSource.firebaseRosterId : undefined;
+        if (!rosterId) continue;
+        const snapshot = await readFirebaseSharedRoster(rosterId);
+        onRefreshActiveRoster?.(snapshot.roster, snapshot.name, snapshot, localRoster.id);
+        refreshedCount += 1;
+      }
       const [groups, rosters] = await Promise.all([listFirebaseSharedGroups(), listFirebaseSharedRosters()]);
       setSharedGroups(groups);
       setSharedRosters(rosters);
-      if (snapshot.groupId) setSelectedGroupId(snapshot.groupId);
+      setNotice({ tone: "success", text: refreshedCount === 1 ? "Roster updated." : `${refreshedCount} rosters updated.` });
     } catch (error) {
       setNotice({ tone: "error", text: friendlyFirestoreError(error) });
     } finally {
@@ -287,16 +330,32 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, rosters = [], is
   };
 
   const handleSaveActiveRoster = async () => {
-    if (!user || !activeRoster || busy) return;
+    if (!user || !selectedGroup || busy) return;
+    const changedEditableRosters = selectedGroupChangedLinkedRosters.filter((localRoster) => {
+      const source = localRoster.cloudSource;
+      const role = source?.provider === "firebase" ? source.firebaseRole || (source.firebaseOwnerUid === user.uid ? "owner" : undefined) : undefined;
+      return canRoleSave(role, source?.provider === "firebase" && source.firebaseOwnerUid === user.uid);
+    });
+    if (!changedEditableRosters.length) {
+      setNotice({ tone: "info", text: "No changes to save." });
+      return;
+    }
     setBusy("save");
     setNotice(null);
     try {
-      const saved = await saveFirebaseSharedRoster(activeRoster);
-      onRosterSaved?.(saved);
+      let savedCount = 0;
+      let latestGroupId = selectedGroup.id;
+      for (const localRoster of changedEditableRosters) {
+        const saved = await saveFirebaseSharedRoster(localRoster);
+        onRosterSaved?.(saved, localRoster.id);
+        savedCount += 1;
+        if (saved.groupId) latestGroupId = saved.groupId;
+      }
       const [groups, rosters] = await Promise.all([listFirebaseSharedGroups(), listFirebaseSharedRosters()]);
       setSharedGroups(groups);
       setSharedRosters(rosters);
-      if (saved.groupId) setSelectedGroupId(saved.groupId);
+      setSelectedGroupId(latestGroupId);
+      setNotice({ tone: "success", text: savedCount === 1 ? "Roster saved." : `${savedCount} rosters saved.` });
     } catch (error) {
       setNotice({ tone: "error", text: friendlyFirestoreError(error) });
     } finally {
@@ -331,14 +390,6 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, rosters = [], is
         </div>
       </div>
 
-      <div className="flex items-center justify-between gap-2 px-1 text-xs font-bold text-slate-600">
-        <span className="min-w-0 truncate">{!authReady ? "Checking sign-in…" : user ? user.email : "Not signed in"}</span>
-        <Button type="button" variant="ghost" className="h-7 rounded-xl px-2 text-[10px] font-black text-emerald-700" onClick={() => refreshSharedData()} disabled={!user || Boolean(busy)}>
-          <RefreshCw className={`mr-1 h-3 w-3 ${busy === "refresh" ? "animate-spin" : ""}`} />
-          Sync
-        </Button>
-      </div>
-
       {incomingInvites.length > 0 && (
         <div className="grid gap-1.5 rounded-2xl border border-emerald-100 bg-emerald-50/70 p-2">
           {incomingInvites.slice(0, 3).map((invite) => (
@@ -364,7 +415,7 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, rosters = [], is
         ) : (
           <div className="grid gap-1">
             {visibleRosters.slice(0, 8).map((roster) => (
-              <button key={roster.id} type="button" onClick={() => handleOpenRoster(roster.id)} disabled={Boolean(busy)} className="flex items-center justify-between gap-3 rounded-2xl bg-slate-50 px-3 py-2 text-left active:scale-[0.99]">
+              <button key={roster.id} type="button" onClick={() => handleOpenRoster(roster.id)} disabled={Boolean(busy)} className={`flex items-center justify-between gap-3 rounded-2xl px-3 py-2 text-left active:scale-[0.99] ${selectedGroupLinkedRosterIds.has(roster.id) ? "bg-emerald-50" : "bg-slate-50"}`}>
                 <span className="min-w-0 truncate text-xs font-black text-[#102A43]">{roster.name}</span>
                 <span className="shrink-0 truncate text-[10px] font-semibold text-slate-500">saved by {shortName(roster.lastSavedByEmail || roster.ownerEmail)}</span>
               </button>

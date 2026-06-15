@@ -935,32 +935,35 @@ function App() {
     });
   };
 
-  const markActiveFirebaseRosterSaved = (summary: FirebaseSharedRosterSummary) => {
-    setRosterState((current) => ({
-      ...current,
-      rosters: current.rosters.map((roster) =>
-        roster.id === current.activeRosterId
-          ? normalizeRoster({
-              ...roster,
-              cloudSource: {
-                provider: "firebase",
-                firebaseRosterId: summary.id,
-                firebaseGroupId: summary.groupId,
-                firebaseGroupName: summary.groupName,
-                firebaseVersion: summary.version,
-                firebaseOwnerUid: summary.ownerUid,
-                firebaseOwnerEmail: summary.ownerEmail,
-                firebaseRole: summary.currentUserRole,
-                firebaseLastSavedByEmail: summary.lastSavedByEmail,
-                lastSyncedAt: summary.updatedAt || new Date().toISOString(),
-                lastRemoteModifiedAt: summary.updatedAt,
-                syncMode: "manual",
-              },
-              updatedAt: summary.updatedAt || new Date().toISOString(),
-            })
-          : roster,
-      ),
-    }));
+  const markActiveFirebaseRosterSaved = (summary: FirebaseSharedRosterSummary, localRosterId?: string) => {
+    setRosterState((current) => {
+      const targetRosterId = localRosterId || current.activeRosterId;
+      return {
+        ...current,
+        rosters: current.rosters.map((roster) =>
+          roster.id === targetRosterId
+            ? normalizeRoster({
+                ...roster,
+                cloudSource: {
+                  provider: "firebase",
+                  firebaseRosterId: summary.id,
+                  firebaseGroupId: summary.groupId,
+                  firebaseGroupName: summary.groupName,
+                  firebaseVersion: summary.version,
+                  firebaseOwnerUid: summary.ownerUid,
+                  firebaseOwnerEmail: summary.ownerEmail,
+                  firebaseRole: summary.currentUserRole,
+                  firebaseLastSavedByEmail: summary.lastSavedByEmail,
+                  lastSyncedAt: summary.updatedAt || new Date().toISOString(),
+                  lastRemoteModifiedAt: summary.updatedAt,
+                  syncMode: "manual",
+                },
+                updatedAt: summary.updatedAt || new Date().toISOString(),
+              })
+            : roster,
+        ),
+      };
+    });
     setRosterToolsNotice({
       tone: "success",
       title: "Firebase roster saved",
@@ -970,54 +973,57 @@ function App() {
 
 
 
-  const refreshActiveFirebaseRosterFromRemote = (remoteRoster: RoomRoster, sourceName: string, summary: FirebaseSharedRosterSummary) => {
-    setRosterState((current) => ({
-      ...current,
-      rosters: current.rosters.map((roster) => {
-        if (roster.id !== current.activeRosterId) return roster;
+  const refreshActiveFirebaseRosterFromRemote = (remoteRoster: RoomRoster, sourceName: string, summary: FirebaseSharedRosterSummary, localRosterId?: string) => {
+    setRosterState((current) => {
+      const targetRosterId = localRosterId || current.activeRosterId;
+      return {
+        ...current,
+        rosters: current.rosters.map((roster) => {
+          if (roster.id !== targetRosterId) return roster;
 
-        const photoById = new Map(roster.players.filter((player) => player.profilePhoto).map((player) => [player.id, player.profilePhoto]));
-        const photoByName = new Map(
-          roster.players
-            .filter((player) => player.profilePhoto)
-            .map((player) => [player.name.trim().toLowerCase(), player.profilePhoto]),
-        );
+          const photoById = new Map(roster.players.filter((player) => player.profilePhoto).map((player) => [player.id, player.profilePhoto]));
+          const photoByName = new Map(
+            roster.players
+              .filter((player) => player.profilePhoto)
+              .map((player) => [player.name.trim().toLowerCase(), player.profilePhoto]),
+          );
 
-        const refreshedPlayers = remoteRoster.players.map((player, index) =>
-          normalizePlayer({
-            ...player,
-            profilePhoto: photoById.get(player.id) || photoByName.get(player.name.trim().toLowerCase()) || player.profilePhoto,
-          }, index),
-        );
+          const refreshedPlayers = remoteRoster.players.map((player, index) =>
+            normalizePlayer({
+              ...player,
+              profilePhoto: photoById.get(player.id) || photoByName.get(player.name.trim().toLowerCase()) || player.profilePhoto,
+            }, index),
+          );
 
-        return normalizeRoster({
-          ...roster,
-          name: sourceName || remoteRoster.name || roster.name,
-          players: refreshedPlayers,
-          themeColor: remoteRoster.themeColor || roster.themeColor,
-          logo: roster.logo || remoteRoster.logo,
-          cloudSource: {
-            provider: "firebase",
-            firebaseRosterId: summary.id,
-            firebaseGroupId: summary.groupId,
-            firebaseGroupName: summary.groupName,
-            firebaseVersion: summary.version,
-            firebaseOwnerUid: summary.ownerUid,
-            firebaseOwnerEmail: summary.ownerEmail,
-            firebaseRole: summary.currentUserRole,
-            firebaseLastSavedByEmail: summary.lastSavedByEmail,
-            lastSyncedAt: summary.updatedAt || new Date().toISOString(),
-            lastRemoteModifiedAt: summary.updatedAt,
-            syncMode: "manual",
-          },
-          updatedAt: summary.updatedAt || new Date().toISOString(),
-        });
-      }),
-    }));
+          return normalizeRoster({
+            ...roster,
+            name: sourceName || remoteRoster.name || roster.name,
+            players: refreshedPlayers,
+            themeColor: remoteRoster.themeColor || roster.themeColor,
+            logo: roster.logo || remoteRoster.logo,
+            cloudSource: {
+              provider: "firebase",
+              firebaseRosterId: summary.id,
+              firebaseGroupId: summary.groupId,
+              firebaseGroupName: summary.groupName,
+              firebaseVersion: summary.version,
+              firebaseOwnerUid: summary.ownerUid,
+              firebaseOwnerEmail: summary.ownerEmail,
+              firebaseRole: summary.currentUserRole,
+              firebaseLastSavedByEmail: summary.lastSavedByEmail,
+              lastSyncedAt: summary.updatedAt || new Date().toISOString(),
+              lastRemoteModifiedAt: summary.updatedAt,
+              syncMode: "manual",
+            },
+            updatedAt: summary.updatedAt || new Date().toISOString(),
+          });
+        }),
+      };
+    });
     setRosterToolsNotice({
       tone: "success",
       title: "Firebase roster refreshed",
-      message: `${summary.groupName ? `${summary.groupName} · ` : ""}${sourceName || remoteRoster.name || "Shared roster"} was refreshed from Firebase version ${summary.version}. Local player photos were preserved where possible.`,
+      message: `${summary.groupName ? `${summary.groupName} · ` : ""}${sourceName || remoteRoster.name || "Shared roster"} was refreshed from Firebase version ${summary.version}.`,
     });
   };
 

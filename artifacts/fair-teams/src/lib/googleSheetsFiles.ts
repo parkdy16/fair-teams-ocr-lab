@@ -115,6 +115,25 @@ async function createEmptyGoogleSpreadsheet(accessToken: string, title: string):
   return result as GoogleSheetRosterFile;
 }
 
+async function renameGoogleSheetRosterFile(accessToken: string, spreadsheetId: string, title: string): Promise<void> {
+  const response = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(spreadsheetId)}?supportsAllDrives=true`,
+    {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json; charset=UTF-8",
+      },
+      body: JSON.stringify({ name: title }),
+    },
+  );
+
+  if (!response.ok) {
+    const message = await readGoogleApiError(response, "Google Drive could not rename this shared roster file.");
+    console.warn(message);
+  }
+}
+
 async function getSpreadsheetSummary(accessToken: string, spreadsheetId: string): Promise<GoogleSpreadsheetSummary> {
   const params = new URLSearchParams({
     fields: "spreadsheetId,properties(title),sheets(properties(sheetId,title))",
@@ -293,6 +312,7 @@ export async function updateGoogleSheetRoster(
   const { metadataValues, playerValues } = rosterToGoogleSheetValues(roster);
   await clearGoogleSheetValues(accessToken, spreadsheetId);
   await writeGoogleSheetValues(accessToken, spreadsheetId, metadataValues, playerValues);
+  await renameGoogleSheetRosterFile(accessToken, spreadsheetId, googleSheetRosterTitle(roster));
   return getGoogleDriveFileMetadata(accessToken, spreadsheetId);
 }
 
@@ -317,7 +337,7 @@ export async function listGoogleSheetRosterFiles(accessToken: string): Promise<G
   const query = [
     "trashed = false",
     `mimeType = '${FAIR_TEAMS_GOOGLE_SHEET_MIME_TYPE}'`,
-    "(name contains 'Fair Teams Shared Roster' or appProperties has { key='fairTeamsSharedRoster' and value='true' })",
+    "(name contains 'Fair Teams Shared Roster' or name contains ' - Fair Teams' or appProperties has { key='fairTeamsSharedRoster' and value='true' })",
   ].join(" and ");
 
   const params = new URLSearchParams({

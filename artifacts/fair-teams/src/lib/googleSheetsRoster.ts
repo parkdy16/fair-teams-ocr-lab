@@ -216,7 +216,7 @@ function sheetRowToPlayer(row: GoogleSheetCellValue[], headerIndex: Record<strin
 
 export function googleSheetRosterTitle(roster: RoomRoster) {
   const name = cleanRosterName(roster.name, "Shared roster");
-  return `Fair Teams Shared Roster - ${name}`;
+  return `${name} - Fair Teams`;
 }
 
 export function rosterToGoogleSheetValues(roster: RoomRoster): GoogleSheetRosterValues {

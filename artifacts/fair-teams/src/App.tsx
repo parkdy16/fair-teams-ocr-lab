@@ -521,18 +521,20 @@ function App() {
 
   const getGoogleSheetOwner = (file?: GoogleSheetRosterFile | null) => {
     if (!file) return null;
-    return (
-      file.owners?.find((owner) => owner.me) ||
-      file.owners?.[0] ||
-      file.sharingUser ||
-      null
-    );
+    return file.owners?.[0] || file.sharingUser || null;
+  };
+
+  const isGoogleSheetOwnedByMe = (file?: GoogleSheetRosterFile | null) => {
+    if (!file) return false;
+    if (file.ownedByMe === true) return true;
+    const owner = getGoogleSheetOwner(file);
+    return owner?.me === true;
   };
 
   const getGoogleSheetOwnerLabel = (file?: GoogleSheetRosterFile | null) => {
     if (!file) return "Owner unknown";
     const owner = getGoogleSheetOwner(file);
-    if (file.ownedByMe !== false || owner?.me) return "Owner: You";
+    if (isGoogleSheetOwnedByMe(file)) return "Owner: You";
     const displayName = firstDisplayName(owner?.displayName);
     if (displayName) return `Owner: ${displayName}`;
     const maskedEmail = maskEmail(owner?.emailAddress);
@@ -541,6 +543,7 @@ function App() {
   };
 
   const getGoogleSheetOwnerEmail = (file?: GoogleSheetRosterFile | null) => {
+    if (isGoogleSheetOwnedByMe(file)) return "";
     const owner = getGoogleSheetOwner(file);
     return owner?.emailAddress?.trim() || "";
   };
@@ -1371,7 +1374,7 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
   };
 
   const startGoogleSheetDeleteConfirm = (file: GoogleSheetRosterFile) => {
-    if (file.ownedByMe === false) {
+    if (!isGoogleSheetOwnedByMe(file)) {
       showRosterToolsNotice(
         "Only the owner can delete it",
         "This shared roster belongs to another Google account. You can open it or remove your local copy, but only the owner can delete the shared Google Sheet.",
@@ -2680,7 +2683,7 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
                           {file.name}
                         </span>
                         <span className="mt-0.5 block truncate text-[11px] font-bold text-emerald-700/75">
-                          {file.ownedByMe === false ? "Shared with me" : "My shared roster"} · {getGoogleSheetOwnerLabel(file)} · {formatDriveModifiedTime(file.modifiedTime)}
+                          {isGoogleSheetOwnedByMe(file) ? "My shared roster" : "Shared with me"} · {getGoogleSheetOwnerLabel(file)} · {formatDriveModifiedTime(file.modifiedTime)}
                         </span>
                       </span>
                       <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-lg font-black leading-none text-emerald-400 shadow-sm">
@@ -2731,7 +2734,7 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
                   {googleSheetActionFile.name}
                 </h2>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  {getGoogleSheetOwnerLabel(googleSheetActionFile)} · {googleSheetActionFile.ownedByMe === false ? "Shared with this Google account" : "Owned by this Google account"} · {formatDriveModifiedTime(googleSheetActionFile.modifiedTime)}
+                  {getGoogleSheetOwnerLabel(googleSheetActionFile)} · {isGoogleSheetOwnedByMe(googleSheetActionFile) ? "Owned by this Google account" : "Shared with this Google account"} · {formatDriveModifiedTime(googleSheetActionFile.modifiedTime)}
                 </p>
               </div>
               <Button
@@ -2762,7 +2765,7 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
               <div className="mt-1 text-xs font-black text-[#102A43]">
                 {getGoogleSheetOwnerLabel(googleSheetActionFile).replace("Owner: ", "")}
               </div>
-              {googleSheetActionFile.ownedByMe === false && getGoogleSheetOwnerEmail(googleSheetActionFile) && (
+              {!isGoogleSheetOwnedByMe(googleSheetActionFile) && getGoogleSheetOwnerEmail(googleSheetActionFile) && (
                 <div className="mt-2">
                   {googleSheetOwnerEmailVisible ? (
                     <div className="rounded-2xl bg-white px-3 py-2">
@@ -2799,7 +2802,7 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
               >
                 {googleSheetOpening ? "Opening..." : "Recover / Open this roster"}
               </Button>
-              {googleSheetActionFile.ownedByMe !== false && (
+              {isGoogleSheetOwnedByMe(googleSheetActionFile) && (
                 <div className="rounded-2xl border border-red-100 bg-red-50/70 p-3">
                   <div className="text-[10px] font-black uppercase tracking-wide text-red-700">
                     Danger zone

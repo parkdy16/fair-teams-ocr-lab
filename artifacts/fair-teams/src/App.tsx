@@ -488,6 +488,23 @@ function App() {
   const [fileImportMode, setFileImportMode] = useState<"shared" | "backup">(
     "shared",
   );
+  const rosterToolsActivePanel = rosterLocalBackupToolsOpen
+    ? "local"
+    : rosterCloudBackupToolsOpen
+      ? "cloud"
+      : rosterSharedToolsOpen
+        ? "shared"
+        : null;
+  const openRosterToolsPanel = (panel: "local" | "cloud" | "shared") => {
+    setRosterLocalBackupToolsOpen(panel === "local");
+    setRosterCloudBackupToolsOpen(panel === "cloud");
+    setRosterSharedToolsOpen(panel === "shared");
+  };
+  const closeRosterToolsPanel = () => {
+    setRosterLocalBackupToolsOpen(false);
+    setRosterCloudBackupToolsOpen(false);
+    setRosterSharedToolsOpen(false);
+  };
 
   const showRosterToolsNotice = (title: string, message: string, tone: RosterToolsNotice["tone"] = "info") => {
     setRosterToolsNotice({ title, message, tone });
@@ -2348,7 +2365,7 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
                 )}
               </button>
 
-              <div className="rounded-2xl border border-slate-100 bg-white p-3">
+              <div className={`rounded-2xl border border-slate-100 bg-white p-3 ${rosterToolsActivePanel ? "hidden" : ""}`}>
                 <div className="mb-2 text-[10px] font-black uppercase tracking-wide text-slate-400">
                   Create roster
                 </div>
@@ -2377,11 +2394,11 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
                 </div>
               </div>
 
-              <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+              <div className={`overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm ${rosterToolsActivePanel && rosterToolsActivePanel !== "local" ? "hidden" : ""}`}>
                 <button
                   type="button"
                   className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left transition active:scale-[0.99]"
-                  onClick={() => setRosterLocalBackupToolsOpen((open) => !open)}
+                  onClick={() => rosterToolsActivePanel === "local" ? closeRosterToolsPanel() : openRosterToolsPanel("local")}
                 >
                   <span className="flex min-w-0 items-center gap-2.5">
                     <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-slate-600">
@@ -2403,6 +2420,13 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
 
                 {rosterLocalBackupToolsOpen && (
                   <div className="grid gap-2 border-t border-slate-100 p-3">
+                    <button
+                      type="button"
+                      onClick={closeRosterToolsPanel}
+                      className="mb-1 inline-flex h-8 items-center text-[11px] font-black uppercase tracking-wide text-slate-400"
+                    >
+                      ← Back to tools
+                    </button>
                     <Button
                       type="button"
                       variant="outline"
@@ -2447,11 +2471,11 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
                 )}
               </div>
 
-              <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+              <div className={`overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm ${rosterToolsActivePanel && rosterToolsActivePanel !== "cloud" ? "hidden" : ""}`}>
                 <button
                   type="button"
                   className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left transition active:scale-[0.99]"
-                  onClick={() => setRosterCloudBackupToolsOpen((open) => !open)}
+                  onClick={() => rosterToolsActivePanel === "cloud" ? closeRosterToolsPanel() : openRosterToolsPanel("cloud")}
                 >
                   <span className="flex min-w-0 items-center gap-2.5">
                     <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
@@ -2466,13 +2490,20 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
                       </span>
                     </span>
                   </span>
-                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black ${googleDriveConnected ? "bg-blue-600 text-white" : "bg-slate-50 text-slate-500"}`}>
-                    {googleDriveConnected ? "Connected" : rosterCloudBackupToolsOpen ? "Open" : "Off"}
+                  <span className="shrink-0 rounded-full bg-slate-50 px-2.5 py-1 text-lg font-black leading-none text-slate-400">
+                    {rosterCloudBackupToolsOpen ? "−" : "›"}
                   </span>
                 </button>
 
                 {rosterCloudBackupToolsOpen && (
                   <div className="grid gap-3 border-t border-slate-100 p-3">
+                    <button
+                      type="button"
+                      onClick={closeRosterToolsPanel}
+                      className="mb-1 inline-flex h-8 items-center text-[11px] font-black uppercase tracking-wide text-slate-400"
+                    >
+                      ← Back to tools
+                    </button>
                     <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-slate-50/70 p-3">
                       <div className="min-w-0">
                         <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
@@ -2502,7 +2533,7 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
                       </div>
                       <div className="mt-0.5 text-[11px] font-semibold text-slate-500">
                         {currentDriveBackup
-                          ? `Backup has ${formatRosterSummary(currentDriveBackup.rosterCount !== undefined && currentDriveBackup.playerCount !== undefined ? { rosterCount: currentDriveBackup.rosterCount, playerCount: currentDriveBackup.playerCount } : null)}`
+                          ? `Backup has ${formatBackupSummary(currentDriveBackup.rosterCount !== undefined && currentDriveBackup.playerCount !== undefined ? { rosterCount: currentDriveBackup.rosterCount, playerCount: currentDriveBackup.playerCount } : null)}`
                           : "Optional cloud safety copy."}
                       </div>
                     </div>
@@ -2510,7 +2541,7 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
                     <Button
                       type="button"
                       className="h-12 justify-start rounded-2xl gap-3 bg-blue-600 text-white shadow-sm hover:bg-blue-700"
-                      onClick={createOrUpdateDriveBackup}
+                      onClick={saveAllRostersToGoogleDrive}
                       disabled={isEmptyStarterRoster || !googleDriveConnected || googleDriveSaving || googleDriveUpdating}
                       title={currentDriveBackup ? "Update the active Drive backup" : "Create a new Drive backup"}
                     >
@@ -2525,7 +2556,7 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
                         type="button"
                         variant="outline"
                         className="h-11 justify-start rounded-2xl gap-2 border-blue-100 bg-white/90 px-3"
-                        onClick={openGoogleDriveBackupList}
+                        onClick={openGoogleDriveBackup}
                         disabled={!googleDriveConnected || googleDriveOpening}
                       >
                         <CloudDownload className="h-4 w-4" />
@@ -2577,11 +2608,11 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
                 )}
               </div>
 
-              <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+              <div className={`overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm ${rosterToolsActivePanel && rosterToolsActivePanel !== "shared" ? "hidden" : ""}`}>
                 <button
                   type="button"
                   className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left transition active:scale-[0.99]"
-                  onClick={() => setRosterSharedToolsOpen((open) => !open)}
+                  onClick={() => rosterToolsActivePanel === "shared" ? closeRosterToolsPanel() : openRosterToolsPanel("shared")}
                 >
                   <span className="flex min-w-0 items-center gap-2.5">
                     <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
@@ -2603,6 +2634,13 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
 
                 {rosterSharedToolsOpen && (
                   <div className="grid gap-3 border-t border-slate-100 p-3">
+                    <button
+                      type="button"
+                      onClick={closeRosterToolsPanel}
+                      className="mb-1 inline-flex h-8 items-center text-[11px] font-black uppercase tracking-wide text-slate-400"
+                    >
+                      ← Back to tools
+                    </button>
                     <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-slate-50/70 p-3">
                       <div className="min-w-0">
                         <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
@@ -2771,7 +2809,7 @@ The Google Sheet will not be deleted. This device will keep a local copy of the 
                 )}
               </div>
 
-              {!isEmptyStarterRoster && !activeRosterIsShared && (
+              {!rosterToolsActivePanel && !isEmptyStarterRoster && !activeRosterIsShared && (
                 <div className="border-t border-slate-100 pt-3">
                   <Button
                     type="button"

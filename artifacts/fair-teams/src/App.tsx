@@ -2168,7 +2168,10 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   variant="secondary"
                   size="icon"
                   className="h-9 w-9 rounded-xl border border-slate-200 bg-white/85 text-[#102A43] shadow-none"
-                  onClick={() => setRosterFilesOpen(true)}
+                  onClick={() => {
+                    closeRosterToolsPanel();
+                    setRosterFilesOpen(true);
+                  }}
                   title="Roster tools"
                   aria-label="Roster tools"
                 >
@@ -3661,19 +3664,19 @@ They will no longer be able to open or edit this shared roster unless it is shar
             <div className="mt-4 space-y-3">
               <div className="rounded-2xl border border-slate-100 bg-slate-50/80 p-3">
                 <div className="text-xs font-black text-[#102A43]">
-                  Backup and restore
+                  Backup and device transfer
                 </div>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  Cloud Backup saves roster text data to Google Drive. Use it to restore rosters or move between devices.
+                  Cloud Backup saves all roster text data to Google Drive, so you can recover your rosters if you lose or change your device.
                 </p>
               </div>
 
-              <div className="rounded-2xl border border-amber-100 bg-amber-50/80 p-3">
-                <div className="text-xs font-black text-amber-800">
-                  Not live sync
+              <div className="rounded-2xl border border-blue-100 bg-blue-50/80 p-3">
+                <div className="text-xs font-black text-blue-800">
+                  Use across devices
                 </div>
-                <p className="mt-1 text-xs font-semibold leading-snug text-amber-800/85">
-                  Only one person should edit the latest roster at a time. If someone changes a copy, they should send the newest backup back.
+                <p className="mt-1 text-xs font-semibold leading-snug text-blue-800/85">
+                  Save a backup on one device, then open that backup on another device signed in with the same Google account. It is manual backup and restore, not automatic live sync.
                 </p>
               </div>
             </div>

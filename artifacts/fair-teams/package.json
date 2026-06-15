@@ -74,6 +74,7 @@
     "zod": "catalog:"
   },
   "dependencies": {
+    "firebase": "^12.14.0",
     "tesseract.js": "^7.0.0"
   }
 }

@@ -28,6 +28,7 @@ import { PlayersTab } from "@/components/PlayersTab";
 import { TodayTab } from "@/components/TodayTab";
 import { TeamsTab } from "@/components/TeamsTab";
 import { FirebaseSharedRosterAuthCard } from "@/components/FirebaseSharedRosterAuthCard";
+import { FirebaseSharedRosterPublishCard } from "@/components/FirebaseSharedRosterPublishCard";
 import { Button } from "@/components/ui/button";
 import fairTeamsLogo from "@/assets/fairteams-logo.png";
 import fairTeamsLogoFloating from "@/assets/fairteams-logo-floating.png";
@@ -2896,6 +2897,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 {rosterSharedToolsOpen && (
                   <div className="grid gap-3 border-t border-slate-100 p-3">
                     <FirebaseSharedRosterAuthCard />
+                    <FirebaseSharedRosterPublishCard activeRoster={activeRoster} isEmptyRoster={isEmptyStarterRoster} />
 
                     <div className="rounded-2xl border border-amber-100 bg-amber-50/70 px-3 py-2">
                       <div className="text-[10px] font-black uppercase tracking-wide text-amber-700">

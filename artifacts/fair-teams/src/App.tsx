@@ -1651,10 +1651,20 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
       return;
     }
 
-    setGoogleSheetOpening(true);
+    // Google Picker is its own overlay. Close Fair Teams overlays first so the
+    // picker is not hidden behind our modal stack and the app does not feel frozen.
+    setGoogleSheetChoices(null);
+    setGoogleSheetActionFile(null);
+    setGoogleSheetShareOpen(false);
+    setRosterToolsNotice(null);
+    setGoogleSheetOpening(false);
+
     try {
+      await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
       const picked = await pickGoogleSheetRosterFile(googleDriveAccessToken);
       if (!picked) return;
+
+      setGoogleSheetOpening(true);
       const file = await getGoogleSheetRosterFileMetadata(googleDriveAccessToken, picked.id);
       setGoogleSheetActionFile(file);
     } catch (error) {

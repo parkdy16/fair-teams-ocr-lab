@@ -29,6 +29,7 @@ declare global {
 
 let pickerScriptPromise: Promise<void> | null = null;
 let pickerApiPromise: Promise<void> | null = null;
+let activePickerInstance: any | null = null;
 
 function getPicker() {
   return (window.google as unknown as { picker?: any } | undefined)?.picker;
@@ -118,22 +119,29 @@ function createDriveBackupDocsView() {
 
 const FAIR_TEAMS_GOOGLE_SHEET_MIME_TYPE = "application/vnd.google-apps.spreadsheet";
 
-function createGoogleSheetRosterDocsView() {
+function createGoogleSheetRosterDocsViews() {
   const picker = getPicker();
   if (!picker) throw new Error("Google Picker is not ready.");
 
-  // Use the broad Docs view with a spreadsheet MIME filter. This behaves more
-  // like Google Drive's normal file-open dialog and is more reliable for files
-  // shared from another Google account than the dedicated SPREADSHEETS view.
-  const view = new picker.DocsView(picker.ViewId.DOCS);
-  view.setIncludeFolders(true);
-  view.setSelectFolderEnabled(false);
-  view.setMimeTypes(FAIR_TEAMS_GOOGLE_SHEET_MIME_TYPE);
-  if (picker.DocsViewMode?.LIST) {
-    view.setMode(picker.DocsViewMode.LIST);
-  }
+  const viewId = picker.ViewId?.SPREADSHEETS || picker.ViewId?.DOCS;
+  const makeSheetView = (ownedByMe?: boolean) => {
+    const view = new picker.DocsView(viewId);
+    view.setIncludeFolders(true);
+    view.setSelectFolderEnabled(false);
+    view.setMimeTypes(FAIR_TEAMS_GOOGLE_SHEET_MIME_TYPE);
+    if (typeof ownedByMe === "boolean" && typeof view.setOwnedByMe === "function") {
+      view.setOwnedByMe(ownedByMe);
+    }
+    if (picker.DocsViewMode?.LIST) {
+      view.setMode(picker.DocsViewMode.LIST);
+    }
+    return view;
+  };
 
-  return view;
+  // Separate views matter. Google Picker treats “Shared with me” differently
+  // from shared drives/folders; setOwnedByMe(false) gives the collaborator a
+  // direct shared-files view instead of relying on Drive API discovery.
+  return [makeSheetView(false), makeSheetView(true)];
 }
 
 export async function warmUpGoogleDrivePicker() {
@@ -235,12 +243,24 @@ export async function pickGoogleSheetRosterFile(accessToken: string): Promise<Go
       if (settled) return;
       settled = true;
       window.clearTimeout(timeoutId);
+      try {
+        activePickerInstance?.setVisible?.(false);
+      } catch {
+        // Ignore picker cleanup errors.
+      }
+      activePickerInstance = null;
       resolve(pickedFile);
     };
     const fail = (error: Error) => {
       if (settled) return;
       settled = true;
       window.clearTimeout(timeoutId);
+      try {
+        activePickerInstance?.setVisible?.(false);
+      } catch {
+        // Ignore picker cleanup errors.
+      }
+      activePickerInstance = null;
       reject(error);
     };
 
@@ -253,14 +273,26 @@ export async function pickGoogleSheetRosterFile(accessToken: string): Promise<Go
     }, 25000);
 
     try {
-      const view = createGoogleSheetRosterDocsView();
+      const views = createGoogleSheetRosterDocsViews();
       const builder = new picker.PickerBuilder();
-      builder.addView(view);
+      views.forEach((view) => builder.addView(view));
+      if (picker.ViewId?.RECENTLY_PICKED) {
+        builder.addView(picker.ViewId.RECENTLY_PICKED);
+      }
       builder.setDeveloperKey(config.apiKey);
       applyPickerAppId(builder, config.appId);
       builder.setOAuthToken(accessToken);
       builder.setTitle("Open shared Fair Teams roster");
       builder.setOrigin(window.location.origin);
+      if (typeof builder.setSelectableMimeTypes === "function") {
+        builder.setSelectableMimeTypes(FAIR_TEAMS_GOOGLE_SHEET_MIME_TYPE);
+      }
+      if (typeof builder.setMaxItems === "function") {
+        builder.setMaxItems(1);
+      }
+      if (typeof builder.setSize === "function") {
+        builder.setSize(1051, 650);
+      }
       builder.setCallback((response: PickerResponse) => {
         if (response.action === picker.Action.CANCEL) {
           settle(null);
@@ -274,13 +306,9 @@ export async function pickGoogleSheetRosterFile(accessToken: string): Promise<Go
           return;
         }
         const name = picked.name || "Fair Teams shared roster";
-        const mimeType = picked.mimeType || "";
+        const mimeType = picked.mimeType || FAIR_TEAMS_GOOGLE_SHEET_MIME_TYPE;
         if (mimeType && mimeType !== FAIR_TEAMS_GOOGLE_SHEET_MIME_TYPE) {
           fail(new Error("Please choose a Fair Teams shared roster Google Sheet."));
-          return;
-        }
-        if (!name.toLowerCase().includes("fair teams")) {
-          fail(new Error("Please choose a Fair Teams shared roster file. The file name should include Fair Teams."));
           return;
         }
         settle({
@@ -289,9 +317,10 @@ export async function pickGoogleSheetRosterFile(accessToken: string): Promise<Go
           mimeType,
         });
       });
-      const pickerInstance = builder.build();
-      pickerInstance.setVisible(true);
+      activePickerInstance = builder.build();
+      activePickerInstance.setVisible(true);
     } catch (error) {
+      activePickerInstance = null;
       fail(error instanceof Error ? error : new Error("Could not open Google Drive picker."));
     }
   });

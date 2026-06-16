@@ -4597,83 +4597,87 @@ export function TodayTab({
         </DialogContent>
       </Dialog>
 
+      {todayRosterReady && (
+        <>
       <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
-        <Input
-          placeholder="Search players…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="h-9 pl-8 pr-8 text-xs"
-          data-testid="today-search"
-        />
-        {search && (
-          <button
-            onClick={() => setSearch("")}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
-        )}
-      </div>
-
-      {filtered.length === 0 ? (
-        <div className="text-center py-8 bg-muted/50 rounded-xl border border-dashed border-border">
-          <p className="text-muted-foreground font-medium text-xs">
-            No players match "{search}"
-          </p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-1.5">
-          {filtered.map((player) => (
-            <label
-              key={player.id}
-              className={`flex min-h-[46px] items-center gap-2 px-2.5 py-2.5 border rounded-xl cursor-pointer transition-all ${player.attending ? "border-primary/35 bg-primary/[0.035] shadow-[0_1px_4px_rgba(15,23,42,0.05)]" : "border-border/80 bg-card"}`}
-              data-testid={`attendance-row-${player.id}`}
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+          <Input
+            placeholder="Search players…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="h-9 pl-8 pr-8 text-xs"
+            data-testid="today-search"
+          />
+          {search && (
+            <button
+              onClick={() => setSearch("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
             >
-              <Checkbox
-                checked={!!player.attending}
-                onCheckedChange={() => togglePlayer(player)}
-                className="w-3.5 h-3.5 rounded-full border border-slate-300 shadow-none shrink-0 data-[state=checked]:bg-primary data-[state=checked]:border-primary data-[state=checked]:text-white"
-                data-testid={`attendance-check-${player.id}`}
-              />
-              <div className="min-w-0 flex-1 overflow-hidden">
-                <div className="flex w-full max-w-full items-center gap-1">
-                  <span
-                    className={`min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap font-semibold text-[13px] leading-tight ${player.attending ? "text-[#102A43]" : "text-foreground"}`}
-                    title={displayName(player)}
-                  >
-                    {displayName(player)}
-                  </span>
-                  <TodayStatusDots player={player} />
-                </div>
-              </div>
-              {player.attending && (
-                <button
-                  type="button"
-                  aria-label={
-                    isNotHereYet(player)
-                      ? "Mark player as arrived"
-                      : "Mark player as not here yet"
-                  }
-                  title={isNotHereYet(player) ? "Mark arrived" : "Not here yet"}
-                  onClick={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    toggleNotHereYet(player);
-                  }}
-                  className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border transition-colors ${
-                    isNotHereYet(player)
-                      ? "border-amber-300 bg-amber-100 text-amber-800"
-                      : "border-slate-200 bg-white/80 text-slate-500"
-                  }`}
-                  data-testid={`today-status-${player.id}`}
-                >
-                  <Clock3 className="h-3.5 w-3.5" aria-hidden="true" />
-                </button>
-              )}
-            </label>
-          ))}
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
+  
+        {filtered.length === 0 ? (
+          <div className="text-center py-8 bg-muted/50 rounded-xl border border-dashed border-border">
+            <p className="text-muted-foreground font-medium text-xs">
+              No players match "{search}"
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-1.5">
+            {filtered.map((player) => (
+              <label
+                key={player.id}
+                className={`flex min-h-[46px] items-center gap-2 px-2.5 py-2.5 border rounded-xl cursor-pointer transition-all ${player.attending ? "border-primary/35 bg-primary/[0.035] shadow-[0_1px_4px_rgba(15,23,42,0.05)]" : "border-border/80 bg-card"}`}
+                data-testid={`attendance-row-${player.id}`}
+              >
+                <Checkbox
+                  checked={!!player.attending}
+                  onCheckedChange={() => togglePlayer(player)}
+                  className="w-3.5 h-3.5 rounded-full border border-slate-300 shadow-none shrink-0 data-[state=checked]:bg-primary data-[state=checked]:border-primary data-[state=checked]:text-white"
+                  data-testid={`attendance-check-${player.id}`}
+                />
+                <div className="min-w-0 flex-1 overflow-hidden">
+                  <div className="flex w-full max-w-full items-center gap-1">
+                    <span
+                      className={`min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap font-semibold text-[13px] leading-tight ${player.attending ? "text-[#102A43]" : "text-foreground"}`}
+                      title={displayName(player)}
+                    >
+                      {displayName(player)}
+                    </span>
+                    <TodayStatusDots player={player} />
+                  </div>
+                </div>
+                {player.attending && (
+                  <button
+                    type="button"
+                    aria-label={
+                      isNotHereYet(player)
+                        ? "Mark player as arrived"
+                        : "Mark player as not here yet"
+                    }
+                    title={isNotHereYet(player) ? "Mark arrived" : "Not here yet"}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      toggleNotHereYet(player);
+                    }}
+                    className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border transition-colors ${
+                      isNotHereYet(player)
+                        ? "border-amber-300 bg-amber-100 text-amber-800"
+                        : "border-slate-200 bg-white/80 text-slate-500"
+                    }`}
+                    data-testid={`today-status-${player.id}`}
+                  >
+                    <Clock3 className="h-3.5 w-3.5" aria-hidden="true" />
+                  </button>
+                )}
+              </label>
+            ))}
+          </div>
+        )}
+        </>
       )}
     </div>
   );

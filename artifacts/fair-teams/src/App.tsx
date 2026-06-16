@@ -2432,7 +2432,6 @@ They will no longer be able to open or edit this shared roster unless it is shar
       className="fairteams-visual-refresh flex flex-col min-h-[100dvh] bg-background w-full max-w-md md:max-w-3xl lg:max-w-5xl mx-auto relative overflow-hidden"
       style={{ "--roster-accent": identityAccentColor } as React.CSSProperties}
     >
-      <div className="fairteams-screen-frame" aria-hidden="true" />
       <Tabs
         value={activeTab}
         onValueChange={setActiveTab}

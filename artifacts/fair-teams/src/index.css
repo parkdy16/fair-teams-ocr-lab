@@ -259,22 +259,6 @@
   color: var(--app-ink);
 }
 
-.fairteams-screen-frame {
-  position: fixed;
-  inset: 0;
-  z-index: 45;
-  pointer-events: none;
-  border: 2px solid color-mix(in srgb, var(--roster-accent, #16A34A) 58%, transparent);
-  border-radius: 28px;
-  transition: border-color 240ms ease;
-}
-
-@media (min-width: 768px) {
-  .fairteams-screen-frame {
-    border-radius: 30px;
-  }
-}
-
 .fairteams-visual-refresh .text-\[\#102A43\] {
   color: var(--app-ink) !important;
 }

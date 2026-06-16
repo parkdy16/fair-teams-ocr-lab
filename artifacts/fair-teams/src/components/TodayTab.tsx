@@ -118,7 +118,6 @@ declare global {
   }
 }
 
-const todayRosterReadyIds = new Set<string>();
 
 type OcrMatchStatus = "match" | "suggest" | "new";
 type ScreenshotImportMode = "meetup" | "other";
@@ -1613,6 +1612,8 @@ export function TodayTab({
   rosterChoices = [],
   activeRosterId,
   onChooseRoster,
+  todayRosterChosen = false,
+  onTodayRosterChosen,
 }: {
   players: RoomPlayer[];
   setPlayers: (players: RoomPlayer[]) => void;
@@ -1626,6 +1627,8 @@ export function TodayTab({
   rosterChoices?: RoomRoster[];
   activeRosterId?: string;
   onChooseRoster?: (rosterId: string) => void;
+  todayRosterChosen?: boolean;
+  onTodayRosterChosen?: () => void;
 }) {
   const [search, setSearch] = useState("");
   const [ocrOpen, setOcrOpen] = useState(false);
@@ -1676,12 +1679,7 @@ export function TodayTab({
   >({});
   const [prioritizeScannedPlayers, setPrioritizeScannedPlayers] =
     useState(false);
-  const getTodayRosterReady = () => {
-    if (rosterChoices.length === 0) return true;
-    if (!activeRosterId) return false;
-    return todayRosterReadyIds.has(activeRosterId);
-  };
-  const [todayRosterReady, setTodayRosterReady] = useState(getTodayRosterReady);
+  const todayRosterReady = rosterChoices.length === 0 || todayRosterChosen;
 
   const attendingSummaryStyle = {
     background: "linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)",
@@ -1703,18 +1701,6 @@ export function TodayTab({
     playerIds: string[];
     count: number;
   } | null>(null);
-
-  useEffect(() => {
-    if (rosterChoices.length === 0) {
-      setTodayRosterReady(true);
-      return;
-    }
-    if (!activeRosterId) {
-      setTodayRosterReady(false);
-      return;
-    }
-    setTodayRosterReady(todayRosterReadyIds.has(activeRosterId));
-  }, [activeRosterId, rosterChoices.length]);
 
   const sorted = [...players].sort((a, b) => {
     if (Boolean(a.attending) !== Boolean(b.attending)) {
@@ -3106,8 +3092,7 @@ export function TodayTab({
                   type="button"
                   onClick={() => {
                     onChooseRoster?.(roster.id);
-                    todayRosterReadyIds.add(roster.id);
-                    setTodayRosterReady(true);
+                    onTodayRosterChosen?.();
                   }}
                   className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-slate-50/70 px-3 py-3 text-left transition-transform hover:bg-white active:scale-[0.99]"
                 >

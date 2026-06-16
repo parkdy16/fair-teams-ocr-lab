@@ -1065,14 +1065,11 @@ export function TeamsTab({ players, pairingRules = [] }: { players: RoomPlayer[]
               <button
                 type="button"
                 onClick={() => setCardScreen(null)}
-                className={`fixed inset-0 z-[110] flex flex-col items-center justify-center gap-3 text-center active:scale-[0.995] ${cardScreen === "yellow" ? "bg-yellow-300 text-yellow-950" : "bg-red-600 text-white"}`}
+                className="fixed inset-0 z-[110] block h-full w-full border-0 p-0 active:scale-100"
+                style={{ backgroundColor: cardScreen === "yellow" ? "#facc15" : "#dc2626" }}
                 aria-label={`Close ${cardScreen} card screen`}
                 data-testid={`screen-${cardScreen}-card`}
-              >
-                <Square className="h-20 w-20 fill-current opacity-95" />
-                <div className="text-5xl font-black uppercase tracking-tight sm:text-7xl">{cardScreen} card</div>
-                <div className="rounded-full bg-black/15 px-4 py-2 text-sm font-black uppercase tracking-[0.22em]">Tap to close</div>
-              </button>
+              />
             )}
           </div>
         </div>

@@ -358,6 +358,7 @@ function App() {
   }, []);
 
   const [activeTab, setActiveTab] = useState("today");
+  const [todayRosterChosen, setTodayRosterChosen] = useState(false);
   const [reviewPlayerQueue, setReviewPlayerQueue] = useState<string[]>([]);
   const [reviewPlayerIndex, setReviewPlayerIndex] = useState(0);
   const [reviewAutoOpenPlayerId, setReviewAutoOpenPlayerId] = useState<string | null>(null);
@@ -2598,6 +2599,8 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 rosterChoices={rosters}
                 activeRosterId={activeRosterId}
                 onChooseRoster={switchRoster}
+                todayRosterChosen={todayRosterChosen}
+                onTodayRosterChosen={() => setTodayRosterChosen(true)}
                 openOcrToken={todayOcrOpenToken}
                 ocrImportContext={ocrImportContext}
                 onOcrImportContextChange={setOcrImportContext}

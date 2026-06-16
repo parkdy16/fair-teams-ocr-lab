@@ -1379,17 +1379,24 @@ export function PlayersTab({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => setAddOptionsOpen(true)}
-          className="h-9 rounded-xl border-primary/20 bg-primary/5 px-3 text-[11px] font-black uppercase tracking-wide text-primary shadow-none hover:bg-primary/10 hover:text-primary"
-          data-testid="button-open-add-options"
-        >
-          <Plus className="mr-1.5 h-3.5 w-3.5" /> Player
-        </Button>
-
+      <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Roster</p>
+            <p className="mt-0.5 text-base font-black leading-tight text-[#102A43]">
+              {players.length} player{players.length === 1 ? "" : "s"}
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setAddOptionsOpen(true)}
+            className="h-9 rounded-xl border-primary/20 bg-primary/5 px-3 text-[11px] font-black uppercase tracking-wide text-primary shadow-none hover:bg-primary/10 hover:text-primary"
+            data-testid="button-open-add-options"
+          >
+            <Plus className="mr-1.5 h-3.5 w-3.5" /> Player
+          </Button>
+        </div>
         <Dialog open={addOptionsOpen} onOpenChange={setAddOptionsOpen}>
           <DialogContent
             onOpenAutoFocus={(event) => event.preventDefault()}
@@ -1797,7 +1804,9 @@ export function PlayersTab({
           </DialogContent>
         </Dialog>
 
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="mt-3 flex items-center justify-between gap-2">
+          <span className="text-[11px] font-bold text-slate-500">Manage players</span>
+          <div className="flex items-center gap-1.5 shrink-0">
           <Button
             type="button"
             variant="outline"
@@ -1825,6 +1834,7 @@ export function PlayersTab({
           <span className="inline-flex h-8 min-w-8 items-center justify-center rounded-xl border border-primary/15 bg-primary/10 px-2 text-[10px] font-black text-primary shadow-none" title="Roster count">
             {search ? `${filtered.length}/${players.length}` : players.length}
           </span>
+          </div>
         </div>
       </div>
 

@@ -1,12 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import Tesseract from "tesseract.js";
-import type { RoomPlayer } from "@/lib/localRoster";
+import type { RoomPlayer, RoomRoster } from "@/lib/localRoster";
 import type { Gender } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  Check,
+  ChevronRight,
   Clock3,
   ClipboardList,
   Image as ImageIcon,
@@ -1596,6 +1598,9 @@ export function TodayTab({
   onAddPlayerManually,
   onReviewNewPlayers,
   onOcrOpenHandled,
+  rosterChoices = [],
+  activeRosterId,
+  onChooseRoster,
 }: {
   players: RoomPlayer[];
   setPlayers: (players: RoomPlayer[]) => void;
@@ -1606,6 +1611,9 @@ export function TodayTab({
   onAddPlayerManually?: () => void;
   onReviewNewPlayers?: (playerIds: string[]) => void;
   onOcrOpenHandled?: () => void;
+  rosterChoices?: RoomRoster[];
+  activeRosterId?: string;
+  onChooseRoster?: (rosterId: string) => void;
 }) {
   const [search, setSearch] = useState("");
   const [ocrOpen, setOcrOpen] = useState(false);
@@ -1656,6 +1664,7 @@ export function TodayTab({
   >({});
   const [prioritizeScannedPlayers, setPrioritizeScannedPlayers] =
     useState(false);
+  const [todayRosterReady, setTodayRosterReady] = useState(() => rosterChoices.length <= 1);
 
   const attendingSummaryStyle = {
     background: "linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)",
@@ -1677,6 +1686,14 @@ export function TodayTab({
     playerIds: string[];
     count: number;
   } | null>(null);
+
+  useEffect(() => {
+    if (rosterChoices.length <= 1) {
+      setTodayRosterReady(true);
+    } else {
+      setTodayRosterReady(false);
+    }
+  }, [rosterChoices.length]);
 
   const sorted = [...players].sort((a, b) => {
     if (Boolean(a.attending) !== Boolean(b.attending)) {
@@ -3050,7 +3067,41 @@ export function TodayTab({
 
   return (
     <div className="flex flex-col gap-4">
-      {players.length === 0 ? (
+      {rosterChoices.length > 1 && !todayRosterReady ? (
+        <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="mb-4 text-center">
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Today</p>
+            <h2 className="mt-1 text-xl font-black tracking-tight text-[#102A43]">Choose roster</h2>
+            <p className="mx-auto mt-1 max-w-xs text-xs font-semibold leading-relaxed text-slate-500">
+              Pick the group or class you are making teams for.
+            </p>
+          </div>
+          <div className="space-y-2">
+            {rosterChoices.map((roster) => {
+              const isActive = roster.id === activeRosterId;
+              return (
+                <button
+                  key={roster.id}
+                  type="button"
+                  onClick={() => {
+                    onChooseRoster?.(roster.id);
+                    setTodayRosterReady(true);
+                  }}
+                  className={`flex w-full items-center justify-between rounded-2xl border px-3 py-3 text-left transition-transform active:scale-[0.99] ${isActive ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-slate-50/70"}`}
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-black text-[#102A43]">{roster.name}</span>
+                    <span className="mt-0.5 block text-[11px] font-bold text-slate-500">{roster.players.length} player{roster.players.length === 1 ? "" : "s"}</span>
+                  </span>
+                  <span className={`ml-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${isActive ? "bg-emerald-500 text-white" : "bg-white text-slate-400"}`}>
+                    {isActive ? <Check className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : players.length === 0 ? (
         <div className="rounded-3xl border border-dashed border-primary/25 bg-primary/5 p-5 text-center shadow-sm">
           <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-white shadow-sm">
             <ImageIcon className="h-6 w-6 text-primary" />

@@ -2565,6 +2565,9 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 players={players}
                 setPlayers={replacePlayers}
                 themeColor={headerColor}
+                rosterChoices={rosters}
+                activeRosterId={activeRosterId}
+                onChooseRoster={switchRoster}
                 openOcrToken={todayOcrOpenToken}
                 ocrImportContext={ocrImportContext}
                 onOcrImportContextChange={setOcrImportContext}

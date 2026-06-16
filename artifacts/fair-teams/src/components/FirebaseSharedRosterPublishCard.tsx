@@ -28,6 +28,7 @@ type Props = {
   onRosterSaved?: (summary: FirebaseSharedRosterSummary, localRosterId?: string) => void;
   onRefreshActiveRoster?: (roster: RoomRoster, sourceName: string, summary: FirebaseSharedRosterSummary, localRosterId?: string) => void;
   onSharedRosterSummariesUpdated?: (summaries: FirebaseSharedRosterSummary[]) => void;
+  onSharedInviteOpened?: (roster: RoomRoster) => void;
 };
 
 function friendlyFirestoreError(error: unknown) {
@@ -63,7 +64,7 @@ function modalShell(title: string, onClose: () => void, body: React.ReactNode) {
   );
 }
 
-export function FirebaseSharedRosterPublishCard({ activeRoster, rosters = [], isEmptyRoster, onOpenRoster, onRosterSaved, onRefreshActiveRoster, onSharedRosterSummariesUpdated }: Props) {
+export function FirebaseSharedRosterPublishCard({ activeRoster, rosters = [], isEmptyRoster, onOpenRoster, onRosterSaved, onRefreshActiveRoster, onSharedRosterSummariesUpdated, onSharedInviteOpened }: Props) {
   const [user, setUser] = useState<SharedRosterUser | null>(null);
   const [busy, setBusy] = useState<string>("");
   const [sharedGroups, setSharedGroups] = useState<FirebaseSharedGroupSummary[]>([]);
@@ -258,9 +259,19 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, rosters = [], is
     setBusy(`accept:${groupId}`);
     setNotice(null);
     try {
-      await acceptFirebaseGroupInvite(groupId);
-      await refreshSharedData();
-      setNotice({ tone: "success", text: "Shared roster added." });
+      const acceptedGroup = await acceptFirebaseGroupInvite(groupId);
+      const groupRosters = await listFirebaseSharedRosters(groupId);
+      const rosterToOpen = groupRosters[0];
+
+      if (rosterToOpen) {
+        const snapshot = await readFirebaseSharedRoster(rosterToOpen.id);
+        onOpenRoster?.(snapshot.roster, snapshot.name, snapshot);
+        onSharedInviteOpened?.(snapshot.roster);
+        setNotice({ tone: "success", text: `${snapshot.name || acceptedGroup.name || "Shared roster"} opened.` });
+      } else {
+        await refreshSharedData();
+        setNotice({ tone: "success", text: "Shared roster added." });
+      }
     } catch (error) {
       setNotice({ tone: "error", text: friendlyFirestoreError(error) });
     } finally {

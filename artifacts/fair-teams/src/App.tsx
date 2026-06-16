@@ -614,6 +614,13 @@ function App() {
     openRosterToolsPanel("shared");
   };
 
+  const finishSharedInviteOpen = (openedRoster: RoomRoster) => {
+    setTodayRosterChosen(true);
+    closeRosterToolsPanel();
+    setRosterFilesOpen(false);
+    setActiveTab(openedRoster.players.length > 0 ? "today" : "players");
+  };
+
   const showRosterToolsNotice = (title: string, message: string, tone: RosterToolsNotice["tone"] = "info") => {
     setRosterToolsNotice({ title, message, tone });
   };
@@ -3205,6 +3212,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                       onRosterSaved={markActiveFirebaseRosterSaved}
                       onRefreshActiveRoster={refreshActiveFirebaseRosterFromRemote}
                       onSharedRosterSummariesUpdated={syncFirebaseRosterBadgesFromSummaries}
+                      onSharedInviteOpened={finishSharedInviteOpen}
                     />
 
                     <details className="rounded-2xl border border-amber-100 bg-amber-50/60 p-2">

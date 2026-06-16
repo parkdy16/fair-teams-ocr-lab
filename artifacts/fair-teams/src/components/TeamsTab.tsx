@@ -6,7 +6,7 @@ import { generateTeams, recomputeStats } from "@/lib/teamGenerator";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Shuffle, ArrowLeftRight, Download, HelpCircle, Clock, Palette, Sparkles, BarChart3, List, Maximize2, X } from "lucide-react";
+import { Shuffle, ArrowLeftRight, Download, HelpCircle, Clock, Palette, Sparkles, BarChart3, List, Maximize2, X, Volume2, Square } from "lucide-react";
 import fairTeamsLogo from "@/assets/fairteams-logo.png";
 
 const COLOR_OPTIONS: { value: TeamColor; label: string; hex: string; textHex: string }[] = [
@@ -379,6 +379,8 @@ export function TeamsTab({ players, pairingRules = [] }: { players: RoomPlayer[]
   const [justGenerated, setJustGenerated] = useState(false);
   const [showPlayerSkillNumbers, setShowPlayerSkillNumbers] = useState(false);
   const [presentTeamsOpen, setPresentTeamsOpen] = useState(false);
+  const [gameToolsOpen, setGameToolsOpen] = useState(false);
+  const [cardScreen, setCardScreen] = useState<"yellow" | "red" | null>(null);
   const generateTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -408,18 +410,68 @@ export function TeamsTab({ players, pairingRules = [] }: { players: RoomPlayer[]
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setPresentTeamsOpen(false);
+      if (event.key !== "Escape") return;
+      if (cardScreen) {
+        setCardScreen(null);
+      } else if (gameToolsOpen) {
+        setGameToolsOpen(false);
+      } else {
+        setPresentTeamsOpen(false);
+      }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => {
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", handleKeyDown);
     };
+  }, [presentTeamsOpen, cardScreen, gameToolsOpen]);
+
+  useEffect(() => {
+    if (!presentTeamsOpen) {
+      setGameToolsOpen(false);
+      setCardScreen(null);
+    }
   }, [presentTeamsOpen]);
 
   const attendingPlayers = players.filter(p => p.attending).map(toLocalPlayer);
   const hereNowCount = attendingPlayers.filter(p => !isNotHereYet(p)).length;
   const notHereYetPlayers = attendingPlayers.filter(isNotHereYet);
+
+  const playWhistleSound = () => {
+    try {
+      const AudioContextCtor = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AudioContextCtor) return;
+      const ctx = new AudioContextCtor();
+      const now = ctx.currentTime;
+      const gain = ctx.createGain();
+      gain.connect(ctx.destination);
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.22, now + 0.025);
+      gain.gain.setValueAtTime(0.22, now + 0.34);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.5);
+
+      const first = ctx.createOscillator();
+      first.type = "sine";
+      first.frequency.setValueAtTime(2300, now);
+      first.frequency.linearRampToValueAtTime(2650, now + 0.18);
+      first.frequency.linearRampToValueAtTime(2400, now + 0.5);
+      first.connect(gain);
+      first.start(now);
+      first.stop(now + 0.52);
+
+      const second = ctx.createOscillator();
+      second.type = "triangle";
+      second.frequency.setValueAtTime(3200, now + 0.06);
+      second.frequency.linearRampToValueAtTime(2850, now + 0.34);
+      second.connect(gain);
+      second.start(now + 0.06);
+      second.stop(now + 0.48);
+
+      window.setTimeout(() => void ctx.close().catch(() => {}), 700);
+    } catch {
+      // Ignore blocked audio contexts or unsupported browser audio.
+    }
+  };
 
   const historyPanel = history.length > 0 ? (
     <div className="bg-card border border-border rounded-xl p-3 shadow-sm">
@@ -949,20 +1001,79 @@ export function TeamsTab({ players, pairingRules = [] }: { players: RoomPlayer[]
               </div>
             </div>
 
+            {gameToolsOpen && (
+              <div className="border-t border-white/10 bg-slate-900/95 px-2 py-2">
+                <div className="mx-auto flex max-w-5xl gap-2">
+                  <button
+                    type="button"
+                    onClick={playWhistleSound}
+                    className="flex h-10 flex-1 items-center justify-center rounded-2xl border border-white/15 bg-white/10 px-2 text-[12px] font-black text-white active:scale-[0.98]"
+                    data-testid="button-game-tool-whistle"
+                  >
+                    <Volume2 className="mr-1.5 h-4 w-4" />
+                    Whistle
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setCardScreen("yellow"); setGameToolsOpen(false); }}
+                    className="flex h-10 flex-1 items-center justify-center rounded-2xl bg-yellow-300 px-2 text-[12px] font-black text-yellow-950 active:scale-[0.98]"
+                    data-testid="button-game-tool-yellow-card"
+                  >
+                    <Square className="mr-1.5 h-4 w-4 fill-current" />
+                    Yellow
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setCardScreen("red"); setGameToolsOpen(false); }}
+                    className="flex h-10 flex-1 items-center justify-center rounded-2xl bg-red-600 px-2 text-[12px] font-black text-white active:scale-[0.98]"
+                    data-testid="button-game-tool-red-card"
+                  >
+                    <Square className="mr-1.5 h-4 w-4 fill-current" />
+                    Red
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="flex items-center justify-between gap-2 border-t border-white/10 bg-slate-950/95 px-2 py-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
               <p className="min-w-0 text-[11px] font-semibold leading-snug text-slate-400">
                 Show this screen to players. Save only when you need an image.
               </p>
+              <div className="flex shrink-0 items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setGameToolsOpen(open => !open)}
+                  className={`inline-flex h-9 items-center justify-center rounded-2xl px-3 text-[12px] font-black active:scale-[0.98] ${gameToolsOpen ? "bg-emerald-300 text-[#102A43]" : "border border-white/15 bg-white/10 text-white"}`}
+                  aria-expanded={gameToolsOpen}
+                  data-testid="button-present-game-tools"
+                >
+                  Game Tools
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void exportTeamsAsJpg(teams, fieldSize)}
+                  className="inline-flex h-9 items-center justify-center rounded-2xl bg-white px-3 text-[12px] font-black text-[#102A43] active:scale-[0.98]"
+                  data-testid="button-present-save-image"
+                >
+                  <Download className="mr-1.5 h-3.5 w-3.5" />
+                  Save Image
+                </button>
+              </div>
+            </div>
+
+            {cardScreen && (
               <button
                 type="button"
-                onClick={() => void exportTeamsAsJpg(teams, fieldSize)}
-                className="inline-flex h-9 shrink-0 items-center justify-center rounded-2xl bg-white px-3 text-[12px] font-black text-[#102A43] active:scale-[0.98]"
-                data-testid="button-present-save-image"
+                onClick={() => setCardScreen(null)}
+                className={`fixed inset-0 z-[110] flex flex-col items-center justify-center gap-3 text-center active:scale-[0.995] ${cardScreen === "yellow" ? "bg-yellow-300 text-yellow-950" : "bg-red-600 text-white"}`}
+                aria-label={`Close ${cardScreen} card screen`}
+                data-testid={`screen-${cardScreen}-card`}
               >
-                <Download className="mr-1.5 h-3.5 w-3.5" />
-                Save Image
+                <Square className="h-20 w-20 fill-current opacity-95" />
+                <div className="text-5xl font-black uppercase tracking-tight sm:text-7xl">{cardScreen} card</div>
+                <div className="rounded-full bg-black/15 px-4 py-2 text-sm font-black uppercase tracking-[0.22em]">Tap to close</div>
               </button>
-            </div>
+            )}
           </div>
         </div>
       )}

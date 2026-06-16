@@ -2429,6 +2429,11 @@ They will no longer be able to open or edit this shared roster unless it is shar
 
   return (
     <div className="flex flex-col min-h-[100dvh] bg-background w-full max-w-md md:max-w-3xl lg:max-w-5xl mx-auto relative shadow-2xl overflow-hidden">
+      <div
+        aria-hidden="true"
+        className="pointer-events-none fixed inset-0 z-40 mx-auto w-full max-w-md rounded-[32px] border-[4px] transition-colors duration-300 md:max-w-3xl lg:max-w-5xl"
+        style={{ borderColor: identityAccentColor }}
+      />
       <Tabs
         value={activeTab}
         onValueChange={setActiveTab}
@@ -2526,12 +2531,6 @@ They will no longer be able to open or edit this shared roster unless it is shar
               />
             </div>
           </div>
-          <div
-            className="mx-1 mb-2 h-0.5 rounded-full"
-            style={{ backgroundColor: identityAccentColor }}
-          />
-
-
         </header>
 
         <div className="flex-1 overflow-y-auto p-4 pb-20 md:p-5 md:pb-20">
@@ -2796,36 +2795,53 @@ They will no longer be able to open or edit this shared roster unless it is shar
             </div>
 
             <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain p-4">
-              <button
-                type="button"
-                onClick={() => {
-                  if (!isEmptyStarterRoster && rosters.length > 1) {
-                    setRosterPickerOpen(true);
-                  }
-                }}
-                className={`sticky top-0 z-20 flex w-full items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white/95 px-3 py-3 text-left shadow-sm backdrop-blur transition ${!isEmptyStarterRoster && rosters.length > 1 ? "active:scale-[0.99]" : "cursor-default"}`}
-              >
-                <span className="min-w-0">
-                  <span className="block text-[10px] font-black uppercase tracking-wide text-slate-400">
-                    Current roster
+              <div className="sticky top-0 z-20 flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white/95 px-3 py-3 text-left shadow-sm backdrop-blur">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!isEmptyStarterRoster && rosters.length > 1) {
+                      setRosterPickerOpen(true);
+                    }
+                  }}
+                  className={`flex min-w-0 flex-1 items-center justify-between gap-3 text-left transition ${!isEmptyStarterRoster && rosters.length > 1 ? "active:scale-[0.99]" : "cursor-default"}`}
+                >
+                  <span className="min-w-0">
+                    <span className="block text-[10px] font-black uppercase tracking-wide text-slate-400">
+                      Current roster
+                    </span>
+                    <span className="mt-1 block truncate text-sm font-black text-[#102A43]">
+                      {isEmptyStarterRoster ? "Make a new roster" : activeRosterName}
+                    </span>
+                    <span className="block text-[11px] font-bold text-slate-500">
+                      {isEmptyStarterRoster
+                        ? "Create one below or import a roster"
+                        : activeRosterIsShared
+                          ? `${players.length} player${players.length === 1 ? "" : "s"} · ${activeSharedHasUnsavedChanges ? "shared changes not saved" : "shared"}`
+                          : `${players.length} player${players.length === 1 ? "" : "s"}`}
+                    </span>
                   </span>
-                  <span className="mt-1 block truncate text-sm font-black text-[#102A43]">
-                    {isEmptyStarterRoster ? "Make a new roster" : activeRosterName}
-                  </span>
-                  <span className="block text-[11px] font-bold text-slate-500">
-                    {isEmptyStarterRoster
-                      ? "Create one below or import a roster"
-                      : activeRosterIsShared
-                        ? `${players.length} player${players.length === 1 ? "" : "s"} · ${activeSharedHasUnsavedChanges ? "shared changes not saved" : "shared"}`
-                        : `${players.length} player${players.length === 1 ? "" : "s"}`}
-                  </span>
-                </span>
-                {!isEmptyStarterRoster && rosters.length > 1 && (
-                  <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-lg font-black leading-none text-slate-400 shadow-sm">
-                    ›
-                  </span>
+                  {!isEmptyStarterRoster && rosters.length > 1 && (
+                    <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-lg font-black leading-none text-slate-400 shadow-sm">
+                      ›
+                    </span>
+                  )}
+                </button>
+                {!isEmptyStarterRoster && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRosterPickerOpen(false);
+                      setRosterFilesOpen(false);
+                      openGroupSettings();
+                    }}
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-[#102A43] shadow-sm transition active:scale-95"
+                    title="Edit roster name, logo, and color"
+                    aria-label="Edit roster name, logo, and color"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </button>
                 )}
-              </button>
+              </div>
 
               <div className={`rounded-2xl border border-slate-100 bg-white p-3 ${rosterToolsActivePanel ? "hidden" : ""}`}>
                 <div className="mb-2 text-[10px] font-black uppercase tracking-wide text-slate-400">

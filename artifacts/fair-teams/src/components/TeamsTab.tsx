@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import type { RoomPlayer } from "@/lib/localRoster";
-import { FieldSize, Player, Team, TeamColor } from "@/lib/types";
+import { FieldSize, PairingRule, Player, Team, TeamColor } from "@/lib/types";
 import { getSpecialSkillStatBoosts } from "@/lib/playerAbilityEffects";
 import { generateTeams, recomputeStats } from "@/lib/teamGenerator";
 import { Button } from "@/components/ui/button";
@@ -364,7 +364,7 @@ function drawTextBadge(
 }
 
 
-export function TeamsTab({ players }: { players: RoomPlayer[] }) {
+export function TeamsTab({ players, pairingRules = [] }: { players: RoomPlayer[]; pairingRules?: PairingRule[] }) {
   const [numTeams, setNumTeams] = useState<number>(2);
   const [fieldSize, setFieldSize] = useState<FieldSize>(() => loadFieldSize());
   const [showFieldHelp, setShowFieldHelp] = useState(false);
@@ -448,7 +448,7 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
     setIsGenerating(true);
     setDrawStep(0);
 
-    const nextTeams = generateTeams(attendingPlayers, numTeams, shuffleEquals, fieldSize);
+    const nextTeams = generateTeams(attendingPlayers, numTeams, shuffleEquals, fieldSize, pairingRules);
 
     if (generateTimerRef.current !== null) window.clearTimeout(generateTimerRef.current);
     generateTimerRef.current = window.setTimeout(() => {

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { RoomPlayer } from "@/lib/localRoster";
 import { calculateOverall, normalizePlayer } from "@/lib/localRoster";
-import { FunBadge, Gender } from "@/lib/types";
+import { FunBadge, Gender, PairingRule, PairingRuleKind } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -1110,6 +1110,8 @@ function PlayerCardBack({ player }: { player: RoomPlayer }) {
 export function PlayersTab({
   players,
   setPlayers,
+  pairingRules = [],
+  setPairingRules,
   onScreenshotImport,
   reviewPlayerId,
   reviewActivePlayerId,
@@ -1121,6 +1123,8 @@ export function PlayersTab({
 }: {
   players: RoomPlayer[];
   setPlayers: (players: RoomPlayer[]) => void;
+  pairingRules?: PairingRule[];
+  setPairingRules?: (rules: PairingRule[]) => void;
   onScreenshotImport?: () => void;
   reviewPlayerId?: string | null;
   reviewActivePlayerId?: string | null;
@@ -1149,6 +1153,12 @@ export function PlayersTab({
   const [flippedPlayerIds, setFlippedPlayerIds] = useState<Record<string, boolean>>({});
   const [search, setSearch] = useState("");
   const [addOptionsOpen, setAddOptionsOpen] = useState(false);
+  const [pairingRulesOpen, setPairingRulesOpen] = useState(false);
+  const [pairAddKind, setPairAddKind] = useState<PairingRuleKind | null>(null);
+  const [pairFirstId, setPairFirstId] = useState("");
+  const [pairSecondId, setPairSecondId] = useState("");
+  const [pairSearch, setPairSearch] = useState("");
+  const [pairNotice, setPairNotice] = useState("");
   const [addPlayerOpen, setAddPlayerOpen] = useState(false);
   const [voiceAddOpen, setVoiceAddOpen] = useState(false);
   const [voiceAddHeard, setVoiceAddHeard] = useState("");
@@ -1367,8 +1377,8 @@ export function PlayersTab({
       return displayName(a).localeCompare(displayName(b));
     }
 
-    const aTime = new Date(a.updatedAt || a.createdAt || 0).getTime() || 0;
-    const bTime = new Date(b.updatedAt || b.createdAt || 0).getTime() || 0;
+    const aTime = new Date(a.createdAt || 0).getTime() || 0;
+    const bTime = new Date(b.createdAt || 0).getTime() || 0;
     if (bTime !== aTime) return bTime - aTime;
     return displayName(a).localeCompare(displayName(b));
   });
@@ -1377,15 +1387,152 @@ export function PlayersTab({
     ? sortedPlayers.filter(p => displayName(p).toLowerCase().includes(search.toLowerCase()))
     : sortedPlayers;
 
+  const playerById = useMemo(() => new Map(players.map((player) => [player.id, player])), [players]);
+  const cleanPairingRules = useMemo(() => pairingRules.filter((rule) =>
+    (rule.kind === "together" || rule.kind === "separate") &&
+    playerById.has(rule.playerAId) &&
+    playerById.has(rule.playerBId) &&
+    rule.playerAId !== rule.playerBId,
+  ), [pairingRules, playerById]);
+  const togetherRules = cleanPairingRules.filter((rule) => rule.kind === "together");
+  const separateRules = cleanPairingRules.filter((rule) => rule.kind === "separate");
+  const pairSearchLower = pairSearch.trim().toLowerCase();
+  const pairCandidates = players
+    .filter((player) => player.id !== pairFirstId && player.id !== pairSecondId)
+    .filter((player) => !pairSearchLower || displayName(player).toLowerCase().includes(pairSearchLower))
+    .slice(0, 7);
+
+  const resetPairAdder = () => {
+    setPairAddKind(null);
+    setPairFirstId("");
+    setPairSecondId("");
+    setPairSearch("");
+    setPairNotice("");
+  };
+
+  const createPairRuleId = () => {
+    if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
+    return `pair-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  };
+
+  const pairName = (playerId: string) => {
+    const player = playerById.get(playerId);
+    return player ? displayName(player) : "Missing player";
+  };
+
+  const pairKey = (a: string, b: string) => [a, b].sort().join("|");
+
+  const startAddPair = (kind: PairingRuleKind) => {
+    setPairAddKind(kind);
+    setPairFirstId("");
+    setPairSecondId("");
+    setPairSearch("");
+    setPairNotice("");
+  };
+
+  const selectPairPlayer = (playerId: string) => {
+    setPairNotice("");
+    if (!pairFirstId) {
+      setPairFirstId(playerId);
+      setPairSearch("");
+      return;
+    }
+    if (playerId !== pairFirstId) {
+      setPairSecondId(playerId);
+      setPairSearch("");
+    }
+  };
+
+  const addPairRule = () => {
+    if (!pairAddKind || !setPairingRules || !pairFirstId || !pairSecondId || pairFirstId === pairSecondId) return;
+    const key = pairKey(pairFirstId, pairSecondId);
+    const duplicateSame = cleanPairingRules.some((rule) => rule.kind === pairAddKind && pairKey(rule.playerAId, rule.playerBId) === key);
+    const duplicateOther = cleanPairingRules.some((rule) => rule.kind !== pairAddKind && pairKey(rule.playerAId, rule.playerBId) === key);
+
+    if (duplicateSame) {
+      setPairNotice("That pair is already saved here.");
+      return;
+    }
+    if (duplicateOther) {
+      setPairNotice("That pair already exists in the other section. Remove it first.");
+      return;
+    }
+
+    setPairingRules([
+      ...cleanPairingRules,
+      {
+        id: createPairRuleId(),
+        kind: pairAddKind,
+        playerAId: pairFirstId,
+        playerBId: pairSecondId,
+        createdAt: new Date().toISOString(),
+      },
+    ]);
+    setPairFirstId("");
+    setPairSecondId("");
+    setPairSearch("");
+    setPairNotice("Pair added.");
+  };
+
+  const removePairRule = (ruleId: string) => {
+    if (!setPairingRules) return;
+    setPairingRules(cleanPairingRules.filter((rule) => rule.id !== ruleId));
+    setPairNotice("");
+  };
+
+  const renderPairSection = (kind: PairingRuleKind, title: string, empty: string, rules: PairingRule[]) => (
+    <div className="rounded-2xl border border-border bg-muted/20 p-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div>
+          <div className="text-[11px] font-black uppercase tracking-wide text-foreground">{title}</div>
+          <div className="text-[10px] font-semibold text-muted-foreground">{rules.length} saved</div>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => startAddPair(kind)}
+          disabled={!setPairingRules || players.length < 2}
+          className="h-8 rounded-xl px-2.5 text-[10px] font-black uppercase tracking-wide"
+          data-testid={`button-add-${kind}-pair`}
+        >
+          <Plus className="mr-1 h-3 w-3" /> Add
+        </Button>
+      </div>
+      {rules.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-border bg-background/70 px-3 py-2 text-[11px] font-semibold text-muted-foreground">{empty}</div>
+      ) : (
+        <div className="space-y-1.5">
+          {rules.map((rule) => (
+            <div key={rule.id} className="flex items-center justify-between gap-2 rounded-xl border border-border bg-background px-3 py-2">
+              <div className="min-w-0 truncate text-[12px] font-black text-foreground">
+                {pairName(rule.playerAId)} <span className="text-muted-foreground">+</span> {pairName(rule.playerBId)}
+              </div>
+              <button
+                type="button"
+                onClick={() => removePairRule(rule.id)}
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                aria-label={`Remove ${pairName(rule.playerAId)} and ${pairName(rule.playerBId)}`}
+                data-testid={`button-remove-pair-${rule.id}`}
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div className="flex flex-col gap-4">
-      <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-        <div className="flex items-center justify-between gap-3">
+      <div className="rounded-2xl border border-border/70 bg-card p-3 shadow-sm">
+        <div className="flex items-center justify-between gap-2">
           <div className="min-w-0">
-            <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Roster</p>
-            <p className="mt-0.5 text-base font-black leading-tight text-[#102A43]">
-              {players.length} player{players.length === 1 ? "" : "s"}
-            </p>
+            <div className="text-[10px] font-black uppercase tracking-wide text-muted-foreground">Players</div>
+            <div className="text-lg font-black leading-tight text-foreground">
+              {search ? `${filtered.length}/${players.length}` : players.length}
+            </div>
           </div>
           <Button
             type="button"
@@ -1394,9 +1541,9 @@ export function PlayersTab({
             className="h-9 rounded-xl border-primary/20 bg-primary/5 px-3 text-[11px] font-black uppercase tracking-wide text-primary shadow-none hover:bg-primary/10 hover:text-primary"
             data-testid="button-open-add-options"
           >
-            <Plus className="mr-1.5 h-3.5 w-3.5" /> Player
+            <Plus className="mr-1.5 h-3.5 w-3.5" /> Add Player
           </Button>
-        </div>
+
         <Dialog open={addOptionsOpen} onOpenChange={setAddOptionsOpen}>
           <DialogContent
             onOpenAutoFocus={(event) => event.preventDefault()}
@@ -1804,8 +1951,9 @@ export function PlayersTab({
           </DialogContent>
         </Dialog>
 
-        <div className="mt-3 flex items-center justify-between gap-2">
-          <span className="text-[11px] font-bold text-slate-500">Manage players</span>
+        </div>
+
+        <div className="mt-2 flex items-center justify-between gap-2 border-t border-border/60 pt-2">
           <div className="flex items-center gap-1.5 shrink-0">
           <Button
             type="button"
@@ -1813,11 +1961,11 @@ export function PlayersTab({
             size="sm"
             onClick={() => setSortMode(prev => prev === "recent" ? "alpha" : prev === "alpha" ? "skill" : "recent")}
             className="h-8 rounded-xl px-2.5 text-[10px] font-black uppercase tracking-wide shadow-none border-primary/20 bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary"
-            title={sortMode === "recent" ? "Roster sorted by last edited / added. Tap for A-Z." : sortMode === "alpha" ? "Roster sorted A-Z. Tap for Skill high to low." : "Roster sorted by Skill high to low. Tap for Recent."}
+            title={sortMode === "recent" ? "Roster sorted by last added. Tap for A-Z." : sortMode === "alpha" ? "Roster sorted A-Z. Tap for Skill high to low." : "Roster sorted by Skill high to low. Tap for Last Added."}
             data-testid="button-toggle-roster-sort"
           >
             {sortMode === "recent" ? <Clock3 className="mr-1 h-3 w-3" /> : sortMode === "alpha" ? <ArrowDownAZ className="mr-1 h-3 w-3" /> : <Star className="mr-1 h-3 w-3" />}
-            {sortMode === "recent" ? "Recent" : sortMode === "alpha" ? "A-Z" : "Skill ↓"}
+            {sortMode === "recent" ? "Last Added" : sortMode === "alpha" ? "A-Z" : "Skill ↓"}
           </Button>
           <Button
             type="button"
@@ -1831,12 +1979,144 @@ export function PlayersTab({
             {hideOverall ? <EyeOff className="mr-1 h-3 w-3" /> : <Eye className="mr-1 h-3 w-3" />}
             Skill
           </Button>
-          <span className="inline-flex h-8 min-w-8 items-center justify-center rounded-xl border border-primary/15 bg-primary/10 px-2 text-[10px] font-black text-primary shadow-none" title="Roster count">
-            {search ? `${filtered.length}/${players.length}` : players.length}
-          </span>
-          </div>
+        </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setPairingRulesOpen(true)}
+            disabled={!setPairingRules || players.length < 2}
+            className="h-8 rounded-xl px-2.5 text-[10px] font-black uppercase tracking-wide shadow-none border-border bg-muted/25 text-muted-foreground hover:bg-muted/45 hover:text-foreground"
+            title="Manage optional keep-together and keep-separate rules"
+            data-testid="button-open-pairing-rules"
+          >
+            Pairing Rules
+            {cleanPairingRules.length > 0 && (
+              <span className="ml-1.5 rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] text-primary">{cleanPairingRules.length}</span>
+            )}
+          </Button>
         </div>
       </div>
+
+      <Dialog open={pairingRulesOpen} onOpenChange={(next) => {
+        setPairingRulesOpen(next);
+        if (!next) resetPairAdder();
+      }}>
+        <DialogContent
+          onOpenAutoFocus={(event) => event.preventDefault()}
+          className="max-w-[380px] rounded-3xl p-0 overflow-hidden"
+        >
+          <DialogHeader className="border-b border-border px-5 py-4 text-left">
+            <DialogTitle className="text-xl font-black tracking-tight">Pairing Rules</DialogTitle>
+            <p className="text-[11px] font-semibold text-muted-foreground">
+              Optional rules for team generation. Keep them neutral and private.
+            </p>
+          </DialogHeader>
+
+          <div className="max-h-[72dvh] space-y-3 overflow-y-auto p-4">
+            {renderPairSection("together", "Keep Together", "No keep-together pairs yet.", togetherRules)}
+            {renderPairSection("separate", "Keep Separate", "No keep-separate pairs yet.", separateRules)}
+
+            {pairAddKind && (
+              <div className="rounded-2xl border border-primary/20 bg-primary/5 p-3">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <div>
+                    <div className="text-[11px] font-black uppercase tracking-wide text-primary">
+                      Add {pairAddKind === "together" ? "Keep Together" : "Keep Separate"} Pair
+                    </div>
+                    <div className="text-[10px] font-semibold text-muted-foreground">Tap two names, then add the pair.</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={resetPairAdder}
+                    className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-background"
+                    aria-label="Cancel adding pair"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+
+                <div className="mb-2 grid grid-cols-2 gap-2">
+                  <div className="rounded-xl border border-border bg-background px-3 py-2">
+                    <div className="text-[9px] font-black uppercase tracking-wide text-muted-foreground">First</div>
+                    <div className="flex items-center justify-between gap-1">
+                      <div className="truncate text-[12px] font-black text-foreground">{pairFirstId ? pairName(pairFirstId) : "Choose player"}</div>
+                      {pairFirstId && (
+                        <button
+                          type="button"
+                          onClick={() => { setPairFirstId(pairSecondId); setPairSecondId(""); setPairNotice(""); }}
+                          className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
+                          aria-label="Remove first selected player"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-border bg-background px-3 py-2">
+                    <div className="text-[9px] font-black uppercase tracking-wide text-muted-foreground">Second</div>
+                    <div className="flex items-center justify-between gap-1">
+                      <div className="truncate text-[12px] font-black text-foreground">{pairSecondId ? pairName(pairSecondId) : "Choose player"}</div>
+                      {pairSecondId && (
+                        <button
+                          type="button"
+                          onClick={() => { setPairSecondId(""); setPairNotice(""); }}
+                          className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
+                          aria-label="Remove second selected player"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={pairSearch}
+                    onChange={(event) => setPairSearch(event.target.value)}
+                    placeholder="Search player…"
+                    className="h-9 rounded-xl pl-8 text-sm"
+                    data-testid="input-pair-search"
+                  />
+                </div>
+
+                <div className="mt-2 max-h-44 space-y-1 overflow-y-auto rounded-xl border border-border bg-background p-1">
+                  {pairCandidates.length === 0 ? (
+                    <div className="px-3 py-2 text-[11px] font-semibold text-muted-foreground">No matching players.</div>
+                  ) : pairCandidates.map((player) => (
+                    <button
+                      key={player.id}
+                      type="button"
+                      onClick={() => selectPairPlayer(player.id)}
+                      className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-[12px] font-bold text-foreground hover:bg-muted"
+                      data-testid={`button-pair-player-${player.id}`}
+                    >
+                      <span className="truncate">{displayName(player)}</span>
+                      <Plus className="h-3.5 w-3.5 text-muted-foreground" />
+                    </button>
+                  ))}
+                </div>
+
+                {pairNotice && (
+                  <div className="mt-2 rounded-xl bg-background px-3 py-2 text-[11px] font-bold text-muted-foreground">{pairNotice}</div>
+                )}
+
+                <Button
+                  type="button"
+                  className="mt-3 h-10 w-full rounded-xl font-black uppercase tracking-wide"
+                  onClick={addPairRule}
+                  disabled={!pairFirstId || !pairSecondId}
+                  data-testid="button-confirm-add-pair"
+                >
+                  Add Pair
+                </Button>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <div className="space-y-3">
         {players.length > 0 && (

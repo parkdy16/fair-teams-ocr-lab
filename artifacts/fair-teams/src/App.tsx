@@ -25,6 +25,7 @@ import {
 import { PlayersTab } from "@/components/PlayersTab";
 import { TodayTab } from "@/components/TodayTab";
 import { TeamsTab } from "@/components/TeamsTab";
+import type { PairingRule } from "@/lib/types";
 import { FirebaseSharedRosterAuthCard } from "@/components/FirebaseSharedRosterAuthCard";
 import { FirebaseSharedRosterPublishCard } from "@/components/FirebaseSharedRosterPublishCard";
 import { Button } from "@/components/ui/button";
@@ -413,6 +414,7 @@ function App() {
   const activeRoster =
     rosters.find((roster) => roster.id === activeRosterId) || rosters[0];
   const players = activeRoster?.players || [];
+  const pairingRules = activeRoster?.pairingRules || [];
   const activeRosterName = activeRoster?.name || "Default roster";
   const headerColor = rosterThemeColor(activeRoster);
   const groupLogo = rosterLogo(activeRoster);
@@ -949,14 +951,40 @@ function App() {
   }, [activeRosterName, headerColor, groupLogo]);
 
   const replacePlayers = (nextPlayers: RoomPlayer[]) => {
+    const normalizedPlayers = nextPlayers.map((player, index) => normalizePlayer(player, index));
+    const safePlayerIds = new Set(normalizedPlayers.map((player) => player.id));
     setRosterState((current) => ({
       ...current,
       rosters: current.rosters.map((roster) =>
         roster.id === current.activeRosterId
           ? {
               ...roster,
-              players: nextPlayers.map((player, index) =>
-                normalizePlayer(player, index),
+              players: normalizedPlayers,
+              pairingRules: (roster.pairingRules || []).filter((rule) =>
+                safePlayerIds.has(rule.playerAId) &&
+                safePlayerIds.has(rule.playerBId) &&
+                rule.playerAId !== rule.playerBId,
+              ),
+              updatedAt: new Date().toISOString(),
+            }
+          : roster,
+      ),
+    }));
+  };
+
+  const replacePairingRules = (nextPairingRules: PairingRule[]) => {
+    const safePlayerIds = new Set(players.map((player) => player.id));
+    setRosterState((current) => ({
+      ...current,
+      rosters: current.rosters.map((roster) =>
+        roster.id === current.activeRosterId
+          ? {
+              ...roster,
+              pairingRules: nextPairingRules.filter((rule) =>
+                (rule.kind === "together" || rule.kind === "separate") &&
+                safePlayerIds.has(rule.playerAId) &&
+                safePlayerIds.has(rule.playerBId) &&
+                rule.playerAId !== rule.playerBId,
               ),
               updatedAt: new Date().toISOString(),
             }
@@ -2543,6 +2571,8 @@ They will no longer be able to open or edit this shared roster unless it is shar
               <PlayersTab
                 players={players}
                 setPlayers={replacePlayers}
+                pairingRules={pairingRules}
+                setPairingRules={replacePairingRules}
                 onScreenshotImport={() => {
                   setOcrImportContext("roster");
                   setActiveTab("today");
@@ -2584,7 +2614,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
               value="teams"
               className="m-0 data-[state=active]:animate-in data-[state=active]:fade-in-50"
             >
-              <TeamsTab players={players} />
+              <TeamsTab players={players} pairingRules={pairingRules} />
             </TabsContent>
             <PoweredByFairTeams />
           </div>

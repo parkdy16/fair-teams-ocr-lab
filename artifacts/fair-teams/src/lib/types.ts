@@ -40,6 +40,16 @@ export interface Player {
 
 export type AttendanceMap = Record<string, boolean>;
 
+export type PairingRuleKind = "together" | "separate";
+
+export interface PairingRule {
+  id: string;
+  kind: PairingRuleKind;
+  playerAId: string;
+  playerBId: string;
+  createdAt?: string;
+}
+
 export type TeamColor = "red" | "blue" | "lime" | "yellow" | "orange" | "black" | "white";
 
 export type FieldSize = "small" | "medium" | "large";

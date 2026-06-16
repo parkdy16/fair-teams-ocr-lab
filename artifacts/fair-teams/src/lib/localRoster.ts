@@ -1,4 +1,4 @@
-import { FunBadge, Gender, TodayStatus } from "@/lib/types";
+import { FunBadge, Gender, PairingRule, PairingRuleKind, TodayStatus } from "@/lib/types";
 import { getSpecialSkillStatBoosts } from "@/lib/playerAbilityEffects";
 
 export interface RoomPlayer {
@@ -266,6 +266,7 @@ export interface RoomRoster {
   id: string;
   name: string;
   players: RoomPlayer[];
+  pairingRules?: PairingRule[];
   themeColor?: string;
   logo?: string;
   cloudSource?: RosterCloudSource;
@@ -418,16 +419,61 @@ function cleanRosterCloudSource(value: unknown): RosterCloudSource | undefined {
   return undefined;
 }
 
+function createPairingRuleId() {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return `pair-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function cleanPairingRuleKind(value: unknown): PairingRuleKind | undefined {
+  return value === "together" || value === "separate" ? value : undefined;
+}
+
+function cleanPairingRules(value: unknown, players: RoomPlayer[]): PairingRule[] {
+  if (!Array.isArray(value)) return [];
+  const playerIds = new Set(players.map((player) => player.id));
+  const seen = new Set<string>();
+  const rules: PairingRule[] = [];
+
+  value.forEach((item) => {
+    if (!item || typeof item !== "object") return;
+    const record = item as Record<string, unknown>;
+    const kind = cleanPairingRuleKind(record.kind);
+    const playerAId = typeof record.playerAId === "string" ? record.playerAId.trim() : "";
+    const playerBId = typeof record.playerBId === "string" ? record.playerBId.trim() : "";
+    if (!kind || !playerAId || !playerBId || playerAId === playerBId) return;
+    if (!playerIds.has(playerAId) || !playerIds.has(playerBId)) return;
+
+    const ordered = [playerAId, playerBId].sort().join("|");
+    const key = `${kind}|${ordered}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+
+    rules.push({
+      id: typeof record.id === "string" && record.id.trim() ? record.id.trim() : createPairingRuleId(),
+      kind,
+      playerAId,
+      playerBId,
+      createdAt: typeof record.createdAt === "string" && record.createdAt.trim() ? record.createdAt.trim() : new Date().toISOString(),
+    });
+  });
+
+  return rules;
+}
+
 export function createRoster(
   name: string,
   players: Partial<RoomPlayer>[] = [],
   identity: { themeColor?: string; logo?: string } = {},
 ): RoomRoster {
   const now = new Date().toISOString();
+  const normalizedPlayers = players.map((player, index) => normalizePlayer(player, index)).filter((player) => player.name);
   return {
     id: createLocalRosterId(),
     name: cleanRosterName(name),
-    players: players.map((player, index) => normalizePlayer(player, index)).filter((player) => player.name),
+    players: normalizedPlayers,
+    pairingRules: [],
     themeColor: pickRosterColor(identity),
     logo: pickRosterLogo(identity),
     createdAt: now,
@@ -438,12 +484,14 @@ export function createRoster(
 export function normalizeRoster(roster: Partial<RoomRoster> & { rosterName?: string; players?: Partial<RoomPlayer>[] }, index = 0): RoomRoster {
   const now = new Date().toISOString();
   const name = pickRosterName(roster, `${DEFAULT_ROSTER_NAME} ${index + 1}`);
+  const players = Array.isArray(roster.players)
+    ? roster.players.map((player, playerIndex) => normalizePlayer(player, playerIndex)).filter((player) => player.name)
+    : [];
   return {
     id: typeof roster.id === "string" && roster.id.trim() ? roster.id : createLocalRosterId(),
     name,
-    players: Array.isArray(roster.players)
-      ? roster.players.map((player, playerIndex) => normalizePlayer(player, playerIndex)).filter((player) => player.name)
-      : [],
+    players,
+    pairingRules: cleanPairingRules((roster as { pairingRules?: unknown }).pairingRules, players),
     themeColor: pickRosterColor(roster),
     logo: pickRosterLogo(roster),
     cloudSource: cleanRosterCloudSource((roster as { cloudSource?: unknown }).cloudSource),

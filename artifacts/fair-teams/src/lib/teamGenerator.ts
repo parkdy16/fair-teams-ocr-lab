@@ -1,5 +1,5 @@
 import { getSpecialSkillStatBoosts } from "./playerAbilityEffects";
-import { FieldSize, Player, Team, TeamColor } from "./types";
+import { FieldSize, PairingRule, Player, Team, TeamColor } from "./types";
 
 const DEFAULT_COLORS: TeamColor[] = ["red", "blue", "lime", "yellow", "orange", "black"];
 
@@ -37,11 +37,113 @@ function getBalanceSkill(player: Player, fieldSize: FieldSize = "medium") {
   return Number((skill * (isNotHereYet(player) ? NOT_HERE_YET_BALANCE_WEIGHT : 1)).toFixed(1));
 }
 
+function cloneTeams(teams: Team[]): Team[] {
+  return teams.map((team) => ({ ...team, players: [...team.players] }));
+}
+
+function cleanActivePairingRules(rules: PairingRule[] | undefined, players: Player[]) {
+  if (!rules?.length) return [];
+  const activeIds = new Set(players.map((player) => player.id));
+  const seen = new Set<string>();
+  const cleaned: PairingRule[] = [];
+
+  rules.forEach((rule) => {
+    if (!rule || (rule.kind !== "together" && rule.kind !== "separate")) return;
+    if (!rule.playerAId || !rule.playerBId || rule.playerAId === rule.playerBId) return;
+    if (!activeIds.has(rule.playerAId) || !activeIds.has(rule.playerBId)) return;
+    const ordered = [rule.playerAId, rule.playerBId].sort().join("|");
+    const key = `${rule.kind}|${ordered}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    cleaned.push(rule);
+  });
+
+  return cleaned;
+}
+
+function teamIndexByPlayerId(teams: Team[]) {
+  const index = new Map<string, number>();
+  teams.forEach((team, teamIndex) => {
+    team.players.forEach((player) => index.set(player.id, teamIndex));
+  });
+  return index;
+}
+
+function pairingRuleScore(teams: Team[], rules: PairingRule[], fieldSize: FieldSize) {
+  const playerTeam = teamIndexByPlayerId(teams);
+  let score = 0;
+
+  rules.forEach((rule) => {
+    const aTeam = playerTeam.get(rule.playerAId);
+    const bTeam = playerTeam.get(rule.playerBId);
+    if (aTeam === undefined || bTeam === undefined) return;
+
+    if (rule.kind === "separate" && aTeam === bTeam) {
+      score += 10000;
+    }
+    if (rule.kind === "together" && aTeam !== bTeam) {
+      score += 4000;
+    }
+  });
+
+  const sizes = teams.map((team) => team.players.length);
+  const maxSize = Math.max(...sizes, 0);
+  const minSize = Math.min(...sizes, 0);
+  score += (maxSize - minSize) * 80;
+
+  const totals = teams.map((team) => team.players.reduce((sum, player) => sum + getBalanceSkill(player, fieldSize), 0));
+  const maxTotal = Math.max(...totals, 0);
+  const minTotal = Math.min(...totals, 0);
+  score += (maxTotal - minTotal) * 8;
+
+  return score;
+}
+
+function improvePairingRules(teams: Team[], rules: PairingRule[] | undefined, fieldSize: FieldSize): Team[] {
+  const activeRules = cleanActivePairingRules(rules, teams.flatMap((team) => team.players));
+  if (activeRules.length === 0 || teams.length < 2) return teams;
+
+  let current = cloneTeams(teams);
+  let currentScore = pairingRuleScore(current, activeRules, fieldSize);
+
+  for (let pass = 0; pass < 8; pass++) {
+    let bestTeams = current;
+    let bestScore = currentScore;
+
+    for (let a = 0; a < current.length; a++) {
+      for (let b = a + 1; b < current.length; b++) {
+        for (let ai = 0; ai < current[a]!.players.length; ai++) {
+          for (let bi = 0; bi < current[b]!.players.length; bi++) {
+            const candidate = cloneTeams(current);
+            const playerA = candidate[a]!.players[ai]!;
+            const playerB = candidate[b]!.players[bi]!;
+            candidate[a]!.players[ai] = playerB;
+            candidate[b]!.players[bi] = playerA;
+
+            const score = pairingRuleScore(candidate, activeRules, fieldSize);
+            if (score + 0.001 < bestScore) {
+              bestScore = score;
+              bestTeams = candidate;
+            }
+          }
+        }
+      }
+    }
+
+    if (bestScore + 0.001 >= currentScore) break;
+    current = bestTeams;
+    currentScore = bestScore;
+  }
+
+  return recomputeStats(current, fieldSize);
+}
+
 export function generateTeams(
   players: Player[],
   numTeams: number,
   shuffleEquals: boolean = false,
-  fieldSize: FieldSize = "medium"
+  fieldSize: FieldSize = "medium",
+  pairingRules: PairingRule[] = []
 ): Team[] {
   if (numTeams < 2 || players.length === 0) return [];
 
@@ -113,7 +215,7 @@ export function generateTeams(
         : 0;
   });
 
-  return teams;
+  return improvePairingRules(teams, pairingRules, fieldSize);
 }
 
 export function recomputeStats(teams: Team[], fieldSize: FieldSize = "medium"): Team[] {

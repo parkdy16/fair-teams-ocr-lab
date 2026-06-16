@@ -482,6 +482,14 @@ function App() {
       : null;
   const activeRosterIsShared = Boolean(activeGoogleSheetSource?.spreadsheetId || activeFirebaseSource?.firebaseRosterId);
   const activeRosterIsFirebaseShared = Boolean(activeFirebaseSource?.firebaseRosterId);
+  const firebaseAccessLabelsFromSummary = (summary: FirebaseSharedRosterSummary) =>
+    Object.fromEntries(
+      [...(summary.memberEmails || []), ...(summary.pendingInviteEmails || [])]
+        .map((email) => email.trim().toLowerCase())
+        .filter((email) => email.includes("@"))
+        .map((email) => [email, "editor"]),
+    );
+
   const rosterFirebaseShareCount = (roster: RoomRoster | undefined) => {
     const source = roster?.cloudSource?.provider === "firebase" ? roster.cloudSource : undefined;
     const ownerEmail = source?.firebaseOwnerEmail?.toLowerCase();
@@ -489,6 +497,56 @@ function App() {
       ? Object.keys(source.accessLabels).filter((email) => email.toLowerCase() !== ownerEmail).length
       : 0;
     return source?.firebaseRosterId ? Math.max(0, labels) : 0;
+  };
+
+  const syncFirebaseRosterBadgesFromSummaries = (summaries: FirebaseSharedRosterSummary[]) => {
+    if (!summaries.length) return;
+    const summaryById = new Map(summaries.map((summary) => [summary.id, summary]));
+    setRosterState((current) => {
+      let changed = false;
+      const rostersWithFreshBadges = current.rosters.map((roster) => {
+        const source = roster.cloudSource?.provider === "firebase" ? roster.cloudSource : undefined;
+        if (!source?.firebaseRosterId) return roster;
+        const summary = summaryById.get(source.firebaseRosterId);
+        if (!summary) return roster;
+
+        const nextAccessLabels = firebaseAccessLabelsFromSummary(summary);
+        const currentLabels = source.accessLabels || {};
+        const currentLabelSignature = JSON.stringify(Object.keys(currentLabels).sort().map((email) => [email, currentLabels[email]]));
+        const nextLabelSignature = JSON.stringify(Object.keys(nextAccessLabels).sort().map((email) => [email, nextAccessLabels[email]]));
+        const nextGroupId = summary.groupId || source.firebaseGroupId;
+        const nextGroupName = summary.groupName || source.firebaseGroupName;
+        const nextRole = summary.currentUserRole || source.firebaseRole;
+        const nextOwnerUid = summary.ownerUid || source.firebaseOwnerUid;
+        const nextOwnerEmail = summary.ownerEmail || source.firebaseOwnerEmail;
+        const nextLastSavedByEmail = summary.lastSavedByEmail || source.firebaseLastSavedByEmail;
+        const metadataChanged =
+          currentLabelSignature !== nextLabelSignature ||
+          source.firebaseGroupId !== nextGroupId ||
+          source.firebaseGroupName !== nextGroupName ||
+          source.firebaseRole !== nextRole ||
+          source.firebaseOwnerUid !== nextOwnerUid ||
+          source.firebaseOwnerEmail !== nextOwnerEmail ||
+          source.firebaseLastSavedByEmail !== nextLastSavedByEmail;
+
+        if (!metadataChanged) return roster;
+        changed = true;
+        return normalizeRoster({
+          ...roster,
+          cloudSource: {
+            ...source,
+            firebaseGroupId: nextGroupId,
+            firebaseGroupName: nextGroupName,
+            firebaseRole: nextRole,
+            firebaseOwnerUid: nextOwnerUid,
+            firebaseOwnerEmail: nextOwnerEmail,
+            firebaseLastSavedByEmail: nextLastSavedByEmail,
+            accessLabels: nextAccessLabels,
+          },
+        });
+      });
+      return changed ? { ...current, rosters: rostersWithFreshBadges } : current;
+    });
   };
   const sharedGoogleSheetRosters = rosters.filter(
     (roster) => roster.cloudSource?.provider === "google-sheets" && Boolean(roster.cloudSource.spreadsheetId),
@@ -932,7 +990,7 @@ function App() {
               firebaseLastSavedByEmail: firebaseSummary.lastSavedByEmail,
               lastSyncedAt: new Date().toISOString(),
               lastRemoteModifiedAt: firebaseSummary.updatedAt,
-              accessLabels: Object.fromEntries([...(firebaseSummary.memberEmails || []), ...(firebaseSummary.pendingInviteEmails || [])].map((email) => [email, "editor"])),
+              accessLabels: firebaseAccessLabelsFromSummary(firebaseSummary),
               syncMode: "manual",
             }
           : undefined,
@@ -968,7 +1026,7 @@ function App() {
                   firebaseOwnerEmail: summary.ownerEmail,
                   firebaseRole: summary.currentUserRole,
                   firebaseLastSavedByEmail: summary.lastSavedByEmail,
-                  accessLabels: Object.fromEntries([...(summary.memberEmails || []), ...(summary.pendingInviteEmails || [])].map((email) => [email, "editor"])),
+                  accessLabels: firebaseAccessLabelsFromSummary(summary),
                   lastSyncedAt: summary.updatedAt || new Date().toISOString(),
                   lastRemoteModifiedAt: summary.updatedAt,
                   syncMode: "manual",
@@ -1026,6 +1084,7 @@ function App() {
               firebaseOwnerEmail: summary.ownerEmail,
               firebaseRole: summary.currentUserRole,
               firebaseLastSavedByEmail: summary.lastSavedByEmail,
+              accessLabels: firebaseAccessLabelsFromSummary(summary),
               lastSyncedAt: summary.updatedAt || new Date().toISOString(),
               lastRemoteModifiedAt: summary.updatedAt,
               syncMode: "manual",
@@ -3056,6 +3115,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                       onOpenRoster={openFirebaseSharedRosterAsLocalCopy}
                       onRosterSaved={markActiveFirebaseRosterSaved}
                       onRefreshActiveRoster={refreshActiveFirebaseRosterFromRemote}
+                      onSharedRosterSummariesUpdated={syncFirebaseRosterBadgesFromSummaries}
                     />
 
                     <details className="rounded-2xl border border-amber-100 bg-amber-50/60 p-2">

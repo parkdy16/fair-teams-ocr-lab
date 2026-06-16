@@ -27,6 +27,7 @@ type Props = {
   onOpenRoster?: (roster: RoomRoster, sourceName: string, summary: FirebaseSharedRosterSummary) => void;
   onRosterSaved?: (summary: FirebaseSharedRosterSummary, localRosterId?: string) => void;
   onRefreshActiveRoster?: (roster: RoomRoster, sourceName: string, summary: FirebaseSharedRosterSummary, localRosterId?: string) => void;
+  onSharedRosterSummariesUpdated?: (summaries: FirebaseSharedRosterSummary[]) => void;
 };
 
 function friendlyFirestoreError(error: unknown) {
@@ -62,7 +63,7 @@ function modalShell(title: string, onClose: () => void, body: React.ReactNode) {
   );
 }
 
-export function FirebaseSharedRosterPublishCard({ activeRoster, rosters = [], isEmptyRoster, onOpenRoster, onRosterSaved, onRefreshActiveRoster }: Props) {
+export function FirebaseSharedRosterPublishCard({ activeRoster, rosters = [], isEmptyRoster, onOpenRoster, onRosterSaved, onRefreshActiveRoster, onSharedRosterSummariesUpdated }: Props) {
   const [user, setUser] = useState<SharedRosterUser | null>(null);
   const [busy, setBusy] = useState<string>("");
   const [sharedGroups, setSharedGroups] = useState<FirebaseSharedGroupSummary[]>([]);
@@ -128,6 +129,7 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, rosters = [], is
       setSharedGroups(groups);
       setSharedRosters(rosters);
       setIncomingInvites(invites);
+      onSharedRosterSummariesUpdated?.(rosters);
     } catch (error) {
       setNotice({ tone: "error", text: friendlyFirestoreError(error) });
     } finally {

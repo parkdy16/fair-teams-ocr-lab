@@ -407,6 +407,10 @@ function cleanRosterCloudSource(value: unknown): RosterCloudSource | undefined {
     if (typeof record.lastRemoteModifiedAt === "string" && record.lastRemoteModifiedAt.trim()) {
       source.lastRemoteModifiedAt = record.lastRemoteModifiedAt.trim();
     }
+    const accessLabels = cleanAccessLabels(record.accessLabels);
+    if (accessLabels) {
+      source.accessLabels = accessLabels;
+    }
 
     return source;
   }

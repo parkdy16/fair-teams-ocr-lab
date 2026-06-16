@@ -2590,27 +2590,27 @@ They will no longer be able to open or edit this shared roster unless it is shar
         </div>
 
         <div className="fixed inset-x-0 bottom-0 z-40 mx-auto w-full max-w-md border-t border-slate-200 bg-white/95 px-4 pb-[max(0.65rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-4px_14px_rgba(15,23,42,0.035)] backdrop-blur md:max-w-3xl lg:max-w-5xl">
-          <TabsList className="mx-auto grid h-12 w-full max-w-md grid-cols-3 gap-1 rounded-2xl border border-slate-200/70 bg-white p-1 shadow-sm">
+          <TabsList className="mx-auto grid h-[54px] w-full max-w-md grid-cols-3 gap-1 rounded-2xl border border-slate-200/70 bg-white p-1.5 shadow-sm">
             <TabsTrigger
               value="players"
-              className="fairteams-tab-trigger flex h-full items-center justify-center gap-1.5 rounded-xl text-slate-500 transition-all"
+              className="fairteams-tab-trigger flex h-full flex-col items-center justify-center gap-0.5 rounded-xl text-slate-500 transition-all"
             >
-              <Users className="h-4 w-4" />
-              <span className="text-[10px] font-extrabold uppercase tracking-wider">Roster</span>
+              <Users className="h-[18px] w-[18px]" />
+              <span className="text-[11px] font-bold leading-none tracking-tight">Roster</span>
             </TabsTrigger>
             <TabsTrigger
               value="today"
-              className="fairteams-tab-trigger flex h-full items-center justify-center gap-1.5 rounded-xl text-slate-500 transition-all"
+              className="fairteams-tab-trigger flex h-full flex-col items-center justify-center gap-0.5 rounded-xl text-slate-500 transition-all"
             >
-              <CalendarCheck className="h-4 w-4" />
-              <span className="text-[10px] font-extrabold uppercase tracking-wider">Today</span>
+              <CalendarCheck className="h-[18px] w-[18px]" />
+              <span className="text-[11px] font-bold leading-none tracking-tight">Today</span>
             </TabsTrigger>
             <TabsTrigger
               value="teams"
-              className="fairteams-tab-trigger flex h-full items-center justify-center gap-1.5 rounded-xl text-slate-500 transition-all"
+              className="fairteams-tab-trigger flex h-full flex-col items-center justify-center gap-0.5 rounded-xl text-slate-500 transition-all"
             >
-              <Shield className="h-4 w-4" />
-              <span className="text-[10px] font-extrabold uppercase tracking-wider">Teams</span>
+              <Shield className="h-[18px] w-[18px]" />
+              <span className="text-[11px] font-bold leading-none tracking-tight">Teams</span>
             </TabsTrigger>
           </TabsList>
         </div>
@@ -2623,20 +2623,12 @@ They will no longer be able to open or edit this shared roster unless it is shar
           aria-modal="true"
         >
           <div className="w-full max-w-xl rounded-t-3xl border border-slate-200 bg-white p-4 shadow-2xl sm:rounded-3xl">
-            <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-3">
-              <div>
-                <h2 className="text-base font-black tracking-tight text-[#102A43]">
-                  Roster Identity
-                </h2>
-                <p className="mt-0.5 text-[11px] font-semibold text-slate-500">
-                  Name, logo, and color are saved with this roster.
-                </p>
-              </div>
+            <div className="mb-1 flex justify-end">
               <Button
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="h-9 w-9 rounded-xl"
+                className="h-9 w-9 rounded-xl text-slate-500 hover:text-slate-800"
                 onClick={cancelGroupSettings}
                 title="Close"
               >
@@ -2644,9 +2636,9 @@ They will no longer be able to open or edit this shared roster unless it is shar
               </Button>
             </div>
 
-            <div className="mt-4 space-y-4">
+            <div className="space-y-4">
               <section>
-                <h3 className="text-sm font-black text-[#102A43]">
+                <h3 className="text-[13px] font-bold text-[#102A43]">
                   Roster Name
                 </h3>
                 <input
@@ -2660,13 +2652,13 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   }}
                   maxLength={32}
                   enterKeyHint="done"
-                  className="mt-2 h-10 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm font-extrabold text-[#102A43] outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
+                  className="mt-2 h-10 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm font-semibold text-[#102A43] outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
                   placeholder="Fair Teams"
                 />
               </section>
 
               <section>
-                <h3 className="text-sm font-black text-[#102A43]">
+                <h3 className="text-[13px] font-bold text-[#102A43]">
                   Roster Logo
                 </h3>
                 <div className="mt-2 flex items-center gap-3">
@@ -2681,7 +2673,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                     <Button
                       type="button"
                       variant="outline"
-                      className="h-9 rounded-2xl text-xs font-black"
+                      className="h-9 rounded-2xl text-xs font-bold"
                       onClick={() => logoInputRef.current?.click()}
                     >
                       Choose logo
@@ -2712,7 +2704,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
               </section>
 
               <section>
-                <h3 className="text-sm font-black text-[#102A43]">
+                <h3 className="text-[13px] font-bold text-[#102A43]">
                   Roster Color
                 </h3>
                 <div className="mt-2 grid grid-cols-5 gap-2.5">
@@ -2755,14 +2747,14 @@ They will no longer be able to open or edit this shared roster unless it is shar
               <Button
                 type="button"
                 variant="outline"
-                className="h-11 flex-1 rounded-2xl text-sm font-black"
+                className="h-11 flex-1 rounded-2xl text-sm font-bold"
                 onClick={cancelGroupSettings}
               >
                 Cancel
               </Button>
               <Button
                 type="button"
-                className="h-11 flex-[1.4] rounded-2xl bg-[#102A43] text-sm font-black text-white"
+                className="h-11 flex-[1.4] rounded-2xl bg-[#102A43] text-sm font-bold text-white"
                 onClick={saveGroupSettings}
               >
                 Save
@@ -3358,7 +3350,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   >
                     <span className="min-w-0">
                       <span className="flex min-w-0 items-center gap-1.5">
-                        <span className="truncate text-sm font-black text-[#102A43]">
+                        <span className="truncate text-[13px] font-bold text-[#102A43]">
                           {roster.name}
                         </span>
                         {roster.cloudSource?.provider === "firebase" && roster.cloudSource.firebaseRosterId && (
@@ -3436,7 +3428,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                       className="flex w-full items-center justify-between gap-3 rounded-2xl border border-emerald-100 bg-emerald-50/60 px-3 py-3 text-left transition active:scale-[0.99]"
                     >
                       <span className="min-w-0">
-                        <span className="block truncate text-sm font-black text-[#102A43]">
+                        <span className="block truncate text-[13px] font-bold text-[#102A43]">
                           {file.name}
                         </span>
                         <span className="mt-0.5 block truncate text-[11px] font-bold text-emerald-700/75">
@@ -3846,7 +3838,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 <div className="text-[10px] font-black uppercase tracking-wide text-emerald-700">
                   Linked roster
                 </div>
-                <div className="mt-1 truncate text-sm font-black text-[#102A43]">
+                <div className="mt-1 truncate text-[13px] font-bold text-[#102A43]">
                   {activeGoogleSheetSource?.spreadsheetName || activeRosterName}
                 </div>
                 <div className="mt-1 text-[10px] font-semibold leading-snug text-emerald-800/75">
@@ -4278,7 +4270,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                       className="flex w-full items-center justify-between gap-3 rounded-2xl border border-blue-100 bg-blue-50/60 px-3 py-3 text-left transition active:scale-[0.99]"
                     >
                       <span className="min-w-0">
-                        <span className="block truncate text-sm font-black text-[#102A43]">
+                        <span className="block truncate text-[13px] font-bold text-[#102A43]">
                           {file.name}
                         </span>
                         <span className="mt-0.5 block truncate text-[11px] font-bold text-blue-700/75">
@@ -4410,7 +4402,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                             onClick={() => toggleDriveRecipient(recipient.id)}
                             className="min-w-0 flex-1 text-left"
                           >
-                            <div className="truncate text-sm font-black text-[#102A43]">
+                            <div className="truncate text-[13px] font-bold text-[#102A43]">
                               {recipient.name || recipient.email}
                             </div>
                             <div className="truncate text-[11px] font-bold text-slate-500">
@@ -4491,7 +4483,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
               <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
                 Safety backup file
               </div>
-              <div className="mt-1 truncate text-sm font-black text-[#102A43]">
+              <div className="mt-1 truncate text-[13px] font-bold text-[#102A43]">
                 {driveUpdateConfirm.file.name}
               </div>
             </div>

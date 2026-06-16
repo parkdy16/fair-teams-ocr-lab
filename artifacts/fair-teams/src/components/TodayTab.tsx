@@ -3077,8 +3077,7 @@ export function TodayTab({
       {rosterChoices.length > 0 && !todayRosterReady ? (
         <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="mb-4 text-center">
-            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Today</p>
-            <h2 className="mt-1 text-xl font-black tracking-tight text-[#102A43]">Choose roster</h2>
+            <h2 className="text-xl font-black tracking-tight text-[#102A43]">Choose roster</h2>
             <p className="mx-auto mt-1 max-w-xs text-xs font-semibold leading-relaxed text-slate-500">
               Pick the group or class you are making teams for.
             </p>

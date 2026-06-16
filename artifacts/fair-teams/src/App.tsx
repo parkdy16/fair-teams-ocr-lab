@@ -341,6 +341,18 @@ function formatBackupSummary(summary: DriveBackupSummary | null | undefined) {
   return `${summary.rosterCount} roster${summary.rosterCount === 1 ? "" : "s"} · ${summary.playerCount} player${summary.playerCount === 1 ? "" : "s"}`;
 }
 
+function formatTodayStartDateLabel(date = new Date()) {
+  const weekday = new Intl.DateTimeFormat("en-US", { weekday: "short" })
+    .format(date)
+    .toUpperCase();
+  const month = new Intl.DateTimeFormat("en-US", { month: "short" })
+    .format(date)
+    .toUpperCase();
+  const day = new Intl.DateTimeFormat("en-US", { day: "numeric" }).format(date);
+
+  return `${weekday} · ${month} ${day}`;
+}
+
 function App() {
   const [showSplash, setShowSplash] = useState(true);
   const [splashVisible, setSplashVisible] = useState(false);
@@ -935,12 +947,24 @@ function App() {
     setGroupSettingsOpen(false);
   };
 
-  const headerDisplayName = activeRosterName || "Fair Teams";
+  const shouldShowTodayStartHeader =
+    activeTab === "today" && rosters.length > 0 && !todayRosterChosen;
+  const headerDisplayName = shouldShowTodayStartHeader
+    ? formatTodayStartDateLabel()
+    : activeRosterName || "Fair Teams";
   const isWhiteHeaderColor = headerColor.toLowerCase() === "#ffffff";
-  const identityAccentColor = isWhiteHeaderColor ? "#E2E8F0" : headerColor;
+  const identityAccentColor = shouldShowTodayStartHeader
+    ? "#E2E8F0"
+    : isWhiteHeaderColor
+      ? "#E2E8F0"
+      : headerColor;
   const logoRingStyle = {
-    borderColor: isWhiteHeaderColor ? "#E2E8F0" : headerColor,
-    boxShadow: isWhiteHeaderColor
+    borderColor: shouldShowTodayStartHeader
+      ? "#E2E8F0"
+      : isWhiteHeaderColor
+        ? "#E2E8F0"
+        : headerColor,
+    boxShadow: shouldShowTodayStartHeader || isWhiteHeaderColor
       ? "0 1px 2px rgba(15, 23, 42, 0.08)"
       : `0 0 0 2px ${hexToRgba(headerColor, 0.14)}`,
   } as React.CSSProperties;
@@ -2476,12 +2500,14 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 title={
                   activeTab === "players"
                     ? "Edit active roster name, logo, and color"
-                    : activeRosterName
+                    : headerDisplayName
                 }
                 aria-label={
                   activeTab === "players"
                     ? "Edit active roster identity"
-                    : `Current roster: ${activeRosterName}`
+                    : shouldShowTodayStartHeader
+                      ? `Today start: ${headerDisplayName}`
+                      : `Current roster: ${activeRosterName}`
                 }
               >
                 <span
@@ -2489,16 +2515,22 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   style={logoRingStyle}
                 >
                   <img
-                    src={groupLogo || fairTeamsLogo}
+                    src={shouldShowTodayStartHeader ? fairTeamsLogo : groupLogo || fairTeamsLogo}
                     alt=""
                     className="h-full w-full object-cover"
                   />
                 </span>
                 <span className="flex min-w-0 max-w-full items-center gap-1.5">
-                  <h1 className="truncate text-[17px] font-black leading-tight tracking-tight text-[#102A43]">
+                  <h1
+                    className={`truncate leading-tight text-[#102A43] ${
+                      shouldShowTodayStartHeader
+                        ? "font-mono text-[13px] font-black uppercase tracking-[0.12em] text-[#102A43]/75"
+                        : "text-[17px] font-black tracking-tight"
+                    }`}
+                  >
                     {headerDisplayName}
                   </h1>
-                  {activeRosterIsFirebaseShared && (
+                  {activeRosterIsFirebaseShared && !shouldShowTodayStartHeader && (
                     <span className="inline-flex h-5 shrink-0 items-center gap-0.5 rounded-full bg-emerald-50 px-1.5 text-[10px] font-black text-emerald-700" title="Shared roster">
                       <Users className="h-3 w-3" />
                       {rosterFirebaseShareCount(activeRoster)}

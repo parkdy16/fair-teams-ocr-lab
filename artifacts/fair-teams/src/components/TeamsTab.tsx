@@ -741,7 +741,7 @@ export function TeamsTab({ players, pairingRules = [] }: { players: RoomPlayer[]
                       )}
                     </div>
 
-                    <div className="flex shrink-0 items-center gap-1">
+                    <div className="flex shrink-0 items-center gap-0.5">
                       <button
                         type="button"
                         onClick={() => toggleTeamStats(team.id)}
@@ -912,30 +912,30 @@ export function TeamsTab({ players, pairingRules = [] }: { players: RoomPlayer[]
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto px-3 py-3">
-              <div className="mx-auto grid max-w-4xl grid-cols-2 gap-2">
+            <div className="flex-1 overflow-y-auto px-2 py-2">
+              <div className="mx-auto grid max-w-5xl grid-cols-2 gap-1.5">
                 {teams.map((team) => {
                   const col = colorFor(team.color);
                   const borderColor = team.color === "white" ? "#E2E8F0" : col.hex;
                   return (
                     <div
                       key={team.id}
-                      className="overflow-hidden rounded-2xl border-2 bg-white text-[#102A43] shadow-xl"
+                      className="overflow-hidden rounded-xl border-2 bg-white text-[#102A43] shadow-xl"
                       style={{ borderColor }}
                     >
-                      <div className="flex items-center justify-between gap-1.5 px-2.5 py-2" style={{ borderBottom: `2px solid ${borderColor}` }}>
-                        <div className="min-w-0 truncate text-[14px] font-black leading-tight sm:text-base">{team.name}</div>
-                        <div className="shrink-0 rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] font-black text-slate-500">
+                      <div className="flex items-center justify-between gap-1.5 px-2 py-1.5" style={{ borderBottom: `2px solid ${borderColor}` }}>
+                        <div className="min-w-0 truncate text-[15px] font-black leading-tight sm:text-[17px]">{team.name}</div>
+                        <div className="shrink-0 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-black text-slate-500">
                           {team.players.length}
                         </div>
                       </div>
                       <div className="divide-y divide-slate-100">
                         {team.players.length === 0 ? (
-                          <p className="px-2.5 py-2 text-[11px] font-bold text-slate-400">Empty</p>
+                          <p className="px-2 py-1.5 text-[12px] font-bold text-slate-400">Empty</p>
                         ) : team.players.map((player) => (
-                          <div key={player.id} className="flex min-h-7 items-center justify-between gap-1.5 px-2.5 py-1.5">
-                            <div className="min-w-0 truncate text-[12px] font-black leading-tight sm:text-sm">{displayName(player)}</div>
-                            <div className="flex shrink-0 items-center gap-1">
+                          <div key={player.id} className="flex min-h-[1.65rem] items-center justify-between gap-1 px-2 py-1">
+                            <div className="min-w-0 truncate text-[13px] font-black leading-tight sm:text-[15px]">{displayName(player)}</div>
+                            <div className="flex shrink-0 items-center gap-0.5">
                               {player.isGoalkeeper && <GKBadge />}
                               {player.isOrganizer && <ORGBadge />}
                               {isNotHereYet(player) && <NotHereBadge />}
@@ -949,7 +949,7 @@ export function TeamsTab({ players, pairingRules = [] }: { players: RoomPlayer[]
               </div>
             </div>
 
-            <div className="flex items-center justify-between gap-2 border-t border-white/10 bg-slate-950/95 px-3 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+            <div className="flex items-center justify-between gap-2 border-t border-white/10 bg-slate-950/95 px-2 py-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
               <p className="min-w-0 text-[11px] font-semibold leading-snug text-slate-400">
                 Show this screen to players. Save only when you need an image.
               </p>

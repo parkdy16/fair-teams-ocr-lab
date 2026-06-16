@@ -2618,14 +2618,23 @@ They will no longer be able to open or edit this shared roster unless it is shar
           aria-modal="true"
         >
           <div className="w-full max-w-xl rounded-t-3xl border border-slate-200 bg-white p-4 shadow-2xl sm:rounded-3xl">
-            <div className="mb-1 flex justify-end">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <h2 className="text-base font-bold tracking-tight text-[#102A43]">
+                  Edit roster
+                </h2>
+                <p className="mt-0.5 text-xs font-medium text-slate-500">
+                  Name, logo, and color
+                </p>
+              </div>
               <Button
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="h-9 w-9 rounded-xl text-slate-500 hover:text-slate-800"
+                className="h-9 w-9 shrink-0 rounded-xl text-slate-500 hover:text-slate-800"
                 onClick={cancelGroupSettings}
                 title="Close"
+                aria-label="Close edit roster"
               >
                 <X className="h-4 w-4" />
               </Button>

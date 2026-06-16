@@ -7,7 +7,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Check,
   ChevronRight,
   Clock3,
   ClipboardList,
@@ -15,6 +14,7 @@ import {
   Mic,
   Search,
   Upload,
+  Users,
   X,
 } from "lucide-react";
 import {
@@ -75,6 +75,16 @@ function TodayStatusDots({
 
 function isNotHereYet(player: Pick<RoomPlayer, "todayStatus">) {
   return player.todayStatus === "not_here_yet";
+}
+
+function rosterSharedCount(roster: RoomRoster) {
+  const source = roster.cloudSource;
+  if (!source?.accessLabels) return 0;
+  const ownerEmail = source.firebaseOwnerEmail?.trim().toLowerCase();
+  return Object.keys(source.accessLabels).filter((email) => {
+    const normalized = email.trim().toLowerCase();
+    return normalized && (!ownerEmail || normalized !== ownerEmail);
+  }).length;
 }
 
 type SpeechRecognitionResultLike = {
@@ -1667,7 +1677,7 @@ export function TodayTab({
   const [prioritizeScannedPlayers, setPrioritizeScannedPlayers] =
     useState(false);
   const getTodayRosterReady = () => {
-    if (rosterChoices.length <= 1) return true;
+    if (rosterChoices.length === 0) return true;
     if (!activeRosterId) return false;
     return todayRosterReadyIds.has(activeRosterId);
   };
@@ -1695,7 +1705,7 @@ export function TodayTab({
   } | null>(null);
 
   useEffect(() => {
-    if (rosterChoices.length <= 1) {
+    if (rosterChoices.length === 0) {
       setTodayRosterReady(true);
       return;
     }
@@ -3078,7 +3088,7 @@ export function TodayTab({
 
   return (
     <div className="flex flex-col gap-4">
-      {rosterChoices.length > 1 && !todayRosterReady ? (
+      {rosterChoices.length > 0 && !todayRosterReady ? (
         <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="mb-4 text-center">
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Today</p>
@@ -3089,7 +3099,7 @@ export function TodayTab({
           </div>
           <div className="space-y-2">
             {rosterChoices.map((roster) => {
-              const isActive = roster.id === activeRosterId;
+              const sharedCount = rosterSharedCount(roster);
               return (
                 <button
                   key={roster.id}
@@ -3099,14 +3109,25 @@ export function TodayTab({
                     todayRosterReadyIds.add(roster.id);
                     setTodayRosterReady(true);
                   }}
-                  className={`flex w-full items-center justify-between rounded-2xl border px-3 py-3 text-left transition-transform active:scale-[0.99] ${isActive ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-slate-50/70"}`}
+                  className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-slate-50/70 px-3 py-3 text-left transition-transform hover:bg-white active:scale-[0.99]"
                 >
                   <span className="min-w-0">
-                    <span className="block truncate text-sm font-black text-[#102A43]">{roster.name}</span>
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <span className="truncate text-sm font-black text-[#102A43]">{roster.name}</span>
+                      {sharedCount > 0 ? (
+                        <span
+                          className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-black leading-none text-slate-400"
+                          title={`${sharedCount} collaborator${sharedCount === 1 ? "" : "s"}`}
+                        >
+                          <Users className="h-3 w-3 opacity-60" />
+                          {sharedCount}
+                        </span>
+                      ) : null}
+                    </span>
                     <span className="mt-0.5 block text-[11px] font-bold text-slate-500">{roster.players.length} player{roster.players.length === 1 ? "" : "s"}</span>
                   </span>
-                  <span className={`ml-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${isActive ? "bg-emerald-500 text-white" : "bg-white text-slate-400"}`}>
-                    {isActive ? <Check className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                  <span className="ml-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-slate-400">
+                    <ChevronRight className="h-4 w-4" />
                   </span>
                 </button>
               );

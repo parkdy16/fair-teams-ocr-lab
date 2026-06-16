@@ -1664,7 +1664,12 @@ export function TodayTab({
   >({});
   const [prioritizeScannedPlayers, setPrioritizeScannedPlayers] =
     useState(false);
-  const [todayRosterReady, setTodayRosterReady] = useState(() => rosterChoices.length <= 1);
+  const getTodayRosterReadyFromSession = () => {
+    if (rosterChoices.length <= 1) return true;
+    if (!activeRosterId || typeof sessionStorage === "undefined") return false;
+    return sessionStorage.getItem("fair-teams-today-roster-ready-v1") === activeRosterId;
+  };
+  const [todayRosterReady, setTodayRosterReady] = useState(getTodayRosterReadyFromSession);
 
   const attendingSummaryStyle = {
     background: "linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)",
@@ -1690,10 +1695,14 @@ export function TodayTab({
   useEffect(() => {
     if (rosterChoices.length <= 1) {
       setTodayRosterReady(true);
-    } else {
-      setTodayRosterReady(false);
+      return;
     }
-  }, [rosterChoices.length]);
+    if (!activeRosterId || typeof sessionStorage === "undefined") {
+      setTodayRosterReady(false);
+      return;
+    }
+    setTodayRosterReady(sessionStorage.getItem("fair-teams-today-roster-ready-v1") === activeRosterId);
+  }, [activeRosterId, rosterChoices.length]);
 
   const sorted = [...players].sort((a, b) => {
     if (Boolean(a.attending) !== Boolean(b.attending)) {
@@ -3085,6 +3094,9 @@ export function TodayTab({
                   type="button"
                   onClick={() => {
                     onChooseRoster?.(roster.id);
+                    try {
+                      sessionStorage.setItem("fair-teams-today-roster-ready-v1", roster.id);
+                    } catch {}
                     setTodayRosterReady(true);
                   }}
                   className={`flex w-full items-center justify-between rounded-2xl border px-3 py-3 text-left transition-transform active:scale-[0.99] ${isActive ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-slate-50/70"}`}

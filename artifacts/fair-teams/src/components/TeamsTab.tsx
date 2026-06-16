@@ -377,6 +377,7 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [drawStep, setDrawStep] = useState(0);
   const [justGenerated, setJustGenerated] = useState(false);
+  const [showPlayerSkillNumbers, setShowPlayerSkillNumbers] = useState(false);
   const generateTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -620,6 +621,19 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
           </Button>
         </div>
 
+        {teams.length > 0 && (
+          <div className="flex items-center justify-end">
+            <button
+              type="button"
+              onClick={() => setShowPlayerSkillNumbers((value) => !value)}
+              className={`rounded-full border px-2.5 py-1 text-[10px] font-black transition-colors ${showPlayerSkillNumbers ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-slate-50 text-slate-500"}`}
+              title={showPlayerSkillNumbers ? "Hide player skill numbers" : "Show player skill numbers"}
+              data-testid="button-toggle-team-skill-numbers"
+            >
+              {showPlayerSkillNumbers ? "Hide skill numbers" : "Show skill numbers"}
+            </button>
+          </div>
+        )}
 
         {isGenerating && (
           <div className="rounded-lg border border-emerald-300/35 bg-emerald-50/80 px-3 py-2 text-[11px] font-black text-emerald-700 shadow-inner">
@@ -828,9 +842,11 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
                             </div>
                             <div className="flex items-center gap-1 shrink-0">
                               <GenderBadge gender={player.gender} />
-                              <span className="min-w-7 h-5 px-1 flex items-center justify-center rounded bg-gradient-to-br from-slate-100 to-slate-200 text-[#102A43] text-[10px] font-black border border-slate-200">
-                                {player.skill === 0 ? "N" : player.skill}
-                              </span>
+                              {showPlayerSkillNumbers && (
+                                <span className="min-w-7 h-5 px-1 flex items-center justify-center rounded bg-gradient-to-br from-slate-100 to-slate-200 text-[#102A43] text-[10px] font-black border border-slate-200">
+                                  {player.skill === 0 ? "N" : player.skill}
+                                </span>
+                              )}
                             </div>
                           </button>
                         );

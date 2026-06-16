@@ -1614,6 +1614,7 @@ export function TodayTab({
   onChooseRoster,
   todayRosterChosen = false,
   onTodayRosterChosen,
+  onChooseEmptyRoster,
 }: {
   players: RoomPlayer[];
   setPlayers: (players: RoomPlayer[]) => void;
@@ -1629,6 +1630,7 @@ export function TodayTab({
   onChooseRoster?: (rosterId: string) => void;
   todayRosterChosen?: boolean;
   onTodayRosterChosen?: () => void;
+  onChooseEmptyRoster?: () => void;
 }) {
   const [search, setSearch] = useState("");
   const [ocrOpen, setOcrOpen] = useState(false);
@@ -3092,6 +3094,9 @@ export function TodayTab({
                   onClick={() => {
                     onChooseRoster?.(roster.id);
                     onTodayRosterChosen?.();
+                    if (roster.players.length === 0) {
+                      onChooseEmptyRoster?.();
+                    }
                   }}
                   className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-slate-50/70 px-3 py-3 text-left transition-transform hover:bg-white active:scale-[0.99]"
                 >
@@ -3108,7 +3113,7 @@ export function TodayTab({
                         </span>
                       ) : null}
                     </span>
-                    <span className="mt-0.5 block text-[11px] font-bold text-slate-500">{roster.players.length} player{roster.players.length === 1 ? "" : "s"}</span>
+                    <span className="mt-0.5 block text-[11px] font-bold text-slate-500">{roster.players.length === 0 ? "Empty roster" : `${roster.players.length} player${roster.players.length === 1 ? "" : "s"}`}</span>
                   </span>
                   <span className="ml-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-slate-400">
                     <ChevronRight className="h-4 w-4" />

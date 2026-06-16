@@ -1512,7 +1512,7 @@ export function PlayersTab({
             type="button"
             variant="outline"
             onClick={() => setAddOptionsOpen(true)}
-            className="h-9 rounded-xl border-primary/20 bg-primary/5 px-3 text-[11px] font-black uppercase tracking-wide text-primary shadow-none hover:bg-primary/10 hover:text-primary"
+            className={`h-9 rounded-xl border-primary/20 bg-primary/5 px-3 text-[11px] font-black uppercase tracking-wide text-primary shadow-none hover:bg-primary/10 hover:text-primary ${players.length === 0 ? "fairteams-empty-add-pulse" : ""}`}
             data-testid="button-open-add-options"
           >
             <Plus className="mr-1.5 h-3.5 w-3.5" /> Add Player

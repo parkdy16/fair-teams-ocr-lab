@@ -2601,7 +2601,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
           <div className="flex min-h-[calc(100dvh-116px)] flex-col">
             <TabsContent
               value="players"
-              className="m-0 data-[state=active]:animate-in data-[state=active]:fade-in-50"
+              className="fairteams-tab-panel m-0 data-[state=active]:animate-in data-[state=active]:fade-in-50"
             >
               <PlayersTab
                 players={players}
@@ -2624,7 +2624,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
             </TabsContent>
             <TabsContent
               value="today"
-              className="m-0 data-[state=active]:animate-in data-[state=active]:fade-in-50"
+              className="fairteams-tab-panel m-0 data-[state=active]:animate-in data-[state=active]:fade-in-50"
             >
               <TodayTab
                 players={players}
@@ -2635,6 +2635,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 onChooseRoster={switchRoster}
                 todayRosterChosen={todayRosterChosen}
                 onTodayRosterChosen={() => setTodayRosterChosen(true)}
+                onChooseEmptyRoster={() => setActiveTab("players")}
                 openOcrToken={todayOcrOpenToken}
                 ocrImportContext={ocrImportContext}
                 onOcrImportContextChange={setOcrImportContext}
@@ -2649,7 +2650,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
             </TabsContent>
             <TabsContent
               value="teams"
-              className="m-0 data-[state=active]:animate-in data-[state=active]:fade-in-50"
+              className="fairteams-tab-panel m-0 data-[state=active]:animate-in data-[state=active]:fade-in-50"
             >
               <TeamsTab players={players} pairingRules={pairingRules} />
             </TabsContent>

@@ -2584,28 +2584,28 @@ They will no longer be able to open or edit this shared roster unless it is shar
           </div>
         </div>
 
-        <div className="fixed inset-x-0 bottom-0 z-40 mx-auto w-full max-w-md border-t border-slate-200 bg-white/92 px-4 pb-[max(0.65rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-6px_18px_rgba(15,23,42,0.045)] backdrop-blur md:max-w-3xl lg:max-w-5xl">
-          <TabsList className="mx-auto grid h-12 w-full max-w-md grid-cols-3 gap-1.5 rounded-2xl border border-border/60 bg-slate-50/90 p-1 shadow-inner">
+        <div className="fixed inset-x-0 bottom-0 z-40 mx-auto w-full max-w-md border-t border-slate-200 bg-white/95 px-4 pb-[max(0.65rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-4px_14px_rgba(15,23,42,0.035)] backdrop-blur md:max-w-3xl lg:max-w-5xl">
+          <TabsList className="mx-auto grid h-12 w-full max-w-md grid-cols-3 gap-1 rounded-2xl border border-slate-200/70 bg-white p-1 shadow-sm">
             <TabsTrigger
               value="players"
-              className="fairteams-tab-trigger flex h-full items-center justify-center gap-1.5 rounded-xl text-muted-foreground transition-all data-[state=active]:shadow-sm"
+              className="fairteams-tab-trigger flex h-full items-center justify-center gap-1.5 rounded-xl text-slate-500 transition-all"
             >
               <Users className="h-4 w-4" />
-              <span className="text-[10px] font-black uppercase tracking-wider">Roster</span>
+              <span className="text-[10px] font-extrabold uppercase tracking-wider">Roster</span>
             </TabsTrigger>
             <TabsTrigger
               value="today"
-              className="fairteams-tab-trigger flex h-full items-center justify-center gap-1.5 rounded-xl text-muted-foreground transition-all data-[state=active]:shadow-sm"
+              className="fairteams-tab-trigger flex h-full items-center justify-center gap-1.5 rounded-xl text-slate-500 transition-all"
             >
               <CalendarCheck className="h-4 w-4" />
-              <span className="text-[10px] font-black uppercase tracking-wider">Today</span>
+              <span className="text-[10px] font-extrabold uppercase tracking-wider">Today</span>
             </TabsTrigger>
             <TabsTrigger
               value="teams"
-              className="fairteams-tab-trigger flex h-full items-center justify-center gap-1.5 rounded-xl text-muted-foreground transition-all data-[state=active]:shadow-sm"
+              className="fairteams-tab-trigger flex h-full items-center justify-center gap-1.5 rounded-xl text-slate-500 transition-all"
             >
               <Shield className="h-4 w-4" />
-              <span className="text-[10px] font-black uppercase tracking-wider">Teams</span>
+              <span className="text-[10px] font-extrabold uppercase tracking-wider">Teams</span>
             </TabsTrigger>
           </TabsList>
         </div>

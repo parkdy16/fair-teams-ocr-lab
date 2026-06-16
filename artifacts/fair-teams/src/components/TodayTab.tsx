@@ -3164,7 +3164,7 @@ export function TodayTab({
               variant="outline"
               size="sm"
               onClick={openImportChoice}
-              className="h-9 rounded-xl border-slate-300 bg-white/80 text-xs font-black text-slate-700 shadow-sm hover:bg-white hover:text-slate-900"
+              className="h-10 rounded-xl border-slate-300 bg-white/85 text-[13px] font-black text-slate-700 shadow-sm hover:bg-white hover:text-slate-900"
               data-testid="today-import-button"
             >
               <ClipboardList className="mr-1.5 h-3.5 w-3.5" />
@@ -3175,7 +3175,7 @@ export function TodayTab({
               variant="outline"
               size="sm"
               onClick={openQuickVoiceSelect}
-              className={`h-9 rounded-xl text-xs font-black ${
+              className={`h-10 rounded-xl text-[13px] font-black ${
                 quickVoiceOpen || quickVoiceListening
                   ? "border-red-300 bg-red-50 text-red-700 shadow-sm hover:bg-red-50 hover:text-red-800"
                   : ""
@@ -4558,7 +4558,7 @@ export function TodayTab({
           {filtered.map((player) => (
             <label
               key={player.id}
-              className={`flex items-center gap-2 px-2.5 py-2 border rounded-lg cursor-pointer transition-colors ${player.attending ? "border-primary bg-primary/5" : "border-border bg-card"}`}
+              className={`flex min-h-[42px] items-center gap-2 px-2.5 py-2.5 border rounded-lg cursor-pointer transition-colors ${player.attending ? "border-primary bg-primary/5" : "border-border bg-card"}`}
               data-testid={`attendance-row-${player.id}`}
             >
               <Checkbox

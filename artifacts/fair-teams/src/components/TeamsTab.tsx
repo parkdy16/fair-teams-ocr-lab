@@ -6,7 +6,7 @@ import { generateTeams, recomputeStats } from "@/lib/teamGenerator";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Shuffle, ArrowLeftRight, Download, HelpCircle, Clock, Palette, Zap, Sparkles, BarChart3, List } from "lucide-react";
+import { Shuffle, ArrowLeftRight, Download, HelpCircle, Clock, Palette, Sparkles, BarChart3, List } from "lucide-react";
 import fairTeamsLogo from "@/assets/fairteams-logo.png";
 
 const COLOR_OPTIONS: { value: TeamColor; label: string; hex: string; textHex: string }[] = [
@@ -554,11 +554,8 @@ export function TeamsTab({ players }: { players: RoomPlayer[] }) {
   if (attendingPlayers.length < 2 && teams.length === 0) {
     return (
       <div className="flex min-h-[calc(100vh-220px)] flex-col gap-3">
-        <div className="flex flex-1 flex-col items-center justify-center px-6 text-center gap-3">
-          <div className="w-12 h-12 bg-muted rounded-full flex items-center justify-center">
-            <Zap className="w-6 h-6 text-muted-foreground opacity-40" />
-          </div>
-          <p className="text-sm text-muted-foreground font-medium">
+        <div className="flex flex-1 flex-col items-center justify-center px-8 text-center">
+          <p className="max-w-xs text-sm font-semibold leading-relaxed text-muted-foreground">
             Select at least 2 players in the Today tab to generate teams.
           </p>
         </div>

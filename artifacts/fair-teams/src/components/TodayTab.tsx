@@ -13,6 +13,7 @@ import {
   Image as ImageIcon,
   Mic,
   Search,
+  Share2,
   Upload,
   Users,
   X,
@@ -1615,6 +1616,7 @@ export function TodayTab({
   todayRosterChosen = false,
   onTodayRosterChosen,
   onChooseEmptyRoster,
+  onJoinSharedRoster,
 }: {
   players: RoomPlayer[];
   setPlayers: (players: RoomPlayer[]) => void;
@@ -1631,6 +1633,7 @@ export function TodayTab({
   todayRosterChosen?: boolean;
   onTodayRosterChosen?: () => void;
   onChooseEmptyRoster?: () => void;
+  onJoinSharedRoster?: () => void;
 }) {
   const [search, setSearch] = useState("");
   const [ocrOpen, setOcrOpen] = useState(false);
@@ -3122,6 +3125,16 @@ export function TodayTab({
               );
             })}
           </div>
+          {onJoinSharedRoster ? (
+            <button
+              type="button"
+              onClick={onJoinSharedRoster}
+              className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-emerald-100 bg-emerald-50/50 px-3 py-3 text-xs font-black uppercase tracking-wide text-emerald-700 transition active:scale-[0.99] hover:bg-emerald-50"
+            >
+              <Share2 className="h-3.5 w-3.5" />
+              Join shared roster
+            </button>
+          ) : null}
         </div>
       ) : players.length === 0 ? (
         <div className="animate-in fade-in-0 slide-in-from-bottom-1 duration-200 rounded-3xl border border-dashed border-primary/25 bg-primary/5 p-5 text-center shadow-sm">

@@ -609,6 +609,10 @@ function App() {
     setRosterCloudBackupToolsOpen(false);
     setRosterSharedToolsOpen(false);
   };
+  const openJoinSharedRoster = () => {
+    setRosterFilesOpen(true);
+    openRosterToolsPanel("shared");
+  };
 
   const showRosterToolsNotice = (title: string, message: string, tone: RosterToolsNotice["tone"] = "info") => {
     setRosterToolsNotice({ title, message, tone });
@@ -2636,6 +2640,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 todayRosterChosen={todayRosterChosen}
                 onTodayRosterChosen={() => setTodayRosterChosen(true)}
                 onChooseEmptyRoster={() => setActiveTab("players")}
+                onJoinSharedRoster={openJoinSharedRoster}
                 openOcrToken={todayOcrOpenToken}
                 ocrImportContext={ocrImportContext}
                 onOcrImportContextChange={setOcrImportContext}

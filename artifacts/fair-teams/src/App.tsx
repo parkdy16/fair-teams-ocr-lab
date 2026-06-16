@@ -2744,7 +2744,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                     setRosterPickerOpen(true);
                   }
                 }}
-                className={`sticky top-0 z-20 w-full items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white/95 px-3 py-3 text-left shadow-sm backdrop-blur transition ${rosterToolsActivePanel === "shared" ? "hidden" : "flex"} ${!isEmptyStarterRoster && rosters.length > 1 ? "active:scale-[0.99]" : "cursor-default"}`}
+                className={`sticky top-0 z-20 flex w-full items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white/95 px-3 py-3 text-left shadow-sm backdrop-blur transition ${!isEmptyStarterRoster && rosters.length > 1 ? "active:scale-[0.99]" : "cursor-default"}`}
               >
                 <span className="min-w-0">
                   <span className="block text-[10px] font-black uppercase tracking-wide text-slate-400">

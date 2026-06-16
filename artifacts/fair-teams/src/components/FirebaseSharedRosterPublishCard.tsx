@@ -119,7 +119,6 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, rosters = [], is
     return localTime > syncedTime + 1000;
   })();
   const activeRemoteIsNewer = Boolean(activeSharedRoster && activeFirebaseSource && activeSharedRoster.version > (activeFirebaseSource.firebaseVersion || 0));
-  const activeCollaboratorCount = activeGroup ? Math.max(0, activeGroup.memberCount - 1) + (activeGroup.pendingInviteEmails?.length || 0) : 0;
 
   const refreshSharedData = async () => {
     if (!user) return;
@@ -286,12 +285,6 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, rosters = [], is
     setCollaboratorRosterId(rosterId || activeSharedRosterId || "");
   };
 
-  const activeStatus = !user
-    ? "Sign in to share rosters."
-    : activeSharedRoster
-      ? `${activeCollaboratorCount} collaborator${activeCollaboratorCount === 1 ? "" : "s"}`
-      : "This roster is local.";
-
   return (
     <div className="grid gap-3">
       {incomingInvites.length > 0 && (
@@ -306,20 +299,6 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, rosters = [], is
           ))}
         </div>
       )}
-
-      <div className="rounded-2xl bg-slate-50 p-3">
-        <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <div className="text-[10px] font-black uppercase tracking-wide text-emerald-600">Current roster</div>
-            <div className="mt-0.5 truncate text-sm font-black text-[#102A43]">{activeRoster?.name || "No roster"}</div>
-            <div className="mt-0.5 truncate text-[11px] font-bold text-slate-500">{activeStatus}</div>
-          </div>
-          <button type="button" onClick={() => activeSharedRoster && openCollaborators(activeSharedRoster.id)} disabled={!activeSharedRoster} className="flex h-10 shrink-0 items-center gap-1 rounded-2xl bg-white px-3 text-xs font-black text-emerald-700 shadow-sm disabled:opacity-40">
-            <Users className="h-4 w-4" />
-            {activeSharedRoster ? activeCollaboratorCount : 0}
-          </button>
-        </div>
-      </div>
 
       {!activeSharedRoster ? (
         <Button type="button" className="h-11 rounded-2xl bg-emerald-600 text-xs font-black text-white hover:bg-emerald-700" onClick={handleShareActiveRoster} disabled={!user || isEmptyRoster || Boolean(busy)}>

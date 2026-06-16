@@ -3119,7 +3119,7 @@ export function TodayTab({
           </div>
         </div>
       ) : players.length === 0 ? (
-        <div className="animate-in fade-in-0 slide-in-from-bottom-1 duration-200 rounded-3xl border border-dashed border-primary/25 bg-primary/5 p-5 text-center shadow-sm">
+        <div className="rounded-3xl border border-dashed border-primary/25 bg-primary/5 p-5 text-center shadow-sm">
           <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-white shadow-sm">
             <ImageIcon className="h-6 w-6 text-primary" />
           </div>
@@ -3166,7 +3166,7 @@ export function TodayTab({
       ) : (
         <>
           <div
-            className="animate-in fade-in-0 slide-in-from-bottom-1 duration-200 flex items-center justify-between rounded-xl border p-3 shadow-sm"
+            className="flex items-center justify-between rounded-xl border p-3 shadow-sm"
             style={attendingSummaryStyle}
           >
             <div className="flex flex-col">

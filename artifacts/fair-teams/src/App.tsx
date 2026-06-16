@@ -2510,21 +2510,23 @@ They will no longer be able to open or edit this shared roster unless it is shar
                       : `Current roster: ${activeRosterName}`
                 }
               >
-                <span
-                  className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-2xl border-2 bg-white shadow-sm"
-                  style={logoRingStyle}
-                >
-                  <img
-                    src={shouldShowTodayStartHeader ? fairTeamsLogo : groupLogo || fairTeamsLogo}
-                    alt=""
-                    className="h-full w-full object-cover"
-                  />
-                </span>
+                {!shouldShowTodayStartHeader && (
+                  <span
+                    className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-2xl border-2 bg-white shadow-sm"
+                    style={logoRingStyle}
+                  >
+                    <img
+                      src={groupLogo || fairTeamsLogo}
+                      alt=""
+                      className="h-full w-full object-cover"
+                    />
+                  </span>
+                )}
                 <span className="flex min-w-0 max-w-full items-center gap-1.5">
                   <h1
                     className={`truncate leading-tight text-[#102A43] ${
                       shouldShowTodayStartHeader
-                        ? "font-mono text-[13px] font-black uppercase tracking-[0.12em] text-[#102A43]/75"
+                        ? "text-[14px] font-black uppercase tracking-[0.075em] text-[#102A43]/65"
                         : "text-[17px] font-black tracking-tight"
                     }`}
                   >
@@ -2555,7 +2557,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   <span className="block">Better games.</span>
                 </span>
               )}
-              {activeTab !== "teams" && (
+              {activeTab !== "teams" && !shouldShowTodayStartHeader && (
                 <Button
                   type="button"
                   variant="secondary"
@@ -2595,7 +2597,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-4 pb-20 md:p-5 md:pb-20">
+        <div className={`flex-1 overflow-y-auto p-4 md:p-5 ${shouldShowTodayStartHeader ? "pb-6 md:pb-6" : "pb-20 md:pb-20"}`}>
           <div className="flex min-h-[calc(100dvh-116px)] flex-col">
             <TabsContent
               value="players"
@@ -2655,28 +2657,30 @@ They will no longer be able to open or edit this shared roster unless it is shar
           </div>
         </div>
 
-        <div className="fixed inset-x-0 bottom-0 z-40 mx-auto w-full max-w-md border-t border-slate-200 bg-white/95 px-4 pb-[max(0.65rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-4px_14px_rgba(15,23,42,0.035)] backdrop-blur md:max-w-3xl lg:max-w-5xl">
-          <TabsList className="mx-auto grid h-[50px] w-full max-w-md grid-cols-3 gap-1 rounded-2xl border border-slate-200/70 bg-white p-1.5 shadow-sm">
-            <TabsTrigger
-              value="players"
-              className="fairteams-tab-trigger fairteams-footer-text-tab flex h-full items-center justify-center rounded-xl text-slate-500 transition-all"
-            >
-              <span className="text-[12px] font-semibold leading-none tracking-tight">Roster</span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="today"
-              className="fairteams-tab-trigger fairteams-footer-text-tab flex h-full items-center justify-center rounded-xl text-slate-500 transition-all"
-            >
-              <span className="text-[12px] font-semibold leading-none tracking-tight">Today</span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="teams"
-              className="fairteams-tab-trigger fairteams-footer-text-tab flex h-full items-center justify-center rounded-xl text-slate-500 transition-all"
-            >
-              <span className="text-[12px] font-semibold leading-none tracking-tight">Teams</span>
-            </TabsTrigger>
-          </TabsList>
-        </div>
+        {!shouldShowTodayStartHeader && (
+          <div className="fixed inset-x-0 bottom-0 z-40 mx-auto w-full max-w-md animate-in fade-in-0 slide-in-from-bottom-2 duration-200 border-t border-slate-200 bg-white/95 px-4 pb-[max(0.65rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-4px_14px_rgba(15,23,42,0.035)] backdrop-blur md:max-w-3xl lg:max-w-5xl">
+            <TabsList className="mx-auto grid h-[50px] w-full max-w-md grid-cols-3 gap-1 rounded-2xl border border-slate-200/70 bg-white p-1.5 shadow-sm">
+              <TabsTrigger
+                value="players"
+                className="fairteams-tab-trigger fairteams-footer-text-tab flex h-full items-center justify-center rounded-xl text-slate-500 transition-all"
+              >
+                <span className="text-[12px] font-semibold leading-none tracking-tight">Roster</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="today"
+                className="fairteams-tab-trigger fairteams-footer-text-tab flex h-full items-center justify-center rounded-xl text-slate-500 transition-all"
+              >
+                <span className="text-[12px] font-semibold leading-none tracking-tight">Today</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="teams"
+                className="fairteams-tab-trigger fairteams-footer-text-tab flex h-full items-center justify-center rounded-xl text-slate-500 transition-all"
+              >
+                <span className="text-[12px] font-semibold leading-none tracking-tight">Teams</span>
+              </TabsTrigger>
+            </TabsList>
+          </div>
+        )}
       </Tabs>
 
       {groupSettingsOpen && (

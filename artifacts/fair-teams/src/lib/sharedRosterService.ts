@@ -180,6 +180,8 @@ function toRosterSummary(id: string, data: DocumentData): FirebaseSharedRosterSu
     createdAt: timestampToIso(data.createdAt) || (typeof data.createdAtIso === "string" ? data.createdAtIso : undefined),
     updatedAt: timestampToIso(data.updatedAt) || (typeof data.updatedAtIso === "string" ? data.updatedAtIso : undefined),
     currentUserRole: currentUserRoleFromData(data),
+    memberEmails: Array.isArray(data.memberEmails) ? data.memberEmails.filter((value): value is string => typeof value === "string") : [],
+    pendingInviteEmails: Array.isArray(data.pendingInviteEmails) ? data.pendingInviteEmails.filter((value): value is string => typeof value === "string") : [],
     lastSavedByEmail: typeof data.lastSavedByEmail === "string" ? data.lastSavedByEmail : undefined,
   };
 }

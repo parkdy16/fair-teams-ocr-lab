@@ -476,7 +476,20 @@ function App() {
     activeRoster?.cloudSource?.provider === "google-sheets"
       ? activeRoster.cloudSource
       : null;
-  const activeRosterIsShared = Boolean(activeGoogleSheetSource?.spreadsheetId);
+  const activeFirebaseSource =
+    activeRoster?.cloudSource?.provider === "firebase"
+      ? activeRoster.cloudSource
+      : null;
+  const activeRosterIsShared = Boolean(activeGoogleSheetSource?.spreadsheetId || activeFirebaseSource?.firebaseRosterId);
+  const activeRosterIsFirebaseShared = Boolean(activeFirebaseSource?.firebaseRosterId);
+  const rosterFirebaseShareCount = (roster: RoomRoster | undefined) => {
+    const source = roster?.cloudSource?.provider === "firebase" ? roster.cloudSource : undefined;
+    const ownerEmail = source?.firebaseOwnerEmail?.toLowerCase();
+    const labels = source?.accessLabels
+      ? Object.keys(source.accessLabels).filter((email) => email.toLowerCase() !== ownerEmail).length
+      : 0;
+    return source?.firebaseRosterId ? Math.max(0, labels) : 0;
+  };
   const sharedGoogleSheetRosters = rosters.filter(
     (roster) => roster.cloudSource?.provider === "google-sheets" && Boolean(roster.cloudSource.spreadsheetId),
   );
@@ -919,6 +932,7 @@ function App() {
               firebaseLastSavedByEmail: firebaseSummary.lastSavedByEmail,
               lastSyncedAt: new Date().toISOString(),
               lastRemoteModifiedAt: firebaseSummary.updatedAt,
+              accessLabels: Object.fromEntries([...(firebaseSummary.memberEmails || []), ...(firebaseSummary.pendingInviteEmails || [])].map((email) => [email, "editor"])),
               syncMode: "manual",
             }
           : undefined,
@@ -954,6 +968,7 @@ function App() {
                   firebaseOwnerEmail: summary.ownerEmail,
                   firebaseRole: summary.currentUserRole,
                   firebaseLastSavedByEmail: summary.lastSavedByEmail,
+                  accessLabels: Object.fromEntries([...(summary.memberEmails || []), ...(summary.pendingInviteEmails || [])].map((email) => [email, "editor"])),
                   lastSyncedAt: summary.updatedAt || new Date().toISOString(),
                   lastRemoteModifiedAt: summary.updatedAt,
                   syncMode: "manual",
@@ -2394,6 +2409,12 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   <h1 className="truncate text-[17px] font-black leading-tight tracking-tight text-[#102A43]">
                     {headerDisplayName}
                   </h1>
+                  {activeRosterIsFirebaseShared && (
+                    <span className="inline-flex h-5 shrink-0 items-center gap-0.5 rounded-full bg-emerald-50 px-1.5 text-[10px] font-black text-emerald-700" title="Shared roster">
+                      <Users className="h-3 w-3" />
+                      {rosterFirebaseShareCount(activeRoster)}
+                    </span>
+                  )}
                   {activeTab === "players" && (
                     <Pencil className="h-3.5 w-3.5 shrink-0 text-[#102A43]/45" />
                   )}
@@ -2451,39 +2472,11 @@ They will no longer be able to open or edit this shared roster unless it is shar
             style={{ backgroundColor: identityAccentColor }}
           />
 
-          <TabsList className="w-full h-11 bg-slate-100/90 grid grid-cols-3 rounded-2xl p-1 gap-1.5 border border-border/70 shadow-inner">
-            <TabsTrigger
-              value="players"
-              className="rounded-xl flex items-center justify-center gap-1.5 h-full text-muted-foreground transition-all data-[state=active]:bg-[#102A43] data-[state=active]:text-white data-[state=active]:shadow-sm"
-            >
-              <Users className="w-4 h-4" />
-              <span className="text-[10px] font-black uppercase tracking-wider">
-                Roster
-              </span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="today"
-              className="rounded-xl flex items-center justify-center gap-1.5 h-full text-muted-foreground transition-all data-[state=active]:bg-[#102A43] data-[state=active]:text-white data-[state=active]:shadow-sm"
-            >
-              <CalendarCheck className="w-4 h-4" />
-              <span className="text-[10px] font-black uppercase tracking-wider">
-                Today
-              </span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="teams"
-              className="rounded-xl flex items-center justify-center gap-1.5 h-full text-muted-foreground transition-all data-[state=active]:bg-[#102A43] data-[state=active]:text-white data-[state=active]:shadow-sm"
-            >
-              <Shield className="w-4 h-4" />
-              <span className="text-[10px] font-black uppercase tracking-wider">
-                Teams
-              </span>
-            </TabsTrigger>
-          </TabsList>
+
         </header>
 
-        <div className="flex-1 overflow-y-auto p-4 md:p-5">
-          <div className="flex min-h-[calc(100dvh-128px)] flex-col">
+        <div className="flex-1 overflow-y-auto p-4 pb-20 md:p-5 md:pb-20">
+          <div className="flex min-h-[calc(100dvh-116px)] flex-col">
             <TabsContent
               value="players"
               className="m-0 data-[state=active]:animate-in data-[state=active]:fade-in-50"
@@ -2533,6 +2526,32 @@ They will no longer be able to open or edit this shared roster unless it is shar
             </TabsContent>
             <PoweredByFairTeams />
           </div>
+        </div>
+
+        <div className="fixed inset-x-0 bottom-0 z-40 mx-auto w-full max-w-md border-t border-slate-200 bg-white/95 px-4 pb-[max(0.65rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur md:max-w-3xl lg:max-w-5xl">
+          <TabsList className="mx-auto grid h-12 w-full max-w-md grid-cols-3 gap-1.5 rounded-2xl border border-border/70 bg-slate-100/90 p-1 shadow-inner">
+            <TabsTrigger
+              value="players"
+              className="flex h-full items-center justify-center gap-1.5 rounded-xl text-muted-foreground transition-all data-[state=active]:bg-[#102A43] data-[state=active]:text-white data-[state=active]:shadow-sm"
+            >
+              <Users className="h-4 w-4" />
+              <span className="text-[10px] font-black uppercase tracking-wider">Roster</span>
+            </TabsTrigger>
+            <TabsTrigger
+              value="today"
+              className="flex h-full items-center justify-center gap-1.5 rounded-xl text-muted-foreground transition-all data-[state=active]:bg-[#102A43] data-[state=active]:text-white data-[state=active]:shadow-sm"
+            >
+              <CalendarCheck className="h-4 w-4" />
+              <span className="text-[10px] font-black uppercase tracking-wider">Today</span>
+            </TabsTrigger>
+            <TabsTrigger
+              value="teams"
+              className="flex h-full items-center justify-center gap-1.5 rounded-xl text-muted-foreground transition-all data-[state=active]:bg-[#102A43] data-[state=active]:text-white data-[state=active]:shadow-sm"
+            >
+              <Shield className="h-4 w-4" />
+              <span className="text-[10px] font-black uppercase tracking-wider">Teams</span>
+            </TabsTrigger>
+          </TabsList>
         </div>
       </Tabs>
 
@@ -3263,8 +3282,16 @@ They will no longer be able to open or edit this shared roster unless it is shar
                     className={`flex w-full items-center justify-between gap-3 rounded-2xl border px-3 py-3 text-left transition active:scale-[0.99] ${selected ? "border-blue-200 bg-blue-50/80" : "border-slate-100 bg-slate-50/70"}`}
                   >
                     <span className="min-w-0">
-                      <span className="block truncate text-sm font-black text-[#102A43]">
-                        {roster.name}
+                      <span className="flex min-w-0 items-center gap-1.5">
+                        <span className="truncate text-sm font-black text-[#102A43]">
+                          {roster.name}
+                        </span>
+                        {roster.cloudSource?.provider === "firebase" && roster.cloudSource.firebaseRosterId && (
+                          <span className="inline-flex h-5 shrink-0 items-center gap-0.5 rounded-full bg-emerald-100 px-1.5 text-[10px] font-black text-emerald-700">
+                            <Users className="h-3 w-3" />
+                            {rosterFirebaseShareCount(roster)}
+                          </span>
+                        )}
                       </span>
                       <span className="block text-[11px] font-bold text-slate-500">
                         {roster.players.length} player

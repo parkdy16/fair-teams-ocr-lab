@@ -425,9 +425,9 @@ async function fileToSmallDataUrl(file: File) {
 }
 
 function PlayerAvatar({ player, size = "md" }: { player: RoomPlayer; size?: "sm" | "md" | "lg" | "xl" }) {
-  const cls = size === "xl" ? "w-12 h-12 text-sm" : size === "lg" ? "w-24 h-24 text-2xl" : size === "sm" ? "w-9 h-9 text-xs" : "w-12 h-12 text-sm";
+  const cls = size === "xl" ? "w-12 h-12 text-xs" : size === "lg" ? "w-24 h-24 text-xl" : size === "sm" ? "w-9 h-9 text-[10px]" : "w-12 h-12 text-xs";
   return (
-    <div className={`${cls} rounded-full overflow-hidden bg-primary/10 text-primary font-black flex items-center justify-center shrink-0 border border-primary/20`}>
+    <div className={`${cls} rounded-full overflow-hidden bg-primary/10 text-primary/80 font-semibold flex items-center justify-center shrink-0 border border-primary/15`}>
       {player.profilePhoto ? <img src={player.profilePhoto} alt="" className="w-full h-full object-cover" /> : initials(player.name)}
     </div>
   );
@@ -1879,13 +1879,13 @@ export function PlayersTab({
                       setFlippedPlayerIds(prev => ({ ...prev, [player.id]: !prev[player.id] }));
                     }
                   }}
-                  className="w-full md:w-[calc(50%-0.25rem)] xl:w-[calc(33.333%-0.34rem)] p-2 bg-card border border-border rounded-xl shadow-sm active:scale-[0.99] transition-transform cursor-pointer"
+                  className="w-full md:w-[calc(50%-0.25rem)] xl:w-[calc(33.333%-0.34rem)] p-2 bg-card border border-border/80 rounded-xl shadow-[0_1px_3px_rgba(15,23,42,0.05)] active:scale-[0.99] transition-transform cursor-pointer"
                   data-testid={`player-row-${player.id}`}
                 >
                   <div className="flex items-center gap-2">
                     <PlayerAvatar player={player} size="sm" />
                     <div className="min-w-0 flex-1">
-                      <div className="font-black leading-tight text-[14px] break-words">{displayName(player)}</div>
+                      <div className="font-semibold leading-tight text-[13px] break-words text-[#102A43]">{displayName(player)}</div>
                       <PlayerTags player={player} includeVibe includeAbilityCount={!isFlipped} />
                     </div>
                     <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>

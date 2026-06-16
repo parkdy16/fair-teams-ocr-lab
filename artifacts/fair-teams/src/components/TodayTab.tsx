@@ -4558,19 +4558,19 @@ export function TodayTab({
           {filtered.map((player) => (
             <label
               key={player.id}
-              className={`flex min-h-[42px] items-center gap-2 px-2.5 py-2.5 border rounded-lg cursor-pointer transition-colors ${player.attending ? "border-primary bg-primary/5" : "border-border bg-card"}`}
+              className={`flex min-h-[46px] items-center gap-2 px-2.5 py-2.5 border rounded-xl cursor-pointer transition-all ${player.attending ? "border-primary/35 bg-primary/[0.035] shadow-[0_1px_4px_rgba(15,23,42,0.05)]" : "border-border/80 bg-card"}`}
               data-testid={`attendance-row-${player.id}`}
             >
               <Checkbox
                 checked={!!player.attending}
                 onCheckedChange={() => togglePlayer(player)}
-                className="w-4 h-4 rounded-full border-2 shrink-0 data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+                className="w-3.5 h-3.5 rounded-full border border-slate-300 shadow-none shrink-0 data-[state=checked]:bg-primary data-[state=checked]:border-primary data-[state=checked]:text-white"
                 data-testid={`attendance-check-${player.id}`}
               />
               <div className="min-w-0 flex-1 overflow-hidden">
                 <div className="flex w-full max-w-full items-center gap-1">
                   <span
-                    className={`min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap font-bold text-xs leading-tight ${player.attending ? "text-primary" : "text-foreground"}`}
+                    className={`min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap font-semibold text-[13px] leading-tight ${player.attending ? "text-[#102A43]" : "text-foreground"}`}
                     title={displayName(player)}
                   >
                     {displayName(player)}

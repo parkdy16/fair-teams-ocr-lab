@@ -896,15 +896,15 @@ export function TeamsTab({ players, pairingRules = [] }: { players: RoomPlayer[]
       {presentTeamsOpen && teams.length > 0 && (
         <div className="fixed inset-0 z-[90] bg-slate-950 text-white" role="dialog" aria-modal="true" aria-label="Present teams">
           <div className="flex h-full flex-col">
-            <div className="flex items-center justify-between gap-3 border-b border-white/10 bg-slate-950/95 px-4 py-3">
+            <div className="flex items-center justify-between gap-3 border-b border-white/10 bg-slate-950/95 px-3 py-2">
               <div className="min-w-0">
                 <p className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-300">Fair Teams</p>
-                <h2 className="truncate text-xl font-black tracking-tight">Today's Teams</h2>
+                <h2 className="truncate text-lg font-black tracking-tight">Today's Teams</h2>
               </div>
               <button
                 type="button"
                 onClick={() => setPresentTeamsOpen(false)}
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-white/15 bg-white/10 text-white active:scale-[0.98]"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-white/15 bg-white/10 text-white active:scale-[0.98]"
                 aria-label="Close full screen teams"
                 data-testid="button-close-present-teams"
               >
@@ -912,30 +912,30 @@ export function TeamsTab({ players, pairingRules = [] }: { players: RoomPlayer[]
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto px-4 py-4">
-              <div className="mx-auto grid max-w-5xl grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="flex-1 overflow-y-auto px-3 py-3">
+              <div className="mx-auto grid max-w-4xl grid-cols-2 gap-2">
                 {teams.map((team) => {
                   const col = colorFor(team.color);
                   const borderColor = team.color === "white" ? "#E2E8F0" : col.hex;
                   return (
                     <div
                       key={team.id}
-                      className="overflow-hidden rounded-3xl border-2 bg-white text-[#102A43] shadow-2xl"
+                      className="overflow-hidden rounded-2xl border-2 bg-white text-[#102A43] shadow-xl"
                       style={{ borderColor }}
                     >
-                      <div className="flex items-center justify-between gap-2 px-4 py-3" style={{ borderBottom: `3px solid ${borderColor}` }}>
-                        <div className="min-w-0 truncate text-xl font-black">{team.name}</div>
-                        <div className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-black text-slate-500">
-                          {team.players.length} player{team.players.length === 1 ? "" : "s"}
+                      <div className="flex items-center justify-between gap-1.5 px-2.5 py-2" style={{ borderBottom: `2px solid ${borderColor}` }}>
+                        <div className="min-w-0 truncate text-[14px] font-black leading-tight sm:text-base">{team.name}</div>
+                        <div className="shrink-0 rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] font-black text-slate-500">
+                          {team.players.length}
                         </div>
                       </div>
                       <div className="divide-y divide-slate-100">
                         {team.players.length === 0 ? (
-                          <p className="px-4 py-4 text-sm font-bold text-slate-400">Empty</p>
+                          <p className="px-2.5 py-2 text-[11px] font-bold text-slate-400">Empty</p>
                         ) : team.players.map((player) => (
-                          <div key={player.id} className="flex items-center justify-between gap-3 px-4 py-3">
-                            <div className="min-w-0 truncate text-lg font-black">{displayName(player)}</div>
-                            <div className="flex shrink-0 items-center gap-1.5">
+                          <div key={player.id} className="flex min-h-7 items-center justify-between gap-1.5 px-2.5 py-1.5">
+                            <div className="min-w-0 truncate text-[12px] font-black leading-tight sm:text-sm">{displayName(player)}</div>
+                            <div className="flex shrink-0 items-center gap-1">
                               {player.isGoalkeeper && <GKBadge />}
                               {player.isOrganizer && <ORGBadge />}
                               {isNotHereYet(player) && <NotHereBadge />}
@@ -949,14 +949,14 @@ export function TeamsTab({ players, pairingRules = [] }: { players: RoomPlayer[]
               </div>
             </div>
 
-            <div className="flex items-center justify-between gap-2 border-t border-white/10 bg-slate-950/95 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+            <div className="flex items-center justify-between gap-2 border-t border-white/10 bg-slate-950/95 px-3 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
               <p className="min-w-0 text-[11px] font-semibold leading-snug text-slate-400">
                 Show this screen to players. Save only when you need an image.
               </p>
               <button
                 type="button"
                 onClick={() => void exportTeamsAsJpg(teams, fieldSize)}
-                className="inline-flex h-10 shrink-0 items-center justify-center rounded-2xl bg-white px-3 text-[12px] font-black text-[#102A43] active:scale-[0.98]"
+                className="inline-flex h-9 shrink-0 items-center justify-center rounded-2xl bg-white px-3 text-[12px] font-black text-[#102A43] active:scale-[0.98]"
                 data-testid="button-present-save-image"
               >
                 <Download className="mr-1.5 h-3.5 w-3.5" />

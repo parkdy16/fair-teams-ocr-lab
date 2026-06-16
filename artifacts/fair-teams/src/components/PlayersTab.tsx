@@ -1065,9 +1065,8 @@ function TraitHelpHint({ ability, onClose }: { ability: (typeof SPECIAL_ABILITIE
 
 function OverallBadge({ player }: { player: RoomPlayer }) {
   return (
-    <div className="w-10 h-9 rounded-xl bg-primary/10 text-primary border border-primary/15 flex flex-col items-center justify-center shrink-0 shadow-sm">
-      <span className="text-[6px] font-bold uppercase opacity-70 leading-none">Skill</span>
-      <span className="text-base font-black leading-none">{player.skill}</span>
+    <div className="w-9 h-8 rounded-xl bg-primary/10 text-primary border border-primary/15 flex items-center justify-center shrink-0 shadow-sm">
+      <span className="text-[15px] font-extrabold leading-none">{player.skill}</span>
     </div>
   );
 }

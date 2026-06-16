@@ -2,8 +2,6 @@ import React, { useEffect, useRef, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Users,
-  CalendarCheck,
-  Shield,
   Download,
   Upload,
   Pencil,
@@ -2590,27 +2588,24 @@ They will no longer be able to open or edit this shared roster unless it is shar
         </div>
 
         <div className="fixed inset-x-0 bottom-0 z-40 mx-auto w-full max-w-md border-t border-slate-200 bg-white/95 px-4 pb-[max(0.65rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-4px_14px_rgba(15,23,42,0.035)] backdrop-blur md:max-w-3xl lg:max-w-5xl">
-          <TabsList className="mx-auto grid h-[54px] w-full max-w-md grid-cols-3 gap-1 rounded-2xl border border-slate-200/70 bg-white p-1.5 shadow-sm">
+          <TabsList className="mx-auto grid h-[50px] w-full max-w-md grid-cols-3 gap-1 rounded-2xl border border-slate-200/70 bg-white p-1.5 shadow-sm">
             <TabsTrigger
               value="players"
-              className="fairteams-tab-trigger flex h-full flex-col items-center justify-center gap-0.5 rounded-xl text-slate-500 transition-all"
+              className="fairteams-tab-trigger fairteams-footer-text-tab flex h-full items-center justify-center rounded-xl text-slate-500 transition-all"
             >
-              <Users className="h-[18px] w-[18px]" />
-              <span className="text-[11px] font-bold leading-none tracking-tight">Roster</span>
+              <span className="text-[12px] font-semibold leading-none tracking-tight">Roster</span>
             </TabsTrigger>
             <TabsTrigger
               value="today"
-              className="fairteams-tab-trigger flex h-full flex-col items-center justify-center gap-0.5 rounded-xl text-slate-500 transition-all"
+              className="fairteams-tab-trigger fairteams-footer-text-tab flex h-full items-center justify-center rounded-xl text-slate-500 transition-all"
             >
-              <CalendarCheck className="h-[18px] w-[18px]" />
-              <span className="text-[11px] font-bold leading-none tracking-tight">Today</span>
+              <span className="text-[12px] font-semibold leading-none tracking-tight">Today</span>
             </TabsTrigger>
             <TabsTrigger
               value="teams"
-              className="fairteams-tab-trigger flex h-full flex-col items-center justify-center gap-0.5 rounded-xl text-slate-500 transition-all"
+              className="fairteams-tab-trigger fairteams-footer-text-tab flex h-full items-center justify-center rounded-xl text-slate-500 transition-all"
             >
-              <Shield className="h-[18px] w-[18px]" />
-              <span className="text-[11px] font-bold leading-none tracking-tight">Teams</span>
+              <span className="text-[12px] font-semibold leading-none tracking-tight">Teams</span>
             </TabsTrigger>
           </TabsList>
         </div>

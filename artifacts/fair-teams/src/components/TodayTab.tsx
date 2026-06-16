@@ -108,6 +108,8 @@ declare global {
   }
 }
 
+const todayRosterReadyIds = new Set<string>();
+
 type OcrMatchStatus = "match" | "suggest" | "new";
 type ScreenshotImportMode = "meetup" | "other";
 type CropBox = { x: number; y: number; w: number; h: number };
@@ -1664,12 +1666,12 @@ export function TodayTab({
   >({});
   const [prioritizeScannedPlayers, setPrioritizeScannedPlayers] =
     useState(false);
-  const getTodayRosterReadyFromSession = () => {
+  const getTodayRosterReady = () => {
     if (rosterChoices.length <= 1) return true;
-    if (!activeRosterId || typeof sessionStorage === "undefined") return false;
-    return sessionStorage.getItem("fair-teams-today-roster-ready-v1") === activeRosterId;
+    if (!activeRosterId) return false;
+    return todayRosterReadyIds.has(activeRosterId);
   };
-  const [todayRosterReady, setTodayRosterReady] = useState(getTodayRosterReadyFromSession);
+  const [todayRosterReady, setTodayRosterReady] = useState(getTodayRosterReady);
 
   const attendingSummaryStyle = {
     background: "linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)",
@@ -1697,11 +1699,11 @@ export function TodayTab({
       setTodayRosterReady(true);
       return;
     }
-    if (!activeRosterId || typeof sessionStorage === "undefined") {
+    if (!activeRosterId) {
       setTodayRosterReady(false);
       return;
     }
-    setTodayRosterReady(sessionStorage.getItem("fair-teams-today-roster-ready-v1") === activeRosterId);
+    setTodayRosterReady(todayRosterReadyIds.has(activeRosterId));
   }, [activeRosterId, rosterChoices.length]);
 
   const sorted = [...players].sort((a, b) => {
@@ -3094,9 +3096,7 @@ export function TodayTab({
                   type="button"
                   onClick={() => {
                     onChooseRoster?.(roster.id);
-                    try {
-                      sessionStorage.setItem("fair-teams-today-roster-ready-v1", roster.id);
-                    } catch {}
+                    todayRosterReadyIds.add(roster.id);
                     setTodayRosterReady(true);
                   }}
                   className={`flex w-full items-center justify-between rounded-2xl border px-3 py-3 text-left transition-transform active:scale-[0.99] ${isActive ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-slate-50/70"}`}

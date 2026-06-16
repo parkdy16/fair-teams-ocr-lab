@@ -6,7 +6,7 @@ import { generateTeams, recomputeStats } from "@/lib/teamGenerator";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Shuffle, ArrowLeftRight, Download, HelpCircle, Clock, Palette, Sparkles, BarChart3, List } from "lucide-react";
+import { Shuffle, ArrowLeftRight, Download, HelpCircle, Clock, Palette, Sparkles, BarChart3, List, Maximize2, X } from "lucide-react";
 import fairTeamsLogo from "@/assets/fairteams-logo.png";
 
 const COLOR_OPTIONS: { value: TeamColor; label: string; hex: string; textHex: string }[] = [
@@ -378,6 +378,7 @@ export function TeamsTab({ players, pairingRules = [] }: { players: RoomPlayer[]
   const [drawStep, setDrawStep] = useState(0);
   const [justGenerated, setJustGenerated] = useState(false);
   const [showPlayerSkillNumbers, setShowPlayerSkillNumbers] = useState(false);
+  const [presentTeamsOpen, setPresentTeamsOpen] = useState(false);
   const generateTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -401,6 +402,20 @@ export function TeamsTab({ players, pairingRules = [] }: { players: RoomPlayer[]
       if (generateTimerRef.current !== null) window.clearTimeout(generateTimerRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    if (!presentTeamsOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setPresentTeamsOpen(false);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [presentTeamsOpen]);
 
   const attendingPlayers = players.filter(p => p.attending).map(toLocalPlayer);
   const hereNowCount = attendingPlayers.filter(p => !isNotHereYet(p)).length;
@@ -427,7 +442,7 @@ export function TeamsTab({ players, pairingRules = [] }: { players: RoomPlayer[]
           <button
             key={entry.id}
             type="button"
-            onClick={() => { setTeams(entry.teams); setFieldSize(entry.fieldSize); setNumTeams(entry.numTeams); setSwap(null); setTeamStatsOpen({}); }}
+            onClick={() => { setTeams(entry.teams); setFieldSize(entry.fieldSize); setNumTeams(entry.numTeams); setSwap(null); setTeamStatsOpen({}); setShowPlayerSkillNumbers(false); setPresentTeamsOpen(false); }}
             className="min-w-[142px] rounded-lg border border-border bg-muted/30 px-3 py-2 text-left active:scale-[0.98] transition-transform"
             data-testid={`button-history-${entry.id}`}
           >
@@ -444,6 +459,8 @@ export function TeamsTab({ players, pairingRules = [] }: { players: RoomPlayer[]
     if (attendingPlayers.length < 2 || isGenerating) return;
     setSwap(null);
     setTeamStatsOpen({});
+    setShowPlayerSkillNumbers(false);
+    setPresentTeamsOpen(false);
     setJustGenerated(false);
     setIsGenerating(true);
     setDrawStep(0);
@@ -865,14 +882,88 @@ export function TeamsTab({ players, pairingRules = [] }: { players: RoomPlayer[]
           <Button
             size="sm"
             className="h-9 rounded-xl px-3 text-[12px] font-black tracking-tight bg-primary text-primary-foreground hover:bg-primary/90"
-            onClick={() => void exportTeamsAsJpg(teams, fieldSize)}
+            onClick={() => setPresentTeamsOpen(true)}
             disabled={isGenerating}
-            title="Save teams as image"
-            data-testid="button-export"
+            title="Show teams full screen"
+            data-testid="button-present-teams"
           >
-            <Download className="w-3.5 h-3.5 mr-1.5" />
-            Save Image
+            <Maximize2 className="w-3.5 h-3.5 mr-1.5" />
+            Present Teams
           </Button>
+        </div>
+      )}
+
+      {presentTeamsOpen && teams.length > 0 && (
+        <div className="fixed inset-0 z-[90] bg-slate-950 text-white" role="dialog" aria-modal="true" aria-label="Present teams">
+          <div className="flex h-full flex-col">
+            <div className="flex items-center justify-between gap-3 border-b border-white/10 bg-slate-950/95 px-4 py-3">
+              <div className="min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-300">Fair Teams</p>
+                <h2 className="truncate text-xl font-black tracking-tight">Today's Teams</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPresentTeamsOpen(false)}
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-white/15 bg-white/10 text-white active:scale-[0.98]"
+                aria-label="Close full screen teams"
+                data-testid="button-close-present-teams"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-4 py-4">
+              <div className="mx-auto grid max-w-5xl grid-cols-1 gap-3 sm:grid-cols-2">
+                {teams.map((team) => {
+                  const col = colorFor(team.color);
+                  const borderColor = team.color === "white" ? "#E2E8F0" : col.hex;
+                  return (
+                    <div
+                      key={team.id}
+                      className="overflow-hidden rounded-3xl border-2 bg-white text-[#102A43] shadow-2xl"
+                      style={{ borderColor }}
+                    >
+                      <div className="flex items-center justify-between gap-2 px-4 py-3" style={{ borderBottom: `3px solid ${borderColor}` }}>
+                        <div className="min-w-0 truncate text-xl font-black">{team.name}</div>
+                        <div className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-black text-slate-500">
+                          {team.players.length} player{team.players.length === 1 ? "" : "s"}
+                        </div>
+                      </div>
+                      <div className="divide-y divide-slate-100">
+                        {team.players.length === 0 ? (
+                          <p className="px-4 py-4 text-sm font-bold text-slate-400">Empty</p>
+                        ) : team.players.map((player) => (
+                          <div key={player.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                            <div className="min-w-0 truncate text-lg font-black">{displayName(player)}</div>
+                            <div className="flex shrink-0 items-center gap-1.5">
+                              {player.isGoalkeeper && <GKBadge />}
+                              {player.isOrganizer && <ORGBadge />}
+                              {isNotHereYet(player) && <NotHereBadge />}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-2 border-t border-white/10 bg-slate-950/95 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+              <p className="min-w-0 text-[11px] font-semibold leading-snug text-slate-400">
+                Show this screen to players. Save only when you need an image.
+              </p>
+              <button
+                type="button"
+                onClick={() => void exportTeamsAsJpg(teams, fieldSize)}
+                className="inline-flex h-10 shrink-0 items-center justify-center rounded-2xl bg-white px-3 text-[12px] font-black text-[#102A43] active:scale-[0.98]"
+                data-testid="button-present-save-image"
+              >
+                <Download className="mr-1.5 h-3.5 w-3.5" />
+                Save Image
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

@@ -37,6 +37,9 @@ type SpeechRecognitionInstance = {
 
 type SpeechRecognitionConstructor = new () => SpeechRecognitionInstance;
 
+let rosterSortModeSession: "recent" | "alpha" | "skill" = "recent";
+let rosterSkillHiddenSession = true;
+
 function cleanVoiceAddName(value: string) {
   return value
     .replace(/[’`´]/g, "'")
@@ -1157,7 +1160,6 @@ export function PlayersTab({
   const [pairAddKind, setPairAddKind] = useState<PairingRuleKind | null>(null);
   const [pairFirstId, setPairFirstId] = useState("");
   const [pairSecondId, setPairSecondId] = useState("");
-  const [pairSearch, setPairSearch] = useState("");
   const [pairNotice, setPairNotice] = useState("");
   const [addPlayerOpen, setAddPlayerOpen] = useState(false);
   const [voiceAddOpen, setVoiceAddOpen] = useState(false);
@@ -1166,17 +1168,8 @@ export function PlayersTab({
   const [voiceAddStatus, setVoiceAddStatus] = useState("");
   const [addTraitHelp, setAddTraitHelp] = useState<(typeof SPECIAL_ABILITIES)[number] | null>(null);
   const voiceAddRecognitionRef = useRef<SpeechRecognitionInstance | null>(null);
-  const [hideOverall, setHideOverall] = useState(() => {
-    try { return window.localStorage.getItem("fair-teams-hide-roster-skill") !== "false"; }
-    catch { return true; }
-  });
-  const [sortMode, setSortMode] = useState<"recent" | "alpha" | "skill">(() => {
-    try {
-      const saved = window.localStorage.getItem("fair-teams-roster-sort");
-      return saved === "alpha" || saved === "skill" ? saved : "recent";
-    }
-    catch { return "recent"; }
-  });
+  const [hideOverall, setHideOverall] = useState(() => rosterSkillHiddenSession);
+  const [sortMode, setSortMode] = useState<"recent" | "alpha" | "skill">(() => rosterSortModeSession);
 
   useEffect(() => {
     if (reviewPlayerId || reviewActivePlayerId) setSearch("");
@@ -1307,13 +1300,11 @@ export function PlayersTab({
   }, []);
 
   useEffect(() => {
-    try { window.localStorage.setItem("fair-teams-hide-roster-skill", hideOverall ? "true" : "false"); }
-    catch {}
+    rosterSkillHiddenSession = hideOverall;
   }, [hideOverall]);
 
   useEffect(() => {
-    try { window.localStorage.setItem("fair-teams-roster-sort", sortMode); }
-    catch {}
+    rosterSortModeSession = sortMode;
   }, [sortMode]);
 
   const updatePlayer = (playerId: string, data: Partial<RoomPlayer>) => {
@@ -1396,17 +1387,15 @@ export function PlayersTab({
   ), [pairingRules, playerById]);
   const togetherRules = cleanPairingRules.filter((rule) => rule.kind === "together");
   const separateRules = cleanPairingRules.filter((rule) => rule.kind === "separate");
-  const pairSearchLower = pairSearch.trim().toLowerCase();
-  const pairCandidates = players
-    .filter((player) => player.id !== pairFirstId && player.id !== pairSecondId)
-    .filter((player) => !pairSearchLower || displayName(player).toLowerCase().includes(pairSearchLower))
-    .slice(0, 7);
+  const pairSelectPlayers = useMemo(
+    () => [...players].sort((a, b) => displayName(a).localeCompare(displayName(b))),
+    [players],
+  );
 
   const resetPairAdder = () => {
     setPairAddKind(null);
     setPairFirstId("");
     setPairSecondId("");
-    setPairSearch("");
     setPairNotice("");
   };
 
@@ -1426,21 +1415,7 @@ export function PlayersTab({
     setPairAddKind(kind);
     setPairFirstId("");
     setPairSecondId("");
-    setPairSearch("");
     setPairNotice("");
-  };
-
-  const selectPairPlayer = (playerId: string) => {
-    setPairNotice("");
-    if (!pairFirstId) {
-      setPairFirstId(playerId);
-      setPairSearch("");
-      return;
-    }
-    if (playerId !== pairFirstId) {
-      setPairSecondId(playerId);
-      setPairSearch("");
-    }
   };
 
   const addPairRule = () => {
@@ -1470,7 +1445,6 @@ export function PlayersTab({
     ]);
     setPairFirstId("");
     setPairSecondId("");
-    setPairSearch("");
     setPairNotice("Pair added.");
   };
 
@@ -2024,7 +1998,7 @@ export function PlayersTab({
                     <div className="text-[11px] font-black uppercase tracking-wide text-primary">
                       Add {pairAddKind === "together" ? "Keep Together" : "Keep Separate"} Pair
                     </div>
-                    <div className="text-[10px] font-semibold text-muted-foreground">Tap two names, then add the pair.</div>
+                    <div className="text-[10px] font-semibold text-muted-foreground">Choose two players, then add the pair.</div>
                   </div>
                   <button
                     type="button"
@@ -2036,67 +2010,51 @@ export function PlayersTab({
                   </button>
                 </div>
 
-                <div className="mb-2 grid grid-cols-2 gap-2">
-                  <div className="rounded-xl border border-border bg-background px-3 py-2">
-                    <div className="text-[9px] font-black uppercase tracking-wide text-muted-foreground">First</div>
-                    <div className="flex items-center justify-between gap-1">
-                      <div className="truncate text-[12px] font-black text-foreground">{pairFirstId ? pairName(pairFirstId) : "Choose player"}</div>
-                      {pairFirstId && (
-                        <button
-                          type="button"
-                          onClick={() => { setPairFirstId(pairSecondId); setPairSecondId(""); setPairNotice(""); }}
-                          className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
-                          aria-label="Remove first selected player"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                  <div className="rounded-xl border border-border bg-background px-3 py-2">
-                    <div className="text-[9px] font-black uppercase tracking-wide text-muted-foreground">Second</div>
-                    <div className="flex items-center justify-between gap-1">
-                      <div className="truncate text-[12px] font-black text-foreground">{pairSecondId ? pairName(pairSecondId) : "Choose player"}</div>
-                      {pairSecondId && (
-                        <button
-                          type="button"
-                          onClick={() => { setPairSecondId(""); setPairNotice(""); }}
-                          className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
-                          aria-label="Remove second selected player"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="relative">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    value={pairSearch}
-                    onChange={(event) => setPairSearch(event.target.value)}
-                    placeholder="Search player…"
-                    className="h-9 rounded-xl pl-8 text-sm"
-                    data-testid="input-pair-search"
-                  />
-                </div>
-
-                <div className="mt-2 max-h-44 space-y-1 overflow-y-auto rounded-xl border border-border bg-background p-1">
-                  {pairCandidates.length === 0 ? (
-                    <div className="px-3 py-2 text-[11px] font-semibold text-muted-foreground">No matching players.</div>
-                  ) : pairCandidates.map((player) => (
-                    <button
-                      key={player.id}
-                      type="button"
-                      onClick={() => selectPairPlayer(player.id)}
-                      className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-[12px] font-bold text-foreground hover:bg-muted"
-                      data-testid={`button-pair-player-${player.id}`}
+                <div className="grid gap-2">
+                  <div className="space-y-1">
+                    <Label className="text-[10px] font-black uppercase tracking-wide text-muted-foreground">First player</Label>
+                    <Select
+                      value={pairFirstId || undefined}
+                      onValueChange={(value) => {
+                        setPairFirstId(value);
+                        if (pairSecondId === value) setPairSecondId("");
+                        setPairNotice("");
+                      }}
                     >
-                      <span className="truncate">{displayName(player)}</span>
-                      <Plus className="h-3.5 w-3.5 text-muted-foreground" />
-                    </button>
-                  ))}
+                      <SelectTrigger className="h-10 rounded-xl bg-background text-sm font-bold" data-testid="select-pair-first-player">
+                        <SelectValue placeholder="Choose player" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-64">
+                        {pairSelectPlayers.map((player) => (
+                          <SelectItem key={player.id} value={player.id} data-testid={`select-pair-first-${player.id}`}>
+                            {displayName(player)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-[10px] font-black uppercase tracking-wide text-muted-foreground">Second player</Label>
+                    <Select
+                      value={pairSecondId || undefined}
+                      onValueChange={(value) => {
+                        setPairSecondId(value);
+                        setPairNotice("");
+                      }}
+                    >
+                      <SelectTrigger className="h-10 rounded-xl bg-background text-sm font-bold" data-testid="select-pair-second-player">
+                        <SelectValue placeholder={pairFirstId ? "Choose player" : "Choose first player first"} />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-64">
+                        {pairSelectPlayers.filter((player) => player.id !== pairFirstId).map((player) => (
+                          <SelectItem key={player.id} value={player.id} data-testid={`select-pair-second-${player.id}`}>
+                            {displayName(player)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
 
                 {pairNotice && (

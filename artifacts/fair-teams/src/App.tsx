@@ -3358,45 +3358,24 @@ They will no longer be able to open or edit this shared roster unless it is shar
                       className="h-12 justify-start rounded-2xl gap-3 bg-blue-600 text-white shadow-sm hover:bg-blue-700"
                       onClick={saveAllRostersToGoogleDrive}
                       disabled={isEmptyStarterRoster || !googleDriveConnected || googleDriveSaving || googleDriveUpdating}
-                      title={currentDriveBackup ? "Update the active Drive backup" : "Create a new Drive backup"}
+                      title={currentDriveBackup ? "Update your private all-rosters backup" : "Create a private backup of all rosters"}
                     >
                       {currentDriveBackup ? <RefreshCw className={`h-4 w-4 ${googleDriveUpdating ? "animate-spin" : ""}`} /> : <CloudUpload className="h-4 w-4" />}
                       <span className="font-black">
-                        {googleDriveSaving || googleDriveUpdating ? "Saving..." : currentDriveBackup ? "Save all rosters" : "Create backup"}
+                        {googleDriveSaving || googleDriveUpdating ? "Saving..." : currentDriveBackup ? "Update backup" : "Back up all rosters"}
                       </span>
                     </Button>
 
-                    <div className="grid grid-cols-2 gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="h-11 justify-start rounded-2xl gap-2 border-blue-100 bg-white/90 px-3"
-                        onClick={openGoogleDriveBackup}
-                        disabled={!googleDriveConnected || googleDriveOpening}
-                      >
-                        <CloudDownload className="h-4 w-4" />
-                        <span className="truncate text-xs font-black">{googleDriveOpening ? "Opening..." : "Restore all"}</span>
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="h-11 justify-start rounded-2xl gap-2 border-blue-100 bg-white/90 px-3"
-                        onClick={saveDriveBackupAsNewCopy}
-                        disabled={
-                          isEmptyStarterRoster ||
-                          !googleDriveConnected ||
-                          googleDriveSaving ||
-                          googleDriveOpening ||
-                          googleDriveUpdating
-                        }
-                        title="Save a separate private backup file"
-                      >
-                        <Archive className="h-4 w-4" />
-                        <span className="truncate text-xs font-black">
-                          {googleDriveSaving ? "Saving..." : "Save copy"}
-                        </span>
-                      </Button>
-                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-11 w-full justify-start rounded-2xl gap-2 border-blue-100 bg-white/90 px-3"
+                      onClick={openGoogleDriveBackup}
+                      disabled={!googleDriveConnected || googleDriveOpening}
+                    >
+                      <CloudDownload className="h-4 w-4" />
+                      <span className="truncate text-xs font-black">{googleDriveOpening ? "Opening..." : "Browse backups"}</span>
+                    </Button>
 
                       <button
                         type="button"
@@ -4565,10 +4544,10 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   Cloud Backup
                 </div>
                 <h2 className="mt-1 truncate text-base font-black tracking-tight text-[#102A43]">
-                  Open backup
+                  Choose backup
                 </h2>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  Choose a private backup. Restoring adds all rosters from that backup.
+                  Nothing changes yet. Pick a private backup to preview its rosters.
                 </p>
               </div>
               <Button
@@ -4601,11 +4580,11 @@ They will no longer be able to open or edit this shared roster unless it is shar
                             {file.name}
                           </span>
                           <span className="mt-0.5 block truncate text-[11px] font-bold text-blue-700/75">
-                            Private backup · {formatDriveModifiedTime(file.modifiedTime)}
+                            Backup file · {formatDriveModifiedTime(file.modifiedTime)}
                           </span>
                         </span>
-                        <span className="shrink-0 text-lg font-black leading-none text-blue-400">
-                          ›
+                        <span className="shrink-0 text-[11px] font-black uppercase tracking-wide text-blue-500">
+                          Preview
                         </span>
                       </button>
 
@@ -4643,7 +4622,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 className="h-10 rounded-2xl text-slate-500"
                 onClick={() => setDriveBackupChoices(null)}
               >
-                Cancel
+                Close
               </Button>
             </div>
           </div>
@@ -4757,7 +4736,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
 
             <div className="mt-3 rounded-2xl border border-amber-100 bg-amber-50/80 p-3">
               <p className="text-xs font-semibold leading-snug text-amber-800">
-                Make sure this is the correct all-rosters backup before updating. Use “Save copy” if you want a separate backup snapshot instead.
+                Make sure this is the correct private all-rosters backup before updating. This will replace the backup file with the current roster list from this device.
               </p>
             </div>
 
@@ -4796,7 +4775,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   Google Drive backup
                 </div>
                 <h2 className="mt-1 truncate text-base font-black tracking-tight text-[#102A43]">
-                  Open this backup?
+                  Backup preview
                 </h2>
                 <p className="mt-1 truncate text-xs font-semibold text-slate-500">
                   {driveImportPreview.file.name}

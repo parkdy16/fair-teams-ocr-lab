@@ -585,6 +585,14 @@ export function ClubTab({
     if (!isSharedRoster) return [];
     return ["Me", ...Array.from({ length: Math.max(0, sharedPeopleCount - 1) }, (_, index) => `Person ${index + 2}`)];
   }, [equipmentHolderLabels, equipmentHolderNamesByEmail, isSharedRoster, sharedPeopleCount]);
+  const equipmentHolderLabelById = useMemo(() => {
+    return equipmentHolders.reduce<Record<string, string>>((labels, holder) => {
+      labels[holder.id] = holder.label;
+      return labels;
+    }, {});
+  }, [equipmentHolders]);
+  const equipmentPreviewKits = useMemo(() => equipmentKits.slice(0, 3), [equipmentKits]);
+  const hiddenEquipmentCount = Math.max(0, equipmentKits.length - equipmentPreviewKits.length);
   const loginGateOpen = Boolean(isActive && authReady && !clubUser);
   const accountModalOpen = loginGateOpen || accountDialogOpen;
 
@@ -927,9 +935,13 @@ export function ClubTab({
         </div>
       )}
 
-      <section className="rounded-[1.7rem] border border-slate-100 bg-white p-3 shadow-sm">
-        <div className="mb-2 flex items-center justify-between gap-2">
-          <div className="text-[10px] font-black uppercase tracking-wide text-emerald-600">Shared roster</div>
+      <section className="relative overflow-hidden rounded-[1.7rem] border border-emerald-100 bg-white p-3 shadow-[0_10px_28px_rgba(16,42,67,0.06)]">
+        <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-emerald-400 via-sky-300 to-transparent" />
+        <div className="mb-2 flex items-center justify-between gap-2 pt-0.5">
+          <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wide text-emerald-700">
+            <span className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.14)]" />
+            Shared roster
+          </div>
           {!isSharedRoster && (
             <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-black text-slate-500">Local</span>
           )}
@@ -937,15 +949,31 @@ export function ClubTab({
         {sharedToolsNode}
       </section>
 
-      <section className="rounded-[1.7rem] border border-slate-100 bg-white p-3 shadow-sm">
-        <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
+      <section className="rounded-[1.7rem] border border-slate-100 bg-white p-3 shadow-[0_10px_28px_rgba(16,42,67,0.055)]">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wide text-blue-600">
               <PackageOpen className="h-4 w-4" />
               Equipment
             </div>
-            <div className="mt-1 text-sm font-black text-[#102A43]">{equipmentKits.length} bag{equipmentKits.length === 1 ? "" : "s"}</div>
-            <div className="mt-0.5 truncate text-[11px] font-semibold text-slate-500">Roster: {activeRosterName || "Current roster"}</div>
+            {equipmentPreviewKits.length > 0 ? (
+              <div className="mt-2 grid gap-1.5">
+                {equipmentPreviewKits.map((kit) => (
+                  <div key={kit.id} className="flex min-w-0 items-center gap-2 rounded-2xl bg-slate-50/80 px-2 py-1.5">
+                    <DuffleBagIcon color={kit.color || DEFAULT_EQUIPMENT_COLOR} className="h-7 w-9 shrink-0" />
+                    <div className="min-w-0 flex-1 truncate text-xs font-black text-[#102A43]">{kit.name}</div>
+                    <div className="shrink-0 truncate text-[11px] font-bold text-slate-500 max-w-[6rem]">
+                      {equipmentHolderLabelById[normalizeEquipmentHolderId(kit.holderId)] || "Storage"}
+                    </div>
+                  </div>
+                ))}
+                {hiddenEquipmentCount > 0 && (
+                  <div className="px-2 text-[11px] font-bold text-slate-400">+{hiddenEquipmentCount} more</div>
+                )}
+              </div>
+            ) : (
+              <div className="mt-1 text-sm font-black text-[#102A43]">No bags yet</div>
+            )}
           </div>
           <Button
             type="button"
@@ -957,7 +985,7 @@ export function ClubTab({
         </div>
       </section>
 
-      <section className="rounded-[1.7rem] border border-slate-100 bg-white p-3 shadow-sm">
+      <section className="rounded-[1.7rem] border border-slate-100 bg-white p-3 shadow-[0_10px_28px_rgba(16,42,67,0.045)]">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
             <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wide text-emerald-600">
@@ -965,7 +993,6 @@ export function ClubTab({
               Votes
             </div>
             <div className="mt-1 text-sm font-black text-[#102A43]">{openVotes.length} active</div>
-            <div className="mt-0.5 truncate text-[11px] font-semibold text-slate-500">Organizer decisions</div>
           </div>
           <Button
             type="button"

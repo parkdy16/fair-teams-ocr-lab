@@ -1,13 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   CalendarClock,
-  CheckCircle2,
   ClipboardList,
   PackageOpen,
   Plus,
-  Share2,
   ShieldCheck,
-  Sparkles,
   Trash2,
   Users,
   Vote,
@@ -31,12 +28,9 @@ import {
 type ClubTabProps = {
   isActive?: boolean;
   activeRosterName: string;
-  activeRosterMeta?: string;
   playerCount: number;
   isSharedRoster: boolean;
   collaboratorCount: number;
-  sharedToolsOpen?: boolean;
-  onSharedToolsOpenChange?: (open: boolean) => void;
   canSwitchRoster?: boolean;
   onOpenRosterPicker?: () => void;
   onBackTargetChange?: (hasBackTarget: boolean) => void;
@@ -430,12 +424,9 @@ function VoteCard({
 export function ClubTab({
   isActive = true,
   activeRosterName,
-  activeRosterMeta,
   playerCount,
   isSharedRoster,
   collaboratorCount,
-  sharedToolsOpen = false,
-  onSharedToolsOpenChange,
   canSwitchRoster = false,
   onOpenRosterPicker,
   onBackTargetChange,
@@ -818,37 +809,6 @@ export function ClubTab({
     if (typeof document === "undefined") return;
     const activeElement = document.activeElement;
     if (activeElement instanceof HTMLElement) activeElement.blur();
-  };
-
-  const releaseModalScrollLockSoon = () => {
-    if (typeof window === "undefined") return;
-    const clearScrollLock = () => {
-      document.body.style.overflow = "";
-      document.body.style.pointerEvents = "";
-      document.body.style.removeProperty("overflow");
-      document.body.style.removeProperty("pointer-events");
-      document.body.style.removeProperty("padding-right");
-      document.documentElement.style.overflow = "";
-      document.documentElement.style.removeProperty("overflow");
-      if (document.body.dataset.fairTeamsScrollLock === "true") {
-        delete document.body.dataset.fairTeamsScrollLock;
-      }
-    };
-
-    // Radix/RemoveScroll releases body styles asynchronously. Clear twice so a
-    // just-closed Shared Roster modal cannot leave the app in a frozen scroll state.
-    window.setTimeout(clearScrollLock, 80);
-    window.setTimeout(clearScrollLock, 240);
-  };
-
-  const handleSharedToolsOpenChange = (open: boolean) => {
-    if (!open) {
-      blurActiveField();
-      onSharedToolsOpenChange?.(false);
-      releaseModalScrollLockSoon();
-      return;
-    }
-    onSharedToolsOpenChange?.(true);
   };
 
   const hasClubBackTarget = Boolean(

@@ -656,7 +656,6 @@ function App() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const logoInputRef = useRef<HTMLInputElement | null>(null);
   const [rosterFilesOpen, setRosterFilesOpen] = useState(false);
-  const [clubSharedToolsOpen, setClubSharedToolsOpen] = useState(false);
   const [rosterSharedToolsOpen, setRosterSharedToolsOpen] = useState(false);
   const [rosterLocalBackupToolsOpen, setRosterLocalBackupToolsOpen] = useState(false);
   const [rosterCloudBackupToolsOpen, setRosterCloudBackupToolsOpen] = useState(false);
@@ -689,14 +688,12 @@ function App() {
     closeRosterToolsPanel();
     setRosterFilesOpen(false);
     setActiveTab("club");
-    setClubSharedToolsOpen(true);
   };
 
   const finishSharedInviteOpen = (openedRoster: RoomRoster) => {
     setTodayRosterChosen(true);
     closeRosterToolsPanel();
     setRosterFilesOpen(false);
-    setClubSharedToolsOpen(false);
     setActiveTab(openedRoster.players.length > 0 ? "today" : "players");
   };
 
@@ -964,7 +961,6 @@ function App() {
   const appScrollLockActive =
     groupSettingsOpen ||
     rosterFilesOpen ||
-    clubSharedToolsOpen ||
     rosterPickerOpen ||
     clearRosterOpen ||
     Boolean(driveImportPreview) ||
@@ -2684,8 +2680,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
       return true;
     }
     if (clubSharedToolsOpen) {
-      setClubSharedToolsOpen(false);
-      return true;
+        return true;
     }
     if (rosterFilesOpen) {
       if (rosterToolsActivePanel) {
@@ -2744,7 +2739,6 @@ They will no longer be able to open or edit this shared roster unless it is shar
     driveAccessOpen ||
     driveHelpOpen ||
     googleSheetHelpOpen ||
-    clubSharedToolsOpen ||
     rosterFilesOpen ||
     clubBackTargetOpen ||
     tabHistoryRef.current.length > 1 ||
@@ -3013,16 +3007,9 @@ They will no longer be able to open or edit this shared roster unless it is shar
               <ClubTab
                 isActive={activeTab === "club"}
                 activeRosterName={activeRosterName}
-                activeRosterMeta={isEmptyStarterRoster
-                  ? "Create or choose a roster"
-                  : activeRosterIsShared
-                    ? `${players.length} player${players.length === 1 ? "" : "s"} · ${rosterFirebaseShareCount(activeRoster)} collaborator${rosterFirebaseShareCount(activeRoster) === 1 ? "" : "s"}`
-                    : `${players.length} player${players.length === 1 ? "" : "s"} · local roster`}
                 playerCount={players.length}
                 isSharedRoster={activeRosterIsFirebaseShared}
                 collaboratorCount={rosterFirebaseShareCount(activeRoster)}
-                sharedToolsOpen={clubSharedToolsOpen}
-                onSharedToolsOpenChange={setClubSharedToolsOpen}
                 canSwitchRoster={!isEmptyStarterRoster && rosters.length > 1}
                 onOpenRosterPicker={() => setRosterPickerOpen(true)}
                 onBackTargetChange={setClubBackTargetOpen}

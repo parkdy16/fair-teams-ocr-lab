@@ -422,6 +422,24 @@ export function ClubTab({
 
   const equipmentRealtimeEnabled = Boolean(equipmentGroupId);
   const equipmentSharedConnecting = isSharedRoster && !equipmentRealtimeEnabled;
+  const equipmentStatusText = equipmentRealtimeEnabled
+    ? equipmentError
+      ? "Sync issue. Open board."
+      : equipmentLoading
+        ? "Loading shared equipment…"
+        : "Realtime sync on."
+    : equipmentSharedConnecting
+      ? "Shared sync not ready yet."
+      : "Local preview.";
+  const equipmentBoardStatusText = equipmentRealtimeEnabled
+    ? equipmentError
+      ? equipmentError
+      : equipmentLoading
+        ? "Loading shared equipment…"
+        : "Realtime sync on · drag bags to move"
+    : equipmentSharedConnecting
+      ? "Shared sync not ready yet."
+      : "Local preview · drag bags to move";
   const equipmentHolders = useMemo<EquipmentHolder[]>(() => {
     if (!isSharedRoster && !equipmentRealtimeEnabled) return LOCAL_EQUIPMENT_HOLDERS;
 
@@ -936,15 +954,7 @@ export function ClubTab({
                 {equipmentKits.length} equipment bag{equipmentKits.length === 1 ? "" : "s"}
               </div>
               <p className="mt-1 text-[11px] font-semibold leading-snug text-slate-500">
-                {equipmentSharedConnecting
-                  ? "Connecting shared board…"
-                  : equipmentRealtimeEnabled
-                    ? equipmentLoading
-                      ? "Connecting to shared equipment…"
-                      : equipmentError
-                        ? "Realtime board needs attention."
-                        : "Realtime sync on."
-                    : "Local preview."}
+                {equipmentStatusText}
               </p>
             </div>
             <Button
@@ -1089,15 +1099,7 @@ export function ClubTab({
 
           <div className="flex-1 overflow-y-auto bg-slate-50/70 p-3">
             <div className="mb-2 rounded-2xl border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold leading-snug text-slate-500 shadow-sm">
-              {equipmentSharedConnecting
-                ? "Connecting shared board…"
-                : equipmentRealtimeEnabled
-                  ? equipmentError
-                    ? equipmentError
-                    : equipmentLoading
-                      ? "Loading shared equipment…"
-                      : "Realtime · drag bags to move"
-                  : "Local preview · drag bags to move"}
+              {equipmentBoardStatusText}
             </div>
 
             <div className="overflow-hidden rounded-[1.65rem] border border-slate-200 bg-white shadow-[0_14px_34px_rgba(15,23,42,0.08)]">

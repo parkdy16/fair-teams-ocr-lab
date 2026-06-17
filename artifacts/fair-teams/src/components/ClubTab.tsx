@@ -25,6 +25,7 @@ type ClubTabProps = {
   isSharedRoster: boolean;
   collaboratorCount: number;
   onOpenSharedTools: () => void;
+  onBackTargetChange?: (hasBackTarget: boolean) => void;
 };
 
 type ClubVoteOption = {
@@ -330,6 +331,7 @@ export function ClubTab({
   isSharedRoster,
   collaboratorCount,
   onOpenSharedTools,
+  onBackTargetChange,
 }: ClubTabProps) {
   const [votes, setVotes] = useState<ClubVote[]>(() => {
     if (typeof window === "undefined") return [];
@@ -569,6 +571,14 @@ export function ClubTab({
     if (activeElement instanceof HTMLElement) activeElement.blur();
   };
 
+  const hasClubBackTarget = Boolean(
+    colorPickerOpen ||
+    contentPeekKitId ||
+    equipmentDialogOpen ||
+    equipmentBoardOpen ||
+    voteDialogOpen,
+  );
+
   useEffect(() => {
     equipmentBackStateRef.current = {
       colorPickerOpen,
@@ -578,6 +588,11 @@ export function ClubTab({
       voteDialogOpen,
     };
   }, [colorPickerOpen, contentPeekKitId, equipmentBoardOpen, equipmentDialogOpen, voteDialogOpen]);
+
+  useEffect(() => {
+    onBackTargetChange?.(hasClubBackTarget);
+    return () => onBackTargetChange?.(false);
+  }, [hasClubBackTarget, onBackTargetChange]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -879,53 +894,6 @@ export function ClubTab({
             </div>
           </div>
 
-          {contentPeekKit && (
-            <div className="absolute inset-0 z-40 flex items-end bg-slate-950/20 p-3" onClick={() => setContentPeekKitId(null)}>
-              <div
-                className="w-full rounded-[1.75rem] border border-slate-200 bg-white p-4 shadow-[0_24px_70px_rgba(15,23,42,0.22)]"
-                onClick={(event) => event.stopPropagation()}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-                      Inside bag
-                    </div>
-                    <h3 className="mt-1 truncate text-base font-black text-[#102A43]">
-                      {contentPeekKit.name}
-                    </h3>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-9 shrink-0 rounded-2xl px-3 text-xs font-black"
-                    onClick={() => setContentPeekKitId(null)}
-                  >
-                    Close
-                  </Button>
-                </div>
-
-                {contentPeekKit.contents.length > 0 ? (
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {contentPeekKit.contents.map((item, index) => (
-                      <span key={`${contentPeekKit.id}-content-${index}`} className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700">
-                        {item}
-                      </span>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="mt-3 rounded-2xl bg-slate-50 px-3 py-3 text-sm font-semibold text-slate-500">
-                    Nothing listed yet.
-                  </div>
-                )}
-
-                {contentPeekKit.note && (
-                  <div className="mt-3 rounded-2xl bg-amber-50 px-3 py-2 text-xs font-semibold leading-snug text-amber-800">
-                    {contentPeekKit.note}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
         </DialogContent>
       </Dialog>
 
@@ -1042,6 +1010,53 @@ export function ClubTab({
               })}
             </div>
           </div>
+          {contentPeekKit && (
+            <div className="absolute inset-0 z-40 flex items-end bg-slate-950/20 p-3" onClick={() => setContentPeekKitId(null)}>
+              <div
+                className="w-full rounded-[1.75rem] border border-slate-200 bg-white p-4 shadow-[0_24px_70px_rgba(15,23,42,0.22)]"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+                      Inside bag
+                    </div>
+                    <h3 className="mt-1 truncate text-base font-black text-[#102A43]">
+                      {contentPeekKit.name}
+                    </h3>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-9 shrink-0 rounded-2xl px-3 text-xs font-black"
+                    onClick={() => setContentPeekKitId(null)}
+                  >
+                    Close
+                  </Button>
+                </div>
+
+                {contentPeekKit.contents.length > 0 ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {contentPeekKit.contents.map((item, index) => (
+                      <span key={`${contentPeekKit.id}-content-${index}`} className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700">
+                        {item}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="mt-3 rounded-2xl bg-slate-50 px-3 py-3 text-sm font-semibold text-slate-500">
+                    Nothing listed yet.
+                  </div>
+                )}
+
+                {contentPeekKit.note && (
+                  <div className="mt-3 rounded-2xl bg-amber-50 px-3 py-2 text-xs font-semibold leading-snug text-amber-800">
+                    {contentPeekKit.note}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 

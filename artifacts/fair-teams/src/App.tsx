@@ -378,6 +378,7 @@ function App() {
   }, []);
 
   const [activeTab, setActiveTab] = useState<AppTab>("today");
+  const [clubBackTargetOpen, setClubBackTargetOpen] = useState(false);
   const activeTabRef = useRef<AppTab>("today");
   const tabHistoryRef = useRef<AppTab[]>(["today"]);
   const restoringTabFromBackRef = useRef(false);
@@ -2570,6 +2571,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
     driveHelpOpen ||
     googleSheetHelpOpen ||
     rosterFilesOpen ||
+    clubBackTargetOpen ||
     tabHistoryRef.current.length > 1 ||
     activeTab !== "today";
 
@@ -2838,6 +2840,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 isSharedRoster={activeRosterIsFirebaseShared}
                 collaboratorCount={rosterFirebaseShareCount(activeRoster)}
                 onOpenSharedTools={openJoinSharedRoster}
+                onBackTargetChange={setClubBackTargetOpen}
               />
             </TabsContent>
             <PoweredByFairTeams />

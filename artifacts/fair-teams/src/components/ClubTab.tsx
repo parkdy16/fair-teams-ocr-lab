@@ -52,6 +52,7 @@ type ClubEquipmentKit = {
   id: string;
   name: string;
   holderId: string;
+  color: string;
   contents: string[];
   note?: string;
   updatedAt: number;
@@ -59,6 +60,17 @@ type ClubEquipmentKit = {
 
 const VOTE_PREVIEW_STORAGE_KEY = "fairteams.clubVotes.preview.v1";
 const EQUIPMENT_PREVIEW_STORAGE_KEY = "fairteams.clubEquipment.preview.v1";
+
+const EQUIPMENT_COLORS = [
+  "#0f766e",
+  "#2563eb",
+  "#7c3aed",
+  "#db2777",
+  "#ea580c",
+  "#475569",
+] as const;
+
+const DEFAULT_EQUIPMENT_COLOR = EQUIPMENT_COLORS[0];
 
 const EQUIPMENT_HOLDERS: EquipmentHolder[] = [
   { id: "storage", label: "Club storage" },
@@ -72,6 +84,7 @@ const DEFAULT_EQUIPMENT_KITS: ClubEquipmentKit[] = [
     id: "kit-ball-bag",
     name: "Ball bag",
     holderId: "joon",
+    color: "#2563eb",
     contents: ["2 balls", "Pump", "Needles"],
     note: "Check air before Saturday.",
     updatedAt: Date.now(),
@@ -80,6 +93,7 @@ const DEFAULT_EQUIPMENT_KITS: ClubEquipmentKit[] = [
     id: "kit-bibs",
     name: "Bibs",
     holderId: "storage",
+    color: "#db2777",
     contents: ["10 dark bibs", "10 light bibs"],
     updatedAt: Date.now(),
   },
@@ -87,6 +101,7 @@ const DEFAULT_EQUIPMENT_KITS: ClubEquipmentKit[] = [
     id: "kit-cones",
     name: "Cone stack",
     holderId: "unknown",
+    color: "#ea580c",
     contents: ["12 cones"],
     note: "Someone took them after last game?",
     updatedAt: Date.now(),
@@ -135,6 +150,7 @@ function parseEquipmentKits(raw: string | null): ClubEquipmentKit[] {
         id: String(kit.id),
         name: String(kit.name),
         holderId: EQUIPMENT_HOLDERS.some((holder) => holder.id === kit.holderId) ? String(kit.holderId) : "unknown",
+        color: typeof kit.color === "string" && kit.color.trim() ? kit.color : DEFAULT_EQUIPMENT_COLOR,
         contents: Array.isArray(kit.contents)
           ? kit.contents.map((item) => String(item).trim()).filter(Boolean).slice(0, 20)
           : [],
@@ -144,6 +160,26 @@ function parseEquipmentKits(raw: string | null): ClubEquipmentKit[] {
   } catch {
     return DEFAULT_EQUIPMENT_KITS;
   }
+}
+
+
+function DuffleBagIcon({ color, className = "h-9 w-12" }: { color: string; className?: string }) {
+  return (
+    <svg viewBox="0 0 64 48" className={className} aria-hidden="true">
+      <path
+        d="M22 17v-4.5C22 8.9 24.9 6 28.5 6h7C39.1 6 42 8.9 42 12.5V17"
+        fill="none"
+        stroke="#102A43"
+        strokeWidth="4"
+        strokeLinecap="round"
+      />
+      <rect x="7" y="16" width="50" height="27" rx="9" fill={color} />
+      <path d="M7 28h50" stroke="rgba(255,255,255,0.42)" strokeWidth="3" />
+      <path d="M19 16v27M45 16v27" stroke="rgba(16,42,67,0.25)" strokeWidth="4" />
+      <circle cx="20" cy="32" r="2" fill="rgba(255,255,255,0.7)" />
+      <circle cx="44" cy="32" r="2" fill="rgba(255,255,255,0.7)" />
+    </svg>
+  );
 }
 
 function ClubFeatureCard({
@@ -298,10 +334,12 @@ export function ClubTab({
     if (typeof window === "undefined") return DEFAULT_EQUIPMENT_KITS;
     return parseEquipmentKits(window.localStorage.getItem(EQUIPMENT_PREVIEW_STORAGE_KEY));
   });
+  const [equipmentBoardOpen, setEquipmentBoardOpen] = useState(false);
   const [equipmentDialogOpen, setEquipmentDialogOpen] = useState(false);
   const [editingKitId, setEditingKitId] = useState<string | null>(null);
   const [kitName, setKitName] = useState("");
   const [kitHolderId, setKitHolderId] = useState("storage");
+  const [kitColor, setKitColor] = useState(DEFAULT_EQUIPMENT_COLOR);
   const [kitContents, setKitContents] = useState("");
   const [kitNote, setKitNote] = useState("");
 
@@ -373,6 +411,7 @@ export function ClubTab({
     setEditingKitId(null);
     setKitName("");
     setKitHolderId("storage");
+    setKitColor(DEFAULT_EQUIPMENT_COLOR);
     setKitContents("");
     setKitNote("");
   };
@@ -386,6 +425,7 @@ export function ClubTab({
     setEditingKitId(kit.id);
     setKitName(kit.name);
     setKitHolderId(kit.holderId);
+    setKitColor(kit.color || DEFAULT_EQUIPMENT_COLOR);
     setKitContents(kit.contents.join("\n"));
     setKitNote(kit.note || "");
     setEquipmentDialogOpen(true);
@@ -399,6 +439,7 @@ export function ClubTab({
       id: editingKitId || makeId("kit"),
       name: trimmedName,
       holderId: kitHolderId,
+      color: kitColor,
       contents: kitContents
         .split("\n")
         .map((line) => line.trim())
@@ -563,77 +604,39 @@ export function ClubTab({
         icon={<PackageOpen className="h-5 w-5" />}
         eyebrow="Equipment"
         title="Who has the bags?"
-        description="Track who has balls, cones, bibs, first-aid spray, keys, and other shared gear."
+        description="Open a focused board for balls, cones, bibs, first-aid spray, keys, and other shared gear."
       >
         <div className="grid gap-3">
           <div className="flex items-center justify-between gap-3 rounded-2xl bg-slate-50 p-3">
             <div className="min-w-0">
               <div className="flex items-center gap-2 text-xs font-bold text-slate-600">
                 <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                Board preview
+                {equipmentKits.length} equipment bag{equipmentKits.length === 1 ? "" : "s"}
               </div>
               <p className="mt-1 text-[11px] font-semibold leading-snug text-slate-500">
-                Local test only. Later this board can become realtime Firebase sync.
+                The full board opens separately so the Club tab stays clean.
               </p>
             </div>
             <Button
               type="button"
               className="h-10 shrink-0 rounded-2xl bg-[#102A43] px-3 text-xs font-black text-white hover:bg-[#0b2036]"
-              onClick={openNewEquipmentKit}
+              onClick={() => setEquipmentBoardOpen(true)}
             >
-              <Plus className="mr-1.5 h-4 w-4" />
-              Kit
+              Open board
             </Button>
           </div>
 
-          <div className="-mx-1 overflow-x-auto pb-1">
-            <div className="flex min-w-max gap-2 px-1">
-              {EQUIPMENT_HOLDERS.map((holder) => {
-                const holderKits = equipmentKits.filter((kit) => kit.holderId === holder.id);
-                return (
-                  <div key={holder.id} className="w-36 rounded-2xl bg-slate-50 p-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="truncate text-[10px] font-black uppercase tracking-wide text-slate-400">
-                        {holder.label}
-                      </div>
-                      <span className="rounded-full bg-white px-1.5 py-0.5 text-[10px] font-black text-slate-400">
-                        {holderKits.length}
-                      </span>
-                    </div>
-                    <div className="mt-2 grid gap-2">
-                      {holderKits.length === 0 ? (
-                        <div className="rounded-xl border border-dashed border-slate-200 bg-white/60 px-2 py-3 text-center text-[10px] font-bold text-slate-300">
-                          Empty
-                        </div>
-                      ) : holderKits.map((kit) => (
-                        <button
-                          key={kit.id}
-                          type="button"
-                          className="rounded-xl border border-slate-200 bg-white px-2 py-2 text-left shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50"
-                          onClick={() => openEditEquipmentKit(kit)}
-                        >
-                          <div className="truncate text-[11px] font-black text-[#102A43]">
-                            {kit.name}
-                          </div>
-                          <div className="mt-1 text-[10px] font-bold text-slate-400">
-                            {kit.contents.length} item{kit.contents.length === 1 ? "" : "s"}
-                          </div>
-                          {kit.note && (
-                            <div className="mt-1 line-clamp-2 text-[10px] font-semibold leading-tight text-amber-700">
-                              {kit.note}
-                            </div>
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="rounded-2xl bg-blue-50 px-3 py-2 text-[11px] font-semibold leading-snug text-blue-800">
-            Mobile-friendly test: tap a kit to move it or edit what is inside. Drag-and-drop can come later only if it still feels necessary.
+          <div className="flex gap-2 overflow-hidden">
+            {equipmentKits.slice(0, 4).map((kit) => (
+              <div key={kit.id} className="flex min-w-0 flex-1 items-center justify-center rounded-2xl bg-white p-2 shadow-sm ring-1 ring-slate-100">
+                <DuffleBagIcon color={kit.color || DEFAULT_EQUIPMENT_COLOR} className="h-8 w-10" />
+              </div>
+            ))}
+            {equipmentKits.length === 0 && (
+              <div className="w-full rounded-2xl border border-dashed border-slate-200 bg-white/70 p-4 text-center text-xs font-bold text-slate-400">
+                No equipment yet
+              </div>
+            )}
           </div>
         </div>
       </ClubFeatureCard>
@@ -726,6 +729,94 @@ export function ClubTab({
         </DialogContent>
       </Dialog>
 
+      <Dialog open={equipmentBoardOpen} onOpenChange={setEquipmentBoardOpen}>
+        <DialogContent className="flex h-[96dvh] w-[calc(100vw-1rem)] max-w-none flex-col overflow-hidden rounded-[2rem] p-0 sm:max-w-2xl">
+          <DialogHeader className="border-b border-slate-100 px-4 py-4 text-left">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <DialogTitle className="flex items-center gap-2 text-lg font-black text-[#102A43]">
+                  <PackageOpen className="h-5 w-5 text-emerald-600" />
+                  Equipment board
+                </DialogTitle>
+                <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
+                  Vertical mobile board preview. Later this can sync live across organizers.
+                </p>
+              </div>
+              <Button
+                type="button"
+                className="h-10 shrink-0 rounded-2xl bg-[#102A43] px-3 text-xs font-black text-white hover:bg-[#0b2036]"
+                onClick={openNewEquipmentKit}
+              >
+                <Plus className="mr-1.5 h-4 w-4" />
+                Add bag
+              </Button>
+            </div>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-y-auto bg-slate-50/70 p-3">
+            <div className="grid gap-3">
+              {EQUIPMENT_HOLDERS.map((holder) => {
+                const holderKits = equipmentKits.filter((kit) => kit.holderId === holder.id);
+                return (
+                  <section key={holder.id} className="rounded-3xl border border-slate-200 bg-white p-3 shadow-sm">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <h3 className="truncate text-sm font-black text-[#102A43]">
+                          {holder.label}
+                        </h3>
+                        <p className="mt-0.5 text-[11px] font-semibold text-slate-400">
+                          {holderKits.length} bag{holderKits.length === 1 ? "" : "s"}
+                        </p>
+                      </div>
+                      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-black text-slate-500">
+                        {holderKits.length}
+                      </span>
+                    </div>
+
+                    <div className="mt-3 grid gap-2">
+                      {holderKits.length === 0 ? (
+                        <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-3 py-4 text-center text-[11px] font-bold text-slate-300">
+                          Nothing here
+                        </div>
+                      ) : holderKits.map((kit) => (
+                        <button
+                          key={kit.id}
+                          type="button"
+                          className="flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3 text-left shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50"
+                          onClick={() => openEditEquipmentKit(kit)}
+                        >
+                          <div className="flex h-14 w-16 shrink-0 items-center justify-center rounded-2xl bg-slate-50">
+                            <DuffleBagIcon color={kit.color || DEFAULT_EQUIPMENT_COLOR} />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-sm font-black text-[#102A43]">
+                              {kit.name}
+                            </div>
+                            <div className="mt-0.5 text-[11px] font-bold text-slate-400">
+                              {kit.contents.length} item{kit.contents.length === 1 ? "" : "s"}
+                            </div>
+                            {kit.contents.length > 0 && (
+                              <div className="mt-1 line-clamp-1 text-[11px] font-semibold text-slate-500">
+                                {kit.contents.slice(0, 3).join(" · ")}
+                              </div>
+                            )}
+                            {kit.note && (
+                              <div className="mt-1 line-clamp-2 text-[11px] font-semibold leading-tight text-amber-700">
+                                {kit.note}
+                              </div>
+                            )}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+                );
+              })}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={equipmentDialogOpen} onOpenChange={(open) => {
         setEquipmentDialogOpen(open);
         if (!open) resetEquipmentForm();
@@ -734,7 +825,7 @@ export function ClubTab({
           <DialogHeader className="border-b border-slate-100 px-5 py-4 text-left">
             <DialogTitle className="flex items-center gap-2 text-lg font-black text-[#102A43]">
               <PackageOpen className="h-5 w-5 text-emerald-600" />
-              {editingKitId ? "Edit equipment" : "New equipment kit"}
+              {editingKitId ? "Edit equipment" : "New equipment bag"}
             </DialogTitle>
           </DialogHeader>
 
@@ -745,7 +836,7 @@ export function ClubTab({
 
             <div className="grid gap-2">
               <Label className="text-xs font-black uppercase tracking-wide text-slate-500">
-                Equipment name
+                Bag name
               </Label>
               <Input
                 value={kitName}
@@ -753,6 +844,29 @@ export function ClubTab({
                 placeholder="Example: Ball bag"
                 className="h-11 rounded-2xl border-slate-200 text-sm font-semibold"
               />
+            </div>
+
+            <div className="grid gap-2">
+              <Label className="text-xs font-black uppercase tracking-wide text-slate-500">
+                Bag color
+              </Label>
+              <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white p-2">
+                <div className="flex h-12 w-16 shrink-0 items-center justify-center rounded-2xl bg-slate-50">
+                  <DuffleBagIcon color={kitColor} />
+                </div>
+                <div className="flex flex-1 flex-wrap gap-2">
+                  {EQUIPMENT_COLORS.map((color) => (
+                    <button
+                      key={color}
+                      type="button"
+                      aria-label={`Use equipment color ${color}`}
+                      className={`h-8 w-8 rounded-full border-2 transition ${kitColor === color ? "border-[#102A43] ring-2 ring-slate-200" : "border-white"}`}
+                      style={{ backgroundColor: color }}
+                      onClick={() => setKitColor(color)}
+                    />
+                  ))}
+                </div>
+              </div>
             </div>
 
             <div className="grid gap-2">
@@ -839,7 +953,7 @@ export function ClubTab({
                 disabled={!canSaveEquipmentKit}
                 onClick={saveEquipmentKit}
               >
-                Save kit
+                Save bag
               </Button>
             </div>
 
@@ -851,7 +965,7 @@ export function ClubTab({
                 onClick={() => deleteEquipmentKit(editingKitId)}
               >
                 <Trash2 className="mr-1.5 h-4 w-4" />
-                Delete equipment
+                Delete bag
               </Button>
             )}
           </div>

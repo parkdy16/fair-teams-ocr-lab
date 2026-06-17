@@ -24,6 +24,23 @@ function cleanOrganizerName(value: string) {
   return value.replace(/\s+/g, " ").trim().slice(0, 40);
 }
 
+
+function releaseMobileInputAndScroll() {
+  if (typeof document === "undefined") return;
+  const active = document.activeElement;
+  if (active instanceof HTMLElement) active.blur();
+
+  const release = () => {
+    document.body.style.overflow = "";
+    document.documentElement.style.overflow = "";
+    delete document.body.dataset.fairTeamsScrollLock;
+  };
+
+  release();
+  window.setTimeout(release, 0);
+  window.setTimeout(release, 120);
+}
+
 function fallbackOrganizerName(email: string) {
   const prefix = email.split("@")[0] || "Organizer";
   return prefix
@@ -92,18 +109,23 @@ export function FirebaseSharedRosterAuthCard() {
 
   const handleSaveOrganizerName = async () => {
     if (!trimmedOrganizerName) return;
+    const nextName = trimmedOrganizerName;
+    releaseMobileInputAndScroll();
+    setEditingName(false);
+    setOrganizerName(nextName);
     setBusyAction("name");
     setNotice(null);
     try {
-      const nextUser = await updateSharedRosterOrganizerName(trimmedOrganizerName);
+      const nextUser = await updateSharedRosterOrganizerName(nextName);
       setUser(nextUser);
-      setOrganizerName(nextUser.displayName || trimmedOrganizerName);
-      setEditingName(false);
+      setOrganizerName(nextUser.displayName || nextName);
       setNotice({ tone: "info", text: "Organizer name updated." });
     } catch (error) {
+      setEditingName(true);
       setNotice({ tone: "error", text: friendlyAuthError(error) });
     } finally {
       setBusyAction("");
+      releaseMobileInputAndScroll();
     }
   };
 
@@ -135,7 +157,10 @@ export function FirebaseSharedRosterAuthCard() {
             <div className="mt-0.5 truncate text-[10px] font-bold text-slate-500">{user.email}</div>
           </div>
           <div className="flex shrink-0 items-center gap-1">
-            <Button type="button" variant="outline" className="h-8 rounded-xl border-slate-100 bg-slate-50 px-2 text-[10px] font-black" onClick={() => setEditingName((value) => !value)} disabled={Boolean(busyAction)}>
+            <Button type="button" variant="outline" className="h-8 rounded-xl border-slate-100 bg-slate-50 px-2 text-[10px] font-black" onClick={() => {
+                releaseMobileInputAndScroll();
+                setEditingName((value) => !value);
+              }} disabled={Boolean(busyAction)}>
               {editingName ? <X className="mr-1 h-3.5 w-3.5" /> : null}
               {editingName ? "Close" : "Change"}
             </Button>

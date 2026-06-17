@@ -528,13 +528,17 @@ function App() {
     ...(summary.memberNamesByEmail || {}),
   });
 
-  const rosterFirebaseShareCount = (roster: RoomRoster | undefined) => {
+  const rosterFirebaseSharedPeopleCount = (roster: RoomRoster | undefined) => {
     const source = roster?.cloudSource?.provider === "firebase" ? roster.cloudSource : undefined;
-    const ownerEmail = source?.firebaseOwnerEmail?.toLowerCase();
-    const labels = source?.accessLabels
-      ? Object.keys(source.accessLabels).filter((email) => email.toLowerCase() !== ownerEmail).length
-      : 0;
-    return source?.firebaseRosterId ? Math.max(0, labels) : 0;
+    if (!source?.firebaseRosterId) return 0;
+    const emails = new Set<string>();
+    const ownerEmail = source.firebaseOwnerEmail?.trim().toLowerCase();
+    if (ownerEmail?.includes("@")) emails.add(ownerEmail);
+    Object.keys(source.accessLabels || {}).forEach((email) => {
+      const normalized = email.trim().toLowerCase();
+      if (normalized.includes("@")) emails.add(normalized);
+    });
+    return emails.size || 1;
   };
 
   const activeFirebaseEquipmentHolderLabels = activeFirebaseSource
@@ -2899,8 +2903,8 @@ They will no longer be able to open or edit this shared roster unless it is shar
                       role="button"
                       tabIndex={0}
                       className="inline-flex h-5 shrink-0 items-center gap-0.5 rounded-full bg-emerald-50 px-1.5 text-[10px] font-black text-emerald-700 active:scale-95"
-                      title="Shared with"
-                      aria-label="Show shared people"
+                      title="People with access"
+                      aria-label="Show people with access"
                       onClick={(event) => {
                         event.stopPropagation();
                         setHeaderSharedPeopleOpen(true);
@@ -2914,7 +2918,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                       }}
                     >
                       <Users className="h-3 w-3" />
-                      {rosterFirebaseShareCount(activeRoster)}
+                      {rosterFirebaseSharedPeopleCount(activeRoster)}
                     </span>
                   )}
                   {activeTab === "players" && (
@@ -2980,7 +2984,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
           <div className="fixed inset-0 z-[75] flex items-end justify-center bg-slate-950/25 p-3 sm:items-center" onClick={() => setHeaderSharedPeopleOpen(false)}>
             <div className="w-full max-w-sm rounded-3xl bg-white p-3 shadow-2xl" onClick={(event) => event.stopPropagation()}>
               <div className="mb-2 flex items-center justify-between gap-3 px-1">
-                <div className="text-sm font-black text-[#102A43]">Shared with</div>
+                <div className="text-sm font-black text-[#102A43]">People with access</div>
                 <button type="button" onClick={() => setHeaderSharedPeopleOpen(false)} className="rounded-full bg-slate-50 p-2 text-slate-500 active:scale-95" aria-label="Close shared people">
                   <X className="h-4 w-4" />
                 </button>
@@ -2989,7 +2993,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 {activeFirebaseSharedPersonNames.length ? activeFirebaseSharedPersonNames.map((name) => (
                   <div key={name} className="rounded-2xl bg-slate-50 px-3 py-2 text-sm font-black text-[#102A43]">{name}</div>
                 )) : (
-                  <div className="rounded-2xl bg-slate-50 px-3 py-2 text-sm font-bold text-slate-500">No collaborators yet</div>
+                  <div className="rounded-2xl bg-slate-50 px-3 py-2 text-sm font-bold text-slate-500">Only you</div>
                 )}
               </div>
             </div>
@@ -3063,7 +3067,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 activeRosterName={activeRosterName}
                 playerCount={players.length}
                 isSharedRoster={activeRosterIsFirebaseShared}
-                collaboratorCount={rosterFirebaseShareCount(activeRoster)}
+                sharedPeopleCount={rosterFirebaseSharedPeopleCount(activeRoster)}
                 canSwitchRoster={!isEmptyStarterRoster && rosters.length > 1}
                 onOpenRosterPicker={() => setRosterPickerOpen(true)}
                 onBackTargetChange={setClubBackTargetOpen}
@@ -3850,7 +3854,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                         {roster.cloudSource?.provider === "firebase" && roster.cloudSource.firebaseRosterId && (
                           <span className="inline-flex h-5 shrink-0 items-center gap-0.5 rounded-full bg-emerald-100 px-1.5 text-[10px] font-black text-emerald-700">
                             <Users className="h-3 w-3" />
-                            {rosterFirebaseShareCount(roster)}
+                            {rosterFirebaseSharedPeopleCount(roster)}
                           </span>
                         )}
                       </span>

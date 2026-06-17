@@ -31,7 +31,7 @@ type ClubTabProps = {
   activeRosterName: string;
   playerCount: number;
   isSharedRoster: boolean;
-  collaboratorCount: number;
+  sharedPeopleCount: number;
   canSwitchRoster?: boolean;
   onOpenRosterPicker?: () => void;
   onBackTargetChange?: (hasBackTarget: boolean) => void;
@@ -427,7 +427,7 @@ export function ClubTab({
   activeRosterName,
   playerCount,
   isSharedRoster,
-  collaboratorCount,
+  sharedPeopleCount,
   canSwitchRoster = false,
   onOpenRosterPicker,
   onBackTargetChange,
@@ -583,9 +583,8 @@ export function ClubTab({
     const unique = cleaned.filter((label, index, all) => all.indexOf(label) === index);
     if (unique.length) return unique;
     if (!isSharedRoster) return [];
-    return ["Me", ...Array.from({ length: Math.max(0, collaboratorCount) }, (_, index) => `Collaborator ${index + 1}`)];
-  }, [collaboratorCount, equipmentHolderLabels, equipmentHolderNamesByEmail, isSharedRoster]);
-  const sharedPeopleCount = isSharedRoster ? Math.max(sharedPersonNames.length, collaboratorCount + 1, 1) : 0;
+    return ["Me", ...Array.from({ length: Math.max(0, sharedPeopleCount - 1) }, (_, index) => `Person ${index + 2}`)];
+  }, [equipmentHolderLabels, equipmentHolderNamesByEmail, isSharedRoster, sharedPeopleCount]);
   const loginGateOpen = Boolean(isActive && authReady && !clubUser);
   const accountModalOpen = loginGateOpen || accountDialogOpen;
 
@@ -982,13 +981,13 @@ export function ClubTab({
       <Dialog open={collaboratorsOpen} onOpenChange={setCollaboratorsOpen}>
         <DialogContent className="max-w-sm rounded-3xl p-0">
           <DialogHeader className="border-b border-slate-100 px-4 py-3 text-left">
-            <DialogTitle className="text-base font-black text-[#102A43]">Shared with</DialogTitle>
+            <DialogTitle className="text-base font-black text-[#102A43]">People with access</DialogTitle>
           </DialogHeader>
           <div className="grid gap-1.5 p-4">
             {sharedPersonNames.length ? sharedPersonNames.map((name) => (
               <div key={name} className="rounded-2xl bg-slate-50 px-3 py-2 text-sm font-black text-[#102A43]">{name}</div>
             )) : (
-              <div className="rounded-2xl bg-slate-50 px-3 py-2 text-sm font-bold text-slate-500">Not shared</div>
+              <div className="rounded-2xl bg-slate-50 px-3 py-2 text-sm font-bold text-slate-500">Only you</div>
             )}
           </div>
         </DialogContent>

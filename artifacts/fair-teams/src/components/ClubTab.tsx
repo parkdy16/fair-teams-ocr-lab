@@ -553,6 +553,38 @@ export function ClubTab({
     if (activeElement instanceof HTMLElement) activeElement.blur();
   };
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const handleNativeBack = (event: Event) => {
+      if (colorPickerOpen) {
+        event.preventDefault();
+        setColorPickerOpen(false);
+        return;
+      }
+      if (equipmentDialogOpen) {
+        event.preventDefault();
+        blurActiveField();
+        setColorPickerOpen(false);
+        setEquipmentDialogOpen(false);
+        resetEquipmentForm();
+        return;
+      }
+      if (equipmentBoardOpen) {
+        event.preventDefault();
+        setEquipmentBoardOpen(false);
+        return;
+      }
+      if (voteDialogOpen) {
+        event.preventDefault();
+        setVoteDialogOpen(false);
+      }
+    };
+
+    window.addEventListener("fairteams:native-back", handleNativeBack);
+    return () => window.removeEventListener("fairteams:native-back", handleNativeBack);
+  }, [colorPickerOpen, equipmentBoardOpen, equipmentDialogOpen, voteDialogOpen]);
+
   const canCreateVote = question.trim().length > 0 && optionText.split("\n").filter((line) => line.trim()).length >= 2;
   const canSaveEquipmentKit = kitName.trim().length > 0;
 
@@ -738,8 +770,8 @@ export function ClubTab({
         if (!open) resetVoteForm();
       }}>
         <DialogContent className="max-h-[88dvh] max-w-md overflow-y-auto rounded-3xl p-0">
-          <DialogHeader className="border-b border-slate-100 px-5 py-4 text-left">
-            <DialogTitle className="flex items-center gap-2 text-lg font-black text-[#102A43]">
+          <DialogHeader className="border-b border-slate-100 px-4 py-3 text-left">
+            <DialogTitle className="flex items-center gap-2 text-base font-black text-[#102A43]">
               <Vote className="h-5 w-5 text-emerald-600" />
               New organizer vote
             </DialogTitle>
@@ -758,7 +790,7 @@ export function ClubTab({
                 value={question}
                 onChange={(event) => setQuestion(event.target.value)}
                 placeholder="Example: Should we move Thursday football to 20:00?"
-                className="min-h-24 rounded-2xl border-slate-200 text-sm font-semibold"
+                className="min-h-[4.75rem] rounded-2xl border-slate-200 text-sm font-semibold"
               />
             </div>
 
@@ -770,7 +802,7 @@ export function ClubTab({
                 value={optionText}
                 onChange={(event) => setOptionText(event.target.value)}
                 placeholder={"Yes\nNo"}
-                className="min-h-24 rounded-2xl border-slate-200 text-sm font-semibold"
+                className="min-h-[4.75rem] rounded-2xl border-slate-200 text-sm font-semibold"
               />
               <p className="text-[11px] font-semibold text-slate-500">
                 One option per line. Use 2–6 options.
@@ -793,7 +825,7 @@ export function ClubTab({
               <Button
                 type="button"
                 variant="outline"
-                className="h-11 rounded-2xl text-sm font-black"
+                className="h-10 rounded-2xl text-sm font-black"
                 onClick={() => setVoteDialogOpen(false)}
               >
                 <X className="mr-1.5 h-4 w-4" />
@@ -801,7 +833,7 @@ export function ClubTab({
               </Button>
               <Button
                 type="button"
-                className="h-11 rounded-2xl bg-[#102A43] text-sm font-black text-white hover:bg-[#0b2036]"
+                className="h-10 rounded-2xl bg-[#102A43] text-sm font-black text-white hover:bg-[#0b2036]"
                 disabled={!canCreateVote}
                 onClick={createVote}
               >
@@ -817,7 +849,7 @@ export function ClubTab({
           <DialogHeader className="border-b border-slate-100 px-4 py-4 text-left">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <DialogTitle className="flex items-center gap-2 text-lg font-black text-[#102A43]">
+                <DialogTitle className="flex items-center gap-2 text-base font-black text-[#102A43]">
                   <PackageOpen className="h-5 w-5 text-emerald-600" />
                   Equipment board
                 </DialogTitle>
@@ -916,37 +948,50 @@ export function ClubTab({
         }
       }}>
         <DialogContent
-            className="max-h-[88dvh] max-w-md overflow-y-auto rounded-3xl p-0"
+            className="max-h-[86dvh] max-w-md overflow-y-auto rounded-3xl p-0"
             onOpenAutoFocus={(event) => event.preventDefault()}
           >
-          <DialogHeader className="border-b border-slate-100 px-5 py-4 text-left">
-            <DialogTitle className="flex items-center gap-2 text-lg font-black text-[#102A43]">
+          <DialogHeader className="border-b border-slate-100 px-4 py-3 text-left">
+            <DialogTitle className="flex items-center gap-2 text-base font-black text-[#102A43]">
               <PackageOpen className="h-5 w-5 text-emerald-600" />
               {editingKitId ? "Edit equipment" : "New equipment bag"}
             </DialogTitle>
           </DialogHeader>
 
-          <div className="grid gap-3 p-4">
-            <div className="grid gap-2">
-              <div className="flex items-center justify-between gap-3">
-                <Label className="text-xs font-black uppercase tracking-wide text-slate-500">
-                  Bag name
-                </Label>
-                <div className="relative">
+          <div className="grid gap-2.5 p-3 pt-2">
+            <div className="grid gap-1.5">
+              <Label className="text-xs font-black uppercase tracking-wide text-slate-500">
+                Bag name
+              </Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  value={kitName}
+                  onChange={(event) => setKitName(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      event.currentTarget.blur();
+                    }
+                  }}
+                  enterKeyHint="done"
+                  placeholder="Example: Ball bag"
+                  className="h-10 min-w-0 flex-1 rounded-2xl border-slate-200 text-sm font-semibold"
+                />
+                <div className="relative shrink-0">
                   <Button
                     type="button"
                     variant="outline"
-                    className="h-9 rounded-2xl border-slate-200 px-2.5 text-[11px] font-black text-slate-600"
+                    className="h-10 rounded-2xl border-slate-200 px-2.5 text-[11px] font-black text-slate-600"
                     onClick={() => setColorPickerOpen((open) => !open)}
+                    aria-label="Choose bag color"
                   >
                     <span
-                      className="mr-2 h-4 w-4 rounded-full border border-slate-300 shadow-inner"
+                      className="h-5 w-5 rounded-full border border-slate-300 shadow-inner"
                       style={{ backgroundColor: kitColor }}
                     />
-                    Color
                   </Button>
                   {colorPickerOpen && (
-                    <div className="absolute right-0 z-50 mt-2 w-56 rounded-3xl border border-slate-200 bg-white p-3 shadow-[0_18px_45px_rgba(15,23,42,0.18)]">
+                    <div className="absolute right-0 z-50 mt-2 w-52 rounded-3xl border border-slate-200 bg-white p-3 shadow-[0_18px_45px_rgba(15,23,42,0.18)]">
                       <div className="mb-2 flex items-center justify-between gap-3">
                         <div className="text-[11px] font-black uppercase tracking-wide text-slate-400">
                           Bag color
@@ -978,19 +1023,6 @@ export function ClubTab({
                   )}
                 </div>
               </div>
-              <Input
-                value={kitName}
-                onChange={(event) => setKitName(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    event.currentTarget.blur();
-                  }
-                }}
-                enterKeyHint="done"
-                placeholder="Example: Ball bag"
-                className="h-11 rounded-2xl border-slate-200 text-sm font-semibold"
-              />
             </div>
 
             <div className="grid gap-2">
@@ -1001,7 +1033,7 @@ export function ClubTab({
                 value={kitContents}
                 onChange={(event) => setKitContents(event.target.value)}
                 placeholder={"2 balls\nPump\n12 cones"}
-                className="min-h-24 rounded-2xl border-slate-200 text-sm font-semibold"
+                className="min-h-[4.75rem] rounded-2xl border-slate-200 text-sm font-semibold"
               />
               <p className="text-[11px] font-semibold text-slate-500">
                 One item per line. Keep it simple, like a checklist.
@@ -1016,11 +1048,11 @@ export function ClubTab({
                 value={kitNote}
                 onChange={(event) => setKitNote(event.target.value)}
                 placeholder="Example: First-aid spray is almost empty."
-                className="min-h-16 rounded-2xl border-slate-200 text-sm font-semibold"
+                className="min-h-[3.5rem] rounded-2xl border-slate-200 text-sm font-semibold"
               />
             </div>
 
-            <div className="grid gap-2 rounded-2xl bg-slate-50 p-3">
+            <div className="grid gap-2 rounded-2xl bg-slate-50 p-2.5">
               <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
                 Quick move
               </div>
@@ -1030,7 +1062,7 @@ export function ClubTab({
                     key={holder.id}
                     type="button"
                     variant={kitHolderId === holder.id ? "default" : "outline"}
-                    className={`h-9 rounded-xl text-[11px] font-black ${kitHolderId === holder.id ? "bg-emerald-600 text-white hover:bg-emerald-700" : ""}`}
+                    className={`h-8 rounded-xl text-[11px] font-black ${kitHolderId === holder.id ? "bg-emerald-600 text-white hover:bg-emerald-700" : ""}`}
                     onClick={() => {
                       setKitHolderId(holder.id);
                       if (editingKitId) moveEquipmentKit(editingKitId, holder.id);
@@ -1046,7 +1078,7 @@ export function ClubTab({
               <Button
                 type="button"
                 variant="outline"
-                className="h-11 rounded-2xl text-sm font-black"
+                className="h-10 rounded-2xl text-sm font-black"
                 onClick={() => {
                   blurActiveField();
                   setColorPickerOpen(false);
@@ -1058,7 +1090,7 @@ export function ClubTab({
               </Button>
               <Button
                 type="button"
-                className="h-11 rounded-2xl bg-[#102A43] text-sm font-black text-white hover:bg-[#0b2036]"
+                className="h-10 rounded-2xl bg-[#102A43] text-sm font-black text-white hover:bg-[#0b2036]"
                 disabled={!canSaveEquipmentKit}
                 onClick={() => {
                   blurActiveField();
@@ -1074,7 +1106,7 @@ export function ClubTab({
               <Button
                 type="button"
                 variant="ghost"
-                className="h-10 rounded-2xl text-sm font-black text-red-500 hover:bg-red-50 hover:text-red-600"
+                className="h-9 rounded-2xl text-sm font-black text-red-500 hover:bg-red-50 hover:text-red-600"
                 onClick={() => deleteEquipmentKit(editingKitId)}
               >
                 <Trash2 className="mr-1.5 h-4 w-4" />

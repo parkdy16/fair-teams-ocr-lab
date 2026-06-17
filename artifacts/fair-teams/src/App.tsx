@@ -354,6 +354,13 @@ function formatTodayStartDateLabel(date = new Date()) {
   return `${weekday} · ${month} ${day}`;
 }
 
+const APP_TAB_VALUES = ["players", "today", "teams", "club"] as const;
+type AppTab = (typeof APP_TAB_VALUES)[number];
+
+function isAppTab(value: string): value is AppTab {
+  return (APP_TAB_VALUES as readonly string[]).includes(value);
+}
+
 function App() {
   const [showSplash, setShowSplash] = useState(true);
   const [splashVisible, setSplashVisible] = useState(false);
@@ -370,7 +377,11 @@ function App() {
     };
   }, []);
 
-  const [activeTab, setActiveTab] = useState("today");
+  const [activeTab, setActiveTab] = useState<AppTab>("today");
+  const activeTabRef = useRef<AppTab>("today");
+  const tabHistoryRef = useRef<AppTab[]>(["today"]);
+  const restoringTabFromBackRef = useRef(false);
+  const fairTeamsBackTrapArmedRef = useRef(false);
   const [todayRosterChosen, setTodayRosterChosen] = useState(false);
   const [reviewPlayerQueue, setReviewPlayerQueue] = useState<string[]>([]);
   const [reviewPlayerIndex, setReviewPlayerIndex] = useState(0);
@@ -2469,6 +2480,155 @@ They will no longer be able to open or edit this shared roster unless it is shar
     ? driveBackupChoices.mine.length + driveBackupChoices.shared.length
     : 0;
 
+  const closeTopLevelOverlayForBack = () => {
+    if (clearRosterOpen) {
+      closeClearRoster();
+      return true;
+    }
+    if (groupSettingsOpen) {
+      cancelGroupSettings();
+      return true;
+    }
+    if (rosterPickerOpen) {
+      setRosterPickerOpen(false);
+      return true;
+    }
+    if (googleSheetShareOpen) {
+      setGoogleSheetShareOpen(false);
+      return true;
+    }
+    if (driveShareOpen) {
+      setDriveShareOpen(false);
+      return true;
+    }
+    if (driveAccessOpen) {
+      setDriveAccessOpen(false);
+      return true;
+    }
+    if (driveHelpOpen) {
+      setDriveHelpOpen(false);
+      return true;
+    }
+    if (googleSheetHelpOpen) {
+      setGoogleSheetHelpOpen(false);
+      return true;
+    }
+    if (rosterFilesOpen) {
+      if (rosterToolsActivePanel) {
+        closeRosterToolsPanel();
+        return true;
+      }
+      setRosterFilesOpen(false);
+      return true;
+    }
+    return false;
+  };
+
+  const goBackToPreviousTab = () => {
+    const stack = tabHistoryRef.current.filter(isAppTab);
+    const currentTab = activeTabRef.current;
+    if (stack.length <= 1) return false;
+
+    const nextStack = [...stack];
+    if (nextStack[nextStack.length - 1] === currentTab) {
+      nextStack.pop();
+    }
+    while (nextStack.length > 1 && nextStack[nextStack.length - 1] === currentTab) {
+      nextStack.pop();
+    }
+
+    const previousTab = nextStack[nextStack.length - 1];
+    if (!previousTab || previousTab === currentTab) return false;
+
+    tabHistoryRef.current = nextStack;
+    restoringTabFromBackRef.current = true;
+    setActiveTab(previousTab);
+    return true;
+  };
+
+  const pushFairTeamsBackTrap = () => {
+    if (typeof window === "undefined") return;
+    try {
+      window.history.pushState(
+        { fairTeamsBackTrap: true },
+        "",
+        window.location.href,
+      );
+      fairTeamsBackTrapArmedRef.current = true;
+    } catch {
+      // Browser history integration is a progressive enhancement.
+    }
+  };
+
+  const hasTopLevelBackTarget =
+    clearRosterOpen ||
+    groupSettingsOpen ||
+    rosterPickerOpen ||
+    googleSheetShareOpen ||
+    driveShareOpen ||
+    driveAccessOpen ||
+    driveHelpOpen ||
+    googleSheetHelpOpen ||
+    rosterFilesOpen ||
+    tabHistoryRef.current.length > 1 ||
+    activeTab !== "today";
+
+  useEffect(() => {
+    activeTabRef.current = activeTab;
+    if (restoringTabFromBackRef.current) {
+      restoringTabFromBackRef.current = false;
+      return;
+    }
+
+    const stack = tabHistoryRef.current;
+    if (stack[stack.length - 1] !== activeTab) {
+      tabHistoryRef.current = [...stack, activeTab].slice(-16);
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (showSplash || !hasTopLevelBackTarget || fairTeamsBackTrapArmedRef.current) return;
+    pushFairTeamsBackTrap();
+  }, [hasTopLevelBackTarget, showSplash]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const handlePopState = () => {
+      fairTeamsBackTrapArmedRef.current = false;
+
+      const childBackEvent = new Event("fairteams:native-back", { cancelable: true });
+      const childDidNotHandleBack = window.dispatchEvent(childBackEvent);
+      if (!childDidNotHandleBack) {
+        pushFairTeamsBackTrap();
+        return;
+      }
+
+      if (closeTopLevelOverlayForBack()) {
+        pushFairTeamsBackTrap();
+        return;
+      }
+
+      if (goBackToPreviousTab()) {
+        pushFairTeamsBackTrap();
+      }
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [
+    clearRosterOpen,
+    driveAccessOpen,
+    driveHelpOpen,
+    driveShareOpen,
+    googleSheetHelpOpen,
+    googleSheetShareOpen,
+    groupSettingsOpen,
+    rosterFilesOpen,
+    rosterPickerOpen,
+    rosterToolsActivePanel,
+  ]);
+
   if (showSplash) {
     return (
       <div className="min-h-[100dvh] flex flex-col items-center justify-center bg-white text-[#102A43] fairteams-splash-fade">
@@ -2496,7 +2656,9 @@ They will no longer be able to open or edit this shared roster unless it is shar
     >
       <Tabs
         value={activeTab}
-        onValueChange={setActiveTab}
+        onValueChange={(value) => {
+          if (isAppTab(value)) setActiveTab(value);
+        }}
         className="flex-1 flex flex-col min-h-0"
       >
         <header className="sticky top-0 z-30 border-b border-border bg-white/92 px-4 pt-3 pb-2 shadow-sm backdrop-blur">

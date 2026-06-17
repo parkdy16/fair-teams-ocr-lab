@@ -20,13 +20,9 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
   deleteFirebaseEquipmentBag,
-  deleteFirebaseEquipmentLocation,
   listenToFirebaseEquipmentBags,
-  listenToFirebaseEquipmentLocations,
   saveFirebaseEquipmentBag,
-  saveFirebaseEquipmentLocation,
   type FirebaseEquipmentBag,
-  type FirebaseEquipmentLocation,
 } from "@/lib/equipmentService";
 
 type ClubTabProps = {
@@ -59,16 +55,12 @@ type ClubVote = {
 type EquipmentHolder = {
   id: string;
   label: string;
-  kind: "location" | "person" | "fallback";
-  editable?: boolean;
 };
 
 type ClubEquipmentKit = FirebaseEquipmentBag;
-type ClubEquipmentLocation = FirebaseEquipmentLocation;
 
 const VOTE_PREVIEW_STORAGE_KEY = "fairteams.clubVotes.preview.v1";
 const EQUIPMENT_PREVIEW_STORAGE_KEY = "fairteams.clubEquipment.preview.v1";
-const EQUIPMENT_LOCATIONS_STORAGE_KEY = "fairteams.clubEquipment.locations.preview.v1";
 
 const EQUIPMENT_COLORS = [
   "#111827",
@@ -90,13 +82,10 @@ const EQUIPMENT_COLORS = [
 
 const DEFAULT_EQUIPMENT_COLOR = EQUIPMENT_COLORS[0];
 
-const DEFAULT_EQUIPMENT_LOCATIONS: ClubEquipmentLocation[] = [
-  { id: "storage", label: "Club storage", updatedAt: Date.now() },
-];
-
-const LOCAL_EQUIPMENT_PEOPLE: EquipmentHolder[] = [
-  { id: "you", label: "You", kind: "person" },
-  { id: "other", label: "Other organizer", kind: "person" },
+const LOCAL_EQUIPMENT_HOLDERS: EquipmentHolder[] = [
+  { id: "storage", label: "Club storage" },
+  { id: "you", label: "You" },
+  { id: "other", label: "Other organizer" },
 ];
 
 const DEFAULT_EQUIPMENT_KITS: ClubEquipmentKit[] = [
@@ -128,10 +117,24 @@ const DEFAULT_EQUIPMENT_KITS: ClubEquipmentKit[] = [
   },
 ];
 
+function normalizeEquipmentHolderId(holderId: string) {
+  return holderId === "unknown" || !holderId ? "storage" : holderId;
+}
+
+function isLikelyCurrentUserLabel(value: string) {
+  if (typeof window === "undefined") return false;
+  try {
+    const authEmail = window.localStorage.getItem("fairteams.firebaseEmail") || window.localStorage.getItem("fairteams.googleEmail") || "";
+    return Boolean(authEmail && value.trim().toLowerCase() === authEmail.trim().toLowerCase());
+  } catch {
+    return false;
+  }
+}
 
 function cleanEquipmentHolderLabel(value: string) {
   const trimmed = value.trim();
   if (!trimmed) return "Organizer";
+  if (isLikelyCurrentUserLabel(trimmed)) return "You";
   const emailName = trimmed.includes("@") ? trimmed.split("@")[0] : trimmed;
   return emailName
     .replace(/[._-]+/g, " ")
@@ -185,7 +188,7 @@ function parseEquipmentKits(raw: string | null): ClubEquipmentKit[] {
       .map((kit) => ({
         id: String(kit.id),
         name: String(kit.name),
-        holderId: String(kit.holderId || "storage") === "unknown" ? "storage" : String(kit.holderId || "storage"),
+        holderId: LOCAL_EQUIPMENT_HOLDERS.some((holder) => holder.id === kit.holderId) ? String(kit.holderId) : "storage",
         color: typeof kit.color === "string" && kit.color.trim() ? kit.color : DEFAULT_EQUIPMENT_COLOR,
         contents: Array.isArray(kit.contents)
           ? kit.contents.map((item) => String(item).trim()).filter(Boolean).slice(0, 20)
@@ -198,29 +201,6 @@ function parseEquipmentKits(raw: string | null): ClubEquipmentKit[] {
   }
 }
 
-
-function parseEquipmentLocations(raw: string | null): ClubEquipmentLocation[] {
-  if (!raw) return DEFAULT_EQUIPMENT_LOCATIONS;
-  try {
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return DEFAULT_EQUIPMENT_LOCATIONS;
-    const locations = parsed
-      .filter((location): location is ClubEquipmentLocation => Boolean(location?.id && location?.label))
-      .map((location) => ({
-        id: String(location.id).trim() || makeId("space"),
-        label: String(location.label).trim() || "Storage",
-        updatedAt: Number(location.updatedAt) || Date.now(),
-        updatedByEmail: location.updatedByEmail ? String(location.updatedByEmail) : undefined,
-      }))
-      .filter((location) => location.id !== "unknown");
-    if (!locations.some((location) => location.id === "storage")) {
-      locations.unshift(DEFAULT_EQUIPMENT_LOCATIONS[0]);
-    }
-    return locations;
-  } catch {
-    return DEFAULT_EQUIPMENT_LOCATIONS;
-  }
-}
 
 function DuffleBagIcon({ color, className = "h-9 w-12" }: { color: string; className?: string }) {
   return (
@@ -396,19 +376,12 @@ export function ClubTab({
     if (typeof window === "undefined") return DEFAULT_EQUIPMENT_KITS;
     return parseEquipmentKits(window.localStorage.getItem(EQUIPMENT_PREVIEW_STORAGE_KEY));
   });
-  const [equipmentLocations, setEquipmentLocations] = useState<ClubEquipmentLocation[]>(() => {
-    if (typeof window === "undefined") return DEFAULT_EQUIPMENT_LOCATIONS;
-    return parseEquipmentLocations(window.localStorage.getItem(EQUIPMENT_LOCATIONS_STORAGE_KEY));
-  });
   const [equipmentLoading, setEquipmentLoading] = useState(false);
   const [equipmentSaving, setEquipmentSaving] = useState(false);
   const [equipmentError, setEquipmentError] = useState("");
   const [equipmentLastSyncedAt, setEquipmentLastSyncedAt] = useState<number | null>(null);
   const [equipmentBoardOpen, setEquipmentBoardOpen] = useState(false);
   const [equipmentDialogOpen, setEquipmentDialogOpen] = useState(false);
-  const [locationDialogOpen, setLocationDialogOpen] = useState(false);
-  const [editingLocationId, setEditingLocationId] = useState<string | null>(null);
-  const [locationName, setLocationName] = useState("");
   const [editingKitId, setEditingKitId] = useState<string | null>(null);
   const [kitName, setKitName] = useState("");
   const [kitHolderId, setKitHolderId] = useState("storage");
@@ -430,7 +403,6 @@ export function ClubTab({
     contentPeekKitId: null as string | null,
     equipmentBoardOpen: false,
     equipmentDialogOpen: false,
-    locationDialogOpen: false,
     voteDialogOpen: false,
   });
 
@@ -442,58 +414,40 @@ export function ClubTab({
   const equipmentRealtimeEnabled = Boolean(equipmentGroupId);
   const equipmentSharedSetupMissing = isSharedRoster && !equipmentRealtimeEnabled;
   const equipmentHolders = useMemo<EquipmentHolder[]>(() => {
-    const locationRows = (equipmentLocations.length ? equipmentLocations : DEFAULT_EQUIPMENT_LOCATIONS)
-      .filter((location) => location.id !== "unknown")
-      .map((location) => ({
-        id: location.id,
-        label: location.label,
-        kind: "location" as const,
-        editable: true,
-      }));
-    const seen = new Set(locationRows.map((holder) => holder.id));
+    if (!isSharedRoster && !equipmentRealtimeEnabled) return LOCAL_EQUIPMENT_HOLDERS;
 
-    const peopleRows = (!isSharedRoster && !equipmentRealtimeEnabled)
-      ? LOCAL_EQUIPMENT_PEOPLE
-      : equipmentHolderLabels
-        .map((label) => ({ id: makeEquipmentHolderId(label), label: cleanEquipmentHolderLabel(label), kind: "person" as const }))
-        .filter((holder) => {
-          if (!holder.id || seen.has(holder.id)) return false;
-          seen.add(holder.id);
-          return true;
-        })
-        .slice(0, 8);
-
-    const safePeopleRows = peopleRows.length > 0
-      ? peopleRows
-      : isSharedRoster || equipmentRealtimeEnabled
-        ? [{ id: "organizer", label: "Organizer", kind: "person" as const }]
-        : [];
-    safePeopleRows.forEach((holder) => seen.add(holder.id));
-
+    const seen = new Set(["storage"]);
+    const sharedHolders = equipmentHolderLabels
+      .map((label) => ({ id: makeEquipmentHolderId(label), label: cleanEquipmentHolderLabel(label) }))
+      .filter((holder) => {
+        if (!holder.id || seen.has(holder.id)) return false;
+        seen.add(holder.id);
+        return true;
+      })
+      .slice(0, 8);
+    const fallbackHolders = sharedHolders.length > 0
+      ? sharedHolders
+      : [{ id: "organizer", label: "Organizer" }];
+    fallbackHolders.forEach((holder) => seen.add(holder.id));
     const bagOnlyHolders = equipmentKits
-      .map((kit) => kit.holderId === "unknown" ? "storage" : kit.holderId)
+      .map((kit) => kit.holderId)
+      .map((holderId) => normalizeEquipmentHolderId(holderId))
       .filter((holderId) => holderId && !seen.has(holderId))
       .map((holderId) => {
         seen.add(holderId);
-        return { id: holderId, label: cleanEquipmentHolderLabel(holderId), kind: "fallback" as const };
+        return { id: holderId, label: cleanEquipmentHolderLabel(holderId) };
       });
-
     return [
-      ...locationRows,
-      ...safePeopleRows,
+      { id: "storage", label: "Club storage" },
+      ...fallbackHolders,
       ...bagOnlyHolders,
     ];
-  }, [equipmentHolderLabels, equipmentKits, equipmentLocations, equipmentRealtimeEnabled, isSharedRoster]);
+  }, [equipmentHolderLabels, equipmentKits, equipmentRealtimeEnabled, isSharedRoster]);
 
   useEffect(() => {
     if (typeof window === "undefined" || equipmentRealtimeEnabled || isSharedRoster) return;
     window.localStorage.setItem(EQUIPMENT_PREVIEW_STORAGE_KEY, JSON.stringify(equipmentKits));
   }, [equipmentKits, equipmentRealtimeEnabled, isSharedRoster]);
-
-  useEffect(() => {
-    if (typeof window === "undefined" || equipmentRealtimeEnabled || isSharedRoster) return;
-    window.localStorage.setItem(EQUIPMENT_LOCATIONS_STORAGE_KEY, JSON.stringify(equipmentLocations));
-  }, [equipmentLocations, equipmentRealtimeEnabled, isSharedRoster]);
 
   useEffect(() => {
     if (!equipmentGroupId) {
@@ -502,10 +456,8 @@ export function ClubTab({
       setEquipmentLastSyncedAt(null);
       if (isSharedRoster) {
         setEquipmentKits([]);
-        setEquipmentLocations(DEFAULT_EQUIPMENT_LOCATIONS);
       } else if (typeof window !== "undefined") {
         setEquipmentKits(parseEquipmentKits(window.localStorage.getItem(EQUIPMENT_PREVIEW_STORAGE_KEY)));
-        setEquipmentLocations(parseEquipmentLocations(window.localStorage.getItem(EQUIPMENT_LOCATIONS_STORAGE_KEY)));
       }
       return;
     }
@@ -532,26 +484,6 @@ export function ClubTab({
     } catch (error) {
       setEquipmentLoading(false);
       setEquipmentError(error instanceof Error ? error.message : "Could not connect equipment board.");
-    }
-  }, [equipmentGroupId]);
-
-
-  useEffect(() => {
-    if (!equipmentGroupId) return;
-    try {
-      const unsubscribe = listenToFirebaseEquipmentLocations(
-        equipmentGroupId,
-        (locations) => {
-          setEquipmentLocations(locations.length ? locations : DEFAULT_EQUIPMENT_LOCATIONS);
-        },
-        (error) => {
-          setEquipmentError(error.message || "Could not load equipment spaces.");
-        },
-      );
-
-      return () => unsubscribe();
-    } catch (error) {
-      setEquipmentError(error instanceof Error ? error.message : "Could not connect equipment spaces.");
     }
   }, [equipmentGroupId]);
 
@@ -613,7 +545,7 @@ export function ClubTab({
   const resetEquipmentForm = () => {
     setEditingKitId(null);
     setKitName("");
-    setKitHolderId(equipmentHolders[0]?.id || "storage");
+    setKitHolderId("storage");
     setKitColor(DEFAULT_EQUIPMENT_COLOR);
     setColorPickerOpen(false);
     setDeleteBagSlide(0);
@@ -622,87 +554,9 @@ export function ClubTab({
     setKitNote("");
   };
 
-  const resetLocationForm = () => {
-    setEditingLocationId(null);
-    setLocationName("");
-  };
-
-  const openNewEquipmentLocation = () => {
-    if (equipmentSharedSetupMissing) {
-      setEquipmentError("Open this roster from Shared Roster tools once to connect realtime equipment.");
-      return;
-    }
-    setEditingLocationId(null);
-    setLocationName("Club locker");
-    setLocationDialogOpen(true);
-  };
-
-  const openEditEquipmentLocation = (holder: EquipmentHolder) => {
-    if (!holder.editable) return;
-    setEditingLocationId(holder.id);
-    setLocationName(holder.label);
-    setLocationDialogOpen(true);
-  };
-
-  const saveEquipmentLocation = async () => {
-    const label = locationName.trim();
-    if (!label) return;
-    const nextLocation: ClubEquipmentLocation = {
-      id: editingLocationId || makeId("space"),
-      label,
-      updatedAt: Date.now(),
-    };
-
-    try {
-      setEquipmentSaving(true);
-      setEquipmentError("");
-      if (equipmentGroupId) {
-        await saveFirebaseEquipmentLocation(equipmentGroupId, nextLocation);
-      } else {
-        setEquipmentLocations((current) => {
-          const withoutOld = current.filter((location) => location.id !== nextLocation.id);
-          const next = nextLocation.id === "storage"
-            ? [nextLocation, ...withoutOld.filter((location) => location.id !== "storage")]
-            : [...withoutOld, nextLocation];
-          return next;
-        });
-      }
-      resetLocationForm();
-      setLocationDialogOpen(false);
-    } catch (error) {
-      setEquipmentError(error instanceof Error ? error.message : "Could not save equipment space.");
-    } finally {
-      setEquipmentSaving(false);
-    }
-  };
-
-  const deleteEquipmentLocation = async () => {
-    const locationId = editingLocationId;
-    if (!locationId || locationId === "storage") return;
-    const bagsToMove = equipmentKits.filter((kit) => kit.holderId === locationId);
-    try {
-      setEquipmentSaving(true);
-      setEquipmentError("");
-      setEquipmentLocations((current) => current.filter((location) => location.id !== locationId));
-      setEquipmentKits((current) => current.map((kit) => kit.holderId === locationId ? { ...kit, holderId: "storage", updatedAt: Date.now() } : kit));
-      if (equipmentGroupId) {
-        await Promise.all([
-          deleteFirebaseEquipmentLocation(equipmentGroupId, locationId),
-          ...bagsToMove.map((kit) => saveFirebaseEquipmentBag(equipmentGroupId, { ...kit, holderId: "storage", updatedAt: Date.now() })),
-        ]);
-      }
-      resetLocationForm();
-      setLocationDialogOpen(false);
-    } catch (error) {
-      setEquipmentError(error instanceof Error ? error.message : "Could not delete equipment space.");
-    } finally {
-      setEquipmentSaving(false);
-    }
-  };
-
   const openNewEquipmentKit = () => {
     if (equipmentSharedSetupMissing) {
-      setEquipmentError("Open this roster from Shared Roster tools once to connect realtime equipment.");
+      setEquipmentError("Shared equipment is not connected yet.");
       return;
     }
     resetEquipmentForm();
@@ -712,7 +566,7 @@ export function ClubTab({
   const openEditEquipmentKit = (kit: ClubEquipmentKit) => {
     setEditingKitId(kit.id);
     setKitName(kit.name);
-    setKitHolderId(kit.holderId === "unknown" ? "storage" : kit.holderId);
+    setKitHolderId(normalizeEquipmentHolderId(kit.holderId));
     setKitColor(kit.color || DEFAULT_EQUIPMENT_COLOR);
     setDeleteBagSlide(0);
     setDeleteConfirmOpen(false);
@@ -728,7 +582,7 @@ export function ClubTab({
     const nextKit: ClubEquipmentKit = {
       id: editingKitId || makeId("kit"),
       name: trimmedName,
-      holderId: kitHolderId === "unknown" ? "storage" : kitHolderId,
+      holderId: normalizeEquipmentHolderId(kitHolderId),
       color: kitColor,
       contents: kitContents
         .split(/[\n,]/)
@@ -746,7 +600,7 @@ export function ClubTab({
     };
 
     if (equipmentSharedSetupMissing) {
-      setEquipmentError("Open this roster from Shared Roster tools once to connect realtime equipment.");
+      setEquipmentError("Shared equipment is not connected yet.");
       return;
     }
 
@@ -770,7 +624,7 @@ export function ClubTab({
   const moveEquipmentKit = async (kitId: string, holderId: string) => {
     const currentKit = equipmentKits.find((kit) => kit.id === kitId);
     if (!currentKit) return;
-    const nextKit = { ...currentKit, holderId: holderId === "unknown" ? "storage" : holderId, updatedAt: Date.now() };
+    const nextKit = { ...currentKit, holderId, updatedAt: Date.now() };
     setEquipmentKits((current) => current.map((kit) => kit.id === kitId ? nextKit : kit));
     try {
       setEquipmentError("");
@@ -794,15 +648,15 @@ export function ClubTab({
     event.currentTarget.setPointerCapture?.(event.pointerId);
     clearEquipmentDragTimer();
     activeEquipmentDragRef.current = null;
-    activeEquipmentDropHolderRef.current = kit.holderId;
+    activeEquipmentDropHolderRef.current = normalizeEquipmentHolderId(kit.holderId);
     suppressEquipmentClickRef.current = false;
 
     equipmentDragTimerRef.current = window.setTimeout(() => {
       activeEquipmentDragRef.current = kit.id;
-      activeEquipmentDropHolderRef.current = kit.holderId;
+      activeEquipmentDropHolderRef.current = normalizeEquipmentHolderId(kit.holderId);
       suppressEquipmentClickRef.current = true;
       setDraggingKitId(kit.id);
-      setDragOverHolderId(kit.holderId);
+      setDragOverHolderId(normalizeEquipmentHolderId(kit.holderId));
     }, 180);
   };
 
@@ -846,7 +700,7 @@ export function ClubTab({
     const previous = equipmentKits;
     setEquipmentKits((current) => current.filter((kit) => kit.id !== kitId));
     if (equipmentSharedSetupMissing) {
-      setEquipmentError("Open this roster from Shared Roster tools once to connect realtime equipment.");
+      setEquipmentError("Shared equipment is not connected yet.");
       return;
     }
 
@@ -879,7 +733,6 @@ export function ClubTab({
     colorPickerOpen ||
     contentPeekKitId ||
     equipmentDialogOpen ||
-    locationDialogOpen ||
     equipmentBoardOpen ||
     voteDialogOpen,
   );
@@ -890,10 +743,9 @@ export function ClubTab({
       contentPeekKitId,
       equipmentBoardOpen,
       equipmentDialogOpen,
-      locationDialogOpen,
       voteDialogOpen,
     };
-  }, [colorPickerOpen, contentPeekKitId, equipmentBoardOpen, equipmentDialogOpen, locationDialogOpen, voteDialogOpen]);
+  }, [colorPickerOpen, contentPeekKitId, equipmentBoardOpen, equipmentDialogOpen, voteDialogOpen]);
 
   useEffect(() => {
     onBackTargetChange?.(hasClubBackTarget);
@@ -925,13 +777,6 @@ export function ClubTab({
         setDeleteConfirmOpen(false);
         setEquipmentDialogOpen(false);
         resetEquipmentForm();
-        return;
-      }
-      if (state.locationDialogOpen) {
-        event.preventDefault();
-        blurActiveField();
-        setLocationDialogOpen(false);
-        resetLocationForm();
         return;
       }
       if (state.equipmentBoardOpen) {
@@ -998,7 +843,7 @@ export function ClubTab({
         icon={<Share2 className="h-5 w-5" />}
         eyebrow="Shared roster"
         title="Collaborate"
-        description="Invite organizers, open shared rosters, save changes, and get latest roster updates."
+        description="Manage shared rosters and collaborators."
       >
         <Button
           type="button"
@@ -1095,14 +940,14 @@ export function ClubTab({
               </div>
               <p className="mt-1 text-[11px] font-semibold leading-snug text-slate-500">
                 {equipmentSharedSetupMissing
-                  ? "Shared roster detected. Reopen it from Shared Roster tools once to connect equipment."
+                  ? "Shared equipment not connected yet."
                   : equipmentRealtimeEnabled
                     ? equipmentLoading
                       ? "Connecting to shared equipment…"
                       : equipmentError
                         ? "Realtime board needs attention."
-                        : "Realtime for this shared group."
-                    : "Local preview. Shared rosters can use realtime equipment."}
+                        : "Realtime sync on."
+                    : "Local preview."}
               </p>
             </div>
             <Button
@@ -1231,42 +1076,31 @@ export function ClubTab({
                   Equipment board
                 </DialogTitle>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  Hold and drag bags between organizers. Tap a bag to edit.
+                  Drag bags to move. Tap a bag to edit.
                 </p>
               </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-10 rounded-2xl border-slate-200 px-3 text-xs font-black text-slate-600"
-                  onClick={openNewEquipmentLocation}
-                >
-                  <Plus className="mr-1 h-4 w-4" />
-                  Space
-                </Button>
-                <Button
-                  type="button"
-                  className="h-10 rounded-2xl bg-[#102A43] px-3 text-xs font-black text-white hover:bg-[#0b2036]"
-                  onClick={openNewEquipmentKit}
-                >
-                  <Plus className="mr-1.5 h-4 w-4" />
-                  Add bag
-                </Button>
-              </div>
+              <Button
+                type="button"
+                className="h-10 shrink-0 rounded-2xl bg-[#102A43] px-3 text-xs font-black text-white hover:bg-[#0b2036]"
+                onClick={openNewEquipmentKit}
+              >
+                <Plus className="mr-1.5 h-4 w-4" />
+                Add bag
+              </Button>
             </div>
           </DialogHeader>
 
           <div className="flex-1 overflow-y-auto bg-slate-50/70 p-3">
             <div className="mb-2 rounded-2xl border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold leading-snug text-slate-500 shadow-sm">
               {equipmentSharedSetupMissing
-                ? "Shared roster is open, but equipment is not connected yet. Reopen this roster from Shared Roster tools once."
+                ? "Shared equipment is not connected yet."
                 : equipmentRealtimeEnabled
                   ? equipmentError
                     ? equipmentError
                     : equipmentLoading
                       ? "Loading shared equipment…"
-                      : "Realtime board. Hold + drag to move. Tap to edit."
-                  : "Local preview. Hold + drag to move. Tap to edit."}
+                      : "Realtime · drag bags to move"
+                  : "Local preview · drag bags to move"}
             </div>
 
             <div className="overflow-hidden rounded-[1.65rem] border border-slate-200 bg-white shadow-[0_14px_34px_rgba(15,23,42,0.08)]">
@@ -1276,7 +1110,7 @@ export function ClubTab({
               </div>
 
               {equipmentHolders.map((holder, index) => {
-                const holderKits = equipmentKits.filter((kit) => (kit.holderId === "unknown" ? "storage" : kit.holderId) === holder.id);
+                const holderKits = equipmentKits.filter((kit) => normalizeEquipmentHolderId(kit.holderId) === holder.id);
                 const highlighted = dragOverHolderId === holder.id;
                 return (
                   <section
@@ -1289,29 +1123,13 @@ export function ClubTab({
                         <h3 className="truncate text-[12px] font-black leading-tight text-[#102A43]">
                           {holder.label}
                         </h3>
-                        {holder.editable && (
-                          <button
-                            type="button"
-                            className="mt-0.5 text-[10px] font-black text-emerald-600 hover:text-emerald-700"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              openEditEquipmentLocation(holder);
-                            }}
-                          >
-                            Edit
-                          </button>
-                        )}
                       </div>
                     </div>
 
                     <div className={`flex min-h-[3.65rem] flex-col items-stretch justify-center gap-1.5 border-l px-2 py-2 transition ${highlighted ? "border-emerald-300 bg-emerald-50 ring-2 ring-inset ring-emerald-100" : "border-slate-200 bg-slate-50/30"}`}>
                       {holderKits.length === 0 ? (
-                        <div className={`min-h-8 rounded-2xl border border-dashed ${highlighted ? "border-emerald-300 bg-white/80" : "border-transparent"}`}>
-                          {highlighted && (
-                            <div className="px-3 py-1 text-[11px] font-bold text-emerald-600">
-                              Drop here
-                            </div>
-                          )}
+                        <div className={`min-h-8 rounded-2xl border border-dashed ${highlighted ? "border-emerald-300 bg-white/80 px-3 py-1 text-[11px] font-bold text-emerald-600" : "border-transparent"}`}>
+                          {highlighted ? "Drop here" : ""}
                         </div>
                       ) : holderKits.map((kit) => {
                         const isDragging = draggingKitId === kit.id;
@@ -1410,71 +1228,6 @@ export function ClubTab({
               </div>
             </div>
           )}
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={locationDialogOpen} onOpenChange={(open) => {
-        setLocationDialogOpen(open);
-        if (!open) resetLocationForm();
-      }}>
-        <DialogContent
-          className="max-w-sm rounded-3xl p-0"
-          onOpenAutoFocus={(event) => event.preventDefault()}
-        >
-          <DialogHeader className="border-b border-slate-100 px-4 py-3 text-left">
-            <DialogTitle className="flex items-center gap-2 text-base font-black text-[#102A43]">
-              <PackageOpen className="h-5 w-5 text-emerald-600" />
-              {editingLocationId ? "Edit Space" : "New Space"}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-3 p-4">
-            <div className="grid gap-1.5">
-              <Label className="text-xs font-black uppercase tracking-wide text-slate-500">
-                Space name
-              </Label>
-              <Input
-                value={locationName}
-                onChange={(event) => setLocationName(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    event.currentTarget.blur();
-                    saveEquipmentLocation();
-                  }
-                }}
-                enterKeyHint="done"
-                placeholder="Club locker"
-                className="h-11 rounded-2xl border-slate-200 text-sm font-semibold"
-              />
-              <p className="text-[11px] font-semibold text-slate-500">
-                Use spaces for things like Club locker, Sarah’s car, or 2nd storage.
-              </p>
-            </div>
-            <div className={`grid gap-2 ${editingLocationId && editingLocationId !== "storage" ? "grid-cols-[0.85fr_1.15fr]" : "grid-cols-1"}`}>
-              {editingLocationId && editingLocationId !== "storage" && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-10 rounded-2xl border-red-200 text-sm font-black text-red-500 hover:bg-red-50 hover:text-red-600"
-                  disabled={equipmentSaving}
-                  onClick={deleteEquipmentLocation}
-                >
-                  Remove
-                </Button>
-              )}
-              <Button
-                type="button"
-                className="h-10 rounded-2xl bg-[#102A43] text-sm font-black text-white hover:bg-[#0b2036]"
-                disabled={!locationName.trim() || equipmentSaving}
-                onClick={() => {
-                  blurActiveField();
-                  saveEquipmentLocation();
-                }}
-              >
-                {equipmentSaving ? "Saving…" : "Save space"}
-              </Button>
-            </div>
-          </div>
         </DialogContent>
       </Dialog>
 

@@ -351,6 +351,7 @@ export function ClubTab({
   const [kitColor, setKitColor] = useState(DEFAULT_EQUIPMENT_COLOR);
   const [colorPickerOpen, setColorPickerOpen] = useState(false);
   const [deleteBagSlide, setDeleteBagSlide] = useState(0);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [contentPeekKitId, setContentPeekKitId] = useState<string | null>(null);
   const [kitContents, setKitContents] = useState("");
   const [kitNote, setKitNote] = useState("");
@@ -360,6 +361,13 @@ export function ClubTab({
   const activeEquipmentDragRef = useRef<string | null>(null);
   const activeEquipmentDropHolderRef = useRef<string | null>(null);
   const suppressEquipmentClickRef = useRef(false);
+  const equipmentBackStateRef = useRef({
+    colorPickerOpen: false,
+    contentPeekKitId: null as string | null,
+    equipmentBoardOpen: false,
+    equipmentDialogOpen: false,
+    voteDialogOpen: false,
+  });
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -433,6 +441,7 @@ export function ClubTab({
     setKitColor(DEFAULT_EQUIPMENT_COLOR);
     setColorPickerOpen(false);
     setDeleteBagSlide(0);
+    setDeleteConfirmOpen(false);
     setKitContents("");
     setKitNote("");
   };
@@ -448,6 +457,7 @@ export function ClubTab({
     setKitHolderId(kit.holderId);
     setKitColor(kit.color || DEFAULT_EQUIPMENT_COLOR);
     setDeleteBagSlide(0);
+    setDeleteConfirmOpen(false);
     setKitContents(kit.contents.join(", "));
     setKitNote(kit.note || "");
     setEquipmentDialogOpen(true);
@@ -547,6 +557,7 @@ export function ClubTab({
   const deleteEquipmentKit = (kitId: string) => {
     setEquipmentKits((current) => current.filter((kit) => kit.id !== kitId));
     if (editingKitId === kitId) {
+      setDeleteConfirmOpen(false);
       resetEquipmentForm();
       setEquipmentDialogOpen(false);
     }
@@ -559,33 +570,49 @@ export function ClubTab({
   };
 
   useEffect(() => {
+    equipmentBackStateRef.current = {
+      colorPickerOpen,
+      contentPeekKitId,
+      equipmentBoardOpen,
+      equipmentDialogOpen,
+      voteDialogOpen,
+    };
+  }, [colorPickerOpen, contentPeekKitId, equipmentBoardOpen, equipmentDialogOpen, voteDialogOpen]);
+
+  useEffect(() => {
     if (typeof window === "undefined") return;
 
     const handleNativeBack = (event: Event) => {
-      if (contentPeekKitId) {
+      const state = equipmentBackStateRef.current;
+
+      // Close the most specific Club overlay first. The edit-bag dialog sits above the
+      // equipment board, so Android back should close Edit Bag before closing the board.
+      if (state.colorPickerOpen) {
+        event.preventDefault();
+        setColorPickerOpen(false);
+        return;
+      }
+      if (state.contentPeekKitId) {
         event.preventDefault();
         setContentPeekKitId(null);
         return;
       }
-      if (colorPickerOpen) {
-        event.preventDefault();
-        setColorPickerOpen(false);
-        return;
-      }
-      if (equipmentDialogOpen) {
+      if (state.equipmentDialogOpen) {
         event.preventDefault();
         blurActiveField();
         setColorPickerOpen(false);
+        setDeleteConfirmOpen(false);
         setEquipmentDialogOpen(false);
         resetEquipmentForm();
         return;
       }
-      if (equipmentBoardOpen) {
+      if (state.equipmentBoardOpen) {
         event.preventDefault();
+        setContentPeekKitId(null);
         setEquipmentBoardOpen(false);
         return;
       }
-      if (voteDialogOpen) {
+      if (state.voteDialogOpen) {
         event.preventDefault();
         setVoteDialogOpen(false);
       }
@@ -593,7 +620,7 @@ export function ClubTab({
 
     window.addEventListener("fairteams:native-back", handleNativeBack);
     return () => window.removeEventListener("fairteams:native-back", handleNativeBack);
-  }, [colorPickerOpen, contentPeekKitId, equipmentBoardOpen, equipmentDialogOpen, voteDialogOpen]);
+  }, []);
 
   const canCreateVote = question.trim().length > 0 && optionText.split("\n").filter((line) => line.trim()).length >= 2;
   const canSaveEquipmentKit = kitName.trim().length > 0;
@@ -906,7 +933,7 @@ export function ClubTab({
         setEquipmentBoardOpen(open);
         if (!open) setContentPeekKitId(null);
       }}>
-        <DialogContent className="relative flex h-[96dvh] w-[calc(100vw-1rem)] max-w-none flex-col overflow-hidden rounded-[2rem] p-0 sm:max-w-2xl">
+        <DialogContent className="fixed bottom-2 left-2 right-2 top-2 flex h-auto max-h-none w-auto max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-[2rem] p-0 sm:bottom-auto sm:left-1/2 sm:right-auto sm:top-1/2 sm:h-[96dvh] sm:w-[calc(100vw-1rem)] sm:max-w-2xl sm:-translate-x-1/2 sm:-translate-y-1/2">
           <DialogHeader className="border-b border-slate-100 px-4 py-4 text-left">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
@@ -960,7 +987,7 @@ export function ClubTab({
                       </div>
                     </div>
 
-                    <div className={`flex min-h-[3.65rem] flex-wrap items-center gap-2 border-l px-2 py-2 transition ${highlighted ? "border-emerald-300 bg-emerald-50 ring-2 ring-inset ring-emerald-100" : "border-slate-200 bg-slate-50/30"}`}>
+                    <div className={`flex min-h-[3.65rem] flex-col items-stretch justify-center gap-1.5 border-l px-2 py-2 transition ${highlighted ? "border-emerald-300 bg-emerald-50 ring-2 ring-inset ring-emerald-100" : "border-slate-200 bg-slate-50/30"}`}>
                       {holderKits.length === 0 ? (
                         <div className="rounded-full border border-dashed border-slate-200 bg-white/80 px-3 py-1 text-[11px] font-bold text-slate-300">
                           Drop here
@@ -968,43 +995,44 @@ export function ClubTab({
                       ) : holderKits.map((kit) => {
                         const isDragging = draggingKitId === kit.id;
                         return (
-                          <div
-                            key={kit.id}
-                            role="button"
-                            tabIndex={0}
-                            className={`touch-none select-none rounded-2xl border border-slate-200 bg-white px-2.5 py-1.5 text-left shadow-sm transition hover:border-emerald-200 hover:bg-white active:scale-[0.98] ${isDragging ? "scale-95 opacity-45 ring-2 ring-emerald-200" : ""}`}
-                            onPointerDown={(event) => startEquipmentPointerDrag(event, kit)}
-                            onPointerMove={moveEquipmentPointerDrag}
-                            onPointerUp={finishEquipmentPointerDrag}
-                            onPointerCancel={finishEquipmentPointerDrag}
-                            onClick={() => openEquipmentKitFromBoard(kit)}
-                            onKeyDown={(event) => {
-                              if (event.key === "Enter" || event.key === " ") {
-                                event.preventDefault();
-                                openEquipmentKitFromBoard(kit);
-                              }
-                            }}
-                          >
-                            <div className="flex items-center gap-2">
-                              <DuffleBagIcon color={kit.color || DEFAULT_EQUIPMENT_COLOR} className="h-9 w-12 shrink-0" />
-                              <div className="min-w-0 flex-1 pr-1">
-                                <div className="max-w-[8.5rem] truncate text-xs font-black text-[#102A43]">
-                                  {kit.name}
+                          <div key={kit.id} className="flex w-full items-center gap-1.5">
+                            <div
+                              role="button"
+                              tabIndex={0}
+                              className={`min-w-0 flex-1 touch-none select-none rounded-2xl border border-slate-200 bg-white px-2.5 py-1.5 text-left shadow-sm transition hover:border-emerald-200 hover:bg-white active:scale-[0.98] ${isDragging ? "scale-95 opacity-45 ring-2 ring-emerald-200" : ""}`}
+                              onPointerDown={(event) => startEquipmentPointerDrag(event, kit)}
+                              onPointerMove={moveEquipmentPointerDrag}
+                              onPointerUp={finishEquipmentPointerDrag}
+                              onPointerCancel={finishEquipmentPointerDrag}
+                              onClick={() => openEquipmentKitFromBoard(kit)}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter" || event.key === " ") {
+                                  event.preventDefault();
+                                  openEquipmentKitFromBoard(kit);
+                                }
+                              }}
+                            >
+                              <div className="flex min-w-0 items-center gap-2">
+                                <DuffleBagIcon color={kit.color || DEFAULT_EQUIPMENT_COLOR} className="h-9 w-12 shrink-0" />
+                                <div className="min-w-0 flex-1">
+                                  <div className="truncate text-xs font-black text-[#102A43]">
+                                    {kit.name}
+                                  </div>
                                 </div>
                               </div>
-                              <button
-                                type="button"
-                                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-slate-50 text-slate-500 ring-1 ring-slate-100 transition hover:bg-emerald-50 hover:text-emerald-700"
-                                aria-label={`Show contents of ${kit.name}`}
-                                onPointerDown={(event) => event.stopPropagation()}
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  setContentPeekKitId(kit.id);
-                                }}
-                              >
-                                <ClipboardList className="h-4 w-4" />
-                              </button>
                             </div>
+                            <button
+                              type="button"
+                              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
+                              aria-label={`Show contents of ${kit.name}`}
+                              onPointerDown={(event) => event.stopPropagation()}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                setContentPeekKitId(kit.id);
+                              }}
+                            >
+                              <ClipboardList className="h-4 w-4" />
+                            </button>
                           </div>
                         );
                       })}
@@ -1021,6 +1049,7 @@ export function ClubTab({
         setEquipmentDialogOpen(open);
         if (!open) {
           setColorPickerOpen(false);
+          setDeleteConfirmOpen(false);
           resetEquipmentForm();
         }
       }}>
@@ -1031,7 +1060,7 @@ export function ClubTab({
           <DialogHeader className="border-b border-slate-100 px-4 py-3 text-left">
             <DialogTitle className="flex items-center gap-2 text-base font-black text-[#102A43]">
               <PackageOpen className="h-5 w-5 text-emerald-600" />
-              {editingKitId ? "Edit equipment" : "New equipment bag"}
+              {editingKitId ? "Edit Bag" : "New Bag"}
             </DialogTitle>
           </DialogHeader>
 
@@ -1142,6 +1171,7 @@ export function ClubTab({
                     className={`h-8 rounded-xl text-[11px] font-black ${kitHolderId === holder.id ? "bg-emerald-600 text-white hover:bg-emerald-700" : ""}`}
                     onClick={() => {
                       setKitHolderId(holder.id);
+                      setDeleteConfirmOpen(false);
                       if (editingKitId) moveEquipmentKit(editingKitId, holder.id);
                     }}
                   >
@@ -1151,35 +1181,7 @@ export function ClubTab({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 pt-1">
-              <Button
-                type="button"
-                variant="outline"
-                className="h-10 rounded-2xl text-sm font-black"
-                onClick={() => {
-                  blurActiveField();
-                  setColorPickerOpen(false);
-                  setEquipmentDialogOpen(false);
-                }}
-              >
-                <X className="mr-1.5 h-4 w-4" />
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                className="h-10 rounded-2xl bg-[#102A43] text-sm font-black text-white hover:bg-[#0b2036]"
-                disabled={!canSaveEquipmentKit}
-                onClick={() => {
-                  blurActiveField();
-                  setColorPickerOpen(false);
-                  saveEquipmentKit();
-                }}
-              >
-                Save bag
-              </Button>
-            </div>
-
-            {editingKitId && (
+            {editingKitId && deleteConfirmOpen && (
               <div className="rounded-2xl border border-red-100 bg-red-50/70 p-2.5">
                 <div className="mb-1.5 flex items-center justify-between gap-2 text-[10px] font-black uppercase tracking-wide text-red-700">
                   <span>Slide to unlock delete</span>
@@ -1194,21 +1196,46 @@ export function ClubTab({
                   className="w-full accent-red-600"
                   aria-label="Slide to unlock delete bag"
                 />
+              </div>
+            )}
+
+            <div className={`grid gap-2 pt-1 ${editingKitId ? "grid-cols-[0.85fr_1.15fr]" : "grid-cols-1"}`}>
+              {editingKitId && (
                 <Button
                   type="button"
-                  variant="ghost"
-                  className="mt-2 h-9 w-full rounded-2xl text-sm font-black text-red-500 hover:bg-red-100 hover:text-red-600 disabled:opacity-40"
-                  disabled={deleteBagSlide < 95}
+                  variant="outline"
+                  className="h-10 rounded-2xl border-red-200 text-sm font-black text-red-500 hover:bg-red-50 hover:text-red-600 disabled:opacity-45"
+                  disabled={deleteConfirmOpen && deleteBagSlide < 95}
                   onClick={() => {
+                    blurActiveField();
+                    setColorPickerOpen(false);
+                    if (!deleteConfirmOpen) {
+                      setDeleteConfirmOpen(true);
+                      setDeleteBagSlide(0);
+                      return;
+                    }
                     if (deleteBagSlide < 95) return;
                     deleteEquipmentKit(editingKitId);
                   }}
                 >
                   <Trash2 className="mr-1.5 h-4 w-4" />
-                  Delete bag
+                  {deleteConfirmOpen && deleteBagSlide >= 95 ? "Delete now" : "Delete"}
                 </Button>
-              </div>
-            )}
+              )}
+              <Button
+                type="button"
+                className="h-10 rounded-2xl bg-[#102A43] text-sm font-black text-white hover:bg-[#0b2036]"
+                disabled={!canSaveEquipmentKit}
+                onClick={() => {
+                  blurActiveField();
+                  setColorPickerOpen(false);
+                  setDeleteConfirmOpen(false);
+                  saveEquipmentKit();
+                }}
+              >
+                Save bag
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

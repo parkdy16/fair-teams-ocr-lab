@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   CalendarClock,
   ClipboardList,
-  PackageOpen,
+  Pencil,
   Plus,
   ShieldCheck,
   Trash2,
@@ -343,6 +343,20 @@ function DuffleBagIcon({ color, className = "h-9 w-12" }: { color: string; class
   );
 }
 
+
+function AntiqueBallIcon({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 48 48" className={className} aria-hidden="true">
+      <circle cx="24" cy="24" r="18" fill="currentColor" opacity="0.12" />
+      <circle cx="24" cy="24" r="17" fill="none" stroke="currentColor" strokeWidth="3" />
+      <path d="M24 7.5c-4.7 4-7 9.5-7 16.5s2.3 12.5 7 16.5" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" />
+      <path d="M24 7.5c4.7 4 7 9.5 7 16.5s-2.3 12.5-7 16.5" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" />
+      <path d="M10 19c4.2 1.8 8.9 2.7 14 2.7s9.8-.9 14-2.7" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
+      <path d="M10 29c4.2-1.8 8.9-2.7 14-2.7s9.8.9 14 2.7" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function getClubGreetingName(user: SharedRosterUser | null) {
   const raw = user?.displayName?.trim() || user?.email?.split("@")[0]?.trim() || "there";
   if (!raw) return "there";
@@ -574,35 +588,46 @@ export function ClubTab({
   };
 
   const equipmentRealtimeEnabled = Boolean(equipmentGroupId);
+  const equipmentCanSyncOnline = Boolean(equipmentGroupId && clubUser?.email);
+  const equipmentWaitingForAccount = Boolean(equipmentGroupId && !authReady);
+  const equipmentNeedsSignIn = Boolean(equipmentGroupId && authReady && !clubUser?.email);
   const equipmentSharedConnecting = isSharedRoster && !equipmentRealtimeEnabled;
-  const equipmentStatusText = equipmentRealtimeEnabled
+  const equipmentStatusText = equipmentCanSyncOnline
     ? equipmentError
-      ? "Sync issue · open board"
+      ? "Reconnecting equipment…"
       : equipmentSaving
         ? "Saving equipment…"
         : equipmentLoading
           ? equipmentKits.length > 0
             ? "Online · syncing latest"
-            : "Connecting equipment…"
+            : "Online · loading bags"
           : "Online · shared equipment"
-    : equipmentSharedConnecting
-      ? "Connecting shared equipment…"
-      : "Local preview";
+    : equipmentWaitingForAccount
+      ? "Connecting account…"
+      : equipmentNeedsSignIn
+        ? "Sign in to sync equipment"
+        : equipmentSharedConnecting
+          ? "Connecting shared equipment…"
+          : "Local preview";
   const equipmentBoardStatusText = equipmentMoveNotice
-    ? `${equipmentMoveNotice}${equipmentRealtimeEnabled ? " · saved online" : ""}`
-    : equipmentRealtimeEnabled
+    ? `${equipmentMoveNotice}${equipmentCanSyncOnline ? " · saved online" : ""}`
+    : equipmentCanSyncOnline
       ? equipmentError
-        ? equipmentError
+        ? "Reconnecting equipment board…"
         : equipmentSaving
           ? "Saving equipment…"
           : equipmentLoading
             ? equipmentKits.length > 0
-              ? "Showing saved bags · syncing latest…"
-              : "Connecting shared equipment…"
+              ? "Online · showing saved bags while syncing latest…"
+              : "Online · loading bags…"
             : `Online · shared equipment${equipmentLastSyncedAt ? ` · updated ${formatEquipmentTimestamp(equipmentLastSyncedAt)}` : ""}`
-      : equipmentSharedConnecting
-        ? "Connecting shared equipment…"
-        : "Local preview · drag bags to move";
+      : equipmentWaitingForAccount
+        ? "Connecting account…"
+        : equipmentNeedsSignIn
+          ? "Sign in to sync the shared equipment board."
+          : equipmentSharedConnecting
+            ? "Connecting shared equipment…"
+            : "Local preview · drag bags to move";
   const equipmentHolders = useMemo<EquipmentHolder[]>(() => {
     if (!isSharedRoster && !equipmentRealtimeEnabled) return LOCAL_EQUIPMENT_HOLDERS;
     return buildSharedEquipmentHolders(equipmentHolderLabels, equipmentKits, equipmentHolderNamesByEmail);
@@ -633,12 +658,26 @@ export function ClubTab({
       return;
     }
 
-    setEquipmentLoading(true);
-    setEquipmentError("");
     const cachedBags = readCachedEquipmentKits(equipmentGroupId);
     if (cachedBags.length > 0) {
       setEquipmentKits(cachedBags);
     }
+
+    if (!authReady) {
+      setEquipmentLoading(true);
+      setEquipmentError("");
+      return;
+    }
+
+    if (!clubUser?.email) {
+      setEquipmentLoading(false);
+      setEquipmentError("");
+      setEquipmentLastSyncedAt(null);
+      return;
+    }
+
+    setEquipmentLoading(true);
+    setEquipmentError("");
     try {
       const unsubscribe = listenToFirebaseEquipmentBags(
         equipmentGroupId,
@@ -660,7 +699,7 @@ export function ClubTab({
       setEquipmentLoading(false);
       setEquipmentError(error instanceof Error ? error.message : "Could not connect equipment board.");
     }
-  }, [equipmentGroupId, isSharedRoster]);
+  }, [authReady, clubUser?.email, equipmentGroupId, isSharedRoster]);
 
   const openVotes = useMemo(() => votes.filter((vote) => vote.status === "open"), [votes]);
   const closedVotes = useMemo(() => votes.filter((vote) => vote.status === "closed"), [votes]);
@@ -1088,7 +1127,7 @@ export function ClubTab({
             <UserCircle className="h-4 w-4 shrink-0 text-slate-400" />
             <span className="min-w-0">
               <span className="block truncate text-xs font-black text-[#102A43]">Hey, {clubGreetingName}</span>
-              <span className="block truncate text-[10px] font-bold text-slate-400">{equipmentRealtimeEnabled ? "Online · club tools sync" : clubUser.email}</span>
+              <span className="block truncate text-[10px] font-bold text-slate-400">{equipmentCanSyncOnline ? "Online · club tools sync" : clubUser.email}</span>
             </span>
           </button>
           <button
@@ -1141,64 +1180,14 @@ export function ClubTab({
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wide text-blue-600">
-              <PackageOpen className="h-4 w-4" />
+              <AntiqueBallIcon className="h-4 w-4" />
               Equipment
             </div>
-            <div className="mt-0.5 text-[11px] font-semibold text-slate-400">Move bags between holders and check what is inside.</div>
+            <div className="mt-0.5 text-[11px] font-semibold text-slate-400">See who has what and move bags quickly.</div>
             <div className="mt-1 flex items-center gap-1.5 text-[10px] font-black text-slate-400">
-              <span className={`h-1.5 w-1.5 rounded-full ${equipmentRealtimeEnabled && !equipmentError ? "bg-emerald-500" : equipmentSharedConnecting ? "bg-amber-400" : "bg-slate-300"}`} />
+              <span className={`h-1.5 w-1.5 rounded-full ${equipmentCanSyncOnline && !equipmentError ? "bg-emerald-500" : equipmentWaitingForAccount || equipmentSharedConnecting ? "bg-amber-400" : "bg-slate-300"}`} />
               {equipmentStatusText}
             </div>
-
-            {equipmentKits.length > 0 ? (
-              <div className="mt-2 overflow-hidden rounded-2xl border border-slate-100 bg-slate-50/60">
-                {equipmentDashboardHolders.map((holder, index) => {
-                  const holderKits = equipmentKits.filter((kit) => normalizeEquipmentHolderId(kit.holderId) === holder.id);
-                  const highlighted = dragOverHolderId === holder.id;
-                  return (
-                    <div
-                      key={`dashboard-${holder.id}`}
-                      data-equipment-holder-id={holder.id}
-                      className={`grid grid-cols-[5.35rem_minmax(0,1fr)] items-center gap-2 px-2 py-1.5 transition ${index === 0 ? "" : "border-t border-slate-100"} ${highlighted ? "bg-emerald-50 ring-2 ring-inset ring-emerald-100" : ""}`}
-                    >
-                      <div className="truncate text-[11px] font-black text-[#102A43]">{holder.label}</div>
-                      <div className="flex min-w-0 flex-wrap gap-1.5">
-                        {holderKits.length ? holderKits.map((kit) => {
-                          const isDragging = draggingKitId === kit.id;
-                          return (
-                            <button
-                              key={`dashboard-kit-${kit.id}`}
-                              type="button"
-                              className={`touch-none select-none rounded-2xl border border-slate-200 bg-white px-2 py-1 text-left shadow-sm transition active:scale-[0.98] ${isDragging ? "scale-95 opacity-45 ring-2 ring-emerald-200" : ""}`}
-                              onPointerDown={(event) => startEquipmentPointerDrag(event, kit)}
-                              onPointerMove={moveEquipmentPointerDrag}
-                              onPointerUp={finishEquipmentPointerDrag}
-                              onPointerCancel={finishEquipmentPointerDrag}
-                              onClick={() => openEquipmentKitFromBoard(kit)}
-                              aria-label={`Edit ${kit.name}`}
-                            >
-                              <span className="flex max-w-[8.5rem] items-center gap-1.5">
-                                <DuffleBagIcon color={kit.color || DEFAULT_EQUIPMENT_COLOR} className="h-6 w-8 shrink-0" />
-                                <span className="min-w-0 truncate text-[11px] font-black text-[#102A43]">{kit.name}</span>
-                              </span>
-                            </button>
-                          );
-                        }) : (
-                          <span className="rounded-full border border-dashed border-slate-200 bg-white/70 px-2 py-1 text-[10px] font-bold text-slate-400">No bag</span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-                {equipmentKits.length > equipmentPreviewKits.length && (
-                  <div className="border-t border-slate-100 px-2 py-1.5 text-[10px] font-bold text-slate-400">
-                    Open board to see all {equipmentKits.length} bags.
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="mt-2 rounded-2xl bg-slate-50 px-3 py-2 text-sm font-black text-[#102A43]">No bags yet</div>
-            )}
           </div>
           <Button
             type="button"
@@ -1208,6 +1197,56 @@ export function ClubTab({
             Open
           </Button>
         </div>
+
+        {equipmentKits.length > 0 ? (
+          <div className="mt-3 overflow-hidden rounded-[1.35rem] border border-slate-100 bg-slate-50/60">
+            {equipmentDashboardHolders.map((holder, index) => {
+              const holderKits = equipmentKits.filter((kit) => normalizeEquipmentHolderId(kit.holderId) === holder.id);
+              const highlighted = dragOverHolderId === holder.id;
+              return (
+                <div
+                  key={`dashboard-${holder.id}`}
+                  data-equipment-holder-id={holder.id}
+                  className={`grid grid-cols-[4.8rem_minmax(0,1fr)] items-center gap-2 px-2.5 py-2 transition ${index === 0 ? "" : "border-t border-slate-100"} ${highlighted ? "bg-emerald-50 ring-2 ring-inset ring-emerald-100" : ""}`}
+                >
+                  <div className="truncate text-[11px] font-black text-[#102A43]">{holder.label}</div>
+                  <div className="flex min-w-0 flex-wrap justify-end gap-1.5">
+                    {holderKits.length ? holderKits.map((kit) => {
+                      const isDragging = draggingKitId === kit.id;
+                      return (
+                        <button
+                          key={`dashboard-kit-${kit.id}`}
+                          type="button"
+                          className={`touch-none select-none rounded-2xl border border-slate-200 bg-white px-2 py-1 text-left shadow-sm transition active:scale-[0.98] ${isDragging ? "scale-95 opacity-45 ring-2 ring-emerald-200" : ""}`}
+                          onPointerDown={(event) => startEquipmentPointerDrag(event, kit)}
+                          onPointerMove={moveEquipmentPointerDrag}
+                          onPointerUp={finishEquipmentPointerDrag}
+                          onPointerCancel={finishEquipmentPointerDrag}
+                          onClick={() => openEquipmentKitFromBoard(kit)}
+                          aria-label={`Edit ${kit.name}`}
+                        >
+                          <span className="flex max-w-[7.4rem] items-center gap-1.5">
+                            <DuffleBagIcon color={kit.color || DEFAULT_EQUIPMENT_COLOR} className="h-6 w-8 shrink-0" />
+                            <span className="min-w-0 truncate text-[11px] font-black text-[#102A43]">{kit.name}</span>
+                          </span>
+                        </button>
+                      );
+                    }) : (
+                      <span className="rounded-full border border-dashed border-slate-200 bg-white/70 px-2 py-1 text-[10px] font-bold text-slate-400">No bag</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+            {equipmentKits.length > equipmentPreviewKits.length && (
+              <div className="border-t border-slate-100 px-2.5 py-1.5 text-[10px] font-bold text-slate-400">
+                Open board to see all {equipmentKits.length} bags.
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="mt-3 rounded-2xl bg-slate-50 px-3 py-2 text-sm font-black text-[#102A43]">No bags yet</div>
+        )}
       </section>
 
       <section className="rounded-[1.7rem] border border-slate-100 bg-white p-3 shadow-sm ring-1 ring-slate-50">
@@ -1337,7 +1376,7 @@ export function ClubTab({
             <div className="grid gap-3">
               <div className="min-w-0">
                 <DialogTitle className="flex items-center gap-2 text-base font-black text-[#102A43]">
-                  <PackageOpen className="h-5 w-5 text-emerald-600" />
+                  <AntiqueBallIcon className="h-5 w-5 text-emerald-600" />
                   Equipment board
                 </DialogTitle>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
@@ -1415,7 +1454,9 @@ export function ClubTab({
                                 <div className="min-w-0 flex-1">
                                   <div className="flex min-w-0 items-center gap-1.5">
                                     <span className="truncate text-xs font-black text-[#102A43]">{kit.name}</span>
-                                    <span className="shrink-0 rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-slate-400">Edit</span>
+                                    <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-400" aria-hidden="true">
+                                      <Pencil className="h-3 w-3" />
+                                    </span>
                                   </div>
                                 </div>
                               </div>
@@ -1504,7 +1545,7 @@ export function ClubTab({
           >
           <DialogHeader className="border-b border-slate-100 px-4 py-3 text-left">
             <DialogTitle className="flex items-center gap-2 text-base font-black text-[#102A43]">
-              <PackageOpen className="h-5 w-5 text-emerald-600" />
+              <DuffleBagIcon color={kitColor || DEFAULT_EQUIPMENT_COLOR} className="h-5 w-7 shrink-0" />
               {editingKitId ? "Edit Bag" : "New Bag"}
             </DialogTitle>
           </DialogHeader>

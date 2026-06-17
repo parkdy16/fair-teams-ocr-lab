@@ -255,6 +255,7 @@ export interface RosterCloudSource {
   firebaseOwnerEmail?: string;
   firebaseRole?: "owner" | "editor" | "viewer" | "member";
   firebaseLastSavedByEmail?: string;
+  firebaseMemberNamesByEmail?: Record<string, string>;
 
   lastSyncedAt?: string;
   lastRemoteModifiedAt?: string;
@@ -337,6 +338,21 @@ function cleanAccessLabels(value: unknown): Record<string, string> | undefined {
   return Object.keys(labels).length ? labels : undefined;
 }
 
+function cleanMemberNamesByEmail(value: unknown): Record<string, string> | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const source = value as Record<string, unknown>;
+  const names: Record<string, string> = {};
+
+  Object.entries(source).forEach(([email, name]) => {
+    const cleanEmail = String(email || "").trim().toLowerCase();
+    const cleanName = String(name || "").replace(/\s+/g, " ").trim();
+    if (!cleanEmail || !cleanEmail.includes("@") || !cleanName) return;
+    names[cleanEmail] = cleanName.slice(0, 40);
+  });
+
+  return Object.keys(names).length ? names : undefined;
+}
+
 function cleanRosterCloudSource(value: unknown): RosterCloudSource | undefined {
   if (!value || typeof value !== "object") return undefined;
   const record = value as Record<string, unknown>;
@@ -367,7 +383,6 @@ function cleanRosterCloudSource(value: unknown): RosterCloudSource | undefined {
     if (accessLabels) {
       source.accessLabels = accessLabels;
     }
-
     return source;
   }
 
@@ -411,6 +426,10 @@ function cleanRosterCloudSource(value: unknown): RosterCloudSource | undefined {
     const accessLabels = cleanAccessLabels(record.accessLabels);
     if (accessLabels) {
       source.accessLabels = accessLabels;
+    }
+    const memberNames = cleanMemberNamesByEmail(record.firebaseMemberNamesByEmail);
+    if (memberNames) {
+      source.firebaseMemberNamesByEmail = memberNames;
     }
 
     return source;

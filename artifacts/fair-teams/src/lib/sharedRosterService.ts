@@ -3,6 +3,7 @@ import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
   signOut,
+  updateProfile,
   type Unsubscribe,
   type User,
 } from "firebase/auth";
@@ -45,6 +46,8 @@ export type FirebaseSharedGroupSummary = {
   currentUserRole?: "owner" | "editor" | "viewer" | "member";
   memberEmails?: string[];
   pendingInviteEmails?: string[];
+  memberNamesByEmail?: Record<string, string>;
+  memberNamesByUid?: Record<string, string>;
   lastSavedByEmail?: string;
   lastSavedRosterName?: string;
   lastSavedAt?: string;
@@ -66,6 +69,8 @@ export type FirebaseSharedRosterSummary = {
   currentUserRole?: "owner" | "editor" | "viewer" | "member";
   memberEmails?: string[];
   pendingInviteEmails?: string[];
+  memberNamesByEmail?: Record<string, string>;
+  memberNamesByUid?: Record<string, string>;
   lastSavedByEmail?: string;
 };
 
@@ -84,6 +89,33 @@ function toSharedRosterUser(user: User | null): SharedRosterUser | null {
 
 function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
+}
+
+function cleanOrganizerDisplayName(value?: string | null) {
+  return (value || "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 40);
+}
+
+function nameFromUser(user: SharedRosterUser) {
+  const displayName = cleanOrganizerDisplayName(user.displayName);
+  if (displayName) return displayName;
+  const prefix = normalizeEmail(user.email).split("@")[0] || "Organizer";
+  return prefix
+    .replace(/[._-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase()) || "Organizer";
+}
+
+function cleanNameMap(value: unknown) {
+  if (!value || typeof value !== "object") return {};
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .map(([key, name]) => [String(key).trim(), cleanOrganizerDisplayName(String(name || ""))])
+      .filter(([key, name]) => Boolean(key && name)),
+  ) as Record<string, string>;
 }
 
 function cleanGroupName(value?: string) {
@@ -153,6 +185,8 @@ function toGroupSummary(id: string, data: DocumentData): FirebaseSharedGroupSumm
   const memberUids = Array.isArray(data.memberUids) ? data.memberUids : [];
   const memberEmails = Array.isArray(data.memberEmails) ? data.memberEmails.filter((value): value is string => typeof value === "string") : [];
   const pendingInviteEmails = Array.isArray(data.pendingInviteEmails) ? data.pendingInviteEmails.filter((value): value is string => typeof value === "string") : [];
+  const memberNamesByEmail = cleanNameMap(data.memberNamesByEmail);
+  const memberNamesByUid = cleanNameMap(data.memberNamesByUid);
   return {
     id,
     name: typeof data.name === "string" && data.name.trim() ? data.name : "My Fair Teams group",
@@ -163,6 +197,8 @@ function toGroupSummary(id: string, data: DocumentData): FirebaseSharedGroupSumm
     currentUserRole: currentUserRoleFromData(data),
     memberEmails,
     pendingInviteEmails,
+    memberNamesByEmail,
+    memberNamesByUid,
     lastSavedByEmail: typeof data.lastSavedByEmail === "string" ? data.lastSavedByEmail : undefined,
     lastSavedRosterName: typeof data.lastSavedRosterName === "string" ? data.lastSavedRosterName : undefined,
     lastSavedAt: timestampToIso(data.lastSavedAt) || (typeof data.lastSavedAtIso === "string" ? data.lastSavedAtIso : undefined),
@@ -193,6 +229,8 @@ function toRosterSummary(id: string, data: DocumentData): FirebaseSharedRosterSu
     currentUserRole: currentUserRoleFromData(data),
     memberEmails: Array.isArray(data.memberEmails) ? data.memberEmails.filter((value): value is string => typeof value === "string") : [],
     pendingInviteEmails: Array.isArray(data.pendingInviteEmails) ? data.pendingInviteEmails.filter((value): value is string => typeof value === "string") : [],
+    memberNamesByEmail: cleanNameMap(data.memberNamesByEmail),
+    memberNamesByUid: cleanNameMap(data.memberNamesByUid),
     lastSavedByEmail: typeof data.lastSavedByEmail === "string" ? data.lastSavedByEmail : undefined,
   };
 }
@@ -203,10 +241,50 @@ export function listenToSharedRosterUser(callback: (user: SharedRosterUser | nul
   });
 }
 
-export async function createSharedRosterAccount(email: string, password: string): Promise<SharedRosterUser> {
+export async function createSharedRosterAccount(email: string, password: string, displayName?: string): Promise<SharedRosterUser> {
   const result = await createUserWithEmailAndPassword(getFairTeamsAuth(), email.trim(), password);
-  const user = toSharedRosterUser(result.user);
+  const cleanName = cleanOrganizerDisplayName(displayName);
+  if (cleanName) {
+    await updateProfile(result.user, { displayName: cleanName });
+  }
+  const user = toSharedRosterUser(getFairTeamsAuth().currentUser || result.user);
   if (!user) throw new Error("Firebase created the account but did not return an email address.");
+  return user;
+}
+
+export async function updateSharedRosterOrganizerName(displayName: string): Promise<SharedRosterUser> {
+  const authUser = getFairTeamsAuth().currentUser;
+  if (!authUser || !authUser.email) throw new Error("Sign in before setting your organizer name.");
+  const cleanName = cleanOrganizerDisplayName(displayName);
+  if (!cleanName) throw new Error("Enter an organizer name.");
+
+  await updateProfile(authUser, { displayName: cleanName });
+
+  const email = normalizeEmail(authUser.email);
+  const firestore = getFairTeamsFirestore();
+  const batch = writeBatch(firestore);
+  const applyName = (data: DocumentData) => ({
+    memberNamesByUid: {
+      ...cleanNameMap(data.memberNamesByUid),
+      [authUser.uid]: cleanName,
+    },
+    memberNamesByEmail: {
+      ...cleanNameMap(data.memberNamesByEmail),
+      [email]: cleanName,
+    },
+    updatedAt: serverTimestamp(),
+    updatedAtIso: new Date().toISOString(),
+  });
+
+  const groups = await getDocs(query(collection(firestore, "sharedGroups"), where("memberUids", "array-contains", authUser.uid)));
+  groups.docs.forEach((docSnap) => batch.update(docSnap.ref, applyName(docSnap.data())));
+
+  const rosters = await getDocs(query(collection(firestore, "sharedRosters"), where("memberUids", "array-contains", authUser.uid)));
+  rosters.docs.forEach((docSnap) => batch.update(docSnap.ref, applyName(docSnap.data())));
+
+  await batch.commit();
+  const user = toSharedRosterUser(getFairTeamsAuth().currentUser);
+  if (!user) throw new Error("Organizer name was saved, but the account could not be reloaded.");
   return user;
 }
 
@@ -225,6 +303,7 @@ export async function createFirebaseSharedGroup(groupName: string): Promise<Fire
   const user = getCurrentSharedRosterUser();
   const now = new Date().toISOString();
   const name = cleanGroupName(groupName);
+  const organizerName = nameFromUser(user);
   const payload = {
     app: "Fair Teams",
     schemaVersion: 2,
@@ -234,6 +313,8 @@ export async function createFirebaseSharedGroup(groupName: string): Promise<Fire
     memberUids: [user.uid],
     memberEmails: [normalizeEmail(user.email)],
     pendingInviteEmails: [],
+    memberNamesByUid: { [user.uid]: organizerName },
+    memberNamesByEmail: { [normalizeEmail(user.email)]: organizerName },
     roleByUid: { [user.uid]: "owner" },
     rosterIds: [],
     createdAt: serverTimestamp(),
@@ -280,6 +361,9 @@ export async function createFirebaseSharedRoster(roster: RoomRoster, groupId?: s
   const groupMemberEmails = Array.isArray(groupData.memberEmails) ? groupData.memberEmails.filter((email): email is string => typeof email === "string") : [normalizeEmail(user.email)];
   const groupPendingInviteEmails = Array.isArray(groupData.pendingInviteEmails) ? groupData.pendingInviteEmails.filter((email): email is string => typeof email === "string") : [];
   const groupRoleByUid = groupData.roleByUid && typeof groupData.roleByUid === "object" ? groupData.roleByUid as Record<string, unknown> : { [user.uid]: "owner" };
+  const organizerName = nameFromUser(user);
+  const groupMemberNamesByUid = { ...cleanNameMap(groupData.memberNamesByUid), [user.uid]: organizerName };
+  const groupMemberNamesByEmail = { ...cleanNameMap(groupData.memberNamesByEmail), [normalizeEmail(user.email)]: organizerName };
   const now = new Date().toISOString();
   const rosterData = cleanForFirestore(makePhotoFreeRosterSnapshot(roster));
   const playerCount = Array.isArray(rosterData.players) ? rosterData.players.length : 0;
@@ -294,6 +378,8 @@ export async function createFirebaseSharedRoster(roster: RoomRoster, groupId?: s
     memberUids: groupMemberUids,
     memberEmails: groupMemberEmails,
     pendingInviteEmails: groupPendingInviteEmails,
+    memberNamesByUid: groupMemberNamesByUid,
+    memberNamesByEmail: groupMemberNamesByEmail,
     roleByUid: groupRoleByUid,
     version: 1,
     playerCount,
@@ -313,6 +399,8 @@ export async function createFirebaseSharedRoster(roster: RoomRoster, groupId?: s
   const batch = writeBatch(getFairTeamsFirestore());
   batch.update(groupRef, {
     rosterIds: arrayUnion(docRef.id),
+    memberNamesByUid: groupMemberNamesByUid,
+    memberNamesByEmail: groupMemberNamesByEmail,
     lastSavedByUid: user.uid,
     lastSavedByEmail: user.email,
     lastSavedRosterId: docRef.id,
@@ -461,12 +549,17 @@ export async function acceptFirebaseGroupInvite(groupId: string): Promise<Fireba
     ...(groupData.roleByUid && typeof groupData.roleByUid === "object" ? groupData.roleByUid as Record<string, unknown> : {}),
     [user.uid]: "editor",
   };
+  const organizerName = nameFromUser(user);
+  const nextMemberNamesByUid = { ...cleanNameMap(groupData.memberNamesByUid), [user.uid]: organizerName };
+  const nextMemberNamesByEmail = { ...cleanNameMap(groupData.memberNamesByEmail), [email]: organizerName };
 
   const batch = writeBatch(getFairTeamsFirestore());
   batch.update(groupRef, {
     memberUids: arrayUnion(user.uid),
     memberEmails: arrayUnion(email),
     pendingInviteEmails: arrayRemove(email),
+    memberNamesByUid: nextMemberNamesByUid,
+    memberNamesByEmail: nextMemberNamesByEmail,
     roleByUid: nextRoleByUid,
     updatedAt: serverTimestamp(),
     updatedAtIso: now,
@@ -476,6 +569,8 @@ export async function acceptFirebaseGroupInvite(groupId: string): Promise<Fireba
       memberUids: arrayUnion(user.uid),
       memberEmails: arrayUnion(email),
       pendingInviteEmails: arrayRemove(email),
+      memberNamesByUid: nextMemberNamesByUid,
+      memberNamesByEmail: nextMemberNamesByEmail,
       roleByUid: nextRoleByUid,
       updatedAt: serverTimestamp(),
       updatedAtIso: now,
@@ -550,6 +645,9 @@ export async function saveFirebaseSharedRoster(roster: RoomRoster): Promise<Fire
     const rosterData = makeSharedRosterUpdateSnapshot(data.rosterData, roster);
     const playerCount = Array.isArray(rosterData.players) ? rosterData.players.length : 0;
     const remoteName = typeof data.name === "string" && data.name.trim() ? data.name : roster.name || "Shared roster";
+    const organizerName = nameFromUser(user);
+    const memberNamesByUid = { ...cleanNameMap(data.memberNamesByUid), [user.uid]: organizerName };
+    const memberNamesByEmail = { ...cleanNameMap(data.memberNamesByEmail), [normalizeEmail(user.email)]: organizerName };
     const payload = {
       name: remoteName,
       groupId,
@@ -557,6 +655,8 @@ export async function saveFirebaseSharedRoster(roster: RoomRoster): Promise<Fire
       version: nextVersion,
       playerCount,
       rosterData,
+      memberNamesByUid,
+      memberNamesByEmail,
       updatedAt: serverTimestamp(),
       updatedAtIso: now,
       lastSavedByUid: user.uid,
@@ -568,6 +668,8 @@ export async function saveFirebaseSharedRoster(roster: RoomRoster): Promise<Fire
     transaction.update(docRef, payload);
     if (groupId) {
       transaction.update(doc(getFairTeamsFirestore(), "sharedGroups", groupId), {
+        memberNamesByUid,
+        memberNamesByEmail,
         lastSavedByUid: user.uid,
         lastSavedByEmail: user.email,
         lastSavedRosterId: rosterId,
@@ -591,6 +693,8 @@ export async function saveFirebaseSharedRoster(roster: RoomRoster): Promise<Fire
       createdAt: timestampToIso(data.createdAt),
       updatedAt: now,
       currentUserRole: role === "owner" || role === "editor" || role === "viewer" ? role : "member",
+      memberNamesByEmail,
+      memberNamesByUid,
       lastSavedByEmail: user.email,
     } as FirebaseSharedRosterSummary;
   });

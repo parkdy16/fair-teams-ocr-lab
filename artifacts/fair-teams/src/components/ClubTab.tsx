@@ -35,6 +35,7 @@ type ClubTabProps = {
   onBackTargetChange?: (hasBackTarget: boolean) => void;
   equipmentGroupId?: string;
   equipmentHolderLabels?: string[];
+  equipmentHolderNamesByEmail?: Record<string, string>;
 };
 
 type ClubVoteOption = {
@@ -140,16 +141,71 @@ function isLikelyCurrentUserLabel(value: string) {
   }
 }
 
-function cleanEquipmentHolderLabel(value: string) {
+function titleCaseWords(value: string) {
+  return value
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function looksLikeReadableName(value: string) {
+  const candidate = value.trim();
+  if (!candidate) return false;
+  if (/\d/.test(candidate)) return false;
+  const words = candidate.split(/\s+/).filter(Boolean);
+  if (!words.length) return false;
+  return words.every((word) => /^[a-zA-ZÀ-ž]{2,}$/.test(word));
+}
+
+function cleanEquipmentHolderLabel(value: string, namesByEmail: Record<string, string> = {}) {
   const trimmed = value.trim();
   if (!trimmed) return "Organizer";
   if (isLikelyCurrentUserLabel(trimmed)) return "You";
+
+  const normalizedEmail = trimmed.toLowerCase();
+  const savedName = normalizedEmail.includes("@") ? namesByEmail[normalizedEmail] : undefined;
+  if (savedName?.trim()) return titleCaseWords(savedName.trim());
+
   const emailName = trimmed.includes("@") ? trimmed.split("@")[0] : trimmed;
-  return emailName
-    .replace(/[._-]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .replace(/\b\w/g, (char) => char.toUpperCase()) || "Organizer";
+  const readableName = titleCaseWords(emailName.replace(/[._-]+/g, " "));
+  return looksLikeReadableName(readableName) ? readableName : "Organizer";
+}
+
+function buildSharedEquipmentHolders(labels: string[], equipmentKits: ClubEquipmentKit[], namesByEmail: Record<string, string> = {}) {
+  const seen = new Set(["storage"]);
+  const normalizedLabels = labels
+    .map((label) => label.trim().toLowerCase())
+    .filter(Boolean)
+    .filter((label, index, all) => all.indexOf(label) === index);
+
+  const currentUserLabels = normalizedLabels.filter(isLikelyCurrentUserLabel);
+  const otherLabels = normalizedLabels.filter((label) => !isLikelyCurrentUserLabel(label));
+
+  const holders: EquipmentHolder[] = [];
+  const addHolder = (id: string, label: string) => {
+    const holderId = normalizeEquipmentHolderId(id);
+    if (!holderId || seen.has(holderId)) return;
+    seen.add(holderId);
+    holders.push({ id: holderId, label });
+  };
+
+  currentUserLabels.forEach((label) => addHolder(makeEquipmentHolderId(label), "You"));
+  otherLabels.slice(0, 8).forEach((label, index) => {
+    const cleaned = cleanEquipmentHolderLabel(label, namesByEmail);
+    addHolder(makeEquipmentHolderId(label), cleaned === "Organizer" ? `Organizer ${index + 1}` : cleaned);
+  });
+
+  equipmentKits
+    .map((kit) => normalizeEquipmentHolderId(kit.holderId))
+    .filter((holderId) => holderId && !seen.has(holderId))
+    .forEach((holderId) => addHolder(holderId, cleanEquipmentHolderLabel(holderId, namesByEmail)));
+
+  if (!holders.length) holders.push({ id: "organizer", label: "Organizer" });
+
+  return [
+    { id: "storage", label: "Club storage" },
+    ...holders,
+  ];
 }
 
 function makeEquipmentHolderId(value: string) {
@@ -372,6 +428,7 @@ export function ClubTab({
   onBackTargetChange,
   equipmentGroupId,
   equipmentHolderLabels = [],
+  equipmentHolderNamesByEmail = {},
 }: ClubTabProps) {
   const [votes, setVotes] = useState<ClubVote[]>(() => {
     if (typeof window === "undefined") return [];
@@ -426,50 +483,24 @@ export function ClubTab({
     ? equipmentError
       ? "Sync issue. Open board."
       : equipmentLoading
-        ? "Connected · loading latest…"
-        : "Connected · realtime sync on."
+        ? "Loading shared equipment…"
+        : "Realtime sync on."
     : equipmentSharedConnecting
-      ? "Opening shared board…"
+      ? "Shared sync not ready yet."
       : "Local preview.";
   const equipmentBoardStatusText = equipmentRealtimeEnabled
     ? equipmentError
       ? equipmentError
       : equipmentLoading
-        ? "Connected · loading latest equipment…"
-        : "Connected · realtime sync on · drag bags to move"
+        ? "Loading shared equipment…"
+        : "Realtime sync on · drag bags to move"
     : equipmentSharedConnecting
-      ? "Opening shared board…"
+      ? "Shared sync not ready yet."
       : "Local preview · drag bags to move";
   const equipmentHolders = useMemo<EquipmentHolder[]>(() => {
     if (!isSharedRoster && !equipmentRealtimeEnabled) return LOCAL_EQUIPMENT_HOLDERS;
-
-    const seen = new Set(["storage"]);
-    const sharedHolders = equipmentHolderLabels
-      .map((label) => ({ id: makeEquipmentHolderId(label), label: cleanEquipmentHolderLabel(label) }))
-      .filter((holder) => {
-        if (!holder.id || seen.has(holder.id)) return false;
-        seen.add(holder.id);
-        return true;
-      })
-      .slice(0, 8);
-    const fallbackHolders = sharedHolders.length > 0
-      ? sharedHolders
-      : [{ id: "organizer", label: "Organizer" }];
-    fallbackHolders.forEach((holder) => seen.add(holder.id));
-    const bagOnlyHolders = equipmentKits
-      .map((kit) => kit.holderId)
-      .map((holderId) => normalizeEquipmentHolderId(holderId))
-      .filter((holderId) => holderId && !seen.has(holderId))
-      .map((holderId) => {
-        seen.add(holderId);
-        return { id: holderId, label: cleanEquipmentHolderLabel(holderId) };
-      });
-    return [
-      { id: "storage", label: "Club storage" },
-      ...fallbackHolders,
-      ...bagOnlyHolders,
-    ];
-  }, [equipmentHolderLabels, equipmentKits, equipmentRealtimeEnabled, isSharedRoster]);
+    return buildSharedEquipmentHolders(equipmentHolderLabels, equipmentKits, equipmentHolderNamesByEmail);
+  }, [equipmentHolderLabels, equipmentHolderNamesByEmail, equipmentKits, equipmentRealtimeEnabled, isSharedRoster]);
 
   useEffect(() => {
     if (typeof window === "undefined" || equipmentRealtimeEnabled || isSharedRoster) return;

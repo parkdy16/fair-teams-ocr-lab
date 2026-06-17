@@ -524,6 +524,10 @@ function App() {
         .map((email) => [email, "editor"]),
     );
 
+  const firebaseMemberNamesFromSummary = (summary: FirebaseSharedRosterSummary) => ({
+    ...(summary.memberNamesByEmail || {}),
+  });
+
   const rosterFirebaseShareCount = (roster: RoomRoster | undefined) => {
     const source = roster?.cloudSource?.provider === "firebase" ? roster.cloudSource : undefined;
     const ownerEmail = source?.firebaseOwnerEmail?.toLowerCase();
@@ -541,6 +545,7 @@ function App() {
         .map((email) => (email || "").trim().toLowerCase())
         .filter((email) => email.includes("@"))))
     : [];
+  const activeFirebaseEquipmentHolderNamesByEmail = activeFirebaseSource?.firebaseMemberNamesByEmail || {};
 
   const syncFirebaseRosterBadgesFromSummaries = (summaries: FirebaseSharedRosterSummary[]) => {
     if (!summaries.length) return;
@@ -554,9 +559,13 @@ function App() {
         if (!summary) return roster;
 
         const nextAccessLabels = firebaseAccessLabelsFromSummary(summary);
+        const nextMemberNamesByEmail = firebaseMemberNamesFromSummary(summary);
         const currentLabels = source.accessLabels || {};
+        const currentMemberNamesByEmail = source.firebaseMemberNamesByEmail || {};
         const currentLabelSignature = JSON.stringify(Object.keys(currentLabels).sort().map((email) => [email, currentLabels[email]]));
         const nextLabelSignature = JSON.stringify(Object.keys(nextAccessLabels).sort().map((email) => [email, nextAccessLabels[email]]));
+        const currentMemberNameSignature = JSON.stringify(Object.keys(currentMemberNamesByEmail).sort().map((email) => [email, currentMemberNamesByEmail[email]]));
+        const nextMemberNameSignature = JSON.stringify(Object.keys(nextMemberNamesByEmail).sort().map((email) => [email, nextMemberNamesByEmail[email]]));
         const nextGroupId = summary.groupId || source.firebaseGroupId;
         const nextGroupName = summary.groupName || source.firebaseGroupName;
         const nextRole = summary.currentUserRole || source.firebaseRole;
@@ -565,6 +574,7 @@ function App() {
         const nextLastSavedByEmail = summary.lastSavedByEmail || source.firebaseLastSavedByEmail;
         const metadataChanged =
           currentLabelSignature !== nextLabelSignature ||
+          currentMemberNameSignature !== nextMemberNameSignature ||
           source.firebaseGroupId !== nextGroupId ||
           source.firebaseGroupName !== nextGroupName ||
           source.firebaseRole !== nextRole ||
@@ -584,6 +594,7 @@ function App() {
             firebaseOwnerUid: nextOwnerUid,
             firebaseOwnerEmail: nextOwnerEmail,
             firebaseLastSavedByEmail: nextLastSavedByEmail,
+            firebaseMemberNamesByEmail: nextMemberNamesByEmail,
             accessLabels: nextAccessLabels,
           },
         });
@@ -1116,6 +1127,7 @@ function App() {
               firebaseOwnerEmail: firebaseSummary.ownerEmail,
               firebaseRole: firebaseSummary.currentUserRole,
               firebaseLastSavedByEmail: firebaseSummary.lastSavedByEmail,
+              firebaseMemberNamesByEmail: firebaseMemberNamesFromSummary(firebaseSummary),
               lastSyncedAt: new Date().toISOString(),
               lastRemoteModifiedAt: firebaseSummary.updatedAt,
               accessLabels: firebaseAccessLabelsFromSummary(firebaseSummary),
@@ -1154,6 +1166,7 @@ function App() {
                   firebaseOwnerEmail: summary.ownerEmail,
                   firebaseRole: summary.currentUserRole,
                   firebaseLastSavedByEmail: summary.lastSavedByEmail,
+                  firebaseMemberNamesByEmail: firebaseMemberNamesFromSummary(summary),
                   accessLabels: firebaseAccessLabelsFromSummary(summary),
                   lastSyncedAt: summary.updatedAt || new Date().toISOString(),
                   lastRemoteModifiedAt: summary.updatedAt,
@@ -1210,6 +1223,7 @@ function App() {
               firebaseOwnerEmail: summary.ownerEmail,
               firebaseRole: summary.currentUserRole,
               firebaseLastSavedByEmail: summary.lastSavedByEmail,
+              firebaseMemberNamesByEmail: firebaseMemberNamesFromSummary(summary),
               accessLabels: firebaseAccessLabelsFromSummary(summary),
               lastSyncedAt: summary.updatedAt || new Date().toISOString(),
               lastRemoteModifiedAt: summary.updatedAt,
@@ -2937,6 +2951,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 onBackTargetChange={setClubBackTargetOpen}
                 equipmentGroupId={activeFirebaseSource?.firebaseGroupId || (activeFirebaseSource?.firebaseRosterId ? `roster:${activeFirebaseSource.firebaseRosterId}` : undefined)}
                 equipmentHolderLabels={activeFirebaseEquipmentHolderLabels}
+                equipmentHolderNamesByEmail={activeFirebaseEquipmentHolderNamesByEmail}
               />
             </TabsContent>
             <PoweredByFairTeams />

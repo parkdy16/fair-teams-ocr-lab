@@ -1107,7 +1107,22 @@ function App() {
 
 
   const openFirebaseSharedRosterAsLocalCopy = (sharedRoster: RoomRoster, sourceName: string, firebaseSummary?: FirebaseSharedRosterSummary) => {
+    const firebaseRosterId = firebaseSummary?.id;
+    let openedExisting = false;
+
     setRosterState((current) => {
+      const existingLinkedRoster = firebaseRosterId
+        ? current.rosters.find((roster) => roster.cloudSource?.provider === "firebase" && roster.cloudSource.firebaseRosterId === firebaseRosterId)
+        : undefined;
+
+      if (existingLinkedRoster) {
+        openedExisting = true;
+        return {
+          ...current,
+          activeRosterId: existingLinkedRoster.id,
+        };
+      }
+
       const imported = createRoster(
         uniqueRosterName(sourceName || sharedRoster.name || "Firebase roster", current.rosters),
         sharedRoster.players,
@@ -1142,8 +1157,10 @@ function App() {
     });
     setRosterToolsNotice({
       tone: "success",
-      title: "Firebase roster opened",
-      message: `${firebaseSummary?.groupName ? `${firebaseSummary.groupName} · ` : ""}${sourceName || sharedRoster.name || "Shared roster"} was opened as a linked local copy. You can now save changes back to Firebase.`,
+      title: openedExisting ? "Shared roster selected" : "Firebase roster opened",
+      message: openedExisting
+        ? `${firebaseSummary?.groupName ? `${firebaseSummary.groupName} · ` : ""}${sourceName || sharedRoster.name || "Shared roster"} is already open on this device.`
+        : `${firebaseSummary?.groupName ? `${firebaseSummary.groupName} · ` : ""}${sourceName || sharedRoster.name || "Shared roster"} was opened as a linked local copy. You can now save changes back to Firebase.`,
     });
   };
 

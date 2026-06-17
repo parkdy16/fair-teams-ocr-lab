@@ -39,9 +39,29 @@ function friendlyFirestoreError(error: unknown) {
   return message.replace(/^Firebase:\s*/i, "");
 }
 
-function shortName(email?: string) {
+function fallbackNameFromEmail(email?: string) {
   if (!email) return "—";
-  return email.split("@")[0] || email;
+  const prefix = email.split("@")[0] || email;
+  return prefix
+    .replace(/[._-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\w/g, (char) => char.toUpperCase()) || email;
+}
+
+function displayNameForEmail(email: string | undefined, memberNamesByEmail?: Record<string, string>, currentUserEmail?: string) {
+  if (!email) return "—";
+  const normalized = email.trim().toLowerCase();
+  if (currentUserEmail && normalized === currentUserEmail.trim().toLowerCase()) return "You";
+  const savedName = memberNamesByEmail?.[normalized] || memberNamesByEmail?.[email];
+  return savedName || fallbackNameFromEmail(email);
+}
+
+function mergedMemberNames(group?: FirebaseSharedGroupSummary | null, roster?: FirebaseSharedRosterSummary | null) {
+  return {
+    ...(roster?.memberNamesByEmail || {}),
+    ...(group?.memberNamesByEmail || {}),
+  };
 }
 
 function canRoleSave(role?: string, isOwner?: boolean) {
@@ -348,11 +368,13 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, rosters = [], is
               const collaboratorCount = group ? Math.max(0, group.memberCount - 1) + (group.pendingInviteEmails?.length || 0) : Math.max(0, (roster.memberEmails?.length || 1) - 1) + (roster.pendingInviteEmails?.length || 0);
               const linked = linkedRosters.some((local) => local.cloudSource?.provider === "firebase" && local.cloudSource.firebaseRosterId === roster.id);
               const isOwner = roster.ownerUid === user?.uid;
+              const memberNamesByEmail = mergedMemberNames(group, roster);
+              const savedByName = displayNameForEmail(roster.lastSavedByEmail || roster.ownerEmail, memberNamesByEmail, user?.email);
               return (
                 <div key={roster.id} className={`grid grid-cols-[1fr_auto_auto] items-center gap-2 rounded-2xl px-3 py-2 ${linked ? "bg-emerald-50" : "bg-slate-50"}`}>
                   <button type="button" onClick={() => handleOpenRoster(roster.id)} disabled={Boolean(busy)} className="min-w-0 text-left active:scale-[0.99]">
                     <span className="block truncate text-xs font-black text-[#102A43]">{roster.name}</span>
-                    <span className="block truncate text-[10px] font-semibold text-slate-500">saved by {shortName(roster.lastSavedByEmail || roster.ownerEmail)}</span>
+                    <span className="block truncate text-[10px] font-semibold text-slate-500">saved by {savedByName}</span>
                   </button>
                   <button type="button" onClick={() => openCollaborators(roster.id)} className="flex h-8 items-center gap-1 rounded-xl bg-white px-2 text-[10px] font-black text-emerald-700 shadow-sm">
                     <Users className="h-3.5 w-3.5" />
@@ -383,18 +405,36 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, rosters = [], is
             </Button>
           </div>
           <div className="grid gap-1.5">
-            {(collaboratorGroup?.memberEmails || collaboratorRoster.memberEmails || []).map((email) => (
-              <div key={email} className="flex items-center justify-between rounded-2xl bg-slate-50 px-3 py-2 text-xs font-bold text-[#102A43]">
-                <span className="truncate">{email}</span>
-                <span className="text-[10px] text-emerald-700">{email === collaboratorRoster.ownerEmail ? "owner" : "active"}</span>
-              </div>
-            ))}
-            {(collaboratorGroup?.pendingInviteEmails || collaboratorRoster.pendingInviteEmails || []).map((email) => (
-              <div key={email} className="flex items-center justify-between gap-2 rounded-2xl bg-amber-50 px-3 py-2 text-xs font-bold text-[#102A43]">
-                <span className="min-w-0 truncate">{email}</span>
-                <button type="button" onClick={() => handleCancelInvite(email)} className="rounded-full bg-white p-1.5 text-amber-700" disabled={Boolean(busy)}><X className="h-3.5 w-3.5" /></button>
-              </div>
-            ))}
+            {(() => {
+              const memberNamesByEmail = mergedMemberNames(collaboratorGroup, collaboratorRoster);
+              const memberEmails = collaboratorGroup?.memberEmails || collaboratorRoster.memberEmails || [];
+              const pendingEmails = collaboratorGroup?.pendingInviteEmails || collaboratorRoster.pendingInviteEmails || [];
+              return (
+                <>
+                  {memberEmails.map((email) => {
+                    const label = displayNameForEmail(email, memberNamesByEmail, user?.email);
+                    return (
+                      <div key={email} className="flex items-center justify-between gap-2 rounded-2xl bg-slate-50 px-3 py-2 text-xs font-bold text-[#102A43]">
+                        <div className="min-w-0">
+                          <div className="truncate">{label}</div>
+                          <div className="truncate text-[10px] text-slate-500">{email}</div>
+                        </div>
+                        <span className="shrink-0 text-[10px] text-emerald-700">{email === collaboratorRoster.ownerEmail ? "owner" : "active"}</span>
+                      </div>
+                    );
+                  })}
+                  {pendingEmails.map((email) => (
+                    <div key={email} className="flex items-center justify-between gap-2 rounded-2xl bg-amber-50 px-3 py-2 text-xs font-bold text-[#102A43]">
+                      <div className="min-w-0">
+                        <div className="truncate">{displayNameForEmail(email, memberNamesByEmail, user?.email)}</div>
+                        <div className="truncate text-[10px] text-amber-700">Pending · {email}</div>
+                      </div>
+                      <button type="button" onClick={() => handleCancelInvite(email)} className="rounded-full bg-white p-1.5 text-amber-700" disabled={Boolean(busy)}><X className="h-3.5 w-3.5" /></button>
+                    </div>
+                  ))}
+                </>
+              );
+            })()}
           </div>
         </div>
       ))}

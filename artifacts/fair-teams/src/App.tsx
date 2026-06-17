@@ -25,6 +25,7 @@ import {
 import { PlayersTab } from "@/components/PlayersTab";
 import { TodayTab } from "@/components/TodayTab";
 import { TeamsTab } from "@/components/TeamsTab";
+import { ClubTab } from "@/components/ClubTab";
 import type { PairingRule } from "@/lib/types";
 import { FirebaseSharedRosterAuthCard } from "@/components/FirebaseSharedRosterAuthCard";
 import { FirebaseSharedRosterPublishCard } from "@/components/FirebaseSharedRosterPublishCard";
@@ -2568,7 +2569,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   <span className="block">Better games.</span>
                 </span>
               )}
-              {activeTab !== "teams" && !shouldShowTodayStartHeader && (
+              {activeTab !== "teams" && activeTab !== "club" && !shouldShowTodayStartHeader && (
                 <Button
                   type="button"
                   variant="secondary"
@@ -2666,13 +2667,25 @@ They will no longer be able to open or edit this shared roster unless it is shar
             >
               <TeamsTab players={players} pairingRules={pairingRules} />
             </TabsContent>
+            <TabsContent
+              value="club"
+              className="fairteams-tab-panel m-0 data-[state=active]:animate-in data-[state=active]:fade-in-50"
+            >
+              <ClubTab
+                activeRosterName={activeRosterName}
+                playerCount={players.length}
+                isSharedRoster={activeRosterIsFirebaseShared}
+                collaboratorCount={rosterFirebaseShareCount(activeRoster)}
+                onOpenSharedTools={openJoinSharedRoster}
+              />
+            </TabsContent>
             <PoweredByFairTeams />
           </div>
         </div>
 
         {!shouldShowTodayStartHeader && (
           <div className="fixed inset-x-0 bottom-0 z-40 mx-auto w-full max-w-md animate-in fade-in-0 slide-in-from-bottom-2 duration-200 border-t border-slate-200 bg-white/95 px-4 pb-[max(0.65rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-4px_14px_rgba(15,23,42,0.035)] backdrop-blur md:max-w-3xl lg:max-w-5xl">
-            <TabsList className="mx-auto grid h-[50px] w-full max-w-md grid-cols-3 gap-1 rounded-2xl border border-slate-200/70 bg-white p-1.5 shadow-sm">
+            <TabsList className="mx-auto grid h-[50px] w-full max-w-md grid-cols-4 gap-1 rounded-2xl border border-slate-200/70 bg-white p-1.5 shadow-sm">
               <TabsTrigger
                 value="players"
                 className="fairteams-tab-trigger fairteams-footer-text-tab flex h-full items-center justify-center rounded-xl text-slate-500 transition-all"
@@ -2690,6 +2703,12 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 className="fairteams-tab-trigger fairteams-footer-text-tab flex h-full items-center justify-center rounded-xl text-slate-500 transition-all"
               >
                 <span className="text-[12px] font-semibold leading-none tracking-tight">Teams</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="club"
+                className="fairteams-tab-trigger fairteams-footer-text-tab flex h-full items-center justify-center rounded-xl text-slate-500 transition-all"
+              >
+                <span className="text-[12px] font-semibold leading-none tracking-tight">Club</span>
               </TabsTrigger>
             </TabsList>
           </div>

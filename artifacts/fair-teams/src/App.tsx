@@ -3108,8 +3108,8 @@ They will no longer be able to open or edit this shared roster unless it is shar
                     {isEmptyStarterRoster
                       ? "Create one below or import a roster"
                       : activeRosterIsShared
-                        ? `${!isEmptyStarterRoster && rosters.length > 1 ? "Tap row to change · " : ""}${players.length} player${players.length === 1 ? "" : "s"} · ${activeSharedHasUnsavedChanges ? "shared changes not saved" : "shared"}`
-                        : `${!isEmptyStarterRoster && rosters.length > 1 ? "Tap row to change · " : ""}${players.length} player${players.length === 1 ? "" : "s"}`}
+                        ? `${players.length} player${players.length === 1 ? "" : "s"} · ${activeSharedHasUnsavedChanges ? "shared changes not saved" : "shared"}`
+                        : `${players.length} player${players.length === 1 ? "" : "s"}`}
                   </div>
                 </div>
                 {!isEmptyStarterRoster && rosters.length > 1 && (

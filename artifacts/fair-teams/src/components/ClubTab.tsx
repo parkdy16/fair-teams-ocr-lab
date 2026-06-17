@@ -84,8 +84,8 @@ const DEFAULT_EQUIPMENT_COLOR = EQUIPMENT_COLORS[0];
 
 const LOCAL_EQUIPMENT_HOLDERS: EquipmentHolder[] = [
   { id: "storage", label: "Club storage" },
-  { id: "joon", label: "Joon" },
-  { id: "sarah", label: "Sarah" },
+  { id: "you", label: "You" },
+  { id: "other", label: "Other organizer" },
   { id: "unknown", label: "Unknown" },
 ];
 
@@ -93,7 +93,7 @@ const DEFAULT_EQUIPMENT_KITS: ClubEquipmentKit[] = [
   {
     id: "kit-ball-bag",
     name: "Ball bag",
-    holderId: "joon",
+    holderId: "you",
     color: "#2563eb",
     contents: ["2 balls", "Pump", "Needles"],
     note: "Check air before Saturday.",
@@ -399,8 +399,10 @@ export function ClubTab({
   }, [votes]);
 
   const equipmentRealtimeEnabled = Boolean(equipmentGroupId);
+  const equipmentSharedSetupMissing = isSharedRoster && !equipmentRealtimeEnabled;
   const equipmentHolders = useMemo<EquipmentHolder[]>(() => {
-    if (!equipmentRealtimeEnabled) return LOCAL_EQUIPMENT_HOLDERS;
+    if (!isSharedRoster && !equipmentRealtimeEnabled) return LOCAL_EQUIPMENT_HOLDERS;
+
     const seen = new Set(["storage", "unknown"]);
     const sharedHolders = equipmentHolderLabels
       .map((label) => ({ id: makeEquipmentHolderId(label), label: cleanEquipmentHolderLabel(label) }))
@@ -410,6 +412,10 @@ export function ClubTab({
         return true;
       })
       .slice(0, 8);
+    const fallbackHolders = sharedHolders.length > 0
+      ? sharedHolders
+      : [{ id: "organizer", label: "Organizer" }];
+    fallbackHolders.forEach((holder) => seen.add(holder.id));
     const bagOnlyHolders = equipmentKits
       .map((kit) => kit.holderId)
       .filter((holderId) => holderId && !seen.has(holderId) && holderId !== "unknown")
@@ -419,23 +425,25 @@ export function ClubTab({
       });
     return [
       { id: "storage", label: "Club storage" },
-      ...sharedHolders,
+      ...fallbackHolders,
       ...bagOnlyHolders,
       { id: "unknown", label: "Unknown" },
     ];
-  }, [equipmentHolderLabels, equipmentKits, equipmentRealtimeEnabled]);
+  }, [equipmentHolderLabels, equipmentKits, equipmentRealtimeEnabled, isSharedRoster]);
 
   useEffect(() => {
-    if (typeof window === "undefined" || equipmentRealtimeEnabled) return;
+    if (typeof window === "undefined" || equipmentRealtimeEnabled || isSharedRoster) return;
     window.localStorage.setItem(EQUIPMENT_PREVIEW_STORAGE_KEY, JSON.stringify(equipmentKits));
-  }, [equipmentKits, equipmentRealtimeEnabled]);
+  }, [equipmentKits, equipmentRealtimeEnabled, isSharedRoster]);
 
   useEffect(() => {
     if (!equipmentGroupId) {
       setEquipmentLoading(false);
       setEquipmentError("");
       setEquipmentLastSyncedAt(null);
-      if (typeof window !== "undefined") {
+      if (isSharedRoster) {
+        setEquipmentKits([]);
+      } else if (typeof window !== "undefined") {
         setEquipmentKits(parseEquipmentKits(window.localStorage.getItem(EQUIPMENT_PREVIEW_STORAGE_KEY)));
       }
       return;
@@ -534,6 +542,10 @@ export function ClubTab({
   };
 
   const openNewEquipmentKit = () => {
+    if (equipmentSharedSetupMissing) {
+      setEquipmentError("Open this roster from Shared Roster tools once to connect realtime equipment.");
+      return;
+    }
     resetEquipmentForm();
     setEquipmentDialogOpen(true);
   };
@@ -573,6 +585,11 @@ export function ClubTab({
         ? current.map((kit) => kit.id === editingKitId ? nextKit : kit)
         : [nextKit, ...current]);
     };
+
+    if (equipmentSharedSetupMissing) {
+      setEquipmentError("Open this roster from Shared Roster tools once to connect realtime equipment.");
+      return;
+    }
 
     try {
       setEquipmentSaving(true);
@@ -669,6 +686,11 @@ export function ClubTab({
   const deleteEquipmentKit = async (kitId: string) => {
     const previous = equipmentKits;
     setEquipmentKits((current) => current.filter((kit) => kit.id !== kitId));
+    if (equipmentSharedSetupMissing) {
+      setEquipmentError("Open this roster from Shared Roster tools once to connect realtime equipment.");
+      return;
+    }
+
     try {
       setEquipmentSaving(true);
       setEquipmentError("");
@@ -904,13 +926,15 @@ export function ClubTab({
                 {equipmentKits.length} equipment bag{equipmentKits.length === 1 ? "" : "s"}
               </div>
               <p className="mt-1 text-[11px] font-semibold leading-snug text-slate-500">
-                {equipmentRealtimeEnabled
-                  ? equipmentLoading
-                    ? "Connecting to shared equipment…"
-                    : equipmentError
-                      ? "Realtime board needs attention."
-                      : "Realtime for this shared group."
-                  : "Local preview. Shared rosters can use realtime equipment."}
+                {equipmentSharedSetupMissing
+                  ? "Shared roster detected. Reopen it from Shared Roster tools once to connect equipment."
+                  : equipmentRealtimeEnabled
+                    ? equipmentLoading
+                      ? "Connecting to shared equipment…"
+                      : equipmentError
+                        ? "Realtime board needs attention."
+                        : "Realtime for this shared group."
+                    : "Local preview. Shared rosters can use realtime equipment."}
               </p>
             </div>
             <Button
@@ -1055,13 +1079,15 @@ export function ClubTab({
 
           <div className="flex-1 overflow-y-auto bg-slate-50/70 p-3">
             <div className="mb-2 rounded-2xl border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold leading-snug text-slate-500 shadow-sm">
-              {equipmentRealtimeEnabled
-                ? equipmentError
+              {equipmentSharedSetupMissing
+                ? "Shared roster is open, but equipment is not connected yet. Reopen this roster from Shared Roster tools once."
+                : equipmentRealtimeEnabled
                   ? equipmentError
-                  : equipmentLoading
-                    ? "Loading shared equipment…"
-                    : "Realtime board. Hold + drag to move. Tap to edit."
-                : "Local preview. Hold + drag to move. Tap to edit."}
+                    ? equipmentError
+                    : equipmentLoading
+                      ? "Loading shared equipment…"
+                      : "Realtime board. Hold + drag to move. Tap to edit."
+                  : "Local preview. Hold + drag to move. Tap to edit."}
             </div>
 
             <div className="overflow-hidden rounded-[1.65rem] border border-slate-200 bg-white shadow-[0_14px_34px_rgba(15,23,42,0.08)]">

@@ -76,7 +76,7 @@ import {
   type GoogleSheetRosterFile,
 } from "@/lib/googleSheetsFiles";
 import { pickGoogleSheetRosterFile, warmUpGoogleDrivePicker } from "@/lib/googleDrivePicker";
-import type { FirebaseSharedRosterSummary } from "@/lib/sharedRosterService";
+import { listFirebaseSharedRosters, type FirebaseSharedRosterSummary } from "@/lib/sharedRosterService";
 
 const GROUP_NAME_STORAGE_KEY = "fair-teams-group-name";
 const HEADER_COLOR_STORAGE_KEY = "fair-teams-header-color-v2";
@@ -591,6 +591,27 @@ function App() {
       return changed ? { ...current, rosters: rostersWithFreshBadges } : current;
     });
   };
+
+
+  useEffect(() => {
+    const missingFirebaseGroupLink = Boolean(
+      activeFirebaseSource?.firebaseRosterId && !activeFirebaseSource.firebaseGroupId,
+    );
+    if (!missingFirebaseGroupLink) return;
+    let cancelled = false;
+    listFirebaseSharedRosters()
+      .then((summaries) => {
+        if (cancelled) return;
+        syncFirebaseRosterBadgesFromSummaries(summaries);
+      })
+      .catch(() => {
+        // The Shared Roster tools will show detailed sign-in/permission errors.
+        // Club should simply stay in its safe "not connected yet" state.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeFirebaseSource?.firebaseRosterId, activeFirebaseSource?.firebaseGroupId]);
   const sharedGoogleSheetRosters = rosters.filter(
     (roster) => roster.cloudSource?.provider === "google-sheets" && Boolean(roster.cloudSource.spreadsheetId),
   );

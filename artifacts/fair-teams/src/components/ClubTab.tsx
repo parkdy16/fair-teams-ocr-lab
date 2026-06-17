@@ -28,11 +28,16 @@ import {
 
 type ClubTabProps = {
   activeRosterName: string;
+  activeRosterMeta?: string;
   playerCount: number;
   isSharedRoster: boolean;
   collaboratorCount: number;
-  onOpenSharedTools: () => void;
+  sharedToolsOpen?: boolean;
+  onSharedToolsOpenChange?: (open: boolean) => void;
+  canSwitchRoster?: boolean;
+  onOpenRosterPicker?: () => void;
   onBackTargetChange?: (hasBackTarget: boolean) => void;
+  sharedToolsNode?: React.ReactNode;
   equipmentGroupId?: string;
   equipmentHolderLabels?: string[];
   equipmentHolderNamesByEmail?: Record<string, string>;
@@ -421,11 +426,16 @@ function VoteCard({
 
 export function ClubTab({
   activeRosterName,
+  activeRosterMeta,
   playerCount,
   isSharedRoster,
   collaboratorCount,
-  onOpenSharedTools,
+  sharedToolsOpen = false,
+  onSharedToolsOpenChange,
+  canSwitchRoster = false,
+  onOpenRosterPicker,
   onBackTargetChange,
+  sharedToolsNode,
   equipmentGroupId,
   equipmentHolderLabels = [],
   equipmentHolderNamesByEmail = {},
@@ -465,6 +475,7 @@ export function ClubTab({
   const activeEquipmentDropHolderRef = useRef<string | null>(null);
   const suppressEquipmentClickRef = useRef(false);
   const equipmentBackStateRef = useRef({
+    sharedToolsOpen: false,
     colorPickerOpen: false,
     contentPeekKitId: null as string | null,
     equipmentBoardOpen: false,
@@ -776,6 +787,7 @@ export function ClubTab({
   };
 
   const hasClubBackTarget = Boolean(
+    sharedToolsOpen ||
     colorPickerOpen ||
     contentPeekKitId ||
     equipmentDialogOpen ||
@@ -785,13 +797,14 @@ export function ClubTab({
 
   useEffect(() => {
     equipmentBackStateRef.current = {
+      sharedToolsOpen,
       colorPickerOpen,
       contentPeekKitId,
       equipmentBoardOpen,
       equipmentDialogOpen,
       voteDialogOpen,
     };
-  }, [colorPickerOpen, contentPeekKitId, equipmentBoardOpen, equipmentDialogOpen, voteDialogOpen]);
+  }, [sharedToolsOpen, colorPickerOpen, contentPeekKitId, equipmentBoardOpen, equipmentDialogOpen, voteDialogOpen]);
 
   useEffect(() => {
     onBackTargetChange?.(hasClubBackTarget);
@@ -831,6 +844,11 @@ export function ClubTab({
         setEquipmentBoardOpen(false);
         return;
       }
+      if (state.sharedToolsOpen) {
+        event.preventDefault();
+        onSharedToolsOpenChange?.(false);
+        return;
+      }
       if (state.voteDialogOpen) {
         event.preventDefault();
         setVoteDialogOpen(false);
@@ -839,7 +857,7 @@ export function ClubTab({
 
     window.addEventListener("fairteams:native-back", handleNativeBack);
     return () => window.removeEventListener("fairteams:native-back", handleNativeBack);
-  }, []);
+  }, [onSharedToolsOpenChange]);
 
   const canCreateVote = question.trim().length > 0 && optionText.split("\n").filter((line) => line.trim()).length >= 2;
   const canSaveEquipmentKit = kitName.trim().length > 0;
@@ -857,7 +875,7 @@ export function ClubTab({
               Club
             </h1>
             <p className="mt-1 text-sm font-semibold leading-snug text-slate-600">
-              Shared roster, organizer votes, and equipment tracking will live here.
+              Shared roster, equipment, and votes.
             </p>
           </div>
           <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-3xl bg-white text-emerald-600 shadow-sm">
@@ -875,7 +893,7 @@ export function ClubTab({
                 {activeRosterName || "Current roster"}
               </div>
               <div className="mt-0.5 text-[11px] font-semibold text-slate-500">
-                {playerCount} player{playerCount === 1 ? "" : "s"} · {isSharedRoster ? `${collaboratorCount} collaborator${collaboratorCount === 1 ? "" : "s"}` : "local roster"}
+                {activeRosterMeta || `${playerCount} player${playerCount === 1 ? "" : "s"} · ${isSharedRoster ? `${collaboratorCount} collaborator${collaboratorCount === 1 ? "" : "s"}` : "local roster"}`}
               </div>
             </div>
             <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black ${isSharedRoster ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
@@ -888,15 +906,15 @@ export function ClubTab({
       <ClubFeatureCard
         icon={<Share2 className="h-5 w-5" />}
         eyebrow="Shared roster"
-        title="Collaborate"
-        description="Manage shared rosters and collaborators."
+        title="Shared rosters"
+        description="Sign in, invite organizers, save changes, and get latest."
       >
         <Button
           type="button"
           className="h-11 w-full rounded-2xl bg-[#102A43] text-sm font-black text-white hover:bg-[#0b2036]"
-          onClick={onOpenSharedTools}
+          onClick={() => onSharedToolsOpenChange?.(true)}
         >
-          Open shared roster tools
+          Open
         </Button>
       </ClubFeatureCard>
 
@@ -1012,14 +1030,53 @@ export function ClubTab({
         </div>
       </ClubFeatureCard>
 
-      <section className="rounded-3xl border border-dashed border-slate-200 bg-white/70 p-4 text-center">
-        <div className="text-[11px] font-black uppercase tracking-wide text-slate-400">
-          Launch plan
-        </div>
-        <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-          This tab is visible during testing. Later, normal solo users will keep the simpler Roster · Today · Teams navigation.
-        </p>
-      </section>
+
+
+
+      <Dialog open={sharedToolsOpen} onOpenChange={(open) => onSharedToolsOpenChange?.(open)}>
+        <DialogContent className="fixed bottom-2 left-2 right-2 top-2 flex h-auto max-h-none w-auto max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-[2rem] p-0 sm:bottom-auto sm:left-1/2 sm:right-auto sm:top-1/2 sm:h-[92dvh] sm:w-[calc(100vw-1rem)] sm:max-w-md sm:-translate-x-1/2 sm:-translate-y-1/2">
+          <DialogHeader className="border-b border-slate-100 px-4 py-4 text-left">
+            <DialogTitle className="flex items-center gap-2 text-base font-black text-[#102A43]">
+              <Share2 className="h-5 w-5 text-emerald-600" />
+              Shared rosters
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-slate-50/70 p-4" style={{ WebkitOverflowScrolling: "touch" }}>
+            <button
+              type="button"
+              className={`mb-3 flex w-full items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-3 text-left shadow-sm transition ${canSwitchRoster ? "active:scale-[0.995]" : "cursor-default"}`}
+              onClick={() => {
+                if (canSwitchRoster) onOpenRosterPicker?.();
+              }}
+              disabled={!canSwitchRoster}
+            >
+              <span className="min-w-0">
+                <span className="block text-[10px] font-black uppercase tracking-wide text-slate-400">
+                  Current roster
+                </span>
+                <span className="mt-1 block truncate text-sm font-black text-[#102A43]">
+                  {activeRosterName || "Current roster"}
+                </span>
+                <span className="mt-0.5 block truncate text-[11px] font-semibold text-slate-500">
+                  {activeRosterMeta || (isSharedRoster ? "Shared roster" : "Local roster")}
+                </span>
+              </span>
+              {canSwitchRoster && (
+                <span className="flex shrink-0 items-center gap-1 text-[11px] font-black uppercase tracking-wide text-[#102A43]/55">
+                  Change
+                </span>
+              )}
+            </button>
+
+            {sharedToolsNode || (
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm font-semibold text-slate-500">
+                Shared tools are not available in this build.
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={voteDialogOpen} onOpenChange={(open) => {
         setVoteDialogOpen(open);

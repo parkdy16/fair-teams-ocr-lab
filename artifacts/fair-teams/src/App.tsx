@@ -656,6 +656,7 @@ function App() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const logoInputRef = useRef<HTMLInputElement | null>(null);
   const [rosterFilesOpen, setRosterFilesOpen] = useState(false);
+  const [clubSharedToolsOpen, setClubSharedToolsOpen] = useState(false);
   const [rosterSharedToolsOpen, setRosterSharedToolsOpen] = useState(false);
   const [rosterLocalBackupToolsOpen, setRosterLocalBackupToolsOpen] = useState(false);
   const [rosterCloudBackupToolsOpen, setRosterCloudBackupToolsOpen] = useState(false);
@@ -685,14 +686,17 @@ function App() {
     setRosterSharedToolsOpen(false);
   };
   const openJoinSharedRoster = () => {
-    setRosterFilesOpen(true);
-    openRosterToolsPanel("shared");
+    closeRosterToolsPanel();
+    setRosterFilesOpen(false);
+    setActiveTab("club");
+    setClubSharedToolsOpen(true);
   };
 
   const finishSharedInviteOpen = (openedRoster: RoomRoster) => {
     setTodayRosterChosen(true);
     closeRosterToolsPanel();
     setRosterFilesOpen(false);
+    setClubSharedToolsOpen(false);
     setActiveTab(openedRoster.players.length > 0 ? "today" : "players");
   };
 
@@ -960,6 +964,7 @@ function App() {
   const appScrollLockActive =
     groupSettingsOpen ||
     rosterFilesOpen ||
+    clubSharedToolsOpen ||
     rosterPickerOpen ||
     clearRosterOpen ||
     Boolean(driveImportPreview) ||
@@ -2668,6 +2673,10 @@ They will no longer be able to open or edit this shared roster unless it is shar
       setGoogleSheetHelpOpen(false);
       return true;
     }
+    if (clubSharedToolsOpen) {
+      setClubSharedToolsOpen(false);
+      return true;
+    }
     if (rosterFilesOpen) {
       if (rosterToolsActivePanel) {
         closeRosterToolsPanel();
@@ -2725,6 +2734,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
     driveAccessOpen ||
     driveHelpOpen ||
     googleSheetHelpOpen ||
+    clubSharedToolsOpen ||
     rosterFilesOpen ||
     clubBackTargetOpen ||
     tabHistoryRef.current.length > 1 ||
@@ -2992,11 +3002,34 @@ They will no longer be able to open or edit this shared roster unless it is shar
             >
               <ClubTab
                 activeRosterName={activeRosterName}
+                activeRosterMeta={isEmptyStarterRoster
+                  ? "Create or choose a roster"
+                  : activeRosterIsShared
+                    ? `${players.length} player${players.length === 1 ? "" : "s"} · ${rosterFirebaseShareCount(activeRoster)} collaborator${rosterFirebaseShareCount(activeRoster) === 1 ? "" : "s"}`
+                    : `${players.length} player${players.length === 1 ? "" : "s"} · local roster`}
                 playerCount={players.length}
                 isSharedRoster={activeRosterIsFirebaseShared}
                 collaboratorCount={rosterFirebaseShareCount(activeRoster)}
-                onOpenSharedTools={openJoinSharedRoster}
+                sharedToolsOpen={clubSharedToolsOpen}
+                onSharedToolsOpenChange={setClubSharedToolsOpen}
+                canSwitchRoster={!isEmptyStarterRoster && rosters.length > 1}
+                onOpenRosterPicker={() => setRosterPickerOpen(true)}
                 onBackTargetChange={setClubBackTargetOpen}
+                sharedToolsNode={(
+                  <div className="grid gap-3">
+                    <FirebaseSharedRosterAuthCard />
+                    <FirebaseSharedRosterPublishCard
+                      activeRoster={activeRoster}
+                      rosters={rosters}
+                      isEmptyRoster={isEmptyStarterRoster}
+                      onOpenRoster={openFirebaseSharedRosterAsLocalCopy}
+                      onRosterSaved={markActiveFirebaseRosterSaved}
+                      onRefreshActiveRoster={refreshActiveFirebaseRosterFromRemote}
+                      onSharedRosterSummariesUpdated={syncFirebaseRosterBadgesFromSummaries}
+                      onSharedInviteOpened={finishSharedInviteOpen}
+                    />
+                  </div>
+                )}
                 equipmentGroupId={activeFirebaseSource?.firebaseGroupId || (activeFirebaseSource?.firebaseRosterId ? `roster:${activeFirebaseSource.firebaseRosterId}` : undefined)}
                 equipmentHolderLabels={activeFirebaseEquipmentHolderLabels}
                 equipmentHolderNamesByEmail={activeFirebaseEquipmentHolderNamesByEmail}
@@ -3498,7 +3531,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 )}
               </div>
 
-              <div className={`overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm ${rosterToolsActivePanel && rosterToolsActivePanel !== "shared" ? "hidden" : ""}`}>
+              <div className={`hidden overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm ${rosterToolsActivePanel && rosterToolsActivePanel !== "shared" ? "hidden" : ""}`}>
                 <button
                   type="button"
                   className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left transition active:scale-[0.99]"

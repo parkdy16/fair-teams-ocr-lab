@@ -786,6 +786,37 @@ export function ClubTab({
     if (activeElement instanceof HTMLElement) activeElement.blur();
   };
 
+  const releaseModalScrollLockSoon = () => {
+    if (typeof window === "undefined") return;
+    const clearScrollLock = () => {
+      document.body.style.overflow = "";
+      document.body.style.pointerEvents = "";
+      document.body.style.removeProperty("overflow");
+      document.body.style.removeProperty("pointer-events");
+      document.body.style.removeProperty("padding-right");
+      document.documentElement.style.overflow = "";
+      document.documentElement.style.removeProperty("overflow");
+      if (document.body.dataset.fairTeamsScrollLock === "true") {
+        delete document.body.dataset.fairTeamsScrollLock;
+      }
+    };
+
+    // Radix/RemoveScroll releases body styles asynchronously. Clear twice so a
+    // just-closed Shared Roster modal cannot leave the app in a frozen scroll state.
+    window.setTimeout(clearScrollLock, 80);
+    window.setTimeout(clearScrollLock, 240);
+  };
+
+  const handleSharedToolsOpenChange = (open: boolean) => {
+    if (!open) {
+      blurActiveField();
+      onSharedToolsOpenChange?.(false);
+      releaseModalScrollLockSoon();
+      return;
+    }
+    onSharedToolsOpenChange?.(true);
+  };
+
   const hasClubBackTarget = Boolean(
     sharedToolsOpen ||
     colorPickerOpen ||
@@ -846,7 +877,7 @@ export function ClubTab({
       }
       if (state.sharedToolsOpen) {
         event.preventDefault();
-        onSharedToolsOpenChange?.(false);
+        handleSharedToolsOpenChange(false);
         return;
       }
       if (state.voteDialogOpen) {
@@ -857,7 +888,7 @@ export function ClubTab({
 
     window.addEventListener("fairteams:native-back", handleNativeBack);
     return () => window.removeEventListener("fairteams:native-back", handleNativeBack);
-  }, [onSharedToolsOpenChange]);
+  }, [handleSharedToolsOpenChange]);
 
   const canCreateVote = question.trim().length > 0 && optionText.split("\n").filter((line) => line.trim()).length >= 2;
   const canSaveEquipmentKit = kitName.trim().length > 0;
@@ -912,7 +943,7 @@ export function ClubTab({
         <Button
           type="button"
           className="h-11 w-full rounded-2xl bg-[#102A43] text-sm font-black text-white hover:bg-[#0b2036]"
-          onClick={() => onSharedToolsOpenChange?.(true)}
+          onClick={() => handleSharedToolsOpenChange(true)}
         >
           Open
         </Button>
@@ -1033,7 +1064,7 @@ export function ClubTab({
 
 
 
-      <Dialog open={sharedToolsOpen} onOpenChange={(open) => onSharedToolsOpenChange?.(open)}>
+      <Dialog open={sharedToolsOpen} onOpenChange={handleSharedToolsOpenChange}>
         <DialogContent className="fixed bottom-2 left-2 right-2 top-2 flex h-auto max-h-none w-auto max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-[2rem] p-0 sm:bottom-auto sm:left-1/2 sm:right-auto sm:top-1/2 sm:h-[92dvh] sm:w-[calc(100vw-1rem)] sm:max-w-md sm:-translate-x-1/2 sm:-translate-y-1/2">
           <DialogHeader className="border-b border-slate-100 px-4 py-4 text-left">
             <DialogTitle className="flex items-center gap-2 text-base font-black text-[#102A43]">

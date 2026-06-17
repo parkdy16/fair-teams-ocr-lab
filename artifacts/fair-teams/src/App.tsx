@@ -991,6 +991,11 @@ function App() {
       if (document.body.dataset.fairTeamsScrollLock === "true") {
         document.body.style.overflow = "";
         document.documentElement.style.overflow = "";
+        document.body.style.pointerEvents = "";
+        document.body.style.removeProperty("overflow");
+        document.body.style.removeProperty("pointer-events");
+        document.body.style.removeProperty("padding-right");
+        document.documentElement.style.removeProperty("overflow");
         delete document.body.dataset.fairTeamsScrollLock;
       }
     };
@@ -1014,6 +1019,11 @@ function App() {
       if (!appScrollLockActive && document.body.dataset.fairTeamsScrollLock === "true") {
         document.body.style.overflow = "";
         document.documentElement.style.overflow = "";
+        document.body.style.pointerEvents = "";
+        document.body.style.removeProperty("overflow");
+        document.body.style.removeProperty("pointer-events");
+        document.body.style.removeProperty("padding-right");
+        document.documentElement.style.removeProperty("overflow");
         delete document.body.dataset.fairTeamsScrollLock;
       }
     };

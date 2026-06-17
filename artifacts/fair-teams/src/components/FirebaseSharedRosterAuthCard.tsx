@@ -147,16 +147,22 @@ export function FirebaseSharedRosterAuthCard() {
         </div>
 
         {editingName && (
-          <div className="flex items-center gap-2 rounded-2xl border border-slate-100 bg-slate-50 p-2">
+          <div className="grid gap-2 rounded-2xl border border-slate-100 bg-slate-50 p-2">
             <input
               value={organizerName}
               onChange={(event) => setOrganizerName(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  event.currentTarget.blur();
+                }
+              }}
               placeholder="Joon"
-              className="min-w-0 flex-1 rounded-xl border border-slate-100 bg-white px-3 py-2 text-sm font-bold text-[#102A43] outline-none placeholder:text-slate-300"
+              className="h-10 w-full min-w-0 rounded-xl border border-slate-100 bg-white px-3 text-sm font-bold text-[#102A43] outline-none placeholder:text-slate-300"
             />
-            <Button type="button" className="h-10 shrink-0 rounded-xl bg-[#102A43] px-3 text-xs font-black text-white hover:bg-[#0b2036]" onClick={handleSaveOrganizerName} disabled={!trimmedOrganizerName || Boolean(busyAction)}>
+            <Button type="button" className="h-10 w-full rounded-xl bg-[#102A43] px-3 text-xs font-black text-white hover:bg-[#0b2036]" onClick={handleSaveOrganizerName} disabled={!trimmedOrganizerName || Boolean(busyAction)}>
               <Check className="mr-1 h-3.5 w-3.5" />
-              {busyAction === "name" ? "Saving…" : "Save"}
+              {busyAction === "name" ? "Saving…" : "Save organizer name"}
             </Button>
           </div>
         )}

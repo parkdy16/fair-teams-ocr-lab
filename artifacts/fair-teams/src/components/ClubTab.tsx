@@ -821,50 +821,38 @@ export function ClubTab({
 
           <div className="flex-1 overflow-y-auto bg-slate-50/70 p-3">
             <div className="mb-3 rounded-2xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-[11px] font-bold leading-snug text-emerald-800">
-              Press and hold a bag, then drag it to another holder. Tap a bag to edit its color, name, contents, or note.
+              Hold and drag a bag between holders. Tap a bag to edit its color, name, contents, or note.
             </div>
 
-            <div className="grid gap-2">
-              {EQUIPMENT_HOLDERS.map((holder) => {
+            <div className="overflow-hidden rounded-[1.6rem] border border-slate-200 bg-white shadow-sm">
+              <div className="grid grid-cols-[6.8rem_minmax(0,1fr)] border-b border-slate-100 bg-slate-50/80 text-[10px] font-black uppercase tracking-wide text-slate-400">
+                <div className="px-3 py-2">Holder</div>
+                <div className="border-l border-slate-200 px-3 py-2">Bags</div>
+              </div>
+
+              {EQUIPMENT_HOLDERS.map((holder, index) => {
                 const holderKits = equipmentKits.filter((kit) => kit.holderId === holder.id);
                 const highlighted = dragOverHolderId === holder.id;
                 return (
                   <section
                     key={holder.id}
                     data-equipment-holder-id={holder.id}
-                    className={`rounded-3xl border p-3 shadow-sm transition ${highlighted ? "border-emerald-300 bg-emerald-50 ring-2 ring-emerald-100" : "border-slate-200 bg-white"}`}
+                    className={`grid grid-cols-[6.8rem_minmax(0,1fr)] transition ${index === 0 ? "" : "border-t border-slate-100"} ${highlighted ? "bg-emerald-50" : "bg-white"}`}
                   >
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="flex min-w-0 items-center gap-2">
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-slate-50 text-[#102A43]">
-                          <Users className="h-4 w-4" />
-                        </div>
-                        <div className="min-w-0">
-                          <h3 className="truncate text-sm font-black text-[#102A43]">
-                            {holder.label}
-                          </h3>
-                          <p className="text-[11px] font-semibold text-slate-400">
-                            {holderKits.length} bag{holderKits.length === 1 ? "" : "s"}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex shrink-0 -space-x-3">
-                        {holderKits.slice(0, 3).map((kit) => (
-                          <div key={kit.id} className="flex h-8 w-10 items-center justify-center rounded-full bg-white shadow-sm ring-1 ring-slate-100">
-                            <DuffleBagIcon color={kit.color || DEFAULT_EQUIPMENT_COLOR} className="h-6 w-8" />
-                          </div>
-                        ))}
-                        {holderKits.length > 3 && (
-                          <span className="flex h-8 min-w-8 items-center justify-center rounded-full bg-slate-100 px-2 text-[10px] font-black text-slate-500 ring-1 ring-white">
-                            +{holderKits.length - 3}
-                          </span>
-                        )}
+                    <div className="flex min-h-[4.25rem] items-center px-3 py-2">
+                      <div className="min-w-0">
+                        <h3 className="truncate text-[12px] font-black leading-tight text-[#102A43]">
+                          {holder.label}
+                        </h3>
+                        <p className="mt-0.5 text-[10px] font-bold text-slate-400">
+                          {holderKits.length} bag{holderKits.length === 1 ? "" : "s"}
+                        </p>
                       </div>
                     </div>
 
-                    <div className="mt-3 flex min-h-16 flex-wrap gap-2 rounded-2xl border border-dashed border-slate-200 bg-slate-50/60 p-2">
+                    <div className={`flex min-h-[4.25rem] flex-wrap items-center gap-2 border-l px-2 py-2 transition ${highlighted ? "border-emerald-200 bg-emerald-50/70 ring-2 ring-inset ring-emerald-100" : "border-slate-200 bg-slate-50/40"}`}>
                       {holderKits.length === 0 ? (
-                        <div className="flex w-full items-center justify-center rounded-xl px-3 py-3 text-center text-[11px] font-bold text-slate-300">
+                        <div className="flex min-h-10 w-full items-center rounded-2xl border border-dashed border-slate-200 bg-white/70 px-3 text-[11px] font-bold text-slate-300">
                           Drop bag here
                         </div>
                       ) : holderKits.map((kit) => {
@@ -873,7 +861,7 @@ export function ClubTab({
                           <button
                             key={kit.id}
                             type="button"
-                            className={`touch-none select-none rounded-2xl border border-slate-200 bg-white px-2.5 py-2 text-left shadow-sm transition hover:border-emerald-200 hover:bg-white active:scale-[0.98] ${isDragging ? "scale-95 opacity-45 ring-2 ring-emerald-200" : ""}`}
+                            className={`touch-none select-none rounded-2xl border border-slate-200 bg-white px-2.5 py-1.5 text-left shadow-sm transition hover:border-emerald-200 hover:bg-white active:scale-[0.98] ${isDragging ? "scale-95 opacity-45 ring-2 ring-emerald-200" : ""}`}
                             onPointerDown={(event) => startEquipmentPointerDrag(event, kit)}
                             onPointerMove={moveEquipmentPointerDrag}
                             onPointerUp={finishEquipmentPointerDrag}
@@ -881,9 +869,9 @@ export function ClubTab({
                             onClick={() => openEquipmentKitFromBoard(kit)}
                           >
                             <div className="flex items-center gap-2">
-                              <DuffleBagIcon color={kit.color || DEFAULT_EQUIPMENT_COLOR} className="h-8 w-11" />
-                              <div className="min-w-0">
-                                <div className="max-w-[9rem] truncate text-xs font-black text-[#102A43]">
+                              <DuffleBagIcon color={kit.color || DEFAULT_EQUIPMENT_COLOR} className="h-9 w-12 shrink-0" />
+                              <div className="min-w-0 pr-1">
+                                <div className="max-w-[8.5rem] truncate text-xs font-black text-[#102A43]">
                                   {kit.name}
                                 </div>
                                 <div className="text-[10px] font-bold text-slate-400">

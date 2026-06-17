@@ -555,10 +555,8 @@ export function ClubTab({
   };
 
   const openNewEquipmentKit = () => {
-    if (equipmentSharedSetupMissing) {
-      setEquipmentError("Shared equipment is not connected yet.");
-      return;
-    }
+    // Always open the editor. The previous shared-link guard could make the Add bag
+    // button feel broken while the app was still resolving the shared group connection.
     resetEquipmentForm();
     setEquipmentDialogOpen(true);
   };

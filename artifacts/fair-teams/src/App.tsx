@@ -2981,8 +2981,8 @@ They will no longer be able to open or edit this shared roster unless it is shar
         </header>
 
         {headerSharedPeopleOpen && (
-          <div className="fixed inset-0 z-[75] flex items-end justify-center bg-slate-950/25 p-3 sm:items-center" onClick={() => setHeaderSharedPeopleOpen(false)}>
-            <div className="w-full max-w-sm rounded-3xl bg-white p-3 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+          <div className="fixed inset-0 z-[75] flex items-end justify-center bg-slate-950/20 p-3 sm:items-center" onClick={() => setHeaderSharedPeopleOpen(false)}>
+            <div className="w-full max-w-xs rounded-3xl border border-slate-100 bg-white p-3 shadow-[0_14px_40px_rgba(15,23,42,0.16)]" onClick={(event) => event.stopPropagation()}>
               <div className="mb-2 flex items-center justify-between gap-3 px-1">
                 <div className="text-sm font-black text-[#102A43]">People with access</div>
                 <button type="button" onClick={() => setHeaderSharedPeopleOpen(false)} className="rounded-full bg-slate-50 p-2 text-slate-500 active:scale-95" aria-label="Close shared people">

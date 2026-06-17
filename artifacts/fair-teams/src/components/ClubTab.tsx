@@ -729,6 +729,7 @@ export function ClubTab({
       updatedAt: Date.now(),
     };
 
+    const previousKits = equipmentKits;
     const applyLocal = () => {
       setEquipmentKits((current) => editingKitId
         ? current.map((kit) => kit.id === editingKitId ? nextKit : kit)
@@ -738,13 +739,13 @@ export function ClubTab({
     try {
       setEquipmentSaving(true);
       setEquipmentError("");
+      applyLocal();
       if (equipmentGroupId) {
         await saveFirebaseEquipmentBag(equipmentGroupId, nextKit);
-      } else {
-        applyLocal();
       }
       closeEquipmentEditor(true);
     } catch (error) {
+      setEquipmentKits(previousKits);
       setEquipmentError(error instanceof Error ? error.message : "Could not save equipment bag.");
     } finally {
       setEquipmentSaving(false);
@@ -963,9 +964,12 @@ export function ClubTab({
 
       <section className="rounded-[1.7rem] border border-slate-100 bg-white p-3 shadow-sm ring-1 ring-slate-50">
         <div className="mb-2 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wide text-slate-500">
-            <span className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.14)]" />
-            Shared roster
+          <div>
+            <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wide text-slate-500">
+              <span className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.14)]" />
+              Shared roster
+            </div>
+            <div className="mt-0.5 text-[11px] font-semibold text-slate-400">Player cards + pairing rules</div>
           </div>
           {!isSharedRoster && (
             <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-black text-slate-500">Local</span>
@@ -981,6 +985,7 @@ export function ClubTab({
               <PackageOpen className="h-4 w-4" />
               Equipment
             </div>
+            <div className="mt-0.5 text-[11px] font-semibold text-slate-400">Bags for this roster</div>
             {equipmentPreviewKits.length > 0 ? (
               <div className="mt-2 grid gap-1.5">
                 {equipmentPreviewKits.map((kit) => (
@@ -1017,6 +1022,7 @@ export function ClubTab({
               <Vote className="h-4 w-4" />
               Votes
             </div>
+            <div className="mt-0.5 text-[11px] font-semibold text-slate-400">Organizer decisions</div>
             <div className="mt-1 text-sm font-black text-[#102A43]">{openVotes.length} active</div>
           </div>
           <Button
@@ -1031,7 +1037,7 @@ export function ClubTab({
       </section>
 
       <Dialog open={collaboratorsOpen} onOpenChange={setCollaboratorsOpen}>
-        <DialogContent className="max-w-sm rounded-3xl p-0">
+        <DialogContent className="max-w-xs rounded-3xl border border-slate-100 p-0 shadow-[0_14px_40px_rgba(15,23,42,0.16)]">
           <DialogHeader className="border-b border-slate-100 px-4 py-3 text-left">
             <DialogTitle className="text-base font-black text-[#102A43]">People with access</DialogTitle>
           </DialogHeader>
@@ -1374,11 +1380,18 @@ export function ClubTab({
               <Label className="text-xs font-black uppercase tracking-wide text-slate-500">
                 What is inside?
               </Label>
-              <Textarea
+              <Input
                 value={kitContents}
                 onChange={(event) => setKitContents(event.target.value)}
-                placeholder={"2 balls, pump, 12 cones"}
-                className="min-h-[4.75rem] rounded-2xl border-slate-200 text-sm font-semibold"
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    event.currentTarget.blur();
+                  }
+                }}
+                enterKeyHint="done"
+                placeholder="2 balls, pump, 12 cones"
+                className="h-10 rounded-2xl border-slate-200 text-sm font-semibold"
               />
               <p className="text-[11px] font-semibold text-slate-500">
                 Separate items with commas. Example: 2 balls, pump, 12 cones.

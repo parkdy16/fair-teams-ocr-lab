@@ -71,8 +71,8 @@ function canRoleSave(role?: string, isOwner?: boolean) {
 
 function modalShell(title: string, onClose: () => void, body: React.ReactNode) {
   return (
-    <div className="fixed inset-0 z-[80] flex items-end justify-center bg-slate-950/35 p-3 sm:items-center">
-      <div className="w-full max-w-md rounded-3xl bg-white p-3 shadow-2xl">
+    <div className="fixed inset-0 z-[80] flex items-end justify-center bg-slate-950/20 p-3 sm:items-center">
+      <div className="w-full max-w-md rounded-3xl border border-slate-100 bg-white p-3 shadow-[0_14px_40px_rgba(15,23,42,0.16)]">
         <div className="mb-2 flex items-center justify-between gap-3 px-1">
           <div className="text-sm font-black text-[#102A43]">{title}</div>
           <button type="button" onClick={onClose} className="rounded-full bg-slate-50 p-2 text-slate-500 active:scale-95">

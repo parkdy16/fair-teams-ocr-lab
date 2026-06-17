@@ -43,7 +43,55 @@ type ClubVote = {
   votedOptionId?: string;
 };
 
+type EquipmentHolder = {
+  id: string;
+  label: string;
+};
+
+type ClubEquipmentKit = {
+  id: string;
+  name: string;
+  holderId: string;
+  contents: string[];
+  note?: string;
+  updatedAt: number;
+};
+
 const VOTE_PREVIEW_STORAGE_KEY = "fairteams.clubVotes.preview.v1";
+const EQUIPMENT_PREVIEW_STORAGE_KEY = "fairteams.clubEquipment.preview.v1";
+
+const EQUIPMENT_HOLDERS: EquipmentHolder[] = [
+  { id: "storage", label: "Club storage" },
+  { id: "joon", label: "Joon" },
+  { id: "sarah", label: "Sarah" },
+  { id: "unknown", label: "Unknown" },
+];
+
+const DEFAULT_EQUIPMENT_KITS: ClubEquipmentKit[] = [
+  {
+    id: "kit-ball-bag",
+    name: "Ball bag",
+    holderId: "joon",
+    contents: ["2 balls", "Pump", "Needles"],
+    note: "Check air before Saturday.",
+    updatedAt: Date.now(),
+  },
+  {
+    id: "kit-bibs",
+    name: "Bibs",
+    holderId: "storage",
+    contents: ["10 dark bibs", "10 light bibs"],
+    updatedAt: Date.now(),
+  },
+  {
+    id: "kit-cones",
+    name: "Cone stack",
+    holderId: "unknown",
+    contents: ["12 cones"],
+    note: "Someone took them after last game?",
+    updatedAt: Date.now(),
+  },
+];
 
 function makeId(prefix: string) {
   const random = typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -73,6 +121,28 @@ function parseVotes(raw: string | null): ClubVote[] {
       }));
   } catch {
     return [];
+  }
+}
+
+function parseEquipmentKits(raw: string | null): ClubEquipmentKit[] {
+  if (!raw) return DEFAULT_EQUIPMENT_KITS;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return DEFAULT_EQUIPMENT_KITS;
+    return parsed
+      .filter((kit): kit is ClubEquipmentKit => Boolean(kit?.id && kit?.name))
+      .map((kit) => ({
+        id: String(kit.id),
+        name: String(kit.name),
+        holderId: EQUIPMENT_HOLDERS.some((holder) => holder.id === kit.holderId) ? String(kit.holderId) : "unknown",
+        contents: Array.isArray(kit.contents)
+          ? kit.contents.map((item) => String(item).trim()).filter(Boolean).slice(0, 20)
+          : [],
+        note: kit.note ? String(kit.note) : undefined,
+        updatedAt: Number(kit.updatedAt) || Date.now(),
+      }));
+  } catch {
+    return DEFAULT_EQUIPMENT_KITS;
   }
 }
 
@@ -224,11 +294,26 @@ export function ClubTab({
   const [question, setQuestion] = useState("");
   const [optionText, setOptionText] = useState("Yes\nNo");
   const [deadline, setDeadline] = useState("");
+  const [equipmentKits, setEquipmentKits] = useState<ClubEquipmentKit[]>(() => {
+    if (typeof window === "undefined") return DEFAULT_EQUIPMENT_KITS;
+    return parseEquipmentKits(window.localStorage.getItem(EQUIPMENT_PREVIEW_STORAGE_KEY));
+  });
+  const [equipmentDialogOpen, setEquipmentDialogOpen] = useState(false);
+  const [editingKitId, setEditingKitId] = useState<string | null>(null);
+  const [kitName, setKitName] = useState("");
+  const [kitHolderId, setKitHolderId] = useState("storage");
+  const [kitContents, setKitContents] = useState("");
+  const [kitNote, setKitNote] = useState("");
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     window.localStorage.setItem(VOTE_PREVIEW_STORAGE_KEY, JSON.stringify(votes));
   }, [votes]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(EQUIPMENT_PREVIEW_STORAGE_KEY, JSON.stringify(equipmentKits));
+  }, [equipmentKits]);
 
   const openVotes = useMemo(() => votes.filter((vote) => vote.status === "open"), [votes]);
   const closedVotes = useMemo(() => votes.filter((vote) => vote.status === "closed"), [votes]);
@@ -284,7 +369,68 @@ export function ClubTab({
     setVotes((current) => current.filter((vote) => vote.id !== voteId));
   };
 
+  const resetEquipmentForm = () => {
+    setEditingKitId(null);
+    setKitName("");
+    setKitHolderId("storage");
+    setKitContents("");
+    setKitNote("");
+  };
+
+  const openNewEquipmentKit = () => {
+    resetEquipmentForm();
+    setEquipmentDialogOpen(true);
+  };
+
+  const openEditEquipmentKit = (kit: ClubEquipmentKit) => {
+    setEditingKitId(kit.id);
+    setKitName(kit.name);
+    setKitHolderId(kit.holderId);
+    setKitContents(kit.contents.join("\n"));
+    setKitNote(kit.note || "");
+    setEquipmentDialogOpen(true);
+  };
+
+  const saveEquipmentKit = () => {
+    const trimmedName = kitName.trim();
+    if (!trimmedName) return;
+
+    const nextKit: ClubEquipmentKit = {
+      id: editingKitId || makeId("kit"),
+      name: trimmedName,
+      holderId: kitHolderId,
+      contents: kitContents
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .slice(0, 20),
+      note: kitNote.trim() || undefined,
+      updatedAt: Date.now(),
+    };
+
+    setEquipmentKits((current) => editingKitId
+      ? current.map((kit) => kit.id === editingKitId ? nextKit : kit)
+      : [nextKit, ...current]);
+    resetEquipmentForm();
+    setEquipmentDialogOpen(false);
+  };
+
+  const moveEquipmentKit = (kitId: string, holderId: string) => {
+    setEquipmentKits((current) => current.map((kit) => kit.id === kitId
+      ? { ...kit, holderId, updatedAt: Date.now() }
+      : kit));
+  };
+
+  const deleteEquipmentKit = (kitId: string) => {
+    setEquipmentKits((current) => current.filter((kit) => kit.id !== kitId));
+    if (editingKitId === kitId) {
+      resetEquipmentForm();
+      setEquipmentDialogOpen(false);
+    }
+  };
+
   const canCreateVote = question.trim().length > 0 && optionText.split("\n").filter((line) => line.trim()).length >= 2;
+  const canSaveEquipmentKit = kitName.trim().length > 0;
 
   return (
     <div className="mx-auto flex w-full max-w-xl flex-col gap-3">
@@ -417,23 +563,78 @@ export function ClubTab({
         icon={<PackageOpen className="h-5 w-5" />}
         eyebrow="Equipment"
         title="Who has the bags?"
-        description="A playful realtime board for balls, cones, bibs, first-aid spray, keys, and other shared gear."
+        description="Track who has balls, cones, bibs, first-aid spray, keys, and other shared gear."
       >
-        <div className="grid grid-cols-3 gap-2">
-          {["Club storage", "Joon", "Unknown"].map((column, index) => (
-            <div key={column} className="rounded-2xl bg-slate-50 p-2">
-              <div className="truncate text-[10px] font-black uppercase tracking-wide text-slate-400">
-                {column}
+        <div className="grid gap-3">
+          <div className="flex items-center justify-between gap-3 rounded-2xl bg-slate-50 p-3">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 text-xs font-bold text-slate-600">
+                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                Board preview
               </div>
-              <div className="mt-2 rounded-xl border border-slate-200 bg-white px-2 py-2 text-[11px] font-black text-[#102A43] shadow-sm">
-                {index === 0 ? "Bibs" : index === 1 ? "Ball bag" : "Pump?"}
-              </div>
+              <p className="mt-1 text-[11px] font-semibold leading-snug text-slate-500">
+                Local test only. Later this board can become realtime Firebase sync.
+              </p>
             </div>
-          ))}
-        </div>
-        <div className="mt-2 flex items-center gap-2 text-[11px] font-semibold text-slate-500">
-          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-          UI preview only for now.
+            <Button
+              type="button"
+              className="h-10 shrink-0 rounded-2xl bg-[#102A43] px-3 text-xs font-black text-white hover:bg-[#0b2036]"
+              onClick={openNewEquipmentKit}
+            >
+              <Plus className="mr-1.5 h-4 w-4" />
+              Kit
+            </Button>
+          </div>
+
+          <div className="-mx-1 overflow-x-auto pb-1">
+            <div className="flex min-w-max gap-2 px-1">
+              {EQUIPMENT_HOLDERS.map((holder) => {
+                const holderKits = equipmentKits.filter((kit) => kit.holderId === holder.id);
+                return (
+                  <div key={holder.id} className="w-36 rounded-2xl bg-slate-50 p-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="truncate text-[10px] font-black uppercase tracking-wide text-slate-400">
+                        {holder.label}
+                      </div>
+                      <span className="rounded-full bg-white px-1.5 py-0.5 text-[10px] font-black text-slate-400">
+                        {holderKits.length}
+                      </span>
+                    </div>
+                    <div className="mt-2 grid gap-2">
+                      {holderKits.length === 0 ? (
+                        <div className="rounded-xl border border-dashed border-slate-200 bg-white/60 px-2 py-3 text-center text-[10px] font-bold text-slate-300">
+                          Empty
+                        </div>
+                      ) : holderKits.map((kit) => (
+                        <button
+                          key={kit.id}
+                          type="button"
+                          className="rounded-xl border border-slate-200 bg-white px-2 py-2 text-left shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50"
+                          onClick={() => openEditEquipmentKit(kit)}
+                        >
+                          <div className="truncate text-[11px] font-black text-[#102A43]">
+                            {kit.name}
+                          </div>
+                          <div className="mt-1 text-[10px] font-bold text-slate-400">
+                            {kit.contents.length} item{kit.contents.length === 1 ? "" : "s"}
+                          </div>
+                          {kit.note && (
+                            <div className="mt-1 line-clamp-2 text-[10px] font-semibold leading-tight text-amber-700">
+                              {kit.note}
+                            </div>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="rounded-2xl bg-blue-50 px-3 py-2 text-[11px] font-semibold leading-snug text-blue-800">
+            Mobile-friendly test: tap a kit to move it or edit what is inside. Drag-and-drop can come later only if it still feels necessary.
+          </div>
         </div>
       </ClubFeatureCard>
 
@@ -521,6 +722,138 @@ export function ClubTab({
                 Create vote
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={equipmentDialogOpen} onOpenChange={(open) => {
+        setEquipmentDialogOpen(open);
+        if (!open) resetEquipmentForm();
+      }}>
+        <DialogContent className="max-h-[88dvh] max-w-md overflow-y-auto rounded-3xl p-0">
+          <DialogHeader className="border-b border-slate-100 px-5 py-4 text-left">
+            <DialogTitle className="flex items-center gap-2 text-lg font-black text-[#102A43]">
+              <PackageOpen className="h-5 w-5 text-emerald-600" />
+              {editingKitId ? "Edit equipment" : "New equipment kit"}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="grid gap-4 p-5">
+            <div className="rounded-2xl bg-blue-50 px-3 py-2 text-[11px] font-semibold leading-snug text-blue-800">
+              Preview only: later this can sync live so every organizer sees who has each bag.
+            </div>
+
+            <div className="grid gap-2">
+              <Label className="text-xs font-black uppercase tracking-wide text-slate-500">
+                Equipment name
+              </Label>
+              <Input
+                value={kitName}
+                onChange={(event) => setKitName(event.target.value)}
+                placeholder="Example: Ball bag"
+                className="h-11 rounded-2xl border-slate-200 text-sm font-semibold"
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <Label className="text-xs font-black uppercase tracking-wide text-slate-500">
+                Who has it?
+              </Label>
+              <select
+                value={kitHolderId}
+                onChange={(event) => setKitHolderId(event.target.value)}
+                className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-bold text-[#102A43] outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
+              >
+                {EQUIPMENT_HOLDERS.map((holder) => (
+                  <option key={holder.id} value={holder.id}>
+                    {holder.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="grid gap-2">
+              <Label className="text-xs font-black uppercase tracking-wide text-slate-500">
+                What is inside?
+              </Label>
+              <Textarea
+                value={kitContents}
+                onChange={(event) => setKitContents(event.target.value)}
+                placeholder={"2 balls\nPump\n12 cones"}
+                className="min-h-28 rounded-2xl border-slate-200 text-sm font-semibold"
+              />
+              <p className="text-[11px] font-semibold text-slate-500">
+                One item per line. Keep it simple, like a checklist.
+              </p>
+            </div>
+
+            <div className="grid gap-2">
+              <Label className="text-xs font-black uppercase tracking-wide text-slate-500">
+                Note optional
+              </Label>
+              <Textarea
+                value={kitNote}
+                onChange={(event) => setKitNote(event.target.value)}
+                placeholder="Example: First-aid spray is almost empty."
+                className="min-h-20 rounded-2xl border-slate-200 text-sm font-semibold"
+              />
+            </div>
+
+            {editingKitId && (
+              <div className="grid gap-2 rounded-2xl bg-slate-50 p-3">
+                <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+                  Quick move
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {EQUIPMENT_HOLDERS.map((holder) => (
+                    <Button
+                      key={holder.id}
+                      type="button"
+                      variant={kitHolderId === holder.id ? "default" : "outline"}
+                      className={`h-9 rounded-xl text-[11px] font-black ${kitHolderId === holder.id ? "bg-emerald-600 text-white hover:bg-emerald-700" : ""}`}
+                      onClick={() => {
+                        setKitHolderId(holder.id);
+                        moveEquipmentKit(editingKitId, holder.id);
+                      }}
+                    >
+                      {holder.label}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <Button
+                type="button"
+                variant="outline"
+                className="h-11 rounded-2xl text-sm font-black"
+                onClick={() => setEquipmentDialogOpen(false)}
+              >
+                <X className="mr-1.5 h-4 w-4" />
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                className="h-11 rounded-2xl bg-[#102A43] text-sm font-black text-white hover:bg-[#0b2036]"
+                disabled={!canSaveEquipmentKit}
+                onClick={saveEquipmentKit}
+              >
+                Save kit
+              </Button>
+            </div>
+
+            {editingKitId && (
+              <Button
+                type="button"
+                variant="ghost"
+                className="h-10 rounded-2xl text-sm font-black text-red-500 hover:bg-red-50 hover:text-red-600"
+                onClick={() => deleteEquipmentKit(editingKitId)}
+              >
+                <Trash2 className="mr-1.5 h-4 w-4" />
+                Delete equipment
+              </Button>
+            )}
           </div>
         </DialogContent>
       </Dialog>

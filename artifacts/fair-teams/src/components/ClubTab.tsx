@@ -351,6 +351,7 @@ export function ClubTab({
   const [kitColor, setKitColor] = useState(DEFAULT_EQUIPMENT_COLOR);
   const [colorPickerOpen, setColorPickerOpen] = useState(false);
   const [deleteBagSlide, setDeleteBagSlide] = useState(0);
+  const [contentPeekKitId, setContentPeekKitId] = useState<string | null>(null);
   const [kitContents, setKitContents] = useState("");
   const [kitNote, setKitNote] = useState("");
   const [draggingKitId, setDraggingKitId] = useState<string | null>(null);
@@ -372,6 +373,7 @@ export function ClubTab({
 
   const openVotes = useMemo(() => votes.filter((vote) => vote.status === "open"), [votes]);
   const closedVotes = useMemo(() => votes.filter((vote) => vote.status === "closed"), [votes]);
+  const contentPeekKit = useMemo(() => equipmentKits.find((kit) => kit.id === contentPeekKitId) || null, [contentPeekKitId, equipmentKits]);
 
   const resetVoteForm = () => {
     setQuestion("");
@@ -446,7 +448,7 @@ export function ClubTab({
     setKitHolderId(kit.holderId);
     setKitColor(kit.color || DEFAULT_EQUIPMENT_COLOR);
     setDeleteBagSlide(0);
-    setKitContents(kit.contents.join("\n"));
+    setKitContents(kit.contents.join(", "));
     setKitNote(kit.note || "");
     setEquipmentDialogOpen(true);
   };
@@ -461,7 +463,7 @@ export function ClubTab({
       holderId: kitHolderId,
       color: kitColor,
       contents: kitContents
-        .split("\n")
+        .split(/[\n,]/)
         .map((line) => line.trim())
         .filter(Boolean)
         .slice(0, 20),
@@ -489,7 +491,7 @@ export function ClubTab({
     }
   };
 
-  const startEquipmentPointerDrag = (event: React.PointerEvent<HTMLButtonElement>, kit: ClubEquipmentKit) => {
+  const startEquipmentPointerDrag = (event: React.PointerEvent<HTMLElement>, kit: ClubEquipmentKit) => {
     if (event.pointerType === "mouse" && event.button !== 0) return;
     event.currentTarget.setPointerCapture?.(event.pointerId);
     clearEquipmentDragTimer();
@@ -506,7 +508,7 @@ export function ClubTab({
     }, 180);
   };
 
-  const moveEquipmentPointerDrag = (event: React.PointerEvent<HTMLButtonElement>) => {
+  const moveEquipmentPointerDrag = (event: React.PointerEvent<HTMLElement>) => {
     if (!activeEquipmentDragRef.current) return;
     event.preventDefault();
     const target = document.elementFromPoint(event.clientX, event.clientY) as HTMLElement | null;
@@ -518,7 +520,7 @@ export function ClubTab({
     }
   };
 
-  const finishEquipmentPointerDrag = (event?: React.PointerEvent<HTMLButtonElement>) => {
+  const finishEquipmentPointerDrag = (event?: React.PointerEvent<HTMLElement>) => {
     clearEquipmentDragTimer();
     const kitId = activeEquipmentDragRef.current;
     const holderId = activeEquipmentDropHolderRef.current;
@@ -560,6 +562,11 @@ export function ClubTab({
     if (typeof window === "undefined") return;
 
     const handleNativeBack = (event: Event) => {
+      if (contentPeekKitId) {
+        event.preventDefault();
+        setContentPeekKitId(null);
+        return;
+      }
       if (colorPickerOpen) {
         event.preventDefault();
         setColorPickerOpen(false);
@@ -586,7 +593,7 @@ export function ClubTab({
 
     window.addEventListener("fairteams:native-back", handleNativeBack);
     return () => window.removeEventListener("fairteams:native-back", handleNativeBack);
-  }, [colorPickerOpen, equipmentBoardOpen, equipmentDialogOpen, voteDialogOpen]);
+  }, [colorPickerOpen, contentPeekKitId, equipmentBoardOpen, equipmentDialogOpen, voteDialogOpen]);
 
   const canCreateVote = question.trim().length > 0 && optionText.split("\n").filter((line) => line.trim()).length >= 2;
   const canSaveEquipmentKit = kitName.trim().length > 0;
@@ -844,11 +851,62 @@ export function ClubTab({
               </Button>
             </div>
           </div>
+
+          {contentPeekKit && (
+            <div className="absolute inset-0 z-40 flex items-end bg-slate-950/20 p-3" onClick={() => setContentPeekKitId(null)}>
+              <div
+                className="w-full rounded-[1.75rem] border border-slate-200 bg-white p-4 shadow-[0_24px_70px_rgba(15,23,42,0.22)]"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+                      Inside bag
+                    </div>
+                    <h3 className="mt-1 truncate text-base font-black text-[#102A43]">
+                      {contentPeekKit.name}
+                    </h3>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-9 shrink-0 rounded-2xl px-3 text-xs font-black"
+                    onClick={() => setContentPeekKitId(null)}
+                  >
+                    Close
+                  </Button>
+                </div>
+
+                {contentPeekKit.contents.length > 0 ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {contentPeekKit.contents.map((item, index) => (
+                      <span key={`${contentPeekKit.id}-content-${index}`} className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700">
+                        {item}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="mt-3 rounded-2xl bg-slate-50 px-3 py-3 text-sm font-semibold text-slate-500">
+                    Nothing listed yet.
+                  </div>
+                )}
+
+                {contentPeekKit.note && (
+                  <div className="mt-3 rounded-2xl bg-amber-50 px-3 py-2 text-xs font-semibold leading-snug text-amber-800">
+                    {contentPeekKit.note}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
-      <Dialog open={equipmentBoardOpen} onOpenChange={setEquipmentBoardOpen}>
-        <DialogContent className="flex h-[96dvh] w-[calc(100vw-1rem)] max-w-none flex-col overflow-hidden rounded-[2rem] p-0 sm:max-w-2xl">
+      <Dialog open={equipmentBoardOpen} onOpenChange={(open) => {
+        setEquipmentBoardOpen(open);
+        if (!open) setContentPeekKitId(null);
+      }}>
+        <DialogContent className="relative flex h-[96dvh] w-[calc(100vw-1rem)] max-w-none flex-col overflow-hidden rounded-[2rem] p-0 sm:max-w-2xl">
           <DialogHeader className="border-b border-slate-100 px-4 py-4 text-left">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
@@ -910,28 +968,44 @@ export function ClubTab({
                       ) : holderKits.map((kit) => {
                         const isDragging = draggingKitId === kit.id;
                         return (
-                          <button
+                          <div
                             key={kit.id}
-                            type="button"
+                            role="button"
+                            tabIndex={0}
                             className={`touch-none select-none rounded-2xl border border-slate-200 bg-white px-2.5 py-1.5 text-left shadow-sm transition hover:border-emerald-200 hover:bg-white active:scale-[0.98] ${isDragging ? "scale-95 opacity-45 ring-2 ring-emerald-200" : ""}`}
                             onPointerDown={(event) => startEquipmentPointerDrag(event, kit)}
                             onPointerMove={moveEquipmentPointerDrag}
                             onPointerUp={finishEquipmentPointerDrag}
                             onPointerCancel={finishEquipmentPointerDrag}
                             onClick={() => openEquipmentKitFromBoard(kit)}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter" || event.key === " ") {
+                                event.preventDefault();
+                                openEquipmentKitFromBoard(kit);
+                              }
+                            }}
                           >
                             <div className="flex items-center gap-2">
                               <DuffleBagIcon color={kit.color || DEFAULT_EQUIPMENT_COLOR} className="h-9 w-12 shrink-0" />
-                              <div className="min-w-0 pr-1">
+                              <div className="min-w-0 flex-1 pr-1">
                                 <div className="max-w-[8.5rem] truncate text-xs font-black text-[#102A43]">
                                   {kit.name}
                                 </div>
-                                <div className="text-[10px] font-bold text-slate-400">
-                                  {kit.contents.length} item{kit.contents.length === 1 ? "" : "s"}
-                                </div>
                               </div>
+                              <button
+                                type="button"
+                                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-slate-50 text-slate-500 ring-1 ring-slate-100 transition hover:bg-emerald-50 hover:text-emerald-700"
+                                aria-label={`Show contents of ${kit.name}`}
+                                onPointerDown={(event) => event.stopPropagation()}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  setContentPeekKitId(kit.id);
+                                }}
+                              >
+                                <ClipboardList className="h-4 w-4" />
+                              </button>
                             </div>
-                          </button>
+                          </div>
                         );
                       })}
                     </div>
@@ -1035,11 +1109,11 @@ export function ClubTab({
               <Textarea
                 value={kitContents}
                 onChange={(event) => setKitContents(event.target.value)}
-                placeholder={"2 balls\nPump\n12 cones"}
+                placeholder={"2 balls, pump, 12 cones"}
                 className="min-h-[4.75rem] rounded-2xl border-slate-200 text-sm font-semibold"
               />
               <p className="text-[11px] font-semibold text-slate-500">
-                One item per line. Keep it simple, like a checklist.
+                Separate items with commas. Example: 2 balls, pump, 12 cones.
               </p>
             </div>
 

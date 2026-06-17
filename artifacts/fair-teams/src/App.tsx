@@ -58,6 +58,7 @@ import {
   readGoogleDriveJsonFile,
   shareGoogleDriveFileWithEditor,
   shareGoogleDriveFileWithViewer,
+  trashGoogleDriveFile,
   updateGoogleDriveJsonFile,
   type GoogleDriveBackupFileGroups,
   type GoogleDriveFileResult,
@@ -239,6 +240,10 @@ type DriveShareConfirm = {
 type DriveRemoveAccessConfirm = {
   permission: GoogleDrivePermissionResult;
   label: string;
+};
+
+type DriveBackupDeleteConfirm = {
+  file: GoogleDriveFileResult;
 };
 
 type DriveBackupSummary = {
@@ -458,6 +463,8 @@ function App() {
   const [connectedDriveUser, setConnectedDriveUser] = useState<{ displayName?: string; emailAddress?: string } | null>(null);
   const [driveImportPreview, setDriveImportPreview] = useState<DriveImportPreview | null>(null);
   const [driveBackupChoices, setDriveBackupChoices] = useState<GoogleDriveBackupFileGroups | null>(null);
+  const [driveBackupDeleteConfirm, setDriveBackupDeleteConfirm] = useState<DriveBackupDeleteConfirm | null>(null);
+  const [googleDriveDeletingFileId, setGoogleDriveDeletingFileId] = useState("");
   const [driveBackupTab, setDriveBackupTab] = useState<DriveBackupTab>("mine");
   const [localImportPreview, setLocalImportPreview] = useState<LocalImportPreview | null>(null);
   const [rosterToolsNotice, setRosterToolsNotice] = useState<RosterToolsNotice | null>(null);
@@ -904,6 +911,7 @@ function App() {
       clearRosterOpen ||
       Boolean(driveImportPreview) ||
       Boolean(driveBackupChoices) ||
+      Boolean(driveBackupDeleteConfirm) ||
       Boolean(localImportPreview) ||
       Boolean(rosterToolsNotice) ||
       driveShareOpen ||
@@ -926,7 +934,7 @@ function App() {
     return () => {
       document.body.style.overflow = previousOverflow;
     };
-  }, [groupSettingsOpen, rosterFilesOpen, rosterPickerOpen, clearRosterOpen, driveImportPreview, driveBackupChoices, localImportPreview, rosterToolsNotice, driveShareOpen, driveShareConfirm, driveAccessOpen, driveRemoveConfirm, driveHelpOpen, googleSheetHelpOpen, driveUpdateConfirm, googleSheetChoices, googleSheetActionFile, googleSheetDeleteConfirm, googleSheetShareOpen, googleSheetConflictConfirm, googleSheetUpdatePrompt]);
+  }, [groupSettingsOpen, rosterFilesOpen, rosterPickerOpen, clearRosterOpen, driveImportPreview, driveBackupChoices, driveBackupDeleteConfirm, localImportPreview, rosterToolsNotice, driveShareOpen, driveShareConfirm, driveAccessOpen, driveRemoveConfirm, driveHelpOpen, googleSheetHelpOpen, driveUpdateConfirm, googleSheetChoices, googleSheetActionFile, googleSheetDeleteConfirm, googleSheetShareOpen, googleSheetConflictConfirm, googleSheetUpdatePrompt]);
 
   const openGroupSettings = () => {
     setDraftGroupName(activeRosterName);
@@ -1375,11 +1383,47 @@ function App() {
     try {
       const groups = await listGoogleDriveBackupFileGroups(googleDriveAccessToken);
       setDriveBackupChoices(groups);
-      setDriveBackupTab(groups.mine.length > 0 ? "mine" : "shared");
+      setDriveBackupTab("mine");
     } catch (error) {
       showRosterToolsNotice("Could not list Google Drive backups", error instanceof Error ? error.message : "Please try again.", "error");
     } finally {
       setGoogleDriveOpening(false);
+    }
+  };
+
+
+  const confirmTrashGoogleDriveBackup = async () => {
+    if (!driveBackupDeleteConfirm) return;
+    const file = driveBackupDeleteConfirm.file;
+    if (file.ownedByMe === false) {
+      setDriveBackupDeleteConfirm(null);
+      showRosterToolsNotice(
+        "Cannot delete received backup",
+        "This backup belongs to someone else. Ask the owner to delete it, or remove it directly from Google Drive.",
+        "warning",
+      );
+      return;
+    }
+
+    setGoogleDriveDeletingFileId(file.id);
+    try {
+      await trashGoogleDriveFile(googleDriveAccessToken, file.id);
+      setDriveBackupChoices((current) => current
+        ? {
+            mine: current.mine.filter((item) => item.id !== file.id),
+            shared: current.shared.filter((item) => item.id !== file.id),
+          }
+        : current,
+      );
+      if (currentDriveBackup?.id === file.id) {
+        setCurrentDriveBackup(null);
+      }
+      setDriveBackupDeleteConfirm(null);
+      showRosterToolsNotice("Backup moved to trash", `${file.name} was moved to your Google Drive trash.`, "success");
+    } catch (error) {
+      showRosterToolsNotice("Could not delete backup", error instanceof Error ? error.message : "Please try again.", "error");
+    } finally {
+      setGoogleDriveDeletingFileId("");
     }
   };
 
@@ -2476,10 +2520,10 @@ They will no longer be able to open or edit this shared roster unless it is shar
   };
 
   const visibleDriveBackupChoices = driveBackupChoices
-    ? [...driveBackupChoices.mine, ...driveBackupChoices.shared]
+    ? [...driveBackupChoices.mine]
     : [];
   const totalDriveBackupChoices = driveBackupChoices
-    ? driveBackupChoices.mine.length + driveBackupChoices.shared.length
+    ? driveBackupChoices.mine.length
     : 0;
 
   const closeTopLevelOverlayForBack = () => {
@@ -2497,6 +2541,10 @@ They will no longer be able to open or edit this shared roster unless it is shar
     }
     if (googleSheetShareOpen) {
       setGoogleSheetShareOpen(false);
+      return true;
+    }
+    if (driveBackupDeleteConfirm) {
+      setDriveBackupDeleteConfirm(null);
       return true;
     }
     if (driveShareOpen) {
@@ -2567,6 +2615,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
     groupSettingsOpen ||
     rosterPickerOpen ||
     googleSheetShareOpen ||
+    Boolean(driveBackupDeleteConfirm) ||
     driveShareOpen ||
     driveAccessOpen ||
     driveHelpOpen ||
@@ -2622,6 +2671,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
   }, [
     clearRosterOpen,
     driveAccessOpen,
+    driveBackupDeleteConfirm,
     driveHelpOpen,
     driveShareOpen,
     googleSheetHelpOpen,
@@ -3254,7 +3304,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                         Cloud Backup
                       </span>
                       <span className="mt-0.5 block truncate text-xs font-semibold text-slate-600">
-                        Save a safety copy in Google Drive.
+                        Private backup of all rosters.
                       </span>
                     </span>
                   </span>
@@ -3299,7 +3349,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                       <div className="mt-0.5 text-[11px] font-semibold text-slate-500">
                         {currentDriveBackup
                           ? `Backup has ${formatBackupSummary(currentDriveBackup.rosterCount !== undefined && currentDriveBackup.playerCount !== undefined ? { rosterCount: currentDriveBackup.rosterCount, playerCount: currentDriveBackup.playerCount } : null)}`
-                          : "Optional cloud safety copy."}
+                          : "Optional private backup for all rosters."}
                       </div>
                     </div>
 
@@ -3312,7 +3362,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                     >
                       {currentDriveBackup ? <RefreshCw className={`h-4 w-4 ${googleDriveUpdating ? "animate-spin" : ""}`} /> : <CloudUpload className="h-4 w-4" />}
                       <span className="font-black">
-                        {googleDriveSaving || googleDriveUpdating ? "Saving..." : currentDriveBackup ? "Save backup" : "Create backup"}
+                        {googleDriveSaving || googleDriveUpdating ? "Saving..." : currentDriveBackup ? "Save all rosters" : "Create backup"}
                       </span>
                     </Button>
 
@@ -3325,7 +3375,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                         disabled={!googleDriveConnected || googleDriveOpening}
                       >
                         <CloudDownload className="h-4 w-4" />
-                        <span className="truncate text-xs font-black">{googleDriveOpening ? "Opening..." : "Restore"}</span>
+                        <span className="truncate text-xs font-black">{googleDriveOpening ? "Opening..." : "Restore all"}</span>
                       </Button>
                       <Button
                         type="button"
@@ -3339,27 +3389,14 @@ They will no longer be able to open or edit this shared roster unless it is shar
                           googleDriveOpening ||
                           googleDriveUpdating
                         }
-                        title="Save as a separate Drive backup file"
+                        title="Save a separate private backup file"
                       >
                         <Archive className="h-4 w-4" />
                         <span className="truncate text-xs font-black">
-                          {googleDriveSaving ? "Saving..." : "Archive copy"}
+                          {googleDriveSaving ? "Saving..." : "Save copy"}
                         </span>
                       </Button>
                     </div>
-
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="h-11 justify-start rounded-2xl gap-3 border-blue-100 bg-white/90"
-                      onClick={openDriveShareModal}
-                      disabled={isEmptyStarterRoster || !googleDriveConnected || googleDriveSharing}
-                    >
-                      <Share2 className="h-4 w-4" />
-                      <span className="font-black">
-                        {googleDriveSharing ? "Sending..." : "Send copy"}
-                      </span>
-                    </Button>
 
                       <button
                         type="button"
@@ -4431,7 +4468,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   Backup and device transfer
                 </div>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  Cloud Backup saves all roster text data to Google Drive, so you can recover your rosters if you lose or change your device.
+                  Cloud Backup saves a private text-only backup of all rosters to your Google Drive, so you can recover your roster list if you lose or change your device.
                 </p>
               </div>
 
@@ -4440,7 +4477,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   Use across devices
                 </div>
                 <p className="mt-1 text-xs font-semibold leading-snug text-blue-800/85">
-                  Save a backup on one device, then open that backup on another device signed in with the same Google account. It is manual backup and restore, not automatic live sync.
+                  Save all rosters on one device, then restore them on another device signed in with the same Google account. It is private manual backup/restore, not collaboration or live sync.
                 </p>
               </div>
             </div>
@@ -4531,7 +4568,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   Open backup
                 </h2>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  Choose a Fair Teams backup you saved from this app.
+                  Choose a private backup. Restoring adds all rosters from that backup.
                 </p>
               </div>
               <Button
@@ -4550,24 +4587,41 @@ They will no longer be able to open or edit this shared roster unless it is shar
               {visibleDriveBackupChoices.length > 0 ? (
                 <div className="space-y-2">
                   {visibleDriveBackupChoices.map((file) => (
-                    <button
+                    <div
                       key={file.id}
-                      type="button"
-                      onClick={() => previewGoogleDriveBackupFile(file)}
-                      className="flex w-full items-center justify-between gap-3 rounded-2xl border border-blue-100 bg-blue-50/60 px-3 py-3 text-left transition active:scale-[0.99]"
+                      className="flex w-full items-center gap-2 rounded-2xl border border-blue-100 bg-blue-50/60 px-2.5 py-2.5"
                     >
-                      <span className="min-w-0">
-                        <span className="block truncate text-[13px] font-bold text-[#102A43]">
-                          {file.name}
+                      <button
+                        type="button"
+                        onClick={() => previewGoogleDriveBackupFile(file)}
+                        className="flex min-w-0 flex-1 items-center justify-between gap-3 rounded-xl px-1 py-1 text-left transition active:scale-[0.99]"
+                      >
+                        <span className="min-w-0">
+                          <span className="block truncate text-[13px] font-bold text-[#102A43]">
+                            {file.name}
+                          </span>
+                          <span className="mt-0.5 block truncate text-[11px] font-bold text-blue-700/75">
+                            Private backup · {formatDriveModifiedTime(file.modifiedTime)}
+                          </span>
                         </span>
-                        <span className="mt-0.5 block truncate text-[11px] font-bold text-blue-700/75">
-                          {file.ownedByMe === false ? "Received copy" : "My backup"} · {formatDriveModifiedTime(file.modifiedTime)}
+                        <span className="shrink-0 text-lg font-black leading-none text-blue-400">
+                          ›
                         </span>
-                      </span>
-                      <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-lg font-black leading-none text-blue-400 shadow-sm">
-                        ›
-                      </span>
-                    </button>
+                      </button>
+
+                      {file.ownedByMe !== false && (
+                        <button
+                          type="button"
+                          onClick={() => setDriveBackupDeleteConfirm({ file })}
+                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-red-100 bg-white text-red-500 shadow-sm transition active:scale-[0.96]"
+                          title="Delete backup"
+                          aria-label={`Delete ${file.name}`}
+                          disabled={googleDriveDeletingFileId === file.id}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
                   ))}
                 </div>
               ) : (
@@ -4575,7 +4629,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   <div className="flex gap-2">
                     <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
                     <p className="text-xs font-semibold leading-snug text-amber-800">
-                      No Fair Teams backups found. Save a backup first, or open a backup copy that someone sent to this Google account.
+                      No private Cloud Backup files found. Save a backup first.
                     </p>
                   </div>
                 </div>
@@ -4596,149 +4650,56 @@ They will no longer be able to open or edit this shared roster unless it is shar
         </div>
       )}
 
-      {driveShareOpen && (
+      {driveBackupDeleteConfirm && (
         <div
-          className="fixed inset-0 z-[60] flex items-end justify-center bg-black/45 p-4 sm:items-center"
+          className="fixed inset-0 z-[70] flex items-end justify-center bg-black/50 p-4 sm:items-center"
           role="dialog"
           aria-modal="true"
         >
-          <div className="flex max-h-[calc(100dvh-2rem)] w-full max-w-sm flex-col overflow-hidden rounded-3xl border border-emerald-100 bg-white shadow-2xl">
-            <div className="flex items-start justify-between gap-3 border-b border-slate-100 p-4 pb-3">
-              <div className="min-w-0">
-                <div className="text-[10px] font-black uppercase tracking-wide text-emerald-600">
-                  Cloud Backup
-                </div>
-                <h2 className="mt-1 text-base font-black tracking-tight text-[#102A43]">
-                  Send backup copy
+          <div className="w-full max-w-sm rounded-3xl border border-red-100 bg-white p-4 shadow-2xl">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-red-50 text-red-600">
+                <Trash2 className="h-5 w-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h2 className="text-base font-black tracking-tight text-[#102A43]">
+                  Delete this backup?
                 </h2>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  Send a view-only copy to another organizer.
-                </p>
-              </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 shrink-0 rounded-xl"
-                onClick={() => {
-                  setDriveShareOpen(false);
-                  setDriveShareConfirm(null);
-                }}
-                title="Close"
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
-              <div className="rounded-2xl border border-slate-100 bg-slate-50/80 p-3">
-                <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-                  Add person
-                </div>
-                <div className="mt-2 grid gap-2">
-                  <input
-                    value={driveRecipientName}
-                    onChange={(e) => setDriveRecipientName(e.target.value)}
-                    placeholder="Name, e.g. Sarah"
-                    className="h-10 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm font-bold text-[#102A43] outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
-                  />
-                  <div className="flex gap-2">
-                    <input
-                      value={driveShareEmail}
-                      onChange={(e) => setDriveShareEmail(e.target.value)}
-                      inputMode="email"
-                      autoCapitalize="none"
-                      autoCorrect="off"
-                      placeholder="email@example.com"
-                      className="h-10 min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-bold text-[#102A43] outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
-                    />
-                    <Button
-                      type="button"
-                      className="h-10 rounded-2xl bg-[#102A43] px-3 text-xs font-black text-white"
-                      onClick={addDriveRecipient}
-                    >
-                      Add
-                    </Button>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-3 rounded-2xl border border-emerald-100 bg-emerald-50/60 p-3">
-                <div className="mb-2 text-[10px] font-black uppercase tracking-wide text-emerald-700">
-                  Send to
-                </div>
-                {driveRecipients.length > 0 ? (
-                  <div className="space-y-2">
-                    {driveRecipients.map((recipient) => {
-                      const selected = selectedDriveRecipientIds.includes(recipient.id);
-                      return (
-                        <div
-                          key={recipient.id}
-                          className={`flex items-center gap-2 rounded-2xl border px-3 py-2 ${selected ? "border-emerald-200 bg-white" : "border-white/70 bg-white/65"}`}
-                        >
-                          <button
-                            type="button"
-                            onClick={() => toggleDriveRecipient(recipient.id)}
-                            className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border ${selected ? "border-emerald-500 bg-emerald-500 text-white" : "border-slate-200 bg-white text-transparent"}`}
-                            aria-label={selected ? `Unselect ${recipient.name}` : `Select ${recipient.name}`}
-                          >
-                            <Check className="h-3.5 w-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => toggleDriveRecipient(recipient.id)}
-                            className="min-w-0 flex-1 text-left"
-                          >
-                            <div className="truncate text-[13px] font-bold text-[#102A43]">
-                              {recipient.name || recipient.email}
-                            </div>
-                            <div className="truncate text-[11px] font-bold text-slate-500">
-                              {recipient.email}
-                            </div>
-                          </button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 shrink-0 rounded-xl text-slate-400"
-                            onClick={() => removeDriveRecipient(recipient.id)}
-                            title="Remove person"
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="rounded-2xl border border-dashed border-emerald-200 bg-white/75 p-3 text-xs font-bold text-slate-500">
-                    Add Sarah, Peter, or another organizer above.
-                  </div>
-                )}
-              </div>
-
-              <div className="mt-3 rounded-2xl border border-amber-100 bg-amber-50/80 p-3">
-                <p className="text-xs font-semibold leading-snug text-amber-800">
-                  Fair Teams creates a new text-only Drive backup copy and shares it as Viewer. Recipients can import the copy, but cannot edit your active backup.
+                  This moves the backup file to Google Drive trash. It does not change rosters already saved on this device.
                 </p>
               </div>
             </div>
 
-            <div className="grid gap-2 border-t border-slate-100 p-4">
-              <Button
-                type="button"
-                className="h-11 rounded-2xl bg-emerald-600 text-white hover:bg-emerald-700"
-                onClick={prepareDriveShare}
-              >
-                Continue
-              </Button>
+            <div className="mt-3 rounded-2xl border border-red-100 bg-red-50/70 p-3">
+              <div className="text-[10px] font-black uppercase tracking-wide text-red-600">
+                Backup file
+              </div>
+              <div className="mt-1 truncate text-[13px] font-bold text-[#102A43]">
+                {driveBackupDeleteConfirm.file.name}
+              </div>
+              <div className="mt-0.5 text-[11px] font-bold text-red-700/80">
+                {formatDriveModifiedTime(driveBackupDeleteConfirm.file.modifiedTime)}
+              </div>
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-2">
               <Button
                 type="button"
                 variant="ghost"
-                className="h-10 rounded-2xl text-slate-500"
-                onClick={() => setDriveShareOpen(false)}
+                className="h-11 rounded-2xl text-slate-500"
+                onClick={() => setDriveBackupDeleteConfirm(null)}
+                disabled={Boolean(googleDriveDeletingFileId)}
               >
                 Cancel
+              </Button>
+              <Button
+                type="button"
+                className="h-11 rounded-2xl bg-red-600 text-white hover:bg-red-700"
+                onClick={confirmTrashGoogleDriveBackup}
+                disabled={Boolean(googleDriveDeletingFileId)}
+              >
+                {googleDriveDeletingFileId ? "Deleting..." : "Move to trash"}
               </Button>
             </div>
           </div>
@@ -4761,7 +4722,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   Update active Drive backup?
                 </h2>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  This will overwrite the selected Drive backup file.
+                  This will overwrite the selected all-rosters Drive backup file.
                 </p>
               </div>
             </div>
@@ -4796,7 +4757,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
 
             <div className="mt-3 rounded-2xl border border-amber-100 bg-amber-50/80 p-3">
               <p className="text-xs font-semibold leading-snug text-amber-800">
-                Make sure this is the correct backup file before updating. Use “Save as copy” if you want a separate archive instead.
+                Make sure this is the correct all-rosters backup before updating. Use “Save copy” if you want a separate backup snapshot instead.
               </p>
             </div>
 
@@ -4816,213 +4777,6 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 onClick={() => setDriveUpdateConfirm(null)}
               >
                 Cancel
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {driveShareConfirm && (
-        <div
-          className="fixed inset-0 z-[70] flex items-end justify-center bg-black/50 p-4 sm:items-center"
-          role="dialog"
-          aria-modal="true"
-        >
-          <div className="w-full max-w-sm rounded-3xl border border-amber-100 bg-white p-4 shadow-2xl">
-            <div className="flex items-start gap-3">
-              <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-amber-50 text-amber-600">
-                <AlertTriangle className="h-5 w-5" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <h2 className="text-base font-black tracking-tight text-[#102A43]">
-                  Send backup copy?
-                </h2>
-                <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  This creates a new Drive file and shares it as Viewer. Make sure these recipients are correct.
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-3 rounded-2xl border border-slate-100 bg-slate-50/80 p-3">
-              <div className="mb-2 text-[10px] font-black uppercase tracking-wide text-slate-400">
-                Recipients
-              </div>
-              <div className="space-y-1.5">
-                {driveShareConfirm.recipients.map((recipient) => (
-                  <div key={recipient.id} className="truncate text-xs font-bold text-slate-700">
-                    • {recipient.name || recipient.email} — {recipient.email}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="mt-3 rounded-2xl border border-amber-100 bg-amber-50/80 p-3">
-              <p className="text-xs font-semibold leading-snug text-amber-800">
-                The backup contains roster text data such as names, ratings, traits, and notes. It does not include player photos or logo images.
-              </p>
-            </div>
-
-            <div className="mt-4 grid gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                className="h-10 rounded-2xl border-slate-200 bg-white text-xs font-black text-slate-700"
-                onClick={downloadAllRostersBackup}
-              >
-                Export local backup first
-              </Button>
-              <Button
-                type="button"
-                className="h-11 rounded-2xl bg-emerald-600 text-white hover:bg-emerald-700"
-                onClick={confirmDriveShare}
-                disabled={googleDriveSharing}
-              >
-                {googleDriveSharing ? "Sending..." : "Send copy"}
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                className="h-10 rounded-2xl text-slate-500"
-                onClick={() => setDriveShareConfirm(null)}
-                disabled={googleDriveSharing}
-              >
-                Cancel
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {localImportPreview && (
-        <div
-          className="fixed inset-0 z-[60] flex items-end justify-center bg-black/45 p-4 sm:items-center"
-          role="dialog"
-          aria-modal="true"
-        >
-          <div className="flex max-h-[calc(100dvh-2rem)] w-full max-w-sm flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
-            <div className="flex items-start justify-between gap-3 border-b border-slate-100 p-4 pb-3">
-              <div className="min-w-0">
-                <div className="text-[10px] font-black uppercase tracking-wide text-[#102A43]/55">
-                  {localImportPreview.mode === "backup" ? "Local backup files" : "Local roster file"}
-                </div>
-                <h2 className="mt-1 truncate text-base font-black tracking-tight text-[#102A43]">
-                  Import this file?
-                </h2>
-                <p className="mt-1 truncate text-xs font-semibold text-slate-500">
-                  {localImportPreview.sourceName}
-                </p>
-              </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 shrink-0 rounded-xl"
-                onClick={closeLocalImportPreview}
-                title="Close"
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
-              <div className="grid grid-cols-2 gap-2">
-                <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-3 text-center">
-                  <div className="text-xl font-black text-[#102A43]">
-                    {localImportPreview.rosterCount}
-                  </div>
-                  <div className="text-[10px] font-black uppercase tracking-wide text-blue-500">
-                    Rosters
-                  </div>
-                </div>
-                <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-3 text-center">
-                  <div className="text-xl font-black text-[#102A43]">
-                    {localImportPreview.playerCount}
-                  </div>
-                  <div className="text-[10px] font-black uppercase tracking-wide text-emerald-600">
-                    Players
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-3 rounded-2xl border border-slate-100 bg-slate-50/80 p-3">
-                <div className="mb-2 text-[10px] font-black uppercase tracking-wide text-slate-400">
-                  Included rosters
-                </div>
-                <div className="space-y-1.5">
-                  {localImportPreview.rosterNames.slice(0, 5).map((name, index) => (
-                    <div key={`${name}-${index}`} className="truncate text-xs font-bold text-slate-700">
-                      • {name}
-                    </div>
-                  ))}
-                  {localImportPreview.rosterNames.length > 5 ? (
-                    <div className="text-xs font-bold text-slate-400">
-                      …and {localImportPreview.rosterNames.length - 5} more
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-
-              <div className="mt-3 rounded-2xl border border-amber-100 bg-amber-50/80 p-3">
-                <div className="flex gap-2">
-                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-                  <p className="text-xs font-semibold leading-snug text-amber-800">
-                    {localImportPreview.mode === "backup"
-                      ? "This adds rosters from the backup file. Your current rosters stay in the app."
-                      : `This imports the file as a separate roster. Your current roster “${activeRosterName}” stays unchanged.`}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="grid gap-2 border-t border-slate-100 p-4">
-              <Button
-                type="button"
-                className="h-11 rounded-2xl bg-[#102A43] text-white hover:bg-[#0b2036]"
-                onClick={confirmLocalImport}
-              >
-                {localImportPreview.mode === "backup" ? "Add rosters from backup" : "Import as new roster"}
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                className="h-10 rounded-2xl text-slate-500"
-                onClick={closeLocalImportPreview}
-              >
-                Cancel
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {rosterToolsNotice && (
-        <div
-          className="fixed inset-0 z-[60] flex items-end justify-center bg-black/45 p-4 sm:items-center"
-          role="dialog"
-          aria-modal="true"
-        >
-          <div className="w-full max-w-sm rounded-3xl border border-slate-200 bg-white p-4 shadow-2xl">
-            <div className="flex items-start gap-3">
-              <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl ${rosterToolsNotice.tone === "success" ? "bg-emerald-50 text-emerald-600" : rosterToolsNotice.tone === "warning" ? "bg-amber-50 text-amber-600" : rosterToolsNotice.tone === "error" ? "bg-red-50 text-red-600" : "bg-blue-50 text-blue-600"}`}>
-                {rosterToolsNotice.tone === "success" ? <Check className="h-5 w-5" /> : <AlertTriangle className="h-5 w-5" />}
-              </div>
-              <div className="min-w-0 flex-1">
-                <h2 className="text-base font-black tracking-tight text-[#102A43]">
-                  {rosterToolsNotice.title}
-                </h2>
-                <p className="mt-1 whitespace-pre-line text-xs font-semibold leading-snug text-slate-500">
-                  {rosterToolsNotice.message}
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-4">
-              <Button
-                type="button"
-                className="h-11 w-full rounded-2xl bg-[#102A43] text-white hover:bg-[#0b2036]"
-                onClick={() => setRosterToolsNotice(null)}
-              >
-                OK
               </Button>
             </div>
           </div>

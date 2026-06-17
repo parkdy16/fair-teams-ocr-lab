@@ -302,6 +302,47 @@ export async function updateGoogleDriveJsonFile(
   return result as GoogleDriveFileResult;
 }
 
+
+export async function trashGoogleDriveFile(
+  accessToken: string,
+  fileId: string,
+): Promise<GoogleDriveFileResult> {
+  const params = new URLSearchParams({
+    fields: "id,name,webViewLink,modifiedTime,ownedByMe,trashed",
+    supportsAllDrives: "true",
+  });
+
+  const response = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?${params.toString()}`,
+    {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json; charset=UTF-8",
+      },
+      body: JSON.stringify({ trashed: true }),
+    },
+  );
+
+  if (!response.ok) {
+    const message = await readDriveError(response);
+    if (response.status === 401) {
+      throw new Error("Google Drive connection expired. Disconnect and connect Google Drive again, then retry.");
+    }
+    if (response.status === 403) {
+      throw new Error("Fair Teams cannot delete this backup. Only the file owner can move this Drive backup to trash.");
+    }
+    throw new Error(message);
+  }
+
+  const result = await response.json();
+  if (!result?.id || !result?.name) {
+    throw new Error("Google Drive moved the backup to trash but did not return file details.");
+  }
+
+  return result as GoogleDriveFileResult;
+}
+
 export async function shareGoogleDriveFileWithEditor(
   accessToken: string,
   fileId: string,

@@ -3078,7 +3078,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                     />
                   </div>
                 )}
-                equipmentGroupId={activeFirebaseSource?.firebaseGroupId || (activeFirebaseSource?.firebaseRosterId ? `roster:${activeFirebaseSource.firebaseRosterId}` : undefined)}
+                equipmentGroupId={activeFirebaseSource?.firebaseRosterId ? `roster:${activeFirebaseSource.firebaseRosterId}` : undefined}
                 equipmentHolderLabels={activeFirebaseEquipmentHolderLabels}
                 equipmentHolderNamesByEmail={activeFirebaseEquipmentHolderNamesByEmail}
               />

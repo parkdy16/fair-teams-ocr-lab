@@ -490,6 +490,7 @@ export function ClubTab({
 
   const equipmentRealtimeEnabled = Boolean(equipmentGroupId);
   const equipmentSharedConnecting = isSharedRoster && !equipmentRealtimeEnabled;
+  const equipmentRosterLabel = activeRosterName || "Current roster";
   const equipmentStatusText = equipmentRealtimeEnabled
     ? equipmentError
       ? "Sync issue. Open board."
@@ -497,17 +498,17 @@ export function ClubTab({
         ? "Loading shared equipment…"
         : "Realtime sync on."
     : equipmentSharedConnecting
-      ? "Shared sync not ready yet."
+      ? "Open a shared roster to sync."
       : "Local preview.";
   const equipmentBoardStatusText = equipmentRealtimeEnabled
     ? equipmentError
       ? equipmentError
       : equipmentLoading
         ? "Loading shared equipment…"
-        : "Realtime sync on · drag bags to move"
+        : "Realtime sync on · this board belongs to the selected roster"
     : equipmentSharedConnecting
-      ? "Shared sync not ready yet."
-      : "Local preview · drag bags to move";
+      ? "Open a shared roster to sync equipment."
+      : "Local preview · this board belongs to this roster on this device";
   const equipmentHolders = useMemo<EquipmentHolder[]>(() => {
     if (!isSharedRoster && !equipmentRealtimeEnabled) return LOCAL_EQUIPMENT_HOLDERS;
     return buildSharedEquipmentHolders(equipmentHolderLabels, equipmentKits, equipmentHolderNamesByEmail);
@@ -817,6 +818,18 @@ export function ClubTab({
     onSharedToolsOpenChange?.(true);
   };
 
+  const openEquipmentRosterPicker = () => {
+    if (!canSwitchRoster || !onOpenRosterPicker) return;
+    blurActiveField();
+    setColorPickerOpen(false);
+    setDeleteConfirmOpen(false);
+    setContentPeekKitId(null);
+    setEquipmentDialogOpen(false);
+    setEquipmentBoardOpen(false);
+    releaseModalScrollLockSoon();
+    window.setTimeout(() => onOpenRosterPicker(), 120);
+  };
+
   const hasClubBackTarget = Boolean(
     sharedToolsOpen ||
     colorPickerOpen ||
@@ -1023,27 +1036,41 @@ export function ClubTab({
       <ClubFeatureCard
         icon={<PackageOpen className="h-5 w-5" />}
         eyebrow="Equipment"
-        title="Who has the bags?"
-        description="Open a focused board for balls, cones, bibs, first-aid spray, keys, and other shared gear."
+        title="Equipment board"
+        description="Bags and shared gear belong to the selected roster. Change roster here when needed."
       >
         <div className="grid gap-3">
-          <div className="flex items-center justify-between gap-3 rounded-2xl bg-slate-50 p-3">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 text-xs font-bold text-slate-600">
-                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                {equipmentKits.length} equipment bag{equipmentKits.length === 1 ? "" : "s"}
+          <div className="rounded-2xl bg-slate-50 p-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 text-xs font-bold text-slate-600">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                  {equipmentKits.length} bag{equipmentKits.length === 1 ? "" : "s"}
+                </div>
+                <p className="mt-1 truncate text-[11px] font-semibold leading-snug text-slate-500">
+                  Roster: {equipmentRosterLabel}
+                </p>
+                <p className="mt-0.5 text-[11px] font-semibold leading-snug text-slate-500">
+                  {equipmentStatusText}
+                </p>
               </div>
-              <p className="mt-1 text-[11px] font-semibold leading-snug text-slate-500">
-                {equipmentStatusText}
-              </p>
+              <Button
+                type="button"
+                className="h-10 shrink-0 rounded-2xl bg-[#102A43] px-3 text-xs font-black text-white hover:bg-[#0b2036]"
+                onClick={() => setEquipmentBoardOpen(true)}
+              >
+                Open
+              </Button>
             </div>
-            <Button
-              type="button"
-              className="h-10 shrink-0 rounded-2xl bg-[#102A43] px-3 text-xs font-black text-white hover:bg-[#0b2036]"
-              onClick={() => setEquipmentBoardOpen(true)}
-            >
-              Open board
-            </Button>
+            {canSwitchRoster && (
+              <button
+                type="button"
+                className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-left text-[11px] font-black uppercase tracking-wide text-[#102A43]/65 shadow-sm active:scale-[0.995]"
+                onClick={openEquipmentRosterPicker}
+              >
+                Change equipment roster
+              </button>
+            )}
           </div>
 
           <div className="flex gap-2 overflow-hidden">
@@ -1202,23 +1229,47 @@ export function ClubTab({
                   Equipment board
                 </DialogTitle>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  Drag bags to move. Tap a bag to edit.
+                  Roster: {equipmentRosterLabel}
                 </p>
               </div>
-              <Button
-                type="button"
-                className="h-10 shrink-0 rounded-2xl bg-[#102A43] px-3 text-xs font-black text-white hover:bg-[#0b2036]"
-                onClick={openNewEquipmentKit}
-              >
-                <Plus className="mr-1.5 h-4 w-4" />
-                Add bag
-              </Button>
+              <div className="flex shrink-0 items-center gap-2">
+                {canSwitchRoster && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-10 rounded-2xl border-slate-200 px-3 text-xs font-black text-slate-600"
+                    onClick={openEquipmentRosterPicker}
+                  >
+                    Change
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  className="h-10 rounded-2xl bg-[#102A43] px-3 text-xs font-black text-white hover:bg-[#0b2036]"
+                  onClick={openNewEquipmentKit}
+                >
+                  <Plus className="mr-1.5 h-4 w-4" />
+                  Add bag
+                </Button>
+              </div>
             </div>
           </DialogHeader>
 
           <div className="flex-1 overflow-y-auto bg-slate-50/70 p-3">
-            <div className="mb-2 rounded-2xl border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold leading-snug text-slate-500 shadow-sm">
-              {equipmentBoardStatusText}
+            <div className="mb-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-bold leading-snug text-slate-500 shadow-sm">
+              <div className="flex items-center justify-between gap-3">
+                <span className="min-w-0 truncate">Equipment for: {equipmentRosterLabel}</span>
+                {canSwitchRoster && (
+                  <button
+                    type="button"
+                    className="shrink-0 text-[10px] font-black uppercase tracking-wide text-[#102A43]/60"
+                    onClick={openEquipmentRosterPicker}
+                  >
+                    Change
+                  </button>
+                )}
+              </div>
+              <div className="mt-0.5 text-slate-400">{equipmentBoardStatusText}</div>
             </div>
 
             <div className="overflow-hidden rounded-[1.65rem] border border-slate-200 bg-white shadow-[0_14px_34px_rgba(15,23,42,0.08)]">

@@ -546,6 +546,19 @@ function App() {
         .filter((email) => email.includes("@"))))
     : [];
   const activeFirebaseEquipmentHolderNamesByEmail = activeFirebaseSource?.firebaseMemberNamesByEmail || {};
+  const cleanFirebasePersonLabel = (email: string) => {
+    const normalized = email.trim().toLowerCase();
+    const savedName = activeFirebaseEquipmentHolderNamesByEmail[normalized] || activeFirebaseEquipmentHolderNamesByEmail[email];
+    if (savedName?.trim()) return savedName.trim();
+    return (normalized.split("@")[0] || "Organizer")
+      .replace(/[._-]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .replace(/\b\w/g, (char) => char.toUpperCase()) || "Organizer";
+  };
+  const activeFirebaseSharedPersonNames = activeFirebaseEquipmentHolderLabels
+    .map(cleanFirebasePersonLabel)
+    .filter((label, index, all) => Boolean(label) && all.indexOf(label) === index);
 
   const syncFirebaseRosterBadgesFromSummaries = (summaries: FirebaseSharedRosterSummary[]) => {
     if (!summaries.length) return;
@@ -660,6 +673,7 @@ function App() {
   const [rosterLocalBackupToolsOpen, setRosterLocalBackupToolsOpen] = useState(false);
   const [rosterCloudBackupToolsOpen, setRosterCloudBackupToolsOpen] = useState(false);
   const [rosterPickerOpen, setRosterPickerOpen] = useState(false);
+  const [headerSharedPeopleOpen, setHeaderSharedPeopleOpen] = useState(false);
   const [rosterSwitchingName, setRosterSwitchingName] = useState("");
   const [clearRosterOpen, setClearRosterOpen] = useState(false);
   const [clearRosterSlide, setClearRosterSlide] = useState(0);
@@ -2655,6 +2669,10 @@ They will no longer be able to open or edit this shared roster unless it is shar
       setRosterPickerOpen(false);
       return true;
     }
+    if (headerSharedPeopleOpen) {
+      setHeaderSharedPeopleOpen(false);
+      return true;
+    }
     if (googleSheetShareOpen) {
       setGoogleSheetShareOpen(false);
       return true;
@@ -2678,9 +2696,6 @@ They will no longer be able to open or edit this shared roster unless it is shar
     if (googleSheetHelpOpen) {
       setGoogleSheetHelpOpen(false);
       return true;
-    }
-    if (clubSharedToolsOpen) {
-        return true;
     }
     if (rosterFilesOpen) {
       if (rosterToolsActivePanel) {
@@ -2733,6 +2748,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
     clearRosterOpen ||
     groupSettingsOpen ||
     rosterPickerOpen ||
+    headerSharedPeopleOpen ||
     googleSheetShareOpen ||
     Boolean(driveBackupDeleteConfirm) ||
     driveShareOpen ||
@@ -2796,6 +2812,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
     googleSheetHelpOpen,
     googleSheetShareOpen,
     groupSettingsOpen,
+    headerSharedPeopleOpen,
     rosterFilesOpen,
     rosterPickerOpen,
     rosterToolsActivePanel,
@@ -2878,7 +2895,24 @@ They will no longer be able to open or edit this shared roster unless it is shar
                     {headerDisplayName}
                   </h1>
                   {activeRosterIsFirebaseShared && !shouldShowTodayStartHeader && (
-                    <span className="inline-flex h-5 shrink-0 items-center gap-0.5 rounded-full bg-emerald-50 px-1.5 text-[10px] font-black text-emerald-700" title="Shared roster">
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      className="inline-flex h-5 shrink-0 items-center gap-0.5 rounded-full bg-emerald-50 px-1.5 text-[10px] font-black text-emerald-700 active:scale-95"
+                      title="Shared with"
+                      aria-label="Show shared people"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setHeaderSharedPeopleOpen(true);
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          setHeaderSharedPeopleOpen(true);
+                        }
+                      }}
+                    >
                       <Users className="h-3 w-3" />
                       {rosterFirebaseShareCount(activeRoster)}
                     </span>
@@ -2941,6 +2975,26 @@ They will no longer be able to open or edit this shared roster unless it is shar
             </div>
           </div>
         </header>
+
+        {headerSharedPeopleOpen && (
+          <div className="fixed inset-0 z-[75] flex items-end justify-center bg-slate-950/25 p-3 sm:items-center" onClick={() => setHeaderSharedPeopleOpen(false)}>
+            <div className="w-full max-w-sm rounded-3xl bg-white p-3 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+              <div className="mb-2 flex items-center justify-between gap-3 px-1">
+                <div className="text-sm font-black text-[#102A43]">Shared with</div>
+                <button type="button" onClick={() => setHeaderSharedPeopleOpen(false)} className="rounded-full bg-slate-50 p-2 text-slate-500 active:scale-95" aria-label="Close shared people">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="grid gap-1.5">
+                {activeFirebaseSharedPersonNames.length ? activeFirebaseSharedPersonNames.map((name) => (
+                  <div key={name} className="rounded-2xl bg-slate-50 px-3 py-2 text-sm font-black text-[#102A43]">{name}</div>
+                )) : (
+                  <div className="rounded-2xl bg-slate-50 px-3 py-2 text-sm font-bold text-slate-500">No collaborators yet</div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className={`flex-1 overflow-y-auto p-4 md:p-5 ${shouldShowTodayStartHeader ? "pb-6 md:pb-6" : "pb-20 md:pb-20"}`} style={{ WebkitOverflowScrolling: "touch" }}>
           <div className="flex min-h-[calc(100dvh-116px)] flex-col">

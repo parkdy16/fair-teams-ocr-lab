@@ -319,6 +319,50 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
     setCollaboratorRosterId(rosterId || activeSharedRosterId || "");
   };
 
+  const collaboratorsModal = collaboratorRoster ? modalShell("Collaborators", () => setCollaboratorRosterId(""), (
+    <div className="grid gap-3">
+      <div className="grid grid-cols-[1fr_auto] gap-2">
+        <input value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} type="email" className="h-10 rounded-2xl border border-slate-100 bg-slate-50 px-3 text-sm font-bold outline-none" placeholder="email@example.com" />
+        <Button type="button" className="h-10 rounded-2xl bg-emerald-600 px-3 text-xs font-black text-white" onClick={handleInvite} disabled={!inviteEmail.trim() || Boolean(busy)}>
+          <UserPlus className="mr-1.5 h-4 w-4" />
+          Add
+        </Button>
+      </div>
+      <div className="grid gap-1.5">
+        {(() => {
+          const memberNamesByEmail = mergedMemberNames(collaboratorGroup, collaboratorRoster);
+          const memberEmails = collaboratorGroup?.memberEmails || collaboratorRoster.memberEmails || [];
+          const pendingEmails = collaboratorGroup?.pendingInviteEmails || collaboratorRoster.pendingInviteEmails || [];
+          return (
+            <>
+              {memberEmails.map((email) => {
+                const label = displayNameForEmail(email, memberNamesByEmail, user?.email);
+                return (
+                  <div key={email} className="flex items-center justify-between gap-2 rounded-2xl bg-slate-50 px-3 py-2 text-xs font-bold text-[#102A43]">
+                    <div className="min-w-0">
+                      <div className="truncate">{label}</div>
+                      <div className="truncate text-[10px] text-slate-500">{email}</div>
+                    </div>
+                    <span className="shrink-0 text-[10px] text-emerald-700">{email === collaboratorRoster.ownerEmail ? "owner" : "active"}</span>
+                  </div>
+                );
+              })}
+              {pendingEmails.map((email) => (
+                <div key={email} className="flex items-center justify-between gap-2 rounded-2xl bg-amber-50 px-3 py-2 text-xs font-bold text-[#102A43]">
+                  <div className="min-w-0">
+                    <div className="truncate">{displayNameForEmail(email, memberNamesByEmail, user?.email)}</div>
+                    <div className="truncate text-[10px] text-amber-700">Pending · {email}</div>
+                  </div>
+                  <button type="button" onClick={() => handleCancelInvite(email)} className="rounded-full bg-white p-1.5 text-amber-700" disabled={Boolean(busy)}><X className="h-3.5 w-3.5" /></button>
+                </div>
+              ))}
+            </>
+          );
+        })()}
+      </div>
+    </div>
+  )) : null;
+
 
   if (variant === "compact") {
     return (
@@ -348,19 +392,24 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
             {busy === "publish" ? "Sharing…" : "Share roster"}
           </Button>
         ) : (
-          <div className="grid grid-cols-2 gap-2">
-            <Button type="button" className="h-10 rounded-2xl bg-emerald-600 text-xs font-black text-white hover:bg-emerald-700" onClick={handleSaveActiveRoster} disabled={!user || !activeCanSave || !activeHasLocalChanges || Boolean(busy)}>
-              <Save className="mr-1.5 h-4 w-4" />
-              {busy === "save" ? "Saving…" : "Save"}
+          <div className="grid grid-cols-3 gap-2">
+            <Button type="button" className="h-10 rounded-2xl bg-emerald-600 px-2 text-xs font-black text-white hover:bg-emerald-700" onClick={handleSaveActiveRoster} disabled={!user || !activeCanSave || !activeHasLocalChanges || Boolean(busy)}>
+              <Save className="mr-1 h-4 w-4" />
+              {busy === "save" ? "…" : "Save"}
             </Button>
-            <Button type="button" variant="outline" className="h-10 rounded-2xl border-slate-100 bg-white text-xs font-black" onClick={handleGetLatest} disabled={!user || !remoteUpdatedLinkedRosters.length || Boolean(busy)}>
-              <CloudDownload className="mr-1.5 h-4 w-4" />
-              {busy === "reload" ? "Getting…" : "Latest"}
+            <Button type="button" variant="outline" className="h-10 rounded-2xl border-slate-100 bg-white px-2 text-xs font-black" onClick={handleGetLatest} disabled={!user || !remoteUpdatedLinkedRosters.length || Boolean(busy)}>
+              <CloudDownload className="mr-1 h-4 w-4" />
+              {busy === "reload" ? "…" : "Latest"}
+            </Button>
+            <Button type="button" variant="outline" className="h-10 rounded-2xl border-slate-100 bg-white px-2 text-xs font-black" onClick={() => openCollaborators(activeSharedRosterId)} disabled={!user || Boolean(busy)}>
+              <Users className="mr-1 h-4 w-4" />
+              People
             </Button>
           </div>
         )}
 
         {notice && <div className={`rounded-2xl px-3 py-2 text-[11px] font-bold ${notice.tone === "error" ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>{notice.text}</div>}
+        {collaboratorsModal}
       </div>
     );
   }
@@ -440,50 +489,7 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
 
       {notice && <div className={`rounded-2xl px-3 py-2 text-[11px] font-bold ${notice.tone === "error" ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>{notice.text}</div>}
 
-      {collaboratorRoster && modalShell("Collaborators", () => setCollaboratorRosterId(""), (
-        <div className="grid gap-3">
-          <div className="rounded-2xl bg-slate-50 px-3 py-2 text-xs font-black text-[#102A43]">{collaboratorRoster.name}</div>
-          <div className="grid grid-cols-[1fr_auto] gap-2">
-            <input value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} type="email" className="h-10 rounded-2xl border border-slate-100 bg-slate-50 px-3 text-sm font-bold outline-none" placeholder="email@example.com" />
-            <Button type="button" className="h-10 rounded-2xl bg-emerald-600 px-3 text-xs font-black text-white" onClick={handleInvite} disabled={!inviteEmail.trim() || Boolean(busy)}>
-              <UserPlus className="mr-1.5 h-4 w-4" />
-              Add
-            </Button>
-          </div>
-          <div className="grid gap-1.5">
-            {(() => {
-              const memberNamesByEmail = mergedMemberNames(collaboratorGroup, collaboratorRoster);
-              const memberEmails = collaboratorGroup?.memberEmails || collaboratorRoster.memberEmails || [];
-              const pendingEmails = collaboratorGroup?.pendingInviteEmails || collaboratorRoster.pendingInviteEmails || [];
-              return (
-                <>
-                  {memberEmails.map((email) => {
-                    const label = displayNameForEmail(email, memberNamesByEmail, user?.email);
-                    return (
-                      <div key={email} className="flex items-center justify-between gap-2 rounded-2xl bg-slate-50 px-3 py-2 text-xs font-bold text-[#102A43]">
-                        <div className="min-w-0">
-                          <div className="truncate">{label}</div>
-                          <div className="truncate text-[10px] text-slate-500">{email}</div>
-                        </div>
-                        <span className="shrink-0 text-[10px] text-emerald-700">{email === collaboratorRoster.ownerEmail ? "owner" : "active"}</span>
-                      </div>
-                    );
-                  })}
-                  {pendingEmails.map((email) => (
-                    <div key={email} className="flex items-center justify-between gap-2 rounded-2xl bg-amber-50 px-3 py-2 text-xs font-bold text-[#102A43]">
-                      <div className="min-w-0">
-                        <div className="truncate">{displayNameForEmail(email, memberNamesByEmail, user?.email)}</div>
-                        <div className="truncate text-[10px] text-amber-700">Pending · {email}</div>
-                      </div>
-                      <button type="button" onClick={() => handleCancelInvite(email)} className="rounded-full bg-white p-1.5 text-amber-700" disabled={Boolean(busy)}><X className="h-3.5 w-3.5" /></button>
-                    </div>
-                  ))}
-                </>
-              );
-            })()}
-          </div>
-        </div>
-      ))}
+{collaboratorsModal}
     </div>
   );
 }

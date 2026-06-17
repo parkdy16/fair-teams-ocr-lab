@@ -6,6 +6,7 @@ import {
   Plus,
   ShieldCheck,
   Trash2,
+  UserCircle,
   Users,
   Vote,
   X,
@@ -475,11 +476,13 @@ export function ClubTab({
     equipmentBoardOpen: false,
     equipmentDialogOpen: false,
     voteDialogOpen: false,
+    accountDialogOpen: false,
   });
   const [authReady, setAuthReady] = useState(false);
   const [clubUser, setClubUser] = useState<SharedRosterUser | null>(null);
   const [accountBusy, setAccountBusy] = useState(false);
   const [collaboratorsOpen, setCollaboratorsOpen] = useState(false);
+  const [accountDialogOpen, setAccountDialogOpen] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -584,6 +587,7 @@ export function ClubTab({
   }, [collaboratorCount, equipmentHolderLabels, equipmentHolderNamesByEmail, isSharedRoster]);
   const sharedPeopleCount = isSharedRoster ? Math.max(sharedPersonNames.length, collaboratorCount + 1, 1) : 0;
   const loginGateOpen = Boolean(isActive && authReady && !clubUser);
+  const accountModalOpen = loginGateOpen || accountDialogOpen;
 
   const resetVoteForm = () => {
     setQuestion("");
@@ -816,7 +820,8 @@ export function ClubTab({
     contentPeekKitId ||
     equipmentDialogOpen ||
     equipmentBoardOpen ||
-    voteDialogOpen,
+    voteDialogOpen ||
+    accountDialogOpen,
   );
 
   useEffect(() => {
@@ -826,8 +831,9 @@ export function ClubTab({
       equipmentBoardOpen,
       equipmentDialogOpen,
       voteDialogOpen,
+      accountDialogOpen,
     };
-  }, [colorPickerOpen, contentPeekKitId, equipmentBoardOpen, equipmentDialogOpen, voteDialogOpen]);
+  }, [accountDialogOpen, colorPickerOpen, contentPeekKitId, equipmentBoardOpen, equipmentDialogOpen, voteDialogOpen]);
 
   useEffect(() => {
     onBackTargetChange?.(hasClubBackTarget);
@@ -870,6 +876,12 @@ export function ClubTab({
       if (state.voteDialogOpen) {
         event.preventDefault();
         setVoteDialogOpen(false);
+        return;
+      }
+      if (state.accountDialogOpen) {
+        event.preventDefault();
+        blurActiveField();
+        setAccountDialogOpen(false);
       }
     };
 
@@ -882,7 +894,10 @@ export function ClubTab({
 
   return (
     <div className="mx-auto flex w-full max-w-xl flex-col gap-2.5 px-1 pb-2">
-      <Dialog open={loginGateOpen} onOpenChange={() => {}}>
+      <Dialog open={accountModalOpen} onOpenChange={(open) => {
+        if (!clubUser) return;
+        setAccountDialogOpen(open);
+      }}>
         <DialogContent className="max-w-sm rounded-3xl p-3">
           <DialogHeader className="px-1 pb-1 text-left">
             <DialogTitle className="text-base font-black text-[#102A43]">Fair Teams account</DialogTitle>
@@ -893,7 +908,15 @@ export function ClubTab({
 
       {clubUser && (
         <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white px-3 py-2 shadow-sm">
-          <div className="min-w-0 truncate text-[11px] font-bold text-slate-500">{clubUser.email}</div>
+          <button
+            type="button"
+            onClick={() => setAccountDialogOpen(true)}
+            className="flex min-w-0 items-center gap-2 text-left active:scale-[0.99]"
+            aria-label="Open Fair Teams account"
+          >
+            <UserCircle className="h-4 w-4 shrink-0 text-slate-400" />
+            <span className="min-w-0 truncate text-[11px] font-bold text-slate-500">{clubUser.email}</span>
+          </button>
           <button
             type="button"
             onClick={handleClubLogout}
@@ -906,45 +929,13 @@ export function ClubTab({
       )}
 
       <section className="rounded-[1.7rem] border border-slate-100 bg-white p-3 shadow-sm">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="text-[10px] font-black uppercase tracking-wide text-emerald-600">Club roster</div>
-            <div className="mt-1 truncate text-base font-black text-[#102A43]">{activeRosterName || "Current roster"}</div>
-            <div className="mt-0.5 truncate text-[11px] font-semibold text-slate-500">
-              {isSharedRoster ? "Shared roster" : `${playerCount} player${playerCount === 1 ? "" : "s"} · local`}
-            </div>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            {isSharedRoster ? (
-              <button
-                type="button"
-                onClick={() => setCollaboratorsOpen(true)}
-                className="inline-flex h-9 items-center gap-1.5 rounded-2xl bg-emerald-50 px-2.5 text-xs font-black text-emerald-700 active:scale-95"
-                aria-label="Shared with"
-              >
-                <Users className="h-4 w-4" />
-                {sharedPeopleCount}
-              </button>
-            ) : (
-              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-black text-slate-500">Local</span>
-            )}
-            <Button
-              type="button"
-              variant="outline"
-              className="h-9 rounded-2xl border-slate-100 bg-slate-50 px-3 text-xs font-black"
-              onClick={onOpenRosterPicker}
-              disabled={!canSwitchRoster}
-            >
-              Change
-            </Button>
-          </div>
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <div className="text-[10px] font-black uppercase tracking-wide text-emerald-600">Shared roster</div>
+          {!isSharedRoster && (
+            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-black text-slate-500">Local</span>
+          )}
         </div>
-
-        {sharedToolsNode && (
-          <div className="mt-3 border-t border-slate-100 pt-3">
-            {sharedToolsNode}
-          </div>
-        )}
+        {sharedToolsNode}
       </section>
 
       <section className="rounded-[1.7rem] border border-slate-100 bg-white p-3 shadow-sm">

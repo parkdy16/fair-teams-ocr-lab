@@ -737,6 +737,15 @@ function ProfileDialog({
     onAutoOpenHandled?.();
   }, [autoOpen, player, onAutoOpenHandled]);
 
+  const closeProfileDialog = () => {
+    setPhotoActionsOpen(false);
+    setTraitHelp(null);
+    setOpen(false);
+    if (reviewMode) {
+      onReviewDone?.();
+    }
+  };
+
   const save = () => {
     onUpdate({ ...draft, skill: overall, updatedAt: new Date().toISOString() });
     setOpen(false);
@@ -760,6 +769,26 @@ function ProfileDialog({
       onReviewNext?.();
     }
   };
+
+  useEffect(() => {
+    if (!open) return;
+
+    const handleNativeBack = (event: Event) => {
+      event.preventDefault();
+      if (traitHelp) {
+        setTraitHelp(null);
+        return;
+      }
+      if (photoActionsOpen) {
+        setPhotoActionsOpen(false);
+        return;
+      }
+      closeProfileDialog();
+    };
+
+    window.addEventListener("fairteams:native-back", handleNativeBack);
+    return () => window.removeEventListener("fairteams:native-back", handleNativeBack);
+  }, [open, traitHelp, photoActionsOpen, reviewMode, onReviewDone]);
 
   return (
     <Dialog
@@ -1170,6 +1199,58 @@ export function PlayersTab({
   const voiceAddRecognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const [hideOverall, setHideOverall] = useState(() => rosterSkillHiddenSession);
   const [sortMode, setSortMode] = useState<"recent" | "alpha" | "skill">(() => rosterSortModeSession);
+
+  useEffect(() => {
+    const hasRosterDialogOpen =
+      addOptionsOpen ||
+      voiceAddOpen ||
+      addPlayerOpen ||
+      pairingRulesOpen ||
+      addPhotoActionsOpen ||
+      Boolean(addTraitHelp);
+
+    if (!hasRosterDialogOpen) return;
+
+    const handleNativeBack = (event: Event) => {
+      if (event.defaultPrevented) return;
+      event.preventDefault();
+
+      if (addTraitHelp) {
+        setAddTraitHelp(null);
+        return;
+      }
+      if (addPhotoActionsOpen) {
+        setAddPhotoActionsOpen(false);
+        return;
+      }
+      if (addPlayerOpen) {
+        setAddPlayerOpen(false);
+        return;
+      }
+      if (voiceAddOpen) {
+        stopVoiceAddListening();
+        setVoiceAddOpen(false);
+        return;
+      }
+      if (pairingRulesOpen) {
+        setPairingRulesOpen(false);
+        return;
+      }
+      if (addOptionsOpen) {
+        setAddOptionsOpen(false);
+      }
+    };
+
+    window.addEventListener("fairteams:native-back", handleNativeBack);
+    return () => window.removeEventListener("fairteams:native-back", handleNativeBack);
+  }, [
+    addOptionsOpen,
+    voiceAddOpen,
+    addPlayerOpen,
+    pairingRulesOpen,
+    addPhotoActionsOpen,
+    addTraitHelp,
+  ]);
 
   useEffect(() => {
     if (reviewPlayerId || reviewActivePlayerId) setSearch("");

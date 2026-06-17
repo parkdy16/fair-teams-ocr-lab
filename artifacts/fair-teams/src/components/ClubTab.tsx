@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   CalendarClock,
   CheckCircle2,
@@ -342,6 +342,12 @@ export function ClubTab({
   const [kitColor, setKitColor] = useState(DEFAULT_EQUIPMENT_COLOR);
   const [kitContents, setKitContents] = useState("");
   const [kitNote, setKitNote] = useState("");
+  const [draggingKitId, setDraggingKitId] = useState<string | null>(null);
+  const [dragOverHolderId, setDragOverHolderId] = useState<string | null>(null);
+  const equipmentDragTimerRef = useRef<number | null>(null);
+  const activeEquipmentDragRef = useRef<string | null>(null);
+  const activeEquipmentDropHolderRef = useRef<string | null>(null);
+  const suppressEquipmentClickRef = useRef(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -460,6 +466,66 @@ export function ClubTab({
     setEquipmentKits((current) => current.map((kit) => kit.id === kitId
       ? { ...kit, holderId, updatedAt: Date.now() }
       : kit));
+  };
+
+  const clearEquipmentDragTimer = () => {
+    if (equipmentDragTimerRef.current !== null) {
+      window.clearTimeout(equipmentDragTimerRef.current);
+      equipmentDragTimerRef.current = null;
+    }
+  };
+
+  const startEquipmentPointerDrag = (event: React.PointerEvent<HTMLButtonElement>, kit: ClubEquipmentKit) => {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    clearEquipmentDragTimer();
+    activeEquipmentDragRef.current = null;
+    activeEquipmentDropHolderRef.current = kit.holderId;
+    suppressEquipmentClickRef.current = false;
+
+    equipmentDragTimerRef.current = window.setTimeout(() => {
+      activeEquipmentDragRef.current = kit.id;
+      activeEquipmentDropHolderRef.current = kit.holderId;
+      suppressEquipmentClickRef.current = true;
+      setDraggingKitId(kit.id);
+      setDragOverHolderId(kit.holderId);
+    }, 180);
+  };
+
+  const moveEquipmentPointerDrag = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (!activeEquipmentDragRef.current) return;
+    event.preventDefault();
+    const target = document.elementFromPoint(event.clientX, event.clientY) as HTMLElement | null;
+    const holderElement = target?.closest("[data-equipment-holder-id]") as HTMLElement | null;
+    const nextHolderId = holderElement?.dataset.equipmentHolderId || null;
+    if (nextHolderId && nextHolderId !== activeEquipmentDropHolderRef.current) {
+      activeEquipmentDropHolderRef.current = nextHolderId;
+      setDragOverHolderId(nextHolderId);
+    }
+  };
+
+  const finishEquipmentPointerDrag = (event?: React.PointerEvent<HTMLButtonElement>) => {
+    clearEquipmentDragTimer();
+    const kitId = activeEquipmentDragRef.current;
+    const holderId = activeEquipmentDropHolderRef.current;
+    if (event && event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+      event.currentTarget.releasePointerCapture?.(event.pointerId);
+    }
+    if (kitId && holderId) {
+      moveEquipmentKit(kitId, holderId);
+    }
+    activeEquipmentDragRef.current = null;
+    activeEquipmentDropHolderRef.current = null;
+    setDraggingKitId(null);
+    setDragOverHolderId(null);
+    window.setTimeout(() => {
+      suppressEquipmentClickRef.current = false;
+    }, 0);
+  };
+
+  const openEquipmentKitFromBoard = (kit: ClubEquipmentKit) => {
+    if (suppressEquipmentClickRef.current) return;
+    openEditEquipmentKit(kit);
   };
 
   const deleteEquipmentKit = (kitId: string) => {
@@ -754,60 +820,80 @@ export function ClubTab({
           </DialogHeader>
 
           <div className="flex-1 overflow-y-auto bg-slate-50/70 p-3">
-            <div className="grid gap-3">
+            <div className="mb-3 rounded-2xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-[11px] font-bold leading-snug text-emerald-800">
+              Press and hold a bag, then drag it to another holder. Tap a bag to edit its color, name, contents, or note.
+            </div>
+
+            <div className="grid gap-2">
               {EQUIPMENT_HOLDERS.map((holder) => {
                 const holderKits = equipmentKits.filter((kit) => kit.holderId === holder.id);
+                const highlighted = dragOverHolderId === holder.id;
                 return (
-                  <section key={holder.id} className="rounded-3xl border border-slate-200 bg-white p-3 shadow-sm">
+                  <section
+                    key={holder.id}
+                    data-equipment-holder-id={holder.id}
+                    className={`rounded-3xl border p-3 shadow-sm transition ${highlighted ? "border-emerald-300 bg-emerald-50 ring-2 ring-emerald-100" : "border-slate-200 bg-white"}`}
+                  >
                     <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <h3 className="truncate text-sm font-black text-[#102A43]">
-                          {holder.label}
-                        </h3>
-                        <p className="mt-0.5 text-[11px] font-semibold text-slate-400">
-                          {holderKits.length} bag{holderKits.length === 1 ? "" : "s"}
-                        </p>
+                      <div className="flex min-w-0 items-center gap-2">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-slate-50 text-[#102A43]">
+                          <Users className="h-4 w-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <h3 className="truncate text-sm font-black text-[#102A43]">
+                            {holder.label}
+                          </h3>
+                          <p className="text-[11px] font-semibold text-slate-400">
+                            {holderKits.length} bag{holderKits.length === 1 ? "" : "s"}
+                          </p>
+                        </div>
                       </div>
-                      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-black text-slate-500">
-                        {holderKits.length}
-                      </span>
+                      <div className="flex shrink-0 -space-x-3">
+                        {holderKits.slice(0, 3).map((kit) => (
+                          <div key={kit.id} className="flex h-8 w-10 items-center justify-center rounded-full bg-white shadow-sm ring-1 ring-slate-100">
+                            <DuffleBagIcon color={kit.color || DEFAULT_EQUIPMENT_COLOR} className="h-6 w-8" />
+                          </div>
+                        ))}
+                        {holderKits.length > 3 && (
+                          <span className="flex h-8 min-w-8 items-center justify-center rounded-full bg-slate-100 px-2 text-[10px] font-black text-slate-500 ring-1 ring-white">
+                            +{holderKits.length - 3}
+                          </span>
+                        )}
+                      </div>
                     </div>
 
-                    <div className="mt-3 grid gap-2">
+                    <div className="mt-3 flex min-h-16 flex-wrap gap-2 rounded-2xl border border-dashed border-slate-200 bg-slate-50/60 p-2">
                       {holderKits.length === 0 ? (
-                        <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-3 py-4 text-center text-[11px] font-bold text-slate-300">
-                          Nothing here
+                        <div className="flex w-full items-center justify-center rounded-xl px-3 py-3 text-center text-[11px] font-bold text-slate-300">
+                          Drop bag here
                         </div>
-                      ) : holderKits.map((kit) => (
-                        <button
-                          key={kit.id}
-                          type="button"
-                          className="flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3 text-left shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50"
-                          onClick={() => openEditEquipmentKit(kit)}
-                        >
-                          <div className="flex h-14 w-16 shrink-0 items-center justify-center rounded-2xl bg-slate-50">
-                            <DuffleBagIcon color={kit.color || DEFAULT_EQUIPMENT_COLOR} />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="truncate text-sm font-black text-[#102A43]">
-                              {kit.name}
-                            </div>
-                            <div className="mt-0.5 text-[11px] font-bold text-slate-400">
-                              {kit.contents.length} item{kit.contents.length === 1 ? "" : "s"}
-                            </div>
-                            {kit.contents.length > 0 && (
-                              <div className="mt-1 line-clamp-1 text-[11px] font-semibold text-slate-500">
-                                {kit.contents.slice(0, 3).join(" · ")}
+                      ) : holderKits.map((kit) => {
+                        const isDragging = draggingKitId === kit.id;
+                        return (
+                          <button
+                            key={kit.id}
+                            type="button"
+                            className={`touch-none select-none rounded-2xl border border-slate-200 bg-white px-2.5 py-2 text-left shadow-sm transition hover:border-emerald-200 hover:bg-white active:scale-[0.98] ${isDragging ? "scale-95 opacity-45 ring-2 ring-emerald-200" : ""}`}
+                            onPointerDown={(event) => startEquipmentPointerDrag(event, kit)}
+                            onPointerMove={moveEquipmentPointerDrag}
+                            onPointerUp={finishEquipmentPointerDrag}
+                            onPointerCancel={finishEquipmentPointerDrag}
+                            onClick={() => openEquipmentKitFromBoard(kit)}
+                          >
+                            <div className="flex items-center gap-2">
+                              <DuffleBagIcon color={kit.color || DEFAULT_EQUIPMENT_COLOR} className="h-8 w-11" />
+                              <div className="min-w-0">
+                                <div className="max-w-[9rem] truncate text-xs font-black text-[#102A43]">
+                                  {kit.name}
+                                </div>
+                                <div className="text-[10px] font-bold text-slate-400">
+                                  {kit.contents.length} item{kit.contents.length === 1 ? "" : "s"}
+                                </div>
                               </div>
-                            )}
-                            {kit.note && (
-                              <div className="mt-1 line-clamp-2 text-[11px] font-semibold leading-tight text-amber-700">
-                                {kit.note}
-                              </div>
-                            )}
-                          </div>
-                        </button>
-                      ))}
+                            </div>
+                          </button>
+                        );
+                      })}
                     </div>
                   </section>
                 );

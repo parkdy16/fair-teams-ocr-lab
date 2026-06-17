@@ -957,38 +957,69 @@ function App() {
     writeStoredActiveDriveBackup(currentDriveBackup);
   }, [currentDriveBackup]);
 
-  useEffect(() => {
-    const shouldLockScroll =
-      groupSettingsOpen ||
-      rosterFilesOpen ||
-      rosterPickerOpen ||
-      clearRosterOpen ||
-      Boolean(driveImportPreview) ||
-      Boolean(driveBackupChoices) ||
-      Boolean(driveBackupDeleteConfirm) ||
-      Boolean(localImportPreview) ||
-      Boolean(rosterToolsNotice) ||
-      driveShareOpen ||
-      Boolean(driveShareConfirm) ||
-      driveAccessOpen ||
-      Boolean(driveRemoveConfirm) ||
-      driveHelpOpen ||
-      googleSheetHelpOpen ||
-      Boolean(driveUpdateConfirm) ||
-      Boolean(googleSheetChoices) ||
-      Boolean(googleSheetActionFile) ||
-      Boolean(googleSheetDeleteConfirm) ||
-      googleSheetShareOpen ||
-      Boolean(googleSheetConflictConfirm) ||
-      Boolean(googleSheetUpdatePrompt);
-    if (!shouldLockScroll) return;
+  const appScrollLockActive =
+    groupSettingsOpen ||
+    rosterFilesOpen ||
+    rosterPickerOpen ||
+    clearRosterOpen ||
+    Boolean(driveImportPreview) ||
+    Boolean(driveBackupChoices) ||
+    Boolean(driveBackupDeleteConfirm) ||
+    Boolean(localImportPreview) ||
+    Boolean(rosterToolsNotice) ||
+    driveShareOpen ||
+    Boolean(driveShareConfirm) ||
+    driveAccessOpen ||
+    Boolean(driveRemoveConfirm) ||
+    driveHelpOpen ||
+    googleSheetHelpOpen ||
+    Boolean(driveUpdateConfirm) ||
+    Boolean(googleSheetChoices) ||
+    Boolean(googleSheetActionFile) ||
+    Boolean(googleSheetDeleteConfirm) ||
+    googleSheetShareOpen ||
+    Boolean(googleSheetConflictConfirm) ||
+    Boolean(googleSheetUpdatePrompt);
 
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = previousOverflow;
+  useEffect(() => {
+    const clearFairTeamsScrollLock = () => {
+      if (document.body.dataset.fairTeamsScrollLock === "true") {
+        document.body.style.overflow = "";
+        document.documentElement.style.overflow = "";
+        delete document.body.dataset.fairTeamsScrollLock;
+      }
     };
-  }, [groupSettingsOpen, rosterFilesOpen, rosterPickerOpen, clearRosterOpen, driveImportPreview, driveBackupChoices, driveBackupDeleteConfirm, localImportPreview, rosterToolsNotice, driveShareOpen, driveShareConfirm, driveAccessOpen, driveRemoveConfirm, driveHelpOpen, googleSheetHelpOpen, driveUpdateConfirm, googleSheetChoices, googleSheetActionFile, googleSheetDeleteConfirm, googleSheetShareOpen, googleSheetConflictConfirm, googleSheetUpdatePrompt]);
+
+    if (!appScrollLockActive) {
+      clearFairTeamsScrollLock();
+      return;
+    }
+
+    document.body.dataset.fairTeamsScrollLock = "true";
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+
+    return () => {
+      clearFairTeamsScrollLock();
+    };
+  }, [appScrollLockActive]);
+
+  useEffect(() => {
+    const recoverReleasedScroll = () => {
+      if (!appScrollLockActive && document.body.dataset.fairTeamsScrollLock === "true") {
+        document.body.style.overflow = "";
+        document.documentElement.style.overflow = "";
+        delete document.body.dataset.fairTeamsScrollLock;
+      }
+    };
+
+    window.addEventListener("focus", recoverReleasedScroll);
+    document.addEventListener("visibilitychange", recoverReleasedScroll);
+    return () => {
+      window.removeEventListener("focus", recoverReleasedScroll);
+      document.removeEventListener("visibilitychange", recoverReleasedScroll);
+    };
+  }, [appScrollLockActive]);
 
   const openGroupSettings = () => {
     setDraftGroupName(activeRosterName);
@@ -2897,7 +2928,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
           </div>
         </header>
 
-        <div className={`flex-1 overflow-y-auto p-4 md:p-5 ${shouldShowTodayStartHeader ? "pb-6 md:pb-6" : "pb-20 md:pb-20"}`}>
+        <div className={`flex-1 overflow-y-auto p-4 md:p-5 ${shouldShowTodayStartHeader ? "pb-6 md:pb-6" : "pb-20 md:pb-20"}`} style={{ WebkitOverflowScrolling: "touch" }}>
           <div className="flex min-h-[calc(100dvh-116px)] flex-col">
             <TabsContent
               value="players"
@@ -3189,7 +3220,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
               </Button>
             </div>
 
-            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain p-4">
+            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain p-4" style={{ WebkitOverflowScrolling: "touch" }}>
               <div
                 className={`sticky top-0 z-20 flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white/95 px-3 py-3 text-left shadow-sm backdrop-blur transition ${!isEmptyStarterRoster && rosters.length > 1 ? "cursor-pointer active:scale-[0.995] hover:border-slate-300 hover:bg-white" : ""}`}
                 role={!isEmptyStarterRoster && rosters.length > 1 ? "button" : undefined}

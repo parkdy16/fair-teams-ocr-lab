@@ -533,6 +533,15 @@ function App() {
     return source?.firebaseRosterId ? Math.max(0, labels) : 0;
   };
 
+  const activeFirebaseEquipmentHolderLabels = activeFirebaseSource
+    ? Array.from(new Set([
+        activeFirebaseSource.firebaseOwnerEmail,
+        ...Object.keys(activeFirebaseSource.accessLabels || {}),
+      ]
+        .map((email) => (email || "").trim().toLowerCase())
+        .filter((email) => email.includes("@"))))
+    : [];
+
   const syncFirebaseRosterBadgesFromSummaries = (summaries: FirebaseSharedRosterSummary[]) => {
     if (!summaries.length) return;
     const summaryById = new Map(summaries.map((summary) => [summary.id, summary]));
@@ -2892,6 +2901,8 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 collaboratorCount={rosterFirebaseShareCount(activeRoster)}
                 onOpenSharedTools={openJoinSharedRoster}
                 onBackTargetChange={setClubBackTargetOpen}
+                equipmentGroupId={activeFirebaseSource?.firebaseGroupId}
+                equipmentHolderLabels={activeFirebaseEquipmentHolderLabels}
               />
             </TabsContent>
             <PoweredByFairTeams />

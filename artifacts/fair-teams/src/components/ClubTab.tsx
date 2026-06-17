@@ -18,6 +18,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  deleteFirebaseEquipmentBag,
+  listenToFirebaseEquipmentBags,
+  saveFirebaseEquipmentBag,
+  type FirebaseEquipmentBag,
+} from "@/lib/equipmentService";
 
 type ClubTabProps = {
   activeRosterName: string;
@@ -26,6 +32,8 @@ type ClubTabProps = {
   collaboratorCount: number;
   onOpenSharedTools: () => void;
   onBackTargetChange?: (hasBackTarget: boolean) => void;
+  equipmentGroupId?: string;
+  equipmentHolderLabels?: string[];
 };
 
 type ClubVoteOption = {
@@ -49,15 +57,7 @@ type EquipmentHolder = {
   label: string;
 };
 
-type ClubEquipmentKit = {
-  id: string;
-  name: string;
-  holderId: string;
-  color: string;
-  contents: string[];
-  note?: string;
-  updatedAt: number;
-};
+type ClubEquipmentKit = FirebaseEquipmentBag;
 
 const VOTE_PREVIEW_STORAGE_KEY = "fairteams.clubVotes.preview.v1";
 const EQUIPMENT_PREVIEW_STORAGE_KEY = "fairteams.clubEquipment.preview.v1";
@@ -82,7 +82,7 @@ const EQUIPMENT_COLORS = [
 
 const DEFAULT_EQUIPMENT_COLOR = EQUIPMENT_COLORS[0];
 
-const EQUIPMENT_HOLDERS: EquipmentHolder[] = [
+const LOCAL_EQUIPMENT_HOLDERS: EquipmentHolder[] = [
   { id: "storage", label: "Club storage" },
   { id: "joon", label: "Joon" },
   { id: "sarah", label: "Sarah" },
@@ -117,6 +117,22 @@ const DEFAULT_EQUIPMENT_KITS: ClubEquipmentKit[] = [
     updatedAt: Date.now(),
   },
 ];
+
+
+function cleanEquipmentHolderLabel(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return "Organizer";
+  const emailName = trimmed.includes("@") ? trimmed.split("@")[0] : trimmed;
+  return emailName
+    .replace(/[._-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase()) || "Organizer";
+}
+
+function makeEquipmentHolderId(value: string) {
+  return value.trim().toLowerCase() || makeId("holder");
+}
 
 function makeId(prefix: string) {
   const random = typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -159,7 +175,7 @@ function parseEquipmentKits(raw: string | null): ClubEquipmentKit[] {
       .map((kit) => ({
         id: String(kit.id),
         name: String(kit.name),
-        holderId: EQUIPMENT_HOLDERS.some((holder) => holder.id === kit.holderId) ? String(kit.holderId) : "unknown",
+        holderId: LOCAL_EQUIPMENT_HOLDERS.some((holder) => holder.id === kit.holderId) ? String(kit.holderId) : "unknown",
         color: typeof kit.color === "string" && kit.color.trim() ? kit.color : DEFAULT_EQUIPMENT_COLOR,
         contents: Array.isArray(kit.contents)
           ? kit.contents.map((item) => String(item).trim()).filter(Boolean).slice(0, 20)
@@ -332,6 +348,8 @@ export function ClubTab({
   collaboratorCount,
   onOpenSharedTools,
   onBackTargetChange,
+  equipmentGroupId,
+  equipmentHolderLabels = [],
 }: ClubTabProps) {
   const [votes, setVotes] = useState<ClubVote[]>(() => {
     if (typeof window === "undefined") return [];
@@ -345,6 +363,10 @@ export function ClubTab({
     if (typeof window === "undefined") return DEFAULT_EQUIPMENT_KITS;
     return parseEquipmentKits(window.localStorage.getItem(EQUIPMENT_PREVIEW_STORAGE_KEY));
   });
+  const [equipmentLoading, setEquipmentLoading] = useState(false);
+  const [equipmentSaving, setEquipmentSaving] = useState(false);
+  const [equipmentError, setEquipmentError] = useState("");
+  const [equipmentLastSyncedAt, setEquipmentLastSyncedAt] = useState<number | null>(null);
   const [equipmentBoardOpen, setEquipmentBoardOpen] = useState(false);
   const [equipmentDialogOpen, setEquipmentDialogOpen] = useState(false);
   const [editingKitId, setEditingKitId] = useState<string | null>(null);
@@ -376,10 +398,73 @@ export function ClubTab({
     window.localStorage.setItem(VOTE_PREVIEW_STORAGE_KEY, JSON.stringify(votes));
   }, [votes]);
 
+  const equipmentRealtimeEnabled = Boolean(equipmentGroupId);
+  const equipmentHolders = useMemo<EquipmentHolder[]>(() => {
+    if (!equipmentRealtimeEnabled) return LOCAL_EQUIPMENT_HOLDERS;
+    const seen = new Set(["storage", "unknown"]);
+    const sharedHolders = equipmentHolderLabels
+      .map((label) => ({ id: makeEquipmentHolderId(label), label: cleanEquipmentHolderLabel(label) }))
+      .filter((holder) => {
+        if (!holder.id || seen.has(holder.id)) return false;
+        seen.add(holder.id);
+        return true;
+      })
+      .slice(0, 8);
+    const bagOnlyHolders = equipmentKits
+      .map((kit) => kit.holderId)
+      .filter((holderId) => holderId && !seen.has(holderId) && holderId !== "unknown")
+      .map((holderId) => {
+        seen.add(holderId);
+        return { id: holderId, label: cleanEquipmentHolderLabel(holderId) };
+      });
+    return [
+      { id: "storage", label: "Club storage" },
+      ...sharedHolders,
+      ...bagOnlyHolders,
+      { id: "unknown", label: "Unknown" },
+    ];
+  }, [equipmentHolderLabels, equipmentKits, equipmentRealtimeEnabled]);
+
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined" || equipmentRealtimeEnabled) return;
     window.localStorage.setItem(EQUIPMENT_PREVIEW_STORAGE_KEY, JSON.stringify(equipmentKits));
-  }, [equipmentKits]);
+  }, [equipmentKits, equipmentRealtimeEnabled]);
+
+  useEffect(() => {
+    if (!equipmentGroupId) {
+      setEquipmentLoading(false);
+      setEquipmentError("");
+      setEquipmentLastSyncedAt(null);
+      if (typeof window !== "undefined") {
+        setEquipmentKits(parseEquipmentKits(window.localStorage.getItem(EQUIPMENT_PREVIEW_STORAGE_KEY)));
+      }
+      return;
+    }
+
+    setEquipmentLoading(true);
+    setEquipmentError("");
+    setEquipmentKits([]);
+    try {
+      const unsubscribe = listenToFirebaseEquipmentBags(
+        equipmentGroupId,
+        (bags) => {
+          setEquipmentKits(bags);
+          setEquipmentLoading(false);
+          setEquipmentError("");
+          setEquipmentLastSyncedAt(Date.now());
+        },
+        (error) => {
+          setEquipmentLoading(false);
+          setEquipmentError(error.message || "Could not load shared equipment board.");
+        },
+      );
+
+      return () => unsubscribe();
+    } catch (error) {
+      setEquipmentLoading(false);
+      setEquipmentError(error instanceof Error ? error.message : "Could not connect equipment board.");
+    }
+  }, [equipmentGroupId]);
 
   const openVotes = useMemo(() => votes.filter((vote) => vote.status === "open"), [votes]);
   const closedVotes = useMemo(() => votes.filter((vote) => vote.status === "closed"), [votes]);
@@ -465,7 +550,7 @@ export function ClubTab({
     setEquipmentDialogOpen(true);
   };
 
-  const saveEquipmentKit = () => {
+  const saveEquipmentKit = async () => {
     const trimmedName = kitName.trim();
     if (!trimmedName) return;
 
@@ -483,17 +568,42 @@ export function ClubTab({
       updatedAt: Date.now(),
     };
 
-    setEquipmentKits((current) => editingKitId
-      ? current.map((kit) => kit.id === editingKitId ? nextKit : kit)
-      : [nextKit, ...current]);
-    resetEquipmentForm();
-    setEquipmentDialogOpen(false);
+    const applyLocal = () => {
+      setEquipmentKits((current) => editingKitId
+        ? current.map((kit) => kit.id === editingKitId ? nextKit : kit)
+        : [nextKit, ...current]);
+    };
+
+    try {
+      setEquipmentSaving(true);
+      setEquipmentError("");
+      if (equipmentGroupId) {
+        await saveFirebaseEquipmentBag(equipmentGroupId, nextKit);
+      } else {
+        applyLocal();
+      }
+      resetEquipmentForm();
+      setEquipmentDialogOpen(false);
+    } catch (error) {
+      setEquipmentError(error instanceof Error ? error.message : "Could not save equipment bag.");
+    } finally {
+      setEquipmentSaving(false);
+    }
   };
 
-  const moveEquipmentKit = (kitId: string, holderId: string) => {
-    setEquipmentKits((current) => current.map((kit) => kit.id === kitId
-      ? { ...kit, holderId, updatedAt: Date.now() }
-      : kit));
+  const moveEquipmentKit = async (kitId: string, holderId: string) => {
+    const currentKit = equipmentKits.find((kit) => kit.id === kitId);
+    if (!currentKit) return;
+    const nextKit = { ...currentKit, holderId, updatedAt: Date.now() };
+    setEquipmentKits((current) => current.map((kit) => kit.id === kitId ? nextKit : kit));
+    try {
+      setEquipmentError("");
+      if (equipmentGroupId) {
+        await saveFirebaseEquipmentBag(equipmentGroupId, nextKit);
+      }
+    } catch (error) {
+      setEquipmentError(error instanceof Error ? error.message : "Could not move equipment bag.");
+    }
   };
 
   const clearEquipmentDragTimer = () => {
@@ -556,12 +666,25 @@ export function ClubTab({
     openEditEquipmentKit(kit);
   };
 
-  const deleteEquipmentKit = (kitId: string) => {
+  const deleteEquipmentKit = async (kitId: string) => {
+    const previous = equipmentKits;
     setEquipmentKits((current) => current.filter((kit) => kit.id !== kitId));
-    if (editingKitId === kitId) {
-      setDeleteConfirmOpen(false);
-      resetEquipmentForm();
-      setEquipmentDialogOpen(false);
+    try {
+      setEquipmentSaving(true);
+      setEquipmentError("");
+      if (equipmentGroupId) {
+        await deleteFirebaseEquipmentBag(equipmentGroupId, kitId);
+      }
+      if (editingKitId === kitId) {
+        setDeleteConfirmOpen(false);
+        resetEquipmentForm();
+        setEquipmentDialogOpen(false);
+      }
+    } catch (error) {
+      setEquipmentKits(previous);
+      setEquipmentError(error instanceof Error ? error.message : "Could not delete equipment bag.");
+    } finally {
+      setEquipmentSaving(false);
     }
   };
 
@@ -781,7 +904,13 @@ export function ClubTab({
                 {equipmentKits.length} equipment bag{equipmentKits.length === 1 ? "" : "s"}
               </div>
               <p className="mt-1 text-[11px] font-semibold leading-snug text-slate-500">
-                The full board opens separately so the Club tab stays clean.
+                {equipmentRealtimeEnabled
+                  ? equipmentLoading
+                    ? "Connecting to shared equipment…"
+                    : equipmentError
+                      ? "Realtime board needs attention."
+                      : "Realtime for this shared group."
+                  : "Local preview. Shared rosters can use realtime equipment."}
               </p>
             </div>
             <Button
@@ -926,7 +1055,13 @@ export function ClubTab({
 
           <div className="flex-1 overflow-y-auto bg-slate-50/70 p-3">
             <div className="mb-2 rounded-2xl border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold leading-snug text-slate-500 shadow-sm">
-              Hold + drag to move. Tap to edit.
+              {equipmentRealtimeEnabled
+                ? equipmentError
+                  ? equipmentError
+                  : equipmentLoading
+                    ? "Loading shared equipment…"
+                    : "Realtime board. Hold + drag to move. Tap to edit."
+                : "Local preview. Hold + drag to move. Tap to edit."}
             </div>
 
             <div className="overflow-hidden rounded-[1.65rem] border border-slate-200 bg-white shadow-[0_14px_34px_rgba(15,23,42,0.08)]">
@@ -935,7 +1070,7 @@ export function ClubTab({
                 <div className="border-l border-slate-200 px-3 py-2.5">Bags</div>
               </div>
 
-              {EQUIPMENT_HOLDERS.map((holder, index) => {
+              {equipmentHolders.map((holder, index) => {
                 const holderKits = equipmentKits.filter((kit) => kit.holderId === holder.id);
                 const highlighted = dragOverHolderId === holder.id;
                 return (
@@ -1178,7 +1313,7 @@ export function ClubTab({
                 Quick move
               </div>
               <div className="grid grid-cols-2 gap-2">
-                {EQUIPMENT_HOLDERS.map((holder) => (
+                {equipmentHolders.map((holder) => (
                   <Button
                     key={holder.id}
                     type="button"
@@ -1220,7 +1355,7 @@ export function ClubTab({
                   type="button"
                   variant="outline"
                   className="h-10 rounded-2xl border-red-200 text-sm font-black text-red-500 hover:bg-red-50 hover:text-red-600 disabled:opacity-45"
-                  disabled={deleteConfirmOpen && deleteBagSlide < 95}
+                  disabled={equipmentSaving || (deleteConfirmOpen && deleteBagSlide < 95)}
                   onClick={() => {
                     blurActiveField();
                     setColorPickerOpen(false);
@@ -1240,7 +1375,7 @@ export function ClubTab({
               <Button
                 type="button"
                 className="h-10 rounded-2xl bg-[#102A43] text-sm font-black text-white hover:bg-[#0b2036]"
-                disabled={!canSaveEquipmentKit}
+                disabled={!canSaveEquipmentKit || equipmentSaving}
                 onClick={() => {
                   blurActiveField();
                   setColorPickerOpen(false);
@@ -1248,7 +1383,7 @@ export function ClubTab({
                   saveEquipmentKit();
                 }}
               >
-                Save bag
+                {equipmentSaving ? "Saving…" : "Save bag"}
               </Button>
             </div>
           </div>

@@ -349,6 +349,7 @@ export function ClubTab({
   const [kitName, setKitName] = useState("");
   const [kitHolderId, setKitHolderId] = useState("storage");
   const [kitColor, setKitColor] = useState(DEFAULT_EQUIPMENT_COLOR);
+  const [colorPickerOpen, setColorPickerOpen] = useState(false);
   const [kitContents, setKitContents] = useState("");
   const [kitNote, setKitNote] = useState("");
   const [draggingKitId, setDraggingKitId] = useState<string | null>(null);
@@ -427,6 +428,7 @@ export function ClubTab({
     setKitName("");
     setKitHolderId("storage");
     setKitColor(DEFAULT_EQUIPMENT_COLOR);
+    setColorPickerOpen(false);
     setKitContents("");
     setKitNote("");
   };
@@ -768,7 +770,7 @@ export function ClubTab({
                 value={optionText}
                 onChange={(event) => setOptionText(event.target.value)}
                 placeholder={"Yes\nNo"}
-                className="min-h-28 rounded-2xl border-slate-200 text-sm font-semibold"
+                className="min-h-24 rounded-2xl border-slate-200 text-sm font-semibold"
               />
               <p className="text-[11px] font-semibold text-slate-500">
                 One option per line. Use 2–6 options.
@@ -820,7 +822,7 @@ export function ClubTab({
                   Equipment board
                 </DialogTitle>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  Vertical mobile board preview. Later this can sync live across organizers.
+                  Hold and drag bags between organizers. Tap a bag to edit.
                 </p>
               </div>
               <Button
@@ -835,8 +837,8 @@ export function ClubTab({
           </DialogHeader>
 
           <div className="flex-1 overflow-y-auto bg-slate-50/70 p-3">
-            <div className="mb-3 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-bold leading-snug text-slate-500 shadow-sm">
-              Hold a bag, drag it to a name, then release. Tap a bag to edit.
+            <div className="mb-2 rounded-2xl border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold leading-snug text-slate-500 shadow-sm">
+              Hold + drag to move. Tap to edit.
             </div>
 
             <div className="overflow-hidden rounded-[1.65rem] border border-slate-200 bg-white shadow-[0_14px_34px_rgba(15,23,42,0.08)]">
@@ -908,7 +910,10 @@ export function ClubTab({
 
       <Dialog open={equipmentDialogOpen} onOpenChange={(open) => {
         setEquipmentDialogOpen(open);
-        if (!open) resetEquipmentForm();
+        if (!open) {
+          setColorPickerOpen(false);
+          resetEquipmentForm();
+        }
       }}>
         <DialogContent
             className="max-h-[88dvh] max-w-md overflow-y-auto rounded-3xl p-0"
@@ -921,15 +926,58 @@ export function ClubTab({
             </DialogTitle>
           </DialogHeader>
 
-          <div className="grid gap-4 p-5">
-            <div className="rounded-2xl bg-blue-50 px-3 py-2 text-[11px] font-semibold leading-snug text-blue-800">
-              Preview only: later this can sync live so every organizer sees who has each bag.
-            </div>
-
+          <div className="grid gap-3 p-4">
             <div className="grid gap-2">
-              <Label className="text-xs font-black uppercase tracking-wide text-slate-500">
-                Bag name
-              </Label>
+              <div className="flex items-center justify-between gap-3">
+                <Label className="text-xs font-black uppercase tracking-wide text-slate-500">
+                  Bag name
+                </Label>
+                <div className="relative">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-9 rounded-2xl border-slate-200 px-2.5 text-[11px] font-black text-slate-600"
+                    onClick={() => setColorPickerOpen((open) => !open)}
+                  >
+                    <span
+                      className="mr-2 h-4 w-4 rounded-full border border-slate-300 shadow-inner"
+                      style={{ backgroundColor: kitColor }}
+                    />
+                    Color
+                  </Button>
+                  {colorPickerOpen && (
+                    <div className="absolute right-0 z-50 mt-2 w-56 rounded-3xl border border-slate-200 bg-white p-3 shadow-[0_18px_45px_rgba(15,23,42,0.18)]">
+                      <div className="mb-2 flex items-center justify-between gap-3">
+                        <div className="text-[11px] font-black uppercase tracking-wide text-slate-400">
+                          Bag color
+                        </div>
+                        <button
+                          type="button"
+                          className="rounded-full px-2 py-1 text-[10px] font-black text-slate-400 hover:bg-slate-50"
+                          onClick={() => setColorPickerOpen(false)}
+                        >
+                          Done
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-5 gap-2">
+                        {EQUIPMENT_COLORS.map((color) => (
+                          <button
+                            key={color}
+                            type="button"
+                            aria-label="Choose bag color"
+                            className={`h-8 w-8 rounded-full border transition ${kitColor === color ? "border-[#102A43] ring-2 ring-slate-200 ring-offset-1" : "border-slate-200"}`}
+                            style={{ backgroundColor: color }}
+                            onClick={() => {
+                              setKitColor(color);
+                              setColorPickerOpen(false);
+                            }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
               <Input
                 value={kitName}
                 onChange={(event) => setKitName(event.target.value)}
@@ -947,60 +995,13 @@ export function ClubTab({
 
             <div className="grid gap-2">
               <Label className="text-xs font-black uppercase tracking-wide text-slate-500">
-                Bag color
-              </Label>
-              <div className="rounded-2xl border border-slate-200 bg-white p-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2">
-                    <div className="flex h-12 w-16 shrink-0 items-center justify-center rounded-2xl bg-slate-50">
-                      <DuffleBagIcon color={kitColor} />
-                    </div>
-                    <div className="text-xs font-bold leading-tight text-slate-500">
-                      Match the real bag color
-                    </div>
-                  </div>
-                </div>
-                <div className="mt-3 grid grid-cols-8 gap-2">
-                  {EQUIPMENT_COLORS.map((color) => (
-                    <button
-                      key={color}
-                      type="button"
-                      aria-label={`Use bag color ${color}`}
-                      className={`h-8 w-8 rounded-full border transition ${kitColor === color ? "border-[#102A43] ring-2 ring-slate-200 ring-offset-1" : "border-slate-200"}`}
-                      style={{ backgroundColor: color }}
-                      onClick={() => setKitColor(color)}
-                    />
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="grid gap-2">
-              <Label className="text-xs font-black uppercase tracking-wide text-slate-500">
-                Who has it?
-              </Label>
-              <select
-                value={kitHolderId}
-                onChange={(event) => setKitHolderId(event.target.value)}
-                className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-bold text-[#102A43] outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
-              >
-                {EQUIPMENT_HOLDERS.map((holder) => (
-                  <option key={holder.id} value={holder.id}>
-                    {holder.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="grid gap-2">
-              <Label className="text-xs font-black uppercase tracking-wide text-slate-500">
                 What is inside?
               </Label>
               <Textarea
                 value={kitContents}
                 onChange={(event) => setKitContents(event.target.value)}
                 placeholder={"2 balls\nPump\n12 cones"}
-                className="min-h-28 rounded-2xl border-slate-200 text-sm font-semibold"
+                className="min-h-24 rounded-2xl border-slate-200 text-sm font-semibold"
               />
               <p className="text-[11px] font-semibold text-slate-500">
                 One item per line. Keep it simple, like a checklist.
@@ -1015,33 +1016,31 @@ export function ClubTab({
                 value={kitNote}
                 onChange={(event) => setKitNote(event.target.value)}
                 placeholder="Example: First-aid spray is almost empty."
-                className="min-h-20 rounded-2xl border-slate-200 text-sm font-semibold"
+                className="min-h-16 rounded-2xl border-slate-200 text-sm font-semibold"
               />
             </div>
 
-            {editingKitId && (
-              <div className="grid gap-2 rounded-2xl bg-slate-50 p-3">
-                <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-                  Quick move
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  {EQUIPMENT_HOLDERS.map((holder) => (
-                    <Button
-                      key={holder.id}
-                      type="button"
-                      variant={kitHolderId === holder.id ? "default" : "outline"}
-                      className={`h-9 rounded-xl text-[11px] font-black ${kitHolderId === holder.id ? "bg-emerald-600 text-white hover:bg-emerald-700" : ""}`}
-                      onClick={() => {
-                        setKitHolderId(holder.id);
-                        moveEquipmentKit(editingKitId, holder.id);
-                      }}
-                    >
-                      {holder.label}
-                    </Button>
-                  ))}
-                </div>
+            <div className="grid gap-2 rounded-2xl bg-slate-50 p-3">
+              <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+                Quick move
               </div>
-            )}
+              <div className="grid grid-cols-2 gap-2">
+                {EQUIPMENT_HOLDERS.map((holder) => (
+                  <Button
+                    key={holder.id}
+                    type="button"
+                    variant={kitHolderId === holder.id ? "default" : "outline"}
+                    className={`h-9 rounded-xl text-[11px] font-black ${kitHolderId === holder.id ? "bg-emerald-600 text-white hover:bg-emerald-700" : ""}`}
+                    onClick={() => {
+                      setKitHolderId(holder.id);
+                      if (editingKitId) moveEquipmentKit(editingKitId, holder.id);
+                    }}
+                  >
+                    {holder.label}
+                  </Button>
+                ))}
+              </div>
+            </div>
 
             <div className="grid grid-cols-2 gap-2 pt-1">
               <Button
@@ -1050,6 +1049,7 @@ export function ClubTab({
                 className="h-11 rounded-2xl text-sm font-black"
                 onClick={() => {
                   blurActiveField();
+                  setColorPickerOpen(false);
                   setEquipmentDialogOpen(false);
                 }}
               >
@@ -1062,6 +1062,7 @@ export function ClubTab({
                 disabled={!canSaveEquipmentKit}
                 onClick={() => {
                   blurActiveField();
+                  setColorPickerOpen(false);
                   saveEquipmentKit();
                 }}
               >

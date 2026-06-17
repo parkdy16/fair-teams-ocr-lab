@@ -1040,6 +1040,7 @@ function App() {
       );
       const linkedRoster = normalizeRoster({
         ...imported,
+        pairingRules: sharedRoster.pairingRules || [],
         cloudSource: firebaseSummary
           ? {
               provider: "firebase",
@@ -1134,6 +1135,7 @@ function App() {
           return normalizeRoster({
             ...roster,
             players: refreshedPlayers,
+            pairingRules: remoteRoster.pairingRules || [],
             cloudSource: {
               provider: "firebase",
               firebaseRosterId: summary.id,
@@ -1157,7 +1159,7 @@ function App() {
     setRosterToolsNotice({
       tone: "success",
       title: "Firebase roster refreshed",
-      message: `${summary.groupName ? `${summary.groupName} · ` : ""}${sourceName || remoteRoster.name || "Shared roster"} player cards were updated from Firebase version ${summary.version}. Local photos and roster settings stayed on this device.`,
+      message: `${summary.groupName ? `${summary.groupName} · ` : ""}${sourceName || remoteRoster.name || "Shared roster"} player cards and pairing rules were updated from Firebase version ${summary.version}. Local photos and device settings stayed on this device.`,
     });
   };
 

@@ -202,7 +202,7 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, rosters = [], is
         refreshed += 1;
       }
       await refreshSharedData();
-      setNotice({ tone: "success", text: refreshed === 1 ? "Player cards updated." : `${refreshed} rosters updated with latest player cards.` });
+      setNotice({ tone: "success", text: refreshed === 1 ? "Player cards and pairing rules updated." : `${refreshed} rosters updated with latest player cards and pairing rules.` });
     } catch (error) {
       setNotice({ tone: "error", text: friendlyFirestoreError(error) });
     } finally {
@@ -315,7 +315,7 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, rosters = [], is
 
       {updateCount > 0 && (
         <div className="rounded-2xl border border-amber-100 bg-amber-50/80 px-3 py-2 text-[11px] font-bold leading-snug text-amber-800">
-          {updateCount === 1 ? "1 shared roster has player-card updates." : `${updateCount} shared rosters have player-card updates.`} Get latest updates player cards only. Local photos, colors, pairing rules, and device settings stay on this device.
+          {updateCount === 1 ? "1 shared roster has roster updates." : `${updateCount} shared rosters have roster updates.`} Get latest updates player cards and pairing rules. Local photos, colors, logo, and device settings stay on this device.
         </div>
       )}
 

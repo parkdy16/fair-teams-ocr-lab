@@ -426,19 +426,19 @@ export function ClubTab({
     ? equipmentError
       ? "Sync issue. Open board."
       : equipmentLoading
-        ? "Loading shared equipment…"
-        : "Realtime sync on."
+        ? "Connected · loading latest…"
+        : "Connected · realtime sync on."
     : equipmentSharedConnecting
-      ? "Shared sync not ready yet."
+      ? "Opening shared board…"
       : "Local preview.";
   const equipmentBoardStatusText = equipmentRealtimeEnabled
     ? equipmentError
       ? equipmentError
       : equipmentLoading
-        ? "Loading shared equipment…"
-        : "Realtime sync on · drag bags to move"
+        ? "Connected · loading latest equipment…"
+        : "Connected · realtime sync on · drag bags to move"
     : equipmentSharedConnecting
-      ? "Shared sync not ready yet."
+      ? "Opening shared board…"
       : "Local preview · drag bags to move";
   const equipmentHolders = useMemo<EquipmentHolder[]>(() => {
     if (!isSharedRoster && !equipmentRealtimeEnabled) return LOCAL_EQUIPMENT_HOLDERS;

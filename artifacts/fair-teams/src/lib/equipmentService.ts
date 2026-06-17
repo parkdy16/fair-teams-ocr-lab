@@ -77,19 +77,33 @@ function requireSignedInUser() {
   return user;
 }
 
-function equipmentCollection(groupId: string) {
-  if (!groupId) throw new Error("Open a Firebase shared group before using realtime equipment.");
-  return collection(getFairTeamsFirestore(), "sharedGroups", groupId, "equipmentBags");
+function resolveEquipmentScope(scopeId: string) {
+  const trimmed = scopeId.trim();
+  if (!trimmed) throw new Error("Open a Firebase shared roster before using realtime equipment.");
+  if (trimmed.startsWith("roster:")) {
+    const rosterId = trimmed.slice("roster:".length).trim();
+    if (!rosterId) throw new Error("Open a Firebase shared roster before using realtime equipment.");
+    return { kind: "roster" as const, id: rosterId };
+  }
+  return { kind: "group" as const, id: trimmed };
+}
+
+function equipmentCollection(scopeId: string) {
+  const scope = resolveEquipmentScope(scopeId);
+  if (scope.kind === "roster") {
+    return collection(getFairTeamsFirestore(), "sharedRosters", scope.id, "equipmentBags");
+  }
+  return collection(getFairTeamsFirestore(), "sharedGroups", scope.id, "equipmentBags");
 }
 
 export function listenToFirebaseEquipmentBags(
-  groupId: string,
+  scopeId: string,
   callback: (bags: FirebaseEquipmentBag[]) => void,
   onError?: (error: Error) => void,
 ): Unsubscribe {
   requireSignedInUser();
   return onSnapshot(
-    equipmentCollection(groupId),
+    equipmentCollection(scopeId),
     (snapshot) => {
       const bags = snapshot.docs
         .map((docSnap) => toEquipmentBag(docSnap.id, docSnap.data()))
@@ -102,13 +116,17 @@ export function listenToFirebaseEquipmentBags(
   );
 }
 
-export async function saveFirebaseEquipmentBag(groupId: string, bag: FirebaseEquipmentBag): Promise<void> {
+export async function saveFirebaseEquipmentBag(scopeId: string, bag: FirebaseEquipmentBag): Promise<void> {
   const user = requireSignedInUser();
   const now = new Date().toISOString();
+  const scope = resolveEquipmentScope(scopeId);
   const payload = {
     app: "Fair Teams",
     schemaVersion: 1,
-    groupId,
+    scopeKind: scope.kind,
+    scopeId: scope.id,
+    groupId: scope.kind === "group" ? scope.id : null,
+    rosterId: scope.kind === "roster" ? scope.id : null,
     name: bag.name.trim() || "Equipment bag",
     holderId: bag.holderId || "unknown",
     color: bag.color || "#111827",
@@ -120,10 +138,10 @@ export async function saveFirebaseEquipmentBag(groupId: string, bag: FirebaseEqu
     updatedAtIso: now,
   };
 
-  await setDoc(doc(equipmentCollection(groupId), bag.id), payload, { merge: true });
+  await setDoc(doc(equipmentCollection(scopeId), bag.id), payload, { merge: true });
 }
 
-export async function deleteFirebaseEquipmentBag(groupId: string, bagId: string): Promise<void> {
+export async function deleteFirebaseEquipmentBag(scopeId: string, bagId: string): Promise<void> {
   requireSignedInUser();
-  await deleteDoc(doc(equipmentCollection(groupId), bagId));
+  await deleteDoc(doc(equipmentCollection(scopeId), bagId));
 }

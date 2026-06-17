@@ -49,14 +49,21 @@ type ClubVoteOption = {
   count: number;
 };
 
+type ClubVoteDecision = "yes" | "no" | "unclear" | "closed";
+
 type ClubVote = {
   id: string;
   question: string;
   options: ClubVoteOption[];
   status: "open" | "closed";
   createdAt: number;
+  createdByName?: string;
   deadline?: string;
   votedOptionId?: string;
+  closedAt?: number;
+  closedByName?: string;
+  decision?: ClubVoteDecision;
+  decisionNote?: string;
 };
 
 type EquipmentHolder = {
@@ -68,6 +75,19 @@ type ClubEquipmentKit = FirebaseEquipmentBag;
 
 const VOTE_PREVIEW_STORAGE_KEY = "fairteams.clubVotes.preview.v1";
 const EQUIPMENT_PREVIEW_STORAGE_KEY = "fairteams.clubEquipment.preview.v1";
+
+const QUICK_VOTE_OPTIONS: Array<{ id: string; label: string }> = [
+  { id: "yes", label: "Yes" },
+  { id: "no", label: "No" },
+  { id: "not_sure", label: "Not sure" },
+];
+
+const VOTE_DECISION_OPTIONS: Array<{ id: ClubVoteDecision; label: string; description: string }> = [
+  { id: "yes", label: "Yes, we’ll do it", description: "Move forward with this." },
+  { id: "no", label: "No, we won’t", description: "Close it as a no." },
+  { id: "unclear", label: "No clear decision", description: "The group feeling was split or uncertain." },
+  { id: "closed", label: "Just close it", description: "No final decision needed." },
+];
 
 const EQUIPMENT_COLORS = [
   "#111827",
@@ -260,6 +280,13 @@ function parseVotes(raw: string | null): ClubVote[] {
         ...vote,
         status: vote.status === "closed" ? "closed" : "open",
         createdAt: Number(vote.createdAt) || Date.now(),
+        createdByName: typeof vote.createdByName === "string" ? vote.createdByName : undefined,
+        deadline: typeof vote.deadline === "string" && vote.deadline.trim() ? vote.deadline : undefined,
+        votedOptionId: typeof vote.votedOptionId === "string" ? vote.votedOptionId : undefined,
+        closedAt: Number(vote.closedAt) || undefined,
+        closedByName: typeof vote.closedByName === "string" ? vote.closedByName : undefined,
+        decision: ["yes", "no", "unclear", "closed"].includes(String(vote.decision)) ? vote.decision : undefined,
+        decisionNote: typeof vote.decisionNote === "string" && vote.decisionNote.trim() ? vote.decisionNote : undefined,
         options: vote.options
           .filter((option: ClubVoteOption) => Boolean(option?.id && option?.label))
           .map((option: ClubVoteOption) => ({
@@ -404,6 +431,43 @@ function ClubFeatureCard({
   );
 }
 
+function formatClubVoteDate(timestamp?: number) {
+  if (!timestamp) return "";
+  try {
+    return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(new Date(timestamp));
+  } catch {
+    return "";
+  }
+}
+
+function getVoteOptionCount(vote: ClubVote, optionId: string) {
+  return vote.options.find((option) => option.id === optionId)?.count ?? 0;
+}
+
+function getVoteResultSummary(vote: ClubVote) {
+  const totalVotes = vote.options.reduce((sum, option) => sum + option.count, 0);
+  if (totalVotes === 0) return "No votes yet";
+  const yes = getVoteOptionCount(vote, "yes");
+  const no = getVoteOptionCount(vote, "no");
+  const notSure = getVoteOptionCount(vote, "not_sure");
+  const highest = Math.max(yes, no, notSure);
+  const leaders = [
+    yes === highest ? "Yes" : "",
+    no === highest ? "No" : "",
+    notSure === highest ? "Not sure" : "",
+  ].filter(Boolean);
+  if (leaders.length !== 1) return `Split feeling · ${totalVotes} voted`;
+  return `Mostly ${leaders[0].toLowerCase()} · ${totalVotes} voted`;
+}
+
+function getVoteDecisionLabel(decision?: ClubVoteDecision) {
+  if (decision === "yes") return "Decided yes";
+  if (decision === "no") return "Decided no";
+  if (decision === "unclear") return "No clear decision";
+  if (decision === "closed") return "Closed";
+  return "Closed";
+}
+
 function VoteCard({
   vote,
   onVote,
@@ -417,28 +481,39 @@ function VoteCard({
 }) {
   const totalVotes = vote.options.reduce((sum, option) => sum + option.count, 0);
   const isClosed = vote.status === "closed";
+  const closedDate = formatClubVoteDate(vote.closedAt);
 
   return (
-    <article className="rounded-3xl border border-slate-200 bg-white p-3 shadow-sm">
+    <article className={`rounded-3xl border bg-white p-3 shadow-sm ${isClosed ? "border-slate-100 opacity-95" : "border-slate-200"}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
             <span className={`rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wide ${isClosed ? "bg-slate-100 text-slate-500" : "bg-emerald-100 text-emerald-700"}`}>
-              {isClosed ? "Closed" : "Open"}
+              {isClosed ? "Past" : "Open"}
             </span>
             <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-slate-500">
               {totalVotes} vote{totalVotes === 1 ? "" : "s"}
             </span>
-            {vote.deadline && (
+            {vote.deadline && !isClosed && (
               <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-blue-700">
                 <CalendarClock className="h-3 w-3" />
                 {vote.deadline}
+              </span>
+            )}
+            {isClosed && (
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-slate-500">
+                {getVoteDecisionLabel(vote.decision)}{closedDate ? ` · ${closedDate}` : ""}
               </span>
             )}
           </div>
           <h3 className="mt-2 text-sm font-black leading-snug text-[#102A43]">
             {vote.question}
           </h3>
+          {vote.createdByName && (
+            <div className="mt-1 text-[10px] font-semibold text-slate-400">
+              Asked by {vote.createdByName}
+            </div>
+          )}
         </div>
         <button
           type="button"
@@ -481,22 +556,34 @@ function VoteCard({
         })}
       </div>
 
-      <div className="mt-3 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500">
-          <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
-          {vote.votedOptionId ? "Your preview vote is counted." : "Names are not shown next to choices."}
+      {isClosed && (
+        <div className="mt-3 rounded-2xl bg-slate-50 px-3 py-2">
+          <div className="text-[11px] font-black text-[#102A43]">{getVoteResultSummary(vote)}</div>
+          {vote.decisionNote && (
+            <div className="mt-1 text-[11px] font-semibold leading-snug text-slate-500">{vote.decisionNote}</div>
+          )}
+          {vote.closedByName && (
+            <div className="mt-1 text-[10px] font-semibold text-slate-400">Closed by {vote.closedByName}</div>
+          )}
         </div>
-        {!isClosed && (
+      )}
+
+      {!isClosed && (
+        <div className="mt-3 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500">
+            <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
+            {vote.votedOptionId ? "Your preview vote is counted." : "Anonymous totals only."}
+          </div>
           <Button
             type="button"
             variant="outline"
             className="h-8 shrink-0 rounded-xl px-3 text-[11px] font-black"
             onClick={() => onCloseVote(vote.id)}
           >
-            Close
+            Close vote
           </Button>
-        )}
-      </div>
+        </div>
+      )}
     </article>
   );
 }
@@ -522,8 +609,12 @@ export function ClubTab({
     return parseVotes(window.localStorage.getItem(VOTE_PREVIEW_STORAGE_KEY));
   });
   const [voteDialogOpen, setVoteDialogOpen] = useState(false);
+  const [voteCreateOpen, setVoteCreateOpen] = useState(false);
+  const [showPastVotes, setShowPastVotes] = useState(false);
+  const [closingVoteId, setClosingVoteId] = useState<string | null>(null);
+  const [closeDecision, setCloseDecision] = useState<ClubVoteDecision | "">("");
+  const [closeNote, setCloseNote] = useState("");
   const [question, setQuestion] = useState("");
-  const [optionText, setOptionText] = useState("Yes\nNo");
   const [deadline, setDeadline] = useState("");
   const [equipmentKits, setEquipmentKits] = useState<ClubEquipmentKit[]>(() => {
     if (typeof window === "undefined") return DEFAULT_EQUIPMENT_KITS;
@@ -559,6 +650,7 @@ export function ClubTab({
     equipmentBoardOpen: false,
     equipmentDialogOpen: false,
     voteDialogOpen: false,
+    closingVoteId: null as string | null,
     accountDialogOpen: false,
   });
   const [authReady, setAuthReady] = useState(false);
@@ -733,32 +825,33 @@ export function ClubTab({
 
   const resetVoteForm = () => {
     setQuestion("");
-    setOptionText("Yes\nNo");
     setDeadline("");
+  };
+
+  const resetCloseVoteForm = () => {
+    setClosingVoteId(null);
+    setCloseDecision("");
+    setCloseNote("");
   };
 
   const createVote = () => {
     const trimmedQuestion = question.trim();
-    const labels = optionText
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .slice(0, 6);
-
-    if (!trimmedQuestion || labels.length < 2) return;
+    if (!trimmedQuestion) return;
 
     const vote: ClubVote = {
       id: makeId("vote"),
       question: trimmedQuestion,
-      options: labels.map((label) => ({ id: makeId("option"), label, count: 0 })),
+      options: QUICK_VOTE_OPTIONS.map((option) => ({ ...option, count: 0 })),
       status: "open",
       createdAt: Date.now(),
+      createdByName: clubGreetingName || undefined,
       deadline: deadline.trim() || undefined,
     };
 
     setVotes((current) => [vote, ...current]);
     resetVoteForm();
-    setVoteDialogOpen(false);
+    setVoteCreateOpen(false);
+    setShowPastVotes(false);
   };
 
   const castPreviewVote = (voteId: string, optionId: string) => {
@@ -775,7 +868,25 @@ export function ClubTab({
   };
 
   const closeVote = (voteId: string) => {
-    setVotes((current) => current.map((vote) => vote.id === voteId ? { ...vote, status: "closed" } : vote));
+    setClosingVoteId(voteId);
+    setCloseDecision("");
+    setCloseNote("");
+  };
+
+  const finalizeCloseVote = () => {
+    if (!closingVoteId || !closeDecision) return;
+    setVotes((current) => current.map((vote) => vote.id === closingVoteId
+      ? {
+        ...vote,
+        status: "closed",
+        closedAt: Date.now(),
+        closedByName: clubGreetingName || undefined,
+        decision: closeDecision,
+        decisionNote: closeNote.trim() || undefined,
+      }
+      : vote));
+    setShowPastVotes(true);
+    resetCloseVoteForm();
   };
 
   const deleteVote = (voteId: string) => {
@@ -1035,6 +1146,7 @@ export function ClubTab({
     equipmentDialogOpen ||
     equipmentBoardOpen ||
     voteDialogOpen ||
+    closingVoteId ||
     accountDialogOpen,
   );
 
@@ -1045,9 +1157,10 @@ export function ClubTab({
       equipmentBoardOpen,
       equipmentDialogOpen,
       voteDialogOpen,
+      closingVoteId,
       accountDialogOpen,
     };
-  }, [accountDialogOpen, colorPickerOpen, contentPeekKitId, equipmentBoardOpen, equipmentDialogOpen, voteDialogOpen]);
+  }, [accountDialogOpen, closingVoteId, colorPickerOpen, contentPeekKitId, equipmentBoardOpen, equipmentDialogOpen, voteDialogOpen]);
 
   useEffect(() => {
     onBackTargetChange?.(hasClubBackTarget);
@@ -1083,6 +1196,11 @@ export function ClubTab({
         setEquipmentBoardOpen(false);
         return;
       }
+      if (state.closingVoteId) {
+        event.preventDefault();
+        resetCloseVoteForm();
+        return;
+      }
       if (state.voteDialogOpen) {
         event.preventDefault();
         setVoteDialogOpen(false);
@@ -1099,7 +1217,9 @@ export function ClubTab({
     return () => window.removeEventListener("fairteams:native-back", handleNativeBack);
   }, [equipmentEditorReturnToBoard]);
 
-  const canCreateVote = question.trim().length > 0 && optionText.split("\n").filter((line) => line.trim()).length >= 2;
+  const canCreateVote = question.trim().length > 0;
+  const closingVote = votes.find((vote) => vote.id === closingVoteId) || null;
+  const canFinalizeCloseVote = Boolean(closingVote && closeDecision);
   const canSaveEquipmentKit = kitName.trim().length > 0;
 
   return (
@@ -1257,13 +1377,16 @@ export function ClubTab({
               Votes
             </div>
             <div className="mt-0.5 text-[11px] font-semibold text-slate-400">Quick anonymous decisions for organizers.</div>
-            <div className="mt-1 text-sm font-black text-[#102A43]">{openVotes.length} active</div>
+            <div className="mt-1 text-sm font-black text-[#102A43]">{openVotes.length} active · {closedVotes.length} past</div>
           </div>
           <Button
             type="button"
             variant="outline"
             className="h-10 shrink-0 rounded-2xl border-slate-100 bg-slate-50 px-4 text-xs font-black"
-            onClick={() => setVoteDialogOpen(true)}
+            onClick={() => {
+              setVoteCreateOpen(openVotes.length === 0);
+              setVoteDialogOpen(true);
+            }}
           >
             Open
           </Button>
@@ -1287,57 +1410,190 @@ export function ClubTab({
 
       <Dialog open={voteDialogOpen} onOpenChange={(open) => {
         setVoteDialogOpen(open);
-        if (!open) resetVoteForm();
+        if (!open) {
+          resetVoteForm();
+          setVoteCreateOpen(false);
+          setShowPastVotes(false);
+        }
       }}>
         <DialogContent className="max-h-[88dvh] max-w-md overflow-y-auto rounded-3xl p-0">
           <DialogHeader className="border-b border-slate-100 px-4 py-3 text-left">
             <DialogTitle className="flex items-center gap-2 text-base font-black text-[#102A43]">
               <Vote className="h-5 w-5 text-emerald-600" />
-              New organizer vote
+              Organizer votes
             </DialogTitle>
           </DialogHeader>
 
-          <div className="grid gap-4 p-5">
+          <div className="grid gap-4 p-4">
             <div className="rounded-2xl bg-emerald-50 px-3 py-2 text-[11px] font-semibold leading-snug text-emerald-800">
-              Preview only: choices are shown as totals. Later, Firebase will store vote results without readable names next to choices.
+              Quick anonymous temperature checks. Answers are fixed: Yes, No, Not sure.
+            </div>
+
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <div className="text-xs font-black text-[#102A43]">Active questions</div>
+                <div className="text-[11px] font-semibold text-slate-500">Close a vote when the group has enough direction.</div>
+              </div>
+              <Button
+                type="button"
+                className="h-9 shrink-0 rounded-2xl bg-[#102A43] px-3 text-[11px] font-black text-white hover:bg-[#0b2036]"
+                onClick={() => setVoteCreateOpen((open) => !open)}
+              >
+                <Plus className="mr-1 h-3.5 w-3.5" />
+                New
+              </Button>
+            </div>
+
+            {voteCreateOpen && (
+              <div className="grid gap-3 rounded-[1.35rem] border border-slate-100 bg-slate-50/70 p-3">
+                <div className="grid gap-2">
+                  <Label className="text-xs font-black uppercase tracking-wide text-slate-500">
+                    Question
+                  </Label>
+                  <Textarea
+                    value={question}
+                    onChange={(event) => setQuestion(event.target.value)}
+                    placeholder="Example: Should we book the winter pitch?"
+                    className="min-h-[4.75rem] rounded-2xl border-slate-200 bg-white text-sm font-semibold"
+                  />
+                </div>
+
+                <div className="grid grid-cols-3 gap-1.5">
+                  {QUICK_VOTE_OPTIONS.map((option) => (
+                    <div key={`fixed-${option.id}`} className="rounded-2xl border border-slate-200 bg-white px-2 py-2 text-center text-[11px] font-black text-[#102A43]">
+                      {option.label}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="grid gap-2">
+                  <Label className="text-xs font-black uppercase tracking-wide text-slate-500">
+                    Needed by optional
+                  </Label>
+                  <Input
+                    value={deadline}
+                    onChange={(event) => setDeadline(event.target.value)}
+                    placeholder="Example: before Thursday game"
+                    className="h-10 rounded-2xl border-slate-200 bg-white text-sm font-semibold"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-10 rounded-2xl text-sm font-black"
+                    onClick={() => {
+                      resetVoteForm();
+                      setVoteCreateOpen(false);
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    className="h-10 rounded-2xl bg-[#102A43] text-sm font-black text-white hover:bg-[#0b2036]"
+                    disabled={!canCreateVote}
+                    onClick={createVote}
+                  >
+                    Create vote
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            <div className="grid gap-2">
+              {openVotes.length ? openVotes.map((vote) => (
+                <VoteCard
+                  key={vote.id}
+                  vote={vote}
+                  onVote={castPreviewVote}
+                  onCloseVote={closeVote}
+                  onDeleteVote={deleteVote}
+                />
+              )) : (
+                <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-center">
+                  <div className="text-sm font-black text-[#102A43]">No active votes</div>
+                  <div className="mt-1 text-xs font-semibold text-slate-500">Ask a yes/no/not sure question when organizers need a quick read.</div>
+                </div>
+              )}
+            </div>
+
+            <div className="border-t border-slate-100 pt-3">
+              <button
+                type="button"
+                className="flex w-full items-center justify-between rounded-2xl bg-slate-50 px-3 py-2 text-left"
+                onClick={() => setShowPastVotes((show) => !show)}
+              >
+                <span className="text-xs font-black text-[#102A43]">Past votes</span>
+                <span className="text-[11px] font-black text-slate-400">{closedVotes.length} {showPastVotes ? "hide" : "show"}</span>
+              </button>
+              {showPastVotes && (
+                <div className="mt-2 grid gap-2">
+                  {closedVotes.length ? closedVotes.map((vote) => (
+                    <VoteCard
+                      key={vote.id}
+                      vote={vote}
+                      onVote={castPreviewVote}
+                      onCloseVote={closeVote}
+                      onDeleteVote={deleteVote}
+                    />
+                  )) : (
+                    <div className="rounded-2xl bg-slate-50 px-3 py-3 text-center text-xs font-semibold text-slate-500">Closed votes will appear here.</div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(closingVote)} onOpenChange={(open) => {
+        if (!open) resetCloseVoteForm();
+      }}>
+        <DialogContent className="max-w-sm rounded-3xl p-0">
+          <DialogHeader className="border-b border-slate-100 px-4 py-3 text-left">
+            <DialogTitle className="text-base font-black text-[#102A43]">Close vote</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 p-4">
+            {closingVote && (
+              <div className="rounded-2xl bg-slate-50 px-3 py-2 text-sm font-black leading-snug text-[#102A43]">
+                {closingVote.question}
+              </div>
+            )}
+
+            <div className="grid gap-2">
+              <Label className="text-xs font-black uppercase tracking-wide text-slate-500">
+                What was decided?
+              </Label>
+              <div className="grid gap-2">
+                {VOTE_DECISION_OPTIONS.map((option) => {
+                  const selected = closeDecision === option.id;
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      className={`rounded-2xl border px-3 py-2 text-left transition ${selected ? "border-emerald-300 bg-emerald-50" : "border-slate-200 bg-white hover:bg-slate-50"}`}
+                      onClick={() => setCloseDecision(option.id)}
+                    >
+                      <div className="text-sm font-black text-[#102A43]">{option.label}</div>
+                      <div className="mt-0.5 text-[11px] font-semibold text-slate-500">{option.description}</div>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             <div className="grid gap-2">
               <Label className="text-xs font-black uppercase tracking-wide text-slate-500">
-                Question
+                Decision note optional
               </Label>
               <Textarea
-                value={question}
-                onChange={(event) => setQuestion(event.target.value)}
-                placeholder="Example: Should we move Thursday football to 20:00?"
-                className="min-h-[4.75rem] rounded-2xl border-slate-200 text-sm font-semibold"
-              />
-            </div>
-
-            <div className="grid gap-2">
-              <Label className="text-xs font-black uppercase tracking-wide text-slate-500">
-                Options
-              </Label>
-              <Textarea
-                value={optionText}
-                onChange={(event) => setOptionText(event.target.value)}
-                placeholder={"Yes\nNo"}
-                className="min-h-[4.75rem] rounded-2xl border-slate-200 text-sm font-semibold"
-              />
-              <p className="text-[11px] font-semibold text-slate-500">
-                One option per line. Use 2–6 options.
-              </p>
-            </div>
-
-            <div className="grid gap-2">
-              <Label className="text-xs font-black uppercase tracking-wide text-slate-500">
-                Deadline note optional
-              </Label>
-              <Input
-                value={deadline}
-                onChange={(event) => setDeadline(event.target.value)}
-                placeholder="Example: Friday 18:00"
-                className="h-11 rounded-2xl border-slate-200 text-sm font-semibold"
+                value={closeNote}
+                onChange={(event) => setCloseNote(event.target.value)}
+                placeholder="Example: Try it for one month, then review."
+                className="min-h-[4.5rem] rounded-2xl border-slate-200 text-sm font-semibold"
               />
             </div>
 
@@ -1346,22 +1602,20 @@ export function ClubTab({
                 type="button"
                 variant="outline"
                 className="h-10 rounded-2xl text-sm font-black"
-                onClick={() => setVoteDialogOpen(false)}
+                onClick={resetCloseVoteForm}
               >
-                <X className="mr-1.5 h-4 w-4" />
                 Cancel
               </Button>
               <Button
                 type="button"
                 className="h-10 rounded-2xl bg-[#102A43] text-sm font-black text-white hover:bg-[#0b2036]"
-                disabled={!canCreateVote}
-                onClick={createVote}
+                disabled={!canFinalizeCloseVote}
+                onClick={finalizeCloseVote}
               >
-                Create vote
+                Move to Past
               </Button>
             </div>
           </div>
-
         </DialogContent>
       </Dialog>
 

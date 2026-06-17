@@ -61,24 +61,25 @@ type ClubEquipmentKit = {
 const VOTE_PREVIEW_STORAGE_KEY = "fairteams.clubVotes.preview.v1";
 const EQUIPMENT_PREVIEW_STORAGE_KEY = "fairteams.clubEquipment.preview.v1";
 
-const EQUIPMENT_COLOR_OPTIONS = [
-  { value: "#1d4ed8", label: "Blue" },
-  { value: "#0f766e", label: "Teal" },
-  { value: "#16a34a", label: "Green" },
-  { value: "#ca8a04", label: "Yellow / tan" },
-  { value: "#ea580c", label: "Orange" },
-  { value: "#dc2626", label: "Red" },
-  { value: "#be123c", label: "Burgundy" },
-  { value: "#db2777", label: "Pink" },
-  { value: "#7c3aed", label: "Purple" },
-  { value: "#0891b2", label: "Cyan" },
-  { value: "#92400e", label: "Brown" },
-  { value: "#475569", label: "Slate grey" },
-  { value: "#111827", label: "Black" },
-  { value: "#f8fafc", label: "White" },
+const EQUIPMENT_COLORS = [
+  "#111827",
+  "#475569",
+  "#1e3a8a",
+  "#2563eb",
+  "#0891b2",
+  "#0f766e",
+  "#16a34a",
+  "#ca8a04",
+  "#ea580c",
+  "#dc2626",
+  "#9f1239",
+  "#db2777",
+  "#7c3aed",
+  "#8b5e34",
+  "#f8fafc",
 ] as const;
 
-const DEFAULT_EQUIPMENT_COLOR = EQUIPMENT_COLOR_OPTIONS[0].value;
+const DEFAULT_EQUIPMENT_COLOR = EQUIPMENT_COLORS[0];
 
 const EQUIPMENT_HOLDERS: EquipmentHolder[] = [
   { id: "storage", label: "Club storage" },
@@ -92,7 +93,7 @@ const DEFAULT_EQUIPMENT_KITS: ClubEquipmentKit[] = [
     id: "kit-ball-bag",
     name: "Ball bag",
     holderId: "joon",
-    color: "#1d4ed8",
+    color: "#2563eb",
     contents: ["2 balls", "Pump", "Needles"],
     note: "Check air before Saturday.",
     updatedAt: Date.now(),
@@ -101,7 +102,7 @@ const DEFAULT_EQUIPMENT_KITS: ClubEquipmentKit[] = [
     id: "kit-bibs",
     name: "Bibs",
     holderId: "storage",
-    color: "#be123c",
+    color: "#db2777",
     contents: ["10 dark bibs", "10 light bibs"],
     updatedAt: Date.now(),
   },
@@ -446,10 +447,6 @@ export function ClubTab({
   };
 
   const saveEquipmentKit = () => {
-    if (typeof document !== "undefined" && document.activeElement instanceof HTMLElement) {
-      document.activeElement.blur();
-    }
-
     const trimmedName = kitName.trim();
     if (!trimmedName) return;
 
@@ -546,6 +543,12 @@ export function ClubTab({
       resetEquipmentForm();
       setEquipmentDialogOpen(false);
     }
+  };
+
+  const blurActiveField = () => {
+    if (typeof document === "undefined") return;
+    const activeElement = document.activeElement;
+    if (activeElement instanceof HTMLElement) activeElement.blur();
   };
 
   const canCreateVote = question.trim().length > 0 && optionText.split("\n").filter((line) => line.trim()).length >= 2;
@@ -833,13 +836,13 @@ export function ClubTab({
 
           <div className="flex-1 overflow-y-auto bg-slate-50/70 p-3">
             <div className="mb-3 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-bold leading-snug text-slate-500 shadow-sm">
-              Hold and drag a bag between holders. Tap to edit details.
+              Hold a bag, drag it to a name, then release. Tap a bag to edit.
             </div>
 
-            <div className="overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-[0_14px_35px_rgba(15,23,42,0.08)]">
-              <div className="grid grid-cols-[6.8rem_minmax(0,1fr)] border-b border-slate-100 bg-white text-[10px] font-black uppercase tracking-wide text-slate-400">
-                <div className="px-3 py-2">Holder</div>
-                <div className="border-l border-slate-200 px-3 py-2">Bags</div>
+            <div className="overflow-hidden rounded-[1.65rem] border border-slate-200 bg-white shadow-[0_14px_34px_rgba(15,23,42,0.08)]">
+              <div className="grid grid-cols-[6.25rem_minmax(0,1fr)] border-b border-slate-200 bg-white text-[10px] font-black uppercase tracking-wide text-slate-400">
+                <div className="px-3 py-2.5">Holder</div>
+                <div className="border-l border-slate-200 px-3 py-2.5">Bags</div>
               </div>
 
               {EQUIPMENT_HOLDERS.map((holder, index) => {
@@ -849,23 +852,23 @@ export function ClubTab({
                   <section
                     key={holder.id}
                     data-equipment-holder-id={holder.id}
-                    className={`grid grid-cols-[6.8rem_minmax(0,1fr)] transition ${index === 0 ? "" : "border-t border-slate-100"} ${highlighted ? "bg-emerald-50" : "bg-white hover:bg-slate-50/40"}`}
+                    className={`grid grid-cols-[6.25rem_minmax(0,1fr)] transition ${index === 0 ? "" : "border-t border-slate-100"} ${highlighted ? "bg-emerald-50" : "bg-white"}`}
                   >
-                    <div className="flex min-h-[4.25rem] items-center px-3 py-2">
+                    <div className="flex min-h-[3.65rem] items-center px-3 py-2">
                       <div className="min-w-0">
                         <h3 className="truncate text-[12px] font-black leading-tight text-[#102A43]">
                           {holder.label}
                         </h3>
                         <p className="mt-0.5 text-[10px] font-bold text-slate-400">
-                          {holderKits.length} bag{holderKits.length === 1 ? "" : "s"}
+                          {holderKits.length || "No"} bag{holderKits.length === 1 ? "" : "s"}
                         </p>
                       </div>
                     </div>
 
-                    <div className={`flex min-h-[4.05rem] flex-wrap items-center gap-2 border-l px-2 py-2 transition ${highlighted ? "border-emerald-200 bg-emerald-50/70 ring-2 ring-inset ring-emerald-100" : "border-slate-200 bg-slate-50/30"}`}>
+                    <div className={`flex min-h-[3.65rem] flex-wrap items-center gap-2 border-l px-2 py-2 transition ${highlighted ? "border-emerald-300 bg-emerald-50 ring-2 ring-inset ring-emerald-100" : "border-slate-200 bg-slate-50/30"}`}>
                       {holderKits.length === 0 ? (
-                        <div className="flex min-h-10 w-full items-center rounded-2xl border border-dashed border-slate-200 bg-white/70 px-3 text-[11px] font-bold text-slate-300">
-                          Drop bag here
+                        <div className="rounded-full border border-dashed border-slate-200 bg-white/80 px-3 py-1 text-[11px] font-bold text-slate-300">
+                          Drop here
                         </div>
                       ) : holderKits.map((kit) => {
                         const isDragging = draggingKitId === kit.id;
@@ -873,7 +876,7 @@ export function ClubTab({
                           <button
                             key={kit.id}
                             type="button"
-                            className={`touch-none select-none rounded-2xl border border-slate-200 bg-white px-2.5 py-1.5 text-left shadow-sm transition hover:border-emerald-200 hover:bg-white active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-emerald-100 ${isDragging ? "scale-95 opacity-45 ring-2 ring-emerald-200" : ""}`}
+                            className={`touch-none select-none rounded-2xl border border-slate-200 bg-white px-2.5 py-1.5 text-left shadow-sm transition hover:border-emerald-200 hover:bg-white active:scale-[0.98] ${isDragging ? "scale-95 opacity-45 ring-2 ring-emerald-200" : ""}`}
                             onPointerDown={(event) => startEquipmentPointerDrag(event, kit)}
                             onPointerMove={moveEquipmentPointerDrag}
                             onPointerUp={finishEquipmentPointerDrag}
@@ -908,9 +911,9 @@ export function ClubTab({
         if (!open) resetEquipmentForm();
       }}>
         <DialogContent
-          className="max-h-[88dvh] max-w-md overflow-y-auto rounded-3xl p-0"
-          onOpenAutoFocus={(event) => event.preventDefault()}
-        >
+            className="max-h-[88dvh] max-w-md overflow-y-auto rounded-3xl p-0"
+            onOpenAutoFocus={(event) => event.preventDefault()}
+          >
           <DialogHeader className="border-b border-slate-100 px-5 py-4 text-left">
             <DialogTitle className="flex items-center gap-2 text-lg font-black text-[#102A43]">
               <PackageOpen className="h-5 w-5 text-emerald-600" />
@@ -946,21 +949,29 @@ export function ClubTab({
               <Label className="text-xs font-black uppercase tracking-wide text-slate-500">
                 Bag color
               </Label>
-              <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-2.5">
-                <div className="flex h-12 w-16 shrink-0 items-center justify-center rounded-2xl bg-slate-50 ring-1 ring-slate-100">
-                  <DuffleBagIcon color={kitColor} />
+              <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-12 w-16 shrink-0 items-center justify-center rounded-2xl bg-slate-50">
+                      <DuffleBagIcon color={kitColor} />
+                    </div>
+                    <div className="text-xs font-bold leading-tight text-slate-500">
+                      Match the real bag color
+                    </div>
+                  </div>
                 </div>
-                <select
-                  value={kitColor}
-                  onChange={(event) => setKitColor(event.target.value)}
-                  className="h-11 min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-bold text-[#102A43] outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
-                >
-                  {EQUIPMENT_COLOR_OPTIONS.map((colorOption) => (
-                    <option key={colorOption.value} value={colorOption.value}>
-                      {colorOption.label}
-                    </option>
+                <div className="mt-3 grid grid-cols-8 gap-2">
+                  {EQUIPMENT_COLORS.map((color) => (
+                    <button
+                      key={color}
+                      type="button"
+                      aria-label={`Use bag color ${color}`}
+                      className={`h-8 w-8 rounded-full border transition ${kitColor === color ? "border-[#102A43] ring-2 ring-slate-200 ring-offset-1" : "border-slate-200"}`}
+                      style={{ backgroundColor: color }}
+                      onClick={() => setKitColor(color)}
+                    />
                   ))}
-                </select>
+                </div>
               </div>
             </div>
 
@@ -1008,15 +1019,37 @@ export function ClubTab({
               />
             </div>
 
+            {editingKitId && (
+              <div className="grid gap-2 rounded-2xl bg-slate-50 p-3">
+                <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+                  Quick move
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {EQUIPMENT_HOLDERS.map((holder) => (
+                    <Button
+                      key={holder.id}
+                      type="button"
+                      variant={kitHolderId === holder.id ? "default" : "outline"}
+                      className={`h-9 rounded-xl text-[11px] font-black ${kitHolderId === holder.id ? "bg-emerald-600 text-white hover:bg-emerald-700" : ""}`}
+                      onClick={() => {
+                        setKitHolderId(holder.id);
+                        moveEquipmentKit(editingKitId, holder.id);
+                      }}
+                    >
+                      {holder.label}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-2 pt-1">
               <Button
                 type="button"
                 variant="outline"
                 className="h-11 rounded-2xl text-sm font-black"
                 onClick={() => {
-                  if (typeof document !== "undefined" && document.activeElement instanceof HTMLElement) {
-                    document.activeElement.blur();
-                  }
+                  blurActiveField();
                   setEquipmentDialogOpen(false);
                 }}
               >
@@ -1027,7 +1060,10 @@ export function ClubTab({
                 type="button"
                 className="h-11 rounded-2xl bg-[#102A43] text-sm font-black text-white hover:bg-[#0b2036]"
                 disabled={!canSaveEquipmentKit}
-                onClick={saveEquipmentKit}
+                onClick={() => {
+                  blurActiveField();
+                  saveEquipmentKit();
+                }}
               >
                 Save bag
               </Button>

@@ -76,7 +76,7 @@ import {
   type GoogleSheetRosterFile,
 } from "@/lib/googleSheetsFiles";
 import { pickGoogleSheetRosterFile, warmUpGoogleDrivePicker } from "@/lib/googleDrivePicker";
-import { listFirebaseSharedRosters, type FirebaseSharedRosterSummary } from "@/lib/sharedRosterService";
+import { listFirebaseSharedRosters, readFirebaseSharedRoster, type FirebaseSharedRosterSummary } from "@/lib/sharedRosterService";
 
 const GROUP_NAME_STORAGE_KEY = "fair-teams-group-name";
 const HEADER_COLOR_STORAGE_KEY = "fair-teams-header-color-v2";
@@ -594,20 +594,33 @@ function App() {
 
 
   useEffect(() => {
-    const missingFirebaseGroupLink = Boolean(
-      activeFirebaseSource?.firebaseRosterId && !activeFirebaseSource.firebaseGroupId,
-    );
-    if (!missingFirebaseGroupLink) return;
+    const rosterId = activeFirebaseSource?.firebaseRosterId;
+    const missingFirebaseGroupLink = Boolean(rosterId && !activeFirebaseSource?.firebaseGroupId);
+    if (!missingFirebaseGroupLink || !rosterId) return;
     let cancelled = false;
-    listFirebaseSharedRosters()
-      .then((summaries) => {
+
+    const attachMissingGroupMetadata = async () => {
+      try {
+        const summaries = await listFirebaseSharedRosters();
         if (cancelled) return;
-        syncFirebaseRosterBadgesFromSummaries(summaries);
-      })
-      .catch(() => {
+        const matchingSummary = summaries.find((summary) => summary.id === rosterId);
+        if (matchingSummary?.groupId) {
+          syncFirebaseRosterBadgesFromSummaries([matchingSummary]);
+          return;
+        }
+
+        // Some older linked local rosters have the shared roster ID but not the
+        // group metadata needed by the Club Equipment board. If the summary list
+        // did not restore it, read the exact shared roster document as a fallback.
+        const snapshot = await readFirebaseSharedRoster(rosterId);
+        if (!cancelled) syncFirebaseRosterBadgesFromSummaries([snapshot]);
+      } catch {
         // The Shared Roster tools will show detailed sign-in/permission errors.
-        // Club should simply stay in its safe "not connected yet" state.
-      });
+        // Club stays in its safe reconnecting state until the group link is restored.
+      }
+    };
+
+    attachMissingGroupMetadata();
     return () => {
       cancelled = true;
     };

@@ -14,6 +14,7 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { getFairTeamsAuth } from "@/lib/firebaseClient";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -122,10 +123,18 @@ function normalizeEquipmentHolderId(holderId: string) {
 }
 
 function isLikelyCurrentUserLabel(value: string) {
+  const candidate = value.trim().toLowerCase();
+  if (!candidate) return false;
+  try {
+    const firebaseEmail = getFairTeamsAuth().currentUser?.email || "";
+    if (firebaseEmail.trim().toLowerCase() === candidate) return true;
+  } catch {
+    // Firebase may not be configured in local preview; fall back below.
+  }
   if (typeof window === "undefined") return false;
   try {
     const authEmail = window.localStorage.getItem("fairteams.firebaseEmail") || window.localStorage.getItem("fairteams.googleEmail") || "";
-    return Boolean(authEmail && value.trim().toLowerCase() === authEmail.trim().toLowerCase());
+    return Boolean(authEmail && authEmail.trim().toLowerCase() === candidate);
   } catch {
     return false;
   }
@@ -412,7 +421,7 @@ export function ClubTab({
   }, [votes]);
 
   const equipmentRealtimeEnabled = Boolean(equipmentGroupId);
-  const equipmentSharedSetupMissing = isSharedRoster && !equipmentRealtimeEnabled;
+  const equipmentSharedConnecting = isSharedRoster && !equipmentRealtimeEnabled;
   const equipmentHolders = useMemo<EquipmentHolder[]>(() => {
     if (!isSharedRoster && !equipmentRealtimeEnabled) return LOCAL_EQUIPMENT_HOLDERS;
 
@@ -597,11 +606,6 @@ export function ClubTab({
         : [nextKit, ...current]);
     };
 
-    if (equipmentSharedSetupMissing) {
-      setEquipmentError("Shared equipment is not connected yet.");
-      return;
-    }
-
     try {
       setEquipmentSaving(true);
       setEquipmentError("");
@@ -697,11 +701,6 @@ export function ClubTab({
   const deleteEquipmentKit = async (kitId: string) => {
     const previous = equipmentKits;
     setEquipmentKits((current) => current.filter((kit) => kit.id !== kitId));
-    if (equipmentSharedSetupMissing) {
-      setEquipmentError("Shared equipment is not connected yet.");
-      return;
-    }
-
     try {
       setEquipmentSaving(true);
       setEquipmentError("");
@@ -937,8 +936,8 @@ export function ClubTab({
                 {equipmentKits.length} equipment bag{equipmentKits.length === 1 ? "" : "s"}
               </div>
               <p className="mt-1 text-[11px] font-semibold leading-snug text-slate-500">
-                {equipmentSharedSetupMissing
-                  ? "Shared equipment not connected yet."
+                {equipmentSharedConnecting
+                  ? "Connecting shared board…"
                   : equipmentRealtimeEnabled
                     ? equipmentLoading
                       ? "Connecting to shared equipment…"
@@ -1090,8 +1089,8 @@ export function ClubTab({
 
           <div className="flex-1 overflow-y-auto bg-slate-50/70 p-3">
             <div className="mb-2 rounded-2xl border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold leading-snug text-slate-500 shadow-sm">
-              {equipmentSharedSetupMissing
-                ? "Shared equipment is not connected yet."
+              {equipmentSharedConnecting
+                ? "Connecting shared board…"
                 : equipmentRealtimeEnabled
                   ? equipmentError
                     ? equipmentError

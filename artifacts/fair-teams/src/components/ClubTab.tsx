@@ -350,6 +350,7 @@ export function ClubTab({
   const [kitHolderId, setKitHolderId] = useState("storage");
   const [kitColor, setKitColor] = useState(DEFAULT_EQUIPMENT_COLOR);
   const [colorPickerOpen, setColorPickerOpen] = useState(false);
+  const [deleteBagSlide, setDeleteBagSlide] = useState(0);
   const [kitContents, setKitContents] = useState("");
   const [kitNote, setKitNote] = useState("");
   const [draggingKitId, setDraggingKitId] = useState<string | null>(null);
@@ -429,6 +430,7 @@ export function ClubTab({
     setKitHolderId("storage");
     setKitColor(DEFAULT_EQUIPMENT_COLOR);
     setColorPickerOpen(false);
+    setDeleteBagSlide(0);
     setKitContents("");
     setKitNote("");
   };
@@ -443,6 +445,7 @@ export function ClubTab({
     setKitName(kit.name);
     setKitHolderId(kit.holderId);
     setKitColor(kit.color || DEFAULT_EQUIPMENT_COLOR);
+    setDeleteBagSlide(0);
     setKitContents(kit.contents.join("\n"));
     setKitNote(kit.note || "");
     setEquipmentDialogOpen(true);
@@ -1103,15 +1106,34 @@ export function ClubTab({
             </div>
 
             {editingKitId && (
-              <Button
-                type="button"
-                variant="ghost"
-                className="h-9 rounded-2xl text-sm font-black text-red-500 hover:bg-red-50 hover:text-red-600"
-                onClick={() => deleteEquipmentKit(editingKitId)}
-              >
-                <Trash2 className="mr-1.5 h-4 w-4" />
-                Delete bag
-              </Button>
+              <div className="rounded-2xl border border-red-100 bg-red-50/70 p-2.5">
+                <div className="mb-1.5 flex items-center justify-between gap-2 text-[10px] font-black uppercase tracking-wide text-red-700">
+                  <span>Slide to unlock delete</span>
+                  <span>{deleteBagSlide >= 95 ? "Ready" : `${deleteBagSlide}%`}</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={deleteBagSlide}
+                  onChange={(event) => setDeleteBagSlide(Number(event.target.value))}
+                  className="w-full accent-red-600"
+                  aria-label="Slide to unlock delete bag"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="mt-2 h-9 w-full rounded-2xl text-sm font-black text-red-500 hover:bg-red-100 hover:text-red-600 disabled:opacity-40"
+                  disabled={deleteBagSlide < 95}
+                  onClick={() => {
+                    if (deleteBagSlide < 95) return;
+                    deleteEquipmentKit(editingKitId);
+                  }}
+                >
+                  <Trash2 className="mr-1.5 h-4 w-4" />
+                  Delete bag
+                </Button>
+              </div>
             )}
           </div>
         </DialogContent>

@@ -21,6 +21,7 @@ import {
 } from "@/lib/sharedRosterService";
 
 type Props = {
+  variant?: "full" | "compact";
   activeRoster: RoomRoster | undefined;
   rosters?: RoomRoster[];
   isEmptyRoster: boolean;
@@ -84,7 +85,7 @@ function modalShell(title: string, onClose: () => void, body: React.ReactNode) {
   );
 }
 
-export function FirebaseSharedRosterPublishCard({ activeRoster, rosters = [], isEmptyRoster, onOpenRoster, onRosterSaved, onRefreshActiveRoster, onSharedRosterSummariesUpdated, onSharedInviteOpened }: Props) {
+export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster, rosters = [], isEmptyRoster, onOpenRoster, onRosterSaved, onRefreshActiveRoster, onSharedRosterSummariesUpdated, onSharedInviteOpened }: Props) {
   const [user, setUser] = useState<SharedRosterUser | null>(null);
   const [busy, setBusy] = useState<string>("");
   const [sharedGroups, setSharedGroups] = useState<FirebaseSharedGroupSummary[]>([]);
@@ -318,6 +319,51 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, rosters = [], is
     setCollaboratorRosterId(rosterId || activeSharedRosterId || "");
   };
 
+
+  if (variant === "compact") {
+    return (
+      <div className="grid gap-2">
+        {incomingInvites.length > 0 && (
+          <div className="grid gap-1.5">
+            {incomingInvites.slice(0, 2).map((invite) => (
+              <div key={invite.id} className="flex items-center justify-between gap-2 rounded-2xl border border-emerald-100 bg-emerald-50/80 px-3 py-2">
+                <div className="min-w-0 truncate text-xs font-black text-[#102A43]">Invite: {invite.name}</div>
+                <Button type="button" variant="outline" className="h-8 rounded-xl border-emerald-100 bg-white px-2 text-[10px] font-black text-emerald-700" onClick={() => handleAcceptInvite(invite.id)} disabled={Boolean(busy)}>
+                  {busy === `accept:${invite.id}` ? "…" : "Accept"}
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {updateCount > 0 && (
+          <div className="rounded-2xl border border-amber-100 bg-amber-50/80 px-3 py-2 text-[11px] font-bold text-amber-800">
+            {updateCount === 1 ? "1 update available." : `${updateCount} updates available.`}
+          </div>
+        )}
+
+        {!activeSharedRoster ? (
+          <Button type="button" className="h-10 rounded-2xl bg-emerald-600 text-xs font-black text-white hover:bg-emerald-700" onClick={handleShareActiveRoster} disabled={!user || isEmptyRoster || Boolean(busy)}>
+            <Share2 className="mr-1.5 h-4 w-4" />
+            {busy === "publish" ? "Sharing…" : "Share roster"}
+          </Button>
+        ) : (
+          <div className="grid grid-cols-2 gap-2">
+            <Button type="button" className="h-10 rounded-2xl bg-emerald-600 text-xs font-black text-white hover:bg-emerald-700" onClick={handleSaveActiveRoster} disabled={!user || !activeCanSave || !activeHasLocalChanges || Boolean(busy)}>
+              <Save className="mr-1.5 h-4 w-4" />
+              {busy === "save" ? "Saving…" : "Save"}
+            </Button>
+            <Button type="button" variant="outline" className="h-10 rounded-2xl border-slate-100 bg-white text-xs font-black" onClick={handleGetLatest} disabled={!user || !remoteUpdatedLinkedRosters.length || Boolean(busy)}>
+              <CloudDownload className="mr-1.5 h-4 w-4" />
+              {busy === "reload" ? "Getting…" : "Latest"}
+            </Button>
+          </div>
+        )}
+
+        {notice && <div className={`rounded-2xl px-3 py-2 text-[11px] font-bold ${notice.tone === "error" ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>{notice.text}</div>}
+      </div>
+    );
+  }
   return (
     <div className="grid gap-3">
       {incomingInvites.length > 0 && (

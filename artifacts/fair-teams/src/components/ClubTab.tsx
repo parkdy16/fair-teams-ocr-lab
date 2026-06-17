@@ -14,7 +14,9 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { FirebaseSharedRosterAuthCard } from "@/components/FirebaseSharedRosterAuthCard";
 import { getFairTeamsAuth } from "@/lib/firebaseClient";
+import { listenToSharedRosterUser, signOutOfSharedRosters, type SharedRosterUser } from "@/lib/sharedRosterService";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,6 +29,7 @@ import {
 } from "@/lib/equipmentService";
 
 type ClubTabProps = {
+  isActive?: boolean;
   activeRosterName: string;
   activeRosterMeta?: string;
   playerCount: number;
@@ -425,6 +428,7 @@ function VoteCard({
 }
 
 export function ClubTab({
+  isActive = true,
   activeRosterName,
   activeRosterMeta,
   playerCount,
@@ -475,22 +479,39 @@ export function ClubTab({
   const activeEquipmentDropHolderRef = useRef<string | null>(null);
   const suppressEquipmentClickRef = useRef(false);
   const equipmentBackStateRef = useRef({
-    sharedToolsOpen: false,
     colorPickerOpen: false,
     contentPeekKitId: null as string | null,
     equipmentBoardOpen: false,
     equipmentDialogOpen: false,
     voteDialogOpen: false,
   });
+  const [authReady, setAuthReady] = useState(false);
+  const [clubUser, setClubUser] = useState<SharedRosterUser | null>(null);
+  const [accountBusy, setAccountBusy] = useState(false);
+  const [collaboratorsOpen, setCollaboratorsOpen] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     window.localStorage.setItem(VOTE_PREVIEW_STORAGE_KEY, JSON.stringify(votes));
   }, [votes]);
 
+  useEffect(() => listenToSharedRosterUser((nextUser) => {
+    setClubUser(nextUser);
+    setAuthReady(true);
+  }), []);
+
+  const handleClubLogout = async () => {
+    if (accountBusy) return;
+    setAccountBusy(true);
+    try {
+      await signOutOfSharedRosters();
+    } finally {
+      setAccountBusy(false);
+    }
+  };
+
   const equipmentRealtimeEnabled = Boolean(equipmentGroupId);
   const equipmentSharedConnecting = isSharedRoster && !equipmentRealtimeEnabled;
-  const equipmentRosterLabel = activeRosterName || "Current roster";
   const equipmentStatusText = equipmentRealtimeEnabled
     ? equipmentError
       ? "Sync issue. Open board."
@@ -498,17 +519,17 @@ export function ClubTab({
         ? "Loading shared equipment…"
         : "Realtime sync on."
     : equipmentSharedConnecting
-      ? "Open a shared roster to sync."
+      ? "Shared sync not ready yet."
       : "Local preview.";
   const equipmentBoardStatusText = equipmentRealtimeEnabled
     ? equipmentError
       ? equipmentError
       : equipmentLoading
         ? "Loading shared equipment…"
-        : "Realtime sync on · this board belongs to the selected roster"
+        : "Realtime sync on · drag bags to move"
     : equipmentSharedConnecting
-      ? "Open a shared roster to sync equipment."
-      : "Local preview · this board belongs to this roster on this device";
+      ? "Shared sync not ready yet."
+      : "Local preview · drag bags to move";
   const equipmentHolders = useMemo<EquipmentHolder[]>(() => {
     if (!isSharedRoster && !equipmentRealtimeEnabled) return LOCAL_EQUIPMENT_HOLDERS;
     return buildSharedEquipmentHolders(equipmentHolderLabels, equipmentKits, equipmentHolderNamesByEmail);
@@ -560,6 +581,18 @@ export function ClubTab({
   const openVotes = useMemo(() => votes.filter((vote) => vote.status === "open"), [votes]);
   const closedVotes = useMemo(() => votes.filter((vote) => vote.status === "closed"), [votes]);
   const contentPeekKit = useMemo(() => equipmentKits.find((kit) => kit.id === contentPeekKitId) || null, [contentPeekKitId, equipmentKits]);
+  const sharedPersonNames = useMemo(() => {
+    const cleaned = equipmentHolderLabels
+      .map((label) => cleanEquipmentHolderLabel(label, equipmentHolderNamesByEmail))
+      .map((label) => label === "You" ? "Me" : label)
+      .filter(Boolean);
+    const unique = cleaned.filter((label, index, all) => all.indexOf(label) === index);
+    if (unique.length) return unique;
+    if (!isSharedRoster) return [];
+    return ["Me", ...Array.from({ length: Math.max(0, collaboratorCount) }, (_, index) => `Collaborator ${index + 1}`)];
+  }, [collaboratorCount, equipmentHolderLabels, equipmentHolderNamesByEmail, isSharedRoster]);
+  const sharedPeopleCount = isSharedRoster ? Math.max(sharedPersonNames.length, collaboratorCount + 1, 1) : 0;
+  const loginGateOpen = Boolean(isActive && authReady && !clubUser);
 
   const resetVoteForm = () => {
     setQuestion("");
@@ -818,20 +851,7 @@ export function ClubTab({
     onSharedToolsOpenChange?.(true);
   };
 
-  const openEquipmentRosterPicker = () => {
-    if (!canSwitchRoster || !onOpenRosterPicker) return;
-    blurActiveField();
-    setColorPickerOpen(false);
-    setDeleteConfirmOpen(false);
-    setContentPeekKitId(null);
-    setEquipmentDialogOpen(false);
-    setEquipmentBoardOpen(false);
-    releaseModalScrollLockSoon();
-    window.setTimeout(() => onOpenRosterPicker(), 120);
-  };
-
   const hasClubBackTarget = Boolean(
-    sharedToolsOpen ||
     colorPickerOpen ||
     contentPeekKitId ||
     equipmentDialogOpen ||
@@ -841,14 +861,13 @@ export function ClubTab({
 
   useEffect(() => {
     equipmentBackStateRef.current = {
-      sharedToolsOpen,
       colorPickerOpen,
       contentPeekKitId,
       equipmentBoardOpen,
       equipmentDialogOpen,
       voteDialogOpen,
     };
-  }, [sharedToolsOpen, colorPickerOpen, contentPeekKitId, equipmentBoardOpen, equipmentDialogOpen, voteDialogOpen]);
+  }, [colorPickerOpen, contentPeekKitId, equipmentBoardOpen, equipmentDialogOpen, voteDialogOpen]);
 
   useEffect(() => {
     onBackTargetChange?.(hasClubBackTarget);
@@ -888,11 +907,6 @@ export function ClubTab({
         setEquipmentBoardOpen(false);
         return;
       }
-      if (state.sharedToolsOpen) {
-        event.preventDefault();
-        handleSharedToolsOpenChange(false);
-        return;
-      }
       if (state.voteDialogOpen) {
         event.preventDefault();
         setVoteDialogOpen(false);
@@ -901,236 +915,129 @@ export function ClubTab({
 
     window.addEventListener("fairteams:native-back", handleNativeBack);
     return () => window.removeEventListener("fairteams:native-back", handleNativeBack);
-  }, [handleSharedToolsOpenChange]);
+  }, []);
 
   const canCreateVote = question.trim().length > 0 && optionText.split("\n").filter((line) => line.trim()).length >= 2;
   const canSaveEquipmentKit = kitName.trim().length > 0;
 
   return (
-    <div className="mx-auto flex w-full max-w-xl flex-col gap-3">
-      <section className="rounded-[2rem] border border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-blue-50 p-4 shadow-sm">
+    <div className="mx-auto flex w-full max-w-xl flex-col gap-2.5 px-1 pb-2">
+      <Dialog open={loginGateOpen} onOpenChange={() => {}}>
+        <DialogContent className="max-w-sm rounded-3xl p-3">
+          <DialogHeader className="px-1 pb-1 text-left">
+            <DialogTitle className="text-base font-black text-[#102A43]">Fair Teams account</DialogTitle>
+          </DialogHeader>
+          <FirebaseSharedRosterAuthCard />
+        </DialogContent>
+      </Dialog>
+
+      {clubUser && (
+        <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white px-3 py-2 shadow-sm">
+          <div className="min-w-0 truncate text-[11px] font-bold text-slate-500">{clubUser.email}</div>
+          <button
+            type="button"
+            onClick={handleClubLogout}
+            disabled={accountBusy}
+            className="shrink-0 rounded-full bg-slate-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-slate-500 active:scale-95 disabled:opacity-60"
+          >
+            {accountBusy ? "…" : "Log out"}
+          </button>
+        </div>
+      )}
+
+      <section className="rounded-[1.7rem] border border-slate-100 bg-white p-3 shadow-sm">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <div className="inline-flex items-center gap-1.5 rounded-full bg-white/80 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-emerald-700 shadow-sm">
-              <Sparkles className="h-3 w-3" />
-              Organizer tools preview
+            <div className="text-[10px] font-black uppercase tracking-wide text-emerald-600">Club roster</div>
+            <div className="mt-1 truncate text-base font-black text-[#102A43]">{activeRosterName || "Current roster"}</div>
+            <div className="mt-0.5 truncate text-[11px] font-semibold text-slate-500">
+              {isSharedRoster ? "Shared roster" : `${playerCount} player${playerCount === 1 ? "" : "s"} · local`}
             </div>
-            <h1 className="mt-3 text-2xl font-black tracking-tight text-[#102A43]">
-              Club
-            </h1>
-            <p className="mt-1 text-sm font-semibold leading-snug text-slate-600">
-              Shared roster, equipment, and votes.
-            </p>
           </div>
-          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-3xl bg-white text-emerald-600 shadow-sm">
-            <Users className="h-7 w-7" />
+          <div className="flex shrink-0 items-center gap-2">
+            {isSharedRoster ? (
+              <button
+                type="button"
+                onClick={() => setCollaboratorsOpen(true)}
+                className="inline-flex h-9 items-center gap-1.5 rounded-2xl bg-emerald-50 px-2.5 text-xs font-black text-emerald-700 active:scale-95"
+                aria-label="Shared with"
+              >
+                <Users className="h-4 w-4" />
+                {sharedPeopleCount}
+              </button>
+            ) : (
+              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-black text-slate-500">Local</span>
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              className="h-9 rounded-2xl border-slate-100 bg-slate-50 px-3 text-xs font-black"
+              onClick={onOpenRosterPicker}
+              disabled={!canSwitchRoster}
+            >
+              Change
+            </Button>
           </div>
         </div>
 
-        <div className="mt-4 rounded-3xl border border-white/80 bg-white/75 p-3">
-          <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-            Active roster
+        {sharedToolsNode && (
+          <div className="mt-3 border-t border-slate-100 pt-3">
+            {sharedToolsNode}
           </div>
-          <div className="mt-1 flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <div className="truncate text-sm font-black text-[#102A43]">
-                {activeRosterName || "Current roster"}
-              </div>
-              <div className="mt-0.5 text-[11px] font-semibold text-slate-500">
-                {activeRosterMeta || `${playerCount} player${playerCount === 1 ? "" : "s"} · ${isSharedRoster ? `${collaboratorCount} collaborator${collaboratorCount === 1 ? "" : "s"}` : "local roster"}`}
-              </div>
+        )}
+      </section>
+
+      <section className="rounded-[1.7rem] border border-slate-100 bg-white p-3 shadow-sm">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wide text-blue-600">
+              <PackageOpen className="h-4 w-4" />
+              Equipment
             </div>
-            <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black ${isSharedRoster ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
-              {isSharedRoster ? "Shared" : "Local"}
-            </span>
+            <div className="mt-1 text-sm font-black text-[#102A43]">{equipmentKits.length} bag{equipmentKits.length === 1 ? "" : "s"}</div>
+            <div className="mt-0.5 truncate text-[11px] font-semibold text-slate-500">Roster: {activeRosterName || "Current roster"}</div>
           </div>
+          <Button
+            type="button"
+            className="h-10 shrink-0 rounded-2xl bg-[#102A43] px-4 text-xs font-black text-white hover:bg-[#0b2036]"
+            onClick={() => setEquipmentBoardOpen(true)}
+          >
+            Open
+          </Button>
         </div>
       </section>
 
-      <ClubFeatureCard
-        icon={<Share2 className="h-5 w-5" />}
-        eyebrow="Shared roster"
-        title="Shared rosters"
-        description="Sign in, invite organizers, save changes, and get latest."
-      >
-        <Button
-          type="button"
-          className="h-11 w-full rounded-2xl bg-[#102A43] text-sm font-black text-white hover:bg-[#0b2036]"
-          onClick={() => handleSharedToolsOpenChange(true)}
-        >
-          Open
-        </Button>
-      </ClubFeatureCard>
-
-      <ClubFeatureCard
-        icon={<ClipboardList className="h-5 w-5" />}
-        eyebrow="Votes"
-        title="Organizer vote"
-        description="Create a simple private decision vote. Results are shown as totals, without names next to choices."
-      >
-        <div className="grid gap-3">
-          <div className="flex items-center justify-between gap-3 rounded-2xl bg-slate-50 p-3">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 text-xs font-bold text-slate-600">
-                <ShieldCheck className="h-4 w-4 text-emerald-600" />
-                Aggregate preview
-              </div>
-              <p className="mt-1 text-[11px] font-semibold leading-snug text-slate-500">
-                Local test only. Later this will use a safe Firebase vote action.
-              </p>
+      <section className="rounded-[1.7rem] border border-slate-100 bg-white p-3 shadow-sm">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wide text-emerald-600">
+              <Vote className="h-4 w-4" />
+              Votes
             </div>
-            <Button
-              type="button"
-              className="h-10 shrink-0 rounded-2xl bg-emerald-600 px-3 text-xs font-black text-white hover:bg-emerald-700"
-              onClick={() => setVoteDialogOpen(true)}
-            >
-              <Plus className="mr-1.5 h-4 w-4" />
-              New
-            </Button>
+            <div className="mt-1 text-sm font-black text-[#102A43]">{openVotes.length} active</div>
+            <div className="mt-0.5 truncate text-[11px] font-semibold text-slate-500">Organizer decisions</div>
           </div>
-
-          {votes.length === 0 ? (
-            <div className="rounded-3xl border border-dashed border-slate-200 bg-white/70 p-4 text-center">
-              <Vote className="mx-auto h-6 w-6 text-slate-300" />
-              <p className="mt-2 text-sm font-black text-[#102A43]">
-                No votes yet
-              </p>
-              <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                Try a schedule, captain, board role, or simple yes/no decision.
-              </p>
-            </div>
-          ) : (
-            <div className="grid gap-2">
-              {openVotes.map((vote) => (
-                <VoteCard
-                  key={vote.id}
-                  vote={vote}
-                  onVote={castPreviewVote}
-                  onCloseVote={closeVote}
-                  onDeleteVote={deleteVote}
-                />
-              ))}
-              {closedVotes.length > 0 && (
-                <div className="pt-1">
-                  <div className="mb-2 text-[10px] font-black uppercase tracking-wide text-slate-400">
-                    Closed
-                  </div>
-                  <div className="grid gap-2 opacity-90">
-                    {closedVotes.map((vote) => (
-                      <VoteCard
-                        key={vote.id}
-                        vote={vote}
-                        onVote={castPreviewVote}
-                        onCloseVote={closeVote}
-                        onDeleteVote={deleteVote}
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
+          <Button
+            type="button"
+            variant="outline"
+            className="h-10 shrink-0 rounded-2xl border-slate-100 bg-slate-50 px-4 text-xs font-black"
+            onClick={() => setVoteDialogOpen(true)}
+          >
+            Open
+          </Button>
         </div>
-      </ClubFeatureCard>
+      </section>
 
-      <ClubFeatureCard
-        icon={<PackageOpen className="h-5 w-5" />}
-        eyebrow="Equipment"
-        title="Equipment board"
-        description="Bags and shared gear belong to the selected roster. Change roster here when needed."
-      >
-        <div className="grid gap-3">
-          <div className="rounded-2xl bg-slate-50 p-3">
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 text-xs font-bold text-slate-600">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                  {equipmentKits.length} bag{equipmentKits.length === 1 ? "" : "s"}
-                </div>
-                <p className="mt-1 truncate text-[11px] font-semibold leading-snug text-slate-500">
-                  Roster: {equipmentRosterLabel}
-                </p>
-                <p className="mt-0.5 text-[11px] font-semibold leading-snug text-slate-500">
-                  {equipmentStatusText}
-                </p>
-              </div>
-              <Button
-                type="button"
-                className="h-10 shrink-0 rounded-2xl bg-[#102A43] px-3 text-xs font-black text-white hover:bg-[#0b2036]"
-                onClick={() => setEquipmentBoardOpen(true)}
-              >
-                Open
-              </Button>
-            </div>
-            {canSwitchRoster && (
-              <button
-                type="button"
-                className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-left text-[11px] font-black uppercase tracking-wide text-[#102A43]/65 shadow-sm active:scale-[0.995]"
-                onClick={openEquipmentRosterPicker}
-              >
-                Change equipment roster
-              </button>
-            )}
-          </div>
-
-          <div className="flex gap-2 overflow-hidden">
-            {equipmentKits.slice(0, 4).map((kit) => (
-              <div key={kit.id} className="flex min-w-0 flex-1 items-center justify-center rounded-2xl bg-white p-2 shadow-sm ring-1 ring-slate-100">
-                <DuffleBagIcon color={kit.color || DEFAULT_EQUIPMENT_COLOR} className="h-8 w-10" />
-              </div>
-            ))}
-            {equipmentKits.length === 0 && (
-              <div className="w-full rounded-2xl border border-dashed border-slate-200 bg-white/70 p-4 text-center text-xs font-bold text-slate-400">
-                No equipment yet
-              </div>
-            )}
-          </div>
-        </div>
-      </ClubFeatureCard>
-
-
-
-
-      <Dialog open={sharedToolsOpen} onOpenChange={handleSharedToolsOpenChange}>
-        <DialogContent className="fixed bottom-2 left-2 right-2 top-2 flex h-auto max-h-none w-auto max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-[2rem] p-0 sm:bottom-auto sm:left-1/2 sm:right-auto sm:top-1/2 sm:h-[92dvh] sm:w-[calc(100vw-1rem)] sm:max-w-md sm:-translate-x-1/2 sm:-translate-y-1/2">
-          <DialogHeader className="border-b border-slate-100 px-4 py-4 text-left">
-            <DialogTitle className="flex items-center gap-2 text-base font-black text-[#102A43]">
-              <Share2 className="h-5 w-5 text-emerald-600" />
-              Shared rosters
-            </DialogTitle>
+      <Dialog open={collaboratorsOpen} onOpenChange={setCollaboratorsOpen}>
+        <DialogContent className="max-w-sm rounded-3xl p-0">
+          <DialogHeader className="border-b border-slate-100 px-4 py-3 text-left">
+            <DialogTitle className="text-base font-black text-[#102A43]">Shared with</DialogTitle>
           </DialogHeader>
-
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-slate-50/70 p-4" style={{ WebkitOverflowScrolling: "touch" }}>
-            <button
-              type="button"
-              className={`mb-3 flex w-full items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-3 text-left shadow-sm transition ${canSwitchRoster ? "active:scale-[0.995]" : "cursor-default"}`}
-              onClick={() => {
-                if (canSwitchRoster) onOpenRosterPicker?.();
-              }}
-              disabled={!canSwitchRoster}
-            >
-              <span className="min-w-0">
-                <span className="block text-[10px] font-black uppercase tracking-wide text-slate-400">
-                  Current roster
-                </span>
-                <span className="mt-1 block truncate text-sm font-black text-[#102A43]">
-                  {activeRosterName || "Current roster"}
-                </span>
-                <span className="mt-0.5 block truncate text-[11px] font-semibold text-slate-500">
-                  {activeRosterMeta || (isSharedRoster ? "Shared roster" : "Local roster")}
-                </span>
-              </span>
-              {canSwitchRoster && (
-                <span className="flex shrink-0 items-center gap-1 text-[11px] font-black uppercase tracking-wide text-[#102A43]/55">
-                  Change
-                </span>
-              )}
-            </button>
-
-            {sharedToolsNode || (
-              <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm font-semibold text-slate-500">
-                Shared tools are not available in this build.
-              </div>
+          <div className="grid gap-1.5 p-4">
+            {sharedPersonNames.length ? sharedPersonNames.map((name) => (
+              <div key={name} className="rounded-2xl bg-slate-50 px-3 py-2 text-sm font-black text-[#102A43]">{name}</div>
+            )) : (
+              <div className="rounded-2xl bg-slate-50 px-3 py-2 text-sm font-bold text-slate-500">Not shared</div>
             )}
           </div>
         </DialogContent>
@@ -1229,47 +1136,23 @@ export function ClubTab({
                   Equipment board
                 </DialogTitle>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  Roster: {equipmentRosterLabel}
+                  Drag bags to move. Tap a bag to edit.
                 </p>
               </div>
-              <div className="flex shrink-0 items-center gap-2">
-                {canSwitchRoster && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-10 rounded-2xl border-slate-200 px-3 text-xs font-black text-slate-600"
-                    onClick={openEquipmentRosterPicker}
-                  >
-                    Change
-                  </Button>
-                )}
-                <Button
-                  type="button"
-                  className="h-10 rounded-2xl bg-[#102A43] px-3 text-xs font-black text-white hover:bg-[#0b2036]"
-                  onClick={openNewEquipmentKit}
-                >
-                  <Plus className="mr-1.5 h-4 w-4" />
-                  Add bag
-                </Button>
-              </div>
+              <Button
+                type="button"
+                className="h-10 shrink-0 rounded-2xl bg-[#102A43] px-3 text-xs font-black text-white hover:bg-[#0b2036]"
+                onClick={openNewEquipmentKit}
+              >
+                <Plus className="mr-1.5 h-4 w-4" />
+                Add bag
+              </Button>
             </div>
           </DialogHeader>
 
           <div className="flex-1 overflow-y-auto bg-slate-50/70 p-3">
-            <div className="mb-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-bold leading-snug text-slate-500 shadow-sm">
-              <div className="flex items-center justify-between gap-3">
-                <span className="min-w-0 truncate">Equipment for: {equipmentRosterLabel}</span>
-                {canSwitchRoster && (
-                  <button
-                    type="button"
-                    className="shrink-0 text-[10px] font-black uppercase tracking-wide text-[#102A43]/60"
-                    onClick={openEquipmentRosterPicker}
-                  >
-                    Change
-                  </button>
-                )}
-              </div>
-              <div className="mt-0.5 text-slate-400">{equipmentBoardStatusText}</div>
+            <div className="mb-2 rounded-2xl border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold leading-snug text-slate-500 shadow-sm">
+              {equipmentBoardStatusText}
             </div>
 
             <div className="overflow-hidden rounded-[1.65rem] border border-slate-200 bg-white shadow-[0_14px_34px_rgba(15,23,42,0.08)]">

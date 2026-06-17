@@ -657,7 +657,6 @@ function App() {
   const logoInputRef = useRef<HTMLInputElement | null>(null);
   const [rosterFilesOpen, setRosterFilesOpen] = useState(false);
   const [clubSharedToolsOpen, setClubSharedToolsOpen] = useState(false);
-  const reopenClubSharedAfterRosterPickerRef = useRef(false);
   const [rosterSharedToolsOpen, setRosterSharedToolsOpen] = useState(false);
   const [rosterLocalBackupToolsOpen, setRosterLocalBackupToolsOpen] = useState(false);
   const [rosterCloudBackupToolsOpen, setRosterCloudBackupToolsOpen] = useState(false);
@@ -1314,53 +1313,16 @@ function App() {
     );
   };
 
-  const reopenClubSharedToolsAfterRosterPicker = () => {
-    if (!reopenClubSharedAfterRosterPickerRef.current) return;
-    reopenClubSharedAfterRosterPickerRef.current = false;
-    setActiveTab("club");
-    window.setTimeout(() => {
-      setClubSharedToolsOpen(true);
-    }, 90);
-  };
-
-  const closeRosterPicker = () => {
-    setRosterPickerOpen(false);
-    reopenClubSharedToolsAfterRosterPicker();
-  };
-
-  const openRosterPickerFromClubSharedTools = () => {
-    // Avoid stacking the global roster picker above the Shared Roster dialog.
-    // Two modal layers can leave the top dialog visible while the hidden one
-    // owns the native-back/scroll-lock state, which feels like a frozen app.
-    reopenClubSharedAfterRosterPickerRef.current = true;
-    setClubSharedToolsOpen(false);
-    window.setTimeout(() => {
-      setRosterPickerOpen(true);
-    }, 120);
-  };
-
   const switchRosterWithPause = (roster: RoomRoster) => {
-    const shouldReopenClubShared = reopenClubSharedAfterRosterPickerRef.current;
-    reopenClubSharedAfterRosterPickerRef.current = false;
-
     if (roster.id === activeRosterId) {
       setRosterPickerOpen(false);
-      if (shouldReopenClubShared) {
-        setActiveTab("club");
-        window.setTimeout(() => setClubSharedToolsOpen(true), 90);
-      }
       return;
     }
-
     setRosterPickerOpen(false);
     setRosterSwitchingName(roster.name);
     window.setTimeout(() => {
       switchRoster(roster.id);
       setRosterSwitchingName("");
-      if (shouldReopenClubShared) {
-        setActiveTab("club");
-        window.setTimeout(() => setClubSharedToolsOpen(true), 90);
-      }
     }, 520);
   };
 
@@ -2694,7 +2656,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
       return true;
     }
     if (rosterPickerOpen) {
-      closeRosterPicker();
+      setRosterPickerOpen(false);
       return true;
     }
     if (googleSheetShareOpen) {
@@ -3049,6 +3011,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
               className="fairteams-tab-panel m-0 data-[state=active]:animate-in data-[state=active]:fade-in-50"
             >
               <ClubTab
+                isActive={activeTab === "club"}
                 activeRosterName={activeRosterName}
                 activeRosterMeta={isEmptyStarterRoster
                   ? "Create or choose a roster"
@@ -3061,22 +3024,20 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 sharedToolsOpen={clubSharedToolsOpen}
                 onSharedToolsOpenChange={setClubSharedToolsOpen}
                 canSwitchRoster={!isEmptyStarterRoster && rosters.length > 1}
-                onOpenRosterPicker={openRosterPickerFromClubSharedTools}
+                onOpenRosterPicker={() => setRosterPickerOpen(true)}
                 onBackTargetChange={setClubBackTargetOpen}
                 sharedToolsNode={(
-                  <div className="grid gap-3">
-                    <FirebaseSharedRosterAuthCard />
-                    <FirebaseSharedRosterPublishCard
-                      activeRoster={activeRoster}
-                      rosters={rosters}
-                      isEmptyRoster={isEmptyStarterRoster}
-                      onOpenRoster={openFirebaseSharedRosterAsLocalCopy}
-                      onRosterSaved={markActiveFirebaseRosterSaved}
-                      onRefreshActiveRoster={refreshActiveFirebaseRosterFromRemote}
-                      onSharedRosterSummariesUpdated={syncFirebaseRosterBadgesFromSummaries}
-                      onSharedInviteOpened={finishSharedInviteOpen}
-                    />
-                  </div>
+                  <FirebaseSharedRosterPublishCard
+                    variant="compact"
+                    activeRoster={activeRoster}
+                    rosters={rosters}
+                    isEmptyRoster={isEmptyStarterRoster}
+                    onOpenRoster={openFirebaseSharedRosterAsLocalCopy}
+                    onRosterSaved={markActiveFirebaseRosterSaved}
+                    onRefreshActiveRoster={refreshActiveFirebaseRosterFromRemote}
+                    onSharedRosterSummariesUpdated={syncFirebaseRosterBadgesFromSummaries}
+                    onSharedInviteOpened={finishSharedInviteOpen}
+                  />
                 )}
                 equipmentGroupId={activeFirebaseSource?.firebaseRosterId ? `roster:${activeFirebaseSource.firebaseRosterId}` : undefined}
                 equipmentHolderLabels={activeFirebaseEquipmentHolderLabels}
@@ -3823,7 +3784,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8 rounded-xl"
-                onClick={closeRosterPicker}
+                onClick={() => setRosterPickerOpen(false)}
                 title="Close"
               >
                 <X className="h-4 w-4" />

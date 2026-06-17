@@ -113,6 +113,16 @@ function makePhotoFreeRosterSnapshot(roster: RoomRoster) {
   return snapshot;
 }
 
+function makePlayerCardUpdateSnapshot(existingRosterData: unknown, roster: RoomRoster) {
+  const existing = existingRosterData && typeof existingRosterData === "object"
+    ? existingRosterData as Partial<RoomRoster>
+    : {};
+  return cleanForFirestore({
+    ...existing,
+    players: roster.players.map(removeLocalOnlyPlayerData) as RoomPlayer[],
+  });
+}
+
 function cleanForFirestore<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
@@ -510,8 +520,6 @@ export async function saveFirebaseSharedRoster(roster: RoomRoster): Promise<Fire
   const rosterId = source.firebaseRosterId;
   const expectedVersion = typeof source.firebaseVersion === "number" ? source.firebaseVersion : 1;
   const now = new Date().toISOString();
-  const rosterData = cleanForFirestore(makePhotoFreeRosterSnapshot(roster));
-  const playerCount = Array.isArray(rosterData.players) ? rosterData.players.length : 0;
   const docRef = doc(getFairTeamsFirestore(), "sharedRosters", rosterId);
 
   const saved = await runTransaction(getFairTeamsFirestore(), async (transaction) => {
@@ -538,8 +546,11 @@ export async function saveFirebaseSharedRoster(roster: RoomRoster): Promise<Fire
     const nextVersion = remoteVersion + 1;
     const groupId = typeof data.groupId === "string" ? data.groupId : source.firebaseGroupId;
     const groupName = typeof data.groupName === "string" ? data.groupName : source.firebaseGroupName;
+    const rosterData = makePlayerCardUpdateSnapshot(data.rosterData, roster);
+    const playerCount = Array.isArray(rosterData.players) ? rosterData.players.length : 0;
+    const remoteName = typeof data.name === "string" && data.name.trim() ? data.name : roster.name || "Shared roster";
     const payload = {
-      name: roster.name || data.name || "Shared roster",
+      name: remoteName,
       groupId,
       groupName,
       version: nextVersion,

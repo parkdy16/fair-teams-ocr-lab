@@ -120,7 +120,7 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, rosters = [], is
     if (!Number.isFinite(syncedTime)) return true;
     return localTime > syncedTime + 1000;
   })();
-  const activeRemoteIsNewer = Boolean(activeSharedRoster && activeFirebaseSource && activeSharedRoster.version > (activeFirebaseSource.firebaseVersion || 0));
+  const updateCount = remoteUpdatedLinkedRosters.length;
 
   const refreshSharedData = async () => {
     if (!user) return;
@@ -185,7 +185,7 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, rosters = [], is
 
   const handleGetLatest = async () => {
     if (!user || busy) return;
-    const targets = activeRemoteIsNewer && activeRoster ? [activeRoster] : remoteUpdatedLinkedRosters;
+    const targets = remoteUpdatedLinkedRosters;
     if (!targets.length) {
       setNotice({ tone: "info", text: "Already up to date." });
       return;
@@ -202,7 +202,7 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, rosters = [], is
         refreshed += 1;
       }
       await refreshSharedData();
-      setNotice({ tone: "success", text: refreshed === 1 ? "Roster updated." : `${refreshed} rosters updated.` });
+      setNotice({ tone: "success", text: refreshed === 1 ? "Player cards updated." : `${refreshed} rosters updated with latest player cards.` });
     } catch (error) {
       setNotice({ tone: "error", text: friendlyFirestoreError(error) });
     } finally {
@@ -313,6 +313,12 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, rosters = [], is
         </div>
       )}
 
+      {updateCount > 0 && (
+        <div className="rounded-2xl border border-amber-100 bg-amber-50/80 px-3 py-2 text-[11px] font-bold leading-snug text-amber-800">
+          {updateCount === 1 ? "1 shared roster has player-card updates." : `${updateCount} shared rosters have player-card updates.`} Get latest updates player cards only. Local photos, colors, pairing rules, and device settings stay on this device.
+        </div>
+      )}
+
       {!activeSharedRoster ? (
         <Button type="button" className="h-11 rounded-2xl bg-emerald-600 text-xs font-black text-white hover:bg-emerald-700" onClick={handleShareActiveRoster} disabled={!user || isEmptyRoster || Boolean(busy)}>
           <Share2 className="mr-1.5 h-4 w-4" />
@@ -324,7 +330,7 @@ export function FirebaseSharedRosterPublishCard({ activeRoster, rosters = [], is
             <Save className="mr-1.5 h-4 w-4" />
             {busy === "save" ? "Saving…" : "Save changes"}
           </Button>
-          <Button type="button" variant="outline" className="h-10 rounded-2xl border-slate-100 bg-white text-xs font-black" onClick={handleGetLatest} disabled={!user || (!activeRemoteIsNewer && !remoteUpdatedLinkedRosters.length) || Boolean(busy)}>
+          <Button type="button" variant="outline" className="h-10 rounded-2xl border-slate-100 bg-white text-xs font-black" onClick={handleGetLatest} disabled={!user || !remoteUpdatedLinkedRosters.length || Boolean(busy)}>
             <CloudDownload className="mr-1.5 h-4 w-4" />
             {busy === "reload" ? "Getting…" : "Get latest"}
           </Button>

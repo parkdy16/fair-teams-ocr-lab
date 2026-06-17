@@ -1133,10 +1133,7 @@ function App() {
 
           return normalizeRoster({
             ...roster,
-            name: sourceName || remoteRoster.name || roster.name,
             players: refreshedPlayers,
-            themeColor: remoteRoster.themeColor || roster.themeColor,
-            logo: roster.logo || remoteRoster.logo,
             cloudSource: {
               provider: "firebase",
               firebaseRosterId: summary.id,
@@ -1160,7 +1157,7 @@ function App() {
     setRosterToolsNotice({
       tone: "success",
       title: "Firebase roster refreshed",
-      message: `${summary.groupName ? `${summary.groupName} · ` : ""}${sourceName || remoteRoster.name || "Shared roster"} was refreshed from Firebase version ${summary.version}.`,
+      message: `${summary.groupName ? `${summary.groupName} · ` : ""}${sourceName || remoteRoster.name || "Shared roster"} player cards were updated from Firebase version ${summary.version}. Local photos and roster settings stayed on this device.`,
     });
   };
 

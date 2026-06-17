@@ -25,6 +25,7 @@ import {
   saveFirebaseEquipmentBag,
   type FirebaseEquipmentBag,
 } from "@/lib/equipmentService";
+import type { PairingRule } from "@/lib/types";
 
 type ClubTabProps = {
   isActive?: boolean;
@@ -39,6 +40,8 @@ type ClubTabProps = {
   equipmentGroupId?: string;
   equipmentHolderLabels?: string[];
   equipmentHolderNamesByEmail?: Record<string, string>;
+  pairingRules?: PairingRule[];
+  onOpenPairingRules?: () => void;
 };
 
 type ClubVoteOption = {
@@ -101,7 +104,10 @@ const DEFAULT_EQUIPMENT_KITS: ClubEquipmentKit[] = [
     color: "#2563eb",
     contents: ["2 balls", "Pump", "Needles"],
     note: "Check air before Saturday.",
+    createdAt: Date.now(),
+    createdByName: "Preview",
     updatedAt: Date.now(),
+    updatedByName: "Preview",
   },
   {
     id: "kit-bibs",
@@ -109,7 +115,10 @@ const DEFAULT_EQUIPMENT_KITS: ClubEquipmentKit[] = [
     holderId: "storage",
     color: "#db2777",
     contents: ["10 dark bibs", "10 light bibs"],
+    createdAt: Date.now(),
+    createdByName: "Preview",
     updatedAt: Date.now(),
+    updatedByName: "Preview",
   },
   {
     id: "kit-cones",
@@ -118,7 +127,10 @@ const DEFAULT_EQUIPMENT_KITS: ClubEquipmentKit[] = [
     color: "#ea580c",
     contents: ["12 cones"],
     note: "Someone took them after last game?",
+    createdAt: Date.now(),
+    createdByName: "Preview",
     updatedAt: Date.now(),
+    updatedByName: "Preview",
   },
 ];
 
@@ -172,6 +184,22 @@ function cleanEquipmentHolderLabel(value: string, namesByEmail: Record<string, s
   const emailName = trimmed.includes("@") ? trimmed.split("@")[0] : trimmed;
   const readableName = titleCaseWords(emailName.replace(/[._-]+/g, " "));
   return looksLikeReadableName(readableName) ? readableName : "Organizer";
+}
+
+function equipmentActorLabel(name?: string, email?: string, namesByEmail: Record<string, string> = {}) {
+  const cleanName = name?.trim();
+  if (cleanName && !cleanName.includes("@")) return titleCaseWords(cleanName);
+  const cleanEmail = email?.trim() || cleanName || "";
+  if (!cleanEmail) return "Unknown";
+  const label = cleanEquipmentHolderLabel(cleanEmail, namesByEmail);
+  return label === "Organizer" ? "Unknown" : label;
+}
+
+function formatEquipmentTimestamp(value?: number) {
+  if (!value) return "time not recorded";
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "time not recorded";
+  return date.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
 function buildSharedEquipmentHolders(labels: string[], equipmentKits: ClubEquipmentKit[], namesByEmail: Record<string, string> = {}) {
@@ -246,26 +274,53 @@ function parseVotes(raw: string | null): ClubVote[] {
   }
 }
 
-function parseEquipmentKits(raw: string | null): ClubEquipmentKit[] {
-  if (!raw) return DEFAULT_EQUIPMENT_KITS;
+function parseEquipmentKits(raw: string | null, fallback: ClubEquipmentKit[] = DEFAULT_EQUIPMENT_KITS): ClubEquipmentKit[] {
+  if (!raw) return fallback;
   try {
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return DEFAULT_EQUIPMENT_KITS;
+    if (!Array.isArray(parsed)) return fallback;
     return parsed
       .filter((kit): kit is ClubEquipmentKit => Boolean(kit?.id && kit?.name))
       .map((kit) => ({
         id: String(kit.id),
         name: String(kit.name),
-        holderId: LOCAL_EQUIPMENT_HOLDERS.some((holder) => holder.id === kit.holderId) ? String(kit.holderId) : "storage",
+        holderId: typeof kit.holderId === "string" && kit.holderId.trim() ? normalizeEquipmentHolderId(String(kit.holderId)) : "storage",
         color: typeof kit.color === "string" && kit.color.trim() ? kit.color : DEFAULT_EQUIPMENT_COLOR,
         contents: Array.isArray(kit.contents)
           ? kit.contents.map((item) => String(item).trim()).filter(Boolean).slice(0, 20)
           : [],
         note: kit.note ? String(kit.note) : undefined,
+        createdAt: Number(kit.createdAt) || undefined,
+        createdByEmail: kit.createdByEmail ? String(kit.createdByEmail) : undefined,
+        createdByName: kit.createdByName ? String(kit.createdByName) : undefined,
         updatedAt: Number(kit.updatedAt) || Date.now(),
+        updatedByEmail: kit.updatedByEmail ? String(kit.updatedByEmail) : undefined,
+        updatedByName: kit.updatedByName ? String(kit.updatedByName) : undefined,
       }));
   } catch {
-    return DEFAULT_EQUIPMENT_KITS;
+    return fallback;
+  }
+}
+
+function equipmentCacheKey(scopeId: string) {
+  return `${EQUIPMENT_PREVIEW_STORAGE_KEY}.cache.${scopeId}`;
+}
+
+function readCachedEquipmentKits(scopeId: string) {
+  if (typeof window === "undefined") return [];
+  try {
+    return parseEquipmentKits(window.localStorage.getItem(equipmentCacheKey(scopeId)), []);
+  } catch {
+    return [];
+  }
+}
+
+function writeCachedEquipmentKits(scopeId: string, kits: ClubEquipmentKit[]) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(equipmentCacheKey(scopeId), JSON.stringify(kits));
+  } catch {
+    // Best-effort cache only. Realtime Firestore remains the source of truth.
   }
 }
 
@@ -435,6 +490,8 @@ export function ClubTab({
   equipmentGroupId,
   equipmentHolderLabels = [],
   equipmentHolderNamesByEmail = {},
+  pairingRules = [],
+  onOpenPairingRules,
 }: ClubTabProps) {
   const [votes, setVotes] = useState<ClubVote[]>(() => {
     if (typeof window === "undefined") return [];
@@ -453,6 +510,7 @@ export function ClubTab({
   const [equipmentError, setEquipmentError] = useState("");
   const [equipmentLastSyncedAt, setEquipmentLastSyncedAt] = useState<number | null>(null);
   const [equipmentBoardOpen, setEquipmentBoardOpen] = useState(false);
+  const [equipmentManageOpen, setEquipmentManageOpen] = useState(false);
   const [equipmentDialogOpen, setEquipmentDialogOpen] = useState(false);
   const [equipmentEditorReturnToBoard, setEquipmentEditorReturnToBoard] = useState(false);
   const [editingKitId, setEditingKitId] = useState<string | null>(null);
@@ -475,6 +533,7 @@ export function ClubTab({
     colorPickerOpen: false,
     contentPeekKitId: null as string | null,
     equipmentBoardOpen: false,
+    equipmentManageOpen: false,
     equipmentDialogOpen: false,
     voteDialogOpen: false,
     accountDialogOpen: false,
@@ -510,18 +569,24 @@ export function ClubTab({
   const equipmentStatusText = equipmentRealtimeEnabled
     ? equipmentError
       ? "Sync issue. Open board."
-      : equipmentLoading
-        ? "Loading shared equipment…"
-        : "Realtime sync on."
+      : equipmentSaving
+        ? "Saving equipment…"
+        : equipmentLoading
+          ? "Loading shared equipment…"
+          : "Realtime sync on."
     : equipmentSharedConnecting
       ? "Shared sync not ready yet."
       : "Local preview.";
   const equipmentBoardStatusText = equipmentRealtimeEnabled
     ? equipmentError
       ? equipmentError
-      : equipmentLoading
-        ? "Loading shared equipment…"
-        : "Realtime sync on · drag bags to move"
+      : equipmentSaving
+        ? "Saving equipment…"
+        : equipmentLoading
+          ? equipmentKits.length > 0
+            ? "Showing last saved bags · syncing…"
+            : "Loading shared equipment…"
+          : `Realtime sync on${equipmentLastSyncedAt ? ` · updated ${formatEquipmentTimestamp(equipmentLastSyncedAt)}` : ""} · drag bags to move`
     : equipmentSharedConnecting
       ? "Shared sync not ready yet."
       : "Local preview · drag bags to move";
@@ -529,6 +594,7 @@ export function ClubTab({
     if (!isSharedRoster && !equipmentRealtimeEnabled) return LOCAL_EQUIPMENT_HOLDERS;
     return buildSharedEquipmentHolders(equipmentHolderLabels, equipmentKits, equipmentHolderNamesByEmail);
   }, [equipmentHolderLabels, equipmentHolderNamesByEmail, equipmentKits, equipmentRealtimeEnabled, isSharedRoster]);
+  const cleanPairingRuleCount = pairingRules.filter((rule) => rule.playerAId && rule.playerBId).length;
 
   useEffect(() => {
     if (typeof window === "undefined" || equipmentRealtimeEnabled || isSharedRoster) return;
@@ -550,12 +616,16 @@ export function ClubTab({
 
     setEquipmentLoading(true);
     setEquipmentError("");
-    setEquipmentKits([]);
+    const cachedBags = readCachedEquipmentKits(equipmentGroupId);
+    if (cachedBags.length > 0) {
+      setEquipmentKits(cachedBags);
+    }
     try {
       const unsubscribe = listenToFirebaseEquipmentBags(
         equipmentGroupId,
         (bags) => {
           setEquipmentKits(bags);
+          writeCachedEquipmentKits(equipmentGroupId, bags);
           setEquipmentLoading(false);
           setEquipmentError("");
           setEquipmentLastSyncedAt(Date.now());
@@ -571,11 +641,12 @@ export function ClubTab({
       setEquipmentLoading(false);
       setEquipmentError(error instanceof Error ? error.message : "Could not connect equipment board.");
     }
-  }, [equipmentGroupId]);
+  }, [equipmentGroupId, isSharedRoster]);
 
   const openVotes = useMemo(() => votes.filter((vote) => vote.status === "open"), [votes]);
   const closedVotes = useMemo(() => votes.filter((vote) => vote.status === "closed"), [votes]);
   const contentPeekKit = useMemo(() => equipmentKits.find((kit) => kit.id === contentPeekKitId) || null, [contentPeekKitId, equipmentKits]);
+  const editingKitMeta = useMemo(() => editingKitId ? equipmentKits.find((kit) => kit.id === editingKitId) || null : null, [editingKitId, equipmentKits]);
   const sharedPersonNames = useMemo(() => {
     const cleaned = equipmentHolderLabels
       .map((label) => cleanEquipmentHolderLabel(label, equipmentHolderNamesByEmail))
@@ -662,6 +733,7 @@ export function ClubTab({
 
   const openEquipmentEditor = (prepareForm: () => void) => {
     const openedFromBoard = equipmentBoardOpen;
+    setEquipmentManageOpen(false);
     setEquipmentEditorReturnToBoard(openedFromBoard);
 
     const openEditor = () => {
@@ -715,6 +787,17 @@ export function ClubTab({
     const trimmedName = kitName.trim();
     if (!trimmedName) return;
 
+    const now = Date.now();
+    const existingKit = editingKitId ? equipmentKits.find((kit) => kit.id === editingKitId) : null;
+    let actorEmail = clubUser?.email || undefined;
+    let actorName = actorEmail || "Organizer";
+    try {
+      const firebaseUser = getFairTeamsAuth().currentUser;
+      actorEmail = firebaseUser?.email || actorEmail;
+      actorName = firebaseUser?.displayName || actorEmail || "Organizer";
+    } catch {
+      // Local preview can run without Firebase auth ready.
+    }
     const nextKit: ClubEquipmentKit = {
       id: editingKitId || makeId("kit"),
       name: trimmedName,
@@ -726,26 +809,31 @@ export function ClubTab({
         .filter(Boolean)
         .slice(0, 20),
       note: kitNote.trim() || undefined,
-      updatedAt: Date.now(),
+      createdAt: existingKit?.createdAt || (!editingKitId ? now : undefined),
+      createdByEmail: existingKit?.createdByEmail || (!editingKitId ? actorEmail : undefined),
+      createdByName: existingKit?.createdByName || (!editingKitId ? actorName : undefined),
+      updatedAt: now,
+      updatedByEmail: actorEmail,
+      updatedByName: actorName,
     };
 
     const previousKits = equipmentKits;
-    const applyLocal = () => {
-      setEquipmentKits((current) => editingKitId
-        ? current.map((kit) => kit.id === editingKitId ? nextKit : kit)
-        : [nextKit, ...current]);
-    };
+    const nextKits = editingKitId
+      ? previousKits.map((kit) => kit.id === editingKitId ? nextKit : kit)
+      : [nextKit, ...previousKits];
 
     try {
       setEquipmentSaving(true);
       setEquipmentError("");
-      applyLocal();
+      setEquipmentKits(nextKits);
       if (equipmentGroupId) {
+        writeCachedEquipmentKits(equipmentGroupId, nextKits);
         await saveFirebaseEquipmentBag(equipmentGroupId, nextKit);
       }
       closeEquipmentEditor(true);
     } catch (error) {
       setEquipmentKits(previousKits);
+      if (equipmentGroupId) writeCachedEquipmentKits(equipmentGroupId, previousKits);
       setEquipmentError(error instanceof Error ? error.message : "Could not save equipment bag.");
     } finally {
       setEquipmentSaving(false);
@@ -755,14 +843,35 @@ export function ClubTab({
   const moveEquipmentKit = async (kitId: string, holderId: string) => {
     const currentKit = equipmentKits.find((kit) => kit.id === kitId);
     if (!currentKit) return;
-    const nextKit = { ...currentKit, holderId, updatedAt: Date.now() };
-    setEquipmentKits((current) => current.map((kit) => kit.id === kitId ? nextKit : kit));
+    const now = Date.now();
+    let actorEmail = clubUser?.email || undefined;
+    let actorName = actorEmail || "Organizer";
+    try {
+      const firebaseUser = getFairTeamsAuth().currentUser;
+      actorEmail = firebaseUser?.email || actorEmail;
+      actorName = firebaseUser?.displayName || actorEmail || "Organizer";
+    } catch {
+      // Local preview can run without Firebase auth ready.
+    }
+    const nextKit = {
+      ...currentKit,
+      holderId,
+      updatedAt: now,
+      updatedByEmail: actorEmail,
+      updatedByName: actorName,
+    };
+    const previousKits = equipmentKits;
+    const nextKits = previousKits.map((kit) => kit.id === kitId ? nextKit : kit);
+    setEquipmentKits(nextKits);
+    if (equipmentGroupId) writeCachedEquipmentKits(equipmentGroupId, nextKits);
     try {
       setEquipmentError("");
       if (equipmentGroupId) {
         await saveFirebaseEquipmentBag(equipmentGroupId, nextKit);
       }
     } catch (error) {
+      setEquipmentKits(previousKits);
+      if (equipmentGroupId) writeCachedEquipmentKits(equipmentGroupId, previousKits);
       setEquipmentError(error instanceof Error ? error.message : "Could not move equipment bag.");
     }
   };
@@ -829,7 +938,9 @@ export function ClubTab({
 
   const deleteEquipmentKit = async (kitId: string) => {
     const previous = equipmentKits;
-    setEquipmentKits((current) => current.filter((kit) => kit.id !== kitId));
+    const nextKits = previous.filter((kit) => kit.id !== kitId);
+    setEquipmentKits(nextKits);
+    if (equipmentGroupId) writeCachedEquipmentKits(equipmentGroupId, nextKits);
     try {
       setEquipmentSaving(true);
       setEquipmentError("");
@@ -841,6 +952,7 @@ export function ClubTab({
       }
     } catch (error) {
       setEquipmentKits(previous);
+      if (equipmentGroupId) writeCachedEquipmentKits(equipmentGroupId, previous);
       setEquipmentError(error instanceof Error ? error.message : "Could not delete equipment bag.");
     } finally {
       setEquipmentSaving(false);
@@ -857,6 +969,7 @@ export function ClubTab({
     colorPickerOpen ||
     contentPeekKitId ||
     equipmentDialogOpen ||
+    equipmentManageOpen ||
     equipmentBoardOpen ||
     voteDialogOpen ||
     accountDialogOpen,
@@ -867,11 +980,12 @@ export function ClubTab({
       colorPickerOpen,
       contentPeekKitId,
       equipmentBoardOpen,
+      equipmentManageOpen,
       equipmentDialogOpen,
       voteDialogOpen,
       accountDialogOpen,
     };
-  }, [accountDialogOpen, colorPickerOpen, contentPeekKitId, equipmentBoardOpen, equipmentDialogOpen, voteDialogOpen]);
+  }, [accountDialogOpen, colorPickerOpen, contentPeekKitId, equipmentBoardOpen, equipmentManageOpen, equipmentDialogOpen, voteDialogOpen]);
 
   useEffect(() => {
     onBackTargetChange?.(hasClubBackTarget);
@@ -901,9 +1015,15 @@ export function ClubTab({
         closeEquipmentEditor(true);
         return;
       }
+      if (state.equipmentManageOpen) {
+        event.preventDefault();
+        setEquipmentManageOpen(false);
+        return;
+      }
       if (state.equipmentBoardOpen) {
         event.preventDefault();
         setContentPeekKitId(null);
+        setEquipmentManageOpen(false);
         setEquipmentBoardOpen(false);
         return;
       }
@@ -963,17 +1083,36 @@ export function ClubTab({
       )}
 
       <section className="rounded-[1.7rem] border border-slate-100 bg-white p-3 shadow-sm ring-1 ring-slate-50">
-        <div className="mb-2 flex items-center justify-between gap-2">
-          <div>
+        <div className="mb-2 flex items-start justify-between gap-2">
+          <div className="min-w-0">
             <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wide text-slate-500">
               <span className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.14)]" />
               Shared roster
             </div>
-            <div className="mt-0.5 text-[11px] font-semibold text-slate-400">Player cards + pairing rules</div>
+            <div className="mt-0.5 truncate text-[11px] font-semibold text-slate-400">
+              Invite organizers and keep {activeRosterName} in sync.
+            </div>
           </div>
           {!isSharedRoster && (
             <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-black text-slate-500">Local</span>
           )}
+        </div>
+        <div className="mb-2 flex items-center justify-between gap-2 rounded-2xl border border-slate-100 bg-slate-50/70 px-3 py-2">
+          <div className="min-w-0">
+            <div className="text-xs font-black text-[#102A43]">Pairing rules</div>
+            <div className="truncate text-[11px] font-semibold text-slate-500">
+              {cleanPairingRuleCount} keep-together/separate rule{cleanPairingRuleCount === 1 ? "" : "s"}
+            </div>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-8 shrink-0 rounded-xl border-slate-200 bg-white px-3 text-[11px] font-black"
+            disabled={!onOpenPairingRules || playerCount < 2}
+            onClick={onOpenPairingRules}
+          >
+            Open
+          </Button>
         </div>
         {sharedToolsNode}
       </section>
@@ -985,7 +1124,7 @@ export function ClubTab({
               <PackageOpen className="h-4 w-4" />
               Equipment
             </div>
-            <div className="mt-0.5 text-[11px] font-semibold text-slate-400">Bags for this roster</div>
+            <div className="mt-0.5 text-[11px] font-semibold text-slate-400">Who has each bag and what is inside.</div>
             {equipmentPreviewKits.length > 0 ? (
               <div className="mt-2 grid gap-1.5">
                 {equipmentPreviewKits.map((kit) => (
@@ -1022,7 +1161,7 @@ export function ClubTab({
               <Vote className="h-4 w-4" />
               Votes
             </div>
-            <div className="mt-0.5 text-[11px] font-semibold text-slate-400">Organizer decisions</div>
+            <div className="mt-0.5 text-[11px] font-semibold text-slate-400">Quick anonymous decisions for organizers.</div>
             <div className="mt-1 text-sm font-black text-[#102A43]">{openVotes.length} active</div>
           </div>
           <Button
@@ -1133,28 +1272,41 @@ export function ClubTab({
 
       <Dialog open={equipmentBoardOpen} onOpenChange={(open) => {
         setEquipmentBoardOpen(open);
-        if (!open) setContentPeekKitId(null);
+        if (!open) {
+          setContentPeekKitId(null);
+          setEquipmentManageOpen(false);
+        }
       }}>
         <DialogContent className="fixed bottom-2 left-2 right-2 top-2 flex h-auto max-h-none w-auto max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-[2rem] p-0 sm:bottom-auto sm:left-1/2 sm:right-auto sm:top-1/2 sm:h-[96dvh] sm:w-[calc(100vw-1rem)] sm:max-w-2xl sm:-translate-x-1/2 sm:-translate-y-1/2">
-          <DialogHeader className="border-b border-slate-100 px-4 py-4 text-left">
-            <div className="flex items-start justify-between gap-3">
+          <DialogHeader className="border-b border-slate-100 px-4 py-4 pr-12 text-left">
+            <div className="grid gap-3">
               <div className="min-w-0">
                 <DialogTitle className="flex items-center gap-2 text-base font-black text-[#102A43]">
                   <PackageOpen className="h-5 w-5 text-emerald-600" />
                   Equipment board
                 </DialogTitle>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  Drag bags to move. Tap a bag to edit.
+                  Drag bags to move. Use Manage bags for details, edits, and delete.
                 </p>
               </div>
-              <Button
-                type="button"
-                className="h-10 shrink-0 rounded-2xl bg-[#102A43] px-3 text-xs font-black text-white hover:bg-[#0b2036]"
-                onClick={openNewEquipmentKit}
-              >
-                <Plus className="mr-1.5 h-4 w-4" />
-                Add bag
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-9 rounded-2xl border-slate-200 bg-white px-3 text-xs font-black"
+                  onClick={() => setEquipmentManageOpen((open) => !open)}
+                >
+                  Manage bags
+                </Button>
+                <Button
+                  type="button"
+                  className="h-9 rounded-2xl bg-[#102A43] px-3 text-xs font-black text-white hover:bg-[#0b2036]"
+                  onClick={openNewEquipmentKit}
+                >
+                  <Plus className="mr-1.5 h-4 w-4" />
+                  Add bag
+                </Button>
+              </div>
             </div>
           </DialogHeader>
 
@@ -1162,6 +1314,68 @@ export function ClubTab({
             <div className="mb-2 rounded-2xl border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold leading-snug text-slate-500 shadow-sm">
               {equipmentBoardStatusText}
             </div>
+
+            {equipmentManageOpen && (
+              <div className="mb-3 rounded-[1.65rem] border border-slate-200 bg-white p-3 shadow-[0_14px_34px_rgba(15,23,42,0.08)]">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <div>
+                    <div className="text-sm font-black text-[#102A43]">Manage bags</div>
+                    <div className="text-[11px] font-semibold text-slate-500">Edit contents, holder, color, and delete when needed.</div>
+                  </div>
+                  <button
+                    type="button"
+                    className="rounded-full bg-slate-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-slate-500 active:scale-95"
+                    onClick={() => setEquipmentManageOpen(false)}
+                  >
+                    Done
+                  </button>
+                </div>
+
+                {equipmentKits.length === 0 ? (
+                  <div className="rounded-2xl bg-slate-50 px-3 py-3 text-sm font-bold text-slate-500">
+                    No bags yet. Add the first bag to start tracking equipment.
+                  </div>
+                ) : (
+                  <div className="grid gap-2">
+                    {equipmentKits.map((kit) => {
+                      const holderLabel = equipmentHolderLabelById[normalizeEquipmentHolderId(kit.holderId)] || "Storage";
+                      const createdBy = equipmentActorLabel(kit.createdByName, kit.createdByEmail, equipmentHolderNamesByEmail);
+                      const updatedBy = equipmentActorLabel(kit.updatedByName, kit.updatedByEmail, equipmentHolderNamesByEmail);
+                      return (
+                        <article key={`manage-${kit.id}`} className="rounded-2xl border border-slate-100 bg-slate-50/70 p-2.5">
+                          <div className="flex items-start gap-2">
+                            <DuffleBagIcon color={kit.color || DEFAULT_EQUIPMENT_COLOR} className="h-8 w-11 shrink-0" />
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <div className="truncate text-sm font-black text-[#102A43]">{kit.name}</div>
+                                  <div className="truncate text-[11px] font-bold text-slate-500">Holder: {holderLabel}</div>
+                                </div>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="h-8 shrink-0 rounded-xl border-slate-200 bg-white px-3 text-[11px] font-black"
+                                  onClick={() => openEditEquipmentKit(kit)}
+                                >
+                                  Edit
+                                </Button>
+                              </div>
+                              <div className="mt-1 truncate text-[11px] font-semibold text-slate-500">
+                                {kit.contents.length ? kit.contents.join(", ") : "No contents listed"}
+                              </div>
+                              <div className="mt-1 grid gap-0.5 text-[10px] font-semibold leading-snug text-slate-400">
+                                <div>Created by {createdBy} · {formatEquipmentTimestamp(kit.createdAt)}</div>
+                                <div>Last updated by {updatedBy} · {formatEquipmentTimestamp(kit.updatedAt)}</div>
+                              </div>
+                            </div>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="overflow-hidden rounded-[1.65rem] border border-slate-200 bg-white shadow-[0_14px_34px_rgba(15,23,42,0.08)]">
               <div className="grid grid-cols-[6.25rem_minmax(0,1fr)] border-b border-slate-200 bg-white text-[10px] font-black uppercase tracking-wide text-slate-400">
@@ -1410,6 +1624,17 @@ export function ClubTab({
               />
             </div>
 
+            {editingKitMeta && (
+              <div className="rounded-2xl border border-slate-100 bg-slate-50/70 px-3 py-2 text-[11px] font-semibold leading-snug text-slate-500">
+                <div>
+                  Created by {equipmentActorLabel(editingKitMeta.createdByName, editingKitMeta.createdByEmail, equipmentHolderNamesByEmail)} · {formatEquipmentTimestamp(editingKitMeta.createdAt)}
+                </div>
+                <div>
+                  Last updated by {equipmentActorLabel(editingKitMeta.updatedByName, editingKitMeta.updatedByEmail, equipmentHolderNamesByEmail)} · {formatEquipmentTimestamp(editingKitMeta.updatedAt)}
+                </div>
+              </div>
+            )}
+
             <div className="grid gap-2 rounded-2xl bg-slate-50 p-2.5">
               <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
                 Quick move
@@ -1435,6 +1660,9 @@ export function ClubTab({
 
             {editingKitId && deleteConfirmOpen && (
               <div className="rounded-2xl border border-red-100 bg-red-50/70 p-2.5">
+                <div className="mb-1.5 text-[11px] font-bold leading-snug text-red-700">
+                  Deleting removes this bag from everyone’s shared equipment board.
+                </div>
                 <div className="mb-1.5 flex items-center justify-between gap-2 text-[10px] font-black uppercase tracking-wide text-red-700">
                   <span>Slide to unlock delete</span>
                   <span>{deleteBagSlide >= 95 ? "Ready" : `${deleteBagSlide}%`}</span>

@@ -18,8 +18,12 @@ export type FirebaseEquipmentBag = {
   color: string;
   contents: string[];
   note?: string;
+  createdAt?: number;
+  createdByEmail?: string;
+  createdByName?: string;
   updatedAt: number;
   updatedByEmail?: string;
+  updatedByName?: string;
 };
 
 function cleanString(value: unknown, fallback = "") {
@@ -51,10 +55,13 @@ function cleanContents(value: unknown) {
 }
 
 function toEquipmentBag(id: string, data: DocumentData): FirebaseEquipmentBag {
+  const createdAt =
+    timestampToMillis(data.createdAt) ||
+    timestampToMillis(data.createdAtIso);
   const updatedAt =
     timestampToMillis(data.updatedAt) ||
     timestampToMillis(data.updatedAtIso) ||
-    timestampToMillis(data.createdAt) ||
+    createdAt ||
     Date.now();
 
   return {
@@ -64,8 +71,12 @@ function toEquipmentBag(id: string, data: DocumentData): FirebaseEquipmentBag {
     color: cleanString(data.color, "#111827"),
     contents: cleanContents(data.contents),
     note: cleanString(data.note) || undefined,
+    createdAt,
+    createdByEmail: cleanString(data.createdByEmail) || undefined,
+    createdByName: cleanString(data.createdByName) || undefined,
     updatedAt,
     updatedByEmail: cleanString(data.updatedByEmail) || undefined,
+    updatedByName: cleanString(data.updatedByName) || undefined,
   };
 }
 
@@ -104,6 +115,7 @@ export function listenToFirebaseEquipmentBags(
   requireSignedInUser();
   return onSnapshot(
     equipmentCollection(scopeId),
+    { includeMetadataChanges: true },
     (snapshot) => {
       const bags = snapshot.docs
         .map((docSnap) => toEquipmentBag(docSnap.id, docSnap.data()))
@@ -118,9 +130,10 @@ export function listenToFirebaseEquipmentBags(
 
 export async function saveFirebaseEquipmentBag(scopeId: string, bag: FirebaseEquipmentBag): Promise<void> {
   const user = requireSignedInUser();
-  const now = new Date().toISOString();
+  const now = new Date();
+  const userName = user.displayName?.trim() || user.email || "Organizer";
   const scope = resolveEquipmentScope(scopeId);
-  const payload = {
+  const payload: Record<string, unknown> = {
     app: "Fair Teams",
     schemaVersion: 1,
     scopeKind: scope.kind,
@@ -134,9 +147,17 @@ export async function saveFirebaseEquipmentBag(scopeId: string, bag: FirebaseEqu
     note: bag.note?.trim() || null,
     updatedByUid: user.uid,
     updatedByEmail: user.email,
+    updatedByName: userName,
     updatedAt: serverTimestamp(),
-    updatedAtIso: now,
+    updatedAtIso: now.toISOString(),
   };
+
+  if (bag.createdAt) {
+    payload.createdAt = bag.createdAt;
+    payload.createdAtIso = new Date(bag.createdAt).toISOString();
+    payload.createdByEmail = bag.createdByEmail || user.email;
+    payload.createdByName = bag.createdByName || userName;
+  }
 
   await setDoc(doc(equipmentCollection(scopeId), bag.id), payload, { merge: true });
 }

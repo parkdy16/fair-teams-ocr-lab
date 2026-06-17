@@ -1152,6 +1152,7 @@ export function PlayersTab({
   onReviewPlayerHandled,
   onReviewNext,
   onReviewDone,
+  openPairingRulesToken = 0,
 }: {
   players: RoomPlayer[];
   setPlayers: (players: RoomPlayer[]) => void;
@@ -1165,6 +1166,7 @@ export function PlayersTab({
   onReviewPlayerHandled?: () => void;
   onReviewNext?: () => void;
   onReviewDone?: () => void;
+  openPairingRulesToken?: number;
 }) {
   const [name, setName] = useState("");
   const [aka, setAka] = useState("");
@@ -1199,6 +1201,15 @@ export function PlayersTab({
   const voiceAddRecognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const [hideOverall, setHideOverall] = useState(() => rosterSkillHiddenSession);
   const [sortMode, setSortMode] = useState<"recent" | "alpha" | "skill">(() => rosterSortModeSession);
+  const lastOpenPairingRulesTokenRef = useRef(0);
+
+  useEffect(() => {
+    if (!openPairingRulesToken || openPairingRulesToken === lastOpenPairingRulesTokenRef.current) return;
+    lastOpenPairingRulesTokenRef.current = openPairingRulesToken;
+    if (setPairingRules && players.length >= 2) {
+      setPairingRulesOpen(true);
+    }
+  }, [openPairingRulesToken, players.length, setPairingRules]);
 
   useEffect(() => {
     const hasRosterDialogOpen =

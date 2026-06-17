@@ -454,6 +454,7 @@ export function ClubTab({
   const [equipmentLastSyncedAt, setEquipmentLastSyncedAt] = useState<number | null>(null);
   const [equipmentBoardOpen, setEquipmentBoardOpen] = useState(false);
   const [equipmentDialogOpen, setEquipmentDialogOpen] = useState(false);
+  const [equipmentEditorReturnToBoard, setEquipmentEditorReturnToBoard] = useState(false);
   const [editingKitId, setEditingKitId] = useState<string | null>(null);
   const [kitName, setKitName] = useState("");
   const [kitHolderId, setKitHolderId] = useState("storage");
@@ -659,23 +660,55 @@ export function ClubTab({
     setKitNote("");
   };
 
-  const openNewEquipmentKit = () => {
-    // Always open the editor. The previous shared-link guard could make the Add bag
-    // button feel broken while the app was still resolving the shared group connection.
+  const openEquipmentEditor = (prepareForm: () => void) => {
+    const openedFromBoard = equipmentBoardOpen;
+    setEquipmentEditorReturnToBoard(openedFromBoard);
+
+    const openEditor = () => {
+      prepareForm();
+      setEquipmentDialogOpen(true);
+    };
+
+    if (openedFromBoard) {
+      setEquipmentBoardOpen(false);
+      window.setTimeout(openEditor, 90);
+      return;
+    }
+
+    openEditor();
+  };
+
+  const closeEquipmentEditor = (returnToBoard = true) => {
+    blurActiveField();
+    setColorPickerOpen(false);
+    setDeleteConfirmOpen(false);
+    setEquipmentDialogOpen(false);
     resetEquipmentForm();
-    setEquipmentDialogOpen(true);
+
+    if (returnToBoard && equipmentEditorReturnToBoard) {
+      window.setTimeout(() => setEquipmentBoardOpen(true), 90);
+    }
+    setEquipmentEditorReturnToBoard(false);
+  };
+
+  const openNewEquipmentKit = () => {
+    openEquipmentEditor(() => {
+      resetEquipmentForm();
+      setKitHolderId("storage");
+    });
   };
 
   const openEditEquipmentKit = (kit: ClubEquipmentKit) => {
-    setEditingKitId(kit.id);
-    setKitName(kit.name);
-    setKitHolderId(normalizeEquipmentHolderId(kit.holderId));
-    setKitColor(kit.color || DEFAULT_EQUIPMENT_COLOR);
-    setDeleteBagSlide(0);
-    setDeleteConfirmOpen(false);
-    setKitContents(kit.contents.join(", "));
-    setKitNote(kit.note || "");
-    setEquipmentDialogOpen(true);
+    openEquipmentEditor(() => {
+      setEditingKitId(kit.id);
+      setKitName(kit.name);
+      setKitHolderId(normalizeEquipmentHolderId(kit.holderId));
+      setKitColor(kit.color || DEFAULT_EQUIPMENT_COLOR);
+      setDeleteBagSlide(0);
+      setDeleteConfirmOpen(false);
+      setKitContents(kit.contents.join(", "));
+      setKitNote(kit.note || "");
+    });
   };
 
   const saveEquipmentKit = async () => {
@@ -710,8 +743,7 @@ export function ClubTab({
       } else {
         applyLocal();
       }
-      resetEquipmentForm();
-      setEquipmentDialogOpen(false);
+      closeEquipmentEditor(true);
     } catch (error) {
       setEquipmentError(error instanceof Error ? error.message : "Could not save equipment bag.");
     } finally {
@@ -804,9 +836,7 @@ export function ClubTab({
         await deleteFirebaseEquipmentBag(equipmentGroupId, kitId);
       }
       if (editingKitId === kitId) {
-        setDeleteConfirmOpen(false);
-        resetEquipmentForm();
-        setEquipmentDialogOpen(false);
+        closeEquipmentEditor(true);
       }
     } catch (error) {
       setEquipmentKits(previous);
@@ -867,11 +897,7 @@ export function ClubTab({
       }
       if (state.equipmentDialogOpen) {
         event.preventDefault();
-        blurActiveField();
-        setColorPickerOpen(false);
-        setDeleteConfirmOpen(false);
-        setEquipmentDialogOpen(false);
-        resetEquipmentForm();
+        closeEquipmentEditor(true);
         return;
       }
       if (state.equipmentBoardOpen) {
@@ -894,7 +920,7 @@ export function ClubTab({
 
     window.addEventListener("fairteams:native-back", handleNativeBack);
     return () => window.removeEventListener("fairteams:native-back", handleNativeBack);
-  }, []);
+  }, [equipmentEditorReturnToBoard]);
 
   const canCreateVote = question.trim().length > 0 && optionText.split("\n").filter((line) => line.trim()).length >= 2;
   const canSaveEquipmentKit = kitName.trim().length > 0;
@@ -935,10 +961,9 @@ export function ClubTab({
         </div>
       )}
 
-      <section className="relative overflow-hidden rounded-[1.7rem] border border-emerald-100 bg-white p-3 shadow-[0_10px_28px_rgba(16,42,67,0.06)]">
-        <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-emerald-400 via-sky-300 to-transparent" />
-        <div className="mb-2 flex items-center justify-between gap-2 pt-0.5">
-          <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wide text-emerald-700">
+      <section className="rounded-[1.7rem] border border-slate-100 bg-white p-3 shadow-sm ring-1 ring-slate-50">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wide text-slate-500">
             <span className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.14)]" />
             Shared roster
           </div>
@@ -949,7 +974,7 @@ export function ClubTab({
         {sharedToolsNode}
       </section>
 
-      <section className="rounded-[1.7rem] border border-slate-100 bg-white p-3 shadow-[0_10px_28px_rgba(16,42,67,0.055)]">
+      <section className="rounded-[1.7rem] border border-slate-100 bg-white p-3 shadow-sm ring-1 ring-slate-50">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wide text-blue-600">
@@ -985,7 +1010,7 @@ export function ClubTab({
         </div>
       </section>
 
-      <section className="rounded-[1.7rem] border border-slate-100 bg-white p-3 shadow-[0_10px_28px_rgba(16,42,67,0.045)]">
+      <section className="rounded-[1.7rem] border border-slate-100 bg-white p-3 shadow-sm ring-1 ring-slate-50">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
             <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wide text-emerald-600">
@@ -1261,12 +1286,11 @@ export function ClubTab({
       </Dialog>
 
       <Dialog open={equipmentDialogOpen} onOpenChange={(open) => {
-        setEquipmentDialogOpen(open);
-        if (!open) {
-          setColorPickerOpen(false);
-          setDeleteConfirmOpen(false);
-          resetEquipmentForm();
+        if (open) {
+          setEquipmentDialogOpen(true);
+          return;
         }
+        closeEquipmentEditor(true);
       }}>
         <DialogContent
             className="max-h-[86dvh] max-w-md overflow-y-auto rounded-3xl p-0"

@@ -21,6 +21,7 @@ import {
   UserMinus,
   FolderOpen,
   Info,
+  ChevronRight,
 } from "lucide-react";
 import { PlayersTab } from "@/components/PlayersTab";
 import { TodayTab } from "@/components/TodayTab";
@@ -3062,41 +3063,39 @@ They will no longer be able to open or edit this shared roster unless it is shar
             </div>
 
             <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain p-4">
-              <div className="sticky top-0 z-20 flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white/95 px-3 py-3 text-left shadow-sm backdrop-blur">
+              <div
+                className={`sticky top-0 z-20 flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white/95 px-3 py-3 text-left shadow-sm backdrop-blur transition ${!isEmptyStarterRoster && rosters.length > 1 ? "cursor-pointer active:scale-[0.995] hover:border-slate-300 hover:bg-white" : ""}`}
+                role={!isEmptyStarterRoster && rosters.length > 1 ? "button" : undefined}
+                tabIndex={!isEmptyStarterRoster && rosters.length > 1 ? 0 : undefined}
+                title={!isEmptyStarterRoster && rosters.length > 1 ? "Change roster" : undefined}
+                aria-label={!isEmptyStarterRoster && rosters.length > 1 ? "Change current roster" : "Current roster"}
+                onClick={() => {
+                  if (!isEmptyStarterRoster && rosters.length > 1) {
+                    setRosterPickerOpen(true);
+                  }
+                }}
+                onKeyDown={(event) => {
+                  if (!isEmptyStarterRoster && rosters.length > 1 && (event.key === "Enter" || event.key === " ")) {
+                    event.preventDefault();
+                    setRosterPickerOpen(true);
+                  }
+                }}
+              >
                 <div className="min-w-0 flex-1">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!isEmptyStarterRoster && rosters.length > 1) {
-                        setRosterPickerOpen(true);
-                      }
-                    }}
-                    className={`block w-full text-left transition ${!isEmptyStarterRoster && rosters.length > 1 ? "active:scale-[0.99]" : "cursor-default"}`}
-                    title={!isEmptyStarterRoster && rosters.length > 1 ? "Change roster" : undefined}
-                    aria-label={!isEmptyStarterRoster && rosters.length > 1 ? "Change current roster" : "Current roster"}
-                  >
-                    <span className="block text-[10px] font-extrabold uppercase tracking-wide text-slate-400">
-                      Current roster
-                    </span>
-                  </button>
+                  <span className="block text-[10px] font-extrabold uppercase tracking-wide text-slate-400">
+                    Current roster
+                  </span>
                   <div className="mt-1 flex min-w-0 items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (!isEmptyStarterRoster && rosters.length > 1) {
-                          setRosterPickerOpen(true);
-                        }
-                      }}
-                      className={`min-w-0 truncate text-left text-sm font-black text-[#102A43] transition ${!isEmptyStarterRoster && rosters.length > 1 ? "active:scale-[0.99]" : "cursor-default"}`}
-                      title={!isEmptyStarterRoster && rosters.length > 1 ? "Change roster" : undefined}
-                      aria-label={!isEmptyStarterRoster && rosters.length > 1 ? "Change current roster" : "Current roster"}
-                    >
+                    <span className="min-w-0 truncate text-sm font-black text-[#102A43]">
                       {isEmptyStarterRoster ? "Make a new roster" : activeRosterName}
-                    </button>
+                    </span>
                     {!isEmptyStarterRoster && (
                       <button
                         type="button"
-                        onClick={openGroupSettings}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          openGroupSettings();
+                        }}
                         className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-[#102A43]/65 shadow-sm transition active:scale-[0.98] hover:text-[#102A43]"
                         title="Edit roster"
                         aria-label="Edit current roster"
@@ -3105,34 +3104,19 @@ They will no longer be able to open or edit this shared roster unless it is shar
                       </button>
                     )}
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!isEmptyStarterRoster && rosters.length > 1) {
-                        setRosterPickerOpen(true);
-                      }
-                    }}
-                    className={`mt-0.5 block w-full truncate text-left text-[11px] font-semibold transition ${!isEmptyStarterRoster && rosters.length > 1 ? "text-slate-500 active:scale-[0.99]" : "cursor-default text-slate-500"}`}
-                    title={!isEmptyStarterRoster && rosters.length > 1 ? "Change roster" : undefined}
-                    aria-label={!isEmptyStarterRoster && rosters.length > 1 ? "Change current roster" : "Current roster details"}
-                  >
+                  <div className={`mt-0.5 block w-full truncate text-left text-[11px] font-semibold ${!isEmptyStarterRoster && rosters.length > 1 ? "text-slate-500" : "text-slate-500"}`}>
                     {isEmptyStarterRoster
                       ? "Create one below or import a roster"
                       : activeRosterIsShared
-                        ? `${players.length} player${players.length === 1 ? "" : "s"} · ${activeSharedHasUnsavedChanges ? "shared changes not saved" : "shared"}`
-                        : `${players.length} player${players.length === 1 ? "" : "s"}`}
-                  </button>
+                        ? `${!isEmptyStarterRoster && rosters.length > 1 ? "Tap row to change · " : ""}${players.length} player${players.length === 1 ? "" : "s"} · ${activeSharedHasUnsavedChanges ? "shared changes not saved" : "shared"}`
+                        : `${!isEmptyStarterRoster && rosters.length > 1 ? "Tap row to change · " : ""}${players.length} player${players.length === 1 ? "" : "s"}`}
+                  </div>
                 </div>
                 {!isEmptyStarterRoster && rosters.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => setRosterPickerOpen(true)}
-                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-2xl font-semibold leading-none text-[#102A43]/55 shadow-sm transition active:scale-[0.96] hover:bg-slate-100 hover:text-[#102A43]"
-                    title="Change roster"
-                    aria-label="Change current roster"
-                  >
-                    ›
-                  </button>
+                  <div className="pointer-events-none flex shrink-0 items-center gap-1 rounded-full px-1 text-[11px] font-black uppercase tracking-wide text-[#102A43]/55">
+                    <span>Change</span>
+                    <ChevronRight className="h-4 w-4" strokeWidth={2.6} />
+                  </div>
                 )}
               </div>
 

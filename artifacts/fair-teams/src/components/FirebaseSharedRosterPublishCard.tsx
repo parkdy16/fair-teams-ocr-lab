@@ -351,14 +351,14 @@ Your local roster will stay local. Fair Teams will copy shared identity fields o
       setNotice({ tone: "error", text: "This older shared roster is missing its group link." });
       return;
     }
-    const ok = window.confirm(`Remove ${email} from this shared roster?`);
+    const ok = window.confirm(`Remove access for ${email}? They will lose online access to this shared roster, but any private copies on their devices stay untouched.`);
     if (!ok) return;
     setBusy(`remove:${email}`);
     setNotice(null);
     try {
       await removeFirebaseSharedGroupMember(groupId, email);
       await refreshSharedData();
-      setNotice({ tone: "success", text: "Collaborator removed." });
+      setNotice({ tone: "success", text: "Organizer access removed." });
     } catch (error) {
       setNotice({ tone: "error", text: friendlyFirestoreError(error) });
     } finally {
@@ -366,19 +366,30 @@ Your local roster will stay local. Fair Teams will copy shared identity fields o
     }
   };
 
-  const collaboratorsModal = collaboratorRoster ? modalShell("People", () => setCollaboratorRosterId(""), (
+  const collaboratorsModal = collaboratorRoster ? modalShell("Organizers", () => setCollaboratorRosterId(""), (
     <div className="grid gap-3">
-      <div className="grid grid-cols-[1fr_auto] gap-2">
-        <input value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} type="email" className="h-10 rounded-2xl border border-slate-100 bg-slate-50 px-3 text-sm font-bold outline-none" placeholder="email@example.com" />
-        <Button type="button" className="h-10 rounded-2xl bg-emerald-600 px-3 text-xs font-black text-white" onClick={handleInvite} disabled={!inviteEmail.trim() || Boolean(busy)}>
-          <UserPlus className="mr-1.5 h-4 w-4" />
-          Add
-        </Button>
+      <div className="rounded-2xl border border-violet-100 bg-violet-50/80 px-3 py-2 text-[11px] font-bold leading-snug text-violet-800">
+        Organizers can open this shared roster, submit their own Club ratings, and help keep shared player info up to date.
       </div>
+
+      {canManageCollaborators ? (
+        <div className="grid grid-cols-[1fr_auto] gap-2">
+          <input value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} type="email" className="h-10 rounded-2xl border border-violet-100 bg-white px-3 text-sm font-bold outline-none" placeholder="email@example.com" />
+          <Button type="button" className="h-10 rounded-2xl bg-violet-600 px-3 text-xs font-black text-white hover:bg-violet-700" onClick={handleInvite} disabled={!inviteEmail.trim() || Boolean(busy)}>
+            <UserPlus className="mr-1.5 h-4 w-4" />
+            Invite
+          </Button>
+        </div>
+      ) : (
+        <div className="rounded-2xl bg-slate-50 px-3 py-2 text-[11px] font-bold leading-snug text-slate-500">
+          You can view organizers here. To stop being part of this roster, use Leave shared roster from the Club page.
+        </div>
+      )}
+
       <div className="grid gap-1.5">
         {canManageCollaborators && (
-          <div className="rounded-2xl bg-violet-50 px-3 py-2 text-[11px] font-bold leading-snug text-violet-800">
-            Add organizers here. Remove is available for non-owner collaborators.
+          <div className="rounded-2xl bg-white px-3 py-2 text-[11px] font-bold leading-snug text-slate-500 shadow-sm">
+            Removing an organizer removes their online access. It does not delete their private copies.
           </div>
         )}
         {(() => {
@@ -406,10 +417,12 @@ Your local roster will stay local. Fair Teams will copy shared identity fields o
                         disabled={Boolean(busy)}
                         className="shrink-0 rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-rose-600 shadow-sm disabled:opacity-50"
                       >
-                        {busy === `remove:${email}` ? "…" : "Remove"}
+                        {busy === `remove:${email}` ? "…" : "Remove access"}
                       </button>
                     ) : (
-                      <span className="shrink-0 text-[10px] text-emerald-700">{isOwnerEmail ? "owner" : isCurrentUser ? "you" : "active"}</span>
+                      <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black ${isOwnerEmail ? "bg-violet-100 text-violet-700" : isCurrentUser ? "bg-emerald-100 text-emerald-700" : "bg-white text-slate-500"}`}>
+                        {isOwnerEmail ? "Owner" : isCurrentUser ? "You" : "Organizer"}
+                      </span>
                     )}
                   </div>
                 );
@@ -418,9 +431,13 @@ Your local roster will stay local. Fair Teams will copy shared identity fields o
                 <div key={email} className="flex items-center justify-between gap-2 rounded-2xl bg-amber-50 px-3 py-2 text-xs font-bold text-[#102A43]">
                   <div className="min-w-0">
                     <div className="truncate">{displayNameForEmail(email, memberNamesByEmail, user?.email)}</div>
-                    <div className="truncate text-[10px] text-amber-700">Pending · {email}</div>
+                    <div className="truncate text-[10px] text-amber-700">Pending invite · {email}</div>
                   </div>
-                  <button type="button" onClick={() => handleCancelInvite(email)} className="rounded-full bg-white p-1.5 text-amber-700" disabled={Boolean(busy)}><X className="h-3.5 w-3.5" /></button>
+                  {canManageCollaborators ? (
+                    <button type="button" onClick={() => handleCancelInvite(email)} className="rounded-full bg-white p-1.5 text-amber-700" disabled={Boolean(busy)} aria-label={`Cancel invite for ${email}`}><X className="h-3.5 w-3.5" /></button>
+                  ) : (
+                    <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-amber-700">Pending</span>
+                  )}
                 </div>
               ))}
             </>
@@ -535,7 +552,7 @@ No shared roster is open on this device. Choose one below to open it on this dev
             </Button>
             <Button type="button" variant="outline" className="h-10 rounded-2xl border-violet-100 bg-white px-2 text-xs font-black text-violet-700 shadow-sm hover:bg-violet-50" onClick={() => openCollaborators(activeSharedRosterId)} disabled={!user || Boolean(busy)}>
               <Users className="mr-1 h-4 w-4" />
-              People
+              Organizers
             </Button>
           </div>
         )}

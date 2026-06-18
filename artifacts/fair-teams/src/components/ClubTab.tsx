@@ -1368,7 +1368,7 @@ export function ClubTab({
       <Dialog open={collaboratorsOpen} onOpenChange={setCollaboratorsOpen}>
         <DialogContent className="max-w-xs rounded-3xl border border-slate-100 p-0 shadow-[0_14px_40px_rgba(15,23,42,0.16)]">
           <DialogHeader className="border-b border-slate-100 px-4 py-3 text-left">
-            <DialogTitle className="text-base font-black text-[#102A43]">People with access</DialogTitle>
+            <DialogTitle className="text-base font-black text-[#102A43]">Organizers</DialogTitle>
           </DialogHeader>
           <div className="grid gap-1.5 p-4">
             {sharedPersonNames.length ? sharedPersonNames.map((name) => (

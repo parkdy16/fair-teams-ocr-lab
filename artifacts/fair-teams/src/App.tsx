@@ -3143,7 +3143,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                       role="button"
                       tabIndex={0}
                       className="inline-flex h-5 shrink-0 items-center gap-0.5 rounded-full bg-emerald-50 px-1.5 text-[10px] font-black text-emerald-700 active:scale-95"
-                      title="People with access"
+                      title="Organizers"
                       aria-label="Show people with access"
                       onClick={(event) => {
                         event.stopPropagation();
@@ -3224,8 +3224,11 @@ They will no longer be able to open or edit this shared roster unless it is shar
           <div className="fixed inset-0 z-[75] flex items-end justify-center bg-slate-950/20 p-3 sm:items-center" onClick={() => setHeaderSharedPeopleOpen(false)}>
             <div className="w-full max-w-xs rounded-3xl border border-slate-100 bg-white p-3 shadow-[0_14px_40px_rgba(15,23,42,0.16)]" onClick={(event) => event.stopPropagation()}>
               <div className="mb-2 flex items-center justify-between gap-3 px-1">
-                <div className="text-sm font-black text-[#102A43]">People with access</div>
-                <button type="button" onClick={() => setHeaderSharedPeopleOpen(false)} className="rounded-full bg-slate-50 p-2 text-slate-500 active:scale-95" aria-label="Close shared people">
+                <div>
+                  <div className="text-sm font-black text-[#102A43]">Organizers</div>
+                  <div className="text-[10px] font-bold text-slate-400">People who can open this shared roster</div>
+                </div>
+                <button type="button" onClick={() => setHeaderSharedPeopleOpen(false)} className="rounded-full bg-slate-50 p-2 text-slate-500 active:scale-95" aria-label="Close organizers">
                   <X className="h-4 w-4" />
                 </button>
               </div>
@@ -4685,7 +4688,7 @@ This is a shared roster. Local Backup can only remove/disassociate this deviceâ€
               <div className="mt-3 rounded-2xl border border-slate-100 bg-slate-50/80 p-3">
                 <div className="flex items-center justify-between gap-2">
                   <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-                    People with access
+                    Organizers
                   </div>
                   <Button
                     type="button"

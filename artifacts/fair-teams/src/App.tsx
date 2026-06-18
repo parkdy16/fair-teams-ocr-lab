@@ -79,7 +79,7 @@ import {
   type GoogleSheetRosterFile,
 } from "@/lib/googleSheetsFiles";
 import { pickGoogleSheetRosterFile, warmUpGoogleDrivePicker } from "@/lib/googleDrivePicker";
-import { listFirebaseSharedRosters, readFirebaseSharedRoster, type FirebaseSharedRosterSummary } from "@/lib/sharedRosterService";
+import { leaveFirebaseSharedRosterAccess, listFirebaseSharedRosters, readFirebaseSharedRoster, type FirebaseSharedRosterSummary } from "@/lib/sharedRosterService";
 import { fetchClubRatingSummaries } from "@/lib/clubCollaborationService";
 
 const GROUP_NAME_STORAGE_KEY = "fair-teams-group-name";
@@ -706,6 +706,8 @@ function App() {
   const [clearRosterSlide, setClearRosterSlide] = useState(0);
   const [privateCopyConfirmOpen, setPrivateCopyConfirmOpen] = useState(false);
   const [privateCopyCreating, setPrivateCopyCreating] = useState(false);
+  const [leaveSharedConfirmOpen, setLeaveSharedConfirmOpen] = useState(false);
+  const [leaveSharedBusy, setLeaveSharedBusy] = useState(false);
   const [newRosterName, setNewRosterName] = useState("");
   const [fileImportMode, setFileImportMode] = useState<"shared" | "backup">(
     "shared",
@@ -1440,6 +1442,47 @@ function App() {
       );
     } finally {
       setPrivateCopyCreating(false);
+    }
+  };
+
+
+  const leaveActiveSharedRoster = async () => {
+    if (!activeRoster || !activeRosterIsFirebaseShared || leaveSharedBusy) return;
+    const firebaseRosterId = activeRoster.cloudSource?.firebaseRosterId;
+    if (!firebaseRosterId) return;
+    setLeaveSharedBusy(true);
+    try {
+      const result = await leaveFirebaseSharedRosterAccess(firebaseRosterId);
+      const affectedRosterIds = new Set(result.rosterIds);
+      const affectedGroupId = result.groupId || activeRoster.cloudSource?.firebaseGroupId;
+      setRosterState((current) => {
+        const remaining = current.rosters.filter((roster) => {
+          const source = roster.cloudSource?.provider === "firebase" ? roster.cloudSource : undefined;
+          if (!source?.firebaseRosterId) return true;
+          if (affectedRosterIds.has(source.firebaseRosterId)) return false;
+          if (affectedGroupId && source.firebaseGroupId === affectedGroupId) return false;
+          return true;
+        });
+        if (remaining.length === 0) {
+          const empty = createRoster(EMPTY_ROSTER_NAME, []);
+          return { rosters: [empty], activeRosterId: empty.id };
+        }
+        return { rosters: remaining, activeRosterId: remaining[0]?.id || current.activeRosterId };
+      });
+      setLeaveSharedConfirmOpen(false);
+      setActiveTab("today");
+      setTodayRosterChosen(false);
+      showRosterToolsNotice(
+        "Left shared roster",
+        result.groupName
+          ? `You left “${result.groupName}”. Shared roster copies from that group were removed from this device.`
+          : `You left “${activeRosterName}”. The local opened copy was removed from this device.`,
+        "success",
+      );
+    } catch (error) {
+      showRosterToolsNotice("Could not leave shared roster", error instanceof Error ? error.message : "Try again after signing in.", "error");
+    } finally {
+      setLeaveSharedBusy(false);
     }
   };
 
@@ -3307,29 +3350,41 @@ They will no longer be able to open or edit this shared roster unless it is shar
                               Opened on this device
                             </div>
                             <p className="mt-1 text-[11px] font-semibold leading-snug text-violet-900/80">
-                              This roster stays online in Shared rosters. Remove from this device only hides this local/cache copy; it does not delete the shared roster or remove organizers.
+                              This roster stays online in Shared rosters. Leaving removes your account from the shared roster. Hiding on this device only removes this opened copy.
                             </p>
                           </div>
                         </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="h-11 rounded-2xl border-violet-100 bg-white px-3 text-violet-700 hover:bg-violet-50 hover:text-violet-800"
-                            onClick={() => setPrivateCopyConfirmOpen(true)}
-                          >
-                            <Copy className="mr-1.5 h-4 w-4" />
-                            <span className="truncate text-xs font-black">Private copy</span>
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="h-11 rounded-2xl border-violet-100 bg-white px-3 text-violet-700 hover:bg-violet-50 hover:text-violet-800"
-                            onClick={openClearRoster}
-                          >
-                            <X className="mr-1.5 h-4 w-4" />
-                            <span className="truncate text-xs font-black">Remove here</span>
-                          </Button>
+                        <div className="grid gap-2">
+                          {activeFirebaseSource?.firebaseRole !== "owner" && (
+                            <Button
+                              type="button"
+                              className="h-11 rounded-2xl bg-violet-600 px-3 text-xs font-black text-white hover:bg-violet-700"
+                              onClick={() => setLeaveSharedConfirmOpen(true)}
+                            >
+                              <UserMinus className="mr-1.5 h-4 w-4" />
+                              Leave shared roster
+                            </Button>
+                          )}
+                          <div className="grid grid-cols-2 gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="h-11 rounded-2xl border-violet-100 bg-white px-3 text-violet-700 hover:bg-violet-50 hover:text-violet-800"
+                              onClick={() => setPrivateCopyConfirmOpen(true)}
+                            >
+                              <Copy className="mr-1.5 h-4 w-4" />
+                              <span className="truncate text-xs font-black">Private copy</span>
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="h-11 rounded-2xl border-violet-100 bg-white px-3 text-violet-700 hover:bg-violet-50 hover:text-violet-800"
+                              onClick={openClearRoster}
+                            >
+                              <X className="mr-1.5 h-4 w-4" />
+                              <span className="truncate text-xs font-black">Hide on device</span>
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     )}
@@ -5342,6 +5397,61 @@ This is a shared roster. Local Backup can only remove/disassociate this device�
                 onClick={closeDriveImportPreview}
               >
                 Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {leaveSharedConfirmOpen && activeRosterIsFirebaseShared && (
+        <div
+          className="fixed inset-0 z-[86] flex items-end justify-center bg-black/45 p-0 sm:items-center sm:p-4"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => !leaveSharedBusy && setLeaveSharedConfirmOpen(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-t-3xl border border-violet-100 bg-white p-4 shadow-2xl sm:rounded-3xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-violet-50 text-violet-600">
+                <UserMinus className="h-5 w-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h2 className="text-base font-black text-[#102A43]">Leave shared roster?</h2>
+                <p className="mt-1 text-sm font-semibold leading-snug text-slate-600">
+                  This removes your account from “{activeRosterName}” and removes the opened copy from this device.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-violet-100 bg-violet-50/70 p-3">
+              <div className="text-[10px] font-black uppercase tracking-wide text-violet-700">
+                Account access
+              </div>
+              <p className="mt-1 text-[11px] font-semibold leading-snug text-violet-800/80">
+                Other organizers keep access. The owner keeps the online roster. To only hide this device copy without leaving, use Hide on device instead.
+              </p>
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="h-11 rounded-2xl border-slate-200 bg-white text-xs font-black text-slate-600"
+                onClick={() => setLeaveSharedConfirmOpen(false)}
+                disabled={leaveSharedBusy}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                className="h-11 rounded-2xl bg-violet-600 text-xs font-black text-white hover:bg-violet-700"
+                onClick={leaveActiveSharedRoster}
+                disabled={leaveSharedBusy}
+              >
+                {leaveSharedBusy ? "Leaving…" : "Leave roster"}
               </Button>
             </div>
           </div>

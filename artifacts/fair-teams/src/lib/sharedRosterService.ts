@@ -621,6 +621,63 @@ export async function cancelFirebaseGroupInvite(groupId: string, inviteeEmail: s
   await batch.commit();
 }
 
+
+export async function leaveFirebaseSharedRosterAccess(rosterId: string): Promise<{ rosterIds: string[]; groupId?: string; groupName?: string }> {
+  const user = getCurrentSharedRosterUser();
+  const email = normalizeEmail(user.email);
+  const rosterRef = doc(getFairTeamsFirestore(), "sharedRosters", rosterId);
+  const rosterSnap = await getDoc(rosterRef);
+  if (!rosterSnap.exists()) throw new Error("Shared roster was not found.");
+  const rosterData = rosterSnap.data();
+  if (rosterData.ownerUid === user.uid || normalizeEmail(rosterData.ownerEmail || "") === email) {
+    throw new Error("The owner cannot leave their own shared roster. Delete it online or transfer ownership later.");
+  }
+
+  const now = new Date().toISOString();
+  const groupId = typeof rosterData.groupId === "string" && rosterData.groupId.trim() ? rosterData.groupId.trim() : "";
+  const groupName = typeof rosterData.groupName === "string" && rosterData.groupName.trim() ? rosterData.groupName.trim() : undefined;
+  const batch = writeBatch(getFairTeamsFirestore());
+  const affectedRosterIds: string[] = [];
+
+  const removeCurrentUserFields = (data: DocumentData) => ({
+    memberUids: arrayRemove(user.uid),
+    memberEmails: arrayRemove(email),
+    pendingInviteEmails: arrayRemove(email),
+    roleByUid: removeRecordKey(data.roleByUid && typeof data.roleByUid === "object" ? data.roleByUid as Record<string, unknown> : {}, user.uid),
+    memberNamesByUid: removeRecordKey(cleanNameMap(data.memberNamesByUid), user.uid),
+    memberNamesByEmail: removeEmailKey(cleanNameMap(data.memberNamesByEmail), email),
+    memberUidByEmail: removeEmailKey(cleanStringMap(data.memberUidByEmail), email),
+    updatedAt: serverTimestamp(),
+    updatedAtIso: now,
+  });
+
+  if (groupId) {
+    const groupRef = doc(getFairTeamsFirestore(), "sharedGroups", groupId);
+    const groupSnap = await getDoc(groupRef);
+    if (!groupSnap.exists()) throw new Error("Shared group was not found.");
+    const groupData = groupSnap.data();
+    if (groupData.ownerUid === user.uid || normalizeEmail(groupData.ownerEmail || "") === email) {
+      throw new Error("The owner cannot leave their own shared group. Delete it online or transfer ownership later.");
+    }
+    const rosterIds = Array.isArray(groupData.rosterIds) ? groupData.rosterIds.filter((id): id is string => typeof id === "string" && id.trim()) : [rosterId];
+    batch.update(groupRef, removeCurrentUserFields(groupData));
+    for (const id of rosterIds) {
+      const linkedRosterRef = doc(getFairTeamsFirestore(), "sharedRosters", id);
+      const linkedRosterSnap = id === rosterId ? rosterSnap : await getDoc(linkedRosterRef);
+      const linkedRosterData = linkedRosterSnap.exists() ? linkedRosterSnap.data() : groupData;
+      if (linkedRosterData.ownerUid === user.uid || normalizeEmail(linkedRosterData.ownerEmail || "") === email) continue;
+      batch.update(linkedRosterRef, removeCurrentUserFields(linkedRosterData));
+      affectedRosterIds.push(id);
+    }
+  } else {
+    batch.update(rosterRef, removeCurrentUserFields(rosterData));
+    affectedRosterIds.push(rosterId);
+  }
+
+  await batch.commit();
+  return { rosterIds: Array.from(new Set(affectedRosterIds)), groupId: groupId || undefined, groupName };
+}
+
 export async function removeFirebaseSharedGroupMember(groupId: string, memberEmail: string): Promise<void> {
   const user = getCurrentSharedRosterUser();
   const email = normalizeEmail(memberEmail);

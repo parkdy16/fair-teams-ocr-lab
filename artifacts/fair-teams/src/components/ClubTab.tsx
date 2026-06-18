@@ -6,14 +6,12 @@ import {
   Star,
   StickyNote,
   Trash2,
-  UserCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FirebaseSharedRosterAuthCard } from "@/components/FirebaseSharedRosterAuthCard";
 import { getFairTeamsAuth } from "@/lib/firebaseClient";
 import {
   listenToSharedRosterUser,
-  signOutOfSharedRosters,
   type SharedRosterUser,
 } from "@/lib/sharedRosterService";
 import {
@@ -432,17 +430,6 @@ function AntiqueBallIcon({ className = "h-4 w-4" }: { className?: string }) {
   );
 }
 
-function getClubGreetingName(user: SharedRosterUser | null) {
-  const raw =
-    user?.displayName?.trim() || user?.email?.split("@")[0]?.trim() || "there";
-  if (!raw) return "there";
-  return raw
-    .replace(/[._-]+/g, " ")
-    .split(" ")
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
 
 const CLUB_NOTE_STYLES = [
   { background: "#FFF4BD", transform: "rotate(-1.2deg)" },
@@ -539,7 +526,6 @@ export function ClubTab({
   });
   const [authReady, setAuthReady] = useState(false);
   const [clubUser, setClubUser] = useState<SharedRosterUser | null>(null);
-  const [accountBusy, setAccountBusy] = useState(false);
   const [collaboratorsOpen, setCollaboratorsOpen] = useState(false);
   const [accountDialogOpen, setAccountDialogOpen] = useState(false);
 
@@ -552,15 +538,6 @@ export function ClubTab({
     [],
   );
 
-  const handleClubLogout = async () => {
-    if (accountBusy) return;
-    setAccountBusy(true);
-    try {
-      await signOutOfSharedRosters();
-    } finally {
-      setAccountBusy(false);
-    }
-  };
 
   const equipmentRealtimeEnabled = Boolean(equipmentGroupId);
   const equipmentCanSyncOnline = Boolean(equipmentGroupId && clubUser?.email);
@@ -1064,9 +1041,7 @@ export function ClubTab({
       : equipmentHolders.slice(0, Math.min(3, equipmentHolders.length));
     return holdersToShow.slice(0, 4);
   }, [equipmentHolders, equipmentKits]);
-  const clubGreetingName = getClubGreetingName(clubUser);
-  const loginGateOpen = Boolean(isActive && authReady && !clubUser);
-  const accountModalOpen = loginGateOpen || accountDialogOpen;
+  const accountModalOpen = accountDialogOpen;
   const resetEquipmentForm = () => {
     setEditingKitId(null);
     setKitName("");
@@ -1443,10 +1418,7 @@ export function ClubTab({
     <div className="mx-auto flex w-full max-w-xl flex-col gap-3 px-1 pb-2">
       <Dialog
         open={accountModalOpen}
-        onOpenChange={(open) => {
-          if (!clubUser) return;
-          setAccountDialogOpen(open);
-        }}
+        onOpenChange={setAccountDialogOpen}
       >
         <DialogContent className="max-w-sm rounded-3xl p-3">
           <DialogHeader className="px-1 pb-1 text-left">
@@ -1458,57 +1430,40 @@ export function ClubTab({
         </DialogContent>
       </Dialog>
 
-      {clubUser && (
-        <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white px-3 py-2 shadow-sm">
-          <button
-            type="button"
-            onClick={() => setAccountDialogOpen(true)}
-            className="flex min-w-0 items-center gap-2 text-left active:scale-[0.99]"
-            aria-label="Open Fair Teams account"
-          >
-            <UserCircle className="h-4 w-4 shrink-0 text-slate-400" />
-            <span className="min-w-0">
-              <span className="block truncate text-xs font-black text-[#102A43]">
-                Hey, {clubGreetingName}
-              </span>
-              <span className="block truncate text-[10px] font-bold text-slate-400">
-                {equipmentCanSyncOnline
-                  ? "Online · live Club tools"
-                  : clubUser.email}
-              </span>
-            </span>
-          </button>
-          <button
-            type="button"
-            onClick={handleClubLogout}
-            disabled={accountBusy}
-            className="shrink-0 rounded-full bg-slate-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-slate-500 active:scale-95 disabled:opacity-60"
-          >
-            {accountBusy ? "…" : "Log out"}
-          </button>
-        </div>
-      )}
+      <section className="overflow-hidden rounded-[1.7rem] border border-violet-100 bg-[#f7f2ff] p-3 shadow-sm ring-1 ring-violet-50">
+        {!clubUser && (
+          <div className="mb-2 flex items-center justify-between gap-3 rounded-[1.1rem] bg-white/55 px-3 py-2.5">
+            <div className="min-w-0">
+              <div className="text-sm font-black text-[#102A43]">
+                Join the club
+              </div>
+              <div className="text-[11px] font-semibold text-violet-700/80">
+                Sign in to open shared rosters and organizers.
+              </div>
+            </div>
+            <Button
+              type="button"
+              className="h-9 shrink-0 rounded-full bg-violet-600 px-3 text-[11px] font-black text-white hover:bg-violet-700"
+              onClick={() => setAccountDialogOpen(true)}
+            >
+              Sign in
+            </Button>
+          </div>
+        )}
 
-      <section className="overflow-hidden rounded-[1.7rem] border border-violet-100 bg-violet-50/70 p-3 shadow-sm ring-1 ring-violet-50">
-        <div className="flex items-center gap-2 text-sm font-black text-[#102A43]">
-          Shared roster
-          <span className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.14)]" />
-        </div>
+        <div className="min-w-0">{sharedToolsNode}</div>
 
-        <div className="mt-3 grid gap-2">
-          <div className="min-w-0">{sharedToolsNode}</div>
-          <button
-            type="button"
-            className="flex items-center justify-between rounded-2xl border border-violet-100 bg-white/80 px-3 py-2 text-left shadow-sm active:bg-violet-50 disabled:opacity-40"
-            disabled={!onOpenPairingRules || playerCount < 2}
-            onClick={onOpenPairingRules}
-          >
-            <span className="text-[11px] font-black text-[#102A43]">Pairing rules</span>
-            <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-black text-violet-700">
-              {cleanPairingRuleCount > 0 ? cleanPairingRuleCount : "None"}
-            </span>
-          </button>
-        </div>
+        <button
+          type="button"
+          className="mt-2 inline-flex w-fit items-center gap-2 rounded-full bg-white/70 px-2.5 py-1 text-[10px] font-black text-violet-700 shadow-sm active:scale-[0.99] disabled:opacity-40"
+          disabled={!onOpenPairingRules || playerCount < 2}
+          onClick={onOpenPairingRules}
+        >
+          <span>Pairing</span>
+          <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-black text-violet-700">
+            {cleanPairingRuleCount > 0 ? cleanPairingRuleCount : "None"}
+          </span>
+        </button>
       </section>
 
       <section className="overflow-hidden rounded-[1.7rem] border border-amber-100 bg-[#fffaf0] p-3 shadow-sm ring-1 ring-amber-50">

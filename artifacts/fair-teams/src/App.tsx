@@ -1351,8 +1351,8 @@ function App() {
     });
     setRosterToolsNotice({
       tone: "success",
-      title: "Firebase roster refreshed",
-      message: `${summary.groupName ? `${summary.groupName} · ` : ""}${sourceName || remoteRoster.name || "Shared roster"} player cards and pairing rules were updated from Firebase version ${summary.version}. Local photos and device settings stayed on this device.`,
+      title: "Shared roster updated",
+      message: `${summary.groupName ? `${summary.groupName} · ` : ""}${sourceName || remoteRoster.name || "Shared roster"} shared player info and pairing rules were updated from online version ${summary.version}. Private/local rosters were not affected.`,
     });
   };
 
@@ -4007,7 +4007,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device�
                         <div className="mt-1 text-[11px] font-semibold leading-snug text-slate-600">
                           {activeRosterIsShared
                             ? activeSharedHasUnsavedChanges
-                              ? "Save changes when you finish editing."
+                              ? "Save shared when you finish editing."
                               : `Saved ${formatSheetSyncTime(activeGoogleSheetSource?.lastSyncedAt).replace("Synced ", "")}`
                             : "This roster is saved only on this device."}
                         </div>

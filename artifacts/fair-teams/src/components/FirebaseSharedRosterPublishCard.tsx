@@ -203,7 +203,7 @@ Your local roster will stay local. Fair Teams will copy shared identity fields o
       return;
     }
     if (!activeCanSave) {
-      setNotice({ tone: "error", text: "You can open this roster, but not save changes." });
+      setNotice({ tone: "error", text: "You can open this shared roster, but only owner/editors can save shared player info." });
       return;
     }
     setBusy("save");
@@ -212,7 +212,7 @@ Your local roster will stay local. Fair Teams will copy shared identity fields o
       const saved = await saveFirebaseSharedRoster(activeRoster);
       onRosterSaved?.(saved, activeRoster.id);
       await refreshSharedData();
-      setNotice({ tone: "success", text: "Roster saved." });
+      setNotice({ tone: "success", text: "Shared roster saved online." });
     } catch (error) {
       setNotice({ tone: "error", text: friendlyFirestoreError(error) });
     } finally {
@@ -239,7 +239,7 @@ Your local roster will stay local. Fair Teams will copy shared identity fields o
         refreshed += 1;
       }
       await refreshSharedData();
-      setNotice({ tone: "success", text: refreshed === 1 ? "Player cards and pairing rules updated." : `${refreshed} rosters updated with latest player cards and pairing rules.` });
+      setNotice({ tone: "success", text: refreshed === 1 ? "Shared roster info updated on this device." : `${refreshed} shared rosters updated on this device.` });
     } catch (error) {
       setNotice({ tone: "error", text: friendlyFirestoreError(error) });
     } finally {
@@ -580,7 +580,7 @@ No shared roster is open on this device. Choose one below to open it on this dev
 
       {updateCount > 0 && (
         <div className="rounded-2xl border border-amber-100 bg-amber-50/80 px-3 py-2 text-[11px] font-bold leading-snug text-amber-800">
-          {updateCount === 1 ? "1 shared roster has roster updates." : `${updateCount} shared rosters have roster updates.`} Get latest updates player cards and pairing rules. Local photos, colors, logo, and device settings stay on this device.
+          {updateCount === 1 ? "1 shared roster has roster updates." : `${updateCount} shared rosters have roster updates.`} Get latest updates shared player info and pairing rules on this device. Private/local rosters are not affected.
         </div>
       )}
 
@@ -593,7 +593,7 @@ No shared roster is open on this device. Choose one below to open it on this dev
         <div className="grid grid-cols-2 gap-2">
           <Button type="button" className="h-10 rounded-2xl bg-emerald-600 text-xs font-black text-white hover:bg-emerald-700" onClick={handleSaveActiveRoster} disabled={!user || !activeCanSave || !activeHasLocalChanges || Boolean(busy)}>
             <Save className="mr-1.5 h-4 w-4" />
-            {busy === "save" ? "Saving…" : "Save changes"}
+            {busy === "save" ? "Saving…" : "Save shared"}
           </Button>
           <Button type="button" variant="outline" className="h-10 rounded-2xl border-slate-100 bg-white text-xs font-black" onClick={handleGetLatest} disabled={!user || !remoteUpdatedLinkedRosters.length || Boolean(busy)}>
             <CloudDownload className="mr-1.5 h-4 w-4" />

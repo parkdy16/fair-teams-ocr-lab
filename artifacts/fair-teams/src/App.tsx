@@ -3058,7 +3058,13 @@ They will no longer be able to open or edit this shared roster unless it is shar
               value="teams"
               className="fairteams-tab-panel m-0 data-[state=active]:animate-in data-[state=active]:fade-in-50"
             >
-              <TeamsTab players={players} pairingRules={pairingRules} />
+              <TeamsTab
+                players={players}
+                pairingRules={pairingRules}
+                isSharedRoster={activeRosterIsFirebaseShared}
+                sharedRosterId={activeFirebaseSource?.firebaseRosterId}
+                onOpenClubRatings={() => setActiveTab("club")}
+              />
             </TabsContent>
             <TabsContent
               value="club"
@@ -3068,7 +3074,9 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 isActive={activeTab === "club"}
                 activeRosterName={activeRosterName}
                 playerCount={players.length}
+                players={players}
                 isSharedRoster={activeRosterIsFirebaseShared}
+                sharedRosterId={activeFirebaseSource?.firebaseRosterId}
                 sharedPeopleCount={rosterFirebaseSharedPeopleCount(activeRoster)}
                 canSwitchRoster={!isEmptyStarterRoster && rosters.length > 1}
                 onOpenRosterPicker={() => setRosterPickerOpen(true)}
@@ -3078,6 +3086,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   setActiveTab("players");
                   setOpenPairingRulesToken((token) => token + 1);
                 }}
+                onOpenTeams={() => setActiveTab("teams")}
                 sharedToolsNode={(
                   <FirebaseSharedRosterPublishCard
                     variant="compact"

@@ -1,8 +1,9 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { RoomPlayer } from "@/lib/localRoster";
 import { FieldSize, PairingRule, Player, Team, TeamColor } from "@/lib/types";
 import { getSpecialSkillStatBoosts } from "@/lib/playerAbilityEffects";
 import { generateTeams, recomputeStats } from "@/lib/teamGenerator";
+import { listenToClubRatingSummaries, listenToMyClubRatings, type ClubMyRating, type ClubRatingSummary } from "@/lib/clubCollaborationService";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
@@ -146,6 +147,39 @@ function toLocalPlayer(p: RoomPlayer): Player {
     isOrganizer: p.isOrganizer, isNew: p.isNew, todayStatus: p.todayStatus,
   };
 }
+
+function toClubBalancePlayer(p: RoomPlayer, clubSkill: number): Player {
+  const safeSkill = Math.min(10, Math.max(1, Math.round(clubSkill * 2) / 2));
+  return {
+    id: p.id,
+    name: p.name,
+    aka: p.aka,
+    gender: p.gender as Player["gender"],
+    skill: safeSkill,
+    attack: safeSkill,
+    defense: safeSkill,
+    speed: safeSkill,
+    passing: safeSkill,
+    stamina: safeSkill,
+    physical: safeSkill,
+    teamPlay: 2,
+    profilePhoto: p.profilePhoto,
+    isGoalkeeper: p.isGoalkeeper,
+    isOrganizer: p.isOrganizer,
+    isNew: p.isNew,
+    todayStatus: p.todayStatus,
+  };
+}
+
+type RatingSource = "private" | "club";
+
+type TeamsTabProps = {
+  players: RoomPlayer[];
+  pairingRules?: PairingRule[];
+  isSharedRoster?: boolean;
+  sharedRosterId?: string;
+  onOpenClubRatings?: () => void;
+};
 
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number | [number, number, number, number]) {
   const [tl, tr, br, bl] = Array.isArray(r) ? r : [r, r, r, r];
@@ -364,7 +398,7 @@ function drawTextBadge(
 }
 
 
-export function TeamsTab({ players, pairingRules = [] }: { players: RoomPlayer[]; pairingRules?: PairingRule[] }) {
+export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, sharedRosterId, onOpenClubRatings }: TeamsTabProps) {
   const [numTeams, setNumTeams] = useState<number>(2);
   const [fieldSize, setFieldSize] = useState<FieldSize>(() => loadFieldSize());
   const [showFieldHelp, setShowFieldHelp] = useState(false);
@@ -378,6 +412,10 @@ export function TeamsTab({ players, pairingRules = [] }: { players: RoomPlayer[]
   const [drawStep, setDrawStep] = useState(0);
   const [justGenerated, setJustGenerated] = useState(false);
   const [showPlayerSkillNumbers, setShowPlayerSkillNumbers] = useState(false);
+  const [ratingSource, setRatingSource] = useState<RatingSource>(isSharedRoster ? "club" : "private");
+  const [clubRatingSummaries, setClubRatingSummaries] = useState<ClubRatingSummary[]>([]);
+  const [myClubRatings, setMyClubRatings] = useState<ClubMyRating[]>([]);
+  const [clubRatingError, setClubRatingError] = useState("");
   const [presentTeamsOpen, setPresentTeamsOpen] = useState(false);
   const [gameToolsOpen, setGameToolsOpen] = useState(false);
   const [cardScreen, setCardScreen] = useState<"yellow" | "red" | null>(null);
@@ -386,6 +424,40 @@ export function TeamsTab({ players, pairingRules = [] }: { players: RoomPlayer[]
   useEffect(() => {
     localStorage.setItem(FIELD_SIZE_STORAGE_KEY, fieldSize);
   }, [fieldSize]);
+
+  useEffect(() => {
+    setRatingSource(isSharedRoster ? "club" : "private");
+  }, [isSharedRoster, sharedRosterId]);
+
+  useEffect(() => {
+    if (!isSharedRoster || !sharedRosterId) {
+      setClubRatingSummaries([]);
+      setMyClubRatings([]);
+      setClubRatingError("");
+      return;
+    }
+
+    setClubRatingError("");
+    try {
+      const unsubscribeSummaries = listenToClubRatingSummaries(
+        sharedRosterId,
+        setClubRatingSummaries,
+        (error) => setClubRatingError(error.message || "Could not load Club ratings."),
+      );
+      const unsubscribeMine = listenToMyClubRatings(
+        sharedRosterId,
+        setMyClubRatings,
+        (error) => setClubRatingError(error.message || "Could not load your Club ratings."),
+      );
+      return () => {
+        unsubscribeSummaries();
+        unsubscribeMine();
+      };
+    } catch (error) {
+      setClubRatingError(error instanceof Error ? error.message : "Could not connect Club ratings.");
+      return;
+    }
+  }, [isSharedRoster, sharedRosterId]);
 
   useEffect(() => {
     saveTeamHistory(history);
@@ -433,7 +505,25 @@ export function TeamsTab({ players, pairingRules = [] }: { players: RoomPlayer[]
     }
   }, [presentTeamsOpen]);
 
-  const attendingPlayers = players.filter(p => p.attending).map(toLocalPlayer);
+  const clubRatingByPlayerId = useMemo(() => {
+    return new Map(clubRatingSummaries.map((summary) => [summary.playerId, summary]));
+  }, [clubRatingSummaries]);
+  const clubRevealablePlayerIds = useMemo(() => {
+    return new Set(myClubRatings
+      .filter((rating) => !rating.skipped && typeof rating.skill === "number")
+      .map((rating) => rating.playerId));
+  }, [myClubRatings]);
+  const usingClubRatings = Boolean(isSharedRoster && ratingSource === "club");
+  const clubUnratedAttendingCount = usingClubRatings
+    ? players.filter((player) => player.attending && !clubRevealablePlayerIds.has(player.id)).length
+    : 0;
+  const attendingPlayers = useMemo(() => {
+    return players.filter((player) => player.attending).map((player) => {
+      if (!usingClubRatings) return toLocalPlayer(player);
+      const clubAverage = clubRevealablePlayerIds.has(player.id) ? clubRatingByPlayerId.get(player.id)?.averageSkill : null;
+      return toClubBalancePlayer(player, typeof clubAverage === "number" ? clubAverage : 5);
+    });
+  }, [clubRatingByPlayerId, clubRevealablePlayerIds, players, usingClubRatings]);
   const hereNowCount = attendingPlayers.filter(p => !isNotHereYet(p)).length;
   const notHereYetPlayers = attendingPlayers.filter(isNotHereYet);
 
@@ -638,6 +728,51 @@ export function TeamsTab({ players, pairingRules = [] }: { players: RoomPlayer[]
     <div className="flex flex-col gap-3">
       {/* Controls */}
       <div className="bg-card border border-border px-3 py-2.5 rounded-xl shadow-sm flex flex-col gap-2">
+        {isSharedRoster && (
+          <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-2">
+            <div className="mb-1.5 flex items-center justify-between gap-2">
+              <div className="text-[10px] font-black uppercase tracking-wide text-slate-500">Balance using</div>
+              {clubUnratedAttendingCount > 0 && (
+                <button
+                  type="button"
+                  className="text-[10px] font-black text-amber-700 underline decoration-amber-300 underline-offset-2"
+                  onClick={onOpenClubRatings}
+                >
+                  {clubUnratedAttendingCount} need rating
+                </button>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-1.5">
+              <button
+                type="button"
+                className={`rounded-xl px-2 py-2 text-xs font-black transition ${ratingSource === "club" ? "bg-[#102A43] text-white shadow-sm" : "bg-white text-slate-500 ring-1 ring-slate-200"}`}
+                onClick={() => setRatingSource("club")}
+              >
+                Club average
+              </button>
+              <button
+                type="button"
+                className={`rounded-xl px-2 py-2 text-xs font-black transition ${ratingSource === "private" ? "bg-[#102A43] text-white shadow-sm" : "bg-white text-slate-500 ring-1 ring-slate-200"}`}
+                onClick={() => setRatingSource("private")}
+              >
+                My ratings
+              </button>
+            </div>
+            <div className="mt-1.5 text-[10px] font-semibold leading-snug text-slate-500">
+              {usingClubRatings
+                ? clubUnratedAttendingCount > 0
+                  ? `${clubUnratedAttendingCount} selected player${clubUnratedAttendingCount === 1 ? "" : "s"} still need your rating. They will temporarily use 5.0.`
+                  : "Shared teams use the organizer average from the Club tab."
+                : "Only your private roster ratings are used for this team generation."}
+            </div>
+            {clubRatingError && (
+              <div className="mt-1.5 rounded-lg bg-amber-50 px-2 py-1 text-[10px] font-bold text-amber-700">
+                {clubRatingError}
+              </div>
+            )}
+          </div>
+        )}
+
         <div className={teams.length > 0 ? "grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 items-end" : "grid grid-cols-2 md:grid-cols-[1fr_1fr_auto] gap-2"}>
           <div className="flex flex-col gap-1 min-w-0">
             <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Teams</Label>

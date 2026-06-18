@@ -1,14 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
-  CalendarClock,
   ClipboardList,
   Pencil,
   Plus,
-  ShieldCheck,
+  Star,
+  StickyNote,
   Trash2,
   UserCircle,
-  Vote,
-  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FirebaseSharedRosterAuthCard } from "@/components/FirebaseSharedRosterAuthCard";
@@ -25,12 +23,26 @@ import {
   type FirebaseEquipmentBag,
 } from "@/lib/equipmentService";
 import type { PairingRule } from "@/lib/types";
+import type { RoomPlayer } from "@/lib/localRoster";
+import {
+  addClubNote,
+  listenToClubNotes,
+  listenToClubRatingSummaries,
+  listenToMyClubRatings,
+  saveMyClubPlayerRating,
+  skipMyClubPlayerRating,
+  type ClubMyRating,
+  type ClubNote,
+  type ClubRatingSummary,
+} from "@/lib/clubCollaborationService";
 
 type ClubTabProps = {
   isActive?: boolean;
   activeRosterName: string;
   playerCount: number;
+  players: RoomPlayer[];
   isSharedRoster: boolean;
+  sharedRosterId?: string;
   sharedPeopleCount: number;
   canSwitchRoster?: boolean;
   onOpenRosterPicker?: () => void;
@@ -41,29 +53,7 @@ type ClubTabProps = {
   equipmentHolderNamesByEmail?: Record<string, string>;
   pairingRules?: PairingRule[];
   onOpenPairingRules?: () => void;
-};
-
-type ClubVoteOption = {
-  id: string;
-  label: string;
-  count: number;
-};
-
-type ClubVoteDecision = "yes" | "no" | "unclear" | "closed";
-
-type ClubVote = {
-  id: string;
-  question: string;
-  options: ClubVoteOption[];
-  status: "open" | "closed";
-  createdAt: number;
-  createdByName?: string;
-  deadline?: string;
-  votedOptionId?: string;
-  closedAt?: number;
-  closedByName?: string;
-  decision?: ClubVoteDecision;
-  decisionNote?: string;
+  onOpenTeams?: () => void;
 };
 
 type EquipmentHolder = {
@@ -73,21 +63,7 @@ type EquipmentHolder = {
 
 type ClubEquipmentKit = FirebaseEquipmentBag;
 
-const VOTE_PREVIEW_STORAGE_KEY = "fairteams.clubVotes.preview.v1";
 const EQUIPMENT_PREVIEW_STORAGE_KEY = "fairteams.clubEquipment.preview.v1";
-
-const QUICK_VOTE_OPTIONS: Array<{ id: string; label: string }> = [
-  { id: "yes", label: "Yes" },
-  { id: "no", label: "No" },
-  { id: "not_sure", label: "Not sure" },
-];
-
-const VOTE_DECISION_OPTIONS: Array<{ id: ClubVoteDecision; label: string; description: string }> = [
-  { id: "yes", label: "Yes, we’ll do it", description: "Move forward with this." },
-  { id: "no", label: "No, we won’t", description: "Close it as a no." },
-  { id: "unclear", label: "No clear decision", description: "The group feeling was split or uncertain." },
-  { id: "closed", label: "Just close it", description: "No final decision needed." },
-];
 
 const EQUIPMENT_COLORS = [
   "#111827",
@@ -269,37 +245,6 @@ function makeId(prefix: string) {
   return `${prefix}-${random}`;
 }
 
-function parseVotes(raw: string | null): ClubVote[] {
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter((vote): vote is ClubVote => Boolean(vote?.id && vote?.question && Array.isArray(vote?.options)))
-      .map((vote) => ({
-        ...vote,
-        status: vote.status === "closed" ? "closed" : "open",
-        createdAt: Number(vote.createdAt) || Date.now(),
-        createdByName: typeof vote.createdByName === "string" ? vote.createdByName : undefined,
-        deadline: typeof vote.deadline === "string" && vote.deadline.trim() ? vote.deadline : undefined,
-        votedOptionId: typeof vote.votedOptionId === "string" ? vote.votedOptionId : undefined,
-        closedAt: Number(vote.closedAt) || undefined,
-        closedByName: typeof vote.closedByName === "string" ? vote.closedByName : undefined,
-        decision: ["yes", "no", "unclear", "closed"].includes(String(vote.decision)) ? vote.decision : undefined,
-        decisionNote: typeof vote.decisionNote === "string" && vote.decisionNote.trim() ? vote.decisionNote : undefined,
-        options: vote.options
-          .filter((option: ClubVoteOption) => Boolean(option?.id && option?.label))
-          .map((option: ClubVoteOption) => ({
-            id: String(option.id),
-            label: String(option.label),
-            count: Math.max(0, Number(option.count) || 0),
-          })),
-      }));
-  } catch {
-    return [];
-  }
-}
-
 function parseEquipmentKits(raw: string | null, fallback: ClubEquipmentKit[] = DEFAULT_EQUIPMENT_KITS): ClubEquipmentKit[] {
   if (!raw) return fallback;
   try {
@@ -395,204 +340,13 @@ function getClubGreetingName(user: SharedRosterUser | null) {
     .join(" ");
 }
 
-function ClubFeatureCard({
-  icon,
-  eyebrow,
-  title,
-  description,
-  children,
-}: {
-  icon: React.ReactNode;
-  eyebrow: string;
-  title: string;
-  description: string;
-  children?: React.ReactNode;
-}) {
-  return (
-    <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-      <div className="flex items-start gap-3 p-4">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-slate-50 text-[#102A43]">
-          {icon}
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">
-            {eyebrow}
-          </div>
-          <h2 className="mt-1 text-[17px] font-black tracking-tight text-[#102A43]">
-            {title}
-          </h2>
-          <p className="mt-1 text-[12px] font-semibold leading-snug text-slate-500">
-            {description}
-          </p>
-        </div>
-      </div>
-      {children && <div className="border-t border-slate-100 p-3">{children}</div>}
-    </section>
-  );
-}
-
-function formatClubVoteDate(timestamp?: number) {
-  if (!timestamp) return "";
-  try {
-    return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(new Date(timestamp));
-  } catch {
-    return "";
-  }
-}
-
-function getVoteOptionCount(vote: ClubVote, optionId: string) {
-  return vote.options.find((option) => option.id === optionId)?.count ?? 0;
-}
-
-function getVoteResultSummary(vote: ClubVote) {
-  const totalVotes = vote.options.reduce((sum, option) => sum + option.count, 0);
-  if (totalVotes === 0) return "No votes yet";
-  const yes = getVoteOptionCount(vote, "yes");
-  const no = getVoteOptionCount(vote, "no");
-  const notSure = getVoteOptionCount(vote, "not_sure");
-  const highest = Math.max(yes, no, notSure);
-  const leaders = [
-    yes === highest ? "Yes" : "",
-    no === highest ? "No" : "",
-    notSure === highest ? "Not sure" : "",
-  ].filter(Boolean);
-  if (leaders.length !== 1) return `Split feeling · ${totalVotes} voted`;
-  return `Mostly ${leaders[0].toLowerCase()} · ${totalVotes} voted`;
-}
-
-function getVoteDecisionLabel(decision?: ClubVoteDecision) {
-  if (decision === "yes") return "Decided yes";
-  if (decision === "no") return "Decided no";
-  if (decision === "unclear") return "No clear decision";
-  if (decision === "closed") return "Closed";
-  return "Closed";
-}
-
-function VoteCard({
-  vote,
-  onVote,
-  onCloseVote,
-  onDeleteVote,
-}: {
-  vote: ClubVote;
-  onVote: (voteId: string, optionId: string) => void;
-  onCloseVote: (voteId: string) => void;
-  onDeleteVote: (voteId: string) => void;
-}) {
-  const totalVotes = vote.options.reduce((sum, option) => sum + option.count, 0);
-  const isClosed = vote.status === "closed";
-  const closedDate = formatClubVoteDate(vote.closedAt);
-
-  return (
-    <article className={`rounded-3xl border bg-white p-3 shadow-sm ${isClosed ? "border-slate-100 opacity-95" : "border-slate-200"}`}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className={`rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wide ${isClosed ? "bg-slate-100 text-slate-500" : "bg-emerald-100 text-emerald-700"}`}>
-              {isClosed ? "Past" : "Open"}
-            </span>
-            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-slate-500">
-              {totalVotes} vote{totalVotes === 1 ? "" : "s"}
-            </span>
-            {vote.deadline && !isClosed && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-blue-700">
-                <CalendarClock className="h-3 w-3" />
-                {vote.deadline}
-              </span>
-            )}
-            {isClosed && (
-              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-slate-500">
-                {getVoteDecisionLabel(vote.decision)}{closedDate ? ` · ${closedDate}` : ""}
-              </span>
-            )}
-          </div>
-          <h3 className="mt-2 text-sm font-black leading-snug text-[#102A43]">
-            {vote.question}
-          </h3>
-          {vote.createdByName && (
-            <div className="mt-1 text-[10px] font-semibold text-slate-400">
-              Asked by {vote.createdByName}
-            </div>
-          )}
-        </div>
-        <button
-          type="button"
-          aria-label="Delete preview vote"
-          className="rounded-full p-2 text-slate-300 transition hover:bg-red-50 hover:text-red-500"
-          onClick={() => onDeleteVote(vote.id)}
-        >
-          <Trash2 className="h-4 w-4" />
-        </button>
-      </div>
-
-      <div className="mt-3 grid gap-2">
-        {vote.options.map((option) => {
-          const percent = totalVotes > 0 ? Math.round((option.count / totalVotes) * 100) : 0;
-          const selected = vote.votedOptionId === option.id;
-          return (
-            <button
-              key={option.id}
-              type="button"
-              disabled={isClosed || Boolean(vote.votedOptionId)}
-              className={`overflow-hidden rounded-2xl border text-left transition ${selected ? "border-emerald-300 bg-emerald-50" : "border-slate-200 bg-slate-50 hover:bg-slate-100"} disabled:cursor-default disabled:opacity-100`}
-              onClick={() => onVote(vote.id, option.id)}
-            >
-              <div className="relative px-3 py-2.5">
-                <div
-                  className="absolute inset-y-0 left-0 bg-emerald-100/70 transition-all"
-                  style={{ width: `${percent}%` }}
-                />
-                <div className="relative flex items-center justify-between gap-2">
-                  <div className="truncate text-xs font-black text-[#102A43]">
-                    {option.label}
-                  </div>
-                  <div className="shrink-0 text-[11px] font-black text-slate-500">
-                    {option.count} · {percent}%
-                  </div>
-                </div>
-              </div>
-            </button>
-          );
-        })}
-      </div>
-
-      {isClosed && (
-        <div className="mt-3 rounded-2xl bg-slate-50 px-3 py-2">
-          <div className="text-[11px] font-black text-[#102A43]">{getVoteResultSummary(vote)}</div>
-          {vote.decisionNote && (
-            <div className="mt-1 text-[11px] font-semibold leading-snug text-slate-500">{vote.decisionNote}</div>
-          )}
-          {vote.closedByName && (
-            <div className="mt-1 text-[10px] font-semibold text-slate-400">Closed by {vote.closedByName}</div>
-          )}
-        </div>
-      )}
-
-      {!isClosed && (
-        <div className="mt-3 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500">
-            <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
-            {vote.votedOptionId ? "Your preview vote is counted." : "Anonymous totals only."}
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            className="h-8 shrink-0 rounded-xl px-3 text-[11px] font-black"
-            onClick={() => onCloseVote(vote.id)}
-          >
-            Close vote
-          </Button>
-        </div>
-      )}
-    </article>
-  );
-}
-
 export function ClubTab({
   isActive = true,
   activeRosterName,
   playerCount,
+  players,
   isSharedRoster,
+  sharedRosterId,
   sharedPeopleCount,
   canSwitchRoster = false,
   onOpenRosterPicker,
@@ -603,19 +357,19 @@ export function ClubTab({
   equipmentHolderNamesByEmail = {},
   pairingRules = [],
   onOpenPairingRules,
+  onOpenTeams,
 }: ClubTabProps) {
-  const [votes, setVotes] = useState<ClubVote[]>(() => {
-    if (typeof window === "undefined") return [];
-    return parseVotes(window.localStorage.getItem(VOTE_PREVIEW_STORAGE_KEY));
-  });
-  const [voteDialogOpen, setVoteDialogOpen] = useState(false);
-  const [voteCreateOpen, setVoteCreateOpen] = useState(false);
-  const [showPastVotes, setShowPastVotes] = useState(false);
-  const [closingVoteId, setClosingVoteId] = useState<string | null>(null);
-  const [closeDecision, setCloseDecision] = useState<ClubVoteDecision | "">("");
-  const [closeNote, setCloseNote] = useState("");
-  const [question, setQuestion] = useState("");
-  const [deadline, setDeadline] = useState("");
+  const [clubRatingSummaries, setClubRatingSummaries] = useState<ClubRatingSummary[]>([]);
+  const [myClubRatings, setMyClubRatings] = useState<ClubMyRating[]>([]);
+  const [clubRatingError, setClubRatingError] = useState("");
+  const [clubRatingLoading, setClubRatingLoading] = useState(false);
+  const [ratingPlayerId, setRatingPlayerId] = useState<string | null>(null);
+  const [ratingDraft, setRatingDraft] = useState(5);
+  const [ratingSaving, setRatingSaving] = useState(false);
+  const [clubNotes, setClubNotes] = useState<ClubNote[]>([]);
+  const [clubNotesError, setClubNotesError] = useState("");
+  const [clubNoteDraft, setClubNoteDraft] = useState("");
+  const [clubNoteSaving, setClubNoteSaving] = useState(false);
   const [equipmentKits, setEquipmentKits] = useState<ClubEquipmentKit[]>(() => {
     if (typeof window === "undefined") return DEFAULT_EQUIPMENT_KITS;
     return parseEquipmentKits(window.localStorage.getItem(EQUIPMENT_PREVIEW_STORAGE_KEY));
@@ -649,8 +403,7 @@ export function ClubTab({
     contentPeekKitId: null as string | null,
     equipmentBoardOpen: false,
     equipmentDialogOpen: false,
-    voteDialogOpen: false,
-    closingVoteId: null as string | null,
+    ratingPlayerId: null as string | null,
     accountDialogOpen: false,
   });
   const [authReady, setAuthReady] = useState(false);
@@ -658,11 +411,6 @@ export function ClubTab({
   const [accountBusy, setAccountBusy] = useState(false);
   const [collaboratorsOpen, setCollaboratorsOpen] = useState(false);
   const [accountDialogOpen, setAccountDialogOpen] = useState(false);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem(VOTE_PREVIEW_STORAGE_KEY, JSON.stringify(votes));
-  }, [votes]);
 
   useEffect(() => listenToSharedRosterUser((nextUser) => {
     setClubUser(nextUser);
@@ -793,8 +541,147 @@ export function ClubTab({
     }
   }, [authReady, clubUser?.email, equipmentGroupId, isSharedRoster]);
 
-  const openVotes = useMemo(() => votes.filter((vote) => vote.status === "open"), [votes]);
-  const closedVotes = useMemo(() => votes.filter((vote) => vote.status === "closed"), [votes]);
+  const clubRatingsEnabled = Boolean(isSharedRoster && sharedRosterId && clubUser?.email);
+
+  useEffect(() => {
+    if (!clubRatingsEnabled || !sharedRosterId) {
+      setClubRatingSummaries([]);
+      setMyClubRatings([]);
+      setClubRatingError("");
+      setClubRatingLoading(false);
+      return;
+    }
+
+    setClubRatingLoading(true);
+    setClubRatingError("");
+    try {
+      const unsubscribeSummaries = listenToClubRatingSummaries(
+        sharedRosterId,
+        (summaries) => {
+          setClubRatingSummaries(summaries);
+          setClubRatingLoading(false);
+        },
+        (error) => {
+          setClubRatingError(error.message || "Could not load Club ratings.");
+          setClubRatingLoading(false);
+        },
+      );
+      const unsubscribeMine = listenToMyClubRatings(
+        sharedRosterId,
+        (ratings) => {
+          setMyClubRatings(ratings);
+          setClubRatingLoading(false);
+        },
+        (error) => {
+          setClubRatingError(error.message || "Could not load your ratings.");
+          setClubRatingLoading(false);
+        },
+      );
+      return () => {
+        unsubscribeSummaries();
+        unsubscribeMine();
+      };
+    } catch (error) {
+      setClubRatingError(error instanceof Error ? error.message : "Could not connect Club ratings.");
+      setClubRatingLoading(false);
+      return;
+    }
+  }, [clubRatingsEnabled, sharedRosterId]);
+
+  useEffect(() => {
+    if (!clubRatingsEnabled || !sharedRosterId) {
+      setClubNotes([]);
+      setClubNotesError("");
+      return;
+    }
+
+    setClubNotesError("");
+    try {
+      return listenToClubNotes(
+        sharedRosterId,
+        setClubNotes,
+        (error) => setClubNotesError(error.message || "Could not load Club notes."),
+      );
+    } catch (error) {
+      setClubNotesError(error instanceof Error ? error.message : "Could not connect Club notes.");
+      return;
+    }
+  }, [clubRatingsEnabled, sharedRosterId]);
+
+  const myRatingByPlayerId = useMemo(() => {
+    return new Map(myClubRatings.map((rating) => [rating.playerId, rating]));
+  }, [myClubRatings]);
+  const ratingSummaryByPlayerId = useMemo(() => {
+    return new Map(clubRatingSummaries.map((summary) => [summary.playerId, summary]));
+  }, [clubRatingSummaries]);
+  const ratedPlayers = useMemo(() => players.filter((player) => {
+    const rating = myRatingByPlayerId.get(player.id);
+    return Boolean(rating && !rating.skipped && typeof rating.skill === "number");
+  }), [myRatingByPlayerId, players]);
+  const skippedPlayers = useMemo(() => players.filter((player) => myRatingByPlayerId.get(player.id)?.skipped), [myRatingByPlayerId, players]);
+  const needRatingPlayers = useMemo(() => players.filter((player) => !myRatingByPlayerId.has(player.id)), [myRatingByPlayerId, players]);
+  const ratingDialogPlayer = useMemo(() => players.find((player) => player.id === ratingPlayerId) || null, [players, ratingPlayerId]);
+  const nextRatingPlayer = needRatingPlayers[0] || skippedPlayers[0] || ratedPlayers[0] || players[0] || null;
+  const clubRatedCount = ratedPlayers.length;
+  const clubSkippedCount = skippedPlayers.length;
+  const clubNeedRatingCount = needRatingPlayers.length;
+  const clubRatingProgressText = clubRatingsEnabled
+    ? `${clubRatedCount} of ${players.length} rated${clubSkippedCount ? ` · ${clubSkippedCount} skipped` : ""}`
+    : isSharedRoster
+      ? "Sign in to rate this shared roster."
+      : "Available when this roster is shared.";
+  const previewClubNotes = clubNotes.slice(0, 3);
+  const canAddClubNote = clubRatingsEnabled && clubNoteDraft.trim().length > 0 && !clubNoteSaving;
+
+  const openRatingForPlayer = (player: RoomPlayer | null) => {
+    if (!player) return;
+    const existing = myRatingByPlayerId.get(player.id);
+    setRatingDraft(typeof existing?.skill === "number" ? existing.skill : 5);
+    setRatingPlayerId(player.id);
+  };
+
+  const saveClubRating = async () => {
+    if (!sharedRosterId || !ratingDialogPlayer || ratingSaving) return;
+    setRatingSaving(true);
+    setClubRatingError("");
+    try {
+      await saveMyClubPlayerRating(sharedRosterId, ratingDialogPlayer.id, ratingDraft);
+      setRatingPlayerId(null);
+    } catch (error) {
+      setClubRatingError(error instanceof Error ? error.message : "Could not save your rating.");
+    } finally {
+      setRatingSaving(false);
+    }
+  };
+
+  const skipClubRating = async () => {
+    if (!sharedRosterId || !ratingDialogPlayer || ratingSaving) return;
+    setRatingSaving(true);
+    setClubRatingError("");
+    try {
+      await skipMyClubPlayerRating(sharedRosterId, ratingDialogPlayer.id);
+      setRatingPlayerId(null);
+    } catch (error) {
+      setClubRatingError(error instanceof Error ? error.message : "Could not skip this player.");
+    } finally {
+      setRatingSaving(false);
+    }
+  };
+
+  const addSharedClubNote = async () => {
+    if (!sharedRosterId || !canAddClubNote) return;
+    setClubNoteSaving(true);
+    setClubNotesError("");
+    try {
+      await addClubNote(sharedRosterId, clubNoteDraft);
+      setClubNoteDraft("");
+    } catch (error) {
+      setClubNotesError(error instanceof Error ? error.message : "Could not add Club note.");
+    } finally {
+      setClubNoteSaving(false);
+    }
+  };
+
   const contentPeekKit = useMemo(() => equipmentKits.find((kit) => kit.id === contentPeekKitId) || null, [contentPeekKitId, equipmentKits]);
   const editingKitMeta = useMemo(() => editingKitId ? equipmentKits.find((kit) => kit.id === editingKitId) || null : null, [editingKitId, equipmentKits]);
   const sharedPersonNames = useMemo(() => {
@@ -822,77 +709,6 @@ export function ClubTab({
   const clubGreetingName = getClubGreetingName(clubUser);
   const loginGateOpen = Boolean(isActive && authReady && !clubUser);
   const accountModalOpen = loginGateOpen || accountDialogOpen;
-
-  const resetVoteForm = () => {
-    setQuestion("");
-    setDeadline("");
-  };
-
-  const resetCloseVoteForm = () => {
-    setClosingVoteId(null);
-    setCloseDecision("");
-    setCloseNote("");
-  };
-
-  const createVote = () => {
-    const trimmedQuestion = question.trim();
-    if (!trimmedQuestion) return;
-
-    const vote: ClubVote = {
-      id: makeId("vote"),
-      question: trimmedQuestion,
-      options: QUICK_VOTE_OPTIONS.map((option) => ({ ...option, count: 0 })),
-      status: "open",
-      createdAt: Date.now(),
-      createdByName: clubGreetingName || undefined,
-      deadline: deadline.trim() || undefined,
-    };
-
-    setVotes((current) => [vote, ...current]);
-    resetVoteForm();
-    setVoteCreateOpen(false);
-    setShowPastVotes(false);
-  };
-
-  const castPreviewVote = (voteId: string, optionId: string) => {
-    setVotes((current) => current.map((vote) => {
-      if (vote.id !== voteId || vote.status === "closed" || vote.votedOptionId) return vote;
-      return {
-        ...vote,
-        votedOptionId: optionId,
-        options: vote.options.map((option) => option.id === optionId
-          ? { ...option, count: option.count + 1 }
-          : option),
-      };
-    }));
-  };
-
-  const closeVote = (voteId: string) => {
-    setClosingVoteId(voteId);
-    setCloseDecision("");
-    setCloseNote("");
-  };
-
-  const finalizeCloseVote = () => {
-    if (!closingVoteId || !closeDecision) return;
-    setVotes((current) => current.map((vote) => vote.id === closingVoteId
-      ? {
-        ...vote,
-        status: "closed",
-        closedAt: Date.now(),
-        closedByName: clubGreetingName || undefined,
-        decision: closeDecision,
-        decisionNote: closeNote.trim() || undefined,
-      }
-      : vote));
-    setShowPastVotes(true);
-    resetCloseVoteForm();
-  };
-
-  const deleteVote = (voteId: string) => {
-    setVotes((current) => current.filter((vote) => vote.id !== voteId));
-  };
-
   const resetEquipmentForm = () => {
     setEditingKitId(null);
     setKitName("");
@@ -1145,8 +961,7 @@ export function ClubTab({
     contentPeekKitId ||
     equipmentDialogOpen ||
     equipmentBoardOpen ||
-    voteDialogOpen ||
-    closingVoteId ||
+    ratingPlayerId ||
     accountDialogOpen,
   );
 
@@ -1156,11 +971,10 @@ export function ClubTab({
       contentPeekKitId,
       equipmentBoardOpen,
       equipmentDialogOpen,
-      voteDialogOpen,
-      closingVoteId,
+      ratingPlayerId,
       accountDialogOpen,
     };
-  }, [accountDialogOpen, closingVoteId, colorPickerOpen, contentPeekKitId, equipmentBoardOpen, equipmentDialogOpen, voteDialogOpen]);
+  }, [accountDialogOpen, colorPickerOpen, contentPeekKitId, equipmentBoardOpen, equipmentDialogOpen, ratingPlayerId]);
 
   useEffect(() => {
     onBackTargetChange?.(hasClubBackTarget);
@@ -1196,14 +1010,9 @@ export function ClubTab({
         setEquipmentBoardOpen(false);
         return;
       }
-      if (state.closingVoteId) {
+      if (state.ratingPlayerId) {
         event.preventDefault();
-        resetCloseVoteForm();
-        return;
-      }
-      if (state.voteDialogOpen) {
-        event.preventDefault();
-        setVoteDialogOpen(false);
+        setRatingPlayerId(null);
         return;
       }
       if (state.accountDialogOpen) {
@@ -1217,9 +1026,6 @@ export function ClubTab({
     return () => window.removeEventListener("fairteams:native-back", handleNativeBack);
   }, [equipmentEditorReturnToBoard]);
 
-  const canCreateVote = question.trim().length > 0;
-  const closingVote = votes.find((vote) => vote.id === closingVoteId) || null;
-  const canFinalizeCloseVote = Boolean(closingVote && closeDecision);
   const canSaveEquipmentKit = kitName.trim().length > 0;
 
   return (
@@ -1370,25 +1176,125 @@ export function ClubTab({
       </section>
 
       <section className="rounded-[1.7rem] border border-slate-100 bg-white p-3 shadow-sm ring-1 ring-slate-50">
-        <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wide text-emerald-600">
-              <Vote className="h-4 w-4" />
-              Votes
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wide text-violet-600">
+              <Star className="h-4 w-4" />
+              Organizer ratings
             </div>
-            <div className="mt-0.5 text-[11px] font-semibold text-slate-400">Quick anonymous decisions for organizers.</div>
-            <div className="mt-1 text-sm font-black text-[#102A43]">{openVotes.length} active · {closedVotes.length} past</div>
+            <div className="mt-0.5 text-[11px] font-semibold text-slate-400">Private ratings become the Club average for shared teams.</div>
+            <div className="mt-1 text-sm font-black text-[#102A43]">{clubRatingProgressText}</div>
           </div>
           <Button
             type="button"
-            variant="outline"
-            className="h-10 shrink-0 rounded-2xl border-slate-100 bg-slate-50 px-4 text-xs font-black"
-            onClick={() => {
-              setVoteCreateOpen(openVotes.length === 0);
-              setVoteDialogOpen(true);
-            }}
+            className="h-10 shrink-0 rounded-2xl bg-[#102A43] px-4 text-xs font-black text-white hover:bg-[#0b2036]"
+            disabled={!clubRatingsEnabled || players.length === 0}
+            onClick={() => openRatingForPlayer(nextRatingPlayer)}
           >
-            Open
+            {clubRatedCount > 0 ? "Continue" : "Start"}
+          </Button>
+        </div>
+
+        {clubRatingError && (
+          <div className="mt-3 rounded-2xl border border-amber-100 bg-amber-50 px-3 py-2 text-[11px] font-bold leading-snug text-amber-800">
+            {clubRatingError}
+          </div>
+        )}
+
+        {isSharedRoster && (
+          <div className="mt-3 grid gap-2">
+            {clubNeedRatingCount > 0 && (
+              <button
+                type="button"
+                className="flex items-center justify-between rounded-2xl border border-violet-100 bg-violet-50 px-3 py-2 text-left active:scale-[0.99]"
+                disabled={!clubRatingsEnabled}
+                onClick={() => openRatingForPlayer(needRatingPlayers[0] || null)}
+              >
+                <span className="min-w-0">
+                  <span className="block text-xs font-black text-[#102A43]">Needs your rating</span>
+                  <span className="block truncate text-[11px] font-semibold text-violet-700">{needRatingPlayers.slice(0, 3).map((player) => player.name).join(", ")}</span>
+                </span>
+                <span className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-violet-700">{clubNeedRatingCount}</span>
+              </button>
+            )}
+            {clubSkippedCount > 0 && (
+              <button
+                type="button"
+                className="flex items-center justify-between rounded-2xl border border-amber-100 bg-amber-50 px-3 py-2 text-left active:scale-[0.99]"
+                disabled={!clubRatingsEnabled}
+                onClick={() => openRatingForPlayer(skippedPlayers[0] || null)}
+              >
+                <span className="min-w-0">
+                  <span className="block text-xs font-black text-[#102A43]">Skipped for later</span>
+                  <span className="block truncate text-[11px] font-semibold text-amber-700">{skippedPlayers.slice(0, 3).map((player) => player.name).join(", ")}</span>
+                </span>
+                <span className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-amber-700">{clubSkippedCount}</span>
+              </button>
+            )}
+            {clubRatedCount > 0 && (
+              <div className="rounded-2xl bg-slate-50 px-3 py-2 text-[11px] font-semibold text-slate-500">
+                {clubRatingLoading ? "Syncing ratings…" : `Club averages are ready for ${clubRatedCount} player${clubRatedCount === 1 ? "" : "s"}.`}
+              </div>
+            )}
+            {onOpenTeams && (
+              <button
+                type="button"
+                className="text-left text-[11px] font-black text-slate-500 underline decoration-slate-300 underline-offset-2"
+                onClick={onOpenTeams}
+              >
+                Use Club average in Teams
+              </button>
+            )}
+          </div>
+        )}
+      </section>
+
+      <section className="rounded-[1.7rem] border border-slate-100 bg-white p-3 shadow-sm ring-1 ring-slate-50">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wide text-amber-600">
+              <StickyNote className="h-4 w-4" />
+              Club notes
+            </div>
+            <div className="mt-0.5 text-[11px] font-semibold text-slate-400">Small shared notes for organizers.</div>
+          </div>
+          <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-black text-amber-700">Post-it</span>
+        </div>
+
+        <div className="mt-3 grid gap-2">
+          {previewClubNotes.length > 0 ? previewClubNotes.map((note) => (
+            <div key={note.id} className="rounded-[1.25rem] border border-amber-100 bg-amber-50/80 px-3 py-2 shadow-sm">
+              <div className="text-sm font-black leading-snug text-[#102A43]">{note.text}</div>
+              <div className="mt-1 text-[10px] font-bold text-amber-700/70">
+                {note.createdByName || "Organizer"} · {formatEquipmentTimestamp(note.createdAt)}
+              </div>
+            </div>
+          )) : (
+            <div className="rounded-2xl bg-slate-50 px-3 py-2 text-sm font-black text-[#102A43]">
+              No notes yet
+            </div>
+          )}
+        </div>
+
+        <div className="mt-3 grid gap-2">
+          <Textarea
+            value={clubNoteDraft}
+            onChange={(event) => setClubNoteDraft(event.target.value)}
+            disabled={!clubRatingsEnabled}
+            placeholder={clubRatingsEnabled ? "Example: Puma ball died today — Joon" : "Shared notes appear after sign-in."}
+            className="min-h-[4rem] rounded-2xl border-amber-100 bg-white text-sm font-semibold"
+            maxLength={160}
+          />
+          {clubNotesError && (
+            <div className="rounded-xl bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-800">{clubNotesError}</div>
+          )}
+          <Button
+            type="button"
+            className="h-10 rounded-2xl bg-[#102A43] text-xs font-black text-white hover:bg-[#0b2036]"
+            disabled={!canAddClubNote}
+            onClick={addSharedClubNote}
+          >
+            {clubNoteSaving ? "Adding…" : "Add note"}
           </Button>
         </div>
       </section>
@@ -1408,214 +1314,84 @@ export function ClubTab({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={voteDialogOpen} onOpenChange={(open) => {
-        setVoteDialogOpen(open);
-        if (!open) {
-          resetVoteForm();
-          setVoteCreateOpen(false);
-          setShowPastVotes(false);
-        }
-      }}>
-        <DialogContent className="max-h-[88dvh] max-w-md overflow-y-auto rounded-3xl p-0">
-          <DialogHeader className="border-b border-slate-100 px-4 py-3 text-left">
-            <DialogTitle className="flex items-center gap-2 text-base font-black text-[#102A43]">
-              <Vote className="h-5 w-5 text-emerald-600" />
-              Organizer votes
-            </DialogTitle>
-          </DialogHeader>
-
-          <div className="grid gap-4 p-4">
-            <div className="rounded-2xl bg-emerald-50 px-3 py-2 text-[11px] font-semibold leading-snug text-emerald-800">
-              Quick anonymous temperature checks. Answers are fixed: Yes, No, Not sure.
-            </div>
-
-            <div className="flex items-center justify-between gap-2">
-              <div>
-                <div className="text-xs font-black text-[#102A43]">Active questions</div>
-                <div className="text-[11px] font-semibold text-slate-500">Close a vote when the group has enough direction.</div>
-              </div>
-              <Button
-                type="button"
-                className="h-9 shrink-0 rounded-2xl bg-[#102A43] px-3 text-[11px] font-black text-white hover:bg-[#0b2036]"
-                onClick={() => setVoteCreateOpen((open) => !open)}
-              >
-                <Plus className="mr-1 h-3.5 w-3.5" />
-                New
-              </Button>
-            </div>
-
-            {voteCreateOpen && (
-              <div className="grid gap-3 rounded-[1.35rem] border border-slate-100 bg-slate-50/70 p-3">
-                <div className="grid gap-2">
-                  <Label className="text-xs font-black uppercase tracking-wide text-slate-500">
-                    Question
-                  </Label>
-                  <Textarea
-                    value={question}
-                    onChange={(event) => setQuestion(event.target.value)}
-                    placeholder="Example: Should we book the winter pitch?"
-                    className="min-h-[4.75rem] rounded-2xl border-slate-200 bg-white text-sm font-semibold"
-                  />
-                </div>
-
-                <div className="grid grid-cols-3 gap-1.5">
-                  {QUICK_VOTE_OPTIONS.map((option) => (
-                    <div key={`fixed-${option.id}`} className="rounded-2xl border border-slate-200 bg-white px-2 py-2 text-center text-[11px] font-black text-[#102A43]">
-                      {option.label}
-                    </div>
-                  ))}
-                </div>
-
-                <div className="grid gap-2">
-                  <Label className="text-xs font-black uppercase tracking-wide text-slate-500">
-                    Needed by optional
-                  </Label>
-                  <Input
-                    value={deadline}
-                    onChange={(event) => setDeadline(event.target.value)}
-                    placeholder="Example: before Thursday game"
-                    className="h-10 rounded-2xl border-slate-200 bg-white text-sm font-semibold"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 pt-1">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-10 rounded-2xl text-sm font-black"
-                    onClick={() => {
-                      resetVoteForm();
-                      setVoteCreateOpen(false);
-                    }}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    type="button"
-                    className="h-10 rounded-2xl bg-[#102A43] text-sm font-black text-white hover:bg-[#0b2036]"
-                    disabled={!canCreateVote}
-                    onClick={createVote}
-                  >
-                    Create vote
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            <div className="grid gap-2">
-              {openVotes.length ? openVotes.map((vote) => (
-                <VoteCard
-                  key={vote.id}
-                  vote={vote}
-                  onVote={castPreviewVote}
-                  onCloseVote={closeVote}
-                  onDeleteVote={deleteVote}
-                />
-              )) : (
-                <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-center">
-                  <div className="text-sm font-black text-[#102A43]">No active votes</div>
-                  <div className="mt-1 text-xs font-semibold text-slate-500">Ask a yes/no/not sure question when organizers need a quick read.</div>
-                </div>
-              )}
-            </div>
-
-            <div className="border-t border-slate-100 pt-3">
-              <button
-                type="button"
-                className="flex w-full items-center justify-between rounded-2xl bg-slate-50 px-3 py-2 text-left"
-                onClick={() => setShowPastVotes((show) => !show)}
-              >
-                <span className="text-xs font-black text-[#102A43]">Past votes</span>
-                <span className="text-[11px] font-black text-slate-400">{closedVotes.length} {showPastVotes ? "hide" : "show"}</span>
-              </button>
-              {showPastVotes && (
-                <div className="mt-2 grid gap-2">
-                  {closedVotes.length ? closedVotes.map((vote) => (
-                    <VoteCard
-                      key={vote.id}
-                      vote={vote}
-                      onVote={castPreviewVote}
-                      onCloseVote={closeVote}
-                      onDeleteVote={deleteVote}
-                    />
-                  )) : (
-                    <div className="rounded-2xl bg-slate-50 px-3 py-3 text-center text-xs font-semibold text-slate-500">Closed votes will appear here.</div>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={Boolean(closingVote)} onOpenChange={(open) => {
-        if (!open) resetCloseVoteForm();
+      <Dialog open={Boolean(ratingDialogPlayer)} onOpenChange={(open) => {
+        if (!open) setRatingPlayerId(null);
       }}>
         <DialogContent className="max-w-sm rounded-3xl p-0">
           <DialogHeader className="border-b border-slate-100 px-4 py-3 text-left">
-            <DialogTitle className="text-base font-black text-[#102A43]">Close vote</DialogTitle>
+            <DialogTitle className="flex items-center gap-2 text-base font-black text-[#102A43]">
+              <Star className="h-5 w-5 text-violet-600" />
+              {ratingDialogPlayer ? `Rate ${ratingDialogPlayer.name}` : "Rate player"}
+            </DialogTitle>
           </DialogHeader>
-          <div className="grid gap-4 p-4">
-            {closingVote && (
-              <div className="rounded-2xl bg-slate-50 px-3 py-2 text-sm font-black leading-snug text-[#102A43]">
-                {closingVote.question}
+          {ratingDialogPlayer && (() => {
+            const myRating = myRatingByPlayerId.get(ratingDialogPlayer.id);
+            const summary = ratingSummaryByPlayerId.get(ratingDialogPlayer.id);
+            const canRevealAverage = Boolean(myRating && !myRating.skipped && typeof myRating.skill === "number");
+            return (
+              <div className="grid gap-4 p-4">
+                <div className="rounded-2xl bg-slate-50 px-3 py-2">
+                  <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Player</div>
+                  <div className="mt-1 text-lg font-black text-[#102A43]">{ratingDialogPlayer.name}</div>
+                  {ratingDialogPlayer.aka && <div className="text-xs font-semibold text-slate-500">{ratingDialogPlayer.aka}</div>}
+                </div>
+
+                <div className="grid gap-2">
+                  <div className="flex items-end justify-between gap-3">
+                    <Label className="text-xs font-black uppercase tracking-wide text-slate-500">Your rating</Label>
+                    <div className="text-3xl font-black tabular-nums text-[#102A43]">{ratingDraft.toFixed(1)}</div>
+                  </div>
+                  <input
+                    type="range"
+                    min="1"
+                    max="10"
+                    step="0.5"
+                    value={ratingDraft}
+                    onChange={(event) => setRatingDraft(Number(event.target.value))}
+                    className="w-full accent-[#102A43]"
+                  />
+                  <div className="grid grid-cols-3 text-[10px] font-black text-slate-400">
+                    <span>2 weak regular</span>
+                    <span className="text-center">5 average</span>
+                    <span className="text-right">9 strongest</span>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-violet-100 bg-violet-50 px-3 py-2 text-[11px] font-semibold leading-snug text-violet-800">
+                  Rate compared to this group. Think of the weakest regular player as around 2, an average regular as 5, and the strongest regular as around 9.
+                </div>
+
+                <div className="rounded-2xl bg-slate-50 px-3 py-2">
+                  <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Club average</div>
+                  <div className="mt-1 text-sm font-black text-[#102A43]">
+                    {canRevealAverage && summary?.averageSkill
+                      ? `${summary.averageSkill.toFixed(1)} · ${summary.ratingCount} organizer${summary.ratingCount === 1 ? "" : "s"}`
+                      : "Hidden until you rate this player"}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-11 rounded-2xl text-xs font-black"
+                    disabled={ratingSaving}
+                    onClick={skipClubRating}
+                  >
+                    I don’t know yet
+                  </Button>
+                  <Button
+                    type="button"
+                    className="h-11 rounded-2xl bg-[#102A43] text-xs font-black text-white hover:bg-[#0b2036]"
+                    disabled={ratingSaving}
+                    onClick={saveClubRating}
+                  >
+                    {ratingSaving ? "Saving…" : "Save rating"}
+                  </Button>
+                </div>
               </div>
-            )}
-
-            <div className="grid gap-2">
-              <Label className="text-xs font-black uppercase tracking-wide text-slate-500">
-                What was decided?
-              </Label>
-              <div className="grid gap-2">
-                {VOTE_DECISION_OPTIONS.map((option) => {
-                  const selected = closeDecision === option.id;
-                  return (
-                    <button
-                      key={option.id}
-                      type="button"
-                      className={`rounded-2xl border px-3 py-2 text-left transition ${selected ? "border-emerald-300 bg-emerald-50" : "border-slate-200 bg-white hover:bg-slate-50"}`}
-                      onClick={() => setCloseDecision(option.id)}
-                    >
-                      <div className="text-sm font-black text-[#102A43]">{option.label}</div>
-                      <div className="mt-0.5 text-[11px] font-semibold text-slate-500">{option.description}</div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="grid gap-2">
-              <Label className="text-xs font-black uppercase tracking-wide text-slate-500">
-                Decision note optional
-              </Label>
-              <Textarea
-                value={closeNote}
-                onChange={(event) => setCloseNote(event.target.value)}
-                placeholder="Example: Try it for one month, then review."
-                className="min-h-[4.5rem] rounded-2xl border-slate-200 text-sm font-semibold"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 pt-1">
-              <Button
-                type="button"
-                variant="outline"
-                className="h-10 rounded-2xl text-sm font-black"
-                onClick={resetCloseVoteForm}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                className="h-10 rounded-2xl bg-[#102A43] text-sm font-black text-white hover:bg-[#0b2036]"
-                disabled={!canFinalizeCloseVote}
-                onClick={finalizeCloseVote}
-              >
-                Move to Past
-              </Button>
-            </div>
-          </div>
+            );
+          })()}
         </DialogContent>
       </Dialog>
 

@@ -1534,6 +1534,9 @@ export function PlayersTab({
 
   const removePlayer = (playerId: string) => {
     setPlayers(players.filter(player => player.id !== playerId));
+    if (setPairingRules) {
+      setPairingRules(pairingRules.filter((rule) => rule.playerAId !== playerId && rule.playerBId !== playerId));
+    }
   };
 
   const handleAdd = (e: React.FormEvent) => {
@@ -2471,18 +2474,30 @@ export function PlayersTab({
                       />
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
-                          <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive w-6 h-6 rounded-full" data-testid={`button-remove-${player.id}`}>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            title={isSharedRoster ? "Remove from shared roster" : "Remove player"}
+                            className="text-muted-foreground hover:text-destructive w-6 h-6 rounded-full"
+                            data-testid={`button-remove-${player.id}`}
+                          >
                             <UserMinus className="w-3 h-3" />
                           </Button>
                         </AlertDialogTrigger>
                         <AlertDialogContent className="max-w-xs rounded-xl">
                           <AlertDialogHeader>
-                            <AlertDialogTitle>Remove Player?</AlertDialogTitle>
-                            <AlertDialogDescription>This will permanently delete {displayName(player)} from the roster.</AlertDialogDescription>
+                            <AlertDialogTitle>{isSharedRoster ? "Remove from shared roster?" : "Remove Player?"}</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              {isSharedRoster
+                                ? `${displayName(player)} will be removed from this shared roster for every organizer. Pairing rules involving this player will also be removed. This does not delete anyone's private copy.`
+                                : `This will permanently delete ${displayName(player)} from this local roster.`}
+                            </AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>
                             <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => removePlayer(player.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Remove</AlertDialogAction>
+                            <AlertDialogAction onClick={() => removePlayer(player.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                              {isSharedRoster ? "Remove for everyone" : "Remove"}
+                            </AlertDialogAction>
                           </AlertDialogFooter>
                         </AlertDialogContent>
                       </AlertDialog>

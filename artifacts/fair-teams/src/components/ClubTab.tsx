@@ -372,6 +372,7 @@ export function ClubTab({
   const [clubNotesError, setClubNotesError] = useState("");
   const [clubNoteDraft, setClubNoteDraft] = useState("");
   const [clubNoteSaving, setClubNoteSaving] = useState(false);
+  const [clubNotesOpen, setClubNotesOpen] = useState(false);
   const [equipmentKits, setEquipmentKits] = useState<ClubEquipmentKit[]>(() => {
     if (typeof window === "undefined") return DEFAULT_EQUIPMENT_KITS;
     return parseEquipmentKits(window.localStorage.getItem(EQUIPMENT_PREVIEW_STORAGE_KEY));
@@ -1324,7 +1325,18 @@ export function ClubTab({
             </div>
             <div className="mt-0.5 text-[11px] font-semibold text-slate-400">Small shared notes for organizers.</div>
           </div>
-          <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-black text-amber-700">Post-it</span>
+          <div className="flex shrink-0 items-center gap-1.5">
+            {clubNotes.length > 0 && (
+              <button
+                type="button"
+                className="rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-amber-700 shadow-sm ring-1 ring-amber-100 active:scale-95"
+                onClick={() => setClubNotesOpen(true)}
+              >
+                View all
+              </button>
+            )}
+            <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-black text-amber-700">Post-it</span>
+          </div>
         </div>
 
         <div className="mt-3 grid gap-2">
@@ -1337,7 +1349,7 @@ export function ClubTab({
             </div>
           )) : (
             <div className="rounded-2xl bg-slate-50 px-3 py-2 text-sm font-black text-[#102A43]">
-              No notes yet
+              No notes yet. Add the first post-it for organizers.
             </div>
           )}
         </div>
@@ -1364,6 +1376,33 @@ export function ClubTab({
           </Button>
         </div>
       </section>
+
+      <Dialog open={clubNotesOpen} onOpenChange={setClubNotesOpen}>
+        <DialogContent className="max-h-[86svh] max-w-sm overflow-hidden rounded-3xl border border-amber-100 p-0 shadow-[0_14px_40px_rgba(15,23,42,0.16)]">
+          <DialogHeader className="border-b border-amber-100 bg-amber-50/70 px-4 py-3 text-left">
+            <DialogTitle className="flex items-center gap-2 text-base font-black text-[#102A43]">
+              <StickyNote className="h-4 w-4 text-amber-600" />
+              Club notes
+            </DialogTitle>
+          </DialogHeader>
+          <div className="max-h-[62svh] overflow-y-auto p-4" style={{ WebkitOverflowScrolling: "touch" }}>
+            <div className="grid gap-2">
+              {clubNotes.length > 0 ? clubNotes.map((note) => (
+                <div key={`all-${note.id}`} className="rounded-[1.25rem] border border-amber-100 bg-amber-50/80 px-3 py-2 shadow-sm">
+                  <div className="text-sm font-black leading-snug text-[#102A43]">{note.text}</div>
+                  <div className="mt-1 text-[10px] font-bold text-amber-700/70">
+                    {note.createdByName || "Organizer"} · {formatEquipmentTimestamp(note.createdAt)}
+                  </div>
+                </div>
+              )) : (
+                <div className="rounded-2xl bg-slate-50 px-3 py-2 text-sm font-black text-[#102A43]">
+                  No notes yet.
+                </div>
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={collaboratorsOpen} onOpenChange={setCollaboratorsOpen}>
         <DialogContent className="max-w-xs rounded-3xl border border-slate-100 p-0 shadow-[0_14px_40px_rgba(15,23,42,0.16)]">

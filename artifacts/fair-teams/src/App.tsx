@@ -3299,15 +3299,39 @@ They will no longer be able to open or edit this shared roster unless it is shar
                       openLibraryToken={sharedRosterLibraryOpenToken}
                     />
                     {activeRosterIsFirebaseShared && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="h-11 justify-start gap-2 rounded-2xl border-violet-100 bg-white px-3 text-violet-700 hover:bg-violet-50 hover:text-violet-800"
-                        onClick={() => setPrivateCopyConfirmOpen(true)}
-                      >
-                        <Copy className="h-4 w-4" />
-                        <span className="truncate text-xs font-black">Make private copy</span>
-                      </Button>
+                      <div className="grid gap-2 rounded-3xl border border-violet-100 bg-violet-50/70 p-3">
+                        <div className="flex items-start gap-2">
+                          <Info className="mt-0.5 h-4 w-4 shrink-0 text-violet-600" />
+                          <div className="min-w-0">
+                            <div className="text-[10px] font-black uppercase tracking-wide text-violet-700">
+                              Opened on this device
+                            </div>
+                            <p className="mt-1 text-[11px] font-semibold leading-snug text-violet-900/80">
+                              This roster stays online in Shared rosters. Remove from this device only hides this local/cache copy; it does not delete the shared roster or remove organizers.
+                            </p>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-11 rounded-2xl border-violet-100 bg-white px-3 text-violet-700 hover:bg-violet-50 hover:text-violet-800"
+                            onClick={() => setPrivateCopyConfirmOpen(true)}
+                          >
+                            <Copy className="mr-1.5 h-4 w-4" />
+                            <span className="truncate text-xs font-black">Private copy</span>
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-11 rounded-2xl border-violet-100 bg-white px-3 text-violet-700 hover:bg-violet-50 hover:text-violet-800"
+                            onClick={openClearRoster}
+                          >
+                            <X className="mr-1.5 h-4 w-4" />
+                            <span className="truncate text-xs font-black">Remove here</span>
+                          </Button>
+                        </div>
+                      </div>
                     )}
                   </div>
                 )}

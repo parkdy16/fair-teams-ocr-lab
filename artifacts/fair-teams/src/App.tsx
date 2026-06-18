@@ -1186,7 +1186,9 @@ function App() {
       }
 
       const imported = createRoster(
-        uniqueRosterName(sourceName || sharedRoster.name || "Firebase roster", current.rosters),
+        firebaseSummary
+          ? sourceName || sharedRoster.name || "Shared roster"
+          : uniqueRosterName(sourceName || sharedRoster.name || "Firebase roster", current.rosters),
         sharedRoster.players,
         { themeColor: sharedRoster.themeColor },
       );
@@ -1259,8 +1261,8 @@ function App() {
     });
     setRosterToolsNotice({
       tone: "success",
-      title: "Firebase roster saved",
-      message: `${summary.groupName ? `${summary.groupName} · ` : ""}${summary.name} was saved to Firebase as version ${summary.version}.`,
+      title: "Shared roster saved",
+      message: `${summary.groupName ? `${summary.groupName} · ` : ""}${summary.name} was saved online as version ${summary.version}.`,
     });
   };
 

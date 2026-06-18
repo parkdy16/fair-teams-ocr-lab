@@ -174,13 +174,20 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
 
   const handleShareActiveRoster = async () => {
     if (!user || !activeRoster || isEmptyRoster || busy) return;
+    const confirmed = window.confirm(
+      `Create a shared copy of ${activeRoster.name || "this roster"}?
+
+Your local roster will stay local. Fair Teams will create a separate shared roster for organizers and open that shared copy on this device.`,
+    );
+    if (!confirmed) return;
+
     setBusy("publish");
     setNotice(null);
     try {
       const created = await createFirebaseSharedRoster(activeRoster, undefined, activeRoster.name || "Shared roster");
-      onRosterSaved?.(created, activeRoster.id);
+      onOpenRoster?.(activeRoster, activeRoster.name || created.name || "Shared roster", created);
       await refreshSharedData();
-      setNotice({ tone: "success", text: "Roster shared." });
+      setNotice({ tone: "success", text: "Shared copy created. Your local roster stayed local." });
     } catch (error) {
       setNotice({ tone: "error", text: friendlyFirestoreError(error) });
     } finally {

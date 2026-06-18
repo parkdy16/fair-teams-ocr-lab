@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { CloudDownload, Save, Share2, Trash2, UserPlus, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { RoomRoster } from "@/lib/localRoster";
 import {
   acceptFirebaseGroupInvite,
@@ -9,6 +10,7 @@ import {
   deleteFirebaseSharedRoster,
   inviteEmailToFirebaseSharedGroup,
   listenToSharedRosterUser,
+  removeFirebaseSharedGroupMember,
   listFirebaseGroupInvites,
   listFirebaseSharedGroups,
   listFirebaseSharedRosters,
@@ -71,17 +73,16 @@ function canRoleSave(role?: string, isOwner?: boolean) {
 
 function modalShell(title: string, onClose: () => void, body: React.ReactNode) {
   return (
-    <div className="fixed inset-0 z-[80] flex items-end justify-center bg-slate-950/20 p-3 sm:items-center">
-      <div className="w-full max-w-md rounded-3xl border border-slate-100 bg-white p-3 shadow-[0_14px_40px_rgba(15,23,42,0.16)]">
-        <div className="mb-2 flex items-center justify-between gap-3 px-1">
-          <div className="text-sm font-black text-[#102A43]">{title}</div>
-          <button type="button" onClick={onClose} className="rounded-full bg-slate-50 p-2 text-slate-500 active:scale-95">
-            <X className="h-4 w-4" />
-          </button>
-        </div>
+    <Dialog open onOpenChange={(open) => {
+      if (!open) onClose();
+    }}>
+      <DialogContent className="max-h-[86svh] max-w-md overflow-y-auto rounded-3xl border border-slate-100 p-3 shadow-[0_14px_40px_rgba(15,23,42,0.16)]">
+        <DialogHeader className="px-1 pb-1 text-left">
+          <DialogTitle className="text-sm font-black text-[#102A43]">{title}</DialogTitle>
+        </DialogHeader>
         {body}
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -319,7 +320,33 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
     setCollaboratorRosterId(rosterId || activeSharedRosterId || "");
   };
 
-  const collaboratorsModal = collaboratorRoster ? modalShell("Collaborators", () => setCollaboratorRosterId(""), (
+  const canManageCollaborators = collaboratorGroup?.currentUserRole === "owner"
+    || collaboratorGroup?.currentUserRole === "editor"
+    || collaboratorRoster?.currentUserRole === "owner"
+    || collaboratorRoster?.currentUserRole === "editor";
+
+  const handleRemoveCollaborator = async (email: string) => {
+    const groupId = collaboratorGroup?.id || collaboratorRoster?.groupId;
+    if (!groupId) {
+      setNotice({ tone: "error", text: "This older shared roster is missing its group link." });
+      return;
+    }
+    const ok = window.confirm(`Remove ${email} from this shared roster?`);
+    if (!ok) return;
+    setBusy(`remove:${email}`);
+    setNotice(null);
+    try {
+      await removeFirebaseSharedGroupMember(groupId, email);
+      await refreshSharedData();
+      setNotice({ tone: "success", text: "Collaborator removed." });
+    } catch (error) {
+      setNotice({ tone: "error", text: friendlyFirestoreError(error) });
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const collaboratorsModal = collaboratorRoster ? modalShell("People", () => setCollaboratorRosterId(""), (
     <div className="grid gap-3">
       <div className="grid grid-cols-[1fr_auto] gap-2">
         <input value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} type="email" className="h-10 rounded-2xl border border-slate-100 bg-slate-50 px-3 text-sm font-bold outline-none" placeholder="email@example.com" />
@@ -329,6 +356,11 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
         </Button>
       </div>
       <div className="grid gap-1.5">
+        {canManageCollaborators && (
+          <div className="rounded-2xl bg-violet-50 px-3 py-2 text-[11px] font-bold leading-snug text-violet-800">
+            Add organizers here. Remove is available for non-owner collaborators.
+          </div>
+        )}
         {(() => {
           const memberNamesByEmail = mergedMemberNames(collaboratorGroup, collaboratorRoster);
           const memberEmails = collaboratorGroup?.memberEmails || collaboratorRoster.memberEmails || [];
@@ -336,14 +368,29 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
           return (
             <>
               {memberEmails.map((email) => {
+                const normalizedEmail = email.trim().toLowerCase();
                 const label = displayNameForEmail(email, memberNamesByEmail, user?.email);
+                const isOwnerEmail = normalizedEmail === (collaboratorRoster.ownerEmail || "").trim().toLowerCase();
+                const isCurrentUser = normalizedEmail === (user?.email || "").trim().toLowerCase();
+                const canRemoveThisMember = canManageCollaborators && !isOwnerEmail && !isCurrentUser;
                 return (
                   <div key={email} className="flex items-center justify-between gap-2 rounded-2xl bg-slate-50 px-3 py-2 text-xs font-bold text-[#102A43]">
                     <div className="min-w-0">
                       <div className="truncate">{label}</div>
                       <div className="truncate text-[10px] text-slate-500">{email}</div>
                     </div>
-                    <span className="shrink-0 text-[10px] text-emerald-700">{email === collaboratorRoster.ownerEmail ? "owner" : "active"}</span>
+                    {canRemoveThisMember ? (
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveCollaborator(email)}
+                        disabled={Boolean(busy)}
+                        className="shrink-0 rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-rose-600 shadow-sm disabled:opacity-50"
+                      >
+                        {busy === `remove:${email}` ? "…" : "Remove"}
+                      </button>
+                    ) : (
+                      <span className="shrink-0 text-[10px] text-emerald-700">{isOwnerEmail ? "owner" : isCurrentUser ? "you" : "active"}</span>
+                    )}
                   </div>
                 );
               })}
@@ -401,7 +448,7 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
               <CloudDownload className="mr-1 h-4 w-4" />
               {busy === "reload" ? "…" : "Latest"}
             </Button>
-            <Button type="button" variant="outline" className="h-10 rounded-2xl border-slate-100 bg-white px-2 text-xs font-black" onClick={() => openCollaborators(activeSharedRosterId)} disabled={!user || Boolean(busy)}>
+            <Button type="button" variant="outline" className="h-10 rounded-2xl border-violet-100 bg-white px-2 text-xs font-black text-violet-700 shadow-sm hover:bg-violet-50" onClick={() => openCollaborators(activeSharedRosterId)} disabled={!user || Boolean(busy)}>
               <Users className="mr-1 h-4 w-4" />
               People
             </Button>
@@ -471,7 +518,7 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
                     <span className="block truncate text-xs font-black text-[#102A43]">{roster.name}</span>
                     <span className="block truncate text-[10px] font-semibold text-slate-500">saved by {savedByName}</span>
                   </button>
-                  <button type="button" onClick={() => openCollaborators(roster.id)} className="flex h-8 items-center gap-1 rounded-xl bg-white px-2 text-[10px] font-black text-emerald-700 shadow-sm">
+                  <button type="button" onClick={() => openCollaborators(roster.id)} className="flex h-8 items-center gap-1 rounded-xl border border-violet-100 bg-white px-2 text-[10px] font-black text-violet-700 shadow-sm hover:bg-violet-50">
                     <Users className="h-3.5 w-3.5" />
                     {collaboratorCount}
                   </button>

@@ -48,6 +48,7 @@ export type FirebaseSharedGroupSummary = {
   pendingInviteEmails?: string[];
   memberNamesByEmail?: Record<string, string>;
   memberNamesByUid?: Record<string, string>;
+  memberUidByEmail?: Record<string, string>;
   lastSavedByEmail?: string;
   lastSavedRosterName?: string;
   lastSavedAt?: string;
@@ -71,6 +72,7 @@ export type FirebaseSharedRosterSummary = {
   pendingInviteEmails?: string[];
   memberNamesByEmail?: Record<string, string>;
   memberNamesByUid?: Record<string, string>;
+  memberUidByEmail?: Record<string, string>;
   lastSavedByEmail?: string;
 };
 
@@ -116,6 +118,44 @@ function cleanNameMap(value: unknown) {
       .map(([key, name]) => [String(key).trim(), cleanOrganizerDisplayName(String(name || ""))])
       .filter(([key, name]) => Boolean(key && name)),
   ) as Record<string, string>;
+}
+
+function cleanStringMap(value: unknown) {
+  if (!value || typeof value !== "object") return {};
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .map(([key, mapped]) => [String(key).trim().toLowerCase(), String(mapped || "").trim()])
+      .filter(([key, mapped]) => Boolean(key && mapped)),
+  ) as Record<string, string>;
+}
+
+function removeRecordKey<T>(record: Record<string, T>, key?: string) {
+  if (!key) return { ...record };
+  const next = { ...record };
+  delete next[key];
+  return next;
+}
+
+function removeEmailKey<T>(record: Record<string, T>, email?: string) {
+  if (!email) return { ...record };
+  const next = { ...record };
+  delete next[email];
+  delete next[email.toLowerCase()];
+  return next;
+}
+
+function memberUidForEmail(data: DocumentData, memberEmail: string) {
+  const email = normalizeEmail(memberEmail);
+  const memberUidByEmail = cleanStringMap(data.memberUidByEmail);
+  if (memberUidByEmail[email]) return memberUidByEmail[email];
+
+  // Older shared roster docs did not store an explicit email -> uid map.
+  // In those docs the arrays were written in matching order, so use that as
+  // a best-effort migration bridge for removing existing collaborators.
+  const memberEmails = Array.isArray(data.memberEmails) ? data.memberEmails.filter((value): value is string => typeof value === "string") : [];
+  const memberUids = Array.isArray(data.memberUids) ? data.memberUids.filter((value): value is string => typeof value === "string") : [];
+  const index = memberEmails.findIndex((value) => normalizeEmail(value) === email);
+  return index >= 0 && typeof memberUids[index] === "string" ? memberUids[index] : "";
 }
 
 function cleanGroupName(value?: string) {
@@ -315,6 +355,7 @@ export async function createFirebaseSharedGroup(groupName: string): Promise<Fire
     pendingInviteEmails: [],
     memberNamesByUid: { [user.uid]: organizerName },
     memberNamesByEmail: { [normalizeEmail(user.email)]: organizerName },
+    memberUidByEmail: { [normalizeEmail(user.email)]: user.uid },
     roleByUid: { [user.uid]: "owner" },
     rosterIds: [],
     createdAt: serverTimestamp(),
@@ -364,6 +405,7 @@ export async function createFirebaseSharedRoster(roster: RoomRoster, groupId?: s
   const organizerName = nameFromUser(user);
   const groupMemberNamesByUid = { ...cleanNameMap(groupData.memberNamesByUid), [user.uid]: organizerName };
   const groupMemberNamesByEmail = { ...cleanNameMap(groupData.memberNamesByEmail), [normalizeEmail(user.email)]: organizerName };
+  const groupMemberUidByEmail = { ...cleanStringMap(groupData.memberUidByEmail), [normalizeEmail(user.email)]: user.uid };
   const now = new Date().toISOString();
   const rosterData = cleanForFirestore(makePhotoFreeRosterSnapshot(roster));
   const playerCount = Array.isArray(rosterData.players) ? rosterData.players.length : 0;
@@ -380,6 +422,7 @@ export async function createFirebaseSharedRoster(roster: RoomRoster, groupId?: s
     pendingInviteEmails: groupPendingInviteEmails,
     memberNamesByUid: groupMemberNamesByUid,
     memberNamesByEmail: groupMemberNamesByEmail,
+    memberUidByEmail: groupMemberUidByEmail,
     roleByUid: groupRoleByUid,
     version: 1,
     playerCount,
@@ -401,6 +444,7 @@ export async function createFirebaseSharedRoster(roster: RoomRoster, groupId?: s
     rosterIds: arrayUnion(docRef.id),
     memberNamesByUid: groupMemberNamesByUid,
     memberNamesByEmail: groupMemberNamesByEmail,
+    memberUidByEmail: groupMemberUidByEmail,
     lastSavedByUid: user.uid,
     lastSavedByEmail: user.email,
     lastSavedRosterId: docRef.id,
@@ -473,6 +517,69 @@ export async function cancelFirebaseGroupInvite(groupId: string, inviteeEmail: s
       updatedAtIso: new Date().toISOString(),
     });
   });
+  await batch.commit();
+}
+
+export async function removeFirebaseSharedGroupMember(groupId: string, memberEmail: string): Promise<void> {
+  const user = getCurrentSharedRosterUser();
+  const email = normalizeEmail(memberEmail);
+  if (!email || !email.includes("@")) throw new Error("Choose a valid collaborator to remove.");
+  if (email === normalizeEmail(user.email)) throw new Error("You cannot remove yourself from this screen.");
+
+  const groupRef = doc(getFairTeamsFirestore(), "sharedGroups", groupId);
+  const groupSnap = await getDoc(groupRef);
+  if (!groupSnap.exists()) throw new Error("Shared group was not found.");
+  const groupData = groupSnap.data();
+  const role = currentUserRoleFromData(groupData);
+  if (role !== "owner" && role !== "editor") throw new Error("Only owners/editors can remove collaborators.");
+  if (normalizeEmail(groupData.ownerEmail || "") === email) throw new Error("The owner cannot be removed.");
+
+  const targetUid = memberUidForEmail(groupData, email);
+  if (!targetUid) {
+    throw new Error("This older collaborator record is missing its user ID. Ask them to re-join, or remove it from Firebase manually once.");
+  }
+
+  const now = new Date().toISOString();
+  const rosterIds = Array.isArray(groupData.rosterIds) ? groupData.rosterIds.filter((id): id is string => typeof id === "string") : [];
+  const nextGroupRoleByUid = removeRecordKey(groupData.roleByUid && typeof groupData.roleByUid === "object" ? groupData.roleByUid as Record<string, unknown> : {}, targetUid);
+  const nextGroupNamesByUid = removeRecordKey(cleanNameMap(groupData.memberNamesByUid), targetUid);
+  const nextGroupNamesByEmail = removeEmailKey(cleanNameMap(groupData.memberNamesByEmail), email);
+  const nextGroupUidByEmail = removeEmailKey(cleanStringMap(groupData.memberUidByEmail), email);
+
+  const batch = writeBatch(getFairTeamsFirestore());
+  batch.update(groupRef, {
+    memberUids: arrayRemove(targetUid),
+    memberEmails: arrayRemove(email),
+    pendingInviteEmails: arrayRemove(email),
+    roleByUid: nextGroupRoleByUid,
+    memberNamesByUid: nextGroupNamesByUid,
+    memberNamesByEmail: nextGroupNamesByEmail,
+    memberUidByEmail: nextGroupUidByEmail,
+    updatedAt: serverTimestamp(),
+    updatedAtIso: now,
+  });
+
+  for (const rosterId of rosterIds) {
+    const rosterRef = doc(getFairTeamsFirestore(), "sharedRosters", rosterId);
+    const rosterSnap = await getDoc(rosterRef);
+    const rosterData = rosterSnap.exists() ? rosterSnap.data() : groupData;
+    const nextRoleByUid = removeRecordKey(rosterData.roleByUid && typeof rosterData.roleByUid === "object" ? rosterData.roleByUid as Record<string, unknown> : nextGroupRoleByUid, targetUid);
+    const nextNamesByUid = removeRecordKey(cleanNameMap(rosterData.memberNamesByUid), targetUid);
+    const nextNamesByEmail = removeEmailKey(cleanNameMap(rosterData.memberNamesByEmail), email);
+    const nextUidByEmail = removeEmailKey(cleanStringMap(rosterData.memberUidByEmail), email);
+    batch.update(rosterRef, {
+      memberUids: arrayRemove(targetUid),
+      memberEmails: arrayRemove(email),
+      pendingInviteEmails: arrayRemove(email),
+      roleByUid: nextRoleByUid,
+      memberNamesByUid: Object.keys(nextNamesByUid).length ? nextNamesByUid : nextGroupNamesByUid,
+      memberNamesByEmail: Object.keys(nextNamesByEmail).length ? nextNamesByEmail : nextGroupNamesByEmail,
+      memberUidByEmail: Object.keys(nextUidByEmail).length ? nextUidByEmail : nextGroupUidByEmail,
+      updatedAt: serverTimestamp(),
+      updatedAtIso: now,
+    });
+  }
+
   await batch.commit();
 }
 
@@ -552,6 +659,7 @@ export async function acceptFirebaseGroupInvite(groupId: string): Promise<Fireba
   const organizerName = nameFromUser(user);
   const nextMemberNamesByUid = { ...cleanNameMap(groupData.memberNamesByUid), [user.uid]: organizerName };
   const nextMemberNamesByEmail = { ...cleanNameMap(groupData.memberNamesByEmail), [email]: organizerName };
+  const nextMemberUidByEmail = { ...cleanStringMap(groupData.memberUidByEmail), [email]: user.uid };
 
   const batch = writeBatch(getFairTeamsFirestore());
   batch.update(groupRef, {
@@ -560,6 +668,7 @@ export async function acceptFirebaseGroupInvite(groupId: string): Promise<Fireba
     pendingInviteEmails: arrayRemove(email),
     memberNamesByUid: nextMemberNamesByUid,
     memberNamesByEmail: nextMemberNamesByEmail,
+    memberUidByEmail: nextMemberUidByEmail,
     roleByUid: nextRoleByUid,
     updatedAt: serverTimestamp(),
     updatedAtIso: now,
@@ -571,6 +680,7 @@ export async function acceptFirebaseGroupInvite(groupId: string): Promise<Fireba
       pendingInviteEmails: arrayRemove(email),
       memberNamesByUid: nextMemberNamesByUid,
       memberNamesByEmail: nextMemberNamesByEmail,
+      memberUidByEmail: nextMemberUidByEmail,
       roleByUid: nextRoleByUid,
       updatedAt: serverTimestamp(),
       updatedAtIso: now,
@@ -648,6 +758,7 @@ export async function saveFirebaseSharedRoster(roster: RoomRoster): Promise<Fire
     const organizerName = nameFromUser(user);
     const memberNamesByUid = { ...cleanNameMap(data.memberNamesByUid), [user.uid]: organizerName };
     const memberNamesByEmail = { ...cleanNameMap(data.memberNamesByEmail), [normalizeEmail(user.email)]: organizerName };
+    const memberUidByEmail = { ...cleanStringMap(data.memberUidByEmail), [normalizeEmail(user.email)]: user.uid };
     const payload = {
       name: remoteName,
       groupId,
@@ -657,6 +768,7 @@ export async function saveFirebaseSharedRoster(roster: RoomRoster): Promise<Fire
       rosterData,
       memberNamesByUid,
       memberNamesByEmail,
+      memberUidByEmail,
       updatedAt: serverTimestamp(),
       updatedAtIso: now,
       lastSavedByUid: user.uid,
@@ -670,6 +782,7 @@ export async function saveFirebaseSharedRoster(roster: RoomRoster): Promise<Fire
       transaction.update(doc(getFairTeamsFirestore(), "sharedGroups", groupId), {
         memberNamesByUid,
         memberNamesByEmail,
+        memberUidByEmail,
         lastSavedByUid: user.uid,
         lastSavedByEmail: user.email,
         lastSavedRosterId: rosterId,

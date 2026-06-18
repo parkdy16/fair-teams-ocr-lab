@@ -385,7 +385,6 @@ function App() {
 
   const [activeTab, setActiveTab] = useState<AppTab>("today");
   const [clubBackTargetOpen, setClubBackTargetOpen] = useState(false);
-  const [openPairingRulesToken, setOpenPairingRulesToken] = useState(0);
   const activeTabRef = useRef<AppTab>("today");
   const tabHistoryRef = useRef<AppTab[]>(["today"]);
   const restoringTabFromBackRef = useRef(false);
@@ -3024,7 +3023,6 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 onReviewPlayerHandled={() => setReviewAutoOpenPlayerId(null)}
                 onReviewNext={openNextReviewPlayer}
                 onReviewDone={finishReviewPlayerQueue}
-                openPairingRulesToken={openPairingRulesToken}
               />
             </TabsContent>
             <TabsContent
@@ -3073,11 +3071,6 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 canSwitchRoster={!isEmptyStarterRoster && rosters.length > 1}
                 onOpenRosterPicker={() => setRosterPickerOpen(true)}
                 onBackTargetChange={setClubBackTargetOpen}
-                pairingRules={pairingRules}
-                onOpenPairingRules={() => {
-                  setActiveTab("players");
-                  setOpenPairingRulesToken((token) => token + 1);
-                }}
                 sharedToolsNode={(
                   <FirebaseSharedRosterPublishCard
                     variant="compact"

@@ -514,16 +514,24 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
       .map((rating) => rating.playerId));
   }, [myClubRatings]);
   const usingClubRatings = Boolean(isSharedRoster && ratingSource === "club");
-  const clubUnratedAttendingCount = usingClubRatings
+  const getUsableClubAverage = (playerId: string) => {
+    const summary = clubRatingByPlayerId.get(playerId);
+    if (!summary || summary.ratingCount <= 0 || typeof summary.averageSkill !== "number") return null;
+    return summary.averageSkill;
+  };
+  const clubNeedsMyRatingAttendingCount = usingClubRatings
     ? players.filter((player) => player.attending && !clubRevealablePlayerIds.has(player.id)).length
+    : 0;
+  const clubNoAverageAttendingCount = usingClubRatings
+    ? players.filter((player) => player.attending && getUsableClubAverage(player.id) === null).length
     : 0;
   const attendingPlayers = useMemo(() => {
     return players.filter((player) => player.attending).map((player) => {
       if (!usingClubRatings) return toLocalPlayer(player);
-      const clubAverage = clubRevealablePlayerIds.has(player.id) ? clubRatingByPlayerId.get(player.id)?.averageSkill : null;
+      const clubAverage = getUsableClubAverage(player.id);
       return toClubBalancePlayer(player, typeof clubAverage === "number" ? clubAverage : 5);
     });
-  }, [clubRatingByPlayerId, clubRevealablePlayerIds, players, usingClubRatings]);
+  }, [clubRatingByPlayerId, players, usingClubRatings]);
   const hereNowCount = attendingPlayers.filter(p => !isNotHereYet(p)).length;
   const notHereYetPlayers = attendingPlayers.filter(isNotHereYet);
 
@@ -732,13 +740,13 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
           <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-2">
             <div className="mb-1.5 flex items-center justify-between gap-2">
               <div className="text-[10px] font-black uppercase tracking-wide text-slate-500">Balance using</div>
-              {clubUnratedAttendingCount > 0 && (
+              {clubNeedsMyRatingAttendingCount > 0 && (
                 <button
                   type="button"
                   className="text-[10px] font-black text-amber-700 underline decoration-amber-300 underline-offset-2"
                   onClick={onOpenClubRatings}
                 >
-                  {clubUnratedAttendingCount} need rating
+                  {clubNeedsMyRatingAttendingCount} need your rating
                 </button>
               )}
             </div>
@@ -760,9 +768,11 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
             </div>
             <div className="mt-1.5 text-[10px] font-semibold leading-snug text-slate-500">
               {usingClubRatings
-                ? clubUnratedAttendingCount > 0
-                  ? `${clubUnratedAttendingCount} selected player${clubUnratedAttendingCount === 1 ? "" : "s"} still need your rating. They will temporarily use 5.0.`
-                  : "Shared teams use the organizer average from the Club tab."
+                ? clubNoAverageAttendingCount > 0
+                  ? `${clubNoAverageAttendingCount} selected player${clubNoAverageAttendingCount === 1 ? " has" : "s have"} no Club average yet. Only those player${clubNoAverageAttendingCount === 1 ? "" : "s"} will temporarily use 5.0.`
+                  : clubNeedsMyRatingAttendingCount > 0
+                    ? "Hidden Club averages are still used for balance. Rate players in Club to reveal them."
+                    : "Shared teams use the organizer average from the Club tab."
                 : "Only your private roster ratings are used for this team generation."}
             </div>
             {clubRatingError && (

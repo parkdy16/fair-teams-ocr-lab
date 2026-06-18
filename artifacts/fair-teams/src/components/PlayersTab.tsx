@@ -1461,11 +1461,14 @@ export function PlayersTab({
   const voiceAddDuplicatePlayer = useMemo(() => {
     const normalizedName = normalizeVoiceAddName(voiceAddCleanName);
     if (!normalizedName) return undefined;
+    if (isSharedRoster) {
+      return findSharedDuplicateCandidates(players, voiceAddCleanName)[0]?.player;
+    }
     return players.find((player) => {
       const names = [player.name, player.aka].filter(Boolean) as string[];
       return names.some((candidate) => normalizeVoiceAddName(candidate) === normalizedName);
     });
-  }, [players, voiceAddCleanName]);
+  }, [isSharedRoster, players, voiceAddCleanName]);
   const voiceAddCanAdd = Boolean(voiceAddCleanName && isProbablyVoiceAddName(voiceAddCleanName) && !voiceAddDuplicatePlayer);
 
   const sharedDuplicateCandidates = useMemo(() => (isSharedRoster ? findSharedDuplicateCandidates(players, name, aka) : []), [aka, isSharedRoster, name, players]);
@@ -1843,9 +1846,15 @@ export function PlayersTab({
                 />
               </div>
 
+              {isSharedRoster && (
+                <div className="rounded-2xl border border-violet-200 bg-violet-50/85 px-3 py-2 text-[11px] font-bold leading-snug text-violet-800">
+                  Voice add creates a shared player for every organizer. Club ratings can be submitted later.
+                </div>
+              )}
+
               {voiceAddDuplicatePlayer && (
                 <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">
-                  Duplicate warning: {displayName(voiceAddDuplicatePlayer)} already exists in the roster.
+                  Duplicate warning: {displayName(voiceAddDuplicatePlayer)} already exists in the {isSharedRoster ? "shared roster" : "roster"}.
                 </div>
               )}
 
@@ -1862,7 +1871,7 @@ export function PlayersTab({
                 className="h-10 w-full rounded-xl font-black uppercase tracking-wide"
                 data-testid="button-confirm-voice-add-player"
               >
-                Add{voiceAddCleanName ? ` “${voiceAddCleanName}”` : " Player"}
+                {isSharedRoster ? "Add to Shared Roster" : `Add${voiceAddCleanName ? ` “${voiceAddCleanName}”` : " Player"}`}
               </Button>
 
               <Button
@@ -1949,7 +1958,7 @@ export function PlayersTab({
                   <div>
                     <Label className="text-[11px] uppercase font-black tracking-wide text-violet-700">Shared player info</Label>
                     <div className="mt-0.5 text-[10px] font-semibold leading-snug text-violet-700/75">
-                      Ratings are collected separately in Club. This player will use 5.0 until someone submits a Club rating.
+                      This player will appear for every organizer as soon as you add them. Ratings are collected separately in Club, and the player uses 5.0 only until the first Club rating exists.
                     </div>
                   </div>
                   <div className="space-y-1.5">
@@ -2015,7 +2024,7 @@ export function PlayersTab({
 
               {isSharedRoster && sharedDuplicateOverride && primarySharedDuplicate && (
                 <div className="rounded-2xl border border-violet-200 bg-violet-50 px-3 py-2 text-[11px] font-bold leading-snug text-violet-800">
-                  Adding as a separate player despite a possible match with {displayName(primarySharedDuplicate.player)}.
+                  Adding as a separate shared player for everyone despite a possible match with {displayName(primarySharedDuplicate.player)}.
                 </div>
               )}
 
@@ -2237,7 +2246,7 @@ export function PlayersTab({
                 className="h-10 rounded-xl font-black uppercase tracking-wide"
                 data-testid="button-add-player"
               >
-                <Plus className="w-3.5 h-3.5 mr-1.5" /> {isSharedRoster ? "Add to Shared Roster" : "Add Player"}
+                <Plus className="w-3.5 h-3.5 mr-1.5" /> {isSharedRoster ? "Add for everyone" : "Add Player"}
               </Button>
             </form>
           </DialogContent>

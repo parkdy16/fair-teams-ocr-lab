@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { CloudDownload, FolderOpen, Save, Share2, Trash2, UserPlus, Users, X } from "lucide-react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { CheckCircle2, FolderOpen, Loader2, Share2, Trash2, UserPlus, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { RoomRoster } from "@/lib/localRoster";
@@ -9,6 +9,7 @@ import {
   createFirebaseSharedRoster,
   deleteFirebaseSharedRoster,
   inviteEmailToFirebaseSharedGroup,
+  listenToFirebaseSharedRoster,
   listenToSharedRosterUser,
   removeFirebaseSharedGroupMember,
   listFirebaseGroupInvites,
@@ -39,7 +40,7 @@ function friendlyFirestoreError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error || "Something went wrong.");
   if (/permission-denied|Missing or insufficient permissions/i.test(message)) return "Permission denied.";
   if (/network/i.test(message)) return "Network error.";
-  if (/saved by someone else|changed elsewhere|Remote version/i.test(message)) return "Saved elsewhere. Get latest first.";
+  if (/saved by someone else|changed elsewhere|Remote version/i.test(message)) return "Online version changed. Fair Teams will update and try again.";
   return message.replace(/^Firebase:\s*/i, "");
 }
 
@@ -97,6 +98,8 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
   const [collaboratorRosterId, setCollaboratorRosterId] = useState("");
   const [sharedRosterLibraryOpen, setSharedRosterLibraryOpen] = useState(false);
   const [notice, setNotice] = useState<{ tone: "success" | "error" | "info"; text: string } | null>(null);
+  const [autoSyncStatus, setAutoSyncStatus] = useState<"idle" | "saving" | "saved" | "syncing" | "error">("idle");
+  const lastLiveRosterVersionRef = useRef(0);
 
   useEffect(() => listenToSharedRosterUser((nextUser) => {
     setUser(nextUser);
@@ -144,7 +147,18 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
     if (!Number.isFinite(syncedTime)) return true;
     return localTime > syncedTime + 1000;
   })();
-  const updateCount = remoteUpdatedLinkedRosters.length;
+  const autoStatusText = activeSharedRoster
+    ? autoSyncStatus === "saving"
+      ? "Saving online…"
+      : autoSyncStatus === "syncing"
+        ? "Updating from online…"
+        : autoSyncStatus === "error"
+          ? "Couldn’t sync automatically."
+          : activeHasLocalChanges
+            ? "Saving soon…"
+            : "Saved online"
+    : "";
+  const AutoStatusIcon = autoSyncStatus === "saving" || autoSyncStatus === "syncing" || activeHasLocalChanges ? Loader2 : CheckCircle2;
 
   const refreshSharedData = async () => {
     if (!user) return;
@@ -196,56 +210,88 @@ Your local roster will stay local. Fair Teams will copy shared identity fields o
     }
   };
 
-  const handleSaveActiveRoster = async () => {
-    if (!user || !activeRoster || !activeFirebaseSource || busy) return;
-    if (!activeHasLocalChanges) {
-      setNotice({ tone: "info", text: "No changes to save." });
-      return;
-    }
-    if (!activeCanSave) {
-      setNotice({ tone: "error", text: "You can open this shared roster, but only owner/editors can save shared player info." });
-      return;
-    }
-    setBusy("save");
-    setNotice(null);
-    try {
-      const saved = await saveFirebaseSharedRoster(activeRoster);
-      onRosterSaved?.(saved, activeRoster.id);
-      await refreshSharedData();
-      setNotice({ tone: "success", text: "Shared roster saved online." });
-    } catch (error) {
-      setNotice({ tone: "error", text: friendlyFirestoreError(error) });
-    } finally {
-      setBusy("");
-    }
-  };
-
-  const handleGetLatest = async () => {
-    if (!user || busy) return;
-    const targets = remoteUpdatedLinkedRosters;
-    if (!targets.length) {
-      setNotice({ tone: "info", text: "Already up to date." });
-      return;
-    }
-    setBusy("reload");
-    setNotice(null);
+  const autoRefreshLinkedRosters = async (targets: RoomRoster[] = remoteUpdatedLinkedRosters) => {
+    if (!user || busy || !targets.length) return;
+    setBusy("autosync");
+    setAutoSyncStatus("syncing");
     try {
       let refreshed = 0;
       for (const localRoster of targets) {
         const rosterId = localRoster.cloudSource?.provider === "firebase" ? localRoster.cloudSource.firebaseRosterId : undefined;
         if (!rosterId) continue;
+        if (localRoster.id === activeRoster?.id && activeHasLocalChanges) continue;
         const snapshot = await readFirebaseSharedRoster(rosterId);
         onRefreshActiveRoster?.(snapshot.roster, snapshot.name, snapshot, localRoster.id);
         refreshed += 1;
       }
       await refreshSharedData();
-      setNotice({ tone: "success", text: refreshed === 1 ? "Shared roster info updated on this device." : `${refreshed} shared rosters updated on this device.` });
+      if (refreshed > 0) {
+        setAutoSyncStatus("saved");
+        setNotice({ tone: "success", text: refreshed === 1 ? "Shared roster updated automatically." : `${refreshed} shared rosters updated automatically.` });
+      } else {
+        setAutoSyncStatus("idle");
+      }
     } catch (error) {
+      setAutoSyncStatus("error");
       setNotice({ tone: "error", text: friendlyFirestoreError(error) });
     } finally {
-      setBusy("");
+      setBusy((current) => current === "autosync" ? "" : current);
     }
   };
+
+  useEffect(() => {
+    if (!user || !activeRoster || !activeFirebaseSource || !activeSharedRosterId || !activeCanSave || !activeHasLocalChanges || busy) return;
+    const timeout = window.setTimeout(() => {
+      setBusy("autosave");
+      setAutoSyncStatus("saving");
+      setNotice(null);
+      void saveFirebaseSharedRoster(activeRoster)
+        .then(async (saved) => {
+          onRosterSaved?.(saved, activeRoster.id);
+          await refreshSharedData();
+          setAutoSyncStatus("saved");
+          setNotice({ tone: "success", text: "Saved online automatically." });
+        })
+        .catch((error) => {
+          setAutoSyncStatus("error");
+          setNotice({ tone: "error", text: friendlyFirestoreError(error) });
+        })
+        .finally(() => {
+          setBusy((current) => current === "autosave" ? "" : current);
+        });
+    }, 900);
+    return () => window.clearTimeout(timeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.uid, activeRoster?.id, activeRoster?.updatedAt, activeFirebaseSource?.firebaseVersion, activeFirebaseSource?.lastSyncedAt, activeCanSave, activeHasLocalChanges, busy]);
+
+  useEffect(() => {
+    if (!user || !activeSharedRosterId || !activeRoster || !activeFirebaseSource) return;
+    lastLiveRosterVersionRef.current = typeof activeFirebaseSource.firebaseVersion === "number" ? activeFirebaseSource.firebaseVersion : 0;
+    return listenToFirebaseSharedRoster(activeSharedRosterId, (snapshot) => {
+      const localVersion = lastLiveRosterVersionRef.current;
+      if (snapshot.version <= localVersion) return;
+      if (activeHasLocalChanges) return;
+      lastLiveRosterVersionRef.current = snapshot.version;
+      setAutoSyncStatus("syncing");
+      onRefreshActiveRoster?.(snapshot.roster, snapshot.name, snapshot, activeRoster.id);
+      setAutoSyncStatus("saved");
+    }, (error) => {
+      setAutoSyncStatus("error");
+      setNotice({ tone: "error", text: friendlyFirestoreError(error) });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.uid, activeSharedRosterId, activeRoster?.id, activeFirebaseSource?.firebaseVersion, activeHasLocalChanges]);
+
+  useEffect(() => {
+    if (!user || busy || remoteUpdatedLinkedRosters.length === 0) return;
+    const safeTargets = remoteUpdatedLinkedRosters.filter((roster) => !(roster.id === activeRoster?.id && activeHasLocalChanges));
+    if (!safeTargets.length) return;
+    const timeout = window.setTimeout(() => {
+      void autoRefreshLinkedRosters(safeTargets);
+    }, 1200);
+    return () => window.clearTimeout(timeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.uid, busy, remoteUpdatedLinkedRosters.length, activeRoster?.id, activeHasLocalChanges]);
 
   const handleOpenRoster = async (rosterId: string) => {
     if (!user || busy) return;
@@ -524,12 +570,6 @@ No shared roster is open on this device. Choose one below to open it on this dev
           </div>
         )}
 
-        {updateCount > 0 && (
-          <div className="rounded-2xl border border-amber-100 bg-amber-50/80 px-3 py-2 text-[11px] font-bold text-amber-800">
-            {updateCount === 1 ? "1 update available." : `${updateCount} updates available.`}
-          </div>
-        )}
-
         <Button type="button" variant="outline" className="h-10 rounded-2xl border-violet-100 bg-white px-3 text-xs font-black text-violet-700 shadow-sm hover:bg-violet-50" onClick={() => setSharedRosterLibraryOpen(true)} disabled={!user || Boolean(busy)}>
           <FolderOpen className="mr-1.5 h-4 w-4" />
           Shared rosters
@@ -541,15 +581,11 @@ No shared roster is open on this device. Choose one below to open it on this dev
             {busy === "publish" ? "Creating…" : "Create shared copy"}
           </Button>
         ) : (
-          <div className="grid grid-cols-3 gap-2">
-            <Button type="button" className="h-10 rounded-2xl bg-emerald-600 px-2 text-xs font-black text-white hover:bg-emerald-700" onClick={handleSaveActiveRoster} disabled={!user || !activeCanSave || !activeHasLocalChanges || Boolean(busy)}>
-              <Save className="mr-1 h-4 w-4" />
-              {busy === "save" ? "…" : "Save"}
-            </Button>
-            <Button type="button" variant="outline" className="h-10 rounded-2xl border-slate-100 bg-white px-2 text-xs font-black" onClick={handleGetLatest} disabled={!user || !remoteUpdatedLinkedRosters.length || Boolean(busy)}>
-              <CloudDownload className="mr-1 h-4 w-4" />
-              {busy === "reload" ? "…" : "Latest"}
-            </Button>
+          <div className="grid gap-2">
+            <div className={`flex h-10 items-center justify-between rounded-2xl border px-3 text-xs font-black ${autoSyncStatus === "error" ? "border-rose-100 bg-rose-50 text-rose-700" : "border-emerald-100 bg-emerald-50 text-emerald-700"}`}>
+              <span>{autoStatusText}</span>
+              <AutoStatusIcon className={`h-4 w-4 ${(autoSyncStatus === "saving" || autoSyncStatus === "syncing" || activeHasLocalChanges) ? "animate-spin" : ""}`} />
+            </div>
             <Button type="button" variant="outline" className="h-10 rounded-2xl border-violet-100 bg-white px-2 text-xs font-black text-violet-700 shadow-sm hover:bg-violet-50" onClick={() => openCollaborators(activeSharedRosterId)} disabled={!user || Boolean(busy)}>
               <Users className="mr-1 h-4 w-4" />
               Organizers
@@ -578,27 +614,15 @@ No shared roster is open on this device. Choose one below to open it on this dev
         </div>
       )}
 
-      {updateCount > 0 && (
-        <div className="rounded-2xl border border-amber-100 bg-amber-50/80 px-3 py-2 text-[11px] font-bold leading-snug text-amber-800">
-          {updateCount === 1 ? "1 shared roster has roster updates." : `${updateCount} shared rosters have roster updates.`} Get latest updates shared player info and pairing rules on this device. Private/local rosters are not affected.
-        </div>
-      )}
-
       {!activeSharedRoster ? (
         <Button type="button" className="h-11 rounded-2xl bg-emerald-600 text-xs font-black text-white hover:bg-emerald-700" onClick={handleShareActiveRoster} disabled={!user || isEmptyRoster || Boolean(busy)}>
           <Share2 className="mr-1.5 h-4 w-4" />
           {busy === "publish" ? "Creating…" : "Create shared copy"}
         </Button>
       ) : (
-        <div className="grid grid-cols-2 gap-2">
-          <Button type="button" className="h-10 rounded-2xl bg-emerald-600 text-xs font-black text-white hover:bg-emerald-700" onClick={handleSaveActiveRoster} disabled={!user || !activeCanSave || !activeHasLocalChanges || Boolean(busy)}>
-            <Save className="mr-1.5 h-4 w-4" />
-            {busy === "save" ? "Saving…" : "Save shared"}
-          </Button>
-          <Button type="button" variant="outline" className="h-10 rounded-2xl border-slate-100 bg-white text-xs font-black" onClick={handleGetLatest} disabled={!user || !remoteUpdatedLinkedRosters.length || Boolean(busy)}>
-            <CloudDownload className="mr-1.5 h-4 w-4" />
-            {busy === "reload" ? "Getting…" : "Get latest"}
-          </Button>
+        <div className={`flex h-11 items-center justify-between rounded-2xl border px-3 text-xs font-black ${autoSyncStatus === "error" ? "border-rose-100 bg-rose-50 text-rose-700" : "border-emerald-100 bg-emerald-50 text-emerald-700"}`}>
+          <span>{autoStatusText}</span>
+          <AutoStatusIcon className={`h-4 w-4 ${(autoSyncStatus === "saving" || autoSyncStatus === "syncing" || activeHasLocalChanges) ? "animate-spin" : ""}`} />
         </div>
       )}
 

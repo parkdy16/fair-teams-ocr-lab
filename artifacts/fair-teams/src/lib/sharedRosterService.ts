@@ -15,6 +15,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  onSnapshot,
   query,
   runTransaction,
   serverTimestamp,
@@ -874,6 +875,39 @@ export async function readFirebaseSharedRoster(rosterId: string): Promise<Fireba
   };
 }
 
+
+export function listenToFirebaseSharedRoster(
+  rosterId: string,
+  callback: (snapshot: FirebaseSharedRosterSnapshot) => void,
+  onError?: (error: unknown) => void,
+): Unsubscribe {
+  getCurrentSharedRosterUser();
+  const docRef = doc(getFairTeamsFirestore(), "sharedRosters", rosterId);
+  return onSnapshot(docRef, (snapshot) => {
+    if (!snapshot.exists()) {
+      onError?.(new Error("Shared roster was not found."));
+      return;
+    }
+    const data = snapshot.data();
+    const summary = toRosterSummary(snapshot.id, data);
+    const rawRoster = data.rosterData && typeof data.rosterData === "object" ? data.rosterData as Partial<RoomRoster> : undefined;
+    if (!rawRoster || !Array.isArray(rawRoster.players)) {
+      onError?.(new Error("Shared roster does not contain roster data yet."));
+      return;
+    }
+    const roster = normalizeRoster({
+      ...rawRoster,
+      name: summary.name || rawRoster.name,
+    }, 0);
+    callback({
+      ...summary,
+      roster,
+    });
+  }, (error) => {
+    onError?.(error);
+  });
+}
+
 export async function saveFirebaseSharedRoster(roster: RoomRoster): Promise<FirebaseSharedRosterSummary> {
   const user = getCurrentSharedRosterUser();
   const source = roster.cloudSource;
@@ -904,7 +938,7 @@ export async function saveFirebaseSharedRoster(roster: RoomRoster): Promise<Fire
 
     const remoteVersion = typeof data.version === "number" ? data.version : 1;
     if (remoteVersion !== expectedVersion) {
-      throw new Error(`This shared roster was already saved by someone else. Get latest from shared roster before saving. Remote version is ${remoteVersion}, your local copy is ${expectedVersion}.`);
+      throw new Error(`This shared roster was already saved by someone else. Fair Teams needs the latest online version before saving again. Remote version is ${remoteVersion}, your local copy is ${expectedVersion}.`);
     }
 
     const nextVersion = remoteVersion + 1;

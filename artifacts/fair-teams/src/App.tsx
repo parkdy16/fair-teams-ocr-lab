@@ -40,6 +40,7 @@ import {
   createRoster,
   downloadText,
   loadRosterState,
+  isRosterCloudShared,
   normalizePlayer,
   normalizeRoster,
   privateLocalRosters,
@@ -163,6 +164,18 @@ function uniqueRosterName(name: string, rosters: RoomRoster[]) {
   let index = 2;
   while (taken.has(`${base} ${index}`.toLowerCase())) index += 1;
   return `${base} ${index}`;
+}
+
+function RosterKindBadge({ roster }: { roster: RoomRoster }) {
+  const shared = isRosterCloudShared(roster);
+  return (
+    <span
+      className={`inline-flex h-5 shrink-0 items-center rounded-full px-1.5 text-[9px] font-black uppercase tracking-wide ${shared ? "bg-violet-50 text-violet-700 ring-1 ring-violet-100" : "bg-slate-100 text-slate-500"}`}
+      title={shared ? "Shared roster" : "Local roster"}
+    >
+      {shared ? "Shared" : "Local"}
+    </span>
+  );
 }
 
 const GROUP_COLOR_THEMES = [
@@ -523,6 +536,8 @@ function App() {
       : null;
   const activeRosterIsShared = Boolean(activeGoogleSheetSource?.spreadsheetId || activeFirebaseSource?.firebaseRosterId);
   const activeRosterIsFirebaseShared = Boolean(activeFirebaseSource?.firebaseRosterId);
+  const localRosterPickerChoices = rosters.filter((roster) => !isRosterCloudShared(roster));
+  const sharedRosterPickerChoices = rosters.filter(isRosterCloudShared);
   const firebaseAccessLabelsFromSummary = (summary: FirebaseSharedRosterSummary) =>
     Object.fromEntries(
       [...(summary.memberEmails || []), ...(summary.pendingInviteEmails || [])]
@@ -1448,6 +1463,56 @@ function App() {
       switchRoster(roster.id);
       setRosterSwitchingName("");
     }, 520);
+  };
+
+  const renderRosterPickerOption = (roster: RoomRoster) => {
+    const selected = roster.id === activeRosterId;
+    const shared = isRosterCloudShared(roster);
+    return (
+      <button
+        key={roster.id}
+        type="button"
+        onClick={() => switchRosterWithPause(roster)}
+        className={`flex w-full items-center justify-between gap-3 rounded-2xl border px-3 py-3 text-left transition active:scale-[0.99] ${
+          selected
+            ? shared
+              ? "border-violet-200 bg-violet-50/90"
+              : "border-blue-200 bg-blue-50/80"
+            : shared
+              ? "border-violet-100 bg-violet-50/50 hover:bg-violet-50"
+              : "border-slate-100 bg-slate-50/70 hover:bg-white"
+        }`}
+      >
+        <span className="min-w-0">
+          <span className="flex min-w-0 items-center gap-1.5">
+            <span className="truncate text-[13px] font-bold text-[#102A43]">
+              {roster.name}
+            </span>
+            <RosterKindBadge roster={roster} />
+            {roster.cloudSource?.provider === "firebase" && roster.cloudSource.firebaseRosterId && (
+              <span className="inline-flex h-5 shrink-0 items-center gap-0.5 rounded-full bg-white px-1.5 text-[10px] font-black text-violet-700 shadow-sm ring-1 ring-violet-100">
+                <Users className="h-3 w-3" />
+                {rosterFirebaseSharedPeopleCount(roster)}
+              </span>
+            )}
+          </span>
+          <span className="mt-0.5 block text-[11px] font-bold text-slate-500">
+            {roster.players.length} player
+            {roster.players.length === 1 ? "" : "s"}
+            {shared ? " · opens from Shared rosters" : " · private on this device"}
+          </span>
+        </span>
+        {selected ? (
+          <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-white ${shared ? "bg-violet-700" : "bg-[#102A43]"}`}>
+            <Check className="h-4 w-4" />
+          </span>
+        ) : (
+          <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-lg font-black leading-none text-slate-400 shadow-sm">
+            ›
+          </span>
+        )}
+      </button>
+    );
   };
 
   const createNewRoster = () => {
@@ -3024,10 +3089,10 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   </h1>
                   {!shouldShowTodayStartHeader && !isEmptyStarterRoster && (
                     <span
-                      className={`inline-flex h-5 shrink-0 items-center rounded-full px-1.5 text-[9px] font-black uppercase tracking-wide ${activeRosterIsFirebaseShared ? "bg-violet-50 text-violet-700 ring-1 ring-violet-100" : "bg-slate-100 text-slate-500"}`}
-                      title={activeRosterIsFirebaseShared ? "Shared roster" : "Local roster"}
+                      className={`inline-flex h-5 shrink-0 items-center rounded-full px-1.5 text-[9px] font-black uppercase tracking-wide ${activeRosterIsShared ? "bg-violet-50 text-violet-700 ring-1 ring-violet-100" : "bg-slate-100 text-slate-500"}`}
+                      title={activeRosterIsShared ? "Shared roster" : "Local roster"}
                     >
-                      {activeRosterIsFirebaseShared ? "Shared" : "Local"}
+                      {activeRosterIsShared ? "Shared" : "Local"}
                     </span>
                   )}
                   {activeRosterIsFirebaseShared && !shouldShowTodayStartHeader && (
@@ -3496,6 +3561,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                     <span className="min-w-0 truncate text-sm font-black text-[#102A43]">
                       {isEmptyStarterRoster ? "Make a new roster" : activeRosterName}
                     </span>
+                    {!isEmptyStarterRoster && activeRoster && <RosterKindBadge roster={activeRoster} />}
                     {!isEmptyStarterRoster && (
                       <button
                         type="button"
@@ -4010,7 +4076,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device�
                   Current roster
                 </h2>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  Choose the roster to use now.
+                  Local rosters stay private. Shared rosters stay connected to your account.
                 </p>
               </div>
               <Button
@@ -4025,45 +4091,38 @@ This is a shared roster. Local Backup can only remove/disassociate this device�
               </Button>
             </div>
 
-            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain p-4">
-              {rosters.map((roster) => {
-                const selected = roster.id === activeRosterId;
-                return (
-                  <button
-                    key={roster.id}
-                    type="button"
-                    onClick={() => switchRosterWithPause(roster)}
-                    className={`flex w-full items-center justify-between gap-3 rounded-2xl border px-3 py-3 text-left transition active:scale-[0.99] ${selected ? "border-blue-200 bg-blue-50/80" : "border-slate-100 bg-slate-50/70"}`}
-                  >
-                    <span className="min-w-0">
-                      <span className="flex min-w-0 items-center gap-1.5">
-                        <span className="truncate text-[13px] font-bold text-[#102A43]">
-                          {roster.name}
-                        </span>
-                        {roster.cloudSource?.provider === "firebase" && roster.cloudSource.firebaseRosterId && (
-                          <span className="inline-flex h-5 shrink-0 items-center gap-0.5 rounded-full bg-emerald-100 px-1.5 text-[10px] font-black text-emerald-700">
-                            <Users className="h-3 w-3" />
-                            {rosterFirebaseSharedPeopleCount(roster)}
-                          </span>
-                        )}
-                      </span>
-                      <span className="block text-[11px] font-bold text-slate-500">
-                        {roster.players.length} player
-                        {roster.players.length === 1 ? "" : "s"}
-                      </span>
-                    </span>
-                    {selected ? (
-                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#102A43] text-white">
-                        <Check className="h-4 w-4" />
-                      </span>
-                    ) : (
-                      <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-lg font-black leading-none text-slate-400 shadow-sm">
-                        ›
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between px-1">
+                  <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Local rosters</span>
+                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-500">{localRosterPickerChoices.length}</span>
+                </div>
+                {localRosterPickerChoices.length > 0 ? (
+                  <div className="space-y-2">
+                    {localRosterPickerChoices.map(renderRosterPickerOption)}
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-3 py-3 text-xs font-semibold text-slate-500">
+                    No private local rosters on this device.
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between px-1">
+                  <span className="text-[10px] font-black uppercase tracking-wide text-violet-700">Shared rosters opened here</span>
+                  <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-black text-violet-700 ring-1 ring-violet-100">{sharedRosterPickerChoices.length}</span>
+                </div>
+                {sharedRosterPickerChoices.length > 0 ? (
+                  <div className="space-y-2">
+                    {sharedRosterPickerChoices.map(renderRosterPickerOption)}
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-violet-100 bg-violet-50/60 px-3 py-3 text-xs font-semibold text-violet-800/75">
+                    No shared roster is open on this device. Use Club → Shared rosters to open one from your account.
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>

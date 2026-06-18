@@ -366,6 +366,8 @@ export function ClubTab({
   const [ratingDraft, setRatingDraft] = useState(5);
   const [ratingSaving, setRatingSaving] = useState(false);
   const [ratingDialogError, setRatingDialogError] = useState("");
+  const [ratingSeedSaving, setRatingSeedSaving] = useState(false);
+  const [ratingSeedMessage, setRatingSeedMessage] = useState("");
   const [clubNotes, setClubNotes] = useState<ClubNote[]>([]);
   const [clubNotesError, setClubNotesError] = useState("");
   const [clubNoteDraft, setClubNoteDraft] = useState("");
@@ -621,6 +623,10 @@ export function ClubTab({
   const skippedPlayers = useMemo(() => players.filter((player) => myRatingByPlayerId.get(player.id)?.skipped), [myRatingByPlayerId, players]);
   const needRatingPlayers = useMemo(() => players.filter((player) => !myRatingByPlayerId.has(player.id)), [myRatingByPlayerId, players]);
   const ratingDialogPlayer = useMemo(() => players.find((player) => player.id === ratingPlayerId) || null, [players, ratingPlayerId]);
+  const legacySkillSeedPlayers = useMemo(() => needRatingPlayers.filter((player) => {
+    const skill = Number(player.skill);
+    return Number.isFinite(skill) && skill >= 1 && skill <= 10;
+  }), [needRatingPlayers]);
   const nextRatingPlayer = needRatingPlayers[0] || skippedPlayers[0] || ratedPlayers[0] || players[0] || null;
   const clubRatedCount = ratedPlayers.length;
   const clubSkippedCount = skippedPlayers.length;
@@ -647,6 +653,27 @@ export function ClubTab({
     const nextSkipped = skippedPlayers.find((player) => player.id !== currentPlayerId);
     if (nextSkipped) return nextSkipped;
     return null;
+  };
+
+  const seedClubRatingsFromRosterSkills = async () => {
+    if (!sharedRosterId || ratingSeedSaving || legacySkillSeedPlayers.length === 0) return;
+    setRatingSeedSaving(true);
+    setClubRatingError("");
+    setRatingSeedMessage("");
+    try {
+      let savedCount = 0;
+      for (const player of legacySkillSeedPlayers) {
+        await saveMyClubPlayerRating(sharedRosterId, player.id, player.skill);
+        savedCount += 1;
+      }
+      setRatingSeedMessage(`Imported ${savedCount} current roster rating${savedCount === 1 ? "" : "s"} as your Club ratings.`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not import current roster ratings.";
+      setRatingSeedMessage("");
+      setClubRatingError(message);
+    } finally {
+      setRatingSeedSaving(false);
+    }
   };
 
   const saveClubRating = async () => {
@@ -1219,6 +1246,29 @@ export function ClubTab({
             {clubRatedCount > 0 ? "Continue" : "Start"}
           </Button>
         </div>
+
+        {isSharedRoster && legacySkillSeedPlayers.length > 0 && (
+          <div className="mt-3 rounded-2xl border border-violet-100 bg-violet-50/80 px-3 py-2">
+            <div className="text-[11px] font-bold leading-snug text-violet-900">
+              Older shared roster? Use the current roster skill numbers as your first Club ratings.
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-2 h-9 w-full rounded-xl border-violet-200 bg-white text-[11px] font-black text-violet-700 hover:bg-violet-50"
+              disabled={!clubRatingsEnabled || ratingSeedSaving}
+              onClick={seedClubRatingsFromRosterSkills}
+            >
+              {ratingSeedSaving ? "Importing…" : `Use current ratings for ${legacySkillSeedPlayers.length} player${legacySkillSeedPlayers.length === 1 ? "" : "s"}`}
+            </Button>
+          </div>
+        )}
+
+        {ratingSeedMessage && (
+          <div className="mt-3 rounded-2xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-[11px] font-bold leading-snug text-emerald-800">
+            {ratingSeedMessage}
+          </div>
+        )}
 
         {clubRatingError && (
           <div className="mt-3 rounded-2xl border border-amber-100 bg-amber-50 px-3 py-2 text-[11px] font-bold leading-snug text-amber-800">

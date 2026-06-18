@@ -2657,6 +2657,13 @@ They will no longer be able to open or edit this shared roster unless it is shar
     }
   };
 
+
+  const openSharedRostersFromLocalFlow = () => {
+    closeClearRoster();
+    setRosterFilesOpen(false);
+    setActiveTab("club");
+  };
+
   const visibleDriveBackupChoices = driveBackupChoices
     ? [...driveBackupChoices.mine]
     : [];
@@ -3482,16 +3489,40 @@ They will no longer be able to open or edit this shared roster unless it is shar
 
                     {!isEmptyStarterRoster && (
                       <div className="border-t border-slate-100 pt-2">
+                        {activeRosterIsShared && (
+                          <div className="mb-2 rounded-2xl border border-violet-100 bg-violet-50/80 p-3">
+                            <div className="flex items-start gap-2">
+                              <Share2 className="mt-0.5 h-4 w-4 shrink-0 text-violet-600" />
+                              <div className="min-w-0 flex-1">
+                                <div className="text-[10px] font-black uppercase tracking-wide text-violet-700">
+                                  Shared roster
+                                </div>
+                                <p className="mt-1 text-[11px] font-semibold leading-snug text-violet-900/80">
+                                  This roster is linked online. Local backup can only remove/disassociate this device’s copy. Manage shared rosters, people, and online deletion from Club.
+                                </p>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="mt-2 h-9 w-full justify-start rounded-2xl gap-2 border-violet-100 bg-white px-3 text-violet-700 hover:bg-violet-50"
+                                  onClick={openSharedRostersFromLocalFlow}
+                                >
+                                  <FolderOpen className="h-3.5 w-3.5" />
+                                  <span className="truncate text-xs font-black">Open Shared rosters</span>
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                         <Button
                           type="button"
                           variant="outline"
-                          className="h-11 w-full justify-start rounded-2xl gap-3 border-red-100 bg-red-50/70 text-red-700 hover:bg-red-100 hover:text-red-800"
+                          className={`h-11 w-full justify-start rounded-2xl gap-3 ${activeRosterIsShared ? "border-violet-100 bg-white text-violet-700 hover:bg-violet-50 hover:text-violet-800" : "border-red-100 bg-red-50/70 text-red-700 hover:bg-red-100 hover:text-red-800"}`}
                           onClick={openClearRoster}
                         >
-                          <Trash2 className="h-4 w-4" />
+                          {activeRosterIsShared ? <X className="h-4 w-4" /> : <Trash2 className="h-4 w-4" />}
                           <span className="font-black">
                             {activeRosterIsShared
-                              ? "Remove local copy"
+                              ? "Remove local copy from this device"
                               : rosters.length > 1
                                 ? "Delete current roster"
                                 : "Clear current roster"}
@@ -4117,10 +4148,10 @@ They will no longer be able to open or edit this shared roster unless it is shar
           role="dialog"
           aria-modal="true"
         >
-          <div className="w-full max-w-sm rounded-3xl border border-red-100 bg-white p-4 shadow-2xl">
+          <div className={`w-full max-w-sm rounded-3xl border bg-white p-4 shadow-2xl ${activeRosterIsShared ? "border-violet-100" : "border-red-100"}`}>
             <div className="flex items-start gap-3">
-              <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-red-50 text-red-600">
-                <AlertTriangle className="h-5 w-5" />
+              <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl ${activeRosterIsShared ? "bg-violet-50 text-violet-600" : "bg-red-50 text-red-600"}`}>
+                {activeRosterIsShared ? <Share2 className="h-5 w-5" /> : <AlertTriangle className="h-5 w-5" />}
               </div>
               <div className="min-w-0 flex-1">
                 <div className="text-[10px] font-black uppercase tracking-wide text-red-600">
@@ -4135,8 +4166,19 @@ They will no longer be able to open or edit this shared roster unless it is shar
               </div>
             </div>
 
-            <div className="mt-4 rounded-2xl border border-red-100 bg-red-50/70 p-3">
-              <div className="mb-2 flex items-center justify-between gap-2 text-[11px] font-black uppercase tracking-wide text-red-700">
+            {activeRosterIsShared && (
+              <div className="mt-4 rounded-2xl border border-violet-100 bg-violet-50/80 p-3">
+                <div className="flex items-start gap-2">
+                  <Info className="mt-0.5 h-4 w-4 shrink-0 text-violet-600" />
+                  <p className="text-[11px] font-semibold leading-snug text-violet-900/80">
+                    Removing the local copy is safe. It does not delete the online shared roster, remove collaborators, or change other organizers’ copies.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            <div className={`mt-4 rounded-2xl border p-3 ${activeRosterIsShared ? "border-violet-100 bg-violet-50/70" : "border-red-100 bg-red-50/70"}`}>
+              <div className={`mb-2 flex items-center justify-between gap-2 text-[11px] font-black uppercase tracking-wide ${activeRosterIsShared ? "text-violet-700" : "text-red-700"}`}>
                 <span>Slide to confirm</span>
                 <span>{googleSheetDeleteSlide >= 95 ? "Ready" : `${googleSheetDeleteSlide}%`}</span>
               </div>
@@ -4146,7 +4188,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 max="100"
                 value={googleSheetDeleteSlide}
                 onChange={(e) => setGoogleSheetDeleteSlide(Number(e.target.value))}
-                className="w-full accent-red-600"
+                className={`w-full ${activeRosterIsShared ? "accent-violet-600" : "accent-red-600"}`}
                 aria-label="Slide to confirm shared roster deletion"
                 disabled={googleSheetDeleting}
               />
@@ -5090,22 +5132,22 @@ They will no longer be able to open or edit this shared roster unless it is shar
           role="dialog"
           aria-modal="true"
         >
-          <div className="w-full max-w-sm rounded-3xl border border-red-100 bg-white p-4 shadow-2xl">
+          <div className={`w-full max-w-sm rounded-3xl border bg-white p-4 shadow-2xl ${activeRosterIsShared ? "border-violet-100" : "border-red-100"}`}>
             <div className="flex items-start gap-3">
-              <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-red-50 text-red-600">
-                <AlertTriangle className="h-5 w-5" />
+              <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl ${activeRosterIsShared ? "bg-violet-50 text-violet-600" : "bg-red-50 text-red-600"}`}>
+                {activeRosterIsShared ? <Share2 className="h-5 w-5" /> : <AlertTriangle className="h-5 w-5" />}
               </div>
               <div className="min-w-0 flex-1">
                 <h2 className="text-base font-black tracking-tight text-[#102A43]">
                   {activeRosterIsShared
-                    ? `Remove local copy of “${activeRosterName}”?`
+                    ? "This is a shared roster"
                     : rosters.length > 1
                       ? `Delete “${activeRosterName}”?`
                       : `Clear “${activeRosterName}”?`}
                 </h2>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
                   {activeRosterIsShared
-                    ? "This removes only this device’s linked copy. The online shared roster stays available for all organizers and can be opened again after signing in."
+                    ? `“${activeRosterName}” is linked online. This action only removes the local copy on this device. To manage people or delete the online shared roster for everyone, go to Club → Shared rosters.`
                     : rosters.length > 1
                       ? "This deletes only the active roster. Your other rosters will stay."
                       : `You need at least one roster, so this removes all ${players.length} player profiles from this roster only.`}
@@ -5113,8 +5155,19 @@ They will no longer be able to open or edit this shared roster unless it is shar
               </div>
             </div>
 
-            <div className="mt-4 rounded-2xl border border-red-100 bg-red-50/70 p-3">
-              <div className="mb-2 flex items-center justify-between gap-2 text-[11px] font-black uppercase tracking-wide text-red-700">
+            {activeRosterIsShared && (
+              <div className="mt-4 rounded-2xl border border-violet-100 bg-violet-50/80 p-3">
+                <div className="flex items-start gap-2">
+                  <Info className="mt-0.5 h-4 w-4 shrink-0 text-violet-600" />
+                  <p className="text-[11px] font-semibold leading-snug text-violet-900/80">
+                    Removing/disassociating the local copy is safe. It does not delete the online shared roster, remove collaborators, or change other organizers’ copies.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            <div className={`mt-4 rounded-2xl border p-3 ${activeRosterIsShared ? "border-violet-100 bg-violet-50/70" : "border-red-100 bg-red-50/70"}`}>
+              <div className={`mb-2 flex items-center justify-between gap-2 text-[11px] font-black uppercase tracking-wide ${activeRosterIsShared ? "text-violet-700" : "text-red-700"}`}>
                 <span>Slide to confirm</span>
                 <span>
                   {clearRosterSlide >= 95 ? "Ready" : `${clearRosterSlide}%`}
@@ -5126,35 +5179,48 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 max="100"
                 value={clearRosterSlide}
                 onChange={(e) => setClearRosterSlide(Number(e.target.value))}
-                className="w-full accent-red-600"
+                className={`w-full ${activeRosterIsShared ? "accent-violet-600" : "accent-red-600"}`}
                 aria-label="Slide to confirm roster action"
               />
-              <p className="mt-2 text-[11px] font-semibold text-red-700/80">
+              <p className={`mt-2 text-[11px] font-semibold ${activeRosterIsShared ? "text-violet-700/80" : "text-red-700/80"}`}>
                 Move the slider all the way right, then confirm.
               </p>
             </div>
 
-            <div className="mt-4 flex items-center justify-end gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                className="rounded-xl"
-                onClick={closeClearRoster}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                className="rounded-xl bg-red-600 text-white hover:bg-red-700"
-                onClick={confirmClearRoster}
-                disabled={clearRosterSlide < 95}
-              >
-                {activeRosterIsShared
-                  ? "Remove local copy"
-                  : rosters.length > 1
-                    ? "Delete roster"
-                    : "Clear roster"}
-              </Button>
+            <div className="mt-4 grid gap-2">
+              {activeRosterIsShared && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-10 rounded-2xl border-violet-100 bg-white text-violet-700 hover:bg-violet-50"
+                  onClick={openSharedRostersFromLocalFlow}
+                >
+                  <FolderOpen className="mr-1.5 h-4 w-4" />
+                  Open Shared rosters instead
+                </Button>
+              )}
+              <div className="flex items-center justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="rounded-xl"
+                  onClick={closeClearRoster}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  className={`rounded-xl text-white ${activeRosterIsShared ? "bg-violet-600 hover:bg-violet-700" : "bg-red-600 hover:bg-red-700"}`}
+                  onClick={confirmClearRoster}
+                  disabled={clearRosterSlide < 95}
+                >
+                  {activeRosterIsShared
+                    ? "Remove local copy only"
+                    : rosters.length > 1
+                      ? "Delete roster"
+                      : "Clear roster"}
+                </Button>
+              </div>
             </div>
           </div>
         </div>

@@ -366,6 +366,7 @@ export function ClubTab({
   const [ratingPlayerId, setRatingPlayerId] = useState<string | null>(null);
   const [ratingDraft, setRatingDraft] = useState(5);
   const [ratingSaving, setRatingSaving] = useState(false);
+  const [ratingDialogError, setRatingDialogError] = useState("");
   const [clubNotes, setClubNotes] = useState<ClubNote[]>([]);
   const [clubNotesError, setClubNotesError] = useState("");
   const [clubNoteDraft, setClubNoteDraft] = useState("");
@@ -636,8 +637,17 @@ export function ClubTab({
   const openRatingForPlayer = (player: RoomPlayer | null) => {
     if (!player) return;
     const existing = myRatingByPlayerId.get(player.id);
+    setRatingDialogError("");
     setRatingDraft(typeof existing?.skill === "number" ? existing.skill : 5);
     setRatingPlayerId(player.id);
+  };
+
+  const findNextRatingPlayerAfter = (currentPlayerId: string | null) => {
+    const nextUnrated = needRatingPlayers.find((player) => player.id !== currentPlayerId);
+    if (nextUnrated) return nextUnrated;
+    const nextSkipped = skippedPlayers.find((player) => player.id !== currentPlayerId);
+    if (nextSkipped) return nextSkipped;
+    return null;
   };
 
   const saveClubRating = async () => {
@@ -645,10 +655,18 @@ export function ClubTab({
     setRatingSaving(true);
     setClubRatingError("");
     try {
-      await saveMyClubPlayerRating(sharedRosterId, ratingDialogPlayer.id, ratingDraft);
-      setRatingPlayerId(null);
+      const savedPlayerId = ratingDialogPlayer.id;
+      await saveMyClubPlayerRating(sharedRosterId, savedPlayerId, ratingDraft);
+      const nextPlayer = findNextRatingPlayerAfter(savedPlayerId);
+      if (nextPlayer) {
+        openRatingForPlayer(nextPlayer);
+      } else {
+        setRatingPlayerId(null);
+      }
     } catch (error) {
-      setClubRatingError(error instanceof Error ? error.message : "Could not save your rating.");
+      const message = error instanceof Error ? error.message : "Could not save your rating.";
+      setRatingDialogError(message);
+      setClubRatingError(message);
     } finally {
       setRatingSaving(false);
     }
@@ -659,10 +677,18 @@ export function ClubTab({
     setRatingSaving(true);
     setClubRatingError("");
     try {
-      await skipMyClubPlayerRating(sharedRosterId, ratingDialogPlayer.id);
-      setRatingPlayerId(null);
+      const skippedPlayerId = ratingDialogPlayer.id;
+      await skipMyClubPlayerRating(sharedRosterId, skippedPlayerId);
+      const nextPlayer = findNextRatingPlayerAfter(skippedPlayerId);
+      if (nextPlayer) {
+        openRatingForPlayer(nextPlayer);
+      } else {
+        setRatingPlayerId(null);
+      }
     } catch (error) {
-      setClubRatingError(error instanceof Error ? error.message : "Could not skip this player.");
+      const message = error instanceof Error ? error.message : "Could not skip this player.";
+      setRatingDialogError(message);
+      setClubRatingError(message);
     } finally {
       setRatingSaving(false);
     }
@@ -1315,7 +1341,10 @@ export function ClubTab({
       </Dialog>
 
       <Dialog open={Boolean(ratingDialogPlayer)} onOpenChange={(open) => {
-        if (!open) setRatingPlayerId(null);
+        if (!open) {
+          setRatingDialogError("");
+          setRatingPlayerId(null);
+        }
       }}>
         <DialogContent className="max-w-sm rounded-3xl p-0">
           <DialogHeader className="border-b border-slate-100 px-4 py-3 text-left">
@@ -1328,6 +1357,7 @@ export function ClubTab({
             const myRating = myRatingByPlayerId.get(ratingDialogPlayer.id);
             const summary = ratingSummaryByPlayerId.get(ratingDialogPlayer.id);
             const canRevealAverage = Boolean(myRating && !myRating.skipped && typeof myRating.skill === "number");
+            const nextPlayerAfterThis = findNextRatingPlayerAfter(ratingDialogPlayer.id);
             return (
               <div className="grid gap-4 p-4">
                 <div className="rounded-2xl bg-slate-50 px-3 py-2">
@@ -1370,6 +1400,12 @@ export function ClubTab({
                   </div>
                 </div>
 
+                {ratingDialogError && (
+                  <div className="rounded-2xl border border-rose-100 bg-rose-50 px-3 py-2 text-[11px] font-bold leading-snug text-rose-700">
+                    {ratingDialogError}
+                  </div>
+                )}
+
                 <div className="grid grid-cols-2 gap-2">
                   <Button
                     type="button"
@@ -1378,7 +1414,7 @@ export function ClubTab({
                     disabled={ratingSaving}
                     onClick={skipClubRating}
                   >
-                    I don’t know yet
+                    {nextPlayerAfterThis ? "Skip & next" : "I don’t know yet"}
                   </Button>
                   <Button
                     type="button"
@@ -1386,7 +1422,7 @@ export function ClubTab({
                     disabled={ratingSaving}
                     onClick={saveClubRating}
                   >
-                    {ratingSaving ? "Saving…" : "Save rating"}
+                    {ratingSaving ? "Saving…" : nextPlayerAfterThis ? "Save & next" : "Save rating"}
                   </Button>
                 </div>
               </div>

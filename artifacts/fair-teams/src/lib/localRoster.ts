@@ -275,6 +275,25 @@ export interface RoomRoster {
   updatedAt?: string;
 }
 
+export function isRosterCloudShared(roster?: Partial<RoomRoster> | null) {
+  return Boolean(roster?.cloudSource?.provider);
+}
+
+export function makeRosterPrivateLocal(roster: Partial<RoomRoster>, index = 0): RoomRoster {
+  const normalized = normalizeRoster(roster, index);
+  return normalizeRoster({
+    ...normalized,
+    cloudSource: undefined,
+  }, index);
+}
+
+export function privateLocalRosters(rosters: RoomRoster[]) {
+  return rosters
+    .map((roster, index) => normalizeRoster(roster, index))
+    .filter((roster) => !isRosterCloudShared(roster))
+    .map((roster, index) => makeRosterPrivateLocal(roster, index));
+}
+
 export interface RosterState {
   rosters: RoomRoster[];
   activeRosterId: string;
@@ -586,14 +605,17 @@ export function rosterToShareJson(roster: RoomRoster) {
 }
 
 export function rostersToBackupJson(rosters: RoomRoster[], activeRosterId: string) {
-  const safe = ensureRosterState(rosters, activeRosterId);
+  const localRosters = privateLocalRosters(rosters);
+  const safeActiveRosterId = localRosters.some((roster) => roster.id === activeRosterId)
+    ? activeRosterId
+    : localRosters[0]?.id || "";
   return JSON.stringify({
     app: "Fair Teams",
     type: "all-rosters-backup",
     version: 1,
     exportedAt: new Date().toISOString(),
-    activeRosterId: safe.activeRosterId,
-    rosters: safe.rosters,
+    activeRosterId: safeActiveRosterId,
+    rosters: localRosters,
   }, null, 2);
 }
 
@@ -615,7 +637,7 @@ export function parseRosterFile(text: string, filename = "Imported roster"): Roo
     }
 
     if (Array.isArray(parsed?.rosters)) {
-      return parsed.rosters.map((roster: Partial<RoomRoster>, index: number) => normalizeRoster(roster, index));
+      return parsed.rosters.map((roster: Partial<RoomRoster>, index: number) => makeRosterPrivateLocal(roster, index));
     }
 
     // Prefer the full roster object when present. It preserves the roster name,
@@ -623,7 +645,7 @@ export function parseRosterFile(text: string, filename = "Imported roster"): Roo
     // top-level `players` array first, which could fall back to the filename
     // for the roster name and drop identity fields.
     if (parsed?.roster && Array.isArray(parsed.roster.players)) {
-      return [normalizeRoster({
+      return [makeRosterPrivateLocal({
         ...parsed.roster,
         name: parsed.roster.name || parsed.rosterName || parsed.name,
         themeColor: parsed.roster.themeColor || parsed.themeColor || parsed.headerColor || parsed.color,

@@ -1,5 +1,5 @@
 import type { RoomPlayer, RoomRoster, RosterState } from "@/lib/localRoster";
-import { normalizePlayer, normalizeRoster } from "@/lib/localRoster";
+import { isRosterCloudShared, makeRosterPrivateLocal, normalizePlayer, normalizeRoster } from "@/lib/localRoster";
 import { FAIR_TEAMS_DRIVE_BACKUP_VERSION } from "@/lib/googleDriveConfig";
 
 export type GoogleDriveBackupKind = "single-roster" | "all-rosters";
@@ -50,9 +50,10 @@ export function stripPlayerImages(player: RoomPlayer): RoomPlayer {
 }
 
 export function stripRosterImages(roster: RoomRoster): RoomRoster {
-  const normalized = normalizeRoster(roster);
+  const normalized = makeRosterPrivateLocal(roster);
   return normalizeRoster({
     ...removeKnownImageFields(normalized as unknown as Record<string, unknown>),
+    cloudSource: undefined,
     logo: undefined,
     players: normalized.players.map(stripPlayerImages),
   });
@@ -63,7 +64,7 @@ export function createDriveBackup(
   activeRosterId: string | undefined,
   backupKind: GoogleDriveBackupKind,
 ): FairTeamsDriveBackup {
-  const safeRosters = rosters.map(stripRosterImages);
+  const safeRosters = rosters.filter((roster) => !isRosterCloudShared(roster)).map(stripRosterImages);
   const safeActiveRosterId = activeRosterId && safeRosters.some((roster) => roster.id === activeRosterId)
     ? activeRosterId
     : safeRosters[0]?.id;

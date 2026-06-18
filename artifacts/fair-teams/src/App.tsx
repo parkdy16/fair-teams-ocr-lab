@@ -42,6 +42,7 @@ import {
   loadRosterState,
   normalizePlayer,
   normalizeRoster,
+  privateLocalRosters,
   parseRosterFile,
   rosterToShareJson,
   rostersToBackupJson,
@@ -455,7 +456,10 @@ function App() {
   const groupLogo = rosterLogo(activeRoster);
   const isEmptyStarterRoster =
     rosters.length === 1 && players.length === 0 && activeRosterName === EMPTY_ROSTER_NAME;
-  const deviceBackupSummary = isEmptyStarterRoster ? { rosterCount: 0, playerCount: 0 } : countBackupRosters(rosters);
+  const privateBackupRosters = privateLocalRosters(rosters);
+  const hasPrivateBackupRosters = privateBackupRosters.some((roster) => roster.players.length > 0 || roster.name !== EMPTY_ROSTER_NAME);
+  const privateBackupSummary = hasPrivateBackupRosters ? countBackupRosters(privateBackupRosters) : { rosterCount: 0, playerCount: 0 };
+  const deviceBackupSummary = privateBackupSummary;
   const googleDriveConfig = getGoogleDriveConfig();
   const [googleDriveAccessToken, setGoogleDriveAccessToken] = useState("");
   const [googleDriveConnecting, setGoogleDriveConnecting] = useState(false);
@@ -963,11 +967,20 @@ function App() {
   const connectedGoogleUserOwnsActiveSheet = googleSheetOwnerPermissions.some(permissionEmailMatchesConnectedUser);
 
   const downloadAllRostersBackup = () => {
+    if (!hasPrivateBackupRosters) {
+      showRosterToolsNotice(
+        "No local rosters to export",
+        "Shared rosters stay online. Open Shared rosters to reopen them, or make a private copy first.",
+        "warning",
+      );
+      return;
+    }
     downloadText(
-      `fair-teams-all-rosters-backup.json`,
+      `fair-teams-local-rosters-backup.json`,
       rostersToBackupJson(rosters, activeRosterId),
       "application/json;charset=utf-8",
     );
+    showRosterToolsNotice("Local backup exported", `Exported ${formatBackupSummary(privateBackupSummary)}. Shared rosters were not included.`, "success");
   };
 
   useEffect(() => {
@@ -1677,7 +1690,7 @@ function App() {
     rememberDriveBackup(driveImportPreview.file, { rosterCount: driveImportPreview.rosterCount, playerCount: driveImportPreview.playerCount });
     const rosterCount = driveImportPreview.rosterCount;
     setDriveImportPreview(null);
-    showRosterToolsNotice("Google Drive import complete", `Replaced local rosters with ${rosterCount} roster${rosterCount === 1 ? "" : "s"} from Google Drive.`, "success");
+    showRosterToolsNotice("Google Drive import complete", `Replaced local rosters with ${rosterCount} roster${rosterCount === 1 ? "" : "s"} from Google Drive. Shared roster links are not restored from backups.`, "success");
   };
 
 
@@ -1690,8 +1703,8 @@ function App() {
       showRosterToolsNotice("Sign in with Google first", "Sign in with your Google account before using Drive backup.", "warning");
       return;
     }
-    if (isEmptyStarterRoster) {
-      showRosterToolsNotice("No roster yet", "Create or import a roster first, then save it to Google Drive.", "warning");
+    if (!hasPrivateBackupRosters) {
+      showRosterToolsNotice("No local rosters to back up", "Shared rosters stay online in Shared rosters. Make a private copy first if you want a local backup version.", "warning");
       return;
     }
 
@@ -1726,8 +1739,8 @@ function App() {
       await createNewGoogleDriveBackupCopy();
       return;
     }
-    if (isEmptyStarterRoster) {
-      showRosterToolsNotice("No roster yet", "Create or import a roster first, then update the Drive backup.", "warning");
+    if (!hasPrivateBackupRosters) {
+      showRosterToolsNotice("No local rosters to back up", "Shared rosters stay online in Shared rosters. Make a private copy first if you want a local backup version.", "warning");
       return;
     }
 
@@ -2468,8 +2481,8 @@ They will no longer be able to open or edit this shared roster unless it is shar
       showRosterToolsNotice("Sign in with Google first", "Sign in with your Google account before sending a backup copy.", "warning");
       return;
     }
-    if (isEmptyStarterRoster) {
-      showRosterToolsNotice("No roster yet", "Create or import a roster first, then send a Drive backup copy.", "warning");
+    if (!hasPrivateBackupRosters) {
+      showRosterToolsNotice("No local rosters to back up", "Shared rosters stay online in Shared rosters. Make a private copy first if you want a local backup version.", "warning");
       return;
     }
     setDriveShareEmail("");
@@ -3558,7 +3571,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                         Local Backup
                       </span>
                       <span className="mt-0.5 block truncate text-xs font-semibold text-slate-600">
-                        Export or import roster files.
+                        Export or import local roster files.
                       </span>
                     </span>
                   </span>
@@ -3574,7 +3587,8 @@ They will no longer be able to open or edit this shared roster unless it is shar
                       variant="outline"
                       className="h-11 justify-start rounded-2xl gap-3"
                       onClick={exportSharedRoster}
-                      disabled={players.length === 0}
+                      disabled={players.length === 0 || activeRosterIsShared}
+                      title={activeRosterIsShared ? "Shared rosters stay online. Use Make private copy first if you want a local export." : "Export this local roster"}
                     >
                       <Download className="h-4 w-4" />
                       <span className="font-black">Export this roster</span>
@@ -3594,7 +3608,8 @@ They will no longer be able to open or edit this shared roster unless it is shar
                         variant="outline"
                         className="h-11 justify-start rounded-2xl gap-2 px-3"
                         onClick={exportAllRostersBackup}
-                        disabled={isEmptyStarterRoster}
+                        disabled={!hasPrivateBackupRosters}
+                        title="Exports local/private rosters only. Shared rosters stay online."
                       >
                         <Archive className="h-4 w-4" />
                         <span className="truncate text-xs font-black">Export all</span>
@@ -3672,7 +3687,7 @@ This is a shared roster. Local Backup can only remove/disassociate this deviceâ€
                         Cloud Backup
                       </span>
                       <span className="mt-0.5 block truncate text-xs font-semibold text-slate-600">
-                        Private backup of all rosters.
+                        Private backup of local rosters.
                       </span>
                     </span>
                   </span>
@@ -3717,7 +3732,7 @@ This is a shared roster. Local Backup can only remove/disassociate this deviceâ€
                       <div className="mt-0.5 text-[11px] font-semibold text-slate-500">
                         {currentDriveBackup
                           ? `Backup has ${formatBackupSummary(currentDriveBackup.rosterCount !== undefined && currentDriveBackup.playerCount !== undefined ? { rosterCount: currentDriveBackup.rosterCount, playerCount: currentDriveBackup.playerCount } : null)}`
-                          : "Optional private backup for all rosters."}
+                          : "Optional private backup for local rosters."}
                       </div>
                     </div>
 
@@ -3725,8 +3740,8 @@ This is a shared roster. Local Backup can only remove/disassociate this deviceâ€
                       type="button"
                       className="h-12 justify-start rounded-2xl gap-3 bg-blue-600 text-white shadow-sm hover:bg-blue-700"
                       onClick={saveAllRostersToGoogleDrive}
-                      disabled={isEmptyStarterRoster || !googleDriveConnected || googleDriveSaving || googleDriveUpdating}
-                      title={currentDriveBackup ? "Update your private all-rosters backup" : "Create a private backup of all rosters"}
+                      disabled={!hasPrivateBackupRosters || !googleDriveConnected || googleDriveSaving || googleDriveUpdating}
+                      title={currentDriveBackup ? "Update your private local-rosters backup" : "Create a private backup of local rosters"}
                     >
                       {currentDriveBackup ? <RefreshCw className={`h-4 w-4 ${googleDriveUpdating ? "animate-spin" : ""}`} /> : <CloudUpload className="h-4 w-4" />}
                       <span className="font-black">
@@ -4827,7 +4842,7 @@ This is a shared roster. Local Backup can only remove/disassociate this deviceâ€
                   Backup and device transfer
                 </div>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  Cloud Backup saves a private text-only backup of all rosters to your Google Drive, so you can recover your roster list if you lose or change your device.
+                  Cloud Backup saves a private text-only backup of your local/private rosters to Google Drive. Shared rosters stay online in Shared rosters and are not included.
                 </p>
               </div>
 
@@ -4836,7 +4851,7 @@ This is a shared roster. Local Backup can only remove/disassociate this deviceâ€
                   Use across devices
                 </div>
                 <p className="mt-1 text-xs font-semibold leading-snug text-blue-800/85">
-                  Save all rosters on one device, then restore them on another device signed in with the same Google account. It is private manual backup/restore, not collaboration or live sync.
+                  Save local rosters on one device, then restore them on another device signed in with the same Google account. It is private manual backup/restore, not collaboration or live sync.
                 </p>
               </div>
             </div>

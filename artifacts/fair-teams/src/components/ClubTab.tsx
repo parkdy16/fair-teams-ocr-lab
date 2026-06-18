@@ -11,8 +11,17 @@ import {
 import { Button } from "@/components/ui/button";
 import { FirebaseSharedRosterAuthCard } from "@/components/FirebaseSharedRosterAuthCard";
 import { getFairTeamsAuth } from "@/lib/firebaseClient";
-import { listenToSharedRosterUser, signOutOfSharedRosters, type SharedRosterUser } from "@/lib/sharedRosterService";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  listenToSharedRosterUser,
+  signOutOfSharedRosters,
+  type SharedRosterUser,
+} from "@/lib/sharedRosterService";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -145,7 +154,10 @@ function isLikelyCurrentUserLabel(value: string) {
   }
   if (typeof window === "undefined") return false;
   try {
-    const authEmail = window.localStorage.getItem("fairteams.firebaseEmail") || window.localStorage.getItem("fairteams.googleEmail") || "";
+    const authEmail =
+      window.localStorage.getItem("fairteams.firebaseEmail") ||
+      window.localStorage.getItem("fairteams.googleEmail") ||
+      "";
     return Boolean(authEmail && authEmail.trim().toLowerCase() === candidate);
   } catch {
     return false;
@@ -168,13 +180,18 @@ function looksLikeReadableName(value: string) {
   return words.every((word) => /^[a-zA-ZÀ-ž]{2,}$/.test(word));
 }
 
-function cleanEquipmentHolderLabel(value: string, namesByEmail: Record<string, string> = {}) {
+function cleanEquipmentHolderLabel(
+  value: string,
+  namesByEmail: Record<string, string> = {},
+) {
   const trimmed = value.trim();
   if (!trimmed) return "Organizer";
   if (isLikelyCurrentUserLabel(trimmed)) return "You";
 
   const normalizedEmail = trimmed.toLowerCase();
-  const savedName = normalizedEmail.includes("@") ? namesByEmail[normalizedEmail] : undefined;
+  const savedName = normalizedEmail.includes("@")
+    ? namesByEmail[normalizedEmail]
+    : undefined;
   if (savedName?.trim()) return titleCaseWords(savedName.trim());
 
   const emailName = trimmed.includes("@") ? trimmed.split("@")[0] : trimmed;
@@ -182,7 +199,11 @@ function cleanEquipmentHolderLabel(value: string, namesByEmail: Record<string, s
   return looksLikeReadableName(readableName) ? readableName : "Organizer";
 }
 
-function equipmentActorLabel(name?: string, email?: string, namesByEmail: Record<string, string> = {}) {
+function equipmentActorLabel(
+  name?: string,
+  email?: string,
+  namesByEmail: Record<string, string> = {},
+) {
   const cleanName = name?.trim();
   if (cleanName && !cleanName.includes("@")) return titleCaseWords(cleanName);
   const cleanEmail = email?.trim() || cleanName || "";
@@ -195,10 +216,19 @@ function formatEquipmentTimestamp(value?: number) {
   if (!value) return "time not recorded";
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) return "time not recorded";
-  return date.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  return date.toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
-function buildSharedEquipmentHolders(labels: string[], equipmentKits: ClubEquipmentKit[], namesByEmail: Record<string, string> = {}) {
+function buildSharedEquipmentHolders(
+  labels: string[],
+  equipmentKits: ClubEquipmentKit[],
+  namesByEmail: Record<string, string> = {},
+) {
   const seen = new Set(["storage"]);
   const normalizedLabels = labels
     .map((label) => label.trim().toLowerCase())
@@ -206,7 +236,9 @@ function buildSharedEquipmentHolders(labels: string[], equipmentKits: ClubEquipm
     .filter((label, index, all) => all.indexOf(label) === index);
 
   const currentUserLabels = normalizedLabels.filter(isLikelyCurrentUserLabel);
-  const otherLabels = normalizedLabels.filter((label) => !isLikelyCurrentUserLabel(label));
+  const otherLabels = normalizedLabels.filter(
+    (label) => !isLikelyCurrentUserLabel(label),
+  );
 
   const holders: EquipmentHolder[] = [];
   const addHolder = (id: string, label: string) => {
@@ -216,23 +248,27 @@ function buildSharedEquipmentHolders(labels: string[], equipmentKits: ClubEquipm
     holders.push({ id: holderId, label });
   };
 
-  currentUserLabels.forEach((label) => addHolder(makeEquipmentHolderId(label), "You"));
+  currentUserLabels.forEach((label) =>
+    addHolder(makeEquipmentHolderId(label), "You"),
+  );
   otherLabels.slice(0, 8).forEach((label, index) => {
     const cleaned = cleanEquipmentHolderLabel(label, namesByEmail);
-    addHolder(makeEquipmentHolderId(label), cleaned === "Organizer" ? `Organizer ${index + 1}` : cleaned);
+    addHolder(
+      makeEquipmentHolderId(label),
+      cleaned === "Organizer" ? `Organizer ${index + 1}` : cleaned,
+    );
   });
 
   equipmentKits
     .map((kit) => normalizeEquipmentHolderId(kit.holderId))
     .filter((holderId) => holderId && !seen.has(holderId))
-    .forEach((holderId) => addHolder(holderId, cleanEquipmentHolderLabel(holderId, namesByEmail)));
+    .forEach((holderId) =>
+      addHolder(holderId, cleanEquipmentHolderLabel(holderId, namesByEmail)),
+    );
 
   if (!holders.length) holders.push({ id: "organizer", label: "Organizer" });
 
-  return [
-    { id: "storage", label: "Club storage" },
-    ...holders,
-  ];
+  return [{ id: "storage", label: "Club storage" }, ...holders];
 }
 
 function makeEquipmentHolderId(value: string) {
@@ -240,13 +276,17 @@ function makeEquipmentHolderId(value: string) {
 }
 
 function makeId(prefix: string) {
-  const random = typeof crypto !== "undefined" && "randomUUID" in crypto
-    ? crypto.randomUUID().slice(0, 8)
-    : Math.random().toString(36).slice(2, 10);
+  const random =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID().slice(0, 8)
+      : Math.random().toString(36).slice(2, 10);
   return `${prefix}-${random}`;
 }
 
-function parseEquipmentKits(raw: string | null, fallback: ClubEquipmentKit[] = DEFAULT_EQUIPMENT_KITS): ClubEquipmentKit[] {
+function parseEquipmentKits(
+  raw: string | null,
+  fallback: ClubEquipmentKit[] = DEFAULT_EQUIPMENT_KITS,
+): ClubEquipmentKit[] {
   if (!raw) return fallback;
   try {
     const parsed = JSON.parse(raw);
@@ -256,18 +296,35 @@ function parseEquipmentKits(raw: string | null, fallback: ClubEquipmentKit[] = D
       .map((kit) => ({
         id: String(kit.id),
         name: String(kit.name),
-        holderId: typeof kit.holderId === "string" && kit.holderId.trim() ? normalizeEquipmentHolderId(String(kit.holderId)) : "storage",
-        color: typeof kit.color === "string" && kit.color.trim() ? kit.color : DEFAULT_EQUIPMENT_COLOR,
+        holderId:
+          typeof kit.holderId === "string" && kit.holderId.trim()
+            ? normalizeEquipmentHolderId(String(kit.holderId))
+            : "storage",
+        color:
+          typeof kit.color === "string" && kit.color.trim()
+            ? kit.color
+            : DEFAULT_EQUIPMENT_COLOR,
         contents: Array.isArray(kit.contents)
-          ? kit.contents.map((item) => String(item).trim()).filter(Boolean).slice(0, 20)
+          ? kit.contents
+              .map((item) => String(item).trim())
+              .filter(Boolean)
+              .slice(0, 20)
           : [],
         note: kit.note ? String(kit.note) : undefined,
         createdAt: Number(kit.createdAt) || undefined,
-        createdByEmail: kit.createdByEmail ? String(kit.createdByEmail) : undefined,
-        createdByName: kit.createdByName ? String(kit.createdByName) : undefined,
+        createdByEmail: kit.createdByEmail
+          ? String(kit.createdByEmail)
+          : undefined,
+        createdByName: kit.createdByName
+          ? String(kit.createdByName)
+          : undefined,
         updatedAt: Number(kit.updatedAt) || Date.now(),
-        updatedByEmail: kit.updatedByEmail ? String(kit.updatedByEmail) : undefined,
-        updatedByName: kit.updatedByName ? String(kit.updatedByName) : undefined,
+        updatedByEmail: kit.updatedByEmail
+          ? String(kit.updatedByEmail)
+          : undefined,
+        updatedByName: kit.updatedByName
+          ? String(kit.updatedByName)
+          : undefined,
       }));
   } catch {
     return fallback;
@@ -281,7 +338,10 @@ function equipmentCacheKey(scopeId: string) {
 function readCachedEquipmentKits(scopeId: string) {
   if (typeof window === "undefined") return [];
   try {
-    return parseEquipmentKits(window.localStorage.getItem(equipmentCacheKey(scopeId)), []);
+    return parseEquipmentKits(
+      window.localStorage.getItem(equipmentCacheKey(scopeId)),
+      [],
+    );
   } catch {
     return [];
   }
@@ -290,14 +350,22 @@ function readCachedEquipmentKits(scopeId: string) {
 function writeCachedEquipmentKits(scopeId: string, kits: ClubEquipmentKit[]) {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(equipmentCacheKey(scopeId), JSON.stringify(kits));
+    window.localStorage.setItem(
+      equipmentCacheKey(scopeId),
+      JSON.stringify(kits),
+    );
   } catch {
     // Best-effort cache only. Realtime Firestore remains the source of truth.
   }
 }
 
-
-function DuffleBagIcon({ color, className = "h-9 w-12" }: { color: string; className?: string }) {
+function DuffleBagIcon({
+  color,
+  className = "h-9 w-12",
+}: {
+  color: string;
+  className?: string;
+}) {
   return (
     <svg viewBox="0 0 64 48" className={className} aria-hidden="true">
       <path
@@ -309,29 +377,64 @@ function DuffleBagIcon({ color, className = "h-9 w-12" }: { color: string; class
       />
       <rect x="7" y="16" width="50" height="27" rx="9" fill={color} />
       <path d="M7 28h50" stroke="rgba(255,255,255,0.42)" strokeWidth="3" />
-      <path d="M19 16v27M45 16v27" stroke="rgba(16,42,67,0.25)" strokeWidth="4" />
+      <path
+        d="M19 16v27M45 16v27"
+        stroke="rgba(16,42,67,0.25)"
+        strokeWidth="4"
+      />
       <circle cx="20" cy="32" r="2" fill="rgba(255,255,255,0.7)" />
       <circle cx="44" cy="32" r="2" fill="rgba(255,255,255,0.7)" />
     </svg>
   );
 }
 
-
 function AntiqueBallIcon({ className = "h-4 w-4" }: { className?: string }) {
   return (
     <svg viewBox="0 0 48 48" className={className} aria-hidden="true">
       <circle cx="24" cy="24" r="18" fill="currentColor" opacity="0.12" />
-      <circle cx="24" cy="24" r="17" fill="none" stroke="currentColor" strokeWidth="3" />
-      <path d="M24 7.5c-4.7 4-7 9.5-7 16.5s2.3 12.5 7 16.5" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" />
-      <path d="M24 7.5c4.7 4 7 9.5 7 16.5s-2.3 12.5-7 16.5" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" />
-      <path d="M10 19c4.2 1.8 8.9 2.7 14 2.7s9.8-.9 14-2.7" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
-      <path d="M10 29c4.2-1.8 8.9-2.7 14-2.7s9.8.9 14 2.7" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
+      <circle
+        cx="24"
+        cy="24"
+        r="17"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="3"
+      />
+      <path
+        d="M24 7.5c-4.7 4-7 9.5-7 16.5s2.3 12.5 7 16.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.6"
+        strokeLinecap="round"
+      />
+      <path
+        d="M24 7.5c4.7 4 7 9.5 7 16.5s-2.3 12.5-7 16.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.6"
+        strokeLinecap="round"
+      />
+      <path
+        d="M10 19c4.2 1.8 8.9 2.7 14 2.7s9.8-.9 14-2.7"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.4"
+        strokeLinecap="round"
+      />
+      <path
+        d="M10 29c4.2-1.8 8.9-2.7 14-2.7s9.8.9 14 2.7"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.4"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }
 
 function getClubGreetingName(user: SharedRosterUser | null) {
-  const raw = user?.displayName?.trim() || user?.email?.split("@")[0]?.trim() || "there";
+  const raw =
+    user?.displayName?.trim() || user?.email?.split("@")[0]?.trim() || "there";
   if (!raw) return "there";
   return raw
     .replace(/[._-]+/g, " ")
@@ -339,6 +442,17 @@ function getClubGreetingName(user: SharedRosterUser | null) {
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+const CLUB_NOTE_STYLES = [
+  { background: "#FFF4BD", transform: "rotate(-1.2deg)" },
+  { background: "#EFF7C8", transform: "rotate(0.8deg)" },
+  { background: "#F0E6FF", transform: "rotate(1.1deg)" },
+  { background: "#FFE4C7", transform: "rotate(-0.5deg)" },
+] as const;
+
+function clubNoteStyle(index: number) {
+  return CLUB_NOTE_STYLES[index % CLUB_NOTE_STYLES.length];
 }
 
 export function ClubTab({
@@ -359,7 +473,9 @@ export function ClubTab({
   pairingRules = [],
   onOpenPairingRules,
 }: ClubTabProps) {
-  const [clubRatingSummaries, setClubRatingSummaries] = useState<ClubRatingSummary[]>([]);
+  const [clubRatingSummaries, setClubRatingSummaries] = useState<
+    ClubRatingSummary[]
+  >([]);
   const [myClubRatings, setMyClubRatings] = useState<ClubMyRating[]>([]);
   const [clubRatingError, setClubRatingError] = useState("");
   const [clubRatingLoading, setClubRatingLoading] = useState(false);
@@ -376,18 +492,25 @@ export function ClubTab({
   const [clubNoteDraft, setClubNoteDraft] = useState("");
   const [clubNoteSaving, setClubNoteSaving] = useState(false);
   const [clubNotesOpen, setClubNotesOpen] = useState(false);
-  const [clubNoteDeletingId, setClubNoteDeletingId] = useState<string | null>(null);
+  const [clubNoteDeletingId, setClubNoteDeletingId] = useState<string | null>(
+    null,
+  );
   const [equipmentKits, setEquipmentKits] = useState<ClubEquipmentKit[]>(() => {
     if (typeof window === "undefined") return DEFAULT_EQUIPMENT_KITS;
-    return parseEquipmentKits(window.localStorage.getItem(EQUIPMENT_PREVIEW_STORAGE_KEY));
+    return parseEquipmentKits(
+      window.localStorage.getItem(EQUIPMENT_PREVIEW_STORAGE_KEY),
+    );
   });
   const [equipmentLoading, setEquipmentLoading] = useState(false);
   const [equipmentSaving, setEquipmentSaving] = useState(false);
   const [equipmentError, setEquipmentError] = useState("");
-  const [equipmentLastSyncedAt, setEquipmentLastSyncedAt] = useState<number | null>(null);
+  const [equipmentLastSyncedAt, setEquipmentLastSyncedAt] = useState<
+    number | null
+  >(null);
   const [equipmentBoardOpen, setEquipmentBoardOpen] = useState(false);
   const [equipmentDialogOpen, setEquipmentDialogOpen] = useState(false);
-  const [equipmentEditorReturnToBoard, setEquipmentEditorReturnToBoard] = useState(false);
+  const [equipmentEditorReturnToBoard, setEquipmentEditorReturnToBoard] =
+    useState(false);
   const [editingKitId, setEditingKitId] = useState<string | null>(null);
   const [kitName, setKitName] = useState("");
   const [kitHolderId, setKitHolderId] = useState("storage");
@@ -420,10 +543,14 @@ export function ClubTab({
   const [collaboratorsOpen, setCollaboratorsOpen] = useState(false);
   const [accountDialogOpen, setAccountDialogOpen] = useState(false);
 
-  useEffect(() => listenToSharedRosterUser((nextUser) => {
-    setClubUser(nextUser);
-    setAuthReady(true);
-  }), []);
+  useEffect(
+    () =>
+      listenToSharedRosterUser((nextUser) => {
+        setClubUser(nextUser);
+        setAuthReady(true);
+      }),
+    [],
+  );
 
   const handleClubLogout = async () => {
     if (accountBusy) return;
@@ -438,7 +565,9 @@ export function ClubTab({
   const equipmentRealtimeEnabled = Boolean(equipmentGroupId);
   const equipmentCanSyncOnline = Boolean(equipmentGroupId && clubUser?.email);
   const equipmentWaitingForAccount = Boolean(equipmentGroupId && !authReady);
-  const equipmentNeedsSignIn = Boolean(equipmentGroupId && authReady && !clubUser?.email);
+  const equipmentNeedsSignIn = Boolean(
+    equipmentGroupId && authReady && !clubUser?.email,
+  );
   const equipmentSharedConnecting = isSharedRoster && !equipmentRealtimeEnabled;
   const equipmentStatusText = equipmentCanSyncOnline
     ? equipmentError
@@ -477,14 +606,35 @@ export function ClubTab({
             ? "Connecting shared equipment…"
             : "Local preview · drag bags to move";
   const equipmentHolders = useMemo<EquipmentHolder[]>(() => {
-    if (!isSharedRoster && !equipmentRealtimeEnabled) return LOCAL_EQUIPMENT_HOLDERS;
-    return buildSharedEquipmentHolders(equipmentHolderLabels, equipmentKits, equipmentHolderNamesByEmail);
-  }, [equipmentHolderLabels, equipmentHolderNamesByEmail, equipmentKits, equipmentRealtimeEnabled, isSharedRoster]);
-  const cleanPairingRuleCount = pairingRules.filter((rule) => rule.playerAId && rule.playerBId).length;
+    if (!isSharedRoster && !equipmentRealtimeEnabled)
+      return LOCAL_EQUIPMENT_HOLDERS;
+    return buildSharedEquipmentHolders(
+      equipmentHolderLabels,
+      equipmentKits,
+      equipmentHolderNamesByEmail,
+    );
+  }, [
+    equipmentHolderLabels,
+    equipmentHolderNamesByEmail,
+    equipmentKits,
+    equipmentRealtimeEnabled,
+    isSharedRoster,
+  ]);
+  const cleanPairingRuleCount = pairingRules.filter(
+    (rule) => rule.playerAId && rule.playerBId,
+  ).length;
 
   useEffect(() => {
-    if (typeof window === "undefined" || equipmentRealtimeEnabled || isSharedRoster) return;
-    window.localStorage.setItem(EQUIPMENT_PREVIEW_STORAGE_KEY, JSON.stringify(equipmentKits));
+    if (
+      typeof window === "undefined" ||
+      equipmentRealtimeEnabled ||
+      isSharedRoster
+    )
+      return;
+    window.localStorage.setItem(
+      EQUIPMENT_PREVIEW_STORAGE_KEY,
+      JSON.stringify(equipmentKits),
+    );
   }, [equipmentKits, equipmentRealtimeEnabled, isSharedRoster]);
 
   useEffect(() => {
@@ -501,7 +651,11 @@ export function ClubTab({
       if (isSharedRoster) {
         setEquipmentKits([]);
       } else if (typeof window !== "undefined") {
-        setEquipmentKits(parseEquipmentKits(window.localStorage.getItem(EQUIPMENT_PREVIEW_STORAGE_KEY)));
+        setEquipmentKits(
+          parseEquipmentKits(
+            window.localStorage.getItem(EQUIPMENT_PREVIEW_STORAGE_KEY),
+          ),
+        );
       }
       return;
     }
@@ -538,18 +692,26 @@ export function ClubTab({
         },
         (error) => {
           setEquipmentLoading(false);
-          setEquipmentError(error.message || "Could not load shared equipment board.");
+          setEquipmentError(
+            error.message || "Could not load shared equipment board.",
+          );
         },
       );
 
       return () => unsubscribe();
     } catch (error) {
       setEquipmentLoading(false);
-      setEquipmentError(error instanceof Error ? error.message : "Could not connect equipment board.");
+      setEquipmentError(
+        error instanceof Error
+          ? error.message
+          : "Could not connect equipment board.",
+      );
     }
   }, [authReady, clubUser?.email, equipmentGroupId, isSharedRoster]);
 
-  const clubRatingsEnabled = Boolean(isSharedRoster && sharedRosterId && clubUser?.email);
+  const clubRatingsEnabled = Boolean(
+    isSharedRoster && sharedRosterId && clubUser?.email,
+  );
 
   useEffect(() => {
     if (!clubRatingsEnabled || !sharedRosterId) {
@@ -590,7 +752,11 @@ export function ClubTab({
         unsubscribeMine();
       };
     } catch (error) {
-      setClubRatingError(error instanceof Error ? error.message : "Could not connect Club ratings.");
+      setClubRatingError(
+        error instanceof Error
+          ? error.message
+          : "Could not connect Club ratings.",
+      );
       setClubRatingLoading(false);
       return;
     }
@@ -605,13 +771,15 @@ export function ClubTab({
 
     setClubNotesError("");
     try {
-      return listenToClubNotes(
-        sharedRosterId,
-        setClubNotes,
-        (error) => setClubNotesError(error.message || "Could not load Club notes."),
+      return listenToClubNotes(sharedRosterId, setClubNotes, (error) =>
+        setClubNotesError(error.message || "Could not load Club notes."),
       );
     } catch (error) {
-      setClubNotesError(error instanceof Error ? error.message : "Could not connect Club notes.");
+      setClubNotesError(
+        error instanceof Error
+          ? error.message
+          : "Could not connect Club notes.",
+      );
       return;
     }
   }, [clubRatingsEnabled, sharedRosterId]);
@@ -620,23 +788,59 @@ export function ClubTab({
     return new Map(myClubRatings.map((rating) => [rating.playerId, rating]));
   }, [myClubRatings]);
   const ratingSummaryByPlayerId = useMemo(() => {
-    return new Map(clubRatingSummaries.map((summary) => [summary.playerId, summary]));
+    return new Map(
+      clubRatingSummaries.map((summary) => [summary.playerId, summary]),
+    );
   }, [clubRatingSummaries]);
-  const ratedPlayers = useMemo(() => players.filter((player) => {
-    const rating = myRatingByPlayerId.get(player.id);
-    return Boolean(rating && !rating.skipped && typeof rating.skill === "number");
-  }), [myRatingByPlayerId, players]);
-  const skippedPlayers = useMemo(() => players.filter((player) => myRatingByPlayerId.get(player.id)?.skipped), [myRatingByPlayerId, players]);
-  const needRatingPlayers = useMemo(() => players.filter((player) => !myRatingByPlayerId.has(player.id)), [myRatingByPlayerId, players]);
-  const newNeedRatingPlayers = useMemo(() => needRatingPlayers.filter((player) => player.isNew), [needRatingPlayers]);
-  const regularNeedRatingPlayers = useMemo(() => needRatingPlayers.filter((player) => !player.isNew), [needRatingPlayers]);
-  const orderedNeedRatingPlayers = useMemo(() => [...newNeedRatingPlayers, ...regularNeedRatingPlayers], [newNeedRatingPlayers, regularNeedRatingPlayers]);
-  const ratingDialogPlayer = useMemo(() => players.find((player) => player.id === ratingPlayerId) || null, [players, ratingPlayerId]);
-  const legacySkillSeedPlayers = useMemo(() => needRatingPlayers.filter((player) => {
-    const skill = Number(player.skill);
-    return Number.isFinite(skill) && skill >= 1 && skill <= 10;
-  }), [needRatingPlayers]);
-  const nextRatingPlayer = orderedNeedRatingPlayers[0] || skippedPlayers[0] || ratedPlayers[0] || players[0] || null;
+  const ratedPlayers = useMemo(
+    () =>
+      players.filter((player) => {
+        const rating = myRatingByPlayerId.get(player.id);
+        return Boolean(
+          rating && !rating.skipped && typeof rating.skill === "number",
+        );
+      }),
+    [myRatingByPlayerId, players],
+  );
+  const skippedPlayers = useMemo(
+    () =>
+      players.filter((player) => myRatingByPlayerId.get(player.id)?.skipped),
+    [myRatingByPlayerId, players],
+  );
+  const needRatingPlayers = useMemo(
+    () => players.filter((player) => !myRatingByPlayerId.has(player.id)),
+    [myRatingByPlayerId, players],
+  );
+  const newNeedRatingPlayers = useMemo(
+    () => needRatingPlayers.filter((player) => player.isNew),
+    [needRatingPlayers],
+  );
+  const regularNeedRatingPlayers = useMemo(
+    () => needRatingPlayers.filter((player) => !player.isNew),
+    [needRatingPlayers],
+  );
+  const orderedNeedRatingPlayers = useMemo(
+    () => [...newNeedRatingPlayers, ...regularNeedRatingPlayers],
+    [newNeedRatingPlayers, regularNeedRatingPlayers],
+  );
+  const ratingDialogPlayer = useMemo(
+    () => players.find((player) => player.id === ratingPlayerId) || null,
+    [players, ratingPlayerId],
+  );
+  const legacySkillSeedPlayers = useMemo(
+    () =>
+      needRatingPlayers.filter((player) => {
+        const skill = Number(player.skill);
+        return Number.isFinite(skill) && skill >= 1 && skill <= 10;
+      }),
+    [needRatingPlayers],
+  );
+  const nextRatingPlayer =
+    orderedNeedRatingPlayers[0] ||
+    skippedPlayers[0] ||
+    ratedPlayers[0] ||
+    players[0] ||
+    null;
   const clubRatedCount = ratedPlayers.length;
   const clubSkippedCount = skippedPlayers.length;
   const clubNeedRatingCount = needRatingPlayers.length;
@@ -647,8 +851,10 @@ export function ClubTab({
       : "Available when this roster is shared.";
   const previewClubNotes = clubNotes.slice(0, 3);
   const currentUserUid = getFairTeamsAuth().currentUser?.uid || "";
-  const canAddClubNote = clubRatingsEnabled && clubNoteDraft.trim().length > 0 && !clubNoteSaving;
-  const canRemoveClubNote = (note: ClubNote) => Boolean(currentUserUid && note.createdByUid === currentUserUid);
+  const canAddClubNote =
+    clubRatingsEnabled && clubNoteDraft.trim().length > 0 && !clubNoteSaving;
+  const canRemoveClubNote = (note: ClubNote) =>
+    Boolean(currentUserUid && note.createdByUid === currentUserUid);
 
   const openRatingForPlayer = (player: RoomPlayer | null) => {
     if (!player) return;
@@ -661,15 +867,24 @@ export function ClubTab({
   };
 
   const findNextRatingPlayerAfter = (currentPlayerId: string | null) => {
-    const nextUnrated = orderedNeedRatingPlayers.find((player) => player.id !== currentPlayerId);
+    const nextUnrated = orderedNeedRatingPlayers.find(
+      (player) => player.id !== currentPlayerId,
+    );
     if (nextUnrated) return nextUnrated;
-    const nextSkipped = skippedPlayers.find((player) => player.id !== currentPlayerId);
+    const nextSkipped = skippedPlayers.find(
+      (player) => player.id !== currentPlayerId,
+    );
     if (nextSkipped) return nextSkipped;
     return null;
   };
 
   const seedClubRatingsFromRosterSkills = async () => {
-    if (!sharedRosterId || ratingSeedSaving || legacySkillSeedPlayers.length === 0) return;
+    if (
+      !sharedRosterId ||
+      ratingSeedSaving ||
+      legacySkillSeedPlayers.length === 0
+    )
+      return;
     setRatingSeedSaving(true);
     setClubRatingError("");
     setRatingSeedMessage("");
@@ -679,9 +894,14 @@ export function ClubTab({
         await saveMyClubPlayerRating(sharedRosterId, player.id, player.skill);
         savedCount += 1;
       }
-      setRatingSeedMessage(`Imported ${savedCount} current roster rating${savedCount === 1 ? "" : "s"} as your Club ratings.`);
+      setRatingSeedMessage(
+        `Imported ${savedCount} current roster rating${savedCount === 1 ? "" : "s"} as your Club ratings.`,
+      );
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Could not import current roster ratings.";
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Could not import current roster ratings.";
       setRatingSeedMessage("");
       setClubRatingError(message);
     } finally {
@@ -700,14 +920,19 @@ export function ClubTab({
       const nextPlayer = findNextRatingPlayerAfter(savedPlayerId);
       if (nextPlayer) {
         openRatingForPlayer(nextPlayer);
-        setRatingFlowNotice(`${savedPlayerName} saved. Next up: ${nextPlayer.name}.`);
+        setRatingFlowNotice(
+          `${savedPlayerName} saved. Next up: ${nextPlayer.name}.`,
+        );
       } else {
         setRatingPlayerId(null);
         setRatingBoardOpen(true);
-        setRatingFlowNotice(`${savedPlayerName} saved. You are caught up for now.`);
+        setRatingFlowNotice(
+          `${savedPlayerName} saved. You are caught up for now.`,
+        );
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Could not save your rating.";
+      const message =
+        error instanceof Error ? error.message : "Could not save your rating.";
       setRatingDialogError(message);
       setClubRatingError(message);
     } finally {
@@ -726,14 +951,19 @@ export function ClubTab({
       const nextPlayer = findNextRatingPlayerAfter(skippedPlayerId);
       if (nextPlayer) {
         openRatingForPlayer(nextPlayer);
-        setRatingFlowNotice(`${skippedPlayerName} skipped for later. Next up: ${nextPlayer.name}.`);
+        setRatingFlowNotice(
+          `${skippedPlayerName} skipped for later. Next up: ${nextPlayer.name}.`,
+        );
       } else {
         setRatingPlayerId(null);
         setRatingBoardOpen(true);
-        setRatingFlowNotice(`${skippedPlayerName} skipped for later. You are caught up for now.`);
+        setRatingFlowNotice(
+          `${skippedPlayerName} skipped for later. You are caught up for now.`,
+        );
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Could not skip this player.";
+      const message =
+        error instanceof Error ? error.message : "Could not skip this player.";
       setRatingDialogError(message);
       setClubRatingError(message);
     } finally {
@@ -749,49 +979,89 @@ export function ClubTab({
       await addClubNote(sharedRosterId, clubNoteDraft);
       setClubNoteDraft("");
     } catch (error) {
-      setClubNotesError(error instanceof Error ? error.message : "Could not add Club note.");
+      setClubNotesError(
+        error instanceof Error ? error.message : "Could not add Club note.",
+      );
     } finally {
       setClubNoteSaving(false);
     }
   };
 
   const removeOwnClubNote = async (note: ClubNote) => {
-    if (!sharedRosterId || !canRemoveClubNote(note) || clubNoteDeletingId) return;
-    const confirmed = window.confirm("Remove this Club note? This only deletes your own note.");
+    if (!sharedRosterId || !canRemoveClubNote(note) || clubNoteDeletingId)
+      return;
+    const confirmed = window.confirm(
+      "Remove this Club note? This only deletes your own note.",
+    );
     if (!confirmed) return;
     setClubNoteDeletingId(note.id);
     setClubNotesError("");
     try {
       await deleteOwnClubNote(sharedRosterId, note.id);
     } catch (error) {
-      setClubNotesError(error instanceof Error ? error.message : "Could not remove Club note.");
+      setClubNotesError(
+        error instanceof Error ? error.message : "Could not remove Club note.",
+      );
     } finally {
       setClubNoteDeletingId(null);
     }
   };
 
-  const contentPeekKit = useMemo(() => equipmentKits.find((kit) => kit.id === contentPeekKitId) || null, [contentPeekKitId, equipmentKits]);
-  const editingKitMeta = useMemo(() => editingKitId ? equipmentKits.find((kit) => kit.id === editingKitId) || null : null, [editingKitId, equipmentKits]);
+  const contentPeekKit = useMemo(
+    () => equipmentKits.find((kit) => kit.id === contentPeekKitId) || null,
+    [contentPeekKitId, equipmentKits],
+  );
+  const editingKitMeta = useMemo(
+    () =>
+      editingKitId
+        ? equipmentKits.find((kit) => kit.id === editingKitId) || null
+        : null,
+    [editingKitId, equipmentKits],
+  );
   const sharedPersonNames = useMemo(() => {
     const cleaned = equipmentHolderLabels
-      .map((label) => cleanEquipmentHolderLabel(label, equipmentHolderNamesByEmail))
-      .map((label) => label === "You" ? "Me" : label)
+      .map((label) =>
+        cleanEquipmentHolderLabel(label, equipmentHolderNamesByEmail),
+      )
+      .map((label) => (label === "You" ? "Me" : label))
       .filter(Boolean);
-    const unique = cleaned.filter((label, index, all) => all.indexOf(label) === index);
+    const unique = cleaned.filter(
+      (label, index, all) => all.indexOf(label) === index,
+    );
     if (unique.length) return unique;
     if (!isSharedRoster) return [];
-    return ["Me", ...Array.from({ length: Math.max(0, sharedPeopleCount - 1) }, (_, index) => `Person ${index + 2}`)];
-  }, [equipmentHolderLabels, equipmentHolderNamesByEmail, isSharedRoster, sharedPeopleCount]);
+    return [
+      "Me",
+      ...Array.from(
+        { length: Math.max(0, sharedPeopleCount - 1) },
+        (_, index) => `Person ${index + 2}`,
+      ),
+    ];
+  }, [
+    equipmentHolderLabels,
+    equipmentHolderNamesByEmail,
+    isSharedRoster,
+    sharedPeopleCount,
+  ]);
   const equipmentHolderLabelById = useMemo(() => {
     return equipmentHolders.reduce<Record<string, string>>((labels, holder) => {
       labels[holder.id] = holder.label;
       return labels;
     }, {});
   }, [equipmentHolders]);
-  const equipmentPreviewKits = useMemo(() => equipmentKits.slice(0, 3), [equipmentKits]);
+  const equipmentPreviewKits = useMemo(
+    () => equipmentKits.slice(0, 3),
+    [equipmentKits],
+  );
   const equipmentDashboardHolders = useMemo(() => {
-    const holdersWithBags = equipmentHolders.filter((holder) => equipmentKits.some((kit) => normalizeEquipmentHolderId(kit.holderId) === holder.id));
-    const holdersToShow = holdersWithBags.length ? holdersWithBags : equipmentHolders.slice(0, Math.min(3, equipmentHolders.length));
+    const holdersWithBags = equipmentHolders.filter((holder) =>
+      equipmentKits.some(
+        (kit) => normalizeEquipmentHolderId(kit.holderId) === holder.id,
+      ),
+    );
+    const holdersToShow = holdersWithBags.length
+      ? holdersWithBags
+      : equipmentHolders.slice(0, Math.min(3, equipmentHolders.length));
     return holdersToShow.slice(0, 4);
   }, [equipmentHolders, equipmentKits]);
   const clubGreetingName = getClubGreetingName(clubUser);
@@ -865,7 +1135,9 @@ export function ClubTab({
     if (!trimmedName) return;
 
     const now = Date.now();
-    const existingKit = editingKitId ? equipmentKits.find((kit) => kit.id === editingKitId) : null;
+    const existingKit = editingKitId
+      ? equipmentKits.find((kit) => kit.id === editingKitId)
+      : null;
     let actorEmail = clubUser?.email || undefined;
     let actorName = actorEmail || "Organizer";
     try {
@@ -887,8 +1159,10 @@ export function ClubTab({
         .slice(0, 20),
       note: kitNote.trim() || undefined,
       createdAt: existingKit?.createdAt || (!editingKitId ? now : undefined),
-      createdByEmail: existingKit?.createdByEmail || (!editingKitId ? actorEmail : undefined),
-      createdByName: existingKit?.createdByName || (!editingKitId ? actorName : undefined),
+      createdByEmail:
+        existingKit?.createdByEmail || (!editingKitId ? actorEmail : undefined),
+      createdByName:
+        existingKit?.createdByName || (!editingKitId ? actorName : undefined),
       updatedAt: now,
       updatedByEmail: actorEmail,
       updatedByName: actorName,
@@ -896,7 +1170,7 @@ export function ClubTab({
 
     const previousKits = equipmentKits;
     const nextKits = editingKitId
-      ? previousKits.map((kit) => kit.id === editingKitId ? nextKit : kit)
+      ? previousKits.map((kit) => (kit.id === editingKitId ? nextKit : kit))
       : [nextKit, ...previousKits];
 
     try {
@@ -910,8 +1184,13 @@ export function ClubTab({
       closeEquipmentEditor(true);
     } catch (error) {
       setEquipmentKits(previousKits);
-      if (equipmentGroupId) writeCachedEquipmentKits(equipmentGroupId, previousKits);
-      setEquipmentError(error instanceof Error ? error.message : "Could not save equipment bag.");
+      if (equipmentGroupId)
+        writeCachedEquipmentKits(equipmentGroupId, previousKits);
+      setEquipmentError(
+        error instanceof Error
+          ? error.message
+          : "Could not save equipment bag.",
+      );
     } finally {
       setEquipmentSaving(false);
     }
@@ -938,8 +1217,12 @@ export function ClubTab({
       updatedByName: actorName,
     };
     const previousKits = equipmentKits;
-    const nextKits = previousKits.map((kit) => kit.id === kitId ? nextKit : kit);
-    const nextHolderLabel = equipmentHolderLabelById[normalizeEquipmentHolderId(holderId)] || "new holder";
+    const nextKits = previousKits.map((kit) =>
+      kit.id === kitId ? nextKit : kit,
+    );
+    const nextHolderLabel =
+      equipmentHolderLabelById[normalizeEquipmentHolderId(holderId)] ||
+      "new holder";
     setEquipmentKits(nextKits);
     setEquipmentMoveNotice(`${currentKit.name} moved → ${nextHolderLabel}`);
     if (equipmentGroupId) writeCachedEquipmentKits(equipmentGroupId, nextKits);
@@ -950,8 +1233,13 @@ export function ClubTab({
       }
     } catch (error) {
       setEquipmentKits(previousKits);
-      if (equipmentGroupId) writeCachedEquipmentKits(equipmentGroupId, previousKits);
-      setEquipmentError(error instanceof Error ? error.message : "Could not move equipment bag.");
+      if (equipmentGroupId)
+        writeCachedEquipmentKits(equipmentGroupId, previousKits);
+      setEquipmentError(
+        error instanceof Error
+          ? error.message
+          : "Could not move equipment bag.",
+      );
     }
   };
 
@@ -962,17 +1250,24 @@ export function ClubTab({
     }
   };
 
-  const startEquipmentPointerDrag = (event: React.PointerEvent<HTMLElement>, kit: ClubEquipmentKit) => {
+  const startEquipmentPointerDrag = (
+    event: React.PointerEvent<HTMLElement>,
+    kit: ClubEquipmentKit,
+  ) => {
     if (event.pointerType === "mouse" && event.button !== 0) return;
     event.currentTarget.setPointerCapture?.(event.pointerId);
     clearEquipmentDragTimer();
     activeEquipmentDragRef.current = null;
-    activeEquipmentDropHolderRef.current = normalizeEquipmentHolderId(kit.holderId);
+    activeEquipmentDropHolderRef.current = normalizeEquipmentHolderId(
+      kit.holderId,
+    );
     suppressEquipmentClickRef.current = false;
 
     equipmentDragTimerRef.current = window.setTimeout(() => {
       activeEquipmentDragRef.current = kit.id;
-      activeEquipmentDropHolderRef.current = normalizeEquipmentHolderId(kit.holderId);
+      activeEquipmentDropHolderRef.current = normalizeEquipmentHolderId(
+        kit.holderId,
+      );
       suppressEquipmentClickRef.current = true;
       setDraggingKitId(kit.id);
       setDragOverHolderId(normalizeEquipmentHolderId(kit.holderId));
@@ -982,8 +1277,13 @@ export function ClubTab({
   const moveEquipmentPointerDrag = (event: React.PointerEvent<HTMLElement>) => {
     if (!activeEquipmentDragRef.current) return;
     event.preventDefault();
-    const target = document.elementFromPoint(event.clientX, event.clientY) as HTMLElement | null;
-    const holderElement = target?.closest("[data-equipment-holder-id]") as HTMLElement | null;
+    const target = document.elementFromPoint(
+      event.clientX,
+      event.clientY,
+    ) as HTMLElement | null;
+    const holderElement = target?.closest(
+      "[data-equipment-holder-id]",
+    ) as HTMLElement | null;
     const nextHolderId = holderElement?.dataset.equipmentHolderId || null;
     if (nextHolderId && nextHolderId !== activeEquipmentDropHolderRef.current) {
       activeEquipmentDropHolderRef.current = nextHolderId;
@@ -991,7 +1291,9 @@ export function ClubTab({
     }
   };
 
-  const finishEquipmentPointerDrag = (event?: React.PointerEvent<HTMLElement>) => {
+  const finishEquipmentPointerDrag = (
+    event?: React.PointerEvent<HTMLElement>,
+  ) => {
     clearEquipmentDragTimer();
     const kitId = activeEquipmentDragRef.current;
     const holderId = activeEquipmentDropHolderRef.current;
@@ -1031,8 +1333,13 @@ export function ClubTab({
       }
     } catch (error) {
       setEquipmentKits(previous);
-      if (equipmentGroupId) writeCachedEquipmentKits(equipmentGroupId, previous);
-      setEquipmentError(error instanceof Error ? error.message : "Could not delete equipment bag.");
+      if (equipmentGroupId)
+        writeCachedEquipmentKits(equipmentGroupId, previous);
+      setEquipmentError(
+        error instanceof Error
+          ? error.message
+          : "Could not delete equipment bag.",
+      );
     } finally {
       setEquipmentSaving(false);
     }
@@ -1042,12 +1349,6 @@ export function ClubTab({
     if (typeof document === "undefined") return;
     const activeElement = document.activeElement;
     if (activeElement instanceof HTMLElement) activeElement.blur();
-  };
-
-  const blurFieldOnDoneKey = (event: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    if (event.key !== "Enter" || event.shiftKey) return;
-    event.preventDefault();
-    event.currentTarget.blur();
   };
 
   const hasClubBackTarget = Boolean(
@@ -1070,7 +1371,15 @@ export function ClubTab({
       ratingBoardOpen,
       accountDialogOpen,
     };
-  }, [accountDialogOpen, colorPickerOpen, contentPeekKitId, equipmentBoardOpen, equipmentDialogOpen, ratingPlayerId, ratingBoardOpen]);
+  }, [
+    accountDialogOpen,
+    colorPickerOpen,
+    contentPeekKitId,
+    equipmentBoardOpen,
+    equipmentDialogOpen,
+    ratingPlayerId,
+    ratingBoardOpen,
+  ]);
 
   useEffect(() => {
     onBackTargetChange?.(hasClubBackTarget);
@@ -1124,20 +1433,26 @@ export function ClubTab({
     };
 
     window.addEventListener("fairteams:native-back", handleNativeBack);
-    return () => window.removeEventListener("fairteams:native-back", handleNativeBack);
+    return () =>
+      window.removeEventListener("fairteams:native-back", handleNativeBack);
   }, [equipmentEditorReturnToBoard]);
 
   const canSaveEquipmentKit = kitName.trim().length > 0;
 
   return (
-    <div className="mx-auto flex w-full max-w-xl flex-col gap-2.5 px-1 pb-2">
-      <Dialog open={accountModalOpen} onOpenChange={(open) => {
-        if (!clubUser) return;
-        setAccountDialogOpen(open);
-      }}>
+    <div className="mx-auto flex w-full max-w-xl flex-col gap-3 px-1 pb-2">
+      <Dialog
+        open={accountModalOpen}
+        onOpenChange={(open) => {
+          if (!clubUser) return;
+          setAccountDialogOpen(open);
+        }}
+      >
         <DialogContent className="max-w-sm rounded-3xl p-3">
           <DialogHeader className="px-1 pb-1 text-left">
-            <DialogTitle className="text-base font-black text-[#102A43]">Fair Teams account</DialogTitle>
+            <DialogTitle className="text-base font-black text-[#102A43]">
+              Fair Teams account
+            </DialogTitle>
           </DialogHeader>
           <FirebaseSharedRosterAuthCard />
         </DialogContent>
@@ -1153,8 +1468,14 @@ export function ClubTab({
           >
             <UserCircle className="h-4 w-4 shrink-0 text-slate-400" />
             <span className="min-w-0">
-              <span className="block truncate text-xs font-black text-[#102A43]">Hey, {clubGreetingName}</span>
-              <span className="block truncate text-[10px] font-bold text-slate-400">{equipmentCanSyncOnline ? "Online · live Club tools" : clubUser.email}</span>
+              <span className="block truncate text-xs font-black text-[#102A43]">
+                Hey, {clubGreetingName}
+              </span>
+              <span className="block truncate text-[10px] font-bold text-slate-400">
+                {equipmentCanSyncOnline
+                  ? "Online · live Club tools"
+                  : clubUser.email}
+              </span>
             </span>
           </button>
           <button
@@ -1168,253 +1489,48 @@ export function ClubTab({
         </div>
       )}
 
-      <section className="rounded-[1.7rem] border border-slate-100 bg-white p-3 shadow-sm ring-1 ring-slate-50">
-        <div className="mb-2 flex items-start justify-between gap-2">
+      <section className="overflow-hidden rounded-[1.7rem] border border-amber-100 bg-[#fffaf0] p-3 shadow-sm ring-1 ring-amber-50">
+        <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wide text-slate-500">
-              <span className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.14)]" />
-              Shared roster
-            </div>
-            <div className="mt-0.5 truncate text-[11px] font-semibold text-slate-400">
-              Invite organizers and keep {activeRosterName} live online.
-            </div>
-          </div>
-          {!isSharedRoster && (
-            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-black text-slate-500">Local</span>
-          )}
-        </div>
-        <div className="mb-2 flex items-center justify-between gap-2 rounded-2xl border border-slate-100 bg-slate-50/70 px-3 py-2">
-          <div className="min-w-0">
-            <div className="text-xs font-black text-[#102A43]">Pairing rules</div>
-            <div className="truncate text-[11px] font-semibold text-slate-500">
-              {cleanPairingRuleCount} keep-together/separate rule{cleanPairingRuleCount === 1 ? "" : "s"}
-            </div>
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            className="h-8 shrink-0 rounded-xl border-slate-200 bg-white px-3 text-[11px] font-black"
-            disabled={!onOpenPairingRules || playerCount < 2}
-            onClick={onOpenPairingRules}
-          >
-            Open
-          </Button>
-        </div>
-        {sharedToolsNode}
-      </section>
-
-      <section className="rounded-[1.7rem] border border-slate-100 bg-white p-3 shadow-sm ring-1 ring-slate-50">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wide text-blue-600">
-              <AntiqueBallIcon className="h-4 w-4" />
-              Equipment
-            </div>
-            <div className="mt-0.5 text-[11px] font-semibold text-slate-400">See who has what and move bags quickly.</div>
-            <div className="mt-1 flex items-center gap-1.5 text-[10px] font-black text-slate-400">
-              <span className={`h-1.5 w-1.5 rounded-full ${equipmentCanSyncOnline && !equipmentError ? "bg-emerald-500" : equipmentWaitingForAccount || equipmentSharedConnecting ? "bg-amber-400" : "bg-slate-300"}`} />
-              {equipmentStatusText}
-            </div>
-          </div>
-          <Button
-            type="button"
-            className="h-10 shrink-0 rounded-2xl bg-[#102A43] px-4 text-xs font-black text-white hover:bg-[#0b2036]"
-            onClick={() => setEquipmentBoardOpen(true)}
-          >
-            Open
-          </Button>
-        </div>
-
-        {equipmentKits.length > 0 ? (
-          <div className="mt-3 overflow-hidden rounded-[1.35rem] border border-slate-100 bg-slate-50/60">
-            {equipmentDashboardHolders.map((holder, index) => {
-              const holderKits = equipmentKits.filter((kit) => normalizeEquipmentHolderId(kit.holderId) === holder.id);
-              const highlighted = dragOverHolderId === holder.id;
-              return (
-                <div
-                  key={`dashboard-${holder.id}`}
-                  data-equipment-holder-id={holder.id}
-                  className={`grid grid-cols-[4.8rem_minmax(0,1fr)] items-center gap-2 px-2.5 py-2 transition ${index === 0 ? "" : "border-t border-slate-100"} ${highlighted ? "bg-emerald-50 ring-2 ring-inset ring-emerald-100" : ""}`}
-                >
-                  <div className="truncate text-[11px] font-black text-[#102A43]">{holder.label}</div>
-                  <div className="flex min-w-0 flex-wrap justify-end gap-1.5">
-                    {holderKits.length ? holderKits.map((kit) => {
-                      const isDragging = draggingKitId === kit.id;
-                      return (
-                        <button
-                          key={`dashboard-kit-${kit.id}`}
-                          type="button"
-                          className={`touch-none select-none rounded-2xl border border-slate-200 bg-white px-2 py-1 text-left shadow-sm transition active:scale-[0.98] ${isDragging ? "scale-95 opacity-45 ring-2 ring-emerald-200" : ""}`}
-                          onPointerDown={(event) => startEquipmentPointerDrag(event, kit)}
-                          onPointerMove={moveEquipmentPointerDrag}
-                          onPointerUp={finishEquipmentPointerDrag}
-                          onPointerCancel={finishEquipmentPointerDrag}
-                          onClick={() => openEquipmentKitFromBoard(kit)}
-                          aria-label={`Edit ${kit.name}`}
-                        >
-                          <span className="flex max-w-[7.4rem] items-center gap-1.5">
-                            <DuffleBagIcon color={kit.color || DEFAULT_EQUIPMENT_COLOR} className="h-6 w-8 shrink-0" />
-                            <span className="min-w-0 truncate text-[11px] font-black text-[#102A43]">{kit.name}</span>
-                          </span>
-                        </button>
-                      );
-                    }) : (
-                      <span className="rounded-full border border-dashed border-slate-200 bg-white/70 px-2 py-1 text-[10px] font-bold text-slate-400">No bag</span>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-            {equipmentKits.length > equipmentPreviewKits.length && (
-              <div className="border-t border-slate-100 px-2.5 py-1.5 text-[10px] font-bold text-slate-400">
-                Open board to see all {equipmentKits.length} bags.
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="mt-3 rounded-2xl bg-slate-50 px-3 py-2 text-sm font-black text-[#102A43]">No bags yet</div>
-        )}
-      </section>
-
-      <section className="rounded-[1.7rem] border border-slate-100 bg-white p-3 shadow-sm ring-1 ring-slate-50">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wide text-violet-600">
-              <Star className="h-4 w-4" />
-              Organizer ratings
-            </div>
-            <div className="mt-0.5 text-[11px] font-semibold text-slate-400">Your rating helps build the Club average for shared teams.</div>
-            <div className="mt-1 text-sm font-black text-[#102A43]">{clubRatingProgressText}</div>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              className="h-10 rounded-2xl border-violet-100 bg-white px-3 text-xs font-black text-violet-700 hover:bg-violet-50"
-              disabled={!clubRatingsEnabled || players.length === 0}
-              onClick={() => setRatingBoardOpen(true)}
-            >
-              Review
-            </Button>
-            <Button
-              type="button"
-              className="h-10 rounded-2xl bg-[#102A43] px-4 text-xs font-black text-white hover:bg-[#0b2036]"
-              disabled={!clubRatingsEnabled || players.length === 0}
-              onClick={() => openRatingForPlayer(nextRatingPlayer)}
-            >
-              {clubRatedCount > 0 ? "Continue" : "Start"}
-            </Button>
-          </div>
-        </div>
-
-        {isSharedRoster && legacySkillSeedPlayers.length > 0 && (
-          <div className="mt-3 rounded-2xl border border-violet-100 bg-violet-50/80 px-3 py-2">
-            <div className="text-[11px] font-bold leading-snug text-violet-900">
-              Older shared roster? Use the current roster skill numbers as your first Club ratings.
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              className="mt-2 h-9 w-full rounded-xl border-violet-200 bg-white text-[11px] font-black text-violet-700 hover:bg-violet-50"
-              disabled={!clubRatingsEnabled || ratingSeedSaving}
-              onClick={seedClubRatingsFromRosterSkills}
-            >
-              {ratingSeedSaving ? "Importing…" : `Use current ratings for ${legacySkillSeedPlayers.length} player${legacySkillSeedPlayers.length === 1 ? "" : "s"}`}
-            </Button>
-          </div>
-        )}
-
-        {ratingSeedMessage && (
-          <div className="mt-3 rounded-2xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-[11px] font-bold leading-snug text-emerald-800">
-            {ratingSeedMessage}
-          </div>
-        )}
-
-        {clubRatingError && (
-          <div className="mt-3 rounded-2xl border border-amber-100 bg-amber-50 px-3 py-2 text-[11px] font-bold leading-snug text-amber-800">
-            {clubRatingError}
-          </div>
-        )}
-
-        {isSharedRoster && (
-          <div className="mt-3 grid gap-2">
-            {clubNeedRatingCount > 0 && (
-              <button
-                type="button"
-                className="flex items-center justify-between rounded-2xl border border-violet-100 bg-violet-50 px-3 py-2 text-left active:scale-[0.99]"
-                disabled={!clubRatingsEnabled}
-                onClick={() => openRatingForPlayer(orderedNeedRatingPlayers[0] || null)}
-              >
-                <span className="min-w-0">
-                  <span className="block text-xs font-black text-[#102A43]">Needs your rating</span>
-                  <span className="block truncate text-[11px] font-semibold text-violet-700">{orderedNeedRatingPlayers.slice(0, 3).map((player) => player.name).join(", ")}</span>
-                  {newNeedRatingPlayers.length > 0 && (
-                    <span className="mt-1 block text-[10px] font-black text-violet-600">{newNeedRatingPlayers.length} new player{newNeedRatingPlayers.length === 1 ? "" : "s"} near the top</span>
-                  )}
-                </span>
-                <span className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-violet-700">{clubNeedRatingCount}</span>
-              </button>
-            )}
-            {clubSkippedCount > 0 && (
-              <button
-                type="button"
-                className="flex items-center justify-between rounded-2xl border border-amber-100 bg-amber-50 px-3 py-2 text-left active:scale-[0.99]"
-                disabled={!clubRatingsEnabled}
-                onClick={() => openRatingForPlayer(skippedPlayers[0] || null)}
-              >
-                <span className="min-w-0">
-                  <span className="block text-xs font-black text-[#102A43]">Skipped for later</span>
-                  <span className="block truncate text-[11px] font-semibold text-amber-700">{skippedPlayers.slice(0, 3).map((player) => player.name).join(", ")}</span>
-                </span>
-                <span className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-amber-700">{clubSkippedCount}</span>
-              </button>
-            )}
-            {clubRatedCount > 0 && (
-              <div className="rounded-2xl bg-slate-50 px-3 py-2 text-[11px] font-semibold text-slate-500">
-                {clubRatingLoading ? "Syncing ratings…" : `Club averages are ready for ${clubRatedCount} player${clubRatedCount === 1 ? "" : "s"}.`}
-              </div>
-            )}
-          </div>
-        )}
-      </section>
-
-      <section className="rounded-[1.7rem] border border-slate-100 bg-white p-3 shadow-sm ring-1 ring-slate-50">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wide text-amber-600">
-              <StickyNote className="h-4 w-4" />
+            <div className="text-lg font-black leading-none text-[#a94f0a]">
               Club notes
             </div>
-            <div className="mt-0.5 text-[11px] font-semibold text-slate-400">Small shared notes for organizers.</div>
+            <div className="mt-1 h-0.5 w-20 rounded-full bg-[#c46a17]/70" />
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
             {clubNotes.length > 0 && (
               <button
                 type="button"
-                className="rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-amber-700 shadow-sm ring-1 ring-amber-100 active:scale-95"
+                className="rounded-full bg-transparent px-2.5 py-1 text-[11px] font-black text-[#a94f0a] active:scale-95"
                 onClick={() => setClubNotesOpen(true)}
               >
                 View all
               </button>
             )}
-            <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-black text-amber-700">Post-it</span>
           </div>
         </div>
 
-        <div className="mt-3 grid gap-2">
-          {previewClubNotes.length > 0 ? previewClubNotes.map((note) => (
-            <div key={note.id} className="rounded-[1.25rem] border border-amber-100 bg-amber-50/80 px-3 py-2 shadow-sm">
-              <div className="flex items-start gap-2">
-                <div className="min-w-0 flex-1">
-                  <div className="text-sm font-black leading-snug text-[#102A43]">{note.text}</div>
-                  <div className="mt-1 text-[10px] font-bold text-amber-700/70">
-                    {note.createdByName || "Organizer"} · {formatEquipmentTimestamp(note.createdAt)}
+        <div className="mt-4 flex gap-3 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {previewClubNotes.length > 0 ? (
+            previewClubNotes.map((note, index) => (
+              <div
+                key={note.id}
+                className="relative min-h-[8.4rem] w-[10.4rem] shrink-0 rounded-[0.7rem] border border-black/5 px-3 py-3 shadow-[0_9px_18px_rgba(15,23,42,0.12)]"
+                style={clubNoteStyle(index)}
+              >
+                <div className="flex h-full flex-col">
+                  <div className="min-h-0 flex-1 text-sm font-black leading-snug text-[#102A43] line-clamp-4">
+                    {note.text}
+                  </div>
+                  <div className="mt-2 truncate text-[10px] font-bold text-slate-600/80">
+                    {note.createdByName || "Organizer"} ·{" "}
+                    {formatEquipmentTimestamp(note.createdAt)}
                   </div>
                 </div>
                 {canRemoveClubNote(note) && (
                   <button
                     type="button"
-                    className="rounded-full bg-white/80 p-1.5 text-amber-600 ring-1 ring-amber-100 active:scale-95 disabled:opacity-50"
+                    className="absolute bottom-2 right-2 rounded-full bg-white/55 p-1.5 text-slate-600 shadow-sm active:scale-95 disabled:opacity-50"
                     onClick={() => removeOwnClubNote(note)}
                     disabled={clubNoteDeletingId === note.id}
                     aria-label="Remove your Club note"
@@ -1423,38 +1539,311 @@ export function ClubTab({
                   </button>
                 )}
               </div>
-            </div>
-          )) : (
-            <div className="rounded-2xl bg-slate-50 px-3 py-2 text-sm font-black text-[#102A43]">
-              No notes yet. Add the first post-it for organizers.
+            ))
+          ) : (
+            <div className="min-h-[7rem] w-full rounded-2xl border border-dashed border-amber-200 bg-white/60 px-3 py-3 text-sm font-black text-[#102A43]">
+              Leave the first note for the organizers.
             </div>
           )}
         </div>
 
-        <div className="mt-3 grid gap-2">
+        <div className="mt-2 flex items-end gap-2 rounded-2xl border border-amber-100 bg-white/80 p-2 shadow-sm">
           <Textarea
             value={clubNoteDraft}
             onChange={(event) => setClubNoteDraft(event.target.value)}
-            onKeyDown={blurFieldOnDoneKey}
-            enterKeyHint="done"
             disabled={!clubRatingsEnabled}
-            placeholder={clubRatingsEnabled ? "Example: Puma ball died today — Joon" : "Shared notes appear after sign-in."}
-            className="min-h-[4rem] rounded-2xl border-amber-100 bg-white text-sm font-semibold"
+            placeholder={
+              clubRatingsEnabled
+                ? "Puma ball died today — Joon"
+                : "Shared notes appear after sign-in."
+            }
+            className="min-h-[2.7rem] flex-1 resize-none border-0 bg-transparent p-1 text-sm font-semibold shadow-none focus-visible:ring-0"
             maxLength={160}
           />
-          {clubNotesError && (
-            <div className="rounded-xl bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-800">{clubNotesError}</div>
-          )}
           <Button
             type="button"
-            className="h-10 rounded-2xl bg-[#102A43] text-xs font-black text-white hover:bg-[#0b2036]"
+            className="h-10 shrink-0 rounded-2xl bg-[#b75a0d] px-3 text-xs font-black text-white hover:bg-[#9a4708]"
             disabled={!canAddClubNote}
             onClick={addSharedClubNote}
           >
-            {clubNoteSaving ? "Adding…" : "Add note"}
+            Post
           </Button>
         </div>
+        {clubNotesError && (
+          <div className="mt-2 rounded-xl bg-amber-100/70 px-3 py-2 text-[11px] font-bold text-amber-900">
+            {clubNotesError}
+          </div>
+        )}
       </section>
+
+      <section className="overflow-hidden rounded-[1.7rem] border border-violet-100 bg-violet-50/70 p-3 shadow-sm ring-1 ring-violet-50">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-sm font-black text-[#102A43]">
+              Shared roster
+              <span className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.14)]" />
+            </div>
+            <div className="mt-0.5 text-[11px] font-black text-emerald-600">
+              Live · saved online
+            </div>
+          </div>
+          {!isSharedRoster && (
+            <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-slate-500 shadow-sm ring-1 ring-slate-100">
+              Local
+            </span>
+          )}
+        </div>
+
+        <div className="mt-3 grid grid-cols-3 overflow-hidden rounded-2xl border border-violet-100 bg-white/80 text-left shadow-sm">
+          <button
+            type="button"
+            className="min-w-0 border-r border-violet-100 px-2.5 py-2.5 text-left active:bg-violet-50 disabled:opacity-40"
+            disabled={!onOpenPairingRules || playerCount < 2}
+            onClick={onOpenPairingRules}
+          >
+            <span className="block truncate text-[11px] font-black text-[#102A43]">
+              Pairing
+            </span>
+            <span className="block truncate text-[10px] font-semibold text-slate-500">
+              {cleanPairingRuleCount} rule
+              {cleanPairingRuleCount === 1 ? "" : "s"}
+            </span>
+          </button>
+          <div className="col-span-2 min-w-0 px-2.5 py-2.5">
+            {sharedToolsNode}
+          </div>
+        </div>
+      </section>
+
+      <div className="grid grid-cols-2 gap-3">
+        <section className="h-full rounded-[1.7rem] border border-blue-100 bg-blue-50/60 p-3 shadow-sm ring-1 ring-blue-50">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wide text-blue-600">
+                <AntiqueBallIcon className="h-4 w-4" />
+                Equipment
+              </div>
+              <div className="hidden">
+                See who has what and move bags quickly.
+              </div>
+              <div className="mt-1 flex items-center gap-1.5 text-[10px] font-black text-slate-400">
+                <span
+                  className={`h-1.5 w-1.5 rounded-full ${equipmentCanSyncOnline && !equipmentError ? "bg-emerald-500" : equipmentWaitingForAccount || equipmentSharedConnecting ? "bg-amber-400" : "bg-slate-300"}`}
+                />
+                {equipmentStatusText}
+              </div>
+            </div>
+            <Button
+              type="button"
+              className="h-9 shrink-0 rounded-2xl border border-blue-100 bg-white px-3 text-xs font-black text-[#102A43] shadow-sm hover:bg-blue-50"
+              onClick={() => setEquipmentBoardOpen(true)}
+            >
+              Open
+            </Button>
+          </div>
+
+          {equipmentKits.length > 0 ? (
+            <div className="mt-3 overflow-hidden rounded-[1.35rem] border border-slate-100 bg-slate-50/60">
+              {equipmentDashboardHolders.map((holder, index) => {
+                const holderKits = equipmentKits.filter(
+                  (kit) =>
+                    normalizeEquipmentHolderId(kit.holderId) === holder.id,
+                );
+                const highlighted = dragOverHolderId === holder.id;
+                return (
+                  <div
+                    key={`dashboard-${holder.id}`}
+                    data-equipment-holder-id={holder.id}
+                    className={`grid grid-cols-[4.8rem_minmax(0,1fr)] items-center gap-2 px-2.5 py-2 transition ${index === 0 ? "" : "border-t border-slate-100"} ${highlighted ? "bg-emerald-50 ring-2 ring-inset ring-emerald-100" : ""}`}
+                  >
+                    <div className="truncate text-[11px] font-black text-[#102A43]">
+                      {holder.label}
+                    </div>
+                    <div className="flex min-w-0 flex-wrap justify-end gap-1.5">
+                      {holderKits.length ? (
+                        holderKits.map((kit) => {
+                          const isDragging = draggingKitId === kit.id;
+                          return (
+                            <button
+                              key={`dashboard-kit-${kit.id}`}
+                              type="button"
+                              className={`touch-none select-none rounded-2xl border border-slate-200 bg-white px-2 py-1 text-left shadow-sm transition active:scale-[0.98] ${isDragging ? "scale-95 opacity-45 ring-2 ring-emerald-200" : ""}`}
+                              onPointerDown={(event) =>
+                                startEquipmentPointerDrag(event, kit)
+                              }
+                              onPointerMove={moveEquipmentPointerDrag}
+                              onPointerUp={finishEquipmentPointerDrag}
+                              onPointerCancel={finishEquipmentPointerDrag}
+                              onClick={() => openEquipmentKitFromBoard(kit)}
+                              aria-label={`Edit ${kit.name}`}
+                            >
+                              <span className="flex max-w-[7.4rem] items-center gap-1.5">
+                                <DuffleBagIcon
+                                  color={kit.color || DEFAULT_EQUIPMENT_COLOR}
+                                  className="h-6 w-8 shrink-0"
+                                />
+                                <span className="min-w-0 truncate text-[11px] font-black text-[#102A43]">
+                                  {kit.name}
+                                </span>
+                              </span>
+                            </button>
+                          );
+                        })
+                      ) : (
+                        <span className="rounded-full border border-dashed border-slate-200 bg-white/70 px-2 py-1 text-[10px] font-bold text-slate-400">
+                          No bag
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+              {equipmentKits.length > equipmentPreviewKits.length && (
+                <div className="border-t border-slate-100 px-2.5 py-1.5 text-[10px] font-bold text-slate-400">
+                  Open board to see all {equipmentKits.length} bags.
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="mt-3 rounded-2xl bg-white/70 px-3 py-5 text-center text-sm font-black text-[#102A43]">
+              No bags yet
+            </div>
+          )}
+        </section>
+        <section className="h-full rounded-[1.7rem] border border-violet-100 bg-violet-50/60 p-3 shadow-sm ring-1 ring-violet-50">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wide text-violet-600">
+                <Star className="h-4 w-4" />
+                Organizer ratings
+              </div>
+              <div className="hidden">
+                Your rating helps build the Club average for shared teams.
+              </div>
+              <div className="mt-1 text-sm font-black text-[#102A43]">
+                {clubRatingProgressText}
+              </div>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9 rounded-2xl border-violet-100 bg-white px-3 text-xs font-black text-violet-700 hover:bg-violet-50"
+                disabled={!clubRatingsEnabled || players.length === 0}
+                onClick={() => setRatingBoardOpen(true)}
+              >
+                Review
+              </Button>
+              <Button
+                type="button"
+                className="h-9 rounded-2xl bg-violet-700 px-4 text-xs font-black text-white hover:bg-violet-800"
+                disabled={!clubRatingsEnabled || players.length === 0}
+                onClick={() => openRatingForPlayer(nextRatingPlayer)}
+              >
+                {clubRatedCount > 0 ? "Continue" : "Start"}
+              </Button>
+            </div>
+          </div>
+
+          {isSharedRoster && legacySkillSeedPlayers.length > 0 && (
+            <div className="mt-3 rounded-2xl border border-violet-100 bg-violet-50/80 px-3 py-2">
+              <div className="text-[11px] font-bold leading-snug text-violet-900">
+                Tip: use current roster ratings as your first Club ratings.
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                className="mt-2 h-9 w-full rounded-xl border-violet-200 bg-white text-[11px] font-black text-violet-700 hover:bg-violet-50"
+                disabled={!clubRatingsEnabled || ratingSeedSaving}
+                onClick={seedClubRatingsFromRosterSkills}
+              >
+                {ratingSeedSaving
+                  ? "Importing…"
+                  : `Use current ratings for ${legacySkillSeedPlayers.length} player${legacySkillSeedPlayers.length === 1 ? "" : "s"}`}
+              </Button>
+            </div>
+          )}
+
+          {ratingSeedMessage && (
+            <div className="mt-3 rounded-2xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-[11px] font-bold leading-snug text-emerald-800">
+              {ratingSeedMessage}
+            </div>
+          )}
+
+          {clubRatingError && (
+            <div className="mt-3 rounded-2xl border border-amber-100 bg-amber-50 px-3 py-2 text-[11px] font-bold leading-snug text-amber-800">
+              {clubRatingError}
+            </div>
+          )}
+
+          {isSharedRoster && (
+            <div className="mt-3 grid gap-2">
+              {clubNeedRatingCount > 0 && (
+                <button
+                  type="button"
+                  className="flex items-center justify-between rounded-2xl border border-violet-100 bg-violet-50 px-3 py-2 text-left active:scale-[0.99]"
+                  disabled={!clubRatingsEnabled}
+                  onClick={() =>
+                    openRatingForPlayer(orderedNeedRatingPlayers[0] || null)
+                  }
+                >
+                  <span className="min-w-0">
+                    <span className="block text-xs font-black text-[#102A43]">
+                      Needs your rating
+                    </span>
+                    <span className="block truncate text-[11px] font-semibold text-violet-700">
+                      {orderedNeedRatingPlayers
+                        .slice(0, 3)
+                        .map((player) => player.name)
+                        .join(", ")}
+                    </span>
+                    {newNeedRatingPlayers.length > 0 && (
+                      <span className="mt-1 block text-[10px] font-black text-violet-600">
+                        {newNeedRatingPlayers.length} new player
+                        {newNeedRatingPlayers.length === 1 ? "" : "s"} near the
+                        top
+                      </span>
+                    )}
+                  </span>
+                  <span className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-violet-700">
+                    {clubNeedRatingCount}
+                  </span>
+                </button>
+              )}
+              {clubSkippedCount > 0 && (
+                <button
+                  type="button"
+                  className="flex items-center justify-between rounded-2xl border border-amber-100 bg-amber-50 px-3 py-2 text-left active:scale-[0.99]"
+                  disabled={!clubRatingsEnabled}
+                  onClick={() => openRatingForPlayer(skippedPlayers[0] || null)}
+                >
+                  <span className="min-w-0">
+                    <span className="block text-xs font-black text-[#102A43]">
+                      Skipped for later
+                    </span>
+                    <span className="block truncate text-[11px] font-semibold text-amber-700">
+                      {skippedPlayers
+                        .slice(0, 3)
+                        .map((player) => player.name)
+                        .join(", ")}
+                    </span>
+                  </span>
+                  <span className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-amber-700">
+                    {clubSkippedCount}
+                  </span>
+                </button>
+              )}
+              {clubRatedCount > 0 && (
+                <div className="rounded-2xl bg-slate-50 px-3 py-2 text-[11px] font-semibold text-slate-500">
+                  {clubRatingLoading
+                    ? "Syncing ratings…"
+                    : `Club averages are ready for ${clubRatedCount} player${clubRatedCount === 1 ? "" : "s"}.`}
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+      </div>
 
       <Dialog open={clubNotesOpen} onOpenChange={setClubNotesOpen}>
         <DialogContent className="max-h-[86svh] max-w-sm overflow-hidden rounded-3xl border border-amber-100 p-0 shadow-[0_14px_40px_rgba(15,23,42,0.16)]">
@@ -1464,31 +1853,42 @@ export function ClubTab({
               Club notes
             </DialogTitle>
           </DialogHeader>
-          <div className="max-h-[62svh] overflow-y-auto p-4" style={{ WebkitOverflowScrolling: "touch" }}>
+          <div
+            className="max-h-[62svh] overflow-y-auto p-4"
+            style={{ WebkitOverflowScrolling: "touch" }}
+          >
             <div className="grid gap-2">
-              {clubNotes.length > 0 ? clubNotes.map((note) => (
-                <div key={`all-${note.id}`} className="rounded-[1.25rem] border border-amber-100 bg-amber-50/80 px-3 py-2 shadow-sm">
-                  <div className="flex items-start gap-2">
-                    <div className="min-w-0 flex-1">
-                      <div className="text-sm font-black leading-snug text-[#102A43]">{note.text}</div>
-                      <div className="mt-1 text-[10px] font-bold text-amber-700/70">
-                        {note.createdByName || "Organizer"} · {formatEquipmentTimestamp(note.createdAt)}
+              {clubNotes.length > 0 ? (
+                clubNotes.map((note) => (
+                  <div
+                    key={`all-${note.id}`}
+                    className="rounded-[1.25rem] border border-amber-100 bg-amber-50/80 px-3 py-2 shadow-sm"
+                  >
+                    <div className="flex items-start gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-black leading-snug text-[#102A43]">
+                          {note.text}
+                        </div>
+                        <div className="mt-1 text-[10px] font-bold text-amber-700/70">
+                          {note.createdByName || "Organizer"} ·{" "}
+                          {formatEquipmentTimestamp(note.createdAt)}
+                        </div>
                       </div>
+                      {canRemoveClubNote(note) && (
+                        <button
+                          type="button"
+                          className="rounded-full bg-white/80 p-1.5 text-amber-600 ring-1 ring-amber-100 active:scale-95 disabled:opacity-50"
+                          onClick={() => removeOwnClubNote(note)}
+                          disabled={clubNoteDeletingId === note.id}
+                          aria-label="Remove your Club note"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
                     </div>
-                    {canRemoveClubNote(note) && (
-                      <button
-                        type="button"
-                        className="rounded-full bg-white/80 p-1.5 text-amber-600 ring-1 ring-amber-100 active:scale-95 disabled:opacity-50"
-                        onClick={() => removeOwnClubNote(note)}
-                        disabled={clubNoteDeletingId === note.id}
-                        aria-label="Remove your Club note"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    )}
                   </div>
-                </div>
-              )) : (
+                ))
+              ) : (
                 <div className="rounded-2xl bg-slate-50 px-3 py-2 text-sm font-black text-[#102A43]">
                   No notes yet.
                 </div>
@@ -1501,13 +1901,24 @@ export function ClubTab({
       <Dialog open={collaboratorsOpen} onOpenChange={setCollaboratorsOpen}>
         <DialogContent className="max-w-xs rounded-3xl border border-slate-100 p-0 shadow-[0_14px_40px_rgba(15,23,42,0.16)]">
           <DialogHeader className="border-b border-slate-100 px-4 py-3 text-left">
-            <DialogTitle className="text-base font-black text-[#102A43]">Organizers</DialogTitle>
+            <DialogTitle className="text-base font-black text-[#102A43]">
+              Organizers
+            </DialogTitle>
           </DialogHeader>
           <div className="grid gap-1.5 p-4">
-            {sharedPersonNames.length ? sharedPersonNames.map((name) => (
-              <div key={name} className="rounded-2xl bg-slate-50 px-3 py-2 text-sm font-black text-[#102A43]">{name}</div>
-            )) : (
-              <div className="rounded-2xl bg-slate-50 px-3 py-2 text-sm font-bold text-slate-500">Only you</div>
+            {sharedPersonNames.length ? (
+              sharedPersonNames.map((name) => (
+                <div
+                  key={name}
+                  className="rounded-2xl bg-slate-50 px-3 py-2 text-sm font-black text-[#102A43]"
+                >
+                  {name}
+                </div>
+              ))
+            ) : (
+              <div className="rounded-2xl bg-slate-50 px-3 py-2 text-sm font-bold text-slate-500">
+                Only you
+              </div>
             )}
           </div>
         </DialogContent>
@@ -1521,9 +1932,13 @@ export function ClubTab({
               Organizer ratings
             </DialogTitle>
           </DialogHeader>
-          <div className="max-h-[66svh] overflow-y-auto p-4" style={{ WebkitOverflowScrolling: "touch" }}>
+          <div
+            className="max-h-[66svh] overflow-y-auto p-4"
+            style={{ WebkitOverflowScrolling: "touch" }}
+          >
             <div className="mb-3 rounded-2xl bg-violet-50 px-3 py-2 text-[11px] font-bold leading-snug text-violet-800">
-              Rate players you know, skip the ones you do not know yet, and adjust your own ratings anytime. Individual ratings stay private.
+              Rate players you know, skip the ones you do not know yet, and
+              adjust your own ratings anytime. Individual ratings stay private.
             </div>
 
             {ratingFlowNotice && (
@@ -1548,12 +1963,22 @@ export function ClubTab({
                     >
                       <span className="min-w-0">
                         <span className="flex min-w-0 items-center gap-1.5">
-                          <span className="truncate text-sm font-black text-[#102A43]">{player.name}</span>
-                          <span className="rounded-full bg-white px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-violet-700">New</span>
+                          <span className="truncate text-sm font-black text-[#102A43]">
+                            {player.name}
+                          </span>
+                          <span className="rounded-full bg-white px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-violet-700">
+                            New
+                          </span>
                         </span>
-                        {player.aka && <span className="block truncate text-[11px] font-semibold text-violet-700">AKA {player.aka}</span>}
+                        {player.aka && (
+                          <span className="block truncate text-[11px] font-semibold text-violet-700">
+                            AKA {player.aka}
+                          </span>
+                        )}
                       </span>
-                      <span className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-violet-700">Rate</span>
+                      <span className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-violet-700">
+                        Rate
+                      </span>
                     </button>
                   ))}
                 </div>
@@ -1573,10 +1998,18 @@ export function ClubTab({
                       onClick={() => openRatingForPlayer(player)}
                     >
                       <span className="min-w-0">
-                        <span className="block truncate text-sm font-black text-[#102A43]">{player.name}</span>
-                        {player.aka && <span className="block truncate text-[11px] font-semibold text-slate-500">AKA {player.aka}</span>}
+                        <span className="block truncate text-sm font-black text-[#102A43]">
+                          {player.name}
+                        </span>
+                        {player.aka && (
+                          <span className="block truncate text-[11px] font-semibold text-slate-500">
+                            AKA {player.aka}
+                          </span>
+                        )}
                       </span>
-                      <span className="rounded-full bg-violet-50 px-2 py-1 text-[10px] font-black text-violet-700">Rate</span>
+                      <span className="rounded-full bg-violet-50 px-2 py-1 text-[10px] font-black text-violet-700">
+                        Rate
+                      </span>
                     </button>
                   ))}
                 </div>
@@ -1596,10 +2029,18 @@ export function ClubTab({
                       onClick={() => openRatingForPlayer(player)}
                     >
                       <span className="min-w-0">
-                        <span className="block truncate text-sm font-black text-[#102A43]">{player.name}</span>
-                        {player.aka && <span className="block truncate text-[11px] font-semibold text-slate-500">AKA {player.aka}</span>}
+                        <span className="block truncate text-sm font-black text-[#102A43]">
+                          {player.name}
+                        </span>
+                        {player.aka && (
+                          <span className="block truncate text-[11px] font-semibold text-slate-500">
+                            AKA {player.aka}
+                          </span>
+                        )}
                       </span>
-                      <span className="rounded-full bg-amber-50 px-2 py-1 text-[10px] font-black text-amber-700">Rate now</span>
+                      <span className="rounded-full bg-amber-50 px-2 py-1 text-[10px] font-black text-amber-700">
+                        Rate now
+                      </span>
                     </button>
                   ))}
                 </div>
@@ -1622,12 +2063,22 @@ export function ClubTab({
                         onClick={() => openRatingForPlayer(player)}
                       >
                         <span className="min-w-0">
-                          <span className="block truncate text-sm font-black text-[#102A43]">{player.name}</span>
+                          <span className="block truncate text-sm font-black text-[#102A43]">
+                            {player.name}
+                          </span>
                           <span className="block truncate text-[11px] font-semibold text-slate-500">
-                            Your {typeof myRating?.skill === "number" ? myRating.skill.toFixed(1) : "—"}{summary?.averageSkill ? ` · Club ${summary.averageSkill.toFixed(1)}` : ""}
+                            Your{" "}
+                            {typeof myRating?.skill === "number"
+                              ? myRating.skill.toFixed(1)
+                              : "—"}
+                            {summary?.averageSkill
+                              ? ` · Club ${summary.averageSkill.toFixed(1)}`
+                              : ""}
                           </span>
                         </span>
-                        <span className="rounded-full bg-slate-50 px-2 py-1 text-[10px] font-black text-slate-600">Adjust</span>
+                        <span className="rounded-full bg-slate-50 px-2 py-1 text-[10px] font-black text-slate-600">
+                          Adjust
+                        </span>
                       </button>
                     );
                   })}
@@ -1635,131 +2086,182 @@ export function ClubTab({
               )}
 
               {players.length === 0 && (
-                <div className="rounded-2xl bg-slate-50 px-3 py-2 text-sm font-bold text-slate-500">No players yet.</div>
+                <div className="rounded-2xl bg-slate-50 px-3 py-2 text-sm font-bold text-slate-500">
+                  No players yet.
+                </div>
               )}
             </div>
           </div>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={Boolean(ratingDialogPlayer)} onOpenChange={(open) => {
-        if (!open) {
-          setRatingDialogError("");
-          setRatingPlayerId(null);
-        }
-      }}>
+      <Dialog
+        open={Boolean(ratingDialogPlayer)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setRatingDialogError("");
+            setRatingPlayerId(null);
+          }
+        }}
+      >
         <DialogContent className="max-w-sm rounded-3xl p-0">
           <DialogHeader className="border-b border-slate-100 px-4 py-3 text-left">
             <DialogTitle className="flex items-center gap-2 text-base font-black text-[#102A43]">
               <Star className="h-5 w-5 text-violet-600" />
-              {ratingDialogPlayer ? `Rate ${ratingDialogPlayer.name}` : "Rate player"}
+              {ratingDialogPlayer
+                ? `Rate ${ratingDialogPlayer.name}`
+                : "Rate player"}
             </DialogTitle>
           </DialogHeader>
-          {ratingDialogPlayer && (() => {
-            const myRating = myRatingByPlayerId.get(ratingDialogPlayer.id);
-            const summary = ratingSummaryByPlayerId.get(ratingDialogPlayer.id);
-            const canRevealAverage = Boolean(myRating && !myRating.skipped && typeof myRating.skill === "number");
-            const nextPlayerAfterThis = findNextRatingPlayerAfter(ratingDialogPlayer.id);
-            const remainingAfterThis = orderedNeedRatingPlayers.filter((player) => player.id !== ratingDialogPlayer.id).length
-              + skippedPlayers.filter((player) => player.id !== ratingDialogPlayer.id).length;
-            const ratingModeLabel = myRating?.skipped
-              ? "Skipped before"
-              : typeof myRating?.skill === "number"
-                ? "Adjusting your rating"
-                : ratingDialogPlayer.isNew
-                  ? "New player"
-                  : "Needs your rating";
-            return (
-              <div className="grid gap-4 p-4">
-                {ratingFlowNotice && (
-                  <div className="rounded-2xl border border-violet-100 bg-violet-50 px-3 py-2 text-[11px] font-black leading-snug text-violet-800">
-                    {ratingFlowNotice}
-                  </div>
-                )}
-
-                <div className="rounded-2xl bg-slate-50 px-3 py-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Player</div>
-                    <div className="rounded-full bg-white px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-violet-700">{ratingModeLabel}</div>
-                  </div>
-                  <div className="mt-1 text-lg font-black text-[#102A43]">{ratingDialogPlayer.name}</div>
-                  {ratingDialogPlayer.aka && <div className="text-xs font-semibold text-slate-500">{ratingDialogPlayer.aka}</div>}
-                  {remainingAfterThis > 0 && (
-                    <div className="mt-2 text-[11px] font-bold text-slate-400">{remainingAfterThis} more player{remainingAfterThis === 1 ? "" : "s"} after this.</div>
+          {ratingDialogPlayer &&
+            (() => {
+              const myRating = myRatingByPlayerId.get(ratingDialogPlayer.id);
+              const summary = ratingSummaryByPlayerId.get(
+                ratingDialogPlayer.id,
+              );
+              const canRevealAverage = Boolean(
+                myRating &&
+                !myRating.skipped &&
+                typeof myRating.skill === "number",
+              );
+              const nextPlayerAfterThis = findNextRatingPlayerAfter(
+                ratingDialogPlayer.id,
+              );
+              const remainingAfterThis =
+                orderedNeedRatingPlayers.filter(
+                  (player) => player.id !== ratingDialogPlayer.id,
+                ).length +
+                skippedPlayers.filter(
+                  (player) => player.id !== ratingDialogPlayer.id,
+                ).length;
+              const ratingModeLabel = myRating?.skipped
+                ? "Skipped before"
+                : typeof myRating?.skill === "number"
+                  ? "Adjusting your rating"
+                  : ratingDialogPlayer.isNew
+                    ? "New player"
+                    : "Needs your rating";
+              return (
+                <div className="grid gap-4 p-4">
+                  {ratingFlowNotice && (
+                    <div className="rounded-2xl border border-violet-100 bg-violet-50 px-3 py-2 text-[11px] font-black leading-snug text-violet-800">
+                      {ratingFlowNotice}
+                    </div>
                   )}
-                </div>
 
-                <div className="grid gap-2">
-                  <div className="flex items-end justify-between gap-3">
-                    <Label className="text-xs font-black uppercase tracking-wide text-slate-500">Your rating</Label>
-                    <div className="text-3xl font-black tabular-nums text-[#102A43]">{ratingDraft.toFixed(1)}</div>
+                  <div className="rounded-2xl bg-slate-50 px-3 py-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+                        Player
+                      </div>
+                      <div className="rounded-full bg-white px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-violet-700">
+                        {ratingModeLabel}
+                      </div>
+                    </div>
+                    <div className="mt-1 text-lg font-black text-[#102A43]">
+                      {ratingDialogPlayer.name}
+                    </div>
+                    {ratingDialogPlayer.aka && (
+                      <div className="text-xs font-semibold text-slate-500">
+                        {ratingDialogPlayer.aka}
+                      </div>
+                    )}
+                    {remainingAfterThis > 0 && (
+                      <div className="mt-2 text-[11px] font-bold text-slate-400">
+                        {remainingAfterThis} more player
+                        {remainingAfterThis === 1 ? "" : "s"} after this.
+                      </div>
+                    )}
                   </div>
-                  <input
-                    type="range"
-                    min="1"
-                    max="10"
-                    step="0.5"
-                    value={ratingDraft}
-                    onChange={(event) => setRatingDraft(Number(event.target.value))}
-                    className="w-full accent-[#102A43]"
-                  />
-                  <div className="grid grid-cols-3 text-[10px] font-black text-slate-400">
-                    <span>2 weak regular</span>
-                    <span className="text-center">5 average</span>
-                    <span className="text-right">9 strongest</span>
+
+                  <div className="grid gap-2">
+                    <div className="flex items-end justify-between gap-3">
+                      <Label className="text-xs font-black uppercase tracking-wide text-slate-500">
+                        Your rating
+                      </Label>
+                      <div className="text-3xl font-black tabular-nums text-[#102A43]">
+                        {ratingDraft.toFixed(1)}
+                      </div>
+                    </div>
+                    <input
+                      type="range"
+                      min="1"
+                      max="10"
+                      step="0.5"
+                      value={ratingDraft}
+                      onChange={(event) =>
+                        setRatingDraft(Number(event.target.value))
+                      }
+                      className="w-full accent-[#102A43]"
+                    />
+                    <div className="grid grid-cols-3 text-[10px] font-black text-slate-400">
+                      <span>2 weak regular</span>
+                      <span className="text-center">5 average</span>
+                      <span className="text-right">9 strongest</span>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-violet-100 bg-violet-50 px-3 py-2 text-[11px] font-semibold leading-snug text-violet-800">
+                    Rate compared to this group. Think of the weakest regular
+                    player as around 2, an average regular as 5, and the
+                    strongest regular as around 9.
+                  </div>
+
+                  <div className="rounded-2xl bg-slate-50 px-3 py-2">
+                    <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+                      Club average
+                    </div>
+                    <div className="mt-1 text-sm font-black text-[#102A43]">
+                      {canRevealAverage && summary?.averageSkill
+                        ? `${summary.averageSkill.toFixed(1)} · ${summary.ratingCount} organizer${summary.ratingCount === 1 ? "" : "s"}`
+                        : "Hidden until you rate this player"}
+                    </div>
+                  </div>
+
+                  {ratingDialogError && (
+                    <div className="rounded-2xl border border-rose-100 bg-rose-50 px-3 py-2 text-[11px] font-bold leading-snug text-rose-700">
+                      {ratingDialogError}
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-11 rounded-2xl text-xs font-black"
+                      disabled={ratingSaving}
+                      onClick={skipClubRating}
+                    >
+                      {nextPlayerAfterThis ? "Skip & next" : "Skip for later"}
+                    </Button>
+                    <Button
+                      type="button"
+                      className="h-11 rounded-2xl bg-[#102A43] text-xs font-black text-white hover:bg-[#0b2036]"
+                      disabled={ratingSaving}
+                      onClick={saveClubRating}
+                    >
+                      {ratingSaving
+                        ? "Saving…"
+                        : nextPlayerAfterThis
+                          ? "Save & next"
+                          : "Save & finish"}
+                    </Button>
                   </div>
                 </div>
-
-                <div className="rounded-2xl border border-violet-100 bg-violet-50 px-3 py-2 text-[11px] font-semibold leading-snug text-violet-800">
-                  Rate compared to this group. Think of the weakest regular player as around 2, an average regular as 5, and the strongest regular as around 9.
-                </div>
-
-                <div className="rounded-2xl bg-slate-50 px-3 py-2">
-                  <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Club average</div>
-                  <div className="mt-1 text-sm font-black text-[#102A43]">
-                    {canRevealAverage && summary?.averageSkill
-                      ? `${summary.averageSkill.toFixed(1)} · ${summary.ratingCount} organizer${summary.ratingCount === 1 ? "" : "s"}`
-                      : "Hidden until you rate this player"}
-                  </div>
-                </div>
-
-                {ratingDialogError && (
-                  <div className="rounded-2xl border border-rose-100 bg-rose-50 px-3 py-2 text-[11px] font-bold leading-snug text-rose-700">
-                    {ratingDialogError}
-                  </div>
-                )}
-
-                <div className="grid grid-cols-2 gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-11 rounded-2xl text-xs font-black"
-                    disabled={ratingSaving}
-                    onClick={skipClubRating}
-                  >
-                    {nextPlayerAfterThis ? "Skip & next" : "Skip for later"}
-                  </Button>
-                  <Button
-                    type="button"
-                    className="h-11 rounded-2xl bg-[#102A43] text-xs font-black text-white hover:bg-[#0b2036]"
-                    disabled={ratingSaving}
-                    onClick={saveClubRating}
-                  >
-                    {ratingSaving ? "Saving…" : nextPlayerAfterThis ? "Save & next" : "Save & finish"}
-                  </Button>
-                </div>
-              </div>
-            );
-          })()}
+              );
+            })()}
         </DialogContent>
       </Dialog>
 
-      <Dialog open={equipmentBoardOpen} onOpenChange={(open) => {
-        setEquipmentBoardOpen(open);
-        if (!open) {
-          setContentPeekKitId(null);
-        }
-      }}>
+      <Dialog
+        open={equipmentBoardOpen}
+        onOpenChange={(open) => {
+          setEquipmentBoardOpen(open);
+          if (!open) {
+            setContentPeekKitId(null);
+          }
+        }}
+      >
         <DialogContent className="fixed bottom-2 left-2 right-2 top-2 flex h-auto max-h-none w-auto max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-[2rem] p-0 sm:bottom-auto sm:left-1/2 sm:right-auto sm:top-1/2 sm:h-[96dvh] sm:w-[calc(100vw-1rem)] sm:max-w-2xl sm:-translate-x-1/2 sm:-translate-y-1/2">
           <DialogHeader className="border-b border-slate-100 px-4 py-4 pr-12 text-left">
             <div className="grid gap-3">
@@ -1769,7 +2271,8 @@ export function ClubTab({
                   Equipment board
                 </DialogTitle>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  Drag bags between holders. Tap a bag to edit its name and contents.
+                  Drag bags between holders. Tap a bag to edit its name and
+                  contents.
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -1786,18 +2289,25 @@ export function ClubTab({
           </DialogHeader>
 
           <div className="flex-1 overflow-y-auto bg-slate-50/70 p-3">
-            <div className={`mb-2 rounded-2xl border px-3 py-1.5 text-[11px] font-bold leading-snug shadow-sm transition ${equipmentMoveNotice ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-white text-slate-500"}`}>
+            <div
+              className={`mb-2 rounded-2xl border px-3 py-1.5 text-[11px] font-bold leading-snug shadow-sm transition ${equipmentMoveNotice ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-white text-slate-500"}`}
+            >
               {equipmentBoardStatusText}
             </div>
 
             <div className="overflow-hidden rounded-[1.65rem] border border-slate-200 bg-white shadow-[0_14px_34px_rgba(15,23,42,0.08)]">
               <div className="grid grid-cols-[6.25rem_minmax(0,1fr)] border-b border-slate-200 bg-white text-[10px] font-black uppercase tracking-wide text-slate-400">
                 <div className="px-3 py-2.5">Holder</div>
-                <div className="border-l border-slate-200 px-3 py-2.5">Bags</div>
+                <div className="border-l border-slate-200 px-3 py-2.5">
+                  Bags
+                </div>
               </div>
 
               {equipmentHolders.map((holder, index) => {
-                const holderKits = equipmentKits.filter((kit) => normalizeEquipmentHolderId(kit.holderId) === holder.id);
+                const holderKits = equipmentKits.filter(
+                  (kit) =>
+                    normalizeEquipmentHolderId(kit.holderId) === holder.id,
+                );
                 const highlighted = dragOverHolderId === holder.id;
                 return (
                   <section
@@ -1813,58 +2323,82 @@ export function ClubTab({
                       </div>
                     </div>
 
-                    <div className={`flex min-h-[3.65rem] flex-col items-stretch justify-center gap-1.5 border-l px-2 py-2 transition ${highlighted ? "border-emerald-300 bg-emerald-50 ring-2 ring-inset ring-emerald-100" : "border-slate-200 bg-slate-50/30"}`}>
+                    <div
+                      className={`flex min-h-[3.65rem] flex-col items-stretch justify-center gap-1.5 border-l px-2 py-2 transition ${highlighted ? "border-emerald-300 bg-emerald-50 ring-2 ring-inset ring-emerald-100" : "border-slate-200 bg-slate-50/30"}`}
+                    >
                       {holderKits.length === 0 ? (
-                        <div className={`min-h-8 rounded-2xl border border-dashed ${highlighted ? "border-emerald-300 bg-white/80 px-3 py-1 text-[11px] font-bold text-emerald-600" : "border-transparent"}`}>
+                        <div
+                          className={`min-h-8 rounded-2xl border border-dashed ${highlighted ? "border-emerald-300 bg-white/80 px-3 py-1 text-[11px] font-bold text-emerald-600" : "border-transparent"}`}
+                        >
                           {highlighted ? "Drop here" : ""}
                         </div>
-                      ) : holderKits.map((kit) => {
-                        const isDragging = draggingKitId === kit.id;
-                        return (
-                          <div key={kit.id} className="flex w-full items-center gap-1.5">
+                      ) : (
+                        holderKits.map((kit) => {
+                          const isDragging = draggingKitId === kit.id;
+                          return (
                             <div
-                              role="button"
-                              tabIndex={0}
-                              className={`min-w-0 flex-1 touch-none select-none rounded-2xl border border-slate-200 bg-white px-2.5 py-1.5 text-left shadow-sm transition hover:border-emerald-200 hover:bg-white active:scale-[0.98] ${isDragging ? "scale-95 opacity-45 ring-2 ring-emerald-200" : ""}`}
-                              onPointerDown={(event) => startEquipmentPointerDrag(event, kit)}
-                              onPointerMove={moveEquipmentPointerDrag}
-                              onPointerUp={finishEquipmentPointerDrag}
-                              onPointerCancel={finishEquipmentPointerDrag}
-                              onClick={() => openEquipmentKitFromBoard(kit)}
-                              onKeyDown={(event) => {
-                                if (event.key === "Enter" || event.key === " ") {
-                                  event.preventDefault();
-                                  openEquipmentKitFromBoard(kit);
-                                }
-                              }}
+                              key={kit.id}
+                              className="flex w-full items-center gap-1.5"
                             >
-                              <div className="flex min-w-0 items-center gap-2">
-                                <DuffleBagIcon color={kit.color || DEFAULT_EQUIPMENT_COLOR} className="h-9 w-12 shrink-0" />
-                                <div className="min-w-0 flex-1">
-                                  <div className="flex min-w-0 items-center gap-1.5">
-                                    <span className="truncate text-xs font-black text-[#102A43]">{kit.name}</span>
-                                    <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-400" aria-hidden="true">
-                                      <Pencil className="h-3 w-3" />
-                                    </span>
+                              <div
+                                role="button"
+                                tabIndex={0}
+                                className={`min-w-0 flex-1 touch-none select-none rounded-2xl border border-slate-200 bg-white px-2.5 py-1.5 text-left shadow-sm transition hover:border-emerald-200 hover:bg-white active:scale-[0.98] ${isDragging ? "scale-95 opacity-45 ring-2 ring-emerald-200" : ""}`}
+                                onPointerDown={(event) =>
+                                  startEquipmentPointerDrag(event, kit)
+                                }
+                                onPointerMove={moveEquipmentPointerDrag}
+                                onPointerUp={finishEquipmentPointerDrag}
+                                onPointerCancel={finishEquipmentPointerDrag}
+                                onClick={() => openEquipmentKitFromBoard(kit)}
+                                onKeyDown={(event) => {
+                                  if (
+                                    event.key === "Enter" ||
+                                    event.key === " "
+                                  ) {
+                                    event.preventDefault();
+                                    openEquipmentKitFromBoard(kit);
+                                  }
+                                }}
+                              >
+                                <div className="flex min-w-0 items-center gap-2">
+                                  <DuffleBagIcon
+                                    color={kit.color || DEFAULT_EQUIPMENT_COLOR}
+                                    className="h-9 w-12 shrink-0"
+                                  />
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex min-w-0 items-center gap-1.5">
+                                      <span className="truncate text-xs font-black text-[#102A43]">
+                                        {kit.name}
+                                      </span>
+                                      <span
+                                        className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-400"
+                                        aria-hidden="true"
+                                      >
+                                        <Pencil className="h-3 w-3" />
+                                      </span>
+                                    </div>
                                   </div>
                                 </div>
                               </div>
+                              <button
+                                type="button"
+                                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
+                                aria-label={`Show contents of ${kit.name}`}
+                                onPointerDown={(event) =>
+                                  event.stopPropagation()
+                                }
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  setContentPeekKitId(kit.id);
+                                }}
+                              >
+                                <ClipboardList className="h-4 w-4" />
+                              </button>
                             </div>
-                            <button
-                              type="button"
-                              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
-                              aria-label={`Show contents of ${kit.name}`}
-                              onPointerDown={(event) => event.stopPropagation()}
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                setContentPeekKitId(kit.id);
-                              }}
-                            >
-                              <ClipboardList className="h-4 w-4" />
-                            </button>
-                          </div>
-                        );
-                      })}
+                          );
+                        })
+                      )}
                     </div>
                   </section>
                 );
@@ -1872,7 +2406,10 @@ export function ClubTab({
             </div>
           </div>
           {contentPeekKit && (
-            <div className="absolute inset-0 z-40 flex items-end bg-slate-950/20 p-3" onClick={() => setContentPeekKitId(null)}>
+            <div
+              className="absolute inset-0 z-40 flex items-end bg-slate-950/20 p-3"
+              onClick={() => setContentPeekKitId(null)}
+            >
               <div
                 className="w-full rounded-[1.75rem] border border-slate-200 bg-white p-4 shadow-[0_24px_70px_rgba(15,23,42,0.22)]"
                 onClick={(event) => event.stopPropagation()}
@@ -1899,7 +2436,10 @@ export function ClubTab({
                 {contentPeekKit.contents.length > 0 ? (
                   <div className="mt-3 flex flex-wrap gap-2">
                     {contentPeekKit.contents.map((item, index) => (
-                      <span key={`${contentPeekKit.id}-content-${index}`} className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700">
+                      <span
+                        key={`${contentPeekKit.id}-content-${index}`}
+                        className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700"
+                      >
                         {item}
                       </span>
                     ))}
@@ -1921,20 +2461,26 @@ export function ClubTab({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={equipmentDialogOpen} onOpenChange={(open) => {
-        if (open) {
-          setEquipmentDialogOpen(true);
-          return;
-        }
-        closeEquipmentEditor(true);
-      }}>
+      <Dialog
+        open={equipmentDialogOpen}
+        onOpenChange={(open) => {
+          if (open) {
+            setEquipmentDialogOpen(true);
+            return;
+          }
+          closeEquipmentEditor(true);
+        }}
+      >
         <DialogContent
-            className="max-h-[86dvh] max-w-md overflow-y-auto rounded-3xl p-0"
-            onOpenAutoFocus={(event) => event.preventDefault()}
-          >
+          className="max-h-[86dvh] max-w-md overflow-y-auto rounded-3xl p-0"
+          onOpenAutoFocus={(event) => event.preventDefault()}
+        >
           <DialogHeader className="border-b border-slate-100 px-4 py-3 text-left">
             <DialogTitle className="flex items-center gap-2 text-base font-black text-[#102A43]">
-              <DuffleBagIcon color={kitColor || DEFAULT_EQUIPMENT_COLOR} className="h-5 w-7 shrink-0" />
+              <DuffleBagIcon
+                color={kitColor || DEFAULT_EQUIPMENT_COLOR}
+                className="h-5 w-7 shrink-0"
+              />
               {editingKitId ? "Edit Bag" : "New Bag"}
             </DialogTitle>
           </DialogHeader>
@@ -2024,7 +2570,8 @@ export function ClubTab({
                 className="h-10 rounded-2xl border-slate-200 text-sm font-semibold"
               />
               <p className="text-[11px] font-semibold text-slate-500">
-                Separate items with commas. Example: enough cones for 2 teams, 2 balls, pump.
+                Separate items with commas. Example: enough cones for 2 teams, 2
+                balls, pump.
               </p>
             </div>
 
@@ -2035,8 +2582,6 @@ export function ClubTab({
               <Textarea
                 value={kitNote}
                 onChange={(event) => setKitNote(event.target.value)}
-                onKeyDown={blurFieldOnDoneKey}
-                enterKeyHint="done"
                 placeholder="Example: First-aid spray is almost empty."
                 className="min-h-[3.5rem] rounded-2xl border-slate-200 text-sm font-semibold"
               />
@@ -2045,10 +2590,22 @@ export function ClubTab({
             {editingKitMeta && (
               <div className="rounded-2xl border border-slate-100 bg-slate-50/70 px-3 py-2 text-[11px] font-semibold leading-snug text-slate-500">
                 <div>
-                  Created by {equipmentActorLabel(editingKitMeta.createdByName, editingKitMeta.createdByEmail, equipmentHolderNamesByEmail)} · {formatEquipmentTimestamp(editingKitMeta.createdAt)}
+                  Created by{" "}
+                  {equipmentActorLabel(
+                    editingKitMeta.createdByName,
+                    editingKitMeta.createdByEmail,
+                    equipmentHolderNamesByEmail,
+                  )}{" "}
+                  · {formatEquipmentTimestamp(editingKitMeta.createdAt)}
                 </div>
                 <div>
-                  Last updated by {equipmentActorLabel(editingKitMeta.updatedByName, editingKitMeta.updatedByEmail, equipmentHolderNamesByEmail)} · {formatEquipmentTimestamp(editingKitMeta.updatedAt)}
+                  Last updated by{" "}
+                  {equipmentActorLabel(
+                    editingKitMeta.updatedByName,
+                    editingKitMeta.updatedByEmail,
+                    equipmentHolderNamesByEmail,
+                  )}{" "}
+                  · {formatEquipmentTimestamp(editingKitMeta.updatedAt)}
                 </div>
               </div>
             )}
@@ -2056,31 +2613,41 @@ export function ClubTab({
             {editingKitId && deleteConfirmOpen && (
               <div className="rounded-2xl border border-red-100 bg-red-50/70 p-2.5">
                 <div className="mb-1.5 text-[11px] font-bold leading-snug text-red-700">
-                  Deleting removes this bag from everyone’s shared equipment board.
+                  Deleting removes this bag from everyone’s shared equipment
+                  board.
                 </div>
                 <div className="mb-1.5 flex items-center justify-between gap-2 text-[10px] font-black uppercase tracking-wide text-red-700">
                   <span>Slide to unlock delete</span>
-                  <span>{deleteBagSlide >= 95 ? "Ready" : `${deleteBagSlide}%`}</span>
+                  <span>
+                    {deleteBagSlide >= 95 ? "Ready" : `${deleteBagSlide}%`}
+                  </span>
                 </div>
                 <input
                   type="range"
                   min="0"
                   max="100"
                   value={deleteBagSlide}
-                  onChange={(event) => setDeleteBagSlide(Number(event.target.value))}
+                  onChange={(event) =>
+                    setDeleteBagSlide(Number(event.target.value))
+                  }
                   className="w-full accent-red-600"
                   aria-label="Slide to unlock delete bag"
                 />
               </div>
             )}
 
-            <div className={`grid gap-2 pt-1 ${editingKitId ? "grid-cols-[0.85fr_1.15fr]" : "grid-cols-1"}`}>
+            <div
+              className={`grid gap-2 pt-1 ${editingKitId ? "grid-cols-[0.85fr_1.15fr]" : "grid-cols-1"}`}
+            >
               {editingKitId && (
                 <Button
                   type="button"
                   variant="outline"
                   className="h-10 rounded-2xl border-red-200 text-sm font-black text-red-500 hover:bg-red-50 hover:text-red-600 disabled:opacity-45"
-                  disabled={equipmentSaving || (deleteConfirmOpen && deleteBagSlide < 95)}
+                  disabled={
+                    equipmentSaving ||
+                    (deleteConfirmOpen && deleteBagSlide < 95)
+                  }
                   onClick={() => {
                     blurActiveField();
                     setColorPickerOpen(false);
@@ -2094,7 +2661,9 @@ export function ClubTab({
                   }}
                 >
                   <Trash2 className="mr-1.5 h-4 w-4" />
-                  {deleteConfirmOpen && deleteBagSlide >= 95 ? "Delete now" : "Delete"}
+                  {deleteConfirmOpen && deleteBagSlide >= 95
+                    ? "Delete now"
+                    : "Delete"}
                 </Button>
               )}
               <Button

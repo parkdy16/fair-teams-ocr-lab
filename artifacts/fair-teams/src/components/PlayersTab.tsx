@@ -69,6 +69,83 @@ function isProbablyVoiceAddName(value: string) {
   return !blocked.has(lowered);
 }
 
+
+function splitAliasValues(value?: string) {
+  if (!value) return [] as string[];
+  return value
+    .split(/[,/;|()\[\]{}]+/g)
+    .map(part => part.trim())
+    .filter(Boolean);
+}
+
+function normalizeDuplicateKey(value: string) {
+  return cleanVoiceAddName(value)
+    .toLocaleLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\p{L}\p{N}]+/gu, "")
+    .trim();
+}
+
+function levenshteinDistance(a: string, b: string, maxDistance = 2) {
+  if (Math.abs(a.length - b.length) > maxDistance) return maxDistance + 1;
+  const previous = Array.from({ length: b.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= a.length; i += 1) {
+    let prevDiagonal = previous[0];
+    previous[0] = i;
+    let rowMin = previous[0];
+    for (let j = 1; j <= b.length; j += 1) {
+      const temp = previous[j];
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      previous[j] = Math.min(previous[j] + 1, previous[j - 1] + 1, prevDiagonal + cost);
+      prevDiagonal = temp;
+      rowMin = Math.min(rowMin, previous[j]);
+    }
+    if (rowMin > maxDistance) return maxDistance + 1;
+  }
+  return previous[b.length];
+}
+
+function duplicateValuesForPlayer(player: Pick<RoomPlayer, "name" | "aka">) {
+  return [player.name, ...splitAliasValues(player.aka)].filter(Boolean);
+}
+
+function findSharedDuplicateCandidates(players: RoomPlayer[], name: string, aka?: string) {
+  const rawInputs = [name, ...splitAliasValues(aka)].map(value => value.trim()).filter(Boolean);
+  const inputKeys = rawInputs.map(normalizeDuplicateKey).filter(Boolean);
+  if (!inputKeys.length) return [] as { player: RoomPlayer; reason: string }[];
+
+  const matches = players
+    .map(player => {
+      const playerValues = duplicateValuesForPlayer(player);
+      const playerKeys = playerValues.map(normalizeDuplicateKey).filter(Boolean);
+      if (!playerKeys.length) return null;
+
+      const exact = inputKeys.some(input => playerKeys.includes(input));
+      if (exact) return { player, reason: "Name or AKA already matches" };
+
+      const similar = inputKeys.some(input => {
+        if (input.length < 5) return false;
+        return playerKeys.some(candidate => {
+          if (candidate.length < 5) return false;
+          if (input === candidate) return true;
+          if (input.includes(candidate) || candidate.includes(input)) return Math.min(input.length, candidate.length) >= 5;
+          return levenshteinDistance(input, candidate, 2) <= 2;
+        });
+      });
+
+      return similar ? { player, reason: "Similar name or spelling" } : null;
+    })
+    .filter(Boolean) as { player: RoomPlayer; reason: string }[];
+
+  const seen = new Set<string>();
+  return matches.filter(match => {
+    if (seen.has(match.player.id)) return false;
+    seen.add(match.player.id);
+    return true;
+  }).slice(0, 3);
+}
+
 const STAT_FIELDS = [
   { key: "attack", label: "Attack", short: "ATK", icon: Target },
   { key: "defense", label: "Defense", short: "DEF", icon: Shield },
@@ -1224,6 +1301,8 @@ export function PlayersTab({
   const [pairSecondId, setPairSecondId] = useState("");
   const [pairNotice, setPairNotice] = useState("");
   const [addPlayerOpen, setAddPlayerOpen] = useState(false);
+  const [sharedDuplicateOverride, setSharedDuplicateOverride] = useState(false);
+  const [sharedDuplicateNotice, setSharedDuplicateNotice] = useState("");
   const [voiceAddOpen, setVoiceAddOpen] = useState(false);
   const [voiceAddHeard, setVoiceAddHeard] = useState("");
   const [voiceAddListening, setVoiceAddListening] = useState(false);
@@ -1309,11 +1388,15 @@ export function PlayersTab({
     setAddPhotoActionsOpen(false);
     setAddAdvancedOpen(false);
     setIsOrganizer(false);
+    setSharedDuplicateOverride(false);
+    setSharedDuplicateNotice("");
   };
 
   const openManualAddPlayer = () => {
     resetAddPlayerForm();
     setAddOptionsOpen(false);
+    setSharedDuplicateOverride(false);
+    setSharedDuplicateNotice("");
     setAddPlayerOpen(true);
   };
 
@@ -1385,6 +1468,21 @@ export function PlayersTab({
   }, [players, voiceAddCleanName]);
   const voiceAddCanAdd = Boolean(voiceAddCleanName && isProbablyVoiceAddName(voiceAddCleanName) && !voiceAddDuplicatePlayer);
 
+  const sharedDuplicateCandidates = useMemo(() => (isSharedRoster ? findSharedDuplicateCandidates(players, name, aka) : []), [aka, isSharedRoster, name, players]);
+  const primarySharedDuplicate = sharedDuplicateCandidates[0];
+
+  useEffect(() => {
+    setSharedDuplicateOverride(false);
+    setSharedDuplicateNotice("");
+  }, [name, aka]);
+
+  const useExistingSharedDuplicate = (player: RoomPlayer) => {
+    setSearch(displayName(player));
+    setAddPlayerOpen(false);
+    setSharedDuplicateOverride(false);
+    setSharedDuplicateNotice(`${displayName(player)} is selected in the roster search.`);
+  };
+
   const addVoicePlayerToRoster = () => {
     const cleanedName = voiceAddCleanName;
     if (!cleanedName || !isProbablyVoiceAddName(cleanedName)) {
@@ -1441,18 +1539,24 @@ export function PlayersTab({
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
+
+    if (isSharedRoster && sharedDuplicateCandidates.length > 0 && !sharedDuplicateOverride) {
+      setSharedDuplicateNotice("Check the possible match before adding this shared player.");
+      return;
+    }
+
     const now = new Date().toISOString();
-    const profileDetails = addDetails;
+    const profileDetails = isSharedRoster ? createDefaultAddPlayerDetails(5) : addDetails;
     const newPlayer = normalizePlayer({
       id: createPlayerId(),
       roomId: 1,
       name: name.trim(),
       aka: aka.trim() || undefined,
       gender,
-      skill: calculateOverall(profileDetails),
+      skill: isSharedRoster ? 5 : calculateOverall(profileDetails),
       ...profileDetails,
-      profilePhoto: addAdvancedOpen ? addProfilePhoto : undefined,
-      isOrganizer,
+      profilePhoto: !isSharedRoster && addAdvancedOpen ? addProfilePhoto : undefined,
+      isOrganizer: isSharedRoster ? false : isOrganizer,
       isNew,
       attending: false,
       createdAt: now,
@@ -1468,6 +1572,8 @@ export function PlayersTab({
     setAddPhotoActionsOpen(false);
     setAddAdvancedOpen(false);
     setIsOrganizer(false);
+    setSharedDuplicateOverride(false);
+    setSharedDuplicateNotice("");
     setAddPlayerOpen(false);
   };
 
@@ -1859,6 +1965,54 @@ export function PlayersTab({
                     <Label className="text-[10px] uppercase font-bold text-violet-700/80 tracking-wider">Player Vibe</Label>
                     <VibePicker value={addDetails.funBadge} onChange={funBadge => updateAddDetails({ funBadge })} />
                   </div>
+                </div>
+              )}
+
+              {isSharedRoster && sharedDuplicateCandidates.length > 0 && !sharedDuplicateOverride && (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-left shadow-sm">
+                  <div className="text-[11px] font-black uppercase tracking-wide text-amber-800">Possible duplicate</div>
+                  <div className="mt-1 text-xs font-semibold leading-snug text-amber-900">
+                    This shared roster may already have this player. Use the existing player if this is the same person.
+                  </div>
+                  <div className="mt-2 space-y-1.5">
+                    {sharedDuplicateCandidates.map(match => (
+                      <div key={match.player.id} className="rounded-xl border border-amber-200 bg-white/80 px-2.5 py-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-black text-slate-900">{displayName(match.player)}</div>
+                            <div className="text-[10px] font-bold uppercase tracking-wide text-amber-700">{match.reason}</div>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-8 shrink-0 rounded-xl border-amber-200 bg-white text-[10px] font-black text-amber-900"
+                            onClick={() => useExistingSharedDuplicate(match.player)}
+                          >
+                            Use existing
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {sharedDuplicateNotice ? <div className="mt-2 text-[10px] font-bold text-amber-700">{sharedDuplicateNotice}</div> : null}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="mt-2 h-8 w-full rounded-xl text-[11px] font-black text-amber-900 hover:bg-amber-100"
+                    onClick={() => {
+                      setSharedDuplicateOverride(true);
+                      setSharedDuplicateNotice("Okay — press Add to Shared Roster again to add this as a separate player.");
+                    }}
+                  >
+                    Add as separate player anyway
+                  </Button>
+                </div>
+              )}
+
+              {isSharedRoster && sharedDuplicateOverride && primarySharedDuplicate && (
+                <div className="rounded-2xl border border-violet-200 bg-violet-50 px-3 py-2 text-[11px] font-bold leading-snug text-violet-800">
+                  Adding as a separate player despite a possible match with {displayName(primarySharedDuplicate.player)}.
                 </div>
               )}
 

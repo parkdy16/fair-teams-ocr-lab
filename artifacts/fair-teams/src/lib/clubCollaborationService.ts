@@ -1,6 +1,7 @@
 import {
   addDoc,
   collection,
+  deleteDoc,
   doc,
   getDocs,
   onSnapshot,
@@ -315,4 +316,11 @@ export async function addClubNote(rosterId: string, text: string): Promise<void>
     createdAt: serverTimestamp(),
     createdAtIso: now.toISOString(),
   });
+}
+
+export async function deleteOwnClubNote(rosterId: string, noteId: string): Promise<void> {
+  requireSignedInUser();
+  const cleanNoteId = noteId.trim();
+  if (!cleanNoteId) throw new Error("Choose a note to remove.");
+  await deleteDoc(doc(clubNotesCollection(rosterId), safeDocId(cleanNoteId)));
 }

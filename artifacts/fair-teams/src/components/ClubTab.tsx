@@ -26,6 +26,7 @@ import type { PairingRule } from "@/lib/types";
 import type { RoomPlayer } from "@/lib/localRoster";
 import {
   addClubNote,
+  deleteOwnClubNote,
   listenToClubNotes,
   listenToClubRatingSummaries,
   listenToMyClubRatings,
@@ -373,6 +374,7 @@ export function ClubTab({
   const [clubNoteDraft, setClubNoteDraft] = useState("");
   const [clubNoteSaving, setClubNoteSaving] = useState(false);
   const [clubNotesOpen, setClubNotesOpen] = useState(false);
+  const [clubNoteDeletingId, setClubNoteDeletingId] = useState<string | null>(null);
   const [equipmentKits, setEquipmentKits] = useState<ClubEquipmentKit[]>(() => {
     if (typeof window === "undefined") return DEFAULT_EQUIPMENT_KITS;
     return parseEquipmentKits(window.localStorage.getItem(EQUIPMENT_PREVIEW_STORAGE_KEY));
@@ -638,7 +640,9 @@ export function ClubTab({
       ? "Sign in to rate this shared roster."
       : "Available when this roster is shared.";
   const previewClubNotes = clubNotes.slice(0, 3);
+  const currentUserUid = getFairTeamsAuth().currentUser?.uid || "";
   const canAddClubNote = clubRatingsEnabled && clubNoteDraft.trim().length > 0 && !clubNoteSaving;
+  const canRemoveClubNote = (note: ClubNote) => Boolean(currentUserUid && note.createdByUid === currentUserUid);
 
   const openRatingForPlayer = (player: RoomPlayer | null) => {
     if (!player) return;
@@ -732,6 +736,21 @@ export function ClubTab({
       setClubNotesError(error instanceof Error ? error.message : "Could not add Club note.");
     } finally {
       setClubNoteSaving(false);
+    }
+  };
+
+  const removeOwnClubNote = async (note: ClubNote) => {
+    if (!sharedRosterId || !canRemoveClubNote(note) || clubNoteDeletingId) return;
+    const confirmed = window.confirm("Remove this Club note? This only deletes your own note.");
+    if (!confirmed) return;
+    setClubNoteDeletingId(note.id);
+    setClubNotesError("");
+    try {
+      await deleteOwnClubNote(sharedRosterId, note.id);
+    } catch (error) {
+      setClubNotesError(error instanceof Error ? error.message : "Could not remove Club note.");
+    } finally {
+      setClubNoteDeletingId(null);
     }
   };
 
@@ -1342,9 +1361,24 @@ export function ClubTab({
         <div className="mt-3 grid gap-2">
           {previewClubNotes.length > 0 ? previewClubNotes.map((note) => (
             <div key={note.id} className="rounded-[1.25rem] border border-amber-100 bg-amber-50/80 px-3 py-2 shadow-sm">
-              <div className="text-sm font-black leading-snug text-[#102A43]">{note.text}</div>
-              <div className="mt-1 text-[10px] font-bold text-amber-700/70">
-                {note.createdByName || "Organizer"} · {formatEquipmentTimestamp(note.createdAt)}
+              <div className="flex items-start gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-black leading-snug text-[#102A43]">{note.text}</div>
+                  <div className="mt-1 text-[10px] font-bold text-amber-700/70">
+                    {note.createdByName || "Organizer"} · {formatEquipmentTimestamp(note.createdAt)}
+                  </div>
+                </div>
+                {canRemoveClubNote(note) && (
+                  <button
+                    type="button"
+                    className="rounded-full bg-white/80 p-1.5 text-amber-600 ring-1 ring-amber-100 active:scale-95 disabled:opacity-50"
+                    onClick={() => removeOwnClubNote(note)}
+                    disabled={clubNoteDeletingId === note.id}
+                    aria-label="Remove your Club note"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                )}
               </div>
             </div>
           )) : (
@@ -1389,9 +1423,24 @@ export function ClubTab({
             <div className="grid gap-2">
               {clubNotes.length > 0 ? clubNotes.map((note) => (
                 <div key={`all-${note.id}`} className="rounded-[1.25rem] border border-amber-100 bg-amber-50/80 px-3 py-2 shadow-sm">
-                  <div className="text-sm font-black leading-snug text-[#102A43]">{note.text}</div>
-                  <div className="mt-1 text-[10px] font-bold text-amber-700/70">
-                    {note.createdByName || "Organizer"} · {formatEquipmentTimestamp(note.createdAt)}
+                  <div className="flex items-start gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-black leading-snug text-[#102A43]">{note.text}</div>
+                      <div className="mt-1 text-[10px] font-bold text-amber-700/70">
+                        {note.createdByName || "Organizer"} · {formatEquipmentTimestamp(note.createdAt)}
+                      </div>
+                    </div>
+                    {canRemoveClubNote(note) && (
+                      <button
+                        type="button"
+                        className="rounded-full bg-white/80 p-1.5 text-amber-600 ring-1 ring-amber-100 active:scale-95 disabled:opacity-50"
+                        onClick={() => removeOwnClubNote(note)}
+                        disabled={clubNoteDeletingId === note.id}
+                        aria-label="Remove your Club note"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                   </div>
                 </div>
               )) : (

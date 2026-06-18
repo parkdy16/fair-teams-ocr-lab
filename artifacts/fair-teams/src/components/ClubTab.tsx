@@ -2,12 +2,11 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   CalendarClock,
   ClipboardList,
-  PackageOpen,
+  Pencil,
   Plus,
   ShieldCheck,
   Trash2,
   UserCircle,
-  Users,
   Vote,
   X,
 } from "lucide-react";
@@ -25,6 +24,7 @@ import {
   saveFirebaseEquipmentBag,
   type FirebaseEquipmentBag,
 } from "@/lib/equipmentService";
+import type { PairingRule } from "@/lib/types";
 
 type ClubTabProps = {
   isActive?: boolean;
@@ -39,6 +39,8 @@ type ClubTabProps = {
   equipmentGroupId?: string;
   equipmentHolderLabels?: string[];
   equipmentHolderNamesByEmail?: Record<string, string>;
+  pairingRules?: PairingRule[];
+  onOpenPairingRules?: () => void;
 };
 
 type ClubVoteOption = {
@@ -47,14 +49,21 @@ type ClubVoteOption = {
   count: number;
 };
 
+type ClubVoteDecision = "yes" | "no" | "unclear" | "closed";
+
 type ClubVote = {
   id: string;
   question: string;
   options: ClubVoteOption[];
   status: "open" | "closed";
   createdAt: number;
+  createdByName?: string;
   deadline?: string;
   votedOptionId?: string;
+  closedAt?: number;
+  closedByName?: string;
+  decision?: ClubVoteDecision;
+  decisionNote?: string;
 };
 
 type EquipmentHolder = {
@@ -66,6 +75,19 @@ type ClubEquipmentKit = FirebaseEquipmentBag;
 
 const VOTE_PREVIEW_STORAGE_KEY = "fairteams.clubVotes.preview.v1";
 const EQUIPMENT_PREVIEW_STORAGE_KEY = "fairteams.clubEquipment.preview.v1";
+
+const QUICK_VOTE_OPTIONS: Array<{ id: string; label: string }> = [
+  { id: "yes", label: "Yes" },
+  { id: "no", label: "No" },
+  { id: "not_sure", label: "Not sure" },
+];
+
+const VOTE_DECISION_OPTIONS: Array<{ id: ClubVoteDecision; label: string; description: string }> = [
+  { id: "yes", label: "Yes, we’ll do it", description: "Move forward with this." },
+  { id: "no", label: "No, we won’t", description: "Close it as a no." },
+  { id: "unclear", label: "No clear decision", description: "The group feeling was split or uncertain." },
+  { id: "closed", label: "Just close it", description: "No final decision needed." },
+];
 
 const EQUIPMENT_COLORS = [
   "#111827",
@@ -101,7 +123,10 @@ const DEFAULT_EQUIPMENT_KITS: ClubEquipmentKit[] = [
     color: "#2563eb",
     contents: ["2 balls", "Pump", "Needles"],
     note: "Check air before Saturday.",
+    createdAt: Date.now(),
+    createdByName: "Preview",
     updatedAt: Date.now(),
+    updatedByName: "Preview",
   },
   {
     id: "kit-bibs",
@@ -109,7 +134,10 @@ const DEFAULT_EQUIPMENT_KITS: ClubEquipmentKit[] = [
     holderId: "storage",
     color: "#db2777",
     contents: ["10 dark bibs", "10 light bibs"],
+    createdAt: Date.now(),
+    createdByName: "Preview",
     updatedAt: Date.now(),
+    updatedByName: "Preview",
   },
   {
     id: "kit-cones",
@@ -118,7 +146,10 @@ const DEFAULT_EQUIPMENT_KITS: ClubEquipmentKit[] = [
     color: "#ea580c",
     contents: ["12 cones"],
     note: "Someone took them after last game?",
+    createdAt: Date.now(),
+    createdByName: "Preview",
     updatedAt: Date.now(),
+    updatedByName: "Preview",
   },
 ];
 
@@ -172,6 +203,22 @@ function cleanEquipmentHolderLabel(value: string, namesByEmail: Record<string, s
   const emailName = trimmed.includes("@") ? trimmed.split("@")[0] : trimmed;
   const readableName = titleCaseWords(emailName.replace(/[._-]+/g, " "));
   return looksLikeReadableName(readableName) ? readableName : "Organizer";
+}
+
+function equipmentActorLabel(name?: string, email?: string, namesByEmail: Record<string, string> = {}) {
+  const cleanName = name?.trim();
+  if (cleanName && !cleanName.includes("@")) return titleCaseWords(cleanName);
+  const cleanEmail = email?.trim() || cleanName || "";
+  if (!cleanEmail) return "Unknown";
+  const label = cleanEquipmentHolderLabel(cleanEmail, namesByEmail);
+  return label === "Organizer" ? "Unknown" : label;
+}
+
+function formatEquipmentTimestamp(value?: number) {
+  if (!value) return "time not recorded";
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "time not recorded";
+  return date.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
 function buildSharedEquipmentHolders(labels: string[], equipmentKits: ClubEquipmentKit[], namesByEmail: Record<string, string> = {}) {
@@ -233,6 +280,13 @@ function parseVotes(raw: string | null): ClubVote[] {
         ...vote,
         status: vote.status === "closed" ? "closed" : "open",
         createdAt: Number(vote.createdAt) || Date.now(),
+        createdByName: typeof vote.createdByName === "string" ? vote.createdByName : undefined,
+        deadline: typeof vote.deadline === "string" && vote.deadline.trim() ? vote.deadline : undefined,
+        votedOptionId: typeof vote.votedOptionId === "string" ? vote.votedOptionId : undefined,
+        closedAt: Number(vote.closedAt) || undefined,
+        closedByName: typeof vote.closedByName === "string" ? vote.closedByName : undefined,
+        decision: ["yes", "no", "unclear", "closed"].includes(String(vote.decision)) ? vote.decision : undefined,
+        decisionNote: typeof vote.decisionNote === "string" && vote.decisionNote.trim() ? vote.decisionNote : undefined,
         options: vote.options
           .filter((option: ClubVoteOption) => Boolean(option?.id && option?.label))
           .map((option: ClubVoteOption) => ({
@@ -246,26 +300,53 @@ function parseVotes(raw: string | null): ClubVote[] {
   }
 }
 
-function parseEquipmentKits(raw: string | null): ClubEquipmentKit[] {
-  if (!raw) return DEFAULT_EQUIPMENT_KITS;
+function parseEquipmentKits(raw: string | null, fallback: ClubEquipmentKit[] = DEFAULT_EQUIPMENT_KITS): ClubEquipmentKit[] {
+  if (!raw) return fallback;
   try {
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return DEFAULT_EQUIPMENT_KITS;
+    if (!Array.isArray(parsed)) return fallback;
     return parsed
       .filter((kit): kit is ClubEquipmentKit => Boolean(kit?.id && kit?.name))
       .map((kit) => ({
         id: String(kit.id),
         name: String(kit.name),
-        holderId: LOCAL_EQUIPMENT_HOLDERS.some((holder) => holder.id === kit.holderId) ? String(kit.holderId) : "storage",
+        holderId: typeof kit.holderId === "string" && kit.holderId.trim() ? normalizeEquipmentHolderId(String(kit.holderId)) : "storage",
         color: typeof kit.color === "string" && kit.color.trim() ? kit.color : DEFAULT_EQUIPMENT_COLOR,
         contents: Array.isArray(kit.contents)
           ? kit.contents.map((item) => String(item).trim()).filter(Boolean).slice(0, 20)
           : [],
         note: kit.note ? String(kit.note) : undefined,
+        createdAt: Number(kit.createdAt) || undefined,
+        createdByEmail: kit.createdByEmail ? String(kit.createdByEmail) : undefined,
+        createdByName: kit.createdByName ? String(kit.createdByName) : undefined,
         updatedAt: Number(kit.updatedAt) || Date.now(),
+        updatedByEmail: kit.updatedByEmail ? String(kit.updatedByEmail) : undefined,
+        updatedByName: kit.updatedByName ? String(kit.updatedByName) : undefined,
       }));
   } catch {
-    return DEFAULT_EQUIPMENT_KITS;
+    return fallback;
+  }
+}
+
+function equipmentCacheKey(scopeId: string) {
+  return `${EQUIPMENT_PREVIEW_STORAGE_KEY}.cache.${scopeId}`;
+}
+
+function readCachedEquipmentKits(scopeId: string) {
+  if (typeof window === "undefined") return [];
+  try {
+    return parseEquipmentKits(window.localStorage.getItem(equipmentCacheKey(scopeId)), []);
+  } catch {
+    return [];
+  }
+}
+
+function writeCachedEquipmentKits(scopeId: string, kits: ClubEquipmentKit[]) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(equipmentCacheKey(scopeId), JSON.stringify(kits));
+  } catch {
+    // Best-effort cache only. Realtime Firestore remains the source of truth.
   }
 }
 
@@ -287,6 +368,31 @@ function DuffleBagIcon({ color, className = "h-9 w-12" }: { color: string; class
       <circle cx="44" cy="32" r="2" fill="rgba(255,255,255,0.7)" />
     </svg>
   );
+}
+
+
+function AntiqueBallIcon({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 48 48" className={className} aria-hidden="true">
+      <circle cx="24" cy="24" r="18" fill="currentColor" opacity="0.12" />
+      <circle cx="24" cy="24" r="17" fill="none" stroke="currentColor" strokeWidth="3" />
+      <path d="M24 7.5c-4.7 4-7 9.5-7 16.5s2.3 12.5 7 16.5" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" />
+      <path d="M24 7.5c4.7 4 7 9.5 7 16.5s-2.3 12.5-7 16.5" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" />
+      <path d="M10 19c4.2 1.8 8.9 2.7 14 2.7s9.8-.9 14-2.7" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
+      <path d="M10 29c4.2-1.8 8.9-2.7 14-2.7s9.8.9 14 2.7" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function getClubGreetingName(user: SharedRosterUser | null) {
+  const raw = user?.displayName?.trim() || user?.email?.split("@")[0]?.trim() || "there";
+  if (!raw) return "there";
+  return raw
+    .replace(/[._-]+/g, " ")
+    .split(" ")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 function ClubFeatureCard({
@@ -325,6 +431,43 @@ function ClubFeatureCard({
   );
 }
 
+function formatClubVoteDate(timestamp?: number) {
+  if (!timestamp) return "";
+  try {
+    return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(new Date(timestamp));
+  } catch {
+    return "";
+  }
+}
+
+function getVoteOptionCount(vote: ClubVote, optionId: string) {
+  return vote.options.find((option) => option.id === optionId)?.count ?? 0;
+}
+
+function getVoteResultSummary(vote: ClubVote) {
+  const totalVotes = vote.options.reduce((sum, option) => sum + option.count, 0);
+  if (totalVotes === 0) return "No votes yet";
+  const yes = getVoteOptionCount(vote, "yes");
+  const no = getVoteOptionCount(vote, "no");
+  const notSure = getVoteOptionCount(vote, "not_sure");
+  const highest = Math.max(yes, no, notSure);
+  const leaders = [
+    yes === highest ? "Yes" : "",
+    no === highest ? "No" : "",
+    notSure === highest ? "Not sure" : "",
+  ].filter(Boolean);
+  if (leaders.length !== 1) return `Split feeling · ${totalVotes} voted`;
+  return `Mostly ${leaders[0].toLowerCase()} · ${totalVotes} voted`;
+}
+
+function getVoteDecisionLabel(decision?: ClubVoteDecision) {
+  if (decision === "yes") return "Decided yes";
+  if (decision === "no") return "Decided no";
+  if (decision === "unclear") return "No clear decision";
+  if (decision === "closed") return "Closed";
+  return "Closed";
+}
+
 function VoteCard({
   vote,
   onVote,
@@ -338,28 +481,39 @@ function VoteCard({
 }) {
   const totalVotes = vote.options.reduce((sum, option) => sum + option.count, 0);
   const isClosed = vote.status === "closed";
+  const closedDate = formatClubVoteDate(vote.closedAt);
 
   return (
-    <article className="rounded-3xl border border-slate-200 bg-white p-3 shadow-sm">
+    <article className={`rounded-3xl border bg-white p-3 shadow-sm ${isClosed ? "border-slate-100 opacity-95" : "border-slate-200"}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
             <span className={`rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wide ${isClosed ? "bg-slate-100 text-slate-500" : "bg-emerald-100 text-emerald-700"}`}>
-              {isClosed ? "Closed" : "Open"}
+              {isClosed ? "Past" : "Open"}
             </span>
             <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-slate-500">
               {totalVotes} vote{totalVotes === 1 ? "" : "s"}
             </span>
-            {vote.deadline && (
+            {vote.deadline && !isClosed && (
               <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-blue-700">
                 <CalendarClock className="h-3 w-3" />
                 {vote.deadline}
+              </span>
+            )}
+            {isClosed && (
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-slate-500">
+                {getVoteDecisionLabel(vote.decision)}{closedDate ? ` · ${closedDate}` : ""}
               </span>
             )}
           </div>
           <h3 className="mt-2 text-sm font-black leading-snug text-[#102A43]">
             {vote.question}
           </h3>
+          {vote.createdByName && (
+            <div className="mt-1 text-[10px] font-semibold text-slate-400">
+              Asked by {vote.createdByName}
+            </div>
+          )}
         </div>
         <button
           type="button"
@@ -402,22 +556,34 @@ function VoteCard({
         })}
       </div>
 
-      <div className="mt-3 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500">
-          <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
-          {vote.votedOptionId ? "Your preview vote is counted." : "Names are not shown next to choices."}
+      {isClosed && (
+        <div className="mt-3 rounded-2xl bg-slate-50 px-3 py-2">
+          <div className="text-[11px] font-black text-[#102A43]">{getVoteResultSummary(vote)}</div>
+          {vote.decisionNote && (
+            <div className="mt-1 text-[11px] font-semibold leading-snug text-slate-500">{vote.decisionNote}</div>
+          )}
+          {vote.closedByName && (
+            <div className="mt-1 text-[10px] font-semibold text-slate-400">Closed by {vote.closedByName}</div>
+          )}
         </div>
-        {!isClosed && (
+      )}
+
+      {!isClosed && (
+        <div className="mt-3 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500">
+            <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
+            {vote.votedOptionId ? "Your preview vote is counted." : "Anonymous totals only."}
+          </div>
           <Button
             type="button"
             variant="outline"
             className="h-8 shrink-0 rounded-xl px-3 text-[11px] font-black"
             onClick={() => onCloseVote(vote.id)}
           >
-            Close
+            Close vote
           </Button>
-        )}
-      </div>
+        </div>
+      )}
     </article>
   );
 }
@@ -435,14 +601,20 @@ export function ClubTab({
   equipmentGroupId,
   equipmentHolderLabels = [],
   equipmentHolderNamesByEmail = {},
+  pairingRules = [],
+  onOpenPairingRules,
 }: ClubTabProps) {
   const [votes, setVotes] = useState<ClubVote[]>(() => {
     if (typeof window === "undefined") return [];
     return parseVotes(window.localStorage.getItem(VOTE_PREVIEW_STORAGE_KEY));
   });
   const [voteDialogOpen, setVoteDialogOpen] = useState(false);
+  const [voteCreateOpen, setVoteCreateOpen] = useState(false);
+  const [showPastVotes, setShowPastVotes] = useState(false);
+  const [closingVoteId, setClosingVoteId] = useState<string | null>(null);
+  const [closeDecision, setCloseDecision] = useState<ClubVoteDecision | "">("");
+  const [closeNote, setCloseNote] = useState("");
   const [question, setQuestion] = useState("");
-  const [optionText, setOptionText] = useState("Yes\nNo");
   const [deadline, setDeadline] = useState("");
   const [equipmentKits, setEquipmentKits] = useState<ClubEquipmentKit[]>(() => {
     if (typeof window === "undefined") return DEFAULT_EQUIPMENT_KITS;
@@ -462,6 +634,7 @@ export function ClubTab({
   const [colorPickerOpen, setColorPickerOpen] = useState(false);
   const [deleteBagSlide, setDeleteBagSlide] = useState(0);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [equipmentMoveNotice, setEquipmentMoveNotice] = useState("");
   const [contentPeekKitId, setContentPeekKitId] = useState<string | null>(null);
   const [kitContents, setKitContents] = useState("");
   const [kitNote, setKitNote] = useState("");
@@ -477,6 +650,7 @@ export function ClubTab({
     equipmentBoardOpen: false,
     equipmentDialogOpen: false,
     voteDialogOpen: false,
+    closingVoteId: null as string | null,
     accountDialogOpen: false,
   });
   const [authReady, setAuthReady] = useState(false);
@@ -506,34 +680,62 @@ export function ClubTab({
   };
 
   const equipmentRealtimeEnabled = Boolean(equipmentGroupId);
+  const equipmentCanSyncOnline = Boolean(equipmentGroupId && clubUser?.email);
+  const equipmentWaitingForAccount = Boolean(equipmentGroupId && !authReady);
+  const equipmentNeedsSignIn = Boolean(equipmentGroupId && authReady && !clubUser?.email);
   const equipmentSharedConnecting = isSharedRoster && !equipmentRealtimeEnabled;
-  const equipmentStatusText = equipmentRealtimeEnabled
+  const equipmentStatusText = equipmentCanSyncOnline
     ? equipmentError
-      ? "Sync issue. Open board."
-      : equipmentLoading
-        ? "Loading shared equipment…"
-        : "Realtime sync on."
-    : equipmentSharedConnecting
-      ? "Shared sync not ready yet."
-      : "Local preview.";
-  const equipmentBoardStatusText = equipmentRealtimeEnabled
-    ? equipmentError
+      ? "Reconnecting equipment…"
+      : equipmentSaving
+        ? "Saving equipment…"
+        : equipmentLoading
+          ? equipmentKits.length > 0
+            ? "Online · syncing latest"
+            : "Online · loading bags"
+          : "Online · shared equipment"
+    : equipmentWaitingForAccount
+      ? "Connecting account…"
+      : equipmentNeedsSignIn
+        ? "Sign in to sync equipment"
+        : equipmentSharedConnecting
+          ? "Connecting shared equipment…"
+          : "Local preview";
+  const equipmentBoardStatusText = equipmentMoveNotice
+    ? `${equipmentMoveNotice}${equipmentCanSyncOnline ? " · saved online" : ""}`
+    : equipmentCanSyncOnline
       ? equipmentError
-      : equipmentLoading
-        ? "Loading shared equipment…"
-        : "Realtime sync on · drag bags to move"
-    : equipmentSharedConnecting
-      ? "Shared sync not ready yet."
-      : "Local preview · drag bags to move";
+        ? "Reconnecting equipment board…"
+        : equipmentSaving
+          ? "Saving equipment…"
+          : equipmentLoading
+            ? equipmentKits.length > 0
+              ? "Online · showing saved bags while syncing latest…"
+              : "Online · loading bags…"
+            : `Online · shared equipment${equipmentLastSyncedAt ? ` · updated ${formatEquipmentTimestamp(equipmentLastSyncedAt)}` : ""}`
+      : equipmentWaitingForAccount
+        ? "Connecting account…"
+        : equipmentNeedsSignIn
+          ? "Sign in to sync the shared equipment board."
+          : equipmentSharedConnecting
+            ? "Connecting shared equipment…"
+            : "Local preview · drag bags to move";
   const equipmentHolders = useMemo<EquipmentHolder[]>(() => {
     if (!isSharedRoster && !equipmentRealtimeEnabled) return LOCAL_EQUIPMENT_HOLDERS;
     return buildSharedEquipmentHolders(equipmentHolderLabels, equipmentKits, equipmentHolderNamesByEmail);
   }, [equipmentHolderLabels, equipmentHolderNamesByEmail, equipmentKits, equipmentRealtimeEnabled, isSharedRoster]);
+  const cleanPairingRuleCount = pairingRules.filter((rule) => rule.playerAId && rule.playerBId).length;
 
   useEffect(() => {
     if (typeof window === "undefined" || equipmentRealtimeEnabled || isSharedRoster) return;
     window.localStorage.setItem(EQUIPMENT_PREVIEW_STORAGE_KEY, JSON.stringify(equipmentKits));
   }, [equipmentKits, equipmentRealtimeEnabled, isSharedRoster]);
+
+  useEffect(() => {
+    if (!equipmentMoveNotice || typeof window === "undefined") return;
+    const timeoutId = window.setTimeout(() => setEquipmentMoveNotice(""), 2200);
+    return () => window.clearTimeout(timeoutId);
+  }, [equipmentMoveNotice]);
 
   useEffect(() => {
     if (!equipmentGroupId) {
@@ -548,14 +750,32 @@ export function ClubTab({
       return;
     }
 
+    const cachedBags = readCachedEquipmentKits(equipmentGroupId);
+    if (cachedBags.length > 0) {
+      setEquipmentKits(cachedBags);
+    }
+
+    if (!authReady) {
+      setEquipmentLoading(true);
+      setEquipmentError("");
+      return;
+    }
+
+    if (!clubUser?.email) {
+      setEquipmentLoading(false);
+      setEquipmentError("");
+      setEquipmentLastSyncedAt(null);
+      return;
+    }
+
     setEquipmentLoading(true);
     setEquipmentError("");
-    setEquipmentKits([]);
     try {
       const unsubscribe = listenToFirebaseEquipmentBags(
         equipmentGroupId,
         (bags) => {
           setEquipmentKits(bags);
+          writeCachedEquipmentKits(equipmentGroupId, bags);
           setEquipmentLoading(false);
           setEquipmentError("");
           setEquipmentLastSyncedAt(Date.now());
@@ -571,11 +791,12 @@ export function ClubTab({
       setEquipmentLoading(false);
       setEquipmentError(error instanceof Error ? error.message : "Could not connect equipment board.");
     }
-  }, [equipmentGroupId]);
+  }, [authReady, clubUser?.email, equipmentGroupId, isSharedRoster]);
 
   const openVotes = useMemo(() => votes.filter((vote) => vote.status === "open"), [votes]);
   const closedVotes = useMemo(() => votes.filter((vote) => vote.status === "closed"), [votes]);
   const contentPeekKit = useMemo(() => equipmentKits.find((kit) => kit.id === contentPeekKitId) || null, [contentPeekKitId, equipmentKits]);
+  const editingKitMeta = useMemo(() => editingKitId ? equipmentKits.find((kit) => kit.id === editingKitId) || null : null, [editingKitId, equipmentKits]);
   const sharedPersonNames = useMemo(() => {
     const cleaned = equipmentHolderLabels
       .map((label) => cleanEquipmentHolderLabel(label, equipmentHolderNamesByEmail))
@@ -593,38 +814,44 @@ export function ClubTab({
     }, {});
   }, [equipmentHolders]);
   const equipmentPreviewKits = useMemo(() => equipmentKits.slice(0, 3), [equipmentKits]);
-  const hiddenEquipmentCount = Math.max(0, equipmentKits.length - equipmentPreviewKits.length);
+  const equipmentDashboardHolders = useMemo(() => {
+    const holdersWithBags = equipmentHolders.filter((holder) => equipmentKits.some((kit) => normalizeEquipmentHolderId(kit.holderId) === holder.id));
+    const holdersToShow = holdersWithBags.length ? holdersWithBags : equipmentHolders.slice(0, Math.min(3, equipmentHolders.length));
+    return holdersToShow.slice(0, 4);
+  }, [equipmentHolders, equipmentKits]);
+  const clubGreetingName = getClubGreetingName(clubUser);
   const loginGateOpen = Boolean(isActive && authReady && !clubUser);
   const accountModalOpen = loginGateOpen || accountDialogOpen;
 
   const resetVoteForm = () => {
     setQuestion("");
-    setOptionText("Yes\nNo");
     setDeadline("");
+  };
+
+  const resetCloseVoteForm = () => {
+    setClosingVoteId(null);
+    setCloseDecision("");
+    setCloseNote("");
   };
 
   const createVote = () => {
     const trimmedQuestion = question.trim();
-    const labels = optionText
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .slice(0, 6);
-
-    if (!trimmedQuestion || labels.length < 2) return;
+    if (!trimmedQuestion) return;
 
     const vote: ClubVote = {
       id: makeId("vote"),
       question: trimmedQuestion,
-      options: labels.map((label) => ({ id: makeId("option"), label, count: 0 })),
+      options: QUICK_VOTE_OPTIONS.map((option) => ({ ...option, count: 0 })),
       status: "open",
       createdAt: Date.now(),
+      createdByName: clubGreetingName || undefined,
       deadline: deadline.trim() || undefined,
     };
 
     setVotes((current) => [vote, ...current]);
     resetVoteForm();
-    setVoteDialogOpen(false);
+    setVoteCreateOpen(false);
+    setShowPastVotes(false);
   };
 
   const castPreviewVote = (voteId: string, optionId: string) => {
@@ -641,7 +868,25 @@ export function ClubTab({
   };
 
   const closeVote = (voteId: string) => {
-    setVotes((current) => current.map((vote) => vote.id === voteId ? { ...vote, status: "closed" } : vote));
+    setClosingVoteId(voteId);
+    setCloseDecision("");
+    setCloseNote("");
+  };
+
+  const finalizeCloseVote = () => {
+    if (!closingVoteId || !closeDecision) return;
+    setVotes((current) => current.map((vote) => vote.id === closingVoteId
+      ? {
+        ...vote,
+        status: "closed",
+        closedAt: Date.now(),
+        closedByName: clubGreetingName || undefined,
+        decision: closeDecision,
+        decisionNote: closeNote.trim() || undefined,
+      }
+      : vote));
+    setShowPastVotes(true);
+    resetCloseVoteForm();
   };
 
   const deleteVote = (voteId: string) => {
@@ -715,6 +960,17 @@ export function ClubTab({
     const trimmedName = kitName.trim();
     if (!trimmedName) return;
 
+    const now = Date.now();
+    const existingKit = editingKitId ? equipmentKits.find((kit) => kit.id === editingKitId) : null;
+    let actorEmail = clubUser?.email || undefined;
+    let actorName = actorEmail || "Organizer";
+    try {
+      const firebaseUser = getFairTeamsAuth().currentUser;
+      actorEmail = firebaseUser?.email || actorEmail;
+      actorName = firebaseUser?.displayName || actorEmail || "Organizer";
+    } catch {
+      // Local preview can run without Firebase auth ready.
+    }
     const nextKit: ClubEquipmentKit = {
       id: editingKitId || makeId("kit"),
       name: trimmedName,
@@ -726,26 +982,31 @@ export function ClubTab({
         .filter(Boolean)
         .slice(0, 20),
       note: kitNote.trim() || undefined,
-      updatedAt: Date.now(),
+      createdAt: existingKit?.createdAt || (!editingKitId ? now : undefined),
+      createdByEmail: existingKit?.createdByEmail || (!editingKitId ? actorEmail : undefined),
+      createdByName: existingKit?.createdByName || (!editingKitId ? actorName : undefined),
+      updatedAt: now,
+      updatedByEmail: actorEmail,
+      updatedByName: actorName,
     };
 
     const previousKits = equipmentKits;
-    const applyLocal = () => {
-      setEquipmentKits((current) => editingKitId
-        ? current.map((kit) => kit.id === editingKitId ? nextKit : kit)
-        : [nextKit, ...current]);
-    };
+    const nextKits = editingKitId
+      ? previousKits.map((kit) => kit.id === editingKitId ? nextKit : kit)
+      : [nextKit, ...previousKits];
 
     try {
       setEquipmentSaving(true);
       setEquipmentError("");
-      applyLocal();
+      setEquipmentKits(nextKits);
       if (equipmentGroupId) {
+        writeCachedEquipmentKits(equipmentGroupId, nextKits);
         await saveFirebaseEquipmentBag(equipmentGroupId, nextKit);
       }
       closeEquipmentEditor(true);
     } catch (error) {
       setEquipmentKits(previousKits);
+      if (equipmentGroupId) writeCachedEquipmentKits(equipmentGroupId, previousKits);
       setEquipmentError(error instanceof Error ? error.message : "Could not save equipment bag.");
     } finally {
       setEquipmentSaving(false);
@@ -755,14 +1016,37 @@ export function ClubTab({
   const moveEquipmentKit = async (kitId: string, holderId: string) => {
     const currentKit = equipmentKits.find((kit) => kit.id === kitId);
     if (!currentKit) return;
-    const nextKit = { ...currentKit, holderId, updatedAt: Date.now() };
-    setEquipmentKits((current) => current.map((kit) => kit.id === kitId ? nextKit : kit));
+    const now = Date.now();
+    let actorEmail = clubUser?.email || undefined;
+    let actorName = actorEmail || "Organizer";
+    try {
+      const firebaseUser = getFairTeamsAuth().currentUser;
+      actorEmail = firebaseUser?.email || actorEmail;
+      actorName = firebaseUser?.displayName || actorEmail || "Organizer";
+    } catch {
+      // Local preview can run without Firebase auth ready.
+    }
+    const nextKit = {
+      ...currentKit,
+      holderId,
+      updatedAt: now,
+      updatedByEmail: actorEmail,
+      updatedByName: actorName,
+    };
+    const previousKits = equipmentKits;
+    const nextKits = previousKits.map((kit) => kit.id === kitId ? nextKit : kit);
+    const nextHolderLabel = equipmentHolderLabelById[normalizeEquipmentHolderId(holderId)] || "new holder";
+    setEquipmentKits(nextKits);
+    setEquipmentMoveNotice(`${currentKit.name} moved → ${nextHolderLabel}`);
+    if (equipmentGroupId) writeCachedEquipmentKits(equipmentGroupId, nextKits);
     try {
       setEquipmentError("");
       if (equipmentGroupId) {
         await saveFirebaseEquipmentBag(equipmentGroupId, nextKit);
       }
     } catch (error) {
+      setEquipmentKits(previousKits);
+      if (equipmentGroupId) writeCachedEquipmentKits(equipmentGroupId, previousKits);
       setEquipmentError(error instanceof Error ? error.message : "Could not move equipment bag.");
     }
   };
@@ -829,7 +1113,9 @@ export function ClubTab({
 
   const deleteEquipmentKit = async (kitId: string) => {
     const previous = equipmentKits;
-    setEquipmentKits((current) => current.filter((kit) => kit.id !== kitId));
+    const nextKits = previous.filter((kit) => kit.id !== kitId);
+    setEquipmentKits(nextKits);
+    if (equipmentGroupId) writeCachedEquipmentKits(equipmentGroupId, nextKits);
     try {
       setEquipmentSaving(true);
       setEquipmentError("");
@@ -841,6 +1127,7 @@ export function ClubTab({
       }
     } catch (error) {
       setEquipmentKits(previous);
+      if (equipmentGroupId) writeCachedEquipmentKits(equipmentGroupId, previous);
       setEquipmentError(error instanceof Error ? error.message : "Could not delete equipment bag.");
     } finally {
       setEquipmentSaving(false);
@@ -859,6 +1146,7 @@ export function ClubTab({
     equipmentDialogOpen ||
     equipmentBoardOpen ||
     voteDialogOpen ||
+    closingVoteId ||
     accountDialogOpen,
   );
 
@@ -869,9 +1157,10 @@ export function ClubTab({
       equipmentBoardOpen,
       equipmentDialogOpen,
       voteDialogOpen,
+      closingVoteId,
       accountDialogOpen,
     };
-  }, [accountDialogOpen, colorPickerOpen, contentPeekKitId, equipmentBoardOpen, equipmentDialogOpen, voteDialogOpen]);
+  }, [accountDialogOpen, closingVoteId, colorPickerOpen, contentPeekKitId, equipmentBoardOpen, equipmentDialogOpen, voteDialogOpen]);
 
   useEffect(() => {
     onBackTargetChange?.(hasClubBackTarget);
@@ -907,6 +1196,11 @@ export function ClubTab({
         setEquipmentBoardOpen(false);
         return;
       }
+      if (state.closingVoteId) {
+        event.preventDefault();
+        resetCloseVoteForm();
+        return;
+      }
       if (state.voteDialogOpen) {
         event.preventDefault();
         setVoteDialogOpen(false);
@@ -923,7 +1217,9 @@ export function ClubTab({
     return () => window.removeEventListener("fairteams:native-back", handleNativeBack);
   }, [equipmentEditorReturnToBoard]);
 
-  const canCreateVote = question.trim().length > 0 && optionText.split("\n").filter((line) => line.trim()).length >= 2;
+  const canCreateVote = question.trim().length > 0;
+  const closingVote = votes.find((vote) => vote.id === closingVoteId) || null;
+  const canFinalizeCloseVote = Boolean(closingVote && closeDecision);
   const canSaveEquipmentKit = kitName.trim().length > 0;
 
   return (
@@ -949,7 +1245,10 @@ export function ClubTab({
             aria-label="Open Fair Teams account"
           >
             <UserCircle className="h-4 w-4 shrink-0 text-slate-400" />
-            <span className="min-w-0 truncate text-[11px] font-bold text-slate-500">{clubUser.email}</span>
+            <span className="min-w-0">
+              <span className="block truncate text-xs font-black text-[#102A43]">Hey, {clubGreetingName}</span>
+              <span className="block truncate text-[10px] font-bold text-slate-400">{equipmentCanSyncOnline ? "Online · club tools sync" : clubUser.email}</span>
+            </span>
           </button>
           <button
             type="button"
@@ -963,17 +1262,36 @@ export function ClubTab({
       )}
 
       <section className="rounded-[1.7rem] border border-slate-100 bg-white p-3 shadow-sm ring-1 ring-slate-50">
-        <div className="mb-2 flex items-center justify-between gap-2">
-          <div>
+        <div className="mb-2 flex items-start justify-between gap-2">
+          <div className="min-w-0">
             <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wide text-slate-500">
               <span className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.14)]" />
               Shared roster
             </div>
-            <div className="mt-0.5 text-[11px] font-semibold text-slate-400">Player cards + pairing rules</div>
+            <div className="mt-0.5 truncate text-[11px] font-semibold text-slate-400">
+              Invite organizers and keep {activeRosterName} in sync.
+            </div>
           </div>
           {!isSharedRoster && (
             <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-black text-slate-500">Local</span>
           )}
+        </div>
+        <div className="mb-2 flex items-center justify-between gap-2 rounded-2xl border border-slate-100 bg-slate-50/70 px-3 py-2">
+          <div className="min-w-0">
+            <div className="text-xs font-black text-[#102A43]">Pairing rules</div>
+            <div className="truncate text-[11px] font-semibold text-slate-500">
+              {cleanPairingRuleCount} keep-together/separate rule{cleanPairingRuleCount === 1 ? "" : "s"}
+            </div>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-8 shrink-0 rounded-xl border-slate-200 bg-white px-3 text-[11px] font-black"
+            disabled={!onOpenPairingRules || playerCount < 2}
+            onClick={onOpenPairingRules}
+          >
+            Open
+          </Button>
         </div>
         {sharedToolsNode}
       </section>
@@ -982,28 +1300,14 @@ export function ClubTab({
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wide text-blue-600">
-              <PackageOpen className="h-4 w-4" />
+              <AntiqueBallIcon className="h-4 w-4" />
               Equipment
             </div>
-            <div className="mt-0.5 text-[11px] font-semibold text-slate-400">Bags for this roster</div>
-            {equipmentPreviewKits.length > 0 ? (
-              <div className="mt-2 grid gap-1.5">
-                {equipmentPreviewKits.map((kit) => (
-                  <div key={kit.id} className="flex min-w-0 items-center gap-2 rounded-2xl bg-slate-50/80 px-2 py-1.5">
-                    <DuffleBagIcon color={kit.color || DEFAULT_EQUIPMENT_COLOR} className="h-7 w-9 shrink-0" />
-                    <div className="min-w-0 flex-1 truncate text-xs font-black text-[#102A43]">{kit.name}</div>
-                    <div className="shrink-0 truncate text-[11px] font-bold text-slate-500 max-w-[6rem]">
-                      {equipmentHolderLabelById[normalizeEquipmentHolderId(kit.holderId)] || "Storage"}
-                    </div>
-                  </div>
-                ))}
-                {hiddenEquipmentCount > 0 && (
-                  <div className="px-2 text-[11px] font-bold text-slate-400">+{hiddenEquipmentCount} more</div>
-                )}
-              </div>
-            ) : (
-              <div className="mt-1 text-sm font-black text-[#102A43]">No bags yet</div>
-            )}
+            <div className="mt-0.5 text-[11px] font-semibold text-slate-400">See who has what and move bags quickly.</div>
+            <div className="mt-1 flex items-center gap-1.5 text-[10px] font-black text-slate-400">
+              <span className={`h-1.5 w-1.5 rounded-full ${equipmentCanSyncOnline && !equipmentError ? "bg-emerald-500" : equipmentWaitingForAccount || equipmentSharedConnecting ? "bg-amber-400" : "bg-slate-300"}`} />
+              {equipmentStatusText}
+            </div>
           </div>
           <Button
             type="button"
@@ -1013,6 +1317,56 @@ export function ClubTab({
             Open
           </Button>
         </div>
+
+        {equipmentKits.length > 0 ? (
+          <div className="mt-3 overflow-hidden rounded-[1.35rem] border border-slate-100 bg-slate-50/60">
+            {equipmentDashboardHolders.map((holder, index) => {
+              const holderKits = equipmentKits.filter((kit) => normalizeEquipmentHolderId(kit.holderId) === holder.id);
+              const highlighted = dragOverHolderId === holder.id;
+              return (
+                <div
+                  key={`dashboard-${holder.id}`}
+                  data-equipment-holder-id={holder.id}
+                  className={`grid grid-cols-[4.8rem_minmax(0,1fr)] items-center gap-2 px-2.5 py-2 transition ${index === 0 ? "" : "border-t border-slate-100"} ${highlighted ? "bg-emerald-50 ring-2 ring-inset ring-emerald-100" : ""}`}
+                >
+                  <div className="truncate text-[11px] font-black text-[#102A43]">{holder.label}</div>
+                  <div className="flex min-w-0 flex-wrap justify-end gap-1.5">
+                    {holderKits.length ? holderKits.map((kit) => {
+                      const isDragging = draggingKitId === kit.id;
+                      return (
+                        <button
+                          key={`dashboard-kit-${kit.id}`}
+                          type="button"
+                          className={`touch-none select-none rounded-2xl border border-slate-200 bg-white px-2 py-1 text-left shadow-sm transition active:scale-[0.98] ${isDragging ? "scale-95 opacity-45 ring-2 ring-emerald-200" : ""}`}
+                          onPointerDown={(event) => startEquipmentPointerDrag(event, kit)}
+                          onPointerMove={moveEquipmentPointerDrag}
+                          onPointerUp={finishEquipmentPointerDrag}
+                          onPointerCancel={finishEquipmentPointerDrag}
+                          onClick={() => openEquipmentKitFromBoard(kit)}
+                          aria-label={`Edit ${kit.name}`}
+                        >
+                          <span className="flex max-w-[7.4rem] items-center gap-1.5">
+                            <DuffleBagIcon color={kit.color || DEFAULT_EQUIPMENT_COLOR} className="h-6 w-8 shrink-0" />
+                            <span className="min-w-0 truncate text-[11px] font-black text-[#102A43]">{kit.name}</span>
+                          </span>
+                        </button>
+                      );
+                    }) : (
+                      <span className="rounded-full border border-dashed border-slate-200 bg-white/70 px-2 py-1 text-[10px] font-bold text-slate-400">No bag</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+            {equipmentKits.length > equipmentPreviewKits.length && (
+              <div className="border-t border-slate-100 px-2.5 py-1.5 text-[10px] font-bold text-slate-400">
+                Open board to see all {equipmentKits.length} bags.
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="mt-3 rounded-2xl bg-slate-50 px-3 py-2 text-sm font-black text-[#102A43]">No bags yet</div>
+        )}
       </section>
 
       <section className="rounded-[1.7rem] border border-slate-100 bg-white p-3 shadow-sm ring-1 ring-slate-50">
@@ -1022,14 +1376,17 @@ export function ClubTab({
               <Vote className="h-4 w-4" />
               Votes
             </div>
-            <div className="mt-0.5 text-[11px] font-semibold text-slate-400">Organizer decisions</div>
-            <div className="mt-1 text-sm font-black text-[#102A43]">{openVotes.length} active</div>
+            <div className="mt-0.5 text-[11px] font-semibold text-slate-400">Quick anonymous decisions for organizers.</div>
+            <div className="mt-1 text-sm font-black text-[#102A43]">{openVotes.length} active · {closedVotes.length} past</div>
           </div>
           <Button
             type="button"
             variant="outline"
             className="h-10 shrink-0 rounded-2xl border-slate-100 bg-slate-50 px-4 text-xs font-black"
-            onClick={() => setVoteDialogOpen(true)}
+            onClick={() => {
+              setVoteCreateOpen(openVotes.length === 0);
+              setVoteDialogOpen(true);
+            }}
           >
             Open
           </Button>
@@ -1053,57 +1410,190 @@ export function ClubTab({
 
       <Dialog open={voteDialogOpen} onOpenChange={(open) => {
         setVoteDialogOpen(open);
-        if (!open) resetVoteForm();
+        if (!open) {
+          resetVoteForm();
+          setVoteCreateOpen(false);
+          setShowPastVotes(false);
+        }
       }}>
         <DialogContent className="max-h-[88dvh] max-w-md overflow-y-auto rounded-3xl p-0">
           <DialogHeader className="border-b border-slate-100 px-4 py-3 text-left">
             <DialogTitle className="flex items-center gap-2 text-base font-black text-[#102A43]">
               <Vote className="h-5 w-5 text-emerald-600" />
-              New organizer vote
+              Organizer votes
             </DialogTitle>
           </DialogHeader>
 
-          <div className="grid gap-4 p-5">
+          <div className="grid gap-4 p-4">
             <div className="rounded-2xl bg-emerald-50 px-3 py-2 text-[11px] font-semibold leading-snug text-emerald-800">
-              Preview only: choices are shown as totals. Later, Firebase will store vote results without readable names next to choices.
+              Quick anonymous temperature checks. Answers are fixed: Yes, No, Not sure.
+            </div>
+
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <div className="text-xs font-black text-[#102A43]">Active questions</div>
+                <div className="text-[11px] font-semibold text-slate-500">Close a vote when the group has enough direction.</div>
+              </div>
+              <Button
+                type="button"
+                className="h-9 shrink-0 rounded-2xl bg-[#102A43] px-3 text-[11px] font-black text-white hover:bg-[#0b2036]"
+                onClick={() => setVoteCreateOpen((open) => !open)}
+              >
+                <Plus className="mr-1 h-3.5 w-3.5" />
+                New
+              </Button>
+            </div>
+
+            {voteCreateOpen && (
+              <div className="grid gap-3 rounded-[1.35rem] border border-slate-100 bg-slate-50/70 p-3">
+                <div className="grid gap-2">
+                  <Label className="text-xs font-black uppercase tracking-wide text-slate-500">
+                    Question
+                  </Label>
+                  <Textarea
+                    value={question}
+                    onChange={(event) => setQuestion(event.target.value)}
+                    placeholder="Example: Should we book the winter pitch?"
+                    className="min-h-[4.75rem] rounded-2xl border-slate-200 bg-white text-sm font-semibold"
+                  />
+                </div>
+
+                <div className="grid grid-cols-3 gap-1.5">
+                  {QUICK_VOTE_OPTIONS.map((option) => (
+                    <div key={`fixed-${option.id}`} className="rounded-2xl border border-slate-200 bg-white px-2 py-2 text-center text-[11px] font-black text-[#102A43]">
+                      {option.label}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="grid gap-2">
+                  <Label className="text-xs font-black uppercase tracking-wide text-slate-500">
+                    Needed by optional
+                  </Label>
+                  <Input
+                    value={deadline}
+                    onChange={(event) => setDeadline(event.target.value)}
+                    placeholder="Example: before Thursday game"
+                    className="h-10 rounded-2xl border-slate-200 bg-white text-sm font-semibold"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-10 rounded-2xl text-sm font-black"
+                    onClick={() => {
+                      resetVoteForm();
+                      setVoteCreateOpen(false);
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    className="h-10 rounded-2xl bg-[#102A43] text-sm font-black text-white hover:bg-[#0b2036]"
+                    disabled={!canCreateVote}
+                    onClick={createVote}
+                  >
+                    Create vote
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            <div className="grid gap-2">
+              {openVotes.length ? openVotes.map((vote) => (
+                <VoteCard
+                  key={vote.id}
+                  vote={vote}
+                  onVote={castPreviewVote}
+                  onCloseVote={closeVote}
+                  onDeleteVote={deleteVote}
+                />
+              )) : (
+                <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-center">
+                  <div className="text-sm font-black text-[#102A43]">No active votes</div>
+                  <div className="mt-1 text-xs font-semibold text-slate-500">Ask a yes/no/not sure question when organizers need a quick read.</div>
+                </div>
+              )}
+            </div>
+
+            <div className="border-t border-slate-100 pt-3">
+              <button
+                type="button"
+                className="flex w-full items-center justify-between rounded-2xl bg-slate-50 px-3 py-2 text-left"
+                onClick={() => setShowPastVotes((show) => !show)}
+              >
+                <span className="text-xs font-black text-[#102A43]">Past votes</span>
+                <span className="text-[11px] font-black text-slate-400">{closedVotes.length} {showPastVotes ? "hide" : "show"}</span>
+              </button>
+              {showPastVotes && (
+                <div className="mt-2 grid gap-2">
+                  {closedVotes.length ? closedVotes.map((vote) => (
+                    <VoteCard
+                      key={vote.id}
+                      vote={vote}
+                      onVote={castPreviewVote}
+                      onCloseVote={closeVote}
+                      onDeleteVote={deleteVote}
+                    />
+                  )) : (
+                    <div className="rounded-2xl bg-slate-50 px-3 py-3 text-center text-xs font-semibold text-slate-500">Closed votes will appear here.</div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(closingVote)} onOpenChange={(open) => {
+        if (!open) resetCloseVoteForm();
+      }}>
+        <DialogContent className="max-w-sm rounded-3xl p-0">
+          <DialogHeader className="border-b border-slate-100 px-4 py-3 text-left">
+            <DialogTitle className="text-base font-black text-[#102A43]">Close vote</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 p-4">
+            {closingVote && (
+              <div className="rounded-2xl bg-slate-50 px-3 py-2 text-sm font-black leading-snug text-[#102A43]">
+                {closingVote.question}
+              </div>
+            )}
+
+            <div className="grid gap-2">
+              <Label className="text-xs font-black uppercase tracking-wide text-slate-500">
+                What was decided?
+              </Label>
+              <div className="grid gap-2">
+                {VOTE_DECISION_OPTIONS.map((option) => {
+                  const selected = closeDecision === option.id;
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      className={`rounded-2xl border px-3 py-2 text-left transition ${selected ? "border-emerald-300 bg-emerald-50" : "border-slate-200 bg-white hover:bg-slate-50"}`}
+                      onClick={() => setCloseDecision(option.id)}
+                    >
+                      <div className="text-sm font-black text-[#102A43]">{option.label}</div>
+                      <div className="mt-0.5 text-[11px] font-semibold text-slate-500">{option.description}</div>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             <div className="grid gap-2">
               <Label className="text-xs font-black uppercase tracking-wide text-slate-500">
-                Question
+                Decision note optional
               </Label>
               <Textarea
-                value={question}
-                onChange={(event) => setQuestion(event.target.value)}
-                placeholder="Example: Should we move Thursday football to 20:00?"
-                className="min-h-[4.75rem] rounded-2xl border-slate-200 text-sm font-semibold"
-              />
-            </div>
-
-            <div className="grid gap-2">
-              <Label className="text-xs font-black uppercase tracking-wide text-slate-500">
-                Options
-              </Label>
-              <Textarea
-                value={optionText}
-                onChange={(event) => setOptionText(event.target.value)}
-                placeholder={"Yes\nNo"}
-                className="min-h-[4.75rem] rounded-2xl border-slate-200 text-sm font-semibold"
-              />
-              <p className="text-[11px] font-semibold text-slate-500">
-                One option per line. Use 2–6 options.
-              </p>
-            </div>
-
-            <div className="grid gap-2">
-              <Label className="text-xs font-black uppercase tracking-wide text-slate-500">
-                Deadline note optional
-              </Label>
-              <Input
-                value={deadline}
-                onChange={(event) => setDeadline(event.target.value)}
-                placeholder="Example: Friday 18:00"
-                className="h-11 rounded-2xl border-slate-200 text-sm font-semibold"
+                value={closeNote}
+                onChange={(event) => setCloseNote(event.target.value)}
+                placeholder="Example: Try it for one month, then review."
+                className="min-h-[4.5rem] rounded-2xl border-slate-200 text-sm font-semibold"
               />
             </div>
 
@@ -1112,54 +1602,56 @@ export function ClubTab({
                 type="button"
                 variant="outline"
                 className="h-10 rounded-2xl text-sm font-black"
-                onClick={() => setVoteDialogOpen(false)}
+                onClick={resetCloseVoteForm}
               >
-                <X className="mr-1.5 h-4 w-4" />
                 Cancel
               </Button>
               <Button
                 type="button"
                 className="h-10 rounded-2xl bg-[#102A43] text-sm font-black text-white hover:bg-[#0b2036]"
-                disabled={!canCreateVote}
-                onClick={createVote}
+                disabled={!canFinalizeCloseVote}
+                onClick={finalizeCloseVote}
               >
-                Create vote
+                Move to Past
               </Button>
             </div>
           </div>
-
         </DialogContent>
       </Dialog>
 
       <Dialog open={equipmentBoardOpen} onOpenChange={(open) => {
         setEquipmentBoardOpen(open);
-        if (!open) setContentPeekKitId(null);
+        if (!open) {
+          setContentPeekKitId(null);
+        }
       }}>
         <DialogContent className="fixed bottom-2 left-2 right-2 top-2 flex h-auto max-h-none w-auto max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-[2rem] p-0 sm:bottom-auto sm:left-1/2 sm:right-auto sm:top-1/2 sm:h-[96dvh] sm:w-[calc(100vw-1rem)] sm:max-w-2xl sm:-translate-x-1/2 sm:-translate-y-1/2">
-          <DialogHeader className="border-b border-slate-100 px-4 py-4 text-left">
-            <div className="flex items-start justify-between gap-3">
+          <DialogHeader className="border-b border-slate-100 px-4 py-4 pr-12 text-left">
+            <div className="grid gap-3">
               <div className="min-w-0">
                 <DialogTitle className="flex items-center gap-2 text-base font-black text-[#102A43]">
-                  <PackageOpen className="h-5 w-5 text-emerald-600" />
+                  <AntiqueBallIcon className="h-5 w-5 text-emerald-600" />
                   Equipment board
                 </DialogTitle>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  Drag bags to move. Tap a bag to edit.
+                  Drag bags between holders. Tap a bag to edit its name and contents.
                 </p>
               </div>
-              <Button
-                type="button"
-                className="h-10 shrink-0 rounded-2xl bg-[#102A43] px-3 text-xs font-black text-white hover:bg-[#0b2036]"
-                onClick={openNewEquipmentKit}
-              >
-                <Plus className="mr-1.5 h-4 w-4" />
-                Add bag
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  className="h-9 rounded-2xl bg-[#102A43] px-3 text-xs font-black text-white hover:bg-[#0b2036]"
+                  onClick={openNewEquipmentKit}
+                >
+                  <Plus className="mr-1.5 h-4 w-4" />
+                  Add bag
+                </Button>
+              </div>
             </div>
           </DialogHeader>
 
           <div className="flex-1 overflow-y-auto bg-slate-50/70 p-3">
-            <div className="mb-2 rounded-2xl border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold leading-snug text-slate-500 shadow-sm">
+            <div className={`mb-2 rounded-2xl border px-3 py-1.5 text-[11px] font-bold leading-snug shadow-sm transition ${equipmentMoveNotice ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-white text-slate-500"}`}>
               {equipmentBoardStatusText}
             </div>
 
@@ -1214,8 +1706,11 @@ export function ClubTab({
                               <div className="flex min-w-0 items-center gap-2">
                                 <DuffleBagIcon color={kit.color || DEFAULT_EQUIPMENT_COLOR} className="h-9 w-12 shrink-0" />
                                 <div className="min-w-0 flex-1">
-                                  <div className="truncate text-xs font-black text-[#102A43]">
-                                    {kit.name}
+                                  <div className="flex min-w-0 items-center gap-1.5">
+                                    <span className="truncate text-xs font-black text-[#102A43]">{kit.name}</span>
+                                    <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-400" aria-hidden="true">
+                                      <Pencil className="h-3 w-3" />
+                                    </span>
                                   </div>
                                 </div>
                               </div>
@@ -1304,7 +1799,7 @@ export function ClubTab({
           >
           <DialogHeader className="border-b border-slate-100 px-4 py-3 text-left">
             <DialogTitle className="flex items-center gap-2 text-base font-black text-[#102A43]">
-              <PackageOpen className="h-5 w-5 text-emerald-600" />
+              <DuffleBagIcon color={kitColor || DEFAULT_EQUIPMENT_COLOR} className="h-5 w-7 shrink-0" />
               {editingKitId ? "Edit Bag" : "New Bag"}
             </DialogTitle>
           </DialogHeader>
@@ -1325,7 +1820,7 @@ export function ClubTab({
                     }
                   }}
                   enterKeyHint="done"
-                  placeholder="Example: Ball bag"
+                  placeholder="Example: Saturday match bag"
                   className="h-10 min-w-0 flex-1 rounded-2xl border-slate-200 text-sm font-semibold"
                 />
                 <div className="relative shrink-0">
@@ -1390,11 +1885,11 @@ export function ClubTab({
                   }
                 }}
                 enterKeyHint="done"
-                placeholder="2 balls, pump, 12 cones"
+                placeholder="Enough cones for 2 teams, 2 balls, pump"
                 className="h-10 rounded-2xl border-slate-200 text-sm font-semibold"
               />
               <p className="text-[11px] font-semibold text-slate-500">
-                Separate items with commas. Example: 2 balls, pump, 12 cones.
+                Separate items with commas. Example: enough cones for 2 teams, 2 balls, pump.
               </p>
             </div>
 
@@ -1410,31 +1905,22 @@ export function ClubTab({
               />
             </div>
 
-            <div className="grid gap-2 rounded-2xl bg-slate-50 p-2.5">
-              <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-                Quick move
+            {editingKitMeta && (
+              <div className="rounded-2xl border border-slate-100 bg-slate-50/70 px-3 py-2 text-[11px] font-semibold leading-snug text-slate-500">
+                <div>
+                  Created by {equipmentActorLabel(editingKitMeta.createdByName, editingKitMeta.createdByEmail, equipmentHolderNamesByEmail)} · {formatEquipmentTimestamp(editingKitMeta.createdAt)}
+                </div>
+                <div>
+                  Last updated by {equipmentActorLabel(editingKitMeta.updatedByName, editingKitMeta.updatedByEmail, equipmentHolderNamesByEmail)} · {formatEquipmentTimestamp(editingKitMeta.updatedAt)}
+                </div>
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                {equipmentHolders.map((holder) => (
-                  <Button
-                    key={holder.id}
-                    type="button"
-                    variant={kitHolderId === holder.id ? "default" : "outline"}
-                    className={`h-8 rounded-xl text-[11px] font-black ${kitHolderId === holder.id ? "bg-emerald-600 text-white hover:bg-emerald-700" : ""}`}
-                    onClick={() => {
-                      setKitHolderId(holder.id);
-                      setDeleteConfirmOpen(false);
-                      if (editingKitId) moveEquipmentKit(editingKitId, holder.id);
-                    }}
-                  >
-                    {holder.label}
-                  </Button>
-                ))}
-              </div>
-            </div>
+            )}
 
             {editingKitId && deleteConfirmOpen && (
               <div className="rounded-2xl border border-red-100 bg-red-50/70 p-2.5">
+                <div className="mb-1.5 text-[11px] font-bold leading-snug text-red-700">
+                  Deleting removes this bag from everyone’s shared equipment board.
+                </div>
                 <div className="mb-1.5 flex items-center justify-between gap-2 text-[10px] font-black uppercase tracking-wide text-red-700">
                   <span>Slide to unlock delete</span>
                   <span>{deleteBagSlide >= 95 ? "Ready" : `${deleteBagSlide}%`}</span>

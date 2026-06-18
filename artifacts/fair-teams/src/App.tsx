@@ -78,6 +78,7 @@ import {
 } from "@/lib/googleSheetsFiles";
 import { pickGoogleSheetRosterFile, warmUpGoogleDrivePicker } from "@/lib/googleDrivePicker";
 import { listFirebaseSharedRosters, readFirebaseSharedRoster, type FirebaseSharedRosterSummary } from "@/lib/sharedRosterService";
+import { fetchClubRatingSummaries } from "@/lib/clubCollaborationService";
 
 const GROUP_NAME_STORAGE_KEY = "fair-teams-group-name";
 const HEADER_COLOR_STORAGE_KEY = "fair-teams-header-color-v2";
@@ -685,6 +686,7 @@ function App() {
   const [clearRosterOpen, setClearRosterOpen] = useState(false);
   const [clearRosterSlide, setClearRosterSlide] = useState(0);
   const [privateCopyConfirmOpen, setPrivateCopyConfirmOpen] = useState(false);
+  const [privateCopyCreating, setPrivateCopyCreating] = useState(false);
   const [newRosterName, setNewRosterName] = useState("");
   const [fileImportMode, setFileImportMode] = useState<"shared" | "backup">(
     "shared",
@@ -1325,31 +1327,92 @@ function App() {
   };
 
 
-  const makePrivateCopyOfActiveSharedRoster = () => {
-    if (!activeRoster || !activeRosterIsFirebaseShared) return;
-    const copyName = uniqueRosterName(`${activeRoster.name || "Shared roster"} private copy`, rosters);
-    const localCopy = normalizeRoster({
-      ...createRoster(copyName, activeRoster.players, {
-        themeColor: activeRoster.themeColor,
-        logo: activeRoster.logo,
-      }),
-      pairingRules: activeRoster.pairingRules || [],
-      cloudSource: undefined,
-      updatedAt: new Date().toISOString(),
-    });
+  const makePrivateCopyOfActiveSharedRoster = async () => {
+    if (!activeRoster || !activeRosterIsFirebaseShared || privateCopyCreating) return;
+    const sharedRosterId = activeRoster.cloudSource?.firebaseRosterId;
+    setPrivateCopyCreating(true);
+    try {
+      const clubSummaryByPlayerId = new Map<string, number>();
+      if (sharedRosterId) {
+        try {
+          const summaries = await fetchClubRatingSummaries(sharedRosterId);
+          summaries.forEach((summary) => {
+            if (summary.ratingCount > 0 && typeof summary.averageSkill === "number") {
+              clubSummaryByPlayerId.set(summary.playerId, summary.averageSkill);
+            }
+          });
+        } catch (error) {
+          console.warn("Could not load Club averages for private copy; using neutral ratings.", error);
+        }
+      }
 
-    setRosterState((current) => ({
-      rosters: [...current.rosters, localCopy],
-      activeRosterId: localCopy.id,
-    }));
-    setPrivateCopyConfirmOpen(false);
-    setTodayRosterChosen(true);
-    setActiveTab("players");
-    showRosterToolsNotice(
-      "Private copy created",
-      `“${localCopy.name}” is a local roster on this device. The original shared roster stays online and unchanged.`,
-      "success",
-    );
+      const copiedPlayers = activeRoster.players.map((player, index) => {
+        const startingSkill = clubSummaryByPlayerId.get(player.id) ?? 5;
+        return normalizePlayer({
+          id: player.id,
+          name: player.name,
+          aka: player.aka,
+          gender: player.gender,
+          isNew: player.isNew,
+          funBadge: player.funBadge,
+          skill: startingSkill,
+          attack: startingSkill,
+          defense: startingSkill,
+          speed: startingSkill,
+          passing: startingSkill,
+          stamina: startingSkill,
+          physical: startingSkill,
+          teamPlay: 2,
+          profilePhoto: undefined,
+          isGoalkeeper: false,
+          isPlaymaker: false,
+          isFinisher: false,
+          isDribbler: false,
+          isSentinel: false,
+          isEngine: false,
+          isVersatile: false,
+          isSpaceFinder: false,
+          isLongPass: false,
+          isTikiTaka: false,
+          isCrossing: false,
+          isAerial: false,
+          isPowerShot: false,
+          isBulldog: false,
+          isOrganizer: false,
+          attending: false,
+          todayStatus: "here",
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }, index);
+      });
+
+      const copyName = uniqueRosterName(`${activeRoster.name || "Shared roster"} private copy`, rosters);
+      const localCopy = normalizeRoster({
+        ...createRoster(copyName, copiedPlayers, {
+          themeColor: activeRoster.themeColor,
+          logo: activeRoster.logo,
+        }),
+        pairingRules: activeRoster.pairingRules || [],
+        cloudSource: undefined,
+        updatedAt: new Date().toISOString(),
+      });
+
+      setRosterState((current) => ({
+        rosters: [...current.rosters, localCopy],
+        activeRosterId: localCopy.id,
+      }));
+      setPrivateCopyConfirmOpen(false);
+      setTodayRosterChosen(true);
+      setActiveTab("players");
+      const seededCount = copiedPlayers.filter((player) => clubSummaryByPlayerId.has(player.id)).length;
+      showRosterToolsNotice(
+        "Private copy created",
+        `“${localCopy.name}” is a clean local roster. It copied shared names and used Club averages for ${seededCount} player${seededCount === 1 ? "" : "s"}; photos and special abilities were reset.`,
+        "success",
+      );
+    } finally {
+      setPrivateCopyCreating(false);
+    }
   };
 
 
@@ -5205,7 +5268,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device�
               <div className="min-w-0 flex-1">
                 <h2 className="text-base font-black text-[#102A43]">Make private copy?</h2>
                 <p className="mt-1 text-sm font-semibold leading-snug text-slate-600">
-                  Create a separate local roster from “{activeRosterName}”. The shared roster stays online and unchanged.
+                  Create a clean local roster from “{activeRosterName}”. The shared roster stays online and unchanged.
                 </p>
               </div>
             </div>
@@ -5215,7 +5278,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device�
                 Private copy
               </div>
               <p className="mt-1 text-[11px] font-semibold leading-snug text-violet-800/80">
-                The copy becomes a normal local roster. You can edit skill, advanced attributes, photos, and special abilities there without affecting organizers.
+                The copy uses shared names and Club averages as starting skill. Photos, special abilities, and advanced private traits are reset so the roster starts clean.
               </p>
             </div>
 

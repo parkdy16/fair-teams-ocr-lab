@@ -2,6 +2,7 @@ import {
   addDoc,
   collection,
   doc,
+  getDocs,
   onSnapshot,
   query,
   runTransaction,
@@ -137,6 +138,13 @@ function toClubNote(id: string, data: DocumentData): ClubNote | null {
     createdByEmail: typeof data.createdByEmail === "string" ? data.createdByEmail : undefined,
     createdByName: typeof data.createdByName === "string" ? data.createdByName : undefined,
   };
+}
+
+
+export async function fetchClubRatingSummaries(rosterId: string): Promise<ClubRatingSummary[]> {
+  requireSignedInUser();
+  const snapshot = await getDocs(clubRatingSummaryCollection(rosterId));
+  return snapshot.docs.map((docSnap) => toRatingSummary(docSnap.id, docSnap.data()));
 }
 
 export function listenToClubRatingSummaries(

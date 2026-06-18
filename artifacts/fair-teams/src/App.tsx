@@ -679,6 +679,7 @@ function App() {
   const [rosterCloudBackupToolsOpen, setRosterCloudBackupToolsOpen] = useState(false);
   const [rosterPickerOpen, setRosterPickerOpen] = useState(false);
   const [headerSharedPeopleOpen, setHeaderSharedPeopleOpen] = useState(false);
+  const [sharedRosterLibraryOpenToken, setSharedRosterLibraryOpenToken] = useState(0);
   const [rosterSwitchingName, setRosterSwitchingName] = useState("");
   const [clearRosterOpen, setClearRosterOpen] = useState(false);
   const [clearRosterSlide, setClearRosterSlide] = useState(0);
@@ -1221,7 +1222,7 @@ function App() {
       title: openedExisting ? "Shared roster selected" : "Firebase roster opened",
       message: openedExisting
         ? `${firebaseSummary?.groupName ? `${firebaseSummary.groupName} · ` : ""}${sourceName || sharedRoster.name || "Shared roster"} is already open on this device.`
-        : `${firebaseSummary?.groupName ? `${firebaseSummary.groupName} · ` : ""}${sourceName || sharedRoster.name || "Shared roster"} was opened as a linked local copy. You can now save changes back to Firebase.`,
+        : `${firebaseSummary?.groupName ? `${firebaseSummary.groupName} · ` : ""}${sourceName || sharedRoster.name || "Shared roster"} was opened on this device. It remains an online shared roster connected to your account.`,
     });
   };
 
@@ -2661,7 +2662,11 @@ They will no longer be able to open or edit this shared roster unless it is shar
   const openSharedRostersFromLocalFlow = () => {
     closeClearRoster();
     setRosterFilesOpen(false);
+    setRosterToolsOpen(false);
+    setRosterSharedToolsOpen(false);
+    setRosterLocalBackupToolsOpen(false);
     setActiveTab("club");
+    setSharedRosterLibraryOpenToken((token) => token + 1);
   };
 
   const visibleDriveBackupChoices = driveBackupChoices
@@ -2909,6 +2914,14 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   >
                     {headerDisplayName}
                   </h1>
+                  {!shouldShowTodayStartHeader && !isEmptyStarterRoster && (
+                    <span
+                      className={`inline-flex h-5 shrink-0 items-center rounded-full px-1.5 text-[9px] font-black uppercase tracking-wide ${activeRosterIsFirebaseShared ? "bg-violet-50 text-violet-700 ring-1 ring-violet-100" : "bg-slate-100 text-slate-500"}`}
+                      title={activeRosterIsFirebaseShared ? "Shared roster" : "Local roster"}
+                    >
+                      {activeRosterIsFirebaseShared ? "Shared" : "Local"}
+                    </span>
+                  )}
                   {activeRosterIsFirebaseShared && !shouldShowTodayStartHeader && (
                     <span
                       role="button"
@@ -3108,6 +3121,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                     onRefreshActiveRoster={refreshActiveFirebaseRosterFromRemote}
                     onSharedRosterSummariesUpdated={syncFirebaseRosterBadgesFromSummaries}
                     onSharedInviteOpened={finishSharedInviteOpen}
+                    openLibraryToken={sharedRosterLibraryOpenToken}
                   />
                 )}
                 equipmentGroupId={activeFirebaseSource?.firebaseRosterId ? `roster:${activeFirebaseSource.firebaseRosterId}` : undefined}
@@ -3379,7 +3393,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                     {isEmptyStarterRoster
                       ? "Create one below or import a roster"
                       : activeRosterIsShared
-                        ? `${players.length} player${players.length === 1 ? "" : "s"} · ${activeSharedHasUnsavedChanges ? "shared changes not saved" : "shared"}`
+                        ? `${players.length} player${players.length === 1 ? "" : "s"} · ${activeSharedHasUnsavedChanges ? "Shared changes not saved" : "Shared roster"}`
                         : `${players.length} player${players.length === 1 ? "" : "s"}`}
                   </div>
                 </div>
@@ -3498,7 +3512,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                                   Shared roster
                                 </div>
                                 <p className="mt-1 text-[11px] font-semibold leading-snug text-violet-900/80">
-                                  This roster is linked online. Local backup can only remove/disassociate this device’s copy. Manage shared rosters, people, and online deletion from Club.
+This is a shared roster. Local Backup can only remove/disassociate this device’s copy. Use Shared rosters to reopen, manage people, or owner-delete online.
                                 </p>
                                 <Button
                                   type="button"
@@ -3507,7 +3521,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                                   onClick={openSharedRostersFromLocalFlow}
                                 >
                                   <FolderOpen className="h-3.5 w-3.5" />
-                                  <span className="truncate text-xs font-black">Open Shared rosters</span>
+                                  <span className="truncate text-xs font-black">Manage Shared rosters</span>
                                 </Button>
                               </div>
                             </div>
@@ -3671,6 +3685,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                       onRefreshActiveRoster={refreshActiveFirebaseRosterFromRemote}
                       onSharedRosterSummariesUpdated={syncFirebaseRosterBadgesFromSummaries}
                       onSharedInviteOpened={finishSharedInviteOpen}
+                      openLibraryToken={sharedRosterLibraryOpenToken}
                     />
 
                     <details className="rounded-2xl border border-amber-100 bg-amber-50/60 p-2">

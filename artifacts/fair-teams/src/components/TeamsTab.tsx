@@ -502,6 +502,7 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
   useEffect(() => {
     if (!isSharedRoster) return;
     setTeamStatsOpen({});
+    setShowPlayerSkillNumbers(false);
   }, [isSharedRoster, sharedRosterId]);
 
   const clubRatingByPlayerId = useMemo(() => {
@@ -817,7 +818,7 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
           </Button>
         </div>
 
-        {teams.length > 0 && (
+        {teams.length > 0 && !isSharedRoster && (
           <div className="flex items-center justify-end">
             <button
               type="button"
@@ -1040,7 +1041,7 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
                             </div>
                             <div className="flex items-center gap-1 shrink-0">
                               <GenderBadge gender={player.gender} />
-                              {showPlayerSkillNumbers && (
+                              {!isSharedRoster && showPlayerSkillNumbers && (
                                 <span className="min-w-7 h-5 px-1 flex items-center justify-center rounded bg-gradient-to-br from-slate-100 to-slate-200 text-[#102A43] text-[10px] font-black border border-slate-200">
                                   {player.skill === 0 ? "N" : player.skill}
                                 </span>

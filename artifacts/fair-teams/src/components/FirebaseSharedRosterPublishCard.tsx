@@ -32,6 +32,7 @@ type Props = {
   onRefreshActiveRoster?: (roster: RoomRoster, sourceName: string, summary: FirebaseSharedRosterSummary, localRosterId?: string) => void;
   onSharedRosterSummariesUpdated?: (summaries: FirebaseSharedRosterSummary[]) => void;
   onSharedInviteOpened?: (roster: RoomRoster) => void;
+  openLibraryToken?: number;
 };
 
 function friendlyFirestoreError(error: unknown) {
@@ -86,7 +87,7 @@ function modalShell(title: string, onClose: () => void, body: React.ReactNode) {
   );
 }
 
-export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster, rosters = [], isEmptyRoster, onOpenRoster, onRosterSaved, onRefreshActiveRoster, onSharedRosterSummariesUpdated, onSharedInviteOpened }: Props) {
+export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster, rosters = [], isEmptyRoster, onOpenRoster, onRosterSaved, onRefreshActiveRoster, onSharedRosterSummariesUpdated, onSharedInviteOpened, openLibraryToken = 0 }: Props) {
   const [user, setUser] = useState<SharedRosterUser | null>(null);
   const [busy, setBusy] = useState<string>("");
   const [sharedGroups, setSharedGroups] = useState<FirebaseSharedGroupSummary[]>([]);
@@ -165,6 +166,11 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
     if (user) void refreshSharedData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.uid]);
+
+  useEffect(() => {
+    if (openLibraryToken <= 0) return;
+    setSharedRosterLibraryOpen(true);
+  }, [openLibraryToken]);
 
   const handleShareActiveRoster = async () => {
     if (!user || !activeRoster || isEmptyRoster || busy) return;
@@ -433,7 +439,7 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
         <>
           {linkedRosters.length === 0 ? (
             <div className="rounded-2xl border border-violet-100 bg-violet-50/80 px-3 py-2 text-[11px] font-bold leading-snug text-violet-800">
-              No shared roster is open on this device. Choose one below to open a fresh local copy.
+No shared roster is open on this device. Choose one below to open it on this device.
             </div>
           ) : null}
           <div className="grid max-h-[52svh] gap-1.5 overflow-y-auto pr-1">
@@ -449,7 +455,7 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
                 <div key={`modal-${roster.id}`} className={`grid ${showOnlineDelete ? "grid-cols-[1fr_auto_auto]" : "grid-cols-[1fr_auto]"} items-center gap-2 rounded-2xl px-3 py-2 ${linked ? "bg-emerald-50" : "bg-slate-50"}`}>
                   <button type="button" onClick={() => { void handleOpenRoster(roster.id); setSharedRosterLibraryOpen(false); }} disabled={Boolean(busy)} className="min-w-0 text-left active:scale-[0.99]">
                     <span className="block truncate text-xs font-black text-[#102A43]">{roster.name}</span>
-                    <span className="block truncate text-[10px] font-semibold text-slate-500">{linked ? "Open on this device" : "Open local copy"} · saved by {savedByName}</span>
+                    <span className="block truncate text-[10px] font-semibold text-slate-500">{linked ? "Open on this device" : "Open shared roster"} · saved by {savedByName}</span>
                   </button>
                   <button type="button" onClick={() => openCollaborators(roster.id)} className="flex h-8 items-center gap-1 rounded-xl border border-violet-100 bg-white px-2 text-[10px] font-black text-violet-700 shadow-sm hover:bg-violet-50">
                     <Users className="h-3.5 w-3.5" />
@@ -507,7 +513,7 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
         {!activeSharedRoster ? (
           <Button type="button" className="h-10 rounded-2xl bg-emerald-600 text-xs font-black text-white hover:bg-emerald-700" onClick={handleShareActiveRoster} disabled={!user || isEmptyRoster || Boolean(busy)}>
             <Share2 className="mr-1.5 h-4 w-4" />
-            {busy === "publish" ? "Sharing…" : "Share roster"}
+            {busy === "publish" ? "Creating…" : "Create shared copy"}
           </Button>
         ) : (
           <div className="grid grid-cols-3 gap-2">
@@ -556,7 +562,7 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
       {!activeSharedRoster ? (
         <Button type="button" className="h-11 rounded-2xl bg-emerald-600 text-xs font-black text-white hover:bg-emerald-700" onClick={handleShareActiveRoster} disabled={!user || isEmptyRoster || Boolean(busy)}>
           <Share2 className="mr-1.5 h-4 w-4" />
-          {busy === "publish" ? "Sharing…" : "Share this roster"}
+          {busy === "publish" ? "Creating…" : "Create shared copy"}
         </Button>
       ) : (
         <div className="grid grid-cols-2 gap-2">
@@ -581,7 +587,7 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
           <>
             {linkedRosters.length === 0 ? (
               <div className="mb-2 rounded-2xl border border-violet-100 bg-violet-50/70 px-3 py-2 text-[11px] font-bold leading-snug text-violet-800">
-                No shared roster is open on this device. Choose an online shared roster below to open a fresh local copy.
+No shared roster is open on this device. Choose an online shared roster below to open it here.
               </div>
             ) : null}
             <div className="grid gap-1.5">

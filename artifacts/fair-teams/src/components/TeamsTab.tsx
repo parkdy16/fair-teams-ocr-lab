@@ -171,7 +171,6 @@ function toClubBalancePlayer(p: RoomPlayer, clubSkill: number): Player {
   };
 }
 
-type RatingSource = "private" | "club";
 
 type TeamsTabProps = {
   players: RoomPlayer[];
@@ -412,7 +411,6 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
   const [drawStep, setDrawStep] = useState(0);
   const [justGenerated, setJustGenerated] = useState(false);
   const [showPlayerSkillNumbers, setShowPlayerSkillNumbers] = useState(false);
-  const [ratingSource, setRatingSource] = useState<RatingSource>(isSharedRoster ? "club" : "private");
   const [clubRatingSummaries, setClubRatingSummaries] = useState<ClubRatingSummary[]>([]);
   const [myClubRatings, setMyClubRatings] = useState<ClubMyRating[]>([]);
   const [clubRatingError, setClubRatingError] = useState("");
@@ -424,10 +422,6 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
   useEffect(() => {
     localStorage.setItem(FIELD_SIZE_STORAGE_KEY, fieldSize);
   }, [fieldSize]);
-
-  useEffect(() => {
-    setRatingSource(isSharedRoster ? "club" : "private");
-  }, [isSharedRoster, sharedRosterId]);
 
   useEffect(() => {
     if (!isSharedRoster || !sharedRosterId) {
@@ -505,6 +499,11 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
     }
   }, [presentTeamsOpen]);
 
+  useEffect(() => {
+    if (!isSharedRoster) return;
+    setTeamStatsOpen({});
+  }, [isSharedRoster, sharedRosterId]);
+
   const clubRatingByPlayerId = useMemo(() => {
     return new Map(clubRatingSummaries.map((summary) => [summary.playerId, summary]));
   }, [clubRatingSummaries]);
@@ -513,7 +512,7 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
       .filter((rating) => !rating.skipped && typeof rating.skill === "number")
       .map((rating) => rating.playerId));
   }, [myClubRatings]);
-  const usingClubRatings = Boolean(isSharedRoster && ratingSource === "club");
+  const usingClubRatings = Boolean(isSharedRoster);
   const getUsableClubAverage = (playerId: string) => {
     const summary = clubRatingByPlayerId.get(playerId);
     if (!summary || summary.ratingCount <= 0 || typeof summary.averageSkill !== "number") return null;
@@ -737,43 +736,26 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
       {/* Controls */}
       <div className="bg-card border border-border px-3 py-2.5 rounded-xl shadow-sm flex flex-col gap-2">
         {isSharedRoster && (
-          <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-2">
-            <div className="mb-1.5 flex items-center justify-between gap-2">
-              <div className="text-[10px] font-black uppercase tracking-wide text-slate-500">Balance using</div>
+          <div className="rounded-xl border border-violet-100 bg-violet-50/80 p-2.5 shadow-sm">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <div className="text-[10px] font-black uppercase tracking-wide text-violet-700">Shared roster</div>
+                <div className="mt-0.5 text-[11px] font-bold leading-snug text-[#102A43]">Balanced with Club average ratings</div>
+              </div>
               {clubNeedsMyRatingAttendingCount > 0 && (
                 <button
                   type="button"
-                  className="text-[10px] font-black text-amber-700 underline decoration-amber-300 underline-offset-2"
+                  className="shrink-0 rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-violet-700 shadow-sm ring-1 ring-violet-100 active:scale-[0.98]"
                   onClick={onOpenClubRatings}
                 >
-                  {clubNeedsMyRatingAttendingCount} need your rating
+                  Rate in Club
                 </button>
               )}
             </div>
-            <div className="grid grid-cols-2 gap-1.5">
-              <button
-                type="button"
-                className={`rounded-xl px-2 py-2 text-xs font-black transition ${ratingSource === "club" ? "bg-[#102A43] text-white shadow-sm" : "bg-white text-slate-500 ring-1 ring-slate-200"}`}
-                onClick={() => setRatingSource("club")}
-              >
-                Club average
-              </button>
-              <button
-                type="button"
-                className={`rounded-xl px-2 py-2 text-xs font-black transition ${ratingSource === "private" ? "bg-[#102A43] text-white shadow-sm" : "bg-white text-slate-500 ring-1 ring-slate-200"}`}
-                onClick={() => setRatingSource("private")}
-              >
-                My ratings
-              </button>
-            </div>
-            <div className="mt-1.5 text-[10px] font-semibold leading-snug text-slate-500">
-              {usingClubRatings
-                ? clubNoAverageAttendingCount > 0
-                  ? `${clubNoAverageAttendingCount} selected player${clubNoAverageAttendingCount === 1 ? " has" : "s have"} no Club average yet. Only those player${clubNoAverageAttendingCount === 1 ? "" : "s"} will temporarily use 5.0.`
-                  : clubNeedsMyRatingAttendingCount > 0
-                    ? "Hidden Club averages are still used for balance. Rate players in Club to reveal them."
-                    : "Shared teams use the organizer average from the Club tab."
-                : "Only your private roster ratings are used for this team generation."}
+            <div className="mt-1.5 text-[10px] font-semibold leading-snug text-violet-700/80">
+              {clubNoAverageAttendingCount > 0
+                ? `${clubNoAverageAttendingCount} selected player${clubNoAverageAttendingCount === 1 ? " has" : "s have"} no Club rating from anyone yet, so only ${clubNoAverageAttendingCount === 1 ? "that player uses" : "those players use"} temporary 5.0.`
+                : "Submitted organizer ratings are averaged quietly. Individual ratings stay private."}
             </div>
             {clubRatingError && (
               <div className="mt-1.5 rounded-lg bg-amber-50 px-2 py-1 text-[10px] font-bold text-amber-700">
@@ -939,16 +921,18 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
                     </div>
 
                     <div className="flex shrink-0 items-center gap-0.5">
-                      <button
-                        type="button"
-                        onClick={() => toggleTeamStats(team.id)}
-                        className="inline-flex h-7 items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-1.5 text-[9px] font-black text-slate-600 active:scale-[0.97]"
-                        title={showingStats ? "Show players" : "Show team stats"}
-                        data-testid={`button-team-stats-${team.id}`}
-                      >
-                        {showingStats ? <List className="h-3.5 w-3.5" /> : <BarChart3 className="h-3.5 w-3.5" />}
-                        <span className="hidden sm:inline">{showingStats ? "List" : "Stats"}</span>
-                      </button>
+                      {!isSharedRoster && (
+                        <button
+                          type="button"
+                          onClick={() => toggleTeamStats(team.id)}
+                          className="inline-flex h-7 items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-1.5 text-[9px] font-black text-slate-600 active:scale-[0.97]"
+                          title={showingStats ? "Show players" : "Show team stats"}
+                          data-testid={`button-team-stats-${team.id}`}
+                        >
+                          {showingStats ? <List className="h-3.5 w-3.5" /> : <BarChart3 className="h-3.5 w-3.5" />}
+                          <span className="hidden sm:inline">{showingStats ? "List" : "Stats"}</span>
+                        </button>
+                      )}
 
                       {/* Team color selector */}
                       <Select value={team.color} onValueChange={v => handleColorChange(team.id, v as TeamColor)}>
@@ -998,7 +982,7 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
                   )}
                 </div>
 
-                {showingStats ? (
+                {showingStats && !isSharedRoster ? (
                   <div className="bg-card border-t border-border px-3 py-3">
                     <div className="space-y-1.5">
                       {statsRows.map((stat) => {

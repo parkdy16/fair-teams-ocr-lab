@@ -357,7 +357,6 @@ export function ClubTab({
   equipmentHolderNamesByEmail = {},
   pairingRules = [],
   onOpenPairingRules,
-  onOpenTeams,
 }: ClubTabProps) {
   const [clubRatingSummaries, setClubRatingSummaries] = useState<ClubRatingSummary[]>([]);
   const [myClubRatings, setMyClubRatings] = useState<ClubMyRating[]>([]);
@@ -1208,7 +1207,7 @@ export function ClubTab({
               <Star className="h-4 w-4" />
               Organizer ratings
             </div>
-            <div className="mt-0.5 text-[11px] font-semibold text-slate-400">Private ratings become the Club average for shared teams.</div>
+            <div className="mt-0.5 text-[11px] font-semibold text-slate-400">Your rating helps build the Club average for shared teams.</div>
             <div className="mt-1 text-sm font-black text-[#102A43]">{clubRatingProgressText}</div>
           </div>
           <Button
@@ -1261,15 +1260,6 @@ export function ClubTab({
               <div className="rounded-2xl bg-slate-50 px-3 py-2 text-[11px] font-semibold text-slate-500">
                 {clubRatingLoading ? "Syncing ratings…" : `Club averages are ready for ${clubRatedCount} player${clubRatedCount === 1 ? "" : "s"}.`}
               </div>
-            )}
-            {onOpenTeams && (
-              <button
-                type="button"
-                className="text-left text-[11px] font-black text-slate-500 underline decoration-slate-300 underline-offset-2"
-                onClick={onOpenTeams}
-              >
-                Use Club average in Teams
-              </button>
             )}
           </div>
         )}

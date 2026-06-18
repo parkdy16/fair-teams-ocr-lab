@@ -367,6 +367,7 @@ export function ClubTab({
   const [ratingDraft, setRatingDraft] = useState(5);
   const [ratingSaving, setRatingSaving] = useState(false);
   const [ratingDialogError, setRatingDialogError] = useState("");
+  const [ratingBoardOpen, setRatingBoardOpen] = useState(false);
   const [ratingSeedSaving, setRatingSeedSaving] = useState(false);
   const [ratingSeedMessage, setRatingSeedMessage] = useState("");
   const [clubNotes, setClubNotes] = useState<ClubNote[]>([]);
@@ -409,6 +410,7 @@ export function ClubTab({
     equipmentBoardOpen: false,
     equipmentDialogOpen: false,
     ratingPlayerId: null as string | null,
+    ratingBoardOpen: false,
     accountDialogOpen: false,
   });
   const [authReady, setAuthReady] = useState(false);
@@ -648,6 +650,7 @@ export function ClubTab({
     if (!player) return;
     const existing = myRatingByPlayerId.get(player.id);
     setRatingDialogError("");
+    setRatingBoardOpen(false);
     setRatingDraft(typeof existing?.skill === "number" ? existing.skill : 5);
     setRatingPlayerId(player.id);
   };
@@ -1034,6 +1037,7 @@ export function ClubTab({
     equipmentDialogOpen ||
     equipmentBoardOpen ||
     ratingPlayerId ||
+    ratingBoardOpen ||
     accountDialogOpen,
   );
 
@@ -1044,9 +1048,10 @@ export function ClubTab({
       equipmentBoardOpen,
       equipmentDialogOpen,
       ratingPlayerId,
+      ratingBoardOpen,
       accountDialogOpen,
     };
-  }, [accountDialogOpen, colorPickerOpen, contentPeekKitId, equipmentBoardOpen, equipmentDialogOpen, ratingPlayerId]);
+  }, [accountDialogOpen, colorPickerOpen, contentPeekKitId, equipmentBoardOpen, equipmentDialogOpen, ratingPlayerId, ratingBoardOpen]);
 
   useEffect(() => {
     onBackTargetChange?.(hasClubBackTarget);
@@ -1085,6 +1090,11 @@ export function ClubTab({
       if (state.ratingPlayerId) {
         event.preventDefault();
         setRatingPlayerId(null);
+        return;
+      }
+      if (state.ratingBoardOpen) {
+        event.preventDefault();
+        setRatingBoardOpen(false);
         return;
       }
       if (state.accountDialogOpen) {
@@ -1257,14 +1267,25 @@ export function ClubTab({
             <div className="mt-0.5 text-[11px] font-semibold text-slate-400">Your rating helps build the Club average for shared teams.</div>
             <div className="mt-1 text-sm font-black text-[#102A43]">{clubRatingProgressText}</div>
           </div>
-          <Button
-            type="button"
-            className="h-10 shrink-0 rounded-2xl bg-[#102A43] px-4 text-xs font-black text-white hover:bg-[#0b2036]"
-            disabled={!clubRatingsEnabled || players.length === 0}
-            onClick={() => openRatingForPlayer(nextRatingPlayer)}
-          >
-            {clubRatedCount > 0 ? "Continue" : "Start"}
-          </Button>
+          <div className="flex shrink-0 items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-10 rounded-2xl border-violet-100 bg-white px-3 text-xs font-black text-violet-700 hover:bg-violet-50"
+              disabled={!clubRatingsEnabled || players.length === 0}
+              onClick={() => setRatingBoardOpen(true)}
+            >
+              Review
+            </Button>
+            <Button
+              type="button"
+              className="h-10 rounded-2xl bg-[#102A43] px-4 text-xs font-black text-white hover:bg-[#0b2036]"
+              disabled={!clubRatingsEnabled || players.length === 0}
+              onClick={() => openRatingForPlayer(nextRatingPlayer)}
+            >
+              {clubRatedCount > 0 ? "Continue" : "Start"}
+            </Button>
+          </div>
         </div>
 
         {isSharedRoster && legacySkillSeedPlayers.length > 0 && (
@@ -1464,6 +1485,103 @@ export function ClubTab({
             )) : (
               <div className="rounded-2xl bg-slate-50 px-3 py-2 text-sm font-bold text-slate-500">Only you</div>
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={ratingBoardOpen} onOpenChange={setRatingBoardOpen}>
+        <DialogContent className="max-h-[86svh] max-w-sm overflow-hidden rounded-3xl border border-violet-100 p-0 shadow-[0_14px_40px_rgba(15,23,42,0.16)]">
+          <DialogHeader className="border-b border-violet-100 bg-violet-50/70 px-4 py-3 text-left">
+            <DialogTitle className="flex items-center gap-2 text-base font-black text-[#102A43]">
+              <Star className="h-4 w-4 text-violet-600" />
+              Organizer ratings
+            </DialogTitle>
+          </DialogHeader>
+          <div className="max-h-[66svh] overflow-y-auto p-4" style={{ WebkitOverflowScrolling: "touch" }}>
+            <div className="mb-3 rounded-2xl bg-violet-50 px-3 py-2 text-[11px] font-bold leading-snug text-violet-800">
+              Rate players you know, skip the ones you do not know yet, and adjust your own ratings anytime. Individual ratings stay private.
+            </div>
+
+            <div className="grid gap-3">
+              {needRatingPlayers.length > 0 && (
+                <div className="grid gap-2">
+                  <div className="flex items-center justify-between px-1 text-[10px] font-black uppercase tracking-wide text-violet-600">
+                    <span>Needs your rating</span>
+                    <span>{needRatingPlayers.length}</span>
+                  </div>
+                  {needRatingPlayers.map((player) => (
+                    <button
+                      key={`need-${player.id}`}
+                      type="button"
+                      className="flex items-center justify-between rounded-2xl border border-violet-100 bg-white px-3 py-2 text-left shadow-sm active:scale-[0.99]"
+                      onClick={() => openRatingForPlayer(player)}
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-black text-[#102A43]">{player.name}</span>
+                        {player.aka && <span className="block truncate text-[11px] font-semibold text-slate-500">AKA {player.aka}</span>}
+                      </span>
+                      <span className="rounded-full bg-violet-50 px-2 py-1 text-[10px] font-black text-violet-700">Rate</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {skippedPlayers.length > 0 && (
+                <div className="grid gap-2">
+                  <div className="flex items-center justify-between px-1 text-[10px] font-black uppercase tracking-wide text-amber-600">
+                    <span>Skipped for later</span>
+                    <span>{skippedPlayers.length}</span>
+                  </div>
+                  {skippedPlayers.map((player) => (
+                    <button
+                      key={`skip-${player.id}`}
+                      type="button"
+                      className="flex items-center justify-between rounded-2xl border border-amber-100 bg-white px-3 py-2 text-left shadow-sm active:scale-[0.99]"
+                      onClick={() => openRatingForPlayer(player)}
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-black text-[#102A43]">{player.name}</span>
+                        {player.aka && <span className="block truncate text-[11px] font-semibold text-slate-500">AKA {player.aka}</span>}
+                      </span>
+                      <span className="rounded-full bg-amber-50 px-2 py-1 text-[10px] font-black text-amber-700">Rate now</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {ratedPlayers.length > 0 && (
+                <div className="grid gap-2">
+                  <div className="flex items-center justify-between px-1 text-[10px] font-black uppercase tracking-wide text-slate-400">
+                    <span>Your rated players</span>
+                    <span>{ratedPlayers.length}</span>
+                  </div>
+                  {ratedPlayers.map((player) => {
+                    const myRating = myRatingByPlayerId.get(player.id);
+                    const summary = ratingSummaryByPlayerId.get(player.id);
+                    return (
+                      <button
+                        key={`rated-${player.id}`}
+                        type="button"
+                        className="flex items-center justify-between rounded-2xl border border-slate-100 bg-white px-3 py-2 text-left shadow-sm active:scale-[0.99]"
+                        onClick={() => openRatingForPlayer(player)}
+                      >
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-black text-[#102A43]">{player.name}</span>
+                          <span className="block truncate text-[11px] font-semibold text-slate-500">
+                            Your {typeof myRating?.skill === "number" ? myRating.skill.toFixed(1) : "—"}{summary?.averageSkill ? ` · Club ${summary.averageSkill.toFixed(1)}` : ""}
+                          </span>
+                        </span>
+                        <span className="rounded-full bg-slate-50 px-2 py-1 text-[10px] font-black text-slate-600">Adjust</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {players.length === 0 && (
+                <div className="rounded-2xl bg-slate-50 px-3 py-2 text-sm font-bold text-slate-500">No players yet.</div>
+              )}
+            </div>
           </div>
         </DialogContent>
       </Dialog>

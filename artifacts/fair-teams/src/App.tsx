@@ -16,6 +16,7 @@ import {
   Cloud,
   CloudUpload,
   CloudDownload,
+  Copy,
   RefreshCw,
   Share2,
   UserMinus,
@@ -683,6 +684,7 @@ function App() {
   const [rosterSwitchingName, setRosterSwitchingName] = useState("");
   const [clearRosterOpen, setClearRosterOpen] = useState(false);
   const [clearRosterSlide, setClearRosterSlide] = useState(0);
+  const [privateCopyConfirmOpen, setPrivateCopyConfirmOpen] = useState(false);
   const [newRosterName, setNewRosterName] = useState("");
   const [fileImportMode, setFileImportMode] = useState<"shared" | "backup">(
     "shared",
@@ -1320,6 +1322,34 @@ function App() {
       title: "Firebase roster refreshed",
       message: `${summary.groupName ? `${summary.groupName} · ` : ""}${sourceName || remoteRoster.name || "Shared roster"} player cards and pairing rules were updated from Firebase version ${summary.version}. Local photos and device settings stayed on this device.`,
     });
+  };
+
+
+  const makePrivateCopyOfActiveSharedRoster = () => {
+    if (!activeRoster || !activeRosterIsFirebaseShared) return;
+    const copyName = uniqueRosterName(`${activeRoster.name || "Shared roster"} private copy`, rosters);
+    const localCopy = normalizeRoster({
+      ...createRoster(copyName, activeRoster.players, {
+        themeColor: activeRoster.themeColor,
+        logo: activeRoster.logo,
+      }),
+      pairingRules: activeRoster.pairingRules || [],
+      cloudSource: undefined,
+      updatedAt: new Date().toISOString(),
+    });
+
+    setRosterState((current) => ({
+      rosters: [...current.rosters, localCopy],
+      activeRosterId: localCopy.id,
+    }));
+    setPrivateCopyConfirmOpen(false);
+    setTodayRosterChosen(true);
+    setActiveTab("players");
+    showRosterToolsNotice(
+      "Private copy created",
+      `“${localCopy.name}” is a local roster on this device. The original shared roster stays online and unchanged.`,
+      "success",
+    );
   };
 
 
@@ -3114,18 +3144,31 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 }}
                 onOpenTeams={() => setActiveTab("teams")}
                 sharedToolsNode={(
-                  <FirebaseSharedRosterPublishCard
-                    variant="compact"
-                    activeRoster={activeRoster}
-                    rosters={rosters}
-                    isEmptyRoster={isEmptyStarterRoster}
-                    onOpenRoster={openFirebaseSharedRosterAsLocalCopy}
-                    onRosterSaved={markActiveFirebaseRosterSaved}
-                    onRefreshActiveRoster={refreshActiveFirebaseRosterFromRemote}
-                    onSharedRosterSummariesUpdated={syncFirebaseRosterBadgesFromSummaries}
-                    onSharedInviteOpened={finishSharedInviteOpen}
-                    openLibraryToken={sharedRosterLibraryOpenToken}
-                  />
+                  <div className="grid gap-2">
+                    <FirebaseSharedRosterPublishCard
+                      variant="compact"
+                      activeRoster={activeRoster}
+                      rosters={rosters}
+                      isEmptyRoster={isEmptyStarterRoster}
+                      onOpenRoster={openFirebaseSharedRosterAsLocalCopy}
+                      onRosterSaved={markActiveFirebaseRosterSaved}
+                      onRefreshActiveRoster={refreshActiveFirebaseRosterFromRemote}
+                      onSharedRosterSummariesUpdated={syncFirebaseRosterBadgesFromSummaries}
+                      onSharedInviteOpened={finishSharedInviteOpen}
+                      openLibraryToken={sharedRosterLibraryOpenToken}
+                    />
+                    {activeRosterIsFirebaseShared && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-11 justify-start gap-2 rounded-2xl border-violet-100 bg-white px-3 text-violet-700 hover:bg-violet-50 hover:text-violet-800"
+                        onClick={() => setPrivateCopyConfirmOpen(true)}
+                      >
+                        <Copy className="h-4 w-4" />
+                        <span className="truncate text-xs font-black">Make private copy</span>
+                      </Button>
+                    )}
+                  </div>
                 )}
                 equipmentGroupId={activeFirebaseSource?.firebaseRosterId ? `roster:${activeFirebaseSource.firebaseRosterId}` : undefined}
                 equipmentHolderLabels={activeFirebaseEquipmentHolderLabels}
@@ -5138,6 +5181,59 @@ This is a shared roster. Local Backup can only remove/disassociate this device�
                 onClick={closeDriveImportPreview}
               >
                 Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {privateCopyConfirmOpen && activeRosterIsFirebaseShared && (
+        <div
+          className="fixed inset-0 z-[86] flex items-end justify-center bg-black/45 p-0 sm:items-center sm:p-4"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setPrivateCopyConfirmOpen(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-t-3xl border border-violet-100 bg-white p-4 shadow-2xl sm:rounded-3xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-violet-50 text-violet-600">
+                <Copy className="h-5 w-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h2 className="text-base font-black text-[#102A43]">Make private copy?</h2>
+                <p className="mt-1 text-sm font-semibold leading-snug text-slate-600">
+                  Create a separate local roster from “{activeRosterName}”. The shared roster stays online and unchanged.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-violet-100 bg-violet-50/70 p-3">
+              <div className="text-[10px] font-black uppercase tracking-wide text-violet-700">
+                Private copy
+              </div>
+              <p className="mt-1 text-[11px] font-semibold leading-snug text-violet-800/80">
+                The copy becomes a normal local roster. You can edit skill, advanced attributes, photos, and special abilities there without affecting organizers.
+              </p>
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="h-11 rounded-2xl border-slate-200 bg-white text-xs font-black text-slate-600"
+                onClick={() => setPrivateCopyConfirmOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                className="h-11 rounded-2xl bg-violet-600 text-xs font-black text-white hover:bg-violet-700"
+                onClick={makePrivateCopyOfActiveSharedRoster}
+              >
+                Make copy
               </Button>
             </div>
           </div>

@@ -4857,6 +4857,13 @@ This is a shared roster. Local Backup can only remove/disassociate this deviceâ€
                 <input
                   value={googleSheetShareName}
                   onChange={(e) => setGoogleSheetShareName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      e.currentTarget.blur();
+                    }
+                  }}
+                  enterKeyHint="done"
                   type="text"
                   autoCapitalize="words"
                   autoCorrect="off"
@@ -4869,9 +4876,11 @@ This is a shared roster. Local Backup can only remove/disassociate this deviceâ€
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       e.preventDefault();
+                      e.currentTarget.blur();
                       confirmGoogleSheetShare();
                     }
                   }}
+                  enterKeyHint="done"
                   type="email"
                   inputMode="email"
                   autoCapitalize="none"

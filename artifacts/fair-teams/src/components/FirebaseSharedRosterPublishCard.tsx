@@ -88,6 +88,12 @@ function modalShell(title: string, onClose: () => void, body: React.ReactNode) {
   );
 }
 
+function blurOnDoneKey(event: React.KeyboardEvent<HTMLInputElement>) {
+  if (event.key !== "Enter") return;
+  event.preventDefault();
+  event.currentTarget.blur();
+}
+
 export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster, rosters = [], isEmptyRoster, onOpenRoster, onRosterSaved, onRefreshActiveRoster, onSharedRosterSummariesUpdated, onSharedInviteOpened, openLibraryToken = 0 }: Props) {
   const [user, setUser] = useState<SharedRosterUser | null>(null);
   const [busy, setBusy] = useState<string>("");
@@ -420,7 +426,7 @@ Your local roster will stay local. Fair Teams will copy shared identity fields o
 
       {canManageCollaborators ? (
         <div className="grid grid-cols-[1fr_auto] gap-2">
-          <input value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} type="email" className="h-10 rounded-2xl border border-violet-100 bg-white px-3 text-sm font-bold outline-none" placeholder="email@example.com" />
+          <input value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} onKeyDown={blurOnDoneKey} enterKeyHint="done" type="email" className="h-10 rounded-2xl border border-violet-100 bg-white px-3 text-sm font-bold outline-none" placeholder="email@example.com" />
           <Button type="button" className="h-10 rounded-2xl bg-violet-600 px-3 text-xs font-black text-white hover:bg-violet-700" onClick={handleInvite} disabled={!inviteEmail.trim() || Boolean(busy)}>
             <UserPlus className="mr-1.5 h-4 w-4" />
             Invite

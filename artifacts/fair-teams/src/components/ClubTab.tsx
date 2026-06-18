@@ -1044,6 +1044,12 @@ export function ClubTab({
     if (activeElement instanceof HTMLElement) activeElement.blur();
   };
 
+  const blurFieldOnDoneKey = (event: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    if (event.key !== "Enter" || event.shiftKey) return;
+    event.preventDefault();
+    event.currentTarget.blur();
+  };
+
   const hasClubBackTarget = Boolean(
     colorPickerOpen ||
     contentPeekKitId ||
@@ -1429,6 +1435,8 @@ export function ClubTab({
           <Textarea
             value={clubNoteDraft}
             onChange={(event) => setClubNoteDraft(event.target.value)}
+            onKeyDown={blurFieldOnDoneKey}
+            enterKeyHint="done"
             disabled={!clubRatingsEnabled}
             placeholder={clubRatingsEnabled ? "Example: Puma ball died today — Joon" : "Shared notes appear after sign-in."}
             className="min-h-[4rem] rounded-2xl border-amber-100 bg-white text-sm font-semibold"
@@ -2027,6 +2035,8 @@ export function ClubTab({
               <Textarea
                 value={kitNote}
                 onChange={(event) => setKitNote(event.target.value)}
+                onKeyDown={blurFieldOnDoneKey}
+                enterKeyHint="done"
                 placeholder="Example: First-aid spray is almost empty."
                 className="min-h-[3.5rem] rounded-2xl border-slate-200 text-sm font-semibold"
               />

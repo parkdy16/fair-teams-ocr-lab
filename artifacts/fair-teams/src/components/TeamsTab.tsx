@@ -899,11 +899,15 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
                         <input
                           className="min-w-0 w-full max-w-[8rem] rounded-md border border-border bg-background px-1.5 py-0.5 text-sm font-black leading-tight text-foreground outline-none focus:border-primary"
                           value={editingTeamName}
-                          autoFocus
                           onChange={e => setEditingTeamName(e.target.value)}
                           onBlur={commitTeamName}
+                          enterKeyHint="done"
                           onKeyDown={e => {
-                            if (e.key === "Enter") commitTeamName();
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              e.currentTarget.blur();
+                              commitTeamName();
+                            }
                             if (e.key === "Escape") cancelTeamNameEdit();
                           }}
                           data-testid={`input-team-name-${team.id}`}

@@ -73,6 +73,12 @@ function TodayStatusDots({
   );
 }
 
+function blurOnDoneKey(event: React.KeyboardEvent<HTMLInputElement>) {
+  if (event.key !== "Enter") return;
+  event.preventDefault();
+  event.currentTarget.blur();
+}
+
 function isFirebaseSharedRoster(roster: RoomRoster) {
   return roster.cloudSource?.provider === "firebase" && Boolean(roster.cloudSource.firebaseRosterId);
 }
@@ -4227,6 +4233,8 @@ export function TodayTab({
                           setExpectedAttendeeCount(event.target.value)
                         }
                         placeholder="Example: 20"
+                        onKeyDown={blurOnDoneKey}
+                        enterKeyHint="done"
                         className="h-10 rounded-xl text-sm font-bold"
                       />
                     </div>

@@ -785,7 +785,7 @@ function VibePicker({ value, onChange }: { value?: FunBadge; onChange: (value?: 
   );
 }
 
-function blurOnDoneKey(event: React.KeyboardEvent<HTMLInputElement>) {
+function blurOnDoneKey(event: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) {
   if (event.key !== "Enter") return;
   event.preventDefault();
   event.currentTarget.blur();
@@ -974,7 +974,7 @@ function ProfileDialog({
               </div>
               <div className="space-y-1.5">
                 <Label className="text-[10px] uppercase font-bold text-violet-700/80 tracking-wider">AKA / Nickname</Label>
-                <Input value={draft.aka || ""} placeholder="Optional" onChange={e => updateDraft({ aka: e.target.value })} className="h-10 border-violet-100 bg-white text-sm font-semibold" />
+                <Input value={draft.aka || ""} placeholder="Optional" onChange={e => updateDraft({ aka: e.target.value })} onKeyDown={blurOnDoneKey} enterKeyHint="done" className="h-10 border-violet-100 bg-white text-sm font-semibold" />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-[10px] uppercase font-bold text-violet-700/80 tracking-wider">Player Vibe</Label>
@@ -1055,7 +1055,7 @@ function ProfileDialog({
                 </div>
                 <div className="flex-1 space-y-2 min-w-0">
                   <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">AKA / Nickname</Label>
-                  <Input value={draft.aka || ""} placeholder="Optional" onChange={e => updateDraft({ aka: e.target.value })} className="h-10 text-sm font-semibold" />
+                  <Input value={draft.aka || ""} placeholder="Optional" onChange={e => updateDraft({ aka: e.target.value })} onKeyDown={blurOnDoneKey} enterKeyHint="done" className="h-10 text-sm font-semibold" />
                   <div className="grid grid-cols-[1fr_auto] items-end gap-2">
                     <div className="space-y-1.5 min-w-0">
                       <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Player Vibe</Label>
@@ -1995,6 +1995,7 @@ export function PlayersTab({
                       placeholder="Nickname or alternate spelling"
                       value={aka}
                       onChange={e => setAka(e.target.value)}
+                      onKeyDown={blurOnDoneKey}
                       className="h-10 border-violet-100 bg-white text-sm font-semibold"
                       enterKeyHint="done"
                       data-testid="input-player-aka"
@@ -2154,6 +2155,7 @@ export function PlayersTab({
                           placeholder="Nickname"
                           value={aka}
                           onChange={e => setAka(e.target.value)}
+                          onKeyDown={blurOnDoneKey}
                           className="h-10 text-sm font-semibold"
                           enterKeyHint="done"
                           data-testid="input-player-aka"

@@ -50,6 +50,12 @@ function fallbackOrganizerName(email: string) {
     .replace(/\b\w/g, (char) => char.toUpperCase()) || "Organizer";
 }
 
+function blurOnDoneKey(event: React.KeyboardEvent<HTMLInputElement>) {
+  if (event.key !== "Enter") return;
+  event.preventDefault();
+  event.currentTarget.blur();
+}
+
 export function FirebaseSharedRosterAuthCard() {
   const [user, setUser] = useState<SharedRosterUser | null>(null);
   const [authReady, setAuthReady] = useState(false);
@@ -202,11 +208,11 @@ export function FirebaseSharedRosterAuthCard() {
       <div className="grid gap-2 sm:grid-cols-2">
         <div className="flex items-center gap-2 rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2">
           <Mail className="h-4 w-4 shrink-0 text-slate-400" />
-          <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" autoComplete="email" placeholder="email" className="min-w-0 flex-1 bg-transparent text-sm font-bold text-[#102A43] outline-none placeholder:text-slate-300" />
+          <input value={email} onChange={(event) => setEmail(event.target.value)} onKeyDown={blurOnDoneKey} enterKeyHint="done" type="email" autoComplete="email" placeholder="email" className="min-w-0 flex-1 bg-transparent text-sm font-bold text-[#102A43] outline-none placeholder:text-slate-300" />
         </div>
-        <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete="current-password" placeholder="password" className="h-10 rounded-2xl border border-slate-100 bg-slate-50 px-3 text-sm font-bold text-[#102A43] outline-none placeholder:text-slate-300" />
+        <input value={password} onChange={(event) => setPassword(event.target.value)} onKeyDown={blurOnDoneKey} enterKeyHint="done" type="password" autoComplete="current-password" placeholder="password" className="h-10 rounded-2xl border border-slate-100 bg-slate-50 px-3 text-sm font-bold text-[#102A43] outline-none placeholder:text-slate-300" />
       </div>
-      <input value={organizerName} onChange={(event) => setOrganizerName(event.target.value)} type="text" autoComplete="name" placeholder="your organizer name" className="h-10 rounded-2xl border border-slate-100 bg-slate-50 px-3 text-sm font-bold text-[#102A43] outline-none placeholder:text-slate-300" />
+      <input value={organizerName} onChange={(event) => setOrganizerName(event.target.value)} onKeyDown={blurOnDoneKey} enterKeyHint="done" type="text" autoComplete="name" placeholder="your organizer name" className="h-10 rounded-2xl border border-slate-100 bg-slate-50 px-3 text-sm font-bold text-[#102A43] outline-none placeholder:text-slate-300" />
       <div className="text-[10px] font-bold text-slate-500">Shown only to people you share rosters with.</div>
       <div className="grid grid-cols-2 gap-2">
         <Button type="button" className="h-9 rounded-2xl bg-[#102A43] text-xs font-black text-white hover:bg-[#0b2036]" onClick={handleSignIn} disabled={!canSignIn}>{busyAction === "signin" ? "Signing in…" : "Sign in"}</Button>

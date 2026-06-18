@@ -697,6 +697,7 @@ function ProfileDialog({
   reviewTotal = 0,
   onReviewNext,
   onReviewDone,
+  isSharedRoster = false,
 }: {
   player: RoomPlayer;
   onUpdate: (data: Partial<RoomPlayer>) => void;
@@ -707,6 +708,7 @@ function ProfileDialog({
   reviewTotal?: number;
   onReviewNext?: () => void;
   onReviewDone?: () => void;
+  isSharedRoster?: boolean;
 }) {
   const [draft, setDraft] = useState<RoomPlayer>(() => normalizePlayer(player));
   const [open, setOpen] = useState(false);
@@ -814,8 +816,12 @@ function ProfileDialog({
         className="max-w-sm md:max-w-xl max-h-[90dvh] overflow-y-auto rounded-3xl"
       >
         <DialogHeader>
-          <DialogTitle>Player Setup</DialogTitle>
-          <div className="text-xs font-semibold text-muted-foreground">Quick edit first. Open Advanced only when you need detailed stats or photos.</div>
+          <DialogTitle>{isSharedRoster ? "Shared Player Info" : "Player Setup"}</DialogTitle>
+          <div className="text-xs font-semibold text-muted-foreground">
+            {isSharedRoster
+              ? "This shared roster keeps identity fields in sync. Club ratings live in the Club tab."
+              : "Quick edit first. Open Advanced only when you need detailed stats or photos."}
+          </div>
         </DialogHeader>
 
         {reviewMode && (
@@ -854,6 +860,27 @@ function ProfileDialog({
             </TogglePill>
           </div>
 
+          {isSharedRoster && (
+            <div className="rounded-2xl border border-violet-200 bg-violet-50/85 p-3 space-y-3">
+              <div>
+                <Label className="text-[11px] uppercase font-black tracking-wide text-violet-700">Shared player info</Label>
+                <div className="mt-0.5 text-[10px] font-semibold leading-snug text-violet-700/75">
+                  These fields are shared with organizers. Team balancing uses Club ratings, not this edit window.
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[10px] uppercase font-bold text-violet-700/80 tracking-wider">AKA / Nickname</Label>
+                <Input value={draft.aka || ""} placeholder="Optional" onChange={e => updateDraft({ aka: e.target.value })} className="h-10 border-violet-100 bg-white text-sm font-semibold" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[10px] uppercase font-bold text-violet-700/80 tracking-wider">Player Vibe</Label>
+                <VibePicker value={draft.funBadge} onChange={funBadge => updateDraft({ funBadge })} />
+              </div>
+            </div>
+          )}
+
+          {!isSharedRoster && (
+            <>
           <div className="rounded-2xl border border-primary/15 bg-primary/5 p-3 space-y-3">
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -1034,6 +1061,8 @@ function ProfileDialog({
               </div>
             </div>
           )}
+            </>
+          )}
 
           {reviewMode ? (
             <div className="grid grid-cols-[0.8fr_1.2fr] gap-2">
@@ -1054,7 +1083,7 @@ function ProfileDialog({
               </Button>
             </div>
           ) : (
-            <Button onClick={save} className="h-11 rounded-xl font-black uppercase tracking-wide">Save Profile</Button>
+            <Button onClick={save} className="h-11 rounded-xl font-black uppercase tracking-wide">{isSharedRoster ? "Save Shared Info" : "Save Profile"}</Button>
           )}
         </div>
       </DialogContent>
@@ -1153,6 +1182,7 @@ export function PlayersTab({
   onReviewNext,
   onReviewDone,
   openPairingRulesToken = 0,
+  isSharedRoster = false,
 }: {
   players: RoomPlayer[];
   setPlayers: (players: RoomPlayer[]) => void;
@@ -1167,6 +1197,7 @@ export function PlayersTab({
   onReviewNext?: () => void;
   onReviewDone?: () => void;
   openPairingRulesToken?: number;
+  isSharedRoster?: boolean;
 }) {
   const [name, setName] = useState("");
   const [aka, setAka] = useState("");
@@ -1449,12 +1480,14 @@ export function PlayersTab({
     }
   };
 
+  const effectiveSortMode = isSharedRoster && sortMode === "skill" ? "recent" : sortMode;
+
   const sortedPlayers = [...players].sort((a, b) => {
-    if (sortMode === "alpha") {
+    if (effectiveSortMode === "alpha") {
       return displayName(a).localeCompare(displayName(b));
     }
 
-    if (sortMode === "skill") {
+    if (effectiveSortMode === "skill") {
       const skillDiff = (b.skill ?? 0) - (a.skill ?? 0);
       if (skillDiff !== 0) return skillDiff;
       return displayName(a).localeCompare(displayName(b));
@@ -1748,7 +1781,12 @@ export function PlayersTab({
             className="max-w-sm md:max-w-xl rounded-3xl !top-[10dvh] !translate-y-0 max-h-[82dvh] overflow-y-auto sm:!top-[50%] sm:!-translate-y-1/2"
           >
             <DialogHeader>
-              <DialogTitle>Add player</DialogTitle>
+              <DialogTitle>{isSharedRoster ? "Add shared player" : "Add player"}</DialogTitle>
+              {isSharedRoster && (
+                <div className="text-xs font-semibold leading-snug text-muted-foreground">
+                  Shared rosters add identity first. Organizers can submit Club ratings later.
+                </div>
+              )}
             </DialogHeader>
             <form onSubmit={handleAdd} onKeyDown={preventKeyboardSubmit} className="flex flex-col gap-3.5 pt-1">
               <div className="grid grid-cols-1 gap-3">
@@ -1797,6 +1835,35 @@ export function PlayersTab({
                 </TogglePill>
               </div>
 
+              {isSharedRoster && (
+                <div className="rounded-2xl border border-violet-200 bg-violet-50/85 p-3 space-y-3">
+                  <div>
+                    <Label className="text-[11px] uppercase font-black tracking-wide text-violet-700">Shared player info</Label>
+                    <div className="mt-0.5 text-[10px] font-semibold leading-snug text-violet-700/75">
+                      Ratings are collected separately in Club. This player will use 5.0 until someone submits a Club rating.
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="aka" className="text-[10px] uppercase font-bold text-violet-700/80 tracking-wider">AKA / Nickname</Label>
+                    <Input
+                      id="aka"
+                      placeholder="Nickname or alternate spelling"
+                      value={aka}
+                      onChange={e => setAka(e.target.value)}
+                      className="h-10 border-violet-100 bg-white text-sm font-semibold"
+                      enterKeyHint="done"
+                      data-testid="input-player-aka"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-[10px] uppercase font-bold text-violet-700/80 tracking-wider">Player Vibe</Label>
+                    <VibePicker value={addDetails.funBadge} onChange={funBadge => updateAddDetails({ funBadge })} />
+                  </div>
+                </div>
+              )}
+
+              {!isSharedRoster && (
+                <>
               <div className="rounded-2xl border border-primary/15 bg-primary/5 p-3 space-y-3">
                 <div className="flex items-center justify-between gap-3">
                   <div>
@@ -2005,13 +2072,15 @@ export function PlayersTab({
                   </div>
                 </div>
               )}
+                </>
+              )}
 
               <Button
                 type="submit"
                 className="h-10 rounded-xl font-black uppercase tracking-wide"
                 data-testid="button-add-player"
               >
-                <Plus className="w-3.5 h-3.5 mr-1.5" /> Add Player
+                <Plus className="w-3.5 h-3.5 mr-1.5" /> {isSharedRoster ? "Add to Shared Roster" : "Add Player"}
               </Button>
             </form>
           </DialogContent>
@@ -2025,14 +2094,15 @@ export function PlayersTab({
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => setSortMode(prev => prev === "recent" ? "alpha" : prev === "alpha" ? "skill" : "recent")}
+            onClick={() => setSortMode(prev => isSharedRoster ? (prev === "recent" ? "alpha" : "recent") : (prev === "recent" ? "alpha" : prev === "alpha" ? "skill" : "recent"))}
             className="h-8 rounded-xl px-2.5 text-[10px] font-black uppercase tracking-wide shadow-none border-primary/20 bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary"
-            title={sortMode === "recent" ? "Roster sorted by last added. Tap for A-Z." : sortMode === "alpha" ? "Roster sorted A-Z. Tap for Skill high to low." : "Roster sorted by Skill high to low. Tap for Last Added."}
+            title={effectiveSortMode === "recent" ? "Roster sorted by last added. Tap for A-Z." : effectiveSortMode === "alpha" ? (isSharedRoster ? "Roster sorted A-Z. Tap for Last Added." : "Roster sorted A-Z. Tap for Skill high to low.") : "Roster sorted by Skill high to low. Tap for Last Added."}
             data-testid="button-toggle-roster-sort"
           >
-            {sortMode === "recent" ? <Clock3 className="mr-1 h-3 w-3" /> : sortMode === "alpha" ? <ArrowDownAZ className="mr-1 h-3 w-3" /> : <Star className="mr-1 h-3 w-3" />}
-            {sortMode === "recent" ? "Last Added" : sortMode === "alpha" ? "A-Z" : "Skill ↓"}
+            {effectiveSortMode === "recent" ? <Clock3 className="mr-1 h-3 w-3" /> : effectiveSortMode === "alpha" ? <ArrowDownAZ className="mr-1 h-3 w-3" /> : <Star className="mr-1 h-3 w-3" />}
+            {effectiveSortMode === "recent" ? "Last Added" : effectiveSortMode === "alpha" ? "A-Z" : "Skill ↓"}
           </Button>
+          {!isSharedRoster && (
           <Button
             type="button"
             variant="outline"
@@ -2045,6 +2115,7 @@ export function PlayersTab({
             {hideOverall ? <EyeOff className="mr-1 h-3 w-3" /> : <Eye className="mr-1 h-3 w-3" />}
             Skill
           </Button>
+          )}
         </div>
           <Button
             type="button"
@@ -2228,7 +2299,7 @@ export function PlayersTab({
                       <PlayerTags player={player} includeVibe includeAbilityCount={!isFlipped} />
                     </div>
                     <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
-                      {!hideOverall ? <OverallBadge player={player} /> : null}
+                      {!isSharedRoster && !hideOverall ? <OverallBadge player={player} /> : null}
                       <ProfileDialog
                         player={player}
                         onUpdate={(data) => updatePlayer(player.id, data)}
@@ -2242,6 +2313,7 @@ export function PlayersTab({
                         reviewTotal={reviewPlayerTotal}
                         onReviewNext={onReviewNext}
                         onReviewDone={onReviewDone}
+                        isSharedRoster={isSharedRoster}
                       />
                       <AlertDialog>
                         <AlertDialogTrigger asChild>

@@ -627,12 +627,15 @@ export function ClubTab({
   }), [myRatingByPlayerId, players]);
   const skippedPlayers = useMemo(() => players.filter((player) => myRatingByPlayerId.get(player.id)?.skipped), [myRatingByPlayerId, players]);
   const needRatingPlayers = useMemo(() => players.filter((player) => !myRatingByPlayerId.has(player.id)), [myRatingByPlayerId, players]);
+  const newNeedRatingPlayers = useMemo(() => needRatingPlayers.filter((player) => player.isNew), [needRatingPlayers]);
+  const regularNeedRatingPlayers = useMemo(() => needRatingPlayers.filter((player) => !player.isNew), [needRatingPlayers]);
+  const orderedNeedRatingPlayers = useMemo(() => [...newNeedRatingPlayers, ...regularNeedRatingPlayers], [newNeedRatingPlayers, regularNeedRatingPlayers]);
   const ratingDialogPlayer = useMemo(() => players.find((player) => player.id === ratingPlayerId) || null, [players, ratingPlayerId]);
   const legacySkillSeedPlayers = useMemo(() => needRatingPlayers.filter((player) => {
     const skill = Number(player.skill);
     return Number.isFinite(skill) && skill >= 1 && skill <= 10;
   }), [needRatingPlayers]);
-  const nextRatingPlayer = needRatingPlayers[0] || skippedPlayers[0] || ratedPlayers[0] || players[0] || null;
+  const nextRatingPlayer = orderedNeedRatingPlayers[0] || skippedPlayers[0] || ratedPlayers[0] || players[0] || null;
   const clubRatedCount = ratedPlayers.length;
   const clubSkippedCount = skippedPlayers.length;
   const clubNeedRatingCount = needRatingPlayers.length;
@@ -656,7 +659,7 @@ export function ClubTab({
   };
 
   const findNextRatingPlayerAfter = (currentPlayerId: string | null) => {
-    const nextUnrated = needRatingPlayers.find((player) => player.id !== currentPlayerId);
+    const nextUnrated = orderedNeedRatingPlayers.find((player) => player.id !== currentPlayerId);
     if (nextUnrated) return nextUnrated;
     const nextSkipped = skippedPlayers.find((player) => player.id !== currentPlayerId);
     if (nextSkipped) return nextSkipped;
@@ -1324,11 +1327,14 @@ export function ClubTab({
                 type="button"
                 className="flex items-center justify-between rounded-2xl border border-violet-100 bg-violet-50 px-3 py-2 text-left active:scale-[0.99]"
                 disabled={!clubRatingsEnabled}
-                onClick={() => openRatingForPlayer(needRatingPlayers[0] || null)}
+                onClick={() => openRatingForPlayer(orderedNeedRatingPlayers[0] || null)}
               >
                 <span className="min-w-0">
                   <span className="block text-xs font-black text-[#102A43]">Needs your rating</span>
-                  <span className="block truncate text-[11px] font-semibold text-violet-700">{needRatingPlayers.slice(0, 3).map((player) => player.name).join(", ")}</span>
+                  <span className="block truncate text-[11px] font-semibold text-violet-700">{orderedNeedRatingPlayers.slice(0, 3).map((player) => player.name).join(", ")}</span>
+                  {newNeedRatingPlayers.length > 0 && (
+                    <span className="mt-1 block text-[10px] font-black text-violet-600">{newNeedRatingPlayers.length} new player{newNeedRatingPlayers.length === 1 ? "" : "s"} near the top</span>
+                  )}
                 </span>
                 <span className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-violet-700">{clubNeedRatingCount}</span>
               </button>
@@ -1503,13 +1509,39 @@ export function ClubTab({
             </div>
 
             <div className="grid gap-3">
-              {needRatingPlayers.length > 0 && (
+              {newNeedRatingPlayers.length > 0 && (
+                <div className="grid gap-2">
+                  <div className="flex items-center justify-between px-1 text-[10px] font-black uppercase tracking-wide text-violet-600">
+                    <span>New players to rate</span>
+                    <span>{newNeedRatingPlayers.length}</span>
+                  </div>
+                  {newNeedRatingPlayers.map((player) => (
+                    <button
+                      key={`new-need-${player.id}`}
+                      type="button"
+                      className="flex items-center justify-between rounded-2xl border border-violet-200 bg-violet-50 px-3 py-2 text-left shadow-sm active:scale-[0.99]"
+                      onClick={() => openRatingForPlayer(player)}
+                    >
+                      <span className="min-w-0">
+                        <span className="flex min-w-0 items-center gap-1.5">
+                          <span className="truncate text-sm font-black text-[#102A43]">{player.name}</span>
+                          <span className="rounded-full bg-white px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-violet-700">New</span>
+                        </span>
+                        {player.aka && <span className="block truncate text-[11px] font-semibold text-violet-700">AKA {player.aka}</span>}
+                      </span>
+                      <span className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-violet-700">Rate</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {regularNeedRatingPlayers.length > 0 && (
                 <div className="grid gap-2">
                   <div className="flex items-center justify-between px-1 text-[10px] font-black uppercase tracking-wide text-violet-600">
                     <span>Needs your rating</span>
-                    <span>{needRatingPlayers.length}</span>
+                    <span>{regularNeedRatingPlayers.length}</span>
                   </div>
-                  {needRatingPlayers.map((player) => (
+                  {regularNeedRatingPlayers.map((player) => (
                     <button
                       key={`need-${player.id}`}
                       type="button"

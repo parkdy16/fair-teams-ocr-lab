@@ -367,6 +367,7 @@ export function ClubTab({
   const [ratingDraft, setRatingDraft] = useState(5);
   const [ratingSaving, setRatingSaving] = useState(false);
   const [ratingDialogError, setRatingDialogError] = useState("");
+  const [ratingFlowNotice, setRatingFlowNotice] = useState("");
   const [ratingBoardOpen, setRatingBoardOpen] = useState(false);
   const [ratingSeedSaving, setRatingSeedSaving] = useState(false);
   const [ratingSeedMessage, setRatingSeedMessage] = useState("");
@@ -653,6 +654,7 @@ export function ClubTab({
     if (!player) return;
     const existing = myRatingByPlayerId.get(player.id);
     setRatingDialogError("");
+    setRatingFlowNotice("");
     setRatingBoardOpen(false);
     setRatingDraft(typeof existing?.skill === "number" ? existing.skill : 5);
     setRatingPlayerId(player.id);
@@ -693,12 +695,16 @@ export function ClubTab({
     setClubRatingError("");
     try {
       const savedPlayerId = ratingDialogPlayer.id;
+      const savedPlayerName = ratingDialogPlayer.name;
       await saveMyClubPlayerRating(sharedRosterId, savedPlayerId, ratingDraft);
       const nextPlayer = findNextRatingPlayerAfter(savedPlayerId);
       if (nextPlayer) {
         openRatingForPlayer(nextPlayer);
+        setRatingFlowNotice(`${savedPlayerName} saved. Next up: ${nextPlayer.name}.`);
       } else {
         setRatingPlayerId(null);
+        setRatingBoardOpen(true);
+        setRatingFlowNotice(`${savedPlayerName} saved. You are caught up for now.`);
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not save your rating.";
@@ -715,12 +721,16 @@ export function ClubTab({
     setClubRatingError("");
     try {
       const skippedPlayerId = ratingDialogPlayer.id;
+      const skippedPlayerName = ratingDialogPlayer.name;
       await skipMyClubPlayerRating(sharedRosterId, skippedPlayerId);
       const nextPlayer = findNextRatingPlayerAfter(skippedPlayerId);
       if (nextPlayer) {
         openRatingForPlayer(nextPlayer);
+        setRatingFlowNotice(`${skippedPlayerName} skipped for later. Next up: ${nextPlayer.name}.`);
       } else {
         setRatingPlayerId(null);
+        setRatingBoardOpen(true);
+        setRatingFlowNotice(`${skippedPlayerName} skipped for later. You are caught up for now.`);
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not skip this player.";
@@ -1508,6 +1518,12 @@ export function ClubTab({
               Rate players you know, skip the ones you do not know yet, and adjust your own ratings anytime. Individual ratings stay private.
             </div>
 
+            {ratingFlowNotice && (
+              <div className="mb-3 rounded-2xl border border-violet-100 bg-white px-3 py-2 text-[11px] font-black leading-snug text-violet-800 shadow-sm">
+                {ratingFlowNotice}
+              </div>
+            )}
+
             <div className="grid gap-3">
               {newNeedRatingPlayers.length > 0 && (
                 <div className="grid gap-2">
@@ -1636,12 +1652,33 @@ export function ClubTab({
             const summary = ratingSummaryByPlayerId.get(ratingDialogPlayer.id);
             const canRevealAverage = Boolean(myRating && !myRating.skipped && typeof myRating.skill === "number");
             const nextPlayerAfterThis = findNextRatingPlayerAfter(ratingDialogPlayer.id);
+            const remainingAfterThis = orderedNeedRatingPlayers.filter((player) => player.id !== ratingDialogPlayer.id).length
+              + skippedPlayers.filter((player) => player.id !== ratingDialogPlayer.id).length;
+            const ratingModeLabel = myRating?.skipped
+              ? "Skipped before"
+              : typeof myRating?.skill === "number"
+                ? "Adjusting your rating"
+                : ratingDialogPlayer.isNew
+                  ? "New player"
+                  : "Needs your rating";
             return (
               <div className="grid gap-4 p-4">
+                {ratingFlowNotice && (
+                  <div className="rounded-2xl border border-violet-100 bg-violet-50 px-3 py-2 text-[11px] font-black leading-snug text-violet-800">
+                    {ratingFlowNotice}
+                  </div>
+                )}
+
                 <div className="rounded-2xl bg-slate-50 px-3 py-2">
-                  <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Player</div>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Player</div>
+                    <div className="rounded-full bg-white px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-violet-700">{ratingModeLabel}</div>
+                  </div>
                   <div className="mt-1 text-lg font-black text-[#102A43]">{ratingDialogPlayer.name}</div>
                   {ratingDialogPlayer.aka && <div className="text-xs font-semibold text-slate-500">{ratingDialogPlayer.aka}</div>}
+                  {remainingAfterThis > 0 && (
+                    <div className="mt-2 text-[11px] font-bold text-slate-400">{remainingAfterThis} more player{remainingAfterThis === 1 ? "" : "s"} after this.</div>
+                  )}
                 </div>
 
                 <div className="grid gap-2">
@@ -1692,7 +1729,7 @@ export function ClubTab({
                     disabled={ratingSaving}
                     onClick={skipClubRating}
                   >
-                    {nextPlayerAfterThis ? "Skip & next" : "I don’t know yet"}
+                    {nextPlayerAfterThis ? "Skip & next" : "Skip for later"}
                   </Button>
                   <Button
                     type="button"
@@ -1700,7 +1737,7 @@ export function ClubTab({
                     disabled={ratingSaving}
                     onClick={saveClubRating}
                   >
-                    {ratingSaving ? "Saving…" : nextPlayerAfterThis ? "Save & next" : "Save rating"}
+                    {ratingSaving ? "Saving…" : nextPlayerAfterThis ? "Save & next" : "Save & finish"}
                   </Button>
                 </div>
               </div>

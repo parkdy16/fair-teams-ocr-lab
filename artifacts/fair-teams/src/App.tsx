@@ -2631,6 +2631,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
   const confirmClearRoster = () => {
     if (clearRosterSlide < 95) return;
     const removingSharedRoster = activeRosterIsShared;
+    const removingFirebaseSharedRoster = activeRosterIsFirebaseShared;
     setRosterState((current) => {
       if (current.rosters.length <= 1) {
         const empty = createRoster(EMPTY_ROSTER_NAME, []);
@@ -2648,7 +2649,9 @@ They will no longer be able to open or edit this shared roster unless it is shar
     if (removingSharedRoster) {
       showRosterToolsNotice(
         "Shared roster removed from this device",
-        "The Google Sheet was not changed or deleted. Open the shared roster again to get the latest version.",
+        removingFirebaseSharedRoster
+          ? "The online Firebase shared roster was not changed or deleted. Sign in and open it again from Club → Shared rosters."
+          : "The online shared roster was not changed or deleted. Open the shared roster again to get the latest version.",
         "success",
       );
     }
@@ -5095,14 +5098,14 @@ They will no longer be able to open or edit this shared roster unless it is shar
               <div className="min-w-0 flex-1">
                 <h2 className="text-base font-black tracking-tight text-[#102A43]">
                   {activeRosterIsShared
-                    ? `Remove “${activeRosterName}” from this device?`
+                    ? `Remove local copy of “${activeRosterName}”?`
                     : rosters.length > 1
                       ? `Delete “${activeRosterName}”?`
                       : `Clear “${activeRosterName}”?`}
                 </h2>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
                   {activeRosterIsShared
-                    ? "This removes only the local copy from this device. It will not delete, clear, or overwrite the shared Google Sheet."
+                    ? "This removes only this device’s linked copy. The online shared roster stays available for all organizers and can be opened again after signing in."
                     : rosters.length > 1
                       ? "This deletes only the active roster. Your other rosters will stay."
                       : `You need at least one roster, so this removes all ${players.length} player profiles from this roster only.`}
@@ -5147,7 +5150,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 disabled={clearRosterSlide < 95}
               >
                 {activeRosterIsShared
-                  ? "Remove from this device"
+                  ? "Remove local copy"
                   : rosters.length > 1
                     ? "Delete roster"
                     : "Clear roster"}

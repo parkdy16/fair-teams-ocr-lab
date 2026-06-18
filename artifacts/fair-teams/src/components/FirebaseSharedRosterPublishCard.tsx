@@ -629,50 +629,7 @@ No shared roster is open on this device. Choose one below to open it on this dev
       </div>
     );
   }
-  return (
-      <div className="grid gap-2">
-        {incomingInvites.length > 0 && (
-          <div className="grid gap-1.5">
-            {incomingInvites.slice(0, 2).map((invite) => (
-              <div key={invite.id} className="flex items-center justify-between gap-2 rounded-2xl border border-violet-100 bg-violet-50/80 px-3 py-2">
-                <div className="min-w-0 truncate text-xs font-black text-[#102A43]">Invite: {invite.name}</div>
-                <Button type="button" variant="outline" className="h-8 rounded-xl border-violet-100 bg-white px-2 text-[10px] font-black text-violet-700" onClick={() => handleAcceptInvite(invite.id)} disabled={Boolean(busy)}>
-                  {busy === `accept:${invite.id}` ? "…" : "Accept"}
-                </Button>
-              </div>
-            ))}
-          </div>
-        )}
 
-        <Button type="button" variant="outline" className="h-10 rounded-2xl border-violet-100 bg-white px-3 text-xs font-black text-violet-700 shadow-sm hover:bg-violet-50" onClick={() => setSharedRosterLibraryOpen(true)} disabled={!user || Boolean(busy)}>
-          <FolderOpen className="mr-1.5 h-4 w-4" />
-          Shared rosters
-        </Button>
-
-        {!activeSharedRoster ? (
-          <Button type="button" className="h-10 rounded-2xl bg-violet-600 text-xs font-black text-white hover:bg-violet-700" onClick={handleShareActiveRoster} disabled={!user || isEmptyRoster || Boolean(busy)}>
-            <Share2 className="mr-1.5 h-4 w-4" />
-            {busy === "publish" ? "Creating…" : "Create shared copy"}
-          </Button>
-        ) : (
-          <div className="grid gap-2">
-            <div className={`flex h-10 items-center justify-between rounded-2xl border px-3 text-xs font-black ${autoSyncStatus === "error" ? "border-rose-100 bg-rose-50 text-rose-700" : "border-violet-100 bg-violet-50 text-violet-700"}`}>
-              <span>{autoStatusText}</span>
-              <AutoStatusIcon className={`h-4 w-4 ${(autoSyncStatus === "saving" || autoSyncStatus === "syncing" || activeHasLocalChanges) ? "animate-spin" : ""}`} />
-            </div>
-            <Button type="button" variant="outline" className="h-10 rounded-2xl border-violet-100 bg-white px-2 text-xs font-black text-violet-700 shadow-sm hover:bg-violet-50" onClick={() => openCollaborators(activeSharedRosterId)} disabled={!user || Boolean(busy)}>
-              <Users className="mr-1 h-4 w-4" />
-              Organizers
-            </Button>
-          </div>
-        )}
-
-        {notice && <div className={`rounded-2xl px-3 py-2 text-[11px] font-bold ${notice.tone === "error" ? "bg-rose-50 text-rose-700" : "bg-violet-50 text-violet-700"}`}>{notice.text}</div>}
-        {sharedRosterLibraryModal}
-        {collaboratorsModal}
-      </div>
-    );
-  }
   return (
     <div className="grid gap-3">
       {incomingInvites.length > 0 && (

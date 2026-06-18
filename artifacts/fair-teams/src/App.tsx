@@ -3342,7 +3342,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                     onSharedRosterSummariesUpdated={syncFirebaseRosterBadgesFromSummaries}
                     onSharedInviteOpened={finishSharedInviteOpen}
                     openLibraryToken={sharedRosterLibraryOpenToken}
-                    onMakePrivateCopy={activeRosterIsFirebaseShared ? () => setPrivateCopyConfirmOpen(true) : undefined}
+                    onMakePrivateCopy={activeRosterIsFirebaseShared ? (() => setPrivateCopyConfirmOpen(true)) : undefined}
                     onHideOnDevice={activeRosterIsFirebaseShared ? openClearRoster : undefined}
                   />
                 )}

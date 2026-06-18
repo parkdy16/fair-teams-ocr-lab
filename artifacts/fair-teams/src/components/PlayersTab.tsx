@@ -87,7 +87,7 @@ function normalizeDuplicateKey(value: string) {
     .trim();
 }
 
-function levenshteinDistance(a: string, b: string, maxDistance = 2) {
+function levenshteinDistance(a: string, b: string, maxDistance = 3) {
   if (Math.abs(a.length - b.length) > maxDistance) return maxDistance + 1;
   const previous = Array.from({ length: b.length + 1 }, (_, index) => index);
   for (let i = 1; i <= a.length; i += 1) {
@@ -110,30 +110,57 @@ function duplicateValuesForPlayer(player: Pick<RoomPlayer, "name" | "aka">) {
   return [player.name, ...splitAliasValues(player.aka)].filter(Boolean);
 }
 
+function firstDuplicateToken(value: string) {
+  return normalizeVoiceAddName(value).split(/\s+/).filter(Boolean)[0] ?? "";
+}
+
+function duplicateComparisonKeys(value: string) {
+  const compact = normalizeDuplicateKey(value);
+  const first = firstDuplicateToken(value);
+  return Array.from(new Set([compact, first].filter(Boolean)));
+}
+
+function areLikelyDuplicateKeys(input: string, candidate: string) {
+  if (!input || !candidate) return false;
+  if (input === candidate) return true;
+
+  const shorter = input.length <= candidate.length ? input : candidate;
+  const longer = input.length > candidate.length ? input : candidate;
+
+  // "Alex" vs "Alexander", "Philip" vs "Philip R" etc. should warn.
+  if (shorter.length >= 4 && longer.startsWith(shorter)) return true;
+  if (shorter.length >= 5 && longer.includes(shorter)) return true;
+
+  const minLength = Math.min(input.length, candidate.length);
+  const maxLength = Math.max(input.length, candidate.length);
+  if (minLength < 3) return false;
+
+  const maxDistance = minLength <= 4 ? 1 : minLength <= 7 ? 2 : 3;
+  const distance = levenshteinDistance(input, candidate, maxDistance);
+  if (distance > maxDistance) return false;
+
+  // Keep very short names fairly strict to avoid too many random warnings.
+  if (minLength <= 4) return distance <= 1;
+
+  const similarity = 1 - distance / maxLength;
+  return similarity >= 0.68;
+}
+
 function findSharedDuplicateCandidates(players: RoomPlayer[], name: string, aka?: string) {
   const rawInputs = [name, ...splitAliasValues(aka)].map(value => value.trim()).filter(Boolean);
-  const inputKeys = rawInputs.map(normalizeDuplicateKey).filter(Boolean);
+  const inputKeys = rawInputs.flatMap(duplicateComparisonKeys).filter(Boolean);
   if (!inputKeys.length) return [] as { player: RoomPlayer; reason: string }[];
 
   const matches = players
     .map(player => {
       const playerValues = duplicateValuesForPlayer(player);
-      const playerKeys = playerValues.map(normalizeDuplicateKey).filter(Boolean);
+      const playerKeys = playerValues.flatMap(duplicateComparisonKeys).filter(Boolean);
       if (!playerKeys.length) return null;
 
       const exact = inputKeys.some(input => playerKeys.includes(input));
       if (exact) return { player, reason: "Name or AKA already matches" };
 
-      const similar = inputKeys.some(input => {
-        if (input.length < 5) return false;
-        return playerKeys.some(candidate => {
-          if (candidate.length < 5) return false;
-          if (input === candidate) return true;
-          if (input.includes(candidate) || candidate.includes(input)) return Math.min(input.length, candidate.length) >= 5;
-          return levenshteinDistance(input, candidate, 2) <= 2;
-        });
-      });
-
+      const similar = inputKeys.some(input => playerKeys.some(candidate => areLikelyDuplicateKeys(input, candidate)));
       return similar ? { player, reason: "Similar name or spelling" } : null;
     })
     .filter(Boolean) as { player: RoomPlayer; reason: string }[];

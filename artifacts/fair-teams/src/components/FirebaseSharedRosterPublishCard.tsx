@@ -34,6 +34,8 @@ type Props = {
   onSharedRosterSummariesUpdated?: (summaries: FirebaseSharedRosterSummary[]) => void;
   onSharedInviteOpened?: (roster: RoomRoster) => void;
   openLibraryToken?: number;
+  onMakePrivateCopy?: () => void;
+  onHideOnDevice?: () => void;
 };
 
 function friendlyFirestoreError(error: unknown) {
@@ -88,13 +90,7 @@ function modalShell(title: string, onClose: () => void, body: React.ReactNode) {
   );
 }
 
-function blurOnDoneKey(event: React.KeyboardEvent<HTMLInputElement>) {
-  if (event.key !== "Enter") return;
-  event.preventDefault();
-  event.currentTarget.blur();
-}
-
-export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster, rosters = [], isEmptyRoster, onOpenRoster, onRosterSaved, onRefreshActiveRoster, onSharedRosterSummariesUpdated, onSharedInviteOpened, openLibraryToken = 0 }: Props) {
+export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster, rosters = [], isEmptyRoster, onOpenRoster, onRosterSaved, onRefreshActiveRoster, onSharedRosterSummariesUpdated, onSharedInviteOpened, openLibraryToken = 0, onMakePrivateCopy, onHideOnDevice }: Props) {
   const [user, setUser] = useState<SharedRosterUser | null>(null);
   const [busy, setBusy] = useState<string>("");
   const [sharedGroups, setSharedGroups] = useState<FirebaseSharedGroupSummary[]>([]);
@@ -426,7 +422,7 @@ Your local roster will stay local. Fair Teams will copy shared identity fields o
 
       {canManageCollaborators ? (
         <div className="grid grid-cols-[1fr_auto] gap-2">
-          <input value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} onKeyDown={blurOnDoneKey} enterKeyHint="done" type="email" className="h-10 rounded-2xl border border-violet-100 bg-white px-3 text-sm font-bold outline-none" placeholder="email@example.com" />
+          <input value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} type="email" className="h-10 rounded-2xl border border-violet-100 bg-white px-3 text-sm font-bold outline-none" placeholder="email@example.com" />
           <Button type="button" className="h-10 rounded-2xl bg-violet-600 px-3 text-xs font-black text-white hover:bg-violet-700" onClick={handleInvite} disabled={!inviteEmail.trim() || Boolean(busy)}>
             <UserPlus className="mr-1.5 h-4 w-4" />
             Invite
@@ -514,6 +510,33 @@ Your local roster will stay local. Fair Teams will copy shared identity fields o
         </div>
       ) : (
         <>
+          {activeSharedRoster && (onMakePrivateCopy || onHideOnDevice) ? (
+            <div className="grid gap-2 rounded-2xl border border-violet-100 bg-violet-50/70 p-3">
+              <div className="text-[11px] font-black text-violet-800">Opened on this device</div>
+              <div className="grid grid-cols-2 gap-2">
+                {onMakePrivateCopy ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-10 rounded-2xl border-violet-100 bg-white px-3 text-xs font-black text-violet-700 hover:bg-violet-50 hover:text-violet-800"
+                    onClick={() => { setSharedRosterLibraryOpen(false); onMakePrivateCopy?.(); }}
+                  >
+                    Private copy
+                  </Button>
+                ) : <div />}
+                {onHideOnDevice ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-10 rounded-2xl border-violet-100 bg-white px-3 text-xs font-black text-violet-700 hover:bg-violet-50 hover:text-violet-800"
+                    onClick={() => { setSharedRosterLibraryOpen(false); onHideOnDevice?.(); }}
+                  >
+                    Hide on device
+                  </Button>
+                ) : <div />}
+              </div>
+            </div>
+          ) : null}
           {linkedRosters.length === 0 ? (
             <div className="rounded-2xl border border-violet-100 bg-violet-50/80 px-3 py-2 text-[11px] font-bold leading-snug text-violet-800">
 No shared roster is open on this device. Choose one below to open it on this device.
@@ -562,6 +585,51 @@ No shared roster is open on this device. Choose one below to open it on this dev
 
   if (variant === "compact") {
     return (
+      <div className="grid gap-2">
+        {incomingInvites.length > 0 && (
+          <div className="grid gap-1.5">
+            {incomingInvites.slice(0, 2).map((invite) => (
+              <div key={invite.id} className="flex items-center justify-between gap-2 rounded-2xl border border-violet-100 bg-violet-50/80 px-3 py-2">
+                <div className="min-w-0 truncate text-xs font-black text-[#102A43]">Invite: {invite.name}</div>
+                <Button type="button" variant="outline" className="h-8 rounded-xl border-violet-100 bg-white px-2 text-[10px] font-black text-violet-700" onClick={() => handleAcceptInvite(invite.id)} disabled={Boolean(busy)}>
+                  {busy === `accept:${invite.id}` ? "…" : "Accept"}
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {!activeSharedRoster ? (
+          <div className="grid gap-2">
+            <Button type="button" variant="outline" className="h-10 rounded-2xl border-violet-100 bg-white px-3 text-xs font-black text-violet-700 shadow-sm hover:bg-violet-50" onClick={() => setSharedRosterLibraryOpen(true)} disabled={!user || Boolean(busy)}>
+              <FolderOpen className="mr-1.5 h-4 w-4" />
+              Shared rosters
+            </Button>
+            <Button type="button" className="h-10 rounded-2xl bg-violet-600 text-xs font-black text-white hover:bg-violet-700" onClick={handleShareActiveRoster} disabled={!user || isEmptyRoster || Boolean(busy)}>
+              <Share2 className="mr-1.5 h-4 w-4" />
+              {busy === "publish" ? "Creating…" : "Create shared copy"}
+            </Button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-2">
+            <Button type="button" variant="outline" className="h-10 rounded-2xl border-violet-100 bg-white px-3 text-xs font-black text-violet-700 shadow-sm hover:bg-violet-50" onClick={() => setSharedRosterLibraryOpen(true)} disabled={!user || Boolean(busy)}>
+              <FolderOpen className="mr-1.5 h-4 w-4" />
+              Shared rosters
+            </Button>
+            <Button type="button" variant="outline" className="h-10 rounded-2xl border-violet-100 bg-white px-2 text-xs font-black text-violet-700 shadow-sm hover:bg-violet-50" onClick={() => openCollaborators(activeSharedRosterId)} disabled={!user || Boolean(busy)}>
+              <Users className="mr-1 h-4 w-4" />
+              Organizers
+            </Button>
+          </div>
+        )}
+
+        {notice && <div className={`rounded-2xl px-3 py-2 text-[11px] font-bold ${notice.tone === "error" ? "bg-rose-50 text-rose-700" : "bg-violet-50 text-violet-700"}`}>{notice.text}</div>}
+        {sharedRosterLibraryModal}
+        {collaboratorsModal}
+      </div>
+    );
+  }
+  return (
       <div className="grid gap-2">
         {incomingInvites.length > 0 && (
           <div className="grid gap-1.5">

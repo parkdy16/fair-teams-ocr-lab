@@ -50,10 +50,7 @@ import {
   saveRosterState,
 } from "@/lib/localRoster";
 import { getGoogleDriveConfig } from "@/lib/googleDriveConfig";
-import {
-  allRostersToDriveBackupJson,
-  parseDriveBackupJson,
-} from "@/lib/googleDriveBackup";
+import { allRostersToDriveBackupJson, parseDriveBackupJson } from "@/lib/googleDriveBackup";
 import { requestGoogleDriveAccessToken } from "@/lib/googleDriveAuth";
 import {
   createGoogleDriveJsonFile,
@@ -81,16 +78,8 @@ import {
   updateGoogleSheetRosterAccessLabels,
   type GoogleSheetRosterFile,
 } from "@/lib/googleSheetsFiles";
-import {
-  pickGoogleSheetRosterFile,
-  warmUpGoogleDrivePicker,
-} from "@/lib/googleDrivePicker";
-import {
-  leaveFirebaseSharedRosterAccess,
-  listFirebaseSharedRosters,
-  readFirebaseSharedRoster,
-  type FirebaseSharedRosterSummary,
-} from "@/lib/sharedRosterService";
+import { pickGoogleSheetRosterFile, warmUpGoogleDrivePicker } from "@/lib/googleDrivePicker";
+import { leaveFirebaseSharedRosterAccess, listFirebaseSharedRosters, readFirebaseSharedRoster, type FirebaseSharedRosterSummary } from "@/lib/sharedRosterService";
 import { fetchClubRatingSummaries } from "@/lib/clubCollaborationService";
 
 const GROUP_NAME_STORAGE_KEY = "fair-teams-group-name";
@@ -164,8 +153,7 @@ function timestampForFilename(date = new Date()) {
 }
 
 function allRostersDriveBackupFilename(rosters: RoomRoster[]) {
-  const readableName =
-    rosters.length === 1 ? rosters[0]?.name || "Roster" : "All rosters";
+  const readableName = rosters.length === 1 ? rosters[0]?.name || "Roster" : "All rosters";
   return `Fair Teams - ${slugifyFilename(readableName)} - ${timestampForFilename()}.json`;
 }
 
@@ -311,19 +299,11 @@ function readStoredDriveRecipients(): DriveBackupRecipient[] {
     if (!Array.isArray(parsed)) return [];
     return parsed
       .map((item, index) => ({
-        id:
-          typeof item?.id === "string"
-            ? item.id
-            : `recipient_${index}_${Date.now()}`,
+        id: typeof item?.id === "string" ? item.id : `recipient_${index}_${Date.now()}`,
         name: typeof item?.name === "string" ? item.name.trim() : "",
-        email:
-          typeof item?.email === "string"
-            ? item.email.trim().toLowerCase()
-            : "",
+        email: typeof item?.email === "string" ? item.email.trim().toLowerCase() : "",
       }))
-      .filter(
-        (item) => item.email && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(item.email),
-      );
+      .filter((item) => item.email && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(item.email));
   } catch {
     return [];
   }
@@ -331,10 +311,7 @@ function readStoredDriveRecipients(): DriveBackupRecipient[] {
 
 function writeStoredDriveRecipients(recipients: DriveBackupRecipient[]) {
   try {
-    window.localStorage.setItem(
-      DRIVE_RECIPIENTS_STORAGE_KEY,
-      JSON.stringify(recipients),
-    );
+    window.localStorage.setItem(DRIVE_RECIPIENTS_STORAGE_KEY, JSON.stringify(recipients));
   } catch {
     // Local recipient storage is optional.
   }
@@ -349,27 +326,14 @@ function readStoredActiveDriveBackup(): ActiveDriveBackupFile | null {
     return {
       id: String(parsed.id),
       name: String(parsed.name),
-      webViewLink:
-        typeof parsed.webViewLink === "string" ? parsed.webViewLink : undefined,
-      modifiedTime:
-        typeof parsed.modifiedTime === "string"
-          ? parsed.modifiedTime
-          : undefined,
-      ownedByMe:
-        typeof parsed.ownedByMe === "boolean" ? parsed.ownedByMe : undefined,
+      webViewLink: typeof parsed.webViewLink === "string" ? parsed.webViewLink : undefined,
+      modifiedTime: typeof parsed.modifiedTime === "string" ? parsed.modifiedTime : undefined,
+      ownedByMe: typeof parsed.ownedByMe === "boolean" ? parsed.ownedByMe : undefined,
       shared: typeof parsed.shared === "boolean" ? parsed.shared : undefined,
-      rosterCount: Number.isFinite(Number(parsed.rosterCount))
-        ? Number(parsed.rosterCount)
-        : undefined,
-      playerCount: Number.isFinite(Number(parsed.playerCount))
-        ? Number(parsed.playerCount)
-        : undefined,
-      checkedAt:
-        typeof parsed.checkedAt === "string" ? parsed.checkedAt : undefined,
-      connectedEmail:
-        typeof parsed.connectedEmail === "string"
-          ? parsed.connectedEmail
-          : undefined,
+      rosterCount: Number.isFinite(Number(parsed.rosterCount)) ? Number(parsed.rosterCount) : undefined,
+      playerCount: Number.isFinite(Number(parsed.playerCount)) ? Number(parsed.playerCount) : undefined,
+      checkedAt: typeof parsed.checkedAt === "string" ? parsed.checkedAt : undefined,
+      connectedEmail: typeof parsed.connectedEmail === "string" ? parsed.connectedEmail : undefined,
     };
   } catch {
     return null;
@@ -382,10 +346,7 @@ function writeStoredActiveDriveBackup(file: ActiveDriveBackupFile | null) {
       window.localStorage.removeItem(DRIVE_ACTIVE_BACKUP_STORAGE_KEY);
       return;
     }
-    window.localStorage.setItem(
-      DRIVE_ACTIVE_BACKUP_STORAGE_KEY,
-      JSON.stringify(file),
-    );
+    window.localStorage.setItem(DRIVE_ACTIVE_BACKUP_STORAGE_KEY, JSON.stringify(file));
   } catch {
     // Safety backup file storage is optional.
   }
@@ -394,10 +355,7 @@ function writeStoredActiveDriveBackup(file: ActiveDriveBackupFile | null) {
 function countBackupRosters(rosters: RoomRoster[]): DriveBackupSummary {
   return {
     rosterCount: rosters.length,
-    playerCount: rosters.reduce(
-      (sum, roster) => sum + roster.players.length,
-      0,
-    ),
+    playerCount: rosters.reduce((sum, roster) => sum + roster.players.length, 0),
   };
 }
 
@@ -451,9 +409,7 @@ function App() {
   const [todayRosterChosen, setTodayRosterChosen] = useState(false);
   const [reviewPlayerQueue, setReviewPlayerQueue] = useState<string[]>([]);
   const [reviewPlayerIndex, setReviewPlayerIndex] = useState(0);
-  const [reviewAutoOpenPlayerId, setReviewAutoOpenPlayerId] = useState<
-    string | null
-  >(null);
+  const [reviewAutoOpenPlayerId, setReviewAutoOpenPlayerId] = useState<string | null>(null);
   const reviewActivePlayerId = reviewPlayerQueue[reviewPlayerIndex] ?? null;
   const startReviewPlayerQueue = (playerIds: string[]) => {
     const cleanIds = playerIds.filter(Boolean);
@@ -512,16 +468,10 @@ function App() {
   const headerColor = rosterThemeColor(activeRoster);
   const groupLogo = rosterLogo(activeRoster);
   const isEmptyStarterRoster =
-    rosters.length === 1 &&
-    players.length === 0 &&
-    activeRosterName === EMPTY_ROSTER_NAME;
+    rosters.length === 1 && players.length === 0 && activeRosterName === EMPTY_ROSTER_NAME;
   const privateBackupRosters = privateLocalRosters(rosters);
-  const hasPrivateBackupRosters = privateBackupRosters.some(
-    (roster) => roster.players.length > 0 || roster.name !== EMPTY_ROSTER_NAME,
-  );
-  const privateBackupSummary = hasPrivateBackupRosters
-    ? countBackupRosters(privateBackupRosters)
-    : { rosterCount: 0, playerCount: 0 };
+  const hasPrivateBackupRosters = privateBackupRosters.some((roster) => roster.players.length > 0 || roster.name !== EMPTY_ROSTER_NAME);
+  const privateBackupSummary = hasPrivateBackupRosters ? countBackupRosters(privateBackupRosters) : { rosterCount: 0, playerCount: 0 };
   const deviceBackupSummary = privateBackupSummary;
   const googleDriveConfig = getGoogleDriveConfig();
   const [googleDriveAccessToken, setGoogleDriveAccessToken] = useState("");
@@ -529,80 +479,47 @@ function App() {
   const [googleDriveSaving, setGoogleDriveSaving] = useState(false);
   const [googleDriveUpdating, setGoogleDriveUpdating] = useState(false);
   const [googleDriveOpening, setGoogleDriveOpening] = useState(false);
-  const [currentDriveBackup, setCurrentDriveBackup] =
-    useState<ActiveDriveBackupFile | null>(() => readStoredActiveDriveBackup());
-  const [connectedDriveUser, setConnectedDriveUser] = useState<{
-    displayName?: string;
-    emailAddress?: string;
-  } | null>(null);
-  const [driveImportPreview, setDriveImportPreview] =
-    useState<DriveImportPreview | null>(null);
-  const [driveBackupChoices, setDriveBackupChoices] =
-    useState<GoogleDriveBackupFileGroups | null>(null);
-  const [driveBackupDeleteConfirm, setDriveBackupDeleteConfirm] =
-    useState<DriveBackupDeleteConfirm | null>(null);
-  const [googleDriveDeletingFileId, setGoogleDriveDeletingFileId] =
-    useState("");
+  const [currentDriveBackup, setCurrentDriveBackup] = useState<ActiveDriveBackupFile | null>(() => readStoredActiveDriveBackup());
+  const [connectedDriveUser, setConnectedDriveUser] = useState<{ displayName?: string; emailAddress?: string } | null>(null);
+  const [driveImportPreview, setDriveImportPreview] = useState<DriveImportPreview | null>(null);
+  const [driveBackupChoices, setDriveBackupChoices] = useState<GoogleDriveBackupFileGroups | null>(null);
+  const [driveBackupDeleteConfirm, setDriveBackupDeleteConfirm] = useState<DriveBackupDeleteConfirm | null>(null);
+  const [googleDriveDeletingFileId, setGoogleDriveDeletingFileId] = useState("");
   const [driveBackupTab, setDriveBackupTab] = useState<DriveBackupTab>("mine");
-  const [localImportPreview, setLocalImportPreview] =
-    useState<LocalImportPreview | null>(null);
-  const [rosterToolsNotice, setRosterToolsNotice] =
-    useState<RosterToolsNotice | null>(null);
+  const [localImportPreview, setLocalImportPreview] = useState<LocalImportPreview | null>(null);
+  const [rosterToolsNotice, setRosterToolsNotice] = useState<RosterToolsNotice | null>(null);
   const [driveShareOpen, setDriveShareOpen] = useState(false);
   const [driveShareEmail, setDriveShareEmail] = useState("");
-  const [driveShareConfirm, setDriveShareConfirm] =
-    useState<DriveShareConfirm | null>(null);
-  const [driveRecipients, setDriveRecipients] = useState<
-    DriveBackupRecipient[]
-  >(() => readStoredDriveRecipients());
-  const [selectedDriveRecipientIds, setSelectedDriveRecipientIds] = useState<
-    string[]
-  >([]);
+  const [driveShareConfirm, setDriveShareConfirm] = useState<DriveShareConfirm | null>(null);
+  const [driveRecipients, setDriveRecipients] = useState<DriveBackupRecipient[]>(() => readStoredDriveRecipients());
+  const [selectedDriveRecipientIds, setSelectedDriveRecipientIds] = useState<string[]>([]);
   const [driveRecipientName, setDriveRecipientName] = useState("");
   const [googleDriveSharing, setGoogleDriveSharing] = useState(false);
   const [driveAccessOpen, setDriveAccessOpen] = useState(false);
-  const [driveAccessList, setDriveAccessList] = useState<
-    GoogleDrivePermissionResult[] | null
-  >(null);
+  const [driveAccessList, setDriveAccessList] = useState<GoogleDrivePermissionResult[] | null>(null);
   const [driveAccessLoading, setDriveAccessLoading] = useState(false);
-  const [driveRemoveConfirm, setDriveRemoveConfirm] =
-    useState<DriveRemoveAccessConfirm | null>(null);
-  const [driveRemovingPermissionId, setDriveRemovingPermissionId] =
-    useState("");
+  const [driveRemoveConfirm, setDriveRemoveConfirm] = useState<DriveRemoveAccessConfirm | null>(null);
+  const [driveRemovingPermissionId, setDriveRemovingPermissionId] = useState("");
   const [driveHelpOpen, setDriveHelpOpen] = useState(false);
   const [googleSheetHelpOpen, setGoogleSheetHelpOpen] = useState(false);
-  const [driveUpdateConfirm, setDriveUpdateConfirm] =
-    useState<DriveUpdateConfirm | null>(null);
+  const [driveUpdateConfirm, setDriveUpdateConfirm] = useState<DriveUpdateConfirm | null>(null);
   const [googleSheetSyncing, setGoogleSheetSyncing] = useState(false);
   const [googleSheetOpening, setGoogleSheetOpening] = useState(false);
   const [googleSheetSharing, setGoogleSheetSharing] = useState(false);
-  const [googleSheetChoices, setGoogleSheetChoices] = useState<
-    GoogleSheetRosterFile[] | null
-  >(null);
-  const [googleSheetActionFile, setGoogleSheetActionFile] =
-    useState<GoogleSheetRosterFile | null>(null);
-  const [googleSheetDeleteConfirm, setGoogleSheetDeleteConfirm] =
-    useState<GoogleSheetDeleteConfirm | null>(null);
+  const [googleSheetChoices, setGoogleSheetChoices] = useState<GoogleSheetRosterFile[] | null>(null);
+  const [googleSheetActionFile, setGoogleSheetActionFile] = useState<GoogleSheetRosterFile | null>(null);
+  const [googleSheetDeleteConfirm, setGoogleSheetDeleteConfirm] = useState<GoogleSheetDeleteConfirm | null>(null);
   const [googleSheetDeleteSlide, setGoogleSheetDeleteSlide] = useState(0);
   const [googleSheetDeleting, setGoogleSheetDeleting] = useState(false);
   const [googleSheetShareOpen, setGoogleSheetShareOpen] = useState(false);
   const [googleSheetShareName, setGoogleSheetShareName] = useState("");
   const [googleSheetShareEmail, setGoogleSheetShareEmail] = useState("");
-  const [googleSheetAccessList, setGoogleSheetAccessList] = useState<
-    GoogleDrivePermissionResult[] | null
-  >(null);
-  const [googleSheetAccessLoading, setGoogleSheetAccessLoading] =
-    useState(false);
-  const [googleSheetRemovingPermissionId, setGoogleSheetRemovingPermissionId] =
-    useState("");
-  const [googleSheetConflictConfirm, setGoogleSheetConflictConfirm] =
-    useState<GoogleSheetConflictConfirm | null>(null);
-  const [googleSheetUpdatePrompt, setGoogleSheetUpdatePrompt] =
-    useState<GoogleSheetConflictConfirm | null>(null);
-  const [
-    googleSheetUpdatePromptDismissedKey,
-    setGoogleSheetUpdatePromptDismissedKey,
-  ] = useState("");
+  const [googleSheetAccessList, setGoogleSheetAccessList] = useState<GoogleDrivePermissionResult[] | null>(null);
+  const [googleSheetAccessLoading, setGoogleSheetAccessLoading] = useState(false);
+  const [googleSheetRemovingPermissionId, setGoogleSheetRemovingPermissionId] = useState("");
+  const [googleSheetConflictConfirm, setGoogleSheetConflictConfirm] = useState<GoogleSheetConflictConfirm | null>(null);
+  const [googleSheetUpdatePrompt, setGoogleSheetUpdatePrompt] = useState<GoogleSheetConflictConfirm | null>(null);
+  const [googleSheetUpdatePromptDismissedKey, setGoogleSheetUpdatePromptDismissedKey] = useState("");
   const googleDriveConnected = Boolean(googleDriveAccessToken);
   const googleDriveStatusText = !googleDriveConfig.isConfigured
     ? "Add Google Client ID and API key to .env.local"
@@ -617,20 +534,11 @@ function App() {
     activeRoster?.cloudSource?.provider === "firebase"
       ? activeRoster.cloudSource
       : null;
-  const activeRosterIsShared = Boolean(
-    activeGoogleSheetSource?.spreadsheetId ||
-    activeFirebaseSource?.firebaseRosterId,
-  );
-  const activeRosterIsFirebaseShared = Boolean(
-    activeFirebaseSource?.firebaseRosterId,
-  );
-  const localRosterPickerChoices = rosters.filter(
-    (roster) => !isRosterCloudShared(roster),
-  );
+  const activeRosterIsShared = Boolean(activeGoogleSheetSource?.spreadsheetId || activeFirebaseSource?.firebaseRosterId);
+  const activeRosterIsFirebaseShared = Boolean(activeFirebaseSource?.firebaseRosterId);
+  const localRosterPickerChoices = rosters.filter((roster) => !isRosterCloudShared(roster));
   const sharedRosterPickerChoices = rosters.filter(isRosterCloudShared);
-  const firebaseAccessLabelsFromSummary = (
-    summary: FirebaseSharedRosterSummary,
-  ) =>
+  const firebaseAccessLabelsFromSummary = (summary: FirebaseSharedRosterSummary) =>
     Object.fromEntries(
       [...(summary.memberEmails || []), ...(summary.pendingInviteEmails || [])]
         .map((email) => email.trim().toLowerCase())
@@ -638,17 +546,12 @@ function App() {
         .map((email) => [email, "editor"]),
     );
 
-  const firebaseMemberNamesFromSummary = (
-    summary: FirebaseSharedRosterSummary,
-  ) => ({
+  const firebaseMemberNamesFromSummary = (summary: FirebaseSharedRosterSummary) => ({
     ...(summary.memberNamesByEmail || {}),
   });
 
   const rosterFirebaseSharedPeopleCount = (roster: RoomRoster | undefined) => {
-    const source =
-      roster?.cloudSource?.provider === "firebase"
-        ? roster.cloudSource
-        : undefined;
+    const source = roster?.cloudSource?.provider === "firebase" ? roster.cloudSource : undefined;
     if (!source?.firebaseRosterId) return 0;
     const emails = new Set<string>();
     const ownerEmail = source.firebaseOwnerEmail?.trim().toLowerCase();
@@ -661,53 +564,35 @@ function App() {
   };
 
   const activeFirebaseEquipmentHolderLabels = activeFirebaseSource
-    ? Array.from(
-        new Set(
-          [
-            activeFirebaseSource.firebaseOwnerEmail,
-            ...Object.keys(activeFirebaseSource.accessLabels || {}),
-          ]
-            .map((email) => (email || "").trim().toLowerCase())
-            .filter((email) => email.includes("@")),
-        ),
-      )
+    ? Array.from(new Set([
+        activeFirebaseSource.firebaseOwnerEmail,
+        ...Object.keys(activeFirebaseSource.accessLabels || {}),
+      ]
+        .map((email) => (email || "").trim().toLowerCase())
+        .filter((email) => email.includes("@"))))
     : [];
-  const activeFirebaseEquipmentHolderNamesByEmail =
-    activeFirebaseSource?.firebaseMemberNamesByEmail || {};
+  const activeFirebaseEquipmentHolderNamesByEmail = activeFirebaseSource?.firebaseMemberNamesByEmail || {};
   const cleanFirebasePersonLabel = (email: string) => {
     const normalized = email.trim().toLowerCase();
-    const savedName =
-      activeFirebaseEquipmentHolderNamesByEmail[normalized] ||
-      activeFirebaseEquipmentHolderNamesByEmail[email];
+    const savedName = activeFirebaseEquipmentHolderNamesByEmail[normalized] || activeFirebaseEquipmentHolderNamesByEmail[email];
     if (savedName?.trim()) return savedName.trim();
-    return (
-      (normalized.split("@")[0] || "Organizer")
-        .replace(/[._-]+/g, " ")
-        .replace(/\s+/g, " ")
-        .trim()
-        .replace(/\b\w/g, (char) => char.toUpperCase()) || "Organizer"
-    );
+    return (normalized.split("@")[0] || "Organizer")
+      .replace(/[._-]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .replace(/\b\w/g, (char) => char.toUpperCase()) || "Organizer";
   };
   const activeFirebaseSharedPersonNames = activeFirebaseEquipmentHolderLabels
     .map(cleanFirebasePersonLabel)
-    .filter(
-      (label, index, all) => Boolean(label) && all.indexOf(label) === index,
-    );
+    .filter((label, index, all) => Boolean(label) && all.indexOf(label) === index);
 
-  const syncFirebaseRosterBadgesFromSummaries = (
-    summaries: FirebaseSharedRosterSummary[],
-  ) => {
+  const syncFirebaseRosterBadgesFromSummaries = (summaries: FirebaseSharedRosterSummary[]) => {
     if (!summaries.length) return;
-    const summaryById = new Map(
-      summaries.map((summary) => [summary.id, summary]),
-    );
+    const summaryById = new Map(summaries.map((summary) => [summary.id, summary]));
     setRosterState((current) => {
       let changed = false;
       const rostersWithFreshBadges = current.rosters.map((roster) => {
-        const source =
-          roster.cloudSource?.provider === "firebase"
-            ? roster.cloudSource
-            : undefined;
+        const source = roster.cloudSource?.provider === "firebase" ? roster.cloudSource : undefined;
         if (!source?.firebaseRosterId) return roster;
         const summary = summaryById.get(source.firebaseRosterId);
         if (!summary) return roster;
@@ -715,35 +600,17 @@ function App() {
         const nextAccessLabels = firebaseAccessLabelsFromSummary(summary);
         const nextMemberNamesByEmail = firebaseMemberNamesFromSummary(summary);
         const currentLabels = source.accessLabels || {};
-        const currentMemberNamesByEmail =
-          source.firebaseMemberNamesByEmail || {};
-        const currentLabelSignature = JSON.stringify(
-          Object.keys(currentLabels)
-            .sort()
-            .map((email) => [email, currentLabels[email]]),
-        );
-        const nextLabelSignature = JSON.stringify(
-          Object.keys(nextAccessLabels)
-            .sort()
-            .map((email) => [email, nextAccessLabels[email]]),
-        );
-        const currentMemberNameSignature = JSON.stringify(
-          Object.keys(currentMemberNamesByEmail)
-            .sort()
-            .map((email) => [email, currentMemberNamesByEmail[email]]),
-        );
-        const nextMemberNameSignature = JSON.stringify(
-          Object.keys(nextMemberNamesByEmail)
-            .sort()
-            .map((email) => [email, nextMemberNamesByEmail[email]]),
-        );
+        const currentMemberNamesByEmail = source.firebaseMemberNamesByEmail || {};
+        const currentLabelSignature = JSON.stringify(Object.keys(currentLabels).sort().map((email) => [email, currentLabels[email]]));
+        const nextLabelSignature = JSON.stringify(Object.keys(nextAccessLabels).sort().map((email) => [email, nextAccessLabels[email]]));
+        const currentMemberNameSignature = JSON.stringify(Object.keys(currentMemberNamesByEmail).sort().map((email) => [email, currentMemberNamesByEmail[email]]));
+        const nextMemberNameSignature = JSON.stringify(Object.keys(nextMemberNamesByEmail).sort().map((email) => [email, nextMemberNamesByEmail[email]]));
         const nextGroupId = summary.groupId || source.firebaseGroupId;
         const nextGroupName = summary.groupName || source.firebaseGroupName;
         const nextRole = summary.currentUserRole || source.firebaseRole;
         const nextOwnerUid = summary.ownerUid || source.firebaseOwnerUid;
         const nextOwnerEmail = summary.ownerEmail || source.firebaseOwnerEmail;
-        const nextLastSavedByEmail =
-          summary.lastSavedByEmail || source.firebaseLastSavedByEmail;
+        const nextLastSavedByEmail = summary.lastSavedByEmail || source.firebaseLastSavedByEmail;
         const metadataChanged =
           currentLabelSignature !== nextLabelSignature ||
           currentMemberNameSignature !== nextMemberNameSignature ||
@@ -771,17 +638,14 @@ function App() {
           },
         });
       });
-      return changed
-        ? { ...current, rosters: rostersWithFreshBadges }
-        : current;
+      return changed ? { ...current, rosters: rostersWithFreshBadges } : current;
     });
   };
 
+
   useEffect(() => {
     const rosterId = activeFirebaseSource?.firebaseRosterId;
-    const missingFirebaseGroupLink = Boolean(
-      rosterId && !activeFirebaseSource?.firebaseGroupId,
-    );
+    const missingFirebaseGroupLink = Boolean(rosterId && !activeFirebaseSource?.firebaseGroupId);
     if (!missingFirebaseGroupLink || !rosterId) return;
     let cancelled = false;
 
@@ -789,9 +653,7 @@ function App() {
       try {
         const summaries = await listFirebaseSharedRosters();
         if (cancelled) return;
-        const matchingSummary = summaries.find(
-          (summary) => summary.id === rosterId,
-        );
+        const matchingSummary = summaries.find((summary) => summary.id === rosterId);
         if (matchingSummary?.groupId) {
           syncFirebaseRosterBadgesFromSummaries([matchingSummary]);
           return;
@@ -812,25 +674,15 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [
-    activeFirebaseSource?.firebaseRosterId,
-    activeFirebaseSource?.firebaseGroupId,
-  ]);
+  }, [activeFirebaseSource?.firebaseRosterId, activeFirebaseSource?.firebaseGroupId]);
   const sharedGoogleSheetRosters = rosters.filter(
-    (roster) =>
-      roster.cloudSource?.provider === "google-sheets" &&
-      Boolean(roster.cloudSource.spreadsheetId),
+    (roster) => roster.cloudSource?.provider === "google-sheets" && Boolean(roster.cloudSource.spreadsheetId),
   );
   const sharedGoogleSheetRosterCount = sharedGoogleSheetRosters.length;
-  const activeRosterActionName =
-    activeRosterName.length > 18 ? "this roster" : activeRosterName;
+  const activeRosterActionName = activeRosterName.length > 18 ? "this roster" : activeRosterName;
   const sharedRosterCountLabel = `${sharedGoogleSheetRosterCount} shared roster${sharedGoogleSheetRosterCount === 1 ? "" : "s"}`;
-  const activeRosterUpdatedAt = new Date(
-    activeRoster?.updatedAt || "",
-  ).getTime();
-  const activeRosterLastSyncedAt = new Date(
-    activeGoogleSheetSource?.lastSyncedAt || "",
-  ).getTime();
+  const activeRosterUpdatedAt = new Date(activeRoster?.updatedAt || "").getTime();
+  const activeRosterLastSyncedAt = new Date(activeGoogleSheetSource?.lastSyncedAt || "").getTime();
   const activeSharedHasUnsavedChanges =
     activeRosterIsShared &&
     !Number.isNaN(activeRosterUpdatedAt) &&
@@ -844,14 +696,11 @@ function App() {
   const logoInputRef = useRef<HTMLInputElement | null>(null);
   const [rosterFilesOpen, setRosterFilesOpen] = useState(false);
   const [rosterSharedToolsOpen, setRosterSharedToolsOpen] = useState(false);
-  const [rosterLocalBackupToolsOpen, setRosterLocalBackupToolsOpen] =
-    useState(false);
-  const [rosterCloudBackupToolsOpen, setRosterCloudBackupToolsOpen] =
-    useState(false);
+  const [rosterLocalBackupToolsOpen, setRosterLocalBackupToolsOpen] = useState(false);
+  const [rosterCloudBackupToolsOpen, setRosterCloudBackupToolsOpen] = useState(false);
   const [rosterPickerOpen, setRosterPickerOpen] = useState(false);
   const [headerSharedPeopleOpen, setHeaderSharedPeopleOpen] = useState(false);
-  const [sharedRosterLibraryOpenToken, setSharedRosterLibraryOpenToken] =
-    useState(0);
+  const [sharedRosterLibraryOpenToken, setSharedRosterLibraryOpenToken] = useState(0);
   const [rosterSwitchingName, setRosterSwitchingName] = useState("");
   const [clearRosterOpen, setClearRosterOpen] = useState(false);
   const [clearRosterSlide, setClearRosterSlide] = useState(0);
@@ -893,26 +742,18 @@ function App() {
     setActiveTab(openedRoster.players.length > 0 ? "today" : "players");
   };
 
-  const showRosterToolsNotice = (
-    title: string,
-    message: string,
-    tone: RosterToolsNotice["tone"] = "info",
-  ) => {
+  const showRosterToolsNotice = (title: string, message: string, tone: RosterToolsNotice["tone"] = "info") => {
     setRosterToolsNotice({ title, message, tone });
   };
 
-  const rememberDriveBackup = (
-    file: GoogleDriveFileResult,
-    summary?: DriveBackupSummary,
-  ) => {
+  const rememberDriveBackup = (file: GoogleDriveFileResult, summary?: DriveBackupSummary) => {
     const next: ActiveDriveBackupFile = {
       ...currentDriveBackup,
       ...file,
       rosterCount: summary?.rosterCount ?? currentDriveBackup?.rosterCount,
       playerCount: summary?.playerCount ?? currentDriveBackup?.playerCount,
       checkedAt: new Date().toISOString(),
-      connectedEmail:
-        connectedDriveUser?.emailAddress || currentDriveBackup?.connectedEmail,
+      connectedEmail: connectedDriveUser?.emailAddress || currentDriveBackup?.connectedEmail,
     };
     setCurrentDriveBackup(next);
   };
@@ -944,20 +785,12 @@ function App() {
 
   const getGoogleSheetOwnerEmail = (file?: GoogleSheetRosterFile | null) => {
     const owner = getGoogleSheetOwner(file);
-    return (
-      owner?.emailAddress?.trim() ||
-      (isGoogleSheetOwnedByMe(file)
-        ? connectedDriveUser?.emailAddress?.trim() || ""
-        : "")
-    );
+    return owner?.emailAddress?.trim() || (isGoogleSheetOwnedByMe(file) ? connectedDriveUser?.emailAddress?.trim() || "" : "");
   };
 
   const getGoogleSheetOwnerName = (file?: GoogleSheetRosterFile | null) => {
     const owner = getGoogleSheetOwner(file);
-    const name = cleanPersonName(
-      owner?.displayName ||
-        (isGoogleSheetOwnedByMe(file) ? connectedDriveUser?.displayName : ""),
-    );
+    const name = cleanPersonName(owner?.displayName || (isGoogleSheetOwnedByMe(file) ? connectedDriveUser?.displayName : ""));
     if (name) return name;
     const email = getGoogleSheetOwnerEmail(file);
     return email || "Another organizer";
@@ -967,6 +800,7 @@ function App() {
     if (!file) return "Owner unknown";
     return `Owner: ${getGoogleSheetOwnerName(file)}`;
   };
+
 
   const getGoogleSheetSharedBy = (file?: GoogleSheetRosterFile | null) => {
     if (!file || isGoogleSheetOwnedByMe(file)) return null;
@@ -986,14 +820,11 @@ function App() {
   const getGoogleSheetSharedByLine = (file?: GoogleSheetRosterFile | null) => {
     if (!file) return "Shared details unknown";
     if (isGoogleSheetOwnedByMe(file)) {
-      return connectedDriveUser?.emailAddress
-        ? `Owned by ${connectedDriveUser.emailAddress}`
-        : "Owned by this Google account";
+      return connectedDriveUser?.emailAddress ? `Owned by ${connectedDriveUser.emailAddress}` : "Owned by this Google account";
     }
     const sharedByName = getGoogleSheetSharedByName(file);
     const sharedByEmail = getGoogleSheetSharedByEmail(file);
-    if (sharedByName)
-      return `Shared by ${sharedByName}${sharedByEmail && sharedByEmail !== sharedByName ? ` · ${sharedByEmail}` : ""}`;
+    if (sharedByName) return `Shared by ${sharedByName}${sharedByEmail && sharedByEmail !== sharedByName ? ` · ${sharedByEmail}` : ""}`;
     const ownerName = getGoogleSheetOwnerName(file);
     const ownerEmail = getGoogleSheetOwnerEmail(file);
     return `Owner: ${ownerName}${ownerEmail && ownerEmail !== ownerName ? ` · ${ownerEmail}` : ""}`;
@@ -1013,10 +844,7 @@ function App() {
     return `${date.toLocaleDateString(undefined, { month: "short", day: "numeric" })} ${date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`;
   };
 
-  const isGoogleSheetRemoteNewer = (
-    remoteModifiedAt?: string,
-    lastKnownRemoteModifiedAt?: string,
-  ) => {
+  const isGoogleSheetRemoteNewer = (remoteModifiedAt?: string, lastKnownRemoteModifiedAt?: string) => {
     if (!remoteModifiedAt || !lastKnownRemoteModifiedAt) return false;
     const remoteTime = new Date(remoteModifiedAt).getTime();
     const knownTime = new Date(lastKnownRemoteModifiedAt).getTime();
@@ -1024,10 +852,7 @@ function App() {
     return remoteTime > knownTime + 3000;
   };
 
-  const sheetCloudSourceFromFile = (
-    file: GoogleSheetRosterFile,
-    accessLabels?: Record<string, string>,
-  ) => ({
+  const sheetCloudSourceFromFile = (file: GoogleSheetRosterFile, accessLabels?: Record<string, string>) => ({
     provider: "google-sheets" as const,
     spreadsheetId: file.id,
     spreadsheetName: file.name,
@@ -1035,29 +860,15 @@ function App() {
     lastSyncedAt: new Date().toISOString(),
     lastRemoteModifiedAt: file.modifiedTime,
     syncMode: "manual" as const,
-    ...(accessLabels && Object.keys(accessLabels).length
-      ? { accessLabels }
-      : {}),
+    ...(accessLabels && Object.keys(accessLabels).length ? { accessLabels } : {}),
   });
 
-  const googleSheetPromptKey = (
-    spreadsheetId?: string,
-    modifiedTime?: string,
-  ) =>
+  const googleSheetPromptKey = (spreadsheetId?: string, modifiedTime?: string) =>
     spreadsheetId && modifiedTime ? `${spreadsheetId}:${modifiedTime}` : "";
 
   useEffect(() => {
-    if (
-      !rosterSharedToolsOpen ||
-      !googleDriveAccessToken ||
-      !activeGoogleSheetSource?.spreadsheetId
-    )
-      return;
-    if (
-      !activeGoogleSheetSource.lastRemoteModifiedAt ||
-      activeSharedHasUnsavedChanges
-    )
-      return;
+    if (!rosterSharedToolsOpen || !googleDriveAccessToken || !activeGoogleSheetSource?.spreadsheetId) return;
+    if (!activeGoogleSheetSource.lastRemoteModifiedAt || activeSharedHasUnsavedChanges) return;
 
     let cancelled = false;
     const spreadsheetId = activeGoogleSheetSource.spreadsheetId;
@@ -1065,21 +876,12 @@ function App() {
 
     const checkSharedRosterChanges = async () => {
       try {
-        const latestFile = await getGoogleSheetRosterFileMetadata(
-          googleDriveAccessToken,
-          spreadsheetId,
-        );
-        const promptKey = googleSheetPromptKey(
-          spreadsheetId,
-          latestFile.modifiedTime,
-        );
+        const latestFile = await getGoogleSheetRosterFileMetadata(googleDriveAccessToken, spreadsheetId);
+        const promptKey = googleSheetPromptKey(spreadsheetId, latestFile.modifiedTime);
         if (
           !cancelled &&
           promptKey !== googleSheetUpdatePromptDismissedKey &&
-          isGoogleSheetRemoteNewer(
-            latestFile.modifiedTime,
-            lastRemoteModifiedAt,
-          )
+          isGoogleSheetRemoteNewer(latestFile.modifiedTime, lastRemoteModifiedAt)
         ) {
           setGoogleSheetUpdatePrompt({
             file: latestFile,
@@ -1095,22 +897,11 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [
-    rosterSharedToolsOpen,
-    googleDriveAccessToken,
-    activeGoogleSheetSource?.spreadsheetId,
-    activeGoogleSheetSource?.lastRemoteModifiedAt,
-    activeSharedHasUnsavedChanges,
-    googleSheetUpdatePromptDismissedKey,
-  ]);
+  }, [rosterSharedToolsOpen, googleDriveAccessToken, activeGoogleSheetSource?.spreadsheetId, activeGoogleSheetSource?.lastRemoteModifiedAt, activeSharedHasUnsavedChanges, googleSheetUpdatePromptDismissedKey]);
 
-  const describeDriveFileSource = (
-    file: GoogleDriveFileResult,
-    tab: DriveBackupTab,
-  ) => {
+  const describeDriveFileSource = (file: GoogleDriveFileResult, tab: DriveBackupTab) => {
     if (tab === "shared") {
-      const sharedBy =
-        file.sharingUser?.displayName || file.sharingUser?.emailAddress;
+      const sharedBy = file.sharingUser?.displayName || file.sharingUser?.emailAddress;
       return sharedBy ? `Shared by ${sharedBy}` : "Shared with me";
     }
     return "My Drive";
@@ -1121,11 +912,9 @@ function App() {
   const validateShareEmail = (value: string) => {
     const email = normalizeShareEmail(value);
     if (!email) return "Enter one email address.";
-    if (email.includes(",") || email.includes(";"))
-      return "Enter only one email address for now.";
+    if (email.includes(",") || email.includes(";")) return "Enter only one email address for now.";
     if (/\s/.test(email)) return "Remove spaces from the email address.";
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))
-      return "Enter a valid email address.";
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return "Enter a valid email address.";
     return "";
   };
 
@@ -1137,19 +926,12 @@ function App() {
     return role || "Access";
   };
 
-  const drivePermissionIsInherited = (
-    permission: GoogleDrivePermissionResult,
-  ) =>
+  const drivePermissionIsInherited = (permission: GoogleDrivePermissionResult) =>
     Boolean(permission.permissionDetails?.some((detail) => detail.inherited));
 
   const drivePermissionLabel = (permission: GoogleDrivePermissionResult) =>
-    permission.emailAddress ||
-    permission.displayName ||
-    (permission.type === "anyone"
-      ? "Anyone with the link"
-      : permission.type === "domain"
-        ? "Domain access"
-        : "Unknown access");
+    permission.emailAddress || permission.displayName ||
+    (permission.type === "anyone" ? "Anyone with the link" : permission.type === "domain" ? "Domain access" : "Unknown access");
 
   const canRemoveDrivePermission = (permission: GoogleDrivePermissionResult) =>
     permission.id &&
@@ -1158,15 +940,12 @@ function App() {
     !permission.deleted &&
     !drivePermissionIsInherited(permission);
 
-  const permissionEmailMatchesConnectedUser = (
-    permission: GoogleDrivePermissionResult,
-  ) => {
+  const permissionEmailMatchesConnectedUser = (permission: GoogleDrivePermissionResult) => {
     const connectedEmail = connectedDriveUser?.emailAddress;
     return Boolean(
       permission.emailAddress &&
       connectedEmail &&
-      normalizeShareEmail(permission.emailAddress) ===
-        normalizeShareEmail(connectedEmail),
+      normalizeShareEmail(permission.emailAddress) === normalizeShareEmail(connectedEmail),
     );
   };
 
@@ -1174,63 +953,35 @@ function App() {
 
   const googleSheetAccessLabelForEmail = (email?: string) => {
     const normalized = email ? normalizeShareEmail(email) : "";
-    return normalized
-      ? cleanPersonName(googleSheetAccessLabels[normalized])
-      : "";
+    return normalized ? cleanPersonName(googleSheetAccessLabels[normalized]) : "";
   };
 
   const drivePermissionDisplay = (permission: GoogleDrivePermissionResult) => {
     const email = permission.emailAddress?.trim() || "";
     const savedName = googleSheetAccessLabelForEmail(email);
     const googleName = cleanPersonName(permission.displayName);
-    const connectedName = permissionEmailMatchesConnectedUser(permission)
-      ? cleanPersonName(connectedDriveUser?.displayName)
-      : "";
-    const name =
-      savedName ||
-      googleName ||
-      connectedName ||
-      email ||
-      drivePermissionLabel(permission);
+    const connectedName = permissionEmailMatchesConnectedUser(permission) ? cleanPersonName(connectedDriveUser?.displayName) : "";
+    const name = savedName || googleName || connectedName || email || drivePermissionLabel(permission);
     return { name, email };
   };
 
-  const googleSheetOwnerPermissions = (googleSheetAccessList || []).filter(
-    (permission) => permission.role === "owner",
-  );
-  const googleSheetEditorPermissions = (googleSheetAccessList || []).filter(
-    (permission) => permission.role === "writer",
-  );
+  const googleSheetOwnerPermissions = (googleSheetAccessList || []).filter((permission) => permission.role === "owner");
+  const googleSheetEditorPermissions = (googleSheetAccessList || []).filter((permission) => permission.role === "writer");
   const googleSheetOtherPermissions = (googleSheetAccessList || []).filter(
     (permission) => permission.role !== "owner" && permission.role !== "writer",
   );
   const googleSheetPermissionEmails = new Set(
     (googleSheetAccessList || [])
-      .map((permission) =>
-        permission.emailAddress
-          ? normalizeShareEmail(permission.emailAddress)
-          : "",
-      )
+      .map((permission) => permission.emailAddress ? normalizeShareEmail(permission.emailAddress) : "")
       .filter(Boolean),
   );
   const googleSheetSavedEditorEntries = Object.entries(googleSheetAccessLabels)
-    .map(([email, name]) => ({
-      email: normalizeShareEmail(email),
-      name: cleanPersonName(name),
-    }))
-    .filter(
-      (entry) =>
-        entry.email &&
-        entry.name &&
-        !googleSheetPermissionEmails.has(entry.email),
-    );
+    .map(([email, name]) => ({ email: normalizeShareEmail(email), name: cleanPersonName(name) }))
+    .filter((entry) => entry.email && entry.name && !googleSheetPermissionEmails.has(entry.email));
   const googleSheetHasPeopleAccessInfo = Boolean(
-    (googleSheetAccessList && googleSheetAccessList.length > 0) ||
-    googleSheetSavedEditorEntries.length > 0,
+    (googleSheetAccessList && googleSheetAccessList.length > 0) || googleSheetSavedEditorEntries.length > 0,
   );
-  const connectedGoogleUserOwnsActiveSheet = googleSheetOwnerPermissions.some(
-    permissionEmailMatchesConnectedUser,
-  );
+  const connectedGoogleUserOwnsActiveSheet = googleSheetOwnerPermissions.some(permissionEmailMatchesConnectedUser);
 
   const downloadAllRostersBackup = () => {
     if (!hasPrivateBackupRosters) {
@@ -1246,11 +997,7 @@ function App() {
       rostersToBackupJson(rosters, activeRosterId),
       "application/json;charset=utf-8",
     );
-    showRosterToolsNotice(
-      "Local backup exported",
-      `Exported ${formatBackupSummary(privateBackupSummary)}. Shared rosters were not included.`,
-      "success",
-    );
+    showRosterToolsNotice("Local backup exported", `Exported ${formatBackupSummary(privateBackupSummary)}. Shared rosters were not included.`, "success");
   };
 
   useEffect(() => {
@@ -1319,10 +1066,7 @@ function App() {
 
   useEffect(() => {
     const recoverReleasedScroll = () => {
-      if (
-        !appScrollLockActive &&
-        document.body.dataset.fairTeamsScrollLock === "true"
-      ) {
+      if (!appScrollLockActive && document.body.dataset.fairTeamsScrollLock === "true") {
         document.body.style.overflow = "";
         document.documentElement.style.overflow = "";
         document.body.style.pointerEvents = "";
@@ -1403,10 +1147,9 @@ function App() {
       : isWhiteHeaderColor
         ? "#E2E8F0"
         : headerColor,
-    boxShadow:
-      shouldShowTodayStartHeader || isWhiteHeaderColor
-        ? "0 1px 2px rgba(15, 23, 42, 0.08)"
-        : `0 0 0 2px ${hexToRgba(headerColor, 0.14)}`,
+    boxShadow: shouldShowTodayStartHeader || isWhiteHeaderColor
+      ? "0 1px 2px rgba(15, 23, 42, 0.08)"
+      : `0 0 0 2px ${hexToRgba(headerColor, 0.14)}`,
   } as React.CSSProperties;
 
   useEffect(() => {
@@ -1416,9 +1159,7 @@ function App() {
   }, [activeRosterName, headerColor, groupLogo]);
 
   const replacePlayers = (nextPlayers: RoomPlayer[]) => {
-    const normalizedPlayers = nextPlayers.map((player, index) =>
-      normalizePlayer(player, index),
-    );
+    const normalizedPlayers = nextPlayers.map((player, index) => normalizePlayer(player, index));
     const safePlayerIds = new Set(normalizedPlayers.map((player) => player.id));
     setRosterState((current) => ({
       ...current,
@@ -1427,11 +1168,10 @@ function App() {
           ? {
               ...roster,
               players: normalizedPlayers,
-              pairingRules: (roster.pairingRules || []).filter(
-                (rule) =>
-                  safePlayerIds.has(rule.playerAId) &&
-                  safePlayerIds.has(rule.playerBId) &&
-                  rule.playerAId !== rule.playerBId,
+              pairingRules: (roster.pairingRules || []).filter((rule) =>
+                safePlayerIds.has(rule.playerAId) &&
+                safePlayerIds.has(rule.playerBId) &&
+                rule.playerAId !== rule.playerBId,
               ),
               updatedAt: new Date().toISOString(),
             }
@@ -1448,12 +1188,11 @@ function App() {
         roster.id === current.activeRosterId
           ? {
               ...roster,
-              pairingRules: nextPairingRules.filter(
-                (rule) =>
-                  (rule.kind === "together" || rule.kind === "separate") &&
-                  safePlayerIds.has(rule.playerAId) &&
-                  safePlayerIds.has(rule.playerBId) &&
-                  rule.playerAId !== rule.playerBId,
+              pairingRules: nextPairingRules.filter((rule) =>
+                (rule.kind === "together" || rule.kind === "separate") &&
+                safePlayerIds.has(rule.playerAId) &&
+                safePlayerIds.has(rule.playerBId) &&
+                rule.playerAId !== rule.playerBId,
               ),
               updatedAt: new Date().toISOString(),
             }
@@ -1462,21 +1201,14 @@ function App() {
     }));
   };
 
-  const openFirebaseSharedRosterAsLocalCopy = (
-    sharedRoster: RoomRoster,
-    sourceName: string,
-    firebaseSummary?: FirebaseSharedRosterSummary,
-  ) => {
+
+  const openFirebaseSharedRosterAsLocalCopy = (sharedRoster: RoomRoster, sourceName: string, firebaseSummary?: FirebaseSharedRosterSummary) => {
     const firebaseRosterId = firebaseSummary?.id;
     let openedExisting = false;
 
     setRosterState((current) => {
       const existingLinkedRoster = firebaseRosterId
-        ? current.rosters.find(
-            (roster) =>
-              roster.cloudSource?.provider === "firebase" &&
-              roster.cloudSource.firebaseRosterId === firebaseRosterId,
-          )
+        ? current.rosters.find((roster) => roster.cloudSource?.provider === "firebase" && roster.cloudSource.firebaseRosterId === firebaseRosterId)
         : undefined;
 
       if (existingLinkedRoster) {
@@ -1490,10 +1222,7 @@ function App() {
       const imported = createRoster(
         firebaseSummary
           ? sourceName || sharedRoster.name || "Shared roster"
-          : uniqueRosterName(
-              sourceName || sharedRoster.name || "Firebase roster",
-              current.rosters,
-            ),
+          : uniqueRosterName(sourceName || sharedRoster.name || "Firebase roster", current.rosters),
         sharedRoster.players,
         { themeColor: sharedRoster.themeColor },
       );
@@ -1511,8 +1240,7 @@ function App() {
               firebaseOwnerEmail: firebaseSummary.ownerEmail,
               firebaseRole: firebaseSummary.currentUserRole,
               firebaseLastSavedByEmail: firebaseSummary.lastSavedByEmail,
-              firebaseMemberNamesByEmail:
-                firebaseMemberNamesFromSummary(firebaseSummary),
+              firebaseMemberNamesByEmail: firebaseMemberNamesFromSummary(firebaseSummary),
               lastSyncedAt: new Date().toISOString(),
               lastRemoteModifiedAt: firebaseSummary.updatedAt,
               accessLabels: firebaseAccessLabelsFromSummary(firebaseSummary),
@@ -1527,19 +1255,14 @@ function App() {
     });
     setRosterToolsNotice({
       tone: "success",
-      title: openedExisting
-        ? "Shared roster selected"
-        : "Firebase roster opened",
+      title: openedExisting ? "Shared roster selected" : "Firebase roster opened",
       message: openedExisting
         ? `${firebaseSummary?.groupName ? `${firebaseSummary.groupName} · ` : ""}${sourceName || sharedRoster.name || "Shared roster"} is already open on this device.`
         : `${firebaseSummary?.groupName ? `${firebaseSummary.groupName} · ` : ""}${sourceName || sharedRoster.name || "Shared roster"} was opened on this device. It remains an online shared roster connected to your account.`,
     });
   };
 
-  const markActiveFirebaseRosterSaved = (
-    summary: FirebaseSharedRosterSummary,
-    localRosterId?: string,
-  ) => {
+  const markActiveFirebaseRosterSaved = (summary: FirebaseSharedRosterSummary, localRosterId?: string) => {
     setRosterState((current) => {
       const targetRosterId = localRosterId || current.activeRosterId;
       return {
@@ -1558,8 +1281,7 @@ function App() {
                   firebaseOwnerEmail: summary.ownerEmail,
                   firebaseRole: summary.currentUserRole,
                   firebaseLastSavedByEmail: summary.lastSavedByEmail,
-                  firebaseMemberNamesByEmail:
-                    firebaseMemberNamesFromSummary(summary),
+                  firebaseMemberNamesByEmail: firebaseMemberNamesFromSummary(summary),
                   accessLabels: firebaseAccessLabelsFromSummary(summary),
                   lastSyncedAt: summary.updatedAt || new Date().toISOString(),
                   lastRemoteModifiedAt: summary.updatedAt,
@@ -1578,12 +1300,9 @@ function App() {
     });
   };
 
-  const refreshActiveFirebaseRosterFromRemote = (
-    remoteRoster: RoomRoster,
-    sourceName: string,
-    summary: FirebaseSharedRosterSummary,
-    localRosterId?: string,
-  ) => {
+
+
+  const refreshActiveFirebaseRosterFromRemote = (remoteRoster: RoomRoster, sourceName: string, summary: FirebaseSharedRosterSummary, localRosterId?: string) => {
     setRosterState((current) => {
       const targetRosterId = localRosterId || current.activeRosterId;
       return {
@@ -1591,31 +1310,18 @@ function App() {
         rosters: current.rosters.map((roster) => {
           if (roster.id !== targetRosterId) return roster;
 
-          const photoById = new Map(
-            roster.players
-              .filter((player) => player.profilePhoto)
-              .map((player) => [player.id, player.profilePhoto]),
-          );
+          const photoById = new Map(roster.players.filter((player) => player.profilePhoto).map((player) => [player.id, player.profilePhoto]));
           const photoByName = new Map(
             roster.players
               .filter((player) => player.profilePhoto)
-              .map((player) => [
-                player.name.trim().toLowerCase(),
-                player.profilePhoto,
-              ]),
+              .map((player) => [player.name.trim().toLowerCase(), player.profilePhoto]),
           );
 
           const refreshedPlayers = remoteRoster.players.map((player, index) =>
-            normalizePlayer(
-              {
-                ...player,
-                profilePhoto:
-                  photoById.get(player.id) ||
-                  photoByName.get(player.name.trim().toLowerCase()) ||
-                  player.profilePhoto,
-              },
-              index,
-            ),
+            normalizePlayer({
+              ...player,
+              profilePhoto: photoById.get(player.id) || photoByName.get(player.name.trim().toLowerCase()) || player.profilePhoto,
+            }, index),
           );
 
           return normalizeRoster({
@@ -1632,8 +1338,7 @@ function App() {
               firebaseOwnerEmail: summary.ownerEmail,
               firebaseRole: summary.currentUserRole,
               firebaseLastSavedByEmail: summary.lastSavedByEmail,
-              firebaseMemberNamesByEmail:
-                firebaseMemberNamesFromSummary(summary),
+              firebaseMemberNamesByEmail: firebaseMemberNamesFromSummary(summary),
               accessLabels: firebaseAccessLabelsFromSummary(summary),
               lastSyncedAt: summary.updatedAt || new Date().toISOString(),
               lastRemoteModifiedAt: summary.updatedAt,
@@ -1651,9 +1356,9 @@ function App() {
     });
   };
 
+
   const makePrivateCopyOfActiveSharedRoster = async () => {
-    if (!activeRoster || !activeRosterIsFirebaseShared || privateCopyCreating)
-      return;
+    if (!activeRoster || !activeRosterIsFirebaseShared || privateCopyCreating) return;
     const sharedRosterId = activeRoster.cloudSource?.firebaseRosterId;
     setPrivateCopyCreating(true);
     try {
@@ -1662,68 +1367,56 @@ function App() {
         try {
           const summaries = await fetchClubRatingSummaries(sharedRosterId);
           summaries.forEach((summary) => {
-            if (
-              summary.ratingCount > 0 &&
-              typeof summary.averageSkill === "number"
-            ) {
+            if (summary.ratingCount > 0 && typeof summary.averageSkill === "number") {
               clubSummaryByPlayerId.set(summary.playerId, summary.averageSkill);
             }
           });
         } catch (error) {
-          console.warn(
-            "Could not load Club averages for private copy; using neutral ratings.",
-            error,
-          );
+          console.warn("Could not load Club averages for private copy; using neutral ratings.", error);
         }
       }
 
       const copiedPlayers = activeRoster.players.map((player, index) => {
         const startingSkill = clubSummaryByPlayerId.get(player.id) ?? 5;
-        return normalizePlayer(
-          {
-            id: player.id,
-            name: player.name,
-            aka: player.aka,
-            gender: player.gender,
-            isNew: player.isNew,
-            funBadge: player.funBadge,
-            skill: startingSkill,
-            attack: startingSkill,
-            defense: startingSkill,
-            speed: startingSkill,
-            passing: startingSkill,
-            stamina: startingSkill,
-            physical: startingSkill,
-            teamPlay: 2,
-            profilePhoto: undefined,
-            isGoalkeeper: false,
-            isPlaymaker: false,
-            isFinisher: false,
-            isDribbler: false,
-            isSentinel: false,
-            isEngine: false,
-            isVersatile: false,
-            isSpaceFinder: false,
-            isLongPass: false,
-            isTikiTaka: false,
-            isCrossing: false,
-            isAerial: false,
-            isPowerShot: false,
-            isBulldog: false,
-            isOrganizer: false,
-            attending: false,
-            todayStatus: "here",
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          },
-          index,
-        );
+        return normalizePlayer({
+          id: player.id,
+          name: player.name,
+          aka: player.aka,
+          gender: player.gender,
+          isNew: player.isNew,
+          funBadge: player.funBadge,
+          skill: startingSkill,
+          attack: startingSkill,
+          defense: startingSkill,
+          speed: startingSkill,
+          passing: startingSkill,
+          stamina: startingSkill,
+          physical: startingSkill,
+          teamPlay: 2,
+          profilePhoto: undefined,
+          isGoalkeeper: false,
+          isPlaymaker: false,
+          isFinisher: false,
+          isDribbler: false,
+          isSentinel: false,
+          isEngine: false,
+          isVersatile: false,
+          isSpaceFinder: false,
+          isLongPass: false,
+          isTikiTaka: false,
+          isCrossing: false,
+          isAerial: false,
+          isPowerShot: false,
+          isBulldog: false,
+          isOrganizer: false,
+          attending: false,
+          todayStatus: "here",
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }, index);
       });
 
-      const copyName = uniqueRosterName(
-        `${activeRoster.name || "Shared roster"} private copy`,
-        rosters,
-      );
+      const copyName = uniqueRosterName(`${activeRoster.name || "Shared roster"} private copy`, rosters);
       const localCopy = normalizeRoster({
         ...createRoster(copyName, copiedPlayers, {
           themeColor: activeRoster.themeColor,
@@ -1741,9 +1434,7 @@ function App() {
       setPrivateCopyConfirmOpen(false);
       setTodayRosterChosen(true);
       setActiveTab("players");
-      const seededCount = copiedPlayers.filter((player) =>
-        clubSummaryByPlayerId.has(player.id),
-      ).length;
+      const seededCount = copiedPlayers.filter((player) => clubSummaryByPlayerId.has(player.id)).length;
       showRosterToolsNotice(
         "Private copy created",
         `“${localCopy.name}” is a clean local roster. It copied shared names and used Club averages for ${seededCount} player${seededCount === 1 ? "" : "s"}; photos and special abilities were reset.`,
@@ -1754,37 +1445,29 @@ function App() {
     }
   };
 
+
   const leaveActiveSharedRoster = async () => {
-    if (!activeRoster || !activeRosterIsFirebaseShared || leaveSharedBusy)
-      return;
+    if (!activeRoster || !activeRosterIsFirebaseShared || leaveSharedBusy) return;
     const firebaseRosterId = activeRoster.cloudSource?.firebaseRosterId;
     if (!firebaseRosterId) return;
     setLeaveSharedBusy(true);
     try {
       const result = await leaveFirebaseSharedRosterAccess(firebaseRosterId);
       const affectedRosterIds = new Set(result.rosterIds);
-      const affectedGroupId =
-        result.groupId || activeRoster.cloudSource?.firebaseGroupId;
+      const affectedGroupId = result.groupId || activeRoster.cloudSource?.firebaseGroupId;
       setRosterState((current) => {
         const remaining = current.rosters.filter((roster) => {
-          const source =
-            roster.cloudSource?.provider === "firebase"
-              ? roster.cloudSource
-              : undefined;
+          const source = roster.cloudSource?.provider === "firebase" ? roster.cloudSource : undefined;
           if (!source?.firebaseRosterId) return true;
           if (affectedRosterIds.has(source.firebaseRosterId)) return false;
-          if (affectedGroupId && source.firebaseGroupId === affectedGroupId)
-            return false;
+          if (affectedGroupId && source.firebaseGroupId === affectedGroupId) return false;
           return true;
         });
         if (remaining.length === 0) {
           const empty = createRoster(EMPTY_ROSTER_NAME, []);
           return { rosters: [empty], activeRosterId: empty.id };
         }
-        return {
-          rosters: remaining,
-          activeRosterId: remaining[0]?.id || current.activeRosterId,
-        };
+        return { rosters: remaining, activeRosterId: remaining[0]?.id || current.activeRosterId };
       });
       setLeaveSharedConfirmOpen(false);
       setActiveTab("today");
@@ -1797,15 +1480,12 @@ function App() {
         "success",
       );
     } catch (error) {
-      showRosterToolsNotice(
-        "Could not leave shared roster",
-        error instanceof Error ? error.message : "Try again after signing in.",
-        "error",
-      );
+      showRosterToolsNotice("Could not leave shared roster", error instanceof Error ? error.message : "Try again after signing in.", "error");
     } finally {
       setLeaveSharedBusy(false);
     }
   };
+
 
   const switchRoster = (rosterId: string) => {
     setRosterState((current) =>
@@ -1852,26 +1532,21 @@ function App() {
               {roster.name}
             </span>
             <RosterKindBadge roster={roster} />
-            {roster.cloudSource?.provider === "firebase" &&
-              roster.cloudSource.firebaseRosterId && (
-                <span className="inline-flex h-5 shrink-0 items-center gap-0.5 rounded-full bg-white px-1.5 text-[10px] font-black text-violet-700 shadow-sm ring-1 ring-violet-100">
-                  <Users className="h-3 w-3" />
-                  {rosterFirebaseSharedPeopleCount(roster)}
-                </span>
-              )}
+            {roster.cloudSource?.provider === "firebase" && roster.cloudSource.firebaseRosterId && (
+              <span className="inline-flex h-5 shrink-0 items-center gap-0.5 rounded-full bg-white px-1.5 text-[10px] font-black text-violet-700 shadow-sm ring-1 ring-violet-100">
+                <Users className="h-3 w-3" />
+                {rosterFirebaseSharedPeopleCount(roster)}
+              </span>
+            )}
           </span>
           <span className="mt-0.5 block text-[11px] font-bold text-slate-500">
             {roster.players.length} player
             {roster.players.length === 1 ? "" : "s"}
-            {shared
-              ? " · opens from Shared rosters"
-              : " · private on this device"}
+            {shared ? " · opens from Shared rosters" : " · private on this device"}
           </span>
         </span>
         {selected ? (
-          <span
-            className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-white ${shared ? "bg-violet-700" : "bg-[#102A43]"}`}
-          >
+          <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-white ${shared ? "bg-violet-700" : "bg-[#102A43]"}`}>
             <Check className="h-4 w-4" />
           </span>
         ) : (
@@ -1889,8 +1564,7 @@ function App() {
       players.length === 0 &&
       activeRosterName === EMPTY_ROSTER_NAME;
     const name = uniqueRosterName(
-      newRosterName ||
-        (isReplacingStarter ? "Roster 1" : `Roster ${rosters.length + 1}`),
+      newRosterName || (isReplacingStarter ? "Roster 1" : `Roster ${rosters.length + 1}`),
       isReplacingStarter ? [] : rosters,
     );
     const roster = createRoster(name, []);
@@ -1909,43 +1583,27 @@ function App() {
 
   const connectGoogleDrive = async () => {
     if (!googleDriveConfig.isConfigured) {
-      showRosterToolsNotice(
-        "Google Drive not configured",
-        "Add VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_API_KEY before using Google Drive backup.",
-        "warning",
-      );
+      showRosterToolsNotice("Google Drive not configured", "Add VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_API_KEY before using Google Drive backup.", "warning");
       return;
     }
 
     setGoogleDriveConnecting(true);
     try {
-      const result = await requestGoogleDriveAccessToken(
-        googleDriveAccessToken ? "" : "consent",
-      );
+      const result = await requestGoogleDriveAccessToken(googleDriveAccessToken ? "" : "consent");
       setGoogleDriveAccessToken(result.accessToken);
       try {
         const user = await getGoogleDriveUserSummary(result.accessToken);
         setConnectedDriveUser(user);
         if (currentDriveBackup && user.emailAddress) {
-          setCurrentDriveBackup((file) =>
-            file ? { ...file, connectedEmail: user.emailAddress } : file,
-          );
+          setCurrentDriveBackup((file) => file ? { ...file, connectedEmail: user.emailAddress } : file);
         }
       } catch {
         setConnectedDriveUser(null);
       }
       void warmUpGoogleDrivePicker();
-      showRosterToolsNotice(
-        "Google Drive connected",
-        "Your browser session is now connected to Google Drive.",
-        "success",
-      );
+      showRosterToolsNotice("Google Drive connected", "Your browser session is now connected to Google Drive.", "success");
     } catch (error) {
-      showRosterToolsNotice(
-        "Could not connect Google Drive",
-        error instanceof Error ? error.message : "Please try again.",
-        "error",
-      );
+      showRosterToolsNotice("Could not connect Google Drive", error instanceof Error ? error.message : "Please try again.", "error");
     } finally {
       setGoogleDriveConnecting(false);
     }
@@ -1955,51 +1613,34 @@ function App() {
     setGoogleDriveAccessToken("");
     setConnectedDriveUser(null);
     setCurrentDriveBackup(null);
-    showRosterToolsNotice(
-      "Google Drive disconnected",
-      "This browser session is no longer connected to Google Drive.",
-      "info",
-    );
+    showRosterToolsNotice("Google Drive disconnected", "This browser session is no longer connected to Google Drive.", "info");
   };
 
   const preserveLocalImagesForDriveRosters = (
     incomingRosters: RoomRoster[],
     existingRosters: RoomRoster[],
   ) => {
-    const rosterNameKey = (name: string) =>
-      name.replace(/\s+/g, " ").trim().toLowerCase();
-    const playerNameKey = (name: string) =>
-      name.replace(/\s+/g, " ").trim().toLowerCase();
+    const rosterNameKey = (name: string) => name.replace(/\s+/g, " ").trim().toLowerCase();
+    const playerNameKey = (name: string) => name.replace(/\s+/g, " ").trim().toLowerCase();
 
     return incomingRosters.map((incomingRoster, rosterIndex) => {
       const matchingRoster =
         existingRosters.find((roster) => roster.id === incomingRoster.id) ||
-        existingRosters.find(
-          (roster) =>
-            rosterNameKey(roster.name) === rosterNameKey(incomingRoster.name),
-        );
+        existingRosters.find((roster) => rosterNameKey(roster.name) === rosterNameKey(incomingRoster.name));
       const existingPlayers = matchingRoster?.players || [];
 
-      const playersWithLocalPhotos = incomingRoster.players.map(
-        (player, playerIndex) => {
-          const matchingPlayer =
-            existingPlayers.find(
-              (existingPlayer) => existingPlayer.id === player.id,
-            ) ||
-            existingPlayers.find(
-              (existingPlayer) =>
-                playerNameKey(existingPlayer.name) ===
-                playerNameKey(player.name),
-            );
-          return normalizePlayer(
-            {
-              ...player,
-              profilePhoto: player.profilePhoto || matchingPlayer?.profilePhoto,
-            },
-            playerIndex,
-          );
-        },
-      );
+      const playersWithLocalPhotos = incomingRoster.players.map((player, playerIndex) => {
+        const matchingPlayer =
+          existingPlayers.find((existingPlayer) => existingPlayer.id === player.id) ||
+          existingPlayers.find((existingPlayer) => playerNameKey(existingPlayer.name) === playerNameKey(player.name));
+        return normalizePlayer(
+          {
+            ...player,
+            profilePhoto: player.profilePhoto || matchingPlayer?.profilePhoto,
+          },
+          playerIndex,
+        );
+      });
 
       return normalizeRoster(
         {
@@ -2019,10 +1660,7 @@ function App() {
         current.rosters[0]?.players.length === 0 &&
         current.rosters[0]?.name === EMPTY_ROSTER_NAME;
       const nextRosters = currentIsStarter ? [] : [...current.rosters];
-      const prepared = preserveLocalImagesForDriveRosters(
-        incomingRosters,
-        current.rosters,
-      );
+      const prepared = preserveLocalImagesForDriveRosters(incomingRosters, current.rosters);
       const added = prepared.map((roster) => {
         const copied = createRoster(
           uniqueRosterName(roster.name, nextRosters),
@@ -2040,58 +1678,33 @@ function App() {
     });
   };
 
-  const replaceWithDriveImportedRosters = (
-    incomingRosters: RoomRoster[],
-    incomingActiveRosterId?: string,
-  ) => {
+  const replaceWithDriveImportedRosters = (incomingRosters: RoomRoster[], incomingActiveRosterId?: string) => {
     setRosterState((current) => {
-      const prepared = preserveLocalImagesForDriveRosters(
-        incomingRosters,
-        current.rosters,
-      );
+      const prepared = preserveLocalImagesForDriveRosters(incomingRosters, current.rosters);
       if (prepared.length === 0) {
         const empty = createRoster(EMPTY_ROSTER_NAME, []);
         return { rosters: [empty], activeRosterId: empty.id };
       }
-      const activeId =
-        incomingActiveRosterId &&
-        prepared.some((roster) => roster.id === incomingActiveRosterId)
-          ? incomingActiveRosterId
-          : prepared[0].id;
+      const activeId = incomingActiveRosterId && prepared.some((roster) => roster.id === incomingActiveRosterId)
+        ? incomingActiveRosterId
+        : prepared[0].id;
       return { rosters: prepared, activeRosterId: activeId };
     });
   };
 
-  const previewGoogleDriveBackupFile = async (picked: {
-    id: string;
-    name: string;
-    mimeType?: string;
-  }) => {
-    if (
-      !picked.name.toLowerCase().endsWith(".json") &&
-      picked.mimeType !== "application/json"
-    ) {
-      showRosterToolsNotice(
-        "Choose a Fair Teams backup",
-        "Please select a Fair Teams .json backup file.",
-        "warning",
-      );
+  const previewGoogleDriveBackupFile = async (picked: { id: string; name: string; mimeType?: string }) => {
+    if (!picked.name.toLowerCase().endsWith(".json") && picked.mimeType !== "application/json") {
+      showRosterToolsNotice("Choose a Fair Teams backup", "Please select a Fair Teams .json backup file.", "warning");
       return;
     }
 
     setDriveBackupChoices(null);
     setGoogleDriveOpening(true);
     try {
-      const { file, text } = await readGoogleDriveJsonFile(
-        googleDriveAccessToken,
-        picked.id,
-      );
+      const { file, text } = await readGoogleDriveJsonFile(googleDriveAccessToken, picked.id);
       const backup = parseDriveBackupJson(text);
       const rosterCount = backup.rosters.length;
-      const playerCount = backup.rosters.reduce(
-        (sum, roster) => sum + roster.players.length,
-        0,
-      );
+      const playerCount = backup.rosters.reduce((sum, roster) => sum + roster.players.length, 0);
 
       setDriveImportPreview({
         file,
@@ -2102,11 +1715,7 @@ function App() {
         rosterNames: backup.rosters.map((roster) => roster.name),
       });
     } catch (error) {
-      showRosterToolsNotice(
-        "Could not open Google Drive backup",
-        error instanceof Error ? error.message : "Please try again.",
-        "error",
-      );
+      showRosterToolsNotice("Could not open Google Drive backup", error instanceof Error ? error.message : "Please try again.", "error");
     } finally {
       setGoogleDriveOpening(false);
     }
@@ -2114,39 +1723,26 @@ function App() {
 
   const openGoogleDriveBackup = async () => {
     if (!googleDriveConfig.isConfigured) {
-      showRosterToolsNotice(
-        "Google Drive not configured",
-        "Add VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_API_KEY before using Google Drive backup.",
-        "warning",
-      );
+      showRosterToolsNotice("Google Drive not configured", "Add VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_API_KEY before using Google Drive backup.", "warning");
       return;
     }
     if (!googleDriveAccessToken) {
-      showRosterToolsNotice(
-        "Sign in with Google first",
-        "Sign in with your Google account before using Drive backup.",
-        "warning",
-      );
+      showRosterToolsNotice("Sign in with Google first", "Sign in with your Google account before using Drive backup.", "warning");
       return;
     }
 
     setGoogleDriveOpening(true);
     try {
-      const groups = await listGoogleDriveBackupFileGroups(
-        googleDriveAccessToken,
-      );
+      const groups = await listGoogleDriveBackupFileGroups(googleDriveAccessToken);
       setDriveBackupChoices(groups);
       setDriveBackupTab("mine");
     } catch (error) {
-      showRosterToolsNotice(
-        "Could not list Google Drive backups",
-        error instanceof Error ? error.message : "Please try again.",
-        "error",
-      );
+      showRosterToolsNotice("Could not list Google Drive backups", error instanceof Error ? error.message : "Please try again.", "error");
     } finally {
       setGoogleDriveOpening(false);
     }
   };
+
 
   const confirmTrashGoogleDriveBackup = async () => {
     if (!driveBackupDeleteConfirm) return;
@@ -2164,29 +1760,20 @@ function App() {
     setGoogleDriveDeletingFileId(file.id);
     try {
       await trashGoogleDriveFile(googleDriveAccessToken, file.id);
-      setDriveBackupChoices((current) =>
-        current
-          ? {
-              mine: current.mine.filter((item) => item.id !== file.id),
-              shared: current.shared.filter((item) => item.id !== file.id),
-            }
-          : current,
+      setDriveBackupChoices((current) => current
+        ? {
+            mine: current.mine.filter((item) => item.id !== file.id),
+            shared: current.shared.filter((item) => item.id !== file.id),
+          }
+        : current,
       );
       if (currentDriveBackup?.id === file.id) {
         setCurrentDriveBackup(null);
       }
       setDriveBackupDeleteConfirm(null);
-      showRosterToolsNotice(
-        "Backup moved to trash",
-        `${file.name} was moved to your Google Drive trash.`,
-        "success",
-      );
+      showRosterToolsNotice("Backup moved to trash", `${file.name} was moved to your Google Drive trash.`, "success");
     } catch (error) {
-      showRosterToolsNotice(
-        "Could not delete backup",
-        error instanceof Error ? error.message : "Please try again.",
-        "error",
-      );
+      showRosterToolsNotice("Could not delete backup", error instanceof Error ? error.message : "Please try again.", "error");
     } finally {
       setGoogleDriveDeletingFileId("");
     }
@@ -2199,63 +1786,33 @@ function App() {
   const confirmAddDriveImport = () => {
     if (!driveImportPreview) return;
     addDriveImportedRosters(driveImportPreview.rosters);
-    rememberDriveBackup(driveImportPreview.file, {
-      rosterCount: driveImportPreview.rosterCount,
-      playerCount: driveImportPreview.playerCount,
-    });
+    rememberDriveBackup(driveImportPreview.file, { rosterCount: driveImportPreview.rosterCount, playerCount: driveImportPreview.playerCount });
     const rosterCount = driveImportPreview.rosterCount;
     setDriveImportPreview(null);
-    showRosterToolsNotice(
-      "Google Drive import complete",
-      `Added ${rosterCount} roster${rosterCount === 1 ? "" : "s"} from Google Drive.`,
-      "success",
-    );
+    showRosterToolsNotice("Google Drive import complete", `Added ${rosterCount} roster${rosterCount === 1 ? "" : "s"} from Google Drive.`, "success");
   };
 
   const confirmReplaceDriveImport = () => {
     if (!driveImportPreview) return;
-    replaceWithDriveImportedRosters(
-      driveImportPreview.rosters,
-      driveImportPreview.activeRosterId,
-    );
-    rememberDriveBackup(driveImportPreview.file, {
-      rosterCount: driveImportPreview.rosterCount,
-      playerCount: driveImportPreview.playerCount,
-    });
+    replaceWithDriveImportedRosters(driveImportPreview.rosters, driveImportPreview.activeRosterId);
+    rememberDriveBackup(driveImportPreview.file, { rosterCount: driveImportPreview.rosterCount, playerCount: driveImportPreview.playerCount });
     const rosterCount = driveImportPreview.rosterCount;
     setDriveImportPreview(null);
-    showRosterToolsNotice(
-      "Google Drive import complete",
-      `Replaced local rosters with ${rosterCount} roster${rosterCount === 1 ? "" : "s"} from Google Drive. Shared roster links are not restored from backups.`,
-      "success",
-    );
+    showRosterToolsNotice("Google Drive import complete", `Replaced local rosters with ${rosterCount} roster${rosterCount === 1 ? "" : "s"} from Google Drive. Shared roster links are not restored from backups.`, "success");
   };
 
-  const createNewGoogleDriveBackupCopy = async (
-    successTitle = "Saved to Google Drive",
-  ) => {
+
+  const createNewGoogleDriveBackupCopy = async (successTitle = "Saved to Google Drive") => {
     if (!googleDriveConfig.isConfigured) {
-      showRosterToolsNotice(
-        "Google Drive not configured",
-        "Add VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_API_KEY before using Google Drive backup.",
-        "warning",
-      );
+      showRosterToolsNotice("Google Drive not configured", "Add VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_API_KEY before using Google Drive backup.", "warning");
       return;
     }
     if (!googleDriveAccessToken) {
-      showRosterToolsNotice(
-        "Sign in with Google first",
-        "Sign in with your Google account before using Drive backup.",
-        "warning",
-      );
+      showRosterToolsNotice("Sign in with Google first", "Sign in with your Google account before using Drive backup.", "warning");
       return;
     }
     if (!hasPrivateBackupRosters) {
-      showRosterToolsNotice(
-        "No local rosters to back up",
-        "Shared rosters stay online in Shared rosters. Make a private copy first if you want a local backup version.",
-        "warning",
-      );
+      showRosterToolsNotice("No local rosters to back up", "Shared rosters stay online in Shared rosters. Make a private copy first if you want a local backup version.", "warning");
       return;
     }
 
@@ -2268,16 +1825,10 @@ function App() {
         jsonText,
       );
       rememberDriveBackup(file, deviceBackupSummary);
-      const openText = file.webViewLink
-        ? "\n\nThis is now the active Drive backup."
-        : "";
+      const openText = file.webViewLink ? "\n\nThis is now the active Drive backup." : "";
       showRosterToolsNotice(successTitle, `${file.name}${openText}`, "success");
     } catch (error) {
-      showRosterToolsNotice(
-        "Could not save to Google Drive",
-        error instanceof Error ? error.message : "Please try again.",
-        "error",
-      );
+      showRosterToolsNotice("Could not save to Google Drive", error instanceof Error ? error.message : "Please try again.", "error");
     } finally {
       setGoogleDriveSaving(false);
     }
@@ -2285,19 +1836,11 @@ function App() {
 
   const prepareDriveBackupUpdate = async () => {
     if (!googleDriveConfig.isConfigured) {
-      showRosterToolsNotice(
-        "Google Drive not configured",
-        "Add VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_API_KEY before using Google Drive backup.",
-        "warning",
-      );
+      showRosterToolsNotice("Google Drive not configured", "Add VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_API_KEY before using Google Drive backup.", "warning");
       return;
     }
     if (!googleDriveAccessToken) {
-      showRosterToolsNotice(
-        "Sign in with Google first",
-        "Sign in with your Google account before using Drive backup.",
-        "warning",
-      );
+      showRosterToolsNotice("Sign in with Google first", "Sign in with your Google account before using Drive backup.", "warning");
       return;
     }
     if (!currentDriveBackup) {
@@ -2305,32 +1848,20 @@ function App() {
       return;
     }
     if (!hasPrivateBackupRosters) {
-      showRosterToolsNotice(
-        "No local rosters to back up",
-        "Shared rosters stay online in Shared rosters. Make a private copy first if you want a local backup version.",
-        "warning",
-      );
+      showRosterToolsNotice("No local rosters to back up", "Shared rosters stay online in Shared rosters. Make a private copy first if you want a local backup version.", "warning");
       return;
     }
 
     setGoogleDriveUpdating(true);
     try {
-      let previous: DriveBackupSummary | null =
-        currentDriveBackup.rosterCount !== undefined &&
-        currentDriveBackup.playerCount !== undefined
-          ? {
-              rosterCount: currentDriveBackup.rosterCount,
-              playerCount: currentDriveBackup.playerCount,
-            }
-          : null;
+      let previous: DriveBackupSummary | null = currentDriveBackup.rosterCount !== undefined && currentDriveBackup.playerCount !== undefined
+        ? { rosterCount: currentDriveBackup.rosterCount, playerCount: currentDriveBackup.playerCount }
+        : null;
       let fileDetails: GoogleDriveFileResult = currentDriveBackup;
       let readFailed = false;
 
       try {
-        const { file, text } = await readGoogleDriveJsonFile(
-          googleDriveAccessToken,
-          currentDriveBackup.id,
-        );
+        const { file, text } = await readGoogleDriveJsonFile(googleDriveAccessToken, currentDriveBackup.id);
         const backup = parseDriveBackupJson(text);
         fileDetails = file;
         previous = countBackupRosters(backup.rosters);
@@ -2345,9 +1876,7 @@ function App() {
           rosterCount: previous?.rosterCount ?? currentDriveBackup.rosterCount,
           playerCount: previous?.playerCount ?? currentDriveBackup.playerCount,
           checkedAt: new Date().toISOString(),
-          connectedEmail:
-            connectedDriveUser?.emailAddress ||
-            currentDriveBackup.connectedEmail,
+          connectedEmail: connectedDriveUser?.emailAddress || currentDriveBackup.connectedEmail,
         },
         previous,
         next: deviceBackupSummary,
@@ -2383,17 +1912,9 @@ function App() {
       );
       rememberDriveBackup(file, deviceBackupSummary);
       setDriveUpdateConfirm(null);
-      showRosterToolsNotice(
-        "Drive backup updated",
-        `${file.name}\n\nNow contains ${formatBackupSummary(deviceBackupSummary)}.`,
-        "success",
-      );
+      showRosterToolsNotice("Drive backup updated", `${file.name}\n\nNow contains ${formatBackupSummary(deviceBackupSummary)}.`, "success");
     } catch (error) {
-      showRosterToolsNotice(
-        "Could not update Google Drive backup",
-        error instanceof Error ? error.message : "Please try again.",
-        "error",
-      );
+      showRosterToolsNotice("Could not update Google Drive backup", error instanceof Error ? error.message : "Please try again.", "error");
     } finally {
       setGoogleDriveUpdating(false);
     }
@@ -2402,11 +1923,8 @@ function App() {
   const updateCurrentGoogleDriveBackup = prepareDriveBackupUpdate;
 
   const isMissingSharedRosterError = (error: unknown) => {
-    const message =
-      error instanceof Error ? error.message : String(error || "");
-    return /shared roster file not found|file not found|not found|requested entity was not found|404/i.test(
-      message,
-    );
+    const message = error instanceof Error ? error.message : String(error || "");
+    return /shared roster file not found|file not found|not found|requested entity was not found|404/i.test(message);
   };
 
   const removeActiveRosterGoogleSheetLink = () => {
@@ -2432,10 +1950,7 @@ function App() {
     );
   };
 
-  const updateActiveRosterGoogleSheetSource = (
-    file: GoogleSheetRosterFile,
-    accessLabels = activeGoogleSheetSource?.accessLabels,
-  ) => {
+  const updateActiveRosterGoogleSheetSource = (file: GoogleSheetRosterFile, accessLabels = activeGoogleSheetSource?.accessLabels) => {
     setRosterState((current) => ({
       ...current,
       rosters: current.rosters.map((roster) =>
@@ -2452,11 +1967,7 @@ function App() {
 
   const disconnectActiveRosterFromGoogleSheet = () => {
     if (!activeGoogleSheetSource?.spreadsheetId) {
-      showRosterToolsNotice(
-        "No shared roster linked",
-        "This roster is already saved only on this device.",
-        "info",
-      );
+      showRosterToolsNotice("No shared roster linked", "This roster is already saved only on this device.", "info");
       return false;
     }
     const confirmed = window.confirm(
@@ -2477,36 +1988,21 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
 
   const makeActiveRosterShared = async () => {
     if (!googleDriveConfig.isConfigured) {
-      showRosterToolsNotice(
-        "Google Drive not configured",
-        "Add VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_API_KEY before creating a shared roster.",
-        "warning",
-      );
+      showRosterToolsNotice("Google Drive not configured", "Add VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_API_KEY before creating a shared roster.", "warning");
       return;
     }
     if (!googleDriveAccessToken) {
-      showRosterToolsNotice(
-        "Sign in with Google first",
-        "Sign in with your Google account before creating a shared roster.",
-        "warning",
-      );
+      showRosterToolsNotice("Sign in with Google first", "Sign in with your Google account before creating a shared roster.", "warning");
       return;
     }
     if (!activeRoster || isEmptyStarterRoster) {
-      showRosterToolsNotice(
-        "No roster yet",
-        "Create or import a roster first, then make it shared.",
-        "warning",
-      );
+      showRosterToolsNotice("No roster yet", "Create or import a roster first, then make it shared.", "warning");
       return;
     }
 
     setGoogleSheetSyncing(true);
     try {
-      const file = await createGoogleSheetRoster(
-        googleDriveAccessToken,
-        activeRoster,
-      );
+      const file = await createGoogleSheetRoster(googleDriveAccessToken, activeRoster);
       updateActiveRosterGoogleSheetSource(file);
       showRosterToolsNotice(
         "Shared roster created",
@@ -2514,26 +2010,16 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
         "success",
       );
     } catch (error) {
-      showRosterToolsNotice(
-        "Could not create shared roster",
-        error instanceof Error ? error.message : "Please try again.",
-        "error",
-      );
+      showRosterToolsNotice("Could not create shared roster", error instanceof Error ? error.message : "Please try again.", "error");
     } finally {
       setGoogleSheetSyncing(false);
     }
   };
 
-  const saveActiveRosterToGoogleSheet = async (
-    options: { force?: boolean } = {},
-  ) => {
+  const saveActiveRosterToGoogleSheet = async (options: { force?: boolean } = {}) => {
     if (!activeRoster) return;
     if (!googleDriveAccessToken) {
-      showRosterToolsNotice(
-        "Sign in with Google first",
-        "Sign in with your Google account before saving a shared roster.",
-        "warning",
-      );
+      showRosterToolsNotice("Sign in with Google first", "Sign in with your Google account before saving a shared roster.", "warning");
       return;
     }
     if (!activeGoogleSheetSource?.spreadsheetId) {
@@ -2556,16 +2042,10 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
           googleDriveAccessToken,
           activeGoogleSheetSource.spreadsheetId,
         );
-        if (
-          isGoogleSheetRemoteNewer(
-            latestFile.modifiedTime,
-            activeGoogleSheetSource.lastRemoteModifiedAt,
-          )
-        ) {
+        if (isGoogleSheetRemoteNewer(latestFile.modifiedTime, activeGoogleSheetSource.lastRemoteModifiedAt)) {
           setGoogleSheetConflictConfirm({
             file: latestFile,
-            lastKnownRemoteModifiedAt:
-              activeGoogleSheetSource.lastRemoteModifiedAt,
+            lastKnownRemoteModifiedAt: activeGoogleSheetSource.lastRemoteModifiedAt,
           });
           return;
         }
@@ -2577,21 +2057,13 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
         activeRoster,
       );
       updateActiveRosterGoogleSheetSource(file);
-      showRosterToolsNotice(
-        "Changes saved",
-        "Your roster changes were saved for everyone using this shared roster.",
-        "success",
-      );
+      showRosterToolsNotice("Changes saved", "Your roster changes were saved for everyone using this shared roster.", "success");
     } catch (error) {
       if (isMissingSharedRosterError(error)) {
         handleMissingActiveGoogleSheetLink();
         return;
       }
-      showRosterToolsNotice(
-        "Could not save shared roster",
-        error instanceof Error ? error.message : "Please try again.",
-        "error",
-      );
+      showRosterToolsNotice("Could not save shared roster", error instanceof Error ? error.message : "Please try again.", "error");
     } finally {
       setGoogleSheetSyncing(false);
     }
@@ -2614,52 +2086,31 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
 
   const dismissGoogleSheetUpdatePrompt = () => {
     const file = googleSheetUpdatePrompt?.file;
-    setGoogleSheetUpdatePromptDismissedKey(
-      googleSheetPromptKey(file?.id, file?.modifiedTime),
-    );
+    setGoogleSheetUpdatePromptDismissedKey(googleSheetPromptKey(file?.id, file?.modifiedTime));
     setGoogleSheetUpdatePrompt(null);
   };
 
   const reloadActiveRosterFromGoogleSheet = async () => {
     if (!googleDriveAccessToken) {
-      showRosterToolsNotice(
-        "Sign in with Google first",
-        "Sign in with your Google account before reloading a shared roster.",
-        "warning",
-      );
+      showRosterToolsNotice("Sign in with Google first", "Sign in with your Google account before reloading a shared roster.", "warning");
       return;
     }
     if (!activeGoogleSheetSource?.spreadsheetId) {
-      showRosterToolsNotice(
-        "No shared roster linked",
-        "Make this roster shared or open a shared roster first.",
-        "warning",
-      );
+      showRosterToolsNotice("No shared roster linked", "Make this roster shared or open a shared roster first.", "warning");
       return;
     }
 
     setGoogleSheetOpening(true);
     try {
-      const { file, roster } = await readGoogleSheetRoster(
-        googleDriveAccessToken,
-        activeGoogleSheetSource.spreadsheetId,
-      );
+      const { file, roster } = await readGoogleSheetRoster(googleDriveAccessToken, activeGoogleSheetSource.spreadsheetId);
       setRosterState((current) => {
-        const [withLocalImages] = preserveLocalImagesForDriveRosters(
-          [roster],
-          current.rosters,
-        );
-        const currentRoster = current.rosters.find(
-          (item) => item.id === current.activeRosterId,
-        );
+        const [withLocalImages] = preserveLocalImagesForDriveRosters([roster], current.rosters);
+        const currentRoster = current.rosters.find((item) => item.id === current.activeRosterId);
         const nextRoster = normalizeRoster({
           ...withLocalImages,
           id: currentRoster?.id || withLocalImages.id,
           logo: withLocalImages.logo || currentRoster?.logo,
-          cloudSource: sheetCloudSourceFromFile(
-            file,
-            withLocalImages.cloudSource?.accessLabels,
-          ),
+          cloudSource: sheetCloudSourceFromFile(file, withLocalImages.cloudSource?.accessLabels),
         });
         return {
           ...current,
@@ -2669,21 +2120,13 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
           activeRosterId: nextRoster.id,
         };
       });
-      showRosterToolsNotice(
-        "Latest changes loaded",
-        "This device now has the latest shared roster. Local photos were preserved.",
-        "success",
-      );
+      showRosterToolsNotice("Latest changes loaded", "This device now has the latest shared roster. Local photos were preserved.", "success");
     } catch (error) {
       if (isMissingSharedRosterError(error)) {
         handleMissingActiveGoogleSheetLink();
         return;
       }
-      showRosterToolsNotice(
-        "Could not reload shared roster",
-        error instanceof Error ? error.message : "Please try again.",
-        "error",
-      );
+      showRosterToolsNotice("Could not reload shared roster", error instanceof Error ? error.message : "Please try again.", "error");
     } finally {
       setGoogleSheetOpening(false);
     }
@@ -2691,26 +2134,16 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
 
   const saveAllSharedRostersToGoogleSheets = async () => {
     if (!googleDriveAccessToken) {
-      showRosterToolsNotice(
-        "Sign in with Google first",
-        "Sign in with your Google account before saving shared rosters.",
-        "warning",
-      );
+      showRosterToolsNotice("Sign in with Google first", "Sign in with your Google account before saving shared rosters.", "warning");
       return;
     }
 
     const sharedRosters = rosters.filter(
-      (roster) =>
-        roster.cloudSource?.provider === "google-sheets" &&
-        Boolean(roster.cloudSource.spreadsheetId),
+      (roster) => roster.cloudSource?.provider === "google-sheets" && Boolean(roster.cloudSource.spreadsheetId),
     );
 
     if (sharedRosters.length === 0) {
-      showRosterToolsNotice(
-        "No shared rosters",
-        "Make or open a shared roster first.",
-        "info",
-      );
+      showRosterToolsNotice("No shared rosters", "Make or open a shared roster first.", "info");
       return;
     }
 
@@ -2721,16 +2154,10 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
       const newerOnlineNames: string[] = [];
       const failedNames: string[] = [];
       const missingRosterIds = new Set<string>();
-      const sourceUpdates = new Map<
-        string,
-        ReturnType<typeof sheetCloudSourceFromFile>
-      >();
+      const sourceUpdates = new Map<string, ReturnType<typeof sheetCloudSourceFromFile>>();
 
       for (const roster of sharedRosters) {
-        const source =
-          roster.cloudSource?.provider === "google-sheets"
-            ? roster.cloudSource
-            : null;
+        const source = roster.cloudSource?.provider === "google-sheets" ? roster.cloudSource : null;
         const spreadsheetId = source?.spreadsheetId;
         if (!spreadsheetId) continue;
 
@@ -2740,28 +2167,13 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
         }
 
         try {
-          const latestFile = await getGoogleSheetRosterFileMetadata(
-            googleDriveAccessToken,
-            spreadsheetId,
-          );
-          if (
-            isGoogleSheetRemoteNewer(
-              latestFile.modifiedTime,
-              source.lastRemoteModifiedAt,
-            )
-          ) {
+          const latestFile = await getGoogleSheetRosterFileMetadata(googleDriveAccessToken, spreadsheetId);
+          if (isGoogleSheetRemoteNewer(latestFile.modifiedTime, source.lastRemoteModifiedAt)) {
             newerOnlineNames.push(roster.name);
             continue;
           }
-          const file = await updateGoogleSheetRoster(
-            googleDriveAccessToken,
-            spreadsheetId,
-            roster,
-          );
-          sourceUpdates.set(
-            roster.id,
-            sheetCloudSourceFromFile(file, source.accessLabels),
-          );
+          const file = await updateGoogleSheetRoster(googleDriveAccessToken, spreadsheetId, roster);
+          sourceUpdates.set(roster.id, sheetCloudSourceFromFile(file, source.accessLabels));
           savedCount += 1;
         } catch (error) {
           if (isMissingSharedRosterError(error)) {
@@ -2778,53 +2190,28 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
           rosters: current.rosters.map((roster) => {
             if (missingRosterIds.has(roster.id)) {
               const { cloudSource: _cloudSource, ...localRoster } = roster;
-              return normalizeRoster({
-                ...localRoster,
-                updatedAt: new Date().toISOString(),
-              });
+              return normalizeRoster({ ...localRoster, updatedAt: new Date().toISOString() });
             }
             const nextSource = sourceUpdates.get(roster.id);
             return nextSource
-              ? normalizeRoster({
-                  ...roster,
-                  cloudSource: nextSource,
-                  updatedAt: new Date().toISOString(),
-                })
+              ? normalizeRoster({ ...roster, cloudSource: nextSource, updatedAt: new Date().toISOString() })
               : roster;
           }),
         }));
       }
 
       const summaryLines = [
-        savedCount > 0
-          ? `Saved ${savedCount} roster${savedCount === 1 ? "" : "s"}.`
-          : "No rosters were saved.",
-        newerOnlineNames.length > 0
-          ? `${newerOnlineNames.length} roster${newerOnlineNames.length === 1 ? " has" : "s have"} newer changes online. Get latest before saving: ${newerOnlineNames.slice(0, 3).join(", ")}${newerOnlineNames.length > 3 ? "…" : ""}`
-          : "",
-        skippedEmptyCount > 0
-          ? `Skipped ${skippedEmptyCount} empty shared roster${skippedEmptyCount === 1 ? "" : "s"} to avoid erasing shared data.`
-          : "",
-        missingRosterIds.size > 0
-          ? `Removed ${missingRosterIds.size} broken shared link${missingRosterIds.size === 1 ? "" : "s"} from this device.`
-          : "",
-        failedNames.length > 0
-          ? `Could not save: ${failedNames.slice(0, 3).join(", ")}${failedNames.length > 3 ? "…" : ""}`
-          : "",
+        savedCount > 0 ? `Saved ${savedCount} roster${savedCount === 1 ? "" : "s"}.` : "No rosters were saved.",
+        newerOnlineNames.length > 0 ? `${newerOnlineNames.length} roster${newerOnlineNames.length === 1 ? " has" : "s have"} newer changes online. Get latest before saving: ${newerOnlineNames.slice(0, 3).join(", ")}${newerOnlineNames.length > 3 ? "…" : ""}` : "",
+        skippedEmptyCount > 0 ? `Skipped ${skippedEmptyCount} empty shared roster${skippedEmptyCount === 1 ? "" : "s"} to avoid erasing shared data.` : "",
+        missingRosterIds.size > 0 ? `Removed ${missingRosterIds.size} broken shared link${missingRosterIds.size === 1 ? "" : "s"} from this device.` : "",
+        failedNames.length > 0 ? `Could not save: ${failedNames.slice(0, 3).join(", ")}${failedNames.length > 3 ? "…" : ""}` : "",
       ].filter(Boolean);
 
       showRosterToolsNotice(
-        newerOnlineNames.length > 0 ||
-          failedNames.length > 0 ||
-          missingRosterIds.size > 0
-          ? "Shared roster save finished with notes"
-          : "Shared rosters saved",
+        newerOnlineNames.length > 0 || failedNames.length > 0 || missingRosterIds.size > 0 ? "Shared roster save finished with notes" : "Shared rosters saved",
         summaryLines.join("\n"),
-        newerOnlineNames.length > 0 ||
-          failedNames.length > 0 ||
-          missingRosterIds.size > 0
-          ? "warning"
-          : "success",
+        newerOnlineNames.length > 0 || failedNames.length > 0 || missingRosterIds.size > 0 ? "warning" : "success",
       );
     } finally {
       setGoogleSheetSyncing(false);
@@ -2833,57 +2220,33 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
 
   const getLatestForAllSharedRosters = async () => {
     if (!googleDriveAccessToken) {
-      showRosterToolsNotice(
-        "Sign in with Google first",
-        "Sign in with your Google account before getting latest shared rosters.",
-        "warning",
-      );
+      showRosterToolsNotice("Sign in with Google first", "Sign in with your Google account before getting latest shared rosters.", "warning");
       return;
     }
 
     const sharedRosters = rosters.filter(
-      (roster) =>
-        roster.cloudSource?.provider === "google-sheets" &&
-        Boolean(roster.cloudSource.spreadsheetId),
+      (roster) => roster.cloudSource?.provider === "google-sheets" && Boolean(roster.cloudSource.spreadsheetId),
     );
 
     if (sharedRosters.length === 0) {
-      showRosterToolsNotice(
-        "No shared rosters",
-        "Make or open a shared roster first.",
-        "info",
-      );
+      showRosterToolsNotice("No shared rosters", "Make or open a shared roster first.", "info");
       return;
     }
 
     setGoogleSheetOpening(true);
     try {
-      const loaded: {
-        localRosterId: string;
-        file: GoogleSheetRosterFile;
-        roster: RoomRoster;
-      }[] = [];
+      const loaded: { localRosterId: string; file: GoogleSheetRosterFile; roster: RoomRoster }[] = [];
       const missingRosterIds = new Set<string>();
       const failedNames: string[] = [];
 
       for (const roster of sharedRosters) {
-        const source =
-          roster.cloudSource?.provider === "google-sheets"
-            ? roster.cloudSource
-            : null;
+        const source = roster.cloudSource?.provider === "google-sheets" ? roster.cloudSource : null;
         const spreadsheetId = source?.spreadsheetId;
         if (!spreadsheetId) continue;
 
         try {
-          const latest = await readGoogleSheetRoster(
-            googleDriveAccessToken,
-            spreadsheetId,
-          );
-          loaded.push({
-            localRosterId: roster.id,
-            file: latest.file,
-            roster: latest.roster,
-          });
+          const latest = await readGoogleSheetRoster(googleDriveAccessToken, spreadsheetId);
+          loaded.push({ localRosterId: roster.id, file: latest.file, roster: latest.roster });
         } catch (error) {
           if (isMissingSharedRosterError(error)) {
             missingRosterIds.add(roster.id);
@@ -2897,21 +2260,13 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
         setRosterState((current) => {
           let nextRosters = current.rosters;
           loaded.forEach((item) => {
-            const [withLocalImages] = preserveLocalImagesForDriveRosters(
-              [item.roster],
-              nextRosters,
-            );
-            const currentRoster = nextRosters.find(
-              (roster) => roster.id === item.localRosterId,
-            );
+            const [withLocalImages] = preserveLocalImagesForDriveRosters([item.roster], nextRosters);
+            const currentRoster = nextRosters.find((roster) => roster.id === item.localRosterId);
             const nextRoster = normalizeRoster({
               ...withLocalImages,
               id: currentRoster?.id || withLocalImages.id,
               logo: withLocalImages.logo || currentRoster?.logo,
-              cloudSource: sheetCloudSourceFromFile(
-                item.file,
-                withLocalImages.cloudSource?.accessLabels,
-              ),
+              cloudSource: sheetCloudSourceFromFile(item.file, withLocalImages.cloudSource?.accessLabels),
             });
             nextRosters = nextRosters.map((roster) =>
               roster.id === item.localRosterId ? nextRoster : roster,
@@ -2921,10 +2276,7 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
             nextRosters = nextRosters.map((roster) => {
               if (!missingRosterIds.has(roster.id)) return roster;
               const { cloudSource: _cloudSource, ...localRoster } = roster;
-              return normalizeRoster({
-                ...localRoster,
-                updatedAt: new Date().toISOString(),
-              });
+              return normalizeRoster({ ...localRoster, updatedAt: new Date().toISOString() });
             });
           }
           return { ...current, rosters: nextRosters };
@@ -2932,25 +2284,15 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
       }
 
       const summaryLines = [
-        loaded.length > 0
-          ? `Got latest changes for ${loaded.length} roster${loaded.length === 1 ? "" : "s"}.`
-          : "No rosters were updated.",
-        missingRosterIds.size > 0
-          ? `Removed ${missingRosterIds.size} broken shared link${missingRosterIds.size === 1 ? "" : "s"} from this device.`
-          : "",
-        failedNames.length > 0
-          ? `Could not update: ${failedNames.slice(0, 3).join(", ")}${failedNames.length > 3 ? "…" : ""}`
-          : "",
+        loaded.length > 0 ? `Got latest changes for ${loaded.length} roster${loaded.length === 1 ? "" : "s"}.` : "No rosters were updated.",
+        missingRosterIds.size > 0 ? `Removed ${missingRosterIds.size} broken shared link${missingRosterIds.size === 1 ? "" : "s"} from this device.` : "",
+        failedNames.length > 0 ? `Could not update: ${failedNames.slice(0, 3).join(", ")}${failedNames.length > 3 ? "…" : ""}` : "",
       ].filter(Boolean);
 
       showRosterToolsNotice(
-        failedNames.length > 0 || missingRosterIds.size > 0
-          ? "Latest changes finished with notes"
-          : "Latest changes received",
+        failedNames.length > 0 || missingRosterIds.size > 0 ? "Latest changes finished with notes" : "Latest changes received",
         summaryLines.join("\n"),
-        failedNames.length > 0 || missingRosterIds.size > 0
-          ? "warning"
-          : "success",
+        failedNames.length > 0 || missingRosterIds.size > 0 ? "warning" : "success",
       );
     } finally {
       setGoogleSheetOpening(false);
@@ -2959,19 +2301,11 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
 
   const openGoogleSheetRosterList = async () => {
     if (!googleDriveConfig.isConfigured) {
-      showRosterToolsNotice(
-        "Google Drive not configured",
-        "Add VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_API_KEY before opening shared rosters.",
-        "warning",
-      );
+      showRosterToolsNotice("Google Drive not configured", "Add VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_API_KEY before opening shared rosters.", "warning");
       return;
     }
     if (!googleDriveAccessToken) {
-      showRosterToolsNotice(
-        "Sign in with Google first",
-        "Sign in with your Google account before opening shared rosters.",
-        "warning",
-      );
+      showRosterToolsNotice("Sign in with Google first", "Sign in with your Google account before opening shared rosters.", "warning");
       return;
     }
 
@@ -2980,31 +2314,20 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
       const files = await listGoogleSheetRosterFiles(googleDriveAccessToken);
       setGoogleSheetChoices(files);
     } catch (error) {
-      showRosterToolsNotice(
-        "Could not list shared rosters",
-        error instanceof Error ? error.message : "Please try again.",
-        "error",
-      );
+      showRosterToolsNotice("Could not list shared rosters", error instanceof Error ? error.message : "Please try again.", "error");
     } finally {
       setGoogleSheetOpening(false);
     }
   };
 
+
   const findGoogleSheetRosterInDrive = async () => {
     if (!googleDriveConfig.isConfigured) {
-      showRosterToolsNotice(
-        "Google Drive not configured",
-        "Add VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_API_KEY before opening shared rosters.",
-        "warning",
-      );
+      showRosterToolsNotice("Google Drive not configured", "Add VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_API_KEY before opening shared rosters.", "warning");
       return;
     }
     if (!googleDriveAccessToken) {
-      showRosterToolsNotice(
-        "Sign in with Google first",
-        "Sign in with your Google account before opening shared rosters.",
-        "warning",
-      );
+      showRosterToolsNotice("Sign in with Google first", "Sign in with your Google account before opening shared rosters.", "warning");
       return;
     }
 
@@ -3017,24 +2340,15 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
     setGoogleSheetOpening(false);
 
     try {
-      await new Promise<void>((resolve) =>
-        window.requestAnimationFrame(() => resolve()),
-      );
+      await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
       const picked = await pickGoogleSheetRosterFile(googleDriveAccessToken);
       if (!picked) return;
 
       setGoogleSheetOpening(true);
-      const file = await getGoogleSheetRosterFileMetadata(
-        googleDriveAccessToken,
-        picked.id,
-      );
+      const file = await getGoogleSheetRosterFileMetadata(googleDriveAccessToken, picked.id);
       setGoogleSheetActionFile(file);
     } catch (error) {
-      showRosterToolsNotice(
-        "Could not open shared roster file",
-        error instanceof Error ? error.message : "Please try again.",
-        "error",
-      );
+      showRosterToolsNotice("Could not open shared roster file", error instanceof Error ? error.message : "Please try again.", "error");
     } finally {
       setGoogleSheetOpening(false);
     }
@@ -3042,41 +2356,27 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
 
   const openGoogleSheetRosterFile = async (picked: GoogleSheetRosterFile) => {
     if (!googleDriveAccessToken) {
-      showRosterToolsNotice(
-        "Sign in with Google first",
-        "Sign in with your Google account before opening shared rosters.",
-        "warning",
-      );
+      showRosterToolsNotice("Sign in with Google first", "Sign in with your Google account before opening shared rosters.", "warning");
       return;
     }
 
     setGoogleSheetOpening(true);
     try {
-      const { file, roster } = await readGoogleSheetRoster(
-        googleDriveAccessToken,
-        picked.id,
-      );
+      const { file, roster } = await readGoogleSheetRoster(googleDriveAccessToken, picked.id);
       setRosterState((current) => {
-        const [withLocalImages] = preserveLocalImagesForDriveRosters(
-          [roster],
-          current.rosters,
-        );
+        const [withLocalImages] = preserveLocalImagesForDriveRosters([roster], current.rosters);
         const currentIsStarter =
           current.rosters.length === 1 &&
           current.rosters[0]?.players.length === 0 &&
           current.rosters[0]?.name === EMPTY_ROSTER_NAME;
         const existingIndex = current.rosters.findIndex(
           (item) =>
-            (item.cloudSource?.provider === "google-sheets" &&
-              item.cloudSource.spreadsheetId === file.id) ||
+            (item.cloudSource?.provider === "google-sheets" && item.cloudSource.spreadsheetId === file.id) ||
             item.id === withLocalImages.id,
         );
         const baseRoster = normalizeRoster({
           ...withLocalImages,
-          cloudSource: sheetCloudSourceFromFile(
-            file,
-            withLocalImages.cloudSource?.accessLabels,
-          ),
+          cloudSource: sheetCloudSourceFromFile(file, withLocalImages.cloudSource?.accessLabels),
         });
 
         if (currentIsStarter) {
@@ -3110,17 +2410,9 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
       setGoogleSheetChoices(null);
       setGoogleSheetActionFile(null);
       setRosterFilesOpen(false);
-      showRosterToolsNotice(
-        "Shared roster opened",
-        `${file.name} is now available in Fair Teams.`,
-        "success",
-      );
+      showRosterToolsNotice("Shared roster opened", `${file.name} is now available in Fair Teams.`, "success");
     } catch (error) {
-      showRosterToolsNotice(
-        "Could not open shared roster",
-        error instanceof Error ? error.message : "Please try again.",
-        "error",
-      );
+      showRosterToolsNotice("Could not open shared roster", error instanceof Error ? error.message : "Please try again.", "error");
     } finally {
       setGoogleSheetOpening(false);
     }
@@ -3147,18 +2439,9 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
   };
 
   const confirmDeleteGoogleSheetRoster = async () => {
-    if (
-      googleSheetDeleteSlide < 95 ||
-      !googleSheetDeleteConfirm ||
-      googleSheetDeleting
-    )
-      return;
+    if (googleSheetDeleteSlide < 95 || !googleSheetDeleteConfirm || googleSheetDeleting) return;
     if (!googleDriveAccessToken) {
-      showRosterToolsNotice(
-        "Sign in with Google first",
-        "Sign in with the owner account before deleting a shared roster.",
-        "warning",
-      );
+      showRosterToolsNotice("Sign in with Google first", "Sign in with the owner account before deleting a shared roster.", "warning");
       return;
     }
 
@@ -3166,21 +2449,12 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
     setGoogleSheetDeleting(true);
     try {
       await trashGoogleSheetRoster(googleDriveAccessToken, file.id);
-      setGoogleSheetChoices((choices) =>
-        choices ? choices.filter((item) => item.id !== file.id) : choices,
-      );
+      setGoogleSheetChoices((choices) => choices ? choices.filter((item) => item.id !== file.id) : choices);
       setRosterState((current) => ({
         ...current,
         rosters: current.rosters.map((roster) => {
-          if (
-            roster.cloudSource?.provider === "google-sheets" &&
-            roster.cloudSource.spreadsheetId === file.id
-          ) {
-            return normalizeRoster({
-              ...roster,
-              cloudSource: undefined,
-              updatedAt: new Date().toISOString(),
-            });
+          if (roster.cloudSource?.provider === "google-sheets" && roster.cloudSource.spreadsheetId === file.id) {
+            return normalizeRoster({ ...roster, cloudSource: undefined, updatedAt: new Date().toISOString() });
           }
           return roster;
         }),
@@ -3193,28 +2467,18 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
         "success",
       );
     } catch (error) {
-      showRosterToolsNotice(
-        "Could not delete shared roster",
-        error instanceof Error ? error.message : "Please try again.",
-        "error",
-      );
+      showRosterToolsNotice("Could not delete shared roster", error instanceof Error ? error.message : "Please try again.", "error");
     } finally {
       setGoogleSheetDeleting(false);
     }
   };
 
   const loadGoogleSheetAccessList = async () => {
-    if (!googleDriveAccessToken || !activeGoogleSheetSource?.spreadsheetId)
-      return;
+    if (!googleDriveAccessToken || !activeGoogleSheetSource?.spreadsheetId) return;
     setGoogleSheetAccessLoading(true);
     try {
-      const permissions = await listGoogleDriveFilePermissions(
-        googleDriveAccessToken,
-        activeGoogleSheetSource.spreadsheetId,
-      );
-      setGoogleSheetAccessList(
-        permissions.filter((permission) => !permission.deleted),
-      );
+      const permissions = await listGoogleDriveFilePermissions(googleDriveAccessToken, activeGoogleSheetSource.spreadsheetId);
+      setGoogleSheetAccessList(permissions.filter((permission) => !permission.deleted));
     } catch (error) {
       if (isMissingSharedRosterError(error)) {
         handleMissingActiveGoogleSheetLink();
@@ -3222,11 +2486,7 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
         return;
       }
       setGoogleSheetAccessList([]);
-      showRosterToolsNotice(
-        "Could not load sharing access",
-        error instanceof Error ? error.message : "Please try again.",
-        "error",
-      );
+      showRosterToolsNotice("Could not load sharing access", error instanceof Error ? error.message : "Please try again.", "error");
     } finally {
       setGoogleSheetAccessLoading(false);
     }
@@ -3234,19 +2494,11 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
 
   const openGoogleSheetShareModal = async () => {
     if (!googleDriveAccessToken) {
-      showRosterToolsNotice(
-        "Sign in with Google first",
-        "Sign in with your Google account before managing sharing access.",
-        "warning",
-      );
+      showRosterToolsNotice("Sign in with Google first", "Sign in with your Google account before managing sharing access.", "warning");
       return;
     }
     if (!activeGoogleSheetSource?.spreadsheetId) {
-      showRosterToolsNotice(
-        "Make it shared first",
-        "Create or open a shared roster before managing access.",
-        "warning",
-      );
+      showRosterToolsNotice("Make it shared first", "Create or open a shared roster before managing access.", "warning");
       return;
     }
     setGoogleSheetShareName("");
@@ -3268,9 +2520,7 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
     try {
       const email = normalizeShareEmail(googleSheetShareEmail);
       const editorName = cleanPersonName(googleSheetShareName);
-      const nextAccessLabels = {
-        ...(activeGoogleSheetSource.accessLabels || {}),
-      };
+      const nextAccessLabels = { ...(activeGoogleSheetSource.accessLabels || {}) };
       if (editorName) {
         nextAccessLabels[email] = editorName;
       }
@@ -3290,30 +2540,20 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
       setGoogleSheetShareName("");
       setGoogleSheetShareEmail("");
       await loadGoogleSheetAccessList();
-      showRosterToolsNotice(
-        "Editor added",
-        `${editorName || email} can now edit this shared roster through Fair Teams.`,
-        "success",
-      );
+      showRosterToolsNotice("Editor added", `${editorName || email} can now edit this shared roster through Fair Teams.`, "success");
     } catch (error) {
       if (isMissingSharedRosterError(error)) {
         handleMissingActiveGoogleSheetLink();
         setGoogleSheetShareOpen(false);
         return;
       }
-      showRosterToolsNotice(
-        "Could not share roster",
-        error instanceof Error ? error.message : "Please try again.",
-        "error",
-      );
+      showRosterToolsNotice("Could not share roster", error instanceof Error ? error.message : "Please try again.", "error");
     } finally {
       setGoogleSheetSharing(false);
     }
   };
 
-  const removeGoogleSheetEditorAccess = async (
-    permission: GoogleDrivePermissionResult,
-  ) => {
+  const removeGoogleSheetEditorAccess = async (permission: GoogleDrivePermissionResult) => {
     if (!activeGoogleSheetSource?.spreadsheetId || !permission.id) return;
     const label = drivePermissionLabel(permission);
     const confirmed = window.confirm(`Remove access for ${label}?
@@ -3323,14 +2563,8 @@ They will no longer be able to open or edit this shared roster unless it is shar
 
     setGoogleSheetRemovingPermissionId(permission.id);
     try {
-      await deleteGoogleDriveFilePermission(
-        googleDriveAccessToken,
-        activeGoogleSheetSource.spreadsheetId,
-        permission.id,
-      );
-      const email = permission.emailAddress
-        ? normalizeShareEmail(permission.emailAddress)
-        : "";
+      await deleteGoogleDriveFilePermission(googleDriveAccessToken, activeGoogleSheetSource.spreadsheetId, permission.id);
+      const email = permission.emailAddress ? normalizeShareEmail(permission.emailAddress) : "";
       if (email && activeGoogleSheetSource.accessLabels?.[email]) {
         const nextAccessLabels = { ...activeGoogleSheetSource.accessLabels };
         delete nextAccessLabels[email];
@@ -3341,20 +2575,10 @@ They will no longer be able to open or edit this shared roster unless it is shar
         );
         updateActiveRosterGoogleSheetSource(updatedFile, nextAccessLabels);
       }
-      setGoogleSheetAccessList((current) =>
-        current ? current.filter((item) => item.id !== permission.id) : current,
-      );
-      showRosterToolsNotice(
-        "Access removed",
-        `${label} can no longer access this shared roster through this direct file permission.`,
-        "success",
-      );
+      setGoogleSheetAccessList((current) => current ? current.filter((item) => item.id !== permission.id) : current);
+      showRosterToolsNotice("Access removed", `${label} can no longer access this shared roster through this direct file permission.`, "success");
     } catch (error) {
-      showRosterToolsNotice(
-        "Could not remove access",
-        error instanceof Error ? error.message : "Please try again.",
-        "error",
-      );
+      showRosterToolsNotice("Could not remove access", error instanceof Error ? error.message : "Please try again.", "error");
     } finally {
       setGoogleSheetRemovingPermissionId("");
     }
@@ -3362,19 +2586,11 @@ They will no longer be able to open or edit this shared roster unless it is shar
 
   const openDriveShareModal = () => {
     if (!googleDriveConnected) {
-      showRosterToolsNotice(
-        "Sign in with Google first",
-        "Sign in with your Google account before sending a backup copy.",
-        "warning",
-      );
+      showRosterToolsNotice("Sign in with Google first", "Sign in with your Google account before sending a backup copy.", "warning");
       return;
     }
     if (!hasPrivateBackupRosters) {
-      showRosterToolsNotice(
-        "No local rosters to back up",
-        "Shared rosters stay online in Shared rosters. Make a private copy first if you want a local backup version.",
-        "warning",
-      );
+      showRosterToolsNotice("No local rosters to back up", "Shared rosters stay online in Shared rosters. Make a private copy first if you want a local backup version.", "warning");
       return;
     }
     setDriveShareEmail("");
@@ -3391,11 +2607,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
     }
     const email = normalizeShareEmail(driveShareEmail);
     if (driveRecipients.some((recipient) => recipient.email === email)) {
-      showRosterToolsNotice(
-        "Already saved",
-        "That email is already in your send list.",
-        "info",
-      );
+      showRosterToolsNotice("Already saved", "That email is already in your send list.", "info");
       return;
     }
     const fallbackName = email.split("@")[0] || email;
@@ -3411,12 +2623,8 @@ They will no longer be able to open or edit this shared roster unless it is shar
   };
 
   const removeDriveRecipient = (recipientId: string) => {
-    setDriveRecipients((current) =>
-      current.filter((recipient) => recipient.id !== recipientId),
-    );
-    setSelectedDriveRecipientIds((current) =>
-      current.filter((id) => id !== recipientId),
-    );
+    setDriveRecipients((current) => current.filter((recipient) => recipient.id !== recipientId));
+    setSelectedDriveRecipientIds((current) => current.filter((id) => id !== recipientId));
   };
 
   const toggleDriveRecipient = (recipientId: string) => {
@@ -3428,15 +2636,9 @@ They will no longer be able to open or edit this shared roster unless it is shar
   };
 
   const prepareDriveShare = () => {
-    const recipients = driveRecipients.filter((recipient) =>
-      selectedDriveRecipientIds.includes(recipient.id),
-    );
+    const recipients = driveRecipients.filter((recipient) => selectedDriveRecipientIds.includes(recipient.id));
     if (recipients.length === 0) {
-      showRosterToolsNotice(
-        "Choose recipients",
-        "Select at least one saved person, or add a new email first.",
-        "warning",
-      );
+      showRosterToolsNotice("Choose recipients", "Select at least one saved person, or add a new email first.", "warning");
       return;
     }
     setDriveShareConfirm({ recipients });
@@ -3454,16 +2656,10 @@ They will no longer be able to open or edit this shared roster unless it is shar
       );
       await Promise.all(
         driveShareConfirm.recipients.map((recipient) =>
-          shareGoogleDriveFileWithViewer(
-            googleDriveAccessToken,
-            file.id,
-            recipient.email,
-          ),
+          shareGoogleDriveFileWithViewer(googleDriveAccessToken, file.id, recipient.email),
         ),
       );
-      const names = driveShareConfirm.recipients
-        .map((recipient) => recipient.name || recipient.email)
-        .join(", ");
+      const names = driveShareConfirm.recipients.map((recipient) => recipient.name || recipient.email).join(", ");
       setDriveShareOpen(false);
       setDriveShareConfirm(null);
       showRosterToolsNotice(
@@ -3472,11 +2668,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
         "success",
       );
     } catch (error) {
-      showRosterToolsNotice(
-        "Could not send backup copy",
-        error instanceof Error ? error.message : "Please try again.",
-        "error",
-      );
+      showRosterToolsNotice("Could not send backup copy", error instanceof Error ? error.message : "Please try again.", "error");
     } finally {
       setGoogleDriveSharing(false);
     }
@@ -3486,19 +2678,10 @@ They will no longer be able to open or edit this shared roster unless it is shar
     if (!currentDriveBackup) return;
     setDriveAccessLoading(true);
     try {
-      const permissions = await listGoogleDriveFilePermissions(
-        googleDriveAccessToken,
-        currentDriveBackup.id,
-      );
-      setDriveAccessList(
-        permissions.filter((permission) => !permission.deleted),
-      );
+      const permissions = await listGoogleDriveFilePermissions(googleDriveAccessToken, currentDriveBackup.id);
+      setDriveAccessList(permissions.filter((permission) => !permission.deleted));
     } catch (error) {
-      showRosterToolsNotice(
-        "Could not load sharing access",
-        error instanceof Error ? error.message : "Please try again.",
-        "error",
-      );
+      showRosterToolsNotice("Could not load sharing access", error instanceof Error ? error.message : "Please try again.", "error");
     } finally {
       setDriveAccessLoading(false);
     }
@@ -3506,19 +2689,11 @@ They will no longer be able to open or edit this shared roster unless it is shar
 
   const openDriveAccessManager = async () => {
     if (!googleDriveConnected) {
-      showRosterToolsNotice(
-        "Sign in with Google first",
-        "Sign in with your Google account before managing Drive access.",
-        "warning",
-      );
+      showRosterToolsNotice("Sign in with Google first", "Sign in with your Google account before managing Drive access.", "warning");
       return;
     }
     if (!currentDriveBackup) {
-      showRosterToolsNotice(
-        "No Drive file selected",
-        "Save or open a Drive backup first, then you can manage access to that selected file.",
-        "warning",
-      );
+      showRosterToolsNotice("No Drive file selected", "Save or open a Drive backup first, then you can manage access to that selected file.", "warning");
       return;
     }
     setDriveAccessOpen(true);
@@ -3539,21 +2714,11 @@ They will no longer be able to open or edit this shared roster unless it is shar
       const removedLabel = driveRemoveConfirm.label;
       setDriveRemoveConfirm(null);
       setDriveAccessList((current) =>
-        current
-          ? current.filter((permission) => permission.id !== permissionId)
-          : current,
+        current ? current.filter((permission) => permission.id !== permissionId) : current,
       );
-      showRosterToolsNotice(
-        "Access removed",
-        `${removedLabel} can no longer access this Drive backup through this direct file permission.`,
-        "success",
-      );
+      showRosterToolsNotice("Access removed", `${removedLabel} can no longer access this Drive backup through this direct file permission.`, "success");
     } catch (error) {
-      showRosterToolsNotice(
-        "Could not remove access",
-        error instanceof Error ? error.message : "Please try again.",
-        "error",
-      );
+      showRosterToolsNotice("Could not remove access", error instanceof Error ? error.message : "Please try again.", "error");
     } finally {
       setDriveRemovingPermissionId("");
     }
@@ -3602,11 +2767,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
       .filter((roster) => roster.players.length > 0 || mode === "backup");
 
     if (normalizedIncoming.length === 0) {
-      showRosterToolsNotice(
-        "Nothing to import",
-        "No players or rosters were found in that file.",
-        "warning",
-      );
+      showRosterToolsNotice("Nothing to import", "No players or rosters were found in that file.", "warning");
       return;
     }
 
@@ -3615,10 +2776,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
       sourceName,
       rosters: normalizedIncoming,
       rosterCount: normalizedIncoming.length,
-      playerCount: normalizedIncoming.reduce(
-        (sum, roster) => sum + roster.players.length,
-        0,
-      ),
+      playerCount: normalizedIncoming.reduce((sum, roster) => sum + roster.players.length, 0),
       rosterNames: normalizedIncoming.map((roster) => roster.name),
     });
   };
@@ -3716,6 +2874,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
     }
   };
 
+
   const openSharedRostersFromLocalFlow = () => {
     closeClearRoster();
     setRosterFilesOpen(false);
@@ -3794,10 +2953,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
     if (nextStack[nextStack.length - 1] === currentTab) {
       nextStack.pop();
     }
-    while (
-      nextStack.length > 1 &&
-      nextStack[nextStack.length - 1] === currentTab
-    ) {
+    while (nextStack.length > 1 && nextStack[nextStack.length - 1] === currentTab) {
       nextStack.pop();
     }
 
@@ -3854,12 +3010,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
   }, [activeTab]);
 
   useEffect(() => {
-    if (
-      showSplash ||
-      !hasTopLevelBackTarget ||
-      fairTeamsBackTrapArmedRef.current
-    )
-      return;
+    if (showSplash || !hasTopLevelBackTarget || fairTeamsBackTrapArmedRef.current) return;
     pushFairTeamsBackTrap();
   }, [hasTopLevelBackTarget, showSplash]);
 
@@ -3869,9 +3020,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
     const handlePopState = () => {
       fairTeamsBackTrapArmedRef.current = false;
 
-      const childBackEvent = new Event("fairteams:native-back", {
-        cancelable: true,
-      });
+      const childBackEvent = new Event("fairteams:native-back", { cancelable: true });
       const childDidNotHandleBack = window.dispatchEvent(childBackEvent);
       if (!childDidNotHandleBack) {
         pushFairTeamsBackTrap();
@@ -3984,37 +3133,34 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   {!shouldShowTodayStartHeader && !isEmptyStarterRoster && (
                     <span
                       className={`inline-flex h-5 shrink-0 items-center rounded-full px-1.5 text-[9px] font-black uppercase tracking-wide ${activeRosterIsShared ? "bg-violet-50 text-violet-700 ring-1 ring-violet-100" : "bg-slate-100 text-slate-500"}`}
-                      title={
-                        activeRosterIsShared ? "Shared roster" : "Local roster"
-                      }
+                      title={activeRosterIsShared ? "Shared roster" : "Local roster"}
                     >
                       {activeRosterIsShared ? "Shared" : "Local"}
                     </span>
                   )}
-                  {activeRosterIsFirebaseShared &&
-                    !shouldShowTodayStartHeader && (
-                      <span
-                        role="button"
-                        tabIndex={0}
-                        className="inline-flex h-5 shrink-0 items-center gap-0.5 rounded-full bg-emerald-50 px-1.5 text-[10px] font-black text-emerald-700 active:scale-95"
-                        title="Organizers"
-                        aria-label="Show people with access"
-                        onClick={(event) => {
+                  {activeRosterIsFirebaseShared && !shouldShowTodayStartHeader && (
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      className="inline-flex h-5 shrink-0 items-center gap-0.5 rounded-full bg-emerald-50 px-1.5 text-[10px] font-black text-emerald-700 active:scale-95"
+                      title="Organizers"
+                      aria-label="Show people with access"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setHeaderSharedPeopleOpen(true);
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
                           event.stopPropagation();
                           setHeaderSharedPeopleOpen(true);
-                        }}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter" || event.key === " ") {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            setHeaderSharedPeopleOpen(true);
-                          }
-                        }}
-                      >
-                        <Users className="h-3 w-3" />
-                        {rosterFirebaseSharedPeopleCount(activeRoster)}
-                      </span>
-                    )}
+                        }
+                      }}
+                    >
+                      <Users className="h-3 w-3" />
+                      {rosterFirebaseSharedPeopleCount(activeRoster)}
+                    </span>
+                  )}
                   {activeTab === "players" && (
                     <span
                       className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-[#102A43]/65 shadow-sm transition-colors group-hover:text-[#102A43]"
@@ -4034,24 +3180,22 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   <span className="block">Better games.</span>
                 </span>
               )}
-              {activeTab !== "teams" &&
-                activeTab !== "club" &&
-                !shouldShowTodayStartHeader && (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="icon"
-                    className="h-9 w-9 rounded-xl border border-slate-200 bg-white/85 text-[#102A43] shadow-none"
-                    onClick={() => {
-                      closeRosterToolsPanel();
-                      setRosterFilesOpen(true);
-                    }}
-                    title="Roster tools"
-                    aria-label="Roster tools"
-                  >
-                    <Settings className="w-4 h-4" />
-                  </Button>
-                )}
+              {activeTab !== "teams" && activeTab !== "club" && !shouldShowTodayStartHeader && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="icon"
+                  className="h-9 w-9 rounded-xl border border-slate-200 bg-white/85 text-[#102A43] shadow-none"
+                  onClick={() => {
+                    closeRosterToolsPanel();
+                    setRosterFilesOpen(true);
+                  }}
+                  title="Roster tools"
+                  aria-label="Roster tools"
+                >
+                  <Settings className="w-4 h-4" />
+                </Button>
+              )}
               <input
                 ref={fileInputRef}
                 type="file"
@@ -4077,56 +3221,29 @@ They will no longer be able to open or edit this shared roster unless it is shar
         </header>
 
         {headerSharedPeopleOpen && (
-          <div
-            className="fixed inset-0 z-[75] flex items-end justify-center bg-slate-950/20 p-3 sm:items-center"
-            onClick={() => setHeaderSharedPeopleOpen(false)}
-          >
-            <div
-              className="w-full max-w-xs rounded-3xl border border-slate-100 bg-white p-3 shadow-[0_14px_40px_rgba(15,23,42,0.16)]"
-              onClick={(event) => event.stopPropagation()}
-            >
+          <div className="fixed inset-0 z-[75] flex items-end justify-center bg-slate-950/20 p-3 sm:items-center" onClick={() => setHeaderSharedPeopleOpen(false)}>
+            <div className="w-full max-w-xs rounded-3xl border border-slate-100 bg-white p-3 shadow-[0_14px_40px_rgba(15,23,42,0.16)]" onClick={(event) => event.stopPropagation()}>
               <div className="mb-2 flex items-center justify-between gap-3 px-1">
                 <div>
-                  <div className="text-sm font-black text-[#102A43]">
-                    Organizers
-                  </div>
-                  <div className="text-[10px] font-bold text-slate-400">
-                    People who can open this shared roster
-                  </div>
+                  <div className="text-sm font-black text-[#102A43]">Organizers</div>
+                  <div className="text-[10px] font-bold text-slate-400">People who can open this shared roster</div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setHeaderSharedPeopleOpen(false)}
-                  className="rounded-full bg-slate-50 p-2 text-slate-500 active:scale-95"
-                  aria-label="Close organizers"
-                >
+                <button type="button" onClick={() => setHeaderSharedPeopleOpen(false)} className="rounded-full bg-slate-50 p-2 text-slate-500 active:scale-95" aria-label="Close organizers">
                   <X className="h-4 w-4" />
                 </button>
               </div>
               <div className="grid gap-1.5">
-                {activeFirebaseSharedPersonNames.length ? (
-                  activeFirebaseSharedPersonNames.map((name) => (
-                    <div
-                      key={name}
-                      className="rounded-2xl bg-slate-50 px-3 py-2 text-sm font-black text-[#102A43]"
-                    >
-                      {name}
-                    </div>
-                  ))
-                ) : (
-                  <div className="rounded-2xl bg-slate-50 px-3 py-2 text-sm font-bold text-slate-500">
-                    Only you
-                  </div>
+                {activeFirebaseSharedPersonNames.length ? activeFirebaseSharedPersonNames.map((name) => (
+                  <div key={name} className="rounded-2xl bg-slate-50 px-3 py-2 text-sm font-black text-[#102A43]">{name}</div>
+                )) : (
+                  <div className="rounded-2xl bg-slate-50 px-3 py-2 text-sm font-bold text-slate-500">Only you</div>
                 )}
               </div>
             </div>
           </div>
         )}
 
-        <div
-          className={`flex-1 overflow-y-auto p-4 md:p-5 ${shouldShowTodayStartHeader ? "pb-6 md:pb-6" : "pb-20 md:pb-20"}`}
-          style={{ WebkitOverflowScrolling: "touch" }}
-        >
+        <div className={`flex-1 overflow-y-auto p-4 md:p-5 ${shouldShowTodayStartHeader ? "pb-6 md:pb-6" : "pb-20 md:pb-20"}`} style={{ WebkitOverflowScrolling: "touch" }}>
           <div className="flex min-h-[calc(100dvh-116px)] flex-col">
             <TabsContent
               value="players"
@@ -4203,9 +3320,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 players={players}
                 isSharedRoster={activeRosterIsFirebaseShared}
                 sharedRosterId={activeFirebaseSource?.firebaseRosterId}
-                sharedPeopleCount={rosterFirebaseSharedPeopleCount(
-                  activeRoster,
-                )}
+                sharedPeopleCount={rosterFirebaseSharedPeopleCount(activeRoster)}
                 canSwitchRoster={!isEmptyStarterRoster && rosters.length > 1}
                 onOpenRosterPicker={() => setRosterPickerOpen(true)}
                 onBackTargetChange={setClubBackTargetOpen}
@@ -4215,77 +3330,25 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   setOpenPairingRulesToken((token) => token + 1);
                 }}
                 onOpenTeams={() => setActiveTab("teams")}
-                sharedToolsNode={
-                  <div className="grid gap-2">
-                    <FirebaseSharedRosterPublishCard
-                      variant="compact"
-                      activeRoster={activeRoster}
-                      rosters={rosters}
-                      isEmptyRoster={isEmptyStarterRoster}
-                      onOpenRoster={openFirebaseSharedRosterAsLocalCopy}
-                      onRosterSaved={markActiveFirebaseRosterSaved}
-                      onRefreshActiveRoster={
-                        refreshActiveFirebaseRosterFromRemote
-                      }
-                      onSharedRosterSummariesUpdated={
-                        syncFirebaseRosterBadgesFromSummaries
-                      }
-                      onSharedInviteOpened={finishSharedInviteOpen}
-                      openLibraryToken={sharedRosterLibraryOpenToken}
-                    />
-                    {activeRosterIsFirebaseShared && (
-                      <div className="grid gap-2 rounded-2xl border border-violet-100 bg-white/70 p-2">
-                        <div className="flex items-center gap-1.5 text-[10px] font-black text-violet-700">
-                          <Info className="h-3.5 w-3.5 shrink-0" />
-                          Opened here
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="h-9 rounded-2xl border-violet-100 bg-white px-2 text-violet-700 hover:bg-violet-50 hover:text-violet-800"
-                            onClick={() => setPrivateCopyConfirmOpen(true)}
-                          >
-                            <Copy className="mr-1 h-3.5 w-3.5" />
-                            <span className="truncate text-[11px] font-black">
-                              Private copy
-                            </span>
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="h-9 rounded-2xl border-violet-100 bg-white px-2 text-violet-700 hover:bg-violet-50 hover:text-violet-800"
-                            onClick={openClearRoster}
-                          >
-                            <X className="mr-1 h-3.5 w-3.5" />
-                            <span className="truncate text-[11px] font-black">
-                              Hide
-                            </span>
-                          </Button>
-                        </div>
-                        {activeFirebaseSource?.firebaseRole !== "owner" && (
-                          <Button
-                            type="button"
-                            className="h-9 rounded-2xl bg-violet-600 px-3 text-[11px] font-black text-white hover:bg-violet-700"
-                            onClick={() => setLeaveSharedConfirmOpen(true)}
-                          >
-                            <UserMinus className="mr-1 h-3.5 w-3.5" />
-                            Leave roster
-                          </Button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                }
-                equipmentGroupId={
-                  activeFirebaseSource?.firebaseRosterId
-                    ? `roster:${activeFirebaseSource.firebaseRosterId}`
-                    : undefined
-                }
+                sharedToolsNode={(
+                  <FirebaseSharedRosterPublishCard
+                    variant="compact"
+                    activeRoster={activeRoster}
+                    rosters={rosters}
+                    isEmptyRoster={isEmptyStarterRoster}
+                    onOpenRoster={openFirebaseSharedRosterAsLocalCopy}
+                    onRosterSaved={markActiveFirebaseRosterSaved}
+                    onRefreshActiveRoster={refreshActiveFirebaseRosterFromRemote}
+                    onSharedRosterSummariesUpdated={syncFirebaseRosterBadgesFromSummaries}
+                    onSharedInviteOpened={finishSharedInviteOpen}
+                    openLibraryToken={sharedRosterLibraryOpenToken}
+                    onMakePrivateCopy={activeRosterIsFirebaseShared ? () => setPrivateCopyConfirmOpen(true) : undefined}
+                    onHideOnDevice={activeRosterIsFirebaseShared ? openClearRoster : undefined}
+                  />
+                )}
+                equipmentGroupId={activeFirebaseSource?.firebaseRosterId ? `roster:${activeFirebaseSource.firebaseRosterId}` : undefined}
                 equipmentHolderLabels={activeFirebaseEquipmentHolderLabels}
-                equipmentHolderNamesByEmail={
-                  activeFirebaseEquipmentHolderNamesByEmail
-                }
+                equipmentHolderNamesByEmail={activeFirebaseEquipmentHolderNamesByEmail}
               />
             </TabsContent>
             <PoweredByFairTeams />
@@ -4299,33 +3362,25 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 value="players"
                 className="fairteams-tab-trigger fairteams-footer-text-tab flex h-full items-center justify-center rounded-xl text-slate-500 transition-all"
               >
-                <span className="text-[12px] font-semibold leading-none tracking-tight">
-                  Roster
-                </span>
+                <span className="text-[12px] font-semibold leading-none tracking-tight">Roster</span>
               </TabsTrigger>
               <TabsTrigger
                 value="today"
                 className="fairteams-tab-trigger fairteams-footer-text-tab flex h-full items-center justify-center rounded-xl text-slate-500 transition-all"
               >
-                <span className="text-[12px] font-semibold leading-none tracking-tight">
-                  Today
-                </span>
+                <span className="text-[12px] font-semibold leading-none tracking-tight">Today</span>
               </TabsTrigger>
               <TabsTrigger
                 value="teams"
                 className="fairteams-tab-trigger fairteams-footer-text-tab flex h-full items-center justify-center rounded-xl text-slate-500 transition-all"
               >
-                <span className="text-[12px] font-semibold leading-none tracking-tight">
-                  Teams
-                </span>
+                <span className="text-[12px] font-semibold leading-none tracking-tight">Teams</span>
               </TabsTrigger>
               <TabsTrigger
                 value="club"
                 className="fairteams-tab-trigger fairteams-footer-text-tab flex h-full items-center justify-center rounded-xl text-slate-500 transition-all"
               >
-                <span className="text-[12px] font-semibold leading-none tracking-tight">
-                  Club
-                </span>
+                <span className="text-[12px] font-semibold leading-none tracking-tight">Club</span>
               </TabsTrigger>
             </TabsList>
           </div>
@@ -4514,41 +3569,20 @@ They will no longer be able to open or edit this shared roster unless it is shar
               </Button>
             </div>
 
-            <div
-              className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain p-4"
-              style={{ WebkitOverflowScrolling: "touch" }}
-            >
+            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain p-4" style={{ WebkitOverflowScrolling: "touch" }}>
               <div
                 className={`sticky top-0 z-20 flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white/95 px-3 py-3 text-left shadow-sm backdrop-blur transition ${!isEmptyStarterRoster && rosters.length > 1 ? "cursor-pointer active:scale-[0.995] hover:border-slate-300 hover:bg-white" : ""}`}
-                role={
-                  !isEmptyStarterRoster && rosters.length > 1
-                    ? "button"
-                    : undefined
-                }
-                tabIndex={
-                  !isEmptyStarterRoster && rosters.length > 1 ? 0 : undefined
-                }
-                title={
-                  !isEmptyStarterRoster && rosters.length > 1
-                    ? "Change roster"
-                    : undefined
-                }
-                aria-label={
-                  !isEmptyStarterRoster && rosters.length > 1
-                    ? "Change current roster"
-                    : "Current roster"
-                }
+                role={!isEmptyStarterRoster && rosters.length > 1 ? "button" : undefined}
+                tabIndex={!isEmptyStarterRoster && rosters.length > 1 ? 0 : undefined}
+                title={!isEmptyStarterRoster && rosters.length > 1 ? "Change roster" : undefined}
+                aria-label={!isEmptyStarterRoster && rosters.length > 1 ? "Change current roster" : "Current roster"}
                 onClick={() => {
                   if (!isEmptyStarterRoster && rosters.length > 1) {
                     setRosterPickerOpen(true);
                   }
                 }}
                 onKeyDown={(event) => {
-                  if (
-                    !isEmptyStarterRoster &&
-                    rosters.length > 1 &&
-                    (event.key === "Enter" || event.key === " ")
-                  ) {
+                  if (!isEmptyStarterRoster && rosters.length > 1 && (event.key === "Enter" || event.key === " ")) {
                     event.preventDefault();
                     setRosterPickerOpen(true);
                   }
@@ -4560,13 +3594,9 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   </span>
                   <div className="mt-1 flex min-w-0 items-center gap-1.5">
                     <span className="min-w-0 truncate text-sm font-black text-[#102A43]">
-                      {isEmptyStarterRoster
-                        ? "Make a new roster"
-                        : activeRosterName}
+                      {isEmptyStarterRoster ? "Make a new roster" : activeRosterName}
                     </span>
-                    {!isEmptyStarterRoster && activeRoster && (
-                      <RosterKindBadge roster={activeRoster} />
-                    )}
+                    {!isEmptyStarterRoster && activeRoster && <RosterKindBadge roster={activeRoster} />}
                     {!isEmptyStarterRoster && (
                       <button
                         type="button"
@@ -4582,9 +3612,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                       </button>
                     )}
                   </div>
-                  <div
-                    className={`mt-0.5 block w-full truncate text-left text-[11px] font-semibold ${!isEmptyStarterRoster && rosters.length > 1 ? "text-slate-500" : "text-slate-500"}`}
-                  >
+                  <div className={`mt-0.5 block w-full truncate text-left text-[11px] font-semibold ${!isEmptyStarterRoster && rosters.length > 1 ? "text-slate-500" : "text-slate-500"}`}>
                     {isEmptyStarterRoster
                       ? "Create one below or import a roster"
                       : activeRosterIsShared
@@ -4600,9 +3628,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 )}
               </div>
 
-              <div
-                className={`rounded-2xl border border-slate-100 bg-white p-3 ${rosterToolsActivePanel ? "hidden" : ""}`}
-              >
+              <div className={`rounded-2xl border border-slate-100 bg-white p-3 ${rosterToolsActivePanel ? "hidden" : ""}`}>
                 <div className="mb-2 text-[10px] font-black uppercase tracking-wide text-slate-400">
                   Create roster
                 </div>
@@ -4631,17 +3657,11 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 </div>
               </div>
 
-              <div
-                className={`overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm ${rosterToolsActivePanel && rosterToolsActivePanel !== "local" ? "hidden" : ""}`}
-              >
+              <div className={`overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm ${rosterToolsActivePanel && rosterToolsActivePanel !== "local" ? "hidden" : ""}`}>
                 <button
                   type="button"
                   className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left transition active:scale-[0.99]"
-                  onClick={() =>
-                    rosterToolsActivePanel === "local"
-                      ? closeRosterToolsPanel()
-                      : openRosterToolsPanel("local")
-                  }
+                  onClick={() => rosterToolsActivePanel === "local" ? closeRosterToolsPanel() : openRosterToolsPanel("local")}
                 >
                   <span className="flex min-w-0 items-center gap-2.5">
                     <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-slate-600">
@@ -4669,11 +3689,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                       className="h-11 justify-start rounded-2xl gap-3"
                       onClick={exportSharedRoster}
                       disabled={players.length === 0 || activeRosterIsShared}
-                      title={
-                        activeRosterIsShared
-                          ? "Shared rosters stay online. Use Make private copy first if you want a local export."
-                          : "Export this local roster"
-                      }
+                      title={activeRosterIsShared ? "Shared rosters stay online. Use Make private copy first if you want a local export." : "Export this local roster"}
                     >
                       <Download className="h-4 w-4" />
                       <span className="font-black">Export this roster</span>
@@ -4697,9 +3713,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                         title="Exports local/private rosters only. Shared rosters stay online."
                       >
                         <Archive className="h-4 w-4" />
-                        <span className="truncate text-xs font-black">
-                          Export all
-                        </span>
+                        <span className="truncate text-xs font-black">Export all</span>
                       </Button>
                       <Button
                         type="button"
@@ -4708,9 +3722,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                         onClick={() => openImportPicker("backup")}
                       >
                         <ArchiveRestore className="h-4 w-4" />
-                        <span className="truncate text-xs font-black">
-                          Import all
-                        </span>
+                        <span className="truncate text-xs font-black">Import all</span>
                       </Button>
                     </div>
 
@@ -4725,10 +3737,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                                   Shared roster
                                 </div>
                                 <p className="mt-1 text-[11px] font-semibold leading-snug text-violet-900/80">
-                                  This is a shared roster. Local Backup can only
-                                  remove/disassociate this device’s copy. Use
-                                  Shared rosters to reopen, manage people, or
-                                  owner-delete online.
+This is a shared roster. Local Backup can only remove/disassociate this device’s copy. Use Shared rosters to reopen, manage people, or owner-delete online.
                                 </p>
                                 <Button
                                   type="button"
@@ -4737,9 +3746,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                                   onClick={openSharedRostersFromLocalFlow}
                                 >
                                   <FolderOpen className="h-3.5 w-3.5" />
-                                  <span className="truncate text-xs font-black">
-                                    Manage Shared rosters
-                                  </span>
+                                  <span className="truncate text-xs font-black">Manage Shared rosters</span>
                                 </Button>
                               </div>
                             </div>
@@ -4751,11 +3758,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                           className={`h-11 w-full justify-start rounded-2xl gap-3 ${activeRosterIsShared ? "border-violet-100 bg-white text-violet-700 hover:bg-violet-50 hover:text-violet-800" : "border-red-100 bg-red-50/70 text-red-700 hover:bg-red-100 hover:text-red-800"}`}
                           onClick={openClearRoster}
                         >
-                          {activeRosterIsShared ? (
-                            <X className="h-4 w-4" />
-                          ) : (
-                            <Trash2 className="h-4 w-4" />
-                          )}
+                          {activeRosterIsShared ? <X className="h-4 w-4" /> : <Trash2 className="h-4 w-4" />}
                           <span className="font-black">
                             {activeRosterIsShared
                               ? "Remove local copy from this device"
@@ -4770,17 +3773,11 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 )}
               </div>
 
-              <div
-                className={`overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm ${rosterToolsActivePanel && rosterToolsActivePanel !== "cloud" ? "hidden" : ""}`}
-              >
+              <div className={`overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm ${rosterToolsActivePanel && rosterToolsActivePanel !== "cloud" ? "hidden" : ""}`}>
                 <button
                   type="button"
                   className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left transition active:scale-[0.99]"
-                  onClick={() =>
-                    rosterToolsActivePanel === "cloud"
-                      ? closeRosterToolsPanel()
-                      : openRosterToolsPanel("cloud")
-                  }
+                  onClick={() => rosterToolsActivePanel === "cloud" ? closeRosterToolsPanel() : openRosterToolsPanel("cloud")}
                 >
                   <span className="flex min-w-0 items-center gap-2.5">
                     <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
@@ -4808,31 +3805,17 @@ They will no longer be able to open or edit this shared roster unless it is shar
                           Google
                         </div>
                         <div className="mt-0.5 truncate text-xs font-black text-[#102A43]">
-                          {connectedDriveUser?.emailAddress ||
-                            (googleDriveConnected
-                              ? "Connected"
-                              : "Not signed in")}
+                          {connectedDriveUser?.emailAddress || (googleDriveConnected ? "Connected" : "Not signed in")}
                         </div>
                       </div>
                       <Button
                         type="button"
                         variant={googleDriveConnected ? "ghost" : "default"}
                         className={`h-9 shrink-0 rounded-2xl px-3 text-xs font-black ${googleDriveConnected ? "text-slate-500 hover:bg-white hover:text-slate-700" : "bg-[#102A43] text-white hover:bg-[#0b2036]"}`}
-                        onClick={
-                          googleDriveConnected
-                            ? disconnectGoogleDrive
-                            : connectGoogleDrive
-                        }
-                        disabled={
-                          !googleDriveConfig.isConfigured ||
-                          googleDriveConnecting
-                        }
+                        onClick={googleDriveConnected ? disconnectGoogleDrive : connectGoogleDrive}
+                        disabled={!googleDriveConfig.isConfigured || googleDriveConnecting}
                       >
-                        {googleDriveConnecting
-                          ? "Connecting..."
-                          : googleDriveConnected
-                            ? "Disconnect"
-                            : "Sign in"}
+                        {googleDriveConnecting ? "Connecting..." : googleDriveConnected ? "Disconnect" : "Sign in"}
                       </Button>
                     </div>
 
@@ -4843,61 +3826,40 @@ They will no longer be able to open or edit this shared roster unless it is shar
                       <div className="rounded-2xl bg-white/80 p-3">
                         <div className="text-[10px] font-black uppercase tracking-wide text-blue-500">
                           Safety backup
-                        </div>
-                        <div className="mt-1 truncate text-xs font-black text-[#102A43]">
-                          {currentDriveBackup?.name || "No backup selected"}
-                        </div>
-                        <div className="mt-0.5 text-[11px] font-semibold text-slate-500">
-                          {currentDriveBackup
-                            ? `Backup has ${formatBackupSummary(currentDriveBackup.rosterCount !== undefined && currentDriveBackup.playerCount !== undefined ? { rosterCount: currentDriveBackup.rosterCount, playerCount: currentDriveBackup.playerCount } : null)}`
-                            : "Optional private backup for local rosters."}
-                        </div>
                       </div>
+                      <div className="mt-1 truncate text-xs font-black text-[#102A43]">
+                        {currentDriveBackup?.name || "No backup selected"}
+                      </div>
+                      <div className="mt-0.5 text-[11px] font-semibold text-slate-500">
+                        {currentDriveBackup
+                          ? `Backup has ${formatBackupSummary(currentDriveBackup.rosterCount !== undefined && currentDriveBackup.playerCount !== undefined ? { rosterCount: currentDriveBackup.rosterCount, playerCount: currentDriveBackup.playerCount } : null)}`
+                          : "Optional private backup for local rosters."}
+                      </div>
+                    </div>
 
-                      <Button
-                        type="button"
-                        className="h-12 justify-start rounded-2xl gap-3 bg-blue-600 text-white shadow-sm hover:bg-blue-700"
-                        onClick={saveAllRostersToGoogleDrive}
-                        disabled={
-                          !hasPrivateBackupRosters ||
-                          !googleDriveConnected ||
-                          googleDriveSaving ||
-                          googleDriveUpdating
-                        }
-                        title={
-                          currentDriveBackup
-                            ? "Update your private local-rosters backup"
-                            : "Create a private backup of local rosters"
-                        }
-                      >
-                        {currentDriveBackup ? (
-                          <RefreshCw
-                            className={`h-4 w-4 ${googleDriveUpdating ? "animate-spin" : ""}`}
-                          />
-                        ) : (
-                          <CloudUpload className="h-4 w-4" />
-                        )}
-                        <span className="font-black">
-                          {googleDriveSaving || googleDriveUpdating
-                            ? "Saving..."
-                            : currentDriveBackup
-                              ? "Update backup"
-                              : "Back up all rosters"}
-                        </span>
-                      </Button>
+                    <Button
+                      type="button"
+                      className="h-12 justify-start rounded-2xl gap-3 bg-blue-600 text-white shadow-sm hover:bg-blue-700"
+                      onClick={saveAllRostersToGoogleDrive}
+                      disabled={!hasPrivateBackupRosters || !googleDriveConnected || googleDriveSaving || googleDriveUpdating}
+                      title={currentDriveBackup ? "Update your private local-rosters backup" : "Create a private backup of local rosters"}
+                    >
+                      {currentDriveBackup ? <RefreshCw className={`h-4 w-4 ${googleDriveUpdating ? "animate-spin" : ""}`} /> : <CloudUpload className="h-4 w-4" />}
+                      <span className="font-black">
+                        {googleDriveSaving || googleDriveUpdating ? "Saving..." : currentDriveBackup ? "Update backup" : "Back up all rosters"}
+                      </span>
+                    </Button>
 
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="h-11 w-full justify-start rounded-2xl gap-2 border-blue-100 bg-white/90 px-3"
-                        onClick={openGoogleDriveBackup}
-                        disabled={!googleDriveConnected || googleDriveOpening}
-                      >
-                        <CloudDownload className="h-4 w-4" />
-                        <span className="truncate text-xs font-black">
-                          {googleDriveOpening ? "Opening..." : "Browse backups"}
-                        </span>
-                      </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-11 w-full justify-start rounded-2xl gap-2 border-blue-100 bg-white/90 px-3"
+                      onClick={openGoogleDriveBackup}
+                      disabled={!googleDriveConnected || googleDriveOpening}
+                    >
+                      <CloudDownload className="h-4 w-4" />
+                      <span className="truncate text-xs font-black">{googleDriveOpening ? "Opening..." : "Browse backups"}</span>
+                    </Button>
 
                       <button
                         type="button"
@@ -4912,17 +3874,11 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 )}
               </div>
 
-              <div
-                className={`hidden overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm ${rosterToolsActivePanel && rosterToolsActivePanel !== "shared" ? "hidden" : ""}`}
-              >
+              <div className={`hidden overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm ${rosterToolsActivePanel && rosterToolsActivePanel !== "shared" ? "hidden" : ""}`}>
                 <button
                   type="button"
                   className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left transition active:scale-[0.99]"
-                  onClick={() =>
-                    rosterToolsActivePanel === "shared"
-                      ? closeRosterToolsPanel()
-                      : openRosterToolsPanel("shared")
-                  }
+                  onClick={() => rosterToolsActivePanel === "shared" ? closeRosterToolsPanel() : openRosterToolsPanel("shared")}
                 >
                   <span className="flex min-w-0 items-center gap-2.5">
                     <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
@@ -4933,9 +3889,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                         Shared Roster
                       </span>
                       <span className="mt-0.5 block truncate text-xs font-semibold text-slate-600">
-                        {activeRoster?.cloudSource?.provider === "firebase"
-                          ? "Firebase shared roster."
-                          : "Invite and sync online."}
+                        {activeRoster?.cloudSource?.provider === "firebase" ? "Firebase shared roster." : "Invite and sync online."}
                       </span>
                     </span>
                   </span>
@@ -4953,12 +3907,8 @@ They will no longer be able to open or edit this shared roster unless it is shar
                       isEmptyRoster={isEmptyStarterRoster}
                       onOpenRoster={openFirebaseSharedRosterAsLocalCopy}
                       onRosterSaved={markActiveFirebaseRosterSaved}
-                      onRefreshActiveRoster={
-                        refreshActiveFirebaseRosterFromRemote
-                      }
-                      onSharedRosterSummariesUpdated={
-                        syncFirebaseRosterBadgesFromSummaries
-                      }
+                      onRefreshActiveRoster={refreshActiveFirebaseRosterFromRemote}
+                      onSharedRosterSummariesUpdated={syncFirebaseRosterBadgesFromSummaries}
                       onSharedInviteOpened={finishSharedInviteOpen}
                       openLibraryToken={sharedRosterLibraryOpenToken}
                     />
@@ -4968,221 +3918,163 @@ They will no longer be able to open or edit this shared roster unless it is shar
                         Legacy Google Sheets tools (temporary)
                       </summary>
                       <p className="px-2 pb-2 pt-1 text-[11px] font-semibold leading-snug text-slate-600">
-                        Firebase is now the main shared-roster path. These old
-                        tools stay hidden for safety during migration.
+                        Firebase is now the main shared-roster path. These old tools stay hidden for safety during migration.
                       </p>
                       <div className="grid gap-3">
-                        <div className="rounded-2xl border border-amber-100 bg-amber-50/70 px-3 py-2">
-                          <div className="text-[10px] font-black uppercase tracking-wide text-amber-700">
-                            Old Google Sheets sharing
-                          </div>
-                          <p className="mt-1 text-[11px] font-semibold leading-snug text-slate-600">
-                            Kept temporarily for safety while Firebase shared
-                            rosters are built.
-                          </p>
+                    <div className="rounded-2xl border border-amber-100 bg-amber-50/70 px-3 py-2">
+                      <div className="text-[10px] font-black uppercase tracking-wide text-amber-700">
+                        Old Google Sheets sharing
+                      </div>
+                      <p className="mt-1 text-[11px] font-semibold leading-snug text-slate-600">
+                        Kept temporarily for safety while Firebase shared rosters are built.
+                      </p>
+                    </div>
+                    <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-slate-50/70 p-3">
+                      <div className="min-w-0">
+                        <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+                          Google
                         </div>
-                        <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-slate-50/70 p-3">
-                          <div className="min-w-0">
-                            <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-                              Google
-                            </div>
-                            <div className="mt-0.5 truncate text-xs font-black text-[#102A43]">
-                              {connectedDriveUser?.emailAddress ||
-                                (googleDriveConnected
-                                  ? "Connected"
-                                  : "Not signed in")}
-                            </div>
+                        <div className="mt-0.5 truncate text-xs font-black text-[#102A43]">
+                          {connectedDriveUser?.emailAddress || (googleDriveConnected ? "Connected" : "Not signed in")}
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant={googleDriveConnected ? "ghost" : "default"}
+                        className={`h-9 shrink-0 rounded-2xl px-3 text-xs font-black ${googleDriveConnected ? "text-slate-500 hover:bg-white hover:text-slate-700" : "bg-[#102A43] text-white hover:bg-[#0b2036]"}`}
+                        onClick={googleDriveConnected ? disconnectGoogleDrive : connectGoogleDrive}
+                        disabled={!googleDriveConfig.isConfigured || googleDriveConnecting}
+                      >
+                        {googleDriveConnecting ? "Connecting..." : googleDriveConnected ? "Disconnect" : "Sign in"}
+                      </Button>
+                    </div>
+
+                    <div
+                      className={`grid gap-3 transition ${!googleDriveConnected ? "pointer-events-none opacity-40 grayscale" : ""}`}
+                      aria-disabled={!googleDriveConnected}
+                    >
+                      <div className={`rounded-2xl border px-3 py-2 ${activeSharedHasUnsavedChanges ? "border-amber-100 bg-amber-50/80" : activeRosterIsShared ? "border-emerald-100 bg-emerald-50/70" : "border-slate-100 bg-white/85"}`}>
+                        <div className={`text-[10px] font-black uppercase tracking-wide ${activeSharedHasUnsavedChanges ? "text-amber-700" : activeRosterIsShared ? "text-emerald-700" : "text-slate-400"}`}>
+                          {activeRosterIsShared ? activeSharedHasUnsavedChanges ? "Unsaved changes" : "Shared" : "Not shared"}
+                        </div>
+                        <div className="mt-1 text-[11px] font-semibold leading-snug text-slate-600">
+                          {activeRosterIsShared
+                            ? activeSharedHasUnsavedChanges
+                              ? "Save shared when you finish editing."
+                              : `Saved ${formatSheetSyncTime(activeGoogleSheetSource?.lastSyncedAt).replace("Synced ", "")}`
+                            : "This roster is saved only on this device."}
+                        </div>
+                      </div>
+
+                      {activeRosterIsShared ? (
+                      <>
+                        <div className="grid gap-2">
+                          <div className="px-1 text-[10px] font-black uppercase tracking-wide text-emerald-600">
+                            Shared roster
                           </div>
                           <Button
                             type="button"
-                            variant={googleDriveConnected ? "ghost" : "default"}
-                            className={`h-9 shrink-0 rounded-2xl px-3 text-xs font-black ${googleDriveConnected ? "text-slate-500 hover:bg-white hover:text-slate-700" : "bg-[#102A43] text-white hover:bg-[#0b2036]"}`}
-                            onClick={
-                              googleDriveConnected
-                                ? disconnectGoogleDrive
-                                : connectGoogleDrive
-                            }
-                            disabled={
-                              !googleDriveConfig.isConfigured ||
-                              googleDriveConnecting
-                            }
+                            className="h-12 justify-start rounded-2xl gap-3 bg-emerald-600 text-white shadow-sm hover:bg-emerald-700"
+                            onClick={() => saveActiveRosterToGoogleSheet()}
+                            disabled={!googleDriveConnected || googleSheetSyncing || googleSheetOpening || isEmptyStarterRoster}
                           >
-                            {googleDriveConnecting
-                              ? "Connecting..."
-                              : googleDriveConnected
-                                ? "Disconnect"
-                                : "Sign in"}
+                            <CloudUpload className="h-4 w-4" />
+                            <span className="min-w-0 truncate font-black">
+                              {googleSheetSyncing ? "Saving..." : "Save to shared roster"}
+                            </span>
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-11 justify-start rounded-2xl gap-2 border-emerald-100 bg-white/90 px-3"
+                            onClick={reloadActiveRosterFromGoogleSheet}
+                            disabled={!googleDriveConnected || googleSheetOpening || googleSheetSyncing}
+                          >
+                            <CloudDownload className="h-4 w-4" />
+                            <span className="truncate text-xs font-black">
+                              {googleSheetOpening ? "Getting..." : "Get latest"}
+                            </span>
                           </Button>
                         </div>
 
-                        <div
-                          className={`grid gap-3 transition ${!googleDriveConnected ? "pointer-events-none opacity-40 grayscale" : ""}`}
-                          aria-disabled={!googleDriveConnected}
-                        >
-                          <div
-                            className={`rounded-2xl border px-3 py-2 ${activeSharedHasUnsavedChanges ? "border-amber-100 bg-amber-50/80" : activeRosterIsShared ? "border-emerald-100 bg-emerald-50/70" : "border-slate-100 bg-white/85"}`}
+                        <div className="grid gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-11 justify-start rounded-2xl gap-2 border-slate-100 bg-white/90 px-3"
+                            onClick={openGoogleSheetShareModal}
+                            disabled={!googleDriveConnected || googleSheetSharing || googleSheetAccessLoading}
                           >
-                            <div
-                              className={`text-[10px] font-black uppercase tracking-wide ${activeSharedHasUnsavedChanges ? "text-amber-700" : activeRosterIsShared ? "text-emerald-700" : "text-slate-400"}`}
-                            >
-                              {activeRosterIsShared
-                                ? activeSharedHasUnsavedChanges
-                                  ? "Unsaved changes"
-                                  : "Shared"
-                                : "Not shared"}
-                            </div>
-                            <div className="mt-1 text-[11px] font-semibold leading-snug text-slate-600">
-                              {activeRosterIsShared
-                                ? activeSharedHasUnsavedChanges
-                                  ? "Save shared when you finish editing."
-                                  : `Saved ${formatSheetSyncTime(activeGoogleSheetSource?.lastSyncedAt).replace("Synced ", "")}`
-                                : "This roster is saved only on this device."}
-                            </div>
-                          </div>
-
-                          {activeRosterIsShared ? (
-                            <>
-                              <div className="grid gap-2">
-                                <div className="px-1 text-[10px] font-black uppercase tracking-wide text-emerald-600">
-                                  Shared roster
-                                </div>
-                                <Button
-                                  type="button"
-                                  className="h-12 justify-start rounded-2xl gap-3 bg-emerald-600 text-white shadow-sm hover:bg-emerald-700"
-                                  onClick={() =>
-                                    saveActiveRosterToGoogleSheet()
-                                  }
-                                  disabled={
-                                    !googleDriveConnected ||
-                                    googleSheetSyncing ||
-                                    googleSheetOpening ||
-                                    isEmptyStarterRoster
-                                  }
-                                >
-                                  <CloudUpload className="h-4 w-4" />
-                                  <span className="min-w-0 truncate font-black">
-                                    {googleSheetSyncing
-                                      ? "Saving..."
-                                      : "Save to shared roster"}
-                                  </span>
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  className="h-11 justify-start rounded-2xl gap-2 border-emerald-100 bg-white/90 px-3"
-                                  onClick={reloadActiveRosterFromGoogleSheet}
-                                  disabled={
-                                    !googleDriveConnected ||
-                                    googleSheetOpening ||
-                                    googleSheetSyncing
-                                  }
-                                >
-                                  <CloudDownload className="h-4 w-4" />
-                                  <span className="truncate text-xs font-black">
-                                    {googleSheetOpening
-                                      ? "Getting..."
-                                      : "Get latest"}
-                                  </span>
-                                </Button>
-                              </div>
-
-                              <div className="grid gap-2">
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  className="h-11 justify-start rounded-2xl gap-2 border-slate-100 bg-white/90 px-3"
-                                  onClick={openGoogleSheetShareModal}
-                                  disabled={
-                                    !googleDriveConnected ||
-                                    googleSheetSharing ||
-                                    googleSheetAccessLoading
-                                  }
-                                >
-                                  <Share2 className="h-4 w-4" />
-                                  <span className="truncate text-xs font-black">
-                                    {googleSheetAccessLoading
-                                      ? "Loading access..."
-                                      : "People & access"}
-                                  </span>
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  className="h-11 justify-start rounded-2xl gap-2 border-slate-100 bg-white/90 px-3"
-                                  onClick={openGoogleSheetRosterList}
-                                  disabled={
-                                    !googleDriveConnected || googleSheetOpening
-                                  }
-                                >
-                                  <FolderOpen className="h-4 w-4" />
-                                  <span className="truncate text-xs font-black">
-                                    {googleSheetOpening
-                                      ? "Opening..."
-                                      : "Open shared roster library"}
-                                  </span>
-                                </Button>
-                              </div>
-                            </>
-                          ) : (
-                            <>
-                              <Button
-                                type="button"
-                                className="h-12 justify-start rounded-2xl gap-3 bg-emerald-600 text-white shadow-sm hover:bg-emerald-700"
-                                onClick={makeActiveRosterShared}
-                                disabled={
-                                  !googleDriveConnected ||
-                                  googleSheetSyncing ||
-                                  isEmptyStarterRoster
-                                }
-                              >
-                                <Share2 className="h-4 w-4" />
-                                <span className="min-w-0 truncate font-black">
-                                  {googleSheetSyncing
-                                    ? "Creating..."
-                                    : "Make this roster shared"}
-                                </span>
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className="h-11 justify-start rounded-2xl gap-2 border-slate-100 bg-white/90 px-3"
-                                onClick={openGoogleSheetRosterList}
-                                disabled={
-                                  !googleDriveConnected || googleSheetOpening
-                                }
-                              >
-                                <FolderOpen className="h-4 w-4" />
-                                <span className="truncate text-xs font-black">
-                                  {googleSheetOpening
-                                    ? "Opening..."
-                                    : "Open shared roster library"}
-                                </span>
-                              </Button>
-                            </>
-                          )}
-
-                          <div className="rounded-2xl bg-white/70 px-3 py-2">
-                            <p className="text-[10px] font-semibold leading-snug text-slate-500">
-                              {googleDriveConnected
-                                ? "Get latest before editing. Save to shared roster after editing."
-                                : "Sign in with Google above to share rosters."}
-                            </p>
-                          </div>
+                            <Share2 className="h-4 w-4" />
+                            <span className="truncate text-xs font-black">
+                              {googleSheetAccessLoading ? "Loading access..." : "People & access"}
+                            </span>
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-11 justify-start rounded-2xl gap-2 border-slate-100 bg-white/90 px-3"
+                            onClick={openGoogleSheetRosterList}
+                            disabled={!googleDriveConnected || googleSheetOpening}
+                          >
+                            <FolderOpen className="h-4 w-4" />
+                            <span className="truncate text-xs font-black">
+                              {googleSheetOpening ? "Opening..." : "Open shared roster library"}
+                            </span>
+                          </Button>
                         </div>
-
-                        <button
+                      </>
+                    ) : (
+                      <>
+                        <Button
                           type="button"
-                          onClick={() => setGoogleSheetHelpOpen(true)}
-                          className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wide text-emerald-600"
+                          className="h-12 justify-start rounded-2xl gap-3 bg-emerald-600 text-white shadow-sm hover:bg-emerald-700"
+                          onClick={makeActiveRosterShared}
+                          disabled={!googleDriveConnected || googleSheetSyncing || isEmptyStarterRoster}
                         >
-                          <Info className="h-3 w-3" />
-                          How shared roster works
-                        </button>
+                          <Share2 className="h-4 w-4" />
+                          <span className="min-w-0 truncate font-black">
+                            {googleSheetSyncing ? "Creating..." : "Make this roster shared"}
+                          </span>
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-11 justify-start rounded-2xl gap-2 border-slate-100 bg-white/90 px-3"
+                          onClick={openGoogleSheetRosterList}
+                          disabled={!googleDriveConnected || googleSheetOpening}
+                        >
+                          <FolderOpen className="h-4 w-4" />
+                          <span className="truncate text-xs font-black">
+                            {googleSheetOpening ? "Opening..." : "Open shared roster library"}
+                          </span>
+                        </Button>
+                      </>
+                    )}
+
+                      <div className="rounded-2xl bg-white/70 px-3 py-2">
+                        <p className="text-[10px] font-semibold leading-snug text-slate-500">
+                          {googleDriveConnected
+                            ? "Get latest before editing. Save to shared roster after editing."
+                            : "Sign in with Google above to share rosters."}
+                        </p>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setGoogleSheetHelpOpen(true)}
+                      className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wide text-emerald-600"
+                    >
+                      <Info className="h-3 w-3" />
+                      How shared roster works
+                    </button>
                       </div>
                     </details>
                   </div>
                 )}
               </div>
+
             </div>
           </div>
         </div>
@@ -5219,8 +4111,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   Current roster
                 </h2>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  Local rosters stay private. Shared rosters stay connected to
-                  your account.
+                  Local rosters stay private. Shared rosters stay connected to your account.
                 </p>
               </div>
               <Button
@@ -5238,12 +4129,8 @@ They will no longer be able to open or edit this shared roster unless it is shar
             <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4">
               <div className="space-y-2">
                 <div className="flex items-center justify-between px-1">
-                  <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-                    Local rosters
-                  </span>
-                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-500">
-                    {localRosterPickerChoices.length}
-                  </span>
+                  <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Local rosters</span>
+                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-500">{localRosterPickerChoices.length}</span>
                 </div>
                 {localRosterPickerChoices.length > 0 ? (
                   <div className="space-y-2">
@@ -5258,12 +4145,8 @@ They will no longer be able to open or edit this shared roster unless it is shar
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between px-1">
-                  <span className="text-[10px] font-black uppercase tracking-wide text-violet-700">
-                    Shared rosters opened here
-                  </span>
-                  <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-black text-violet-700 ring-1 ring-violet-100">
-                    {sharedRosterPickerChoices.length}
-                  </span>
+                  <span className="text-[10px] font-black uppercase tracking-wide text-violet-700">Shared rosters opened here</span>
+                  <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-black text-violet-700 ring-1 ring-violet-100">{sharedRosterPickerChoices.length}</span>
                 </div>
                 {sharedRosterPickerChoices.length > 0 ? (
                   <div className="space-y-2">
@@ -5271,8 +4154,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   </div>
                 ) : (
                   <div className="rounded-2xl border border-dashed border-violet-100 bg-violet-50/60 px-3 py-3 text-xs font-semibold text-violet-800/75">
-                    No shared roster is open on this device. Use Club → Shared
-                    rosters to open one from your account.
+                    No shared roster is open on this device. Use Club → Shared rosters to open one from your account.
                   </div>
                 )}
               </div>
@@ -5331,10 +4213,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                           {file.name}
                         </span>
                         <span className="mt-0.5 block truncate text-[11px] font-bold text-emerald-700/75">
-                          {isGoogleSheetOwnedByMe(file)
-                            ? "Role: Owner"
-                            : "Role: Editor"}{" "}
-                          · {formatDriveModifiedTime(file.modifiedTime)}
+                          {isGoogleSheetOwnedByMe(file) ? "Role: Owner" : "Role: Editor"} · {formatDriveModifiedTime(file.modifiedTime)}
                         </span>
                         <span className="mt-0.5 block truncate text-[10px] font-semibold text-slate-500">
                           {getGoogleSheetSharedByLine(file)}
@@ -5351,11 +4230,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   <div className="flex gap-2">
                     <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
                     <p className="text-xs font-semibold leading-snug text-amber-800">
-                      No shared rosters opened yet. Ask the owner to share it
-                      with{" "}
-                      {connectedDriveUser?.emailAddress ||
-                        "this Google account"}
-                      , then tap Open shared roster file.
+                      No shared rosters opened yet. Ask the owner to share it with {connectedDriveUser?.emailAddress || "this Google account"}, then tap Open shared roster file.
                     </p>
                   </div>
                 </div>
@@ -5372,9 +4247,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
               >
                 <FolderOpen className="h-4 w-4" />
                 <span className="truncate text-xs font-black">
-                  {googleSheetOpening
-                    ? "Opening..."
-                    : "Open shared roster file"}
+                  {googleSheetOpening ? "Opening..." : "Open shared roster file"}
                 </span>
               </Button>
               <Button
@@ -5406,11 +4279,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   {googleSheetActionFile.name}
                 </h2>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  {isGoogleSheetOwnedByMe(googleSheetActionFile)
-                    ? "Role: Owner"
-                    : "Role: Editor"}{" "}
-                  ·{" "}
-                  {formatDriveModifiedTime(googleSheetActionFile.modifiedTime)}
+                  {isGoogleSheetOwnedByMe(googleSheetActionFile) ? "Role: Owner" : "Role: Editor"} · {formatDriveModifiedTime(googleSheetActionFile.modifiedTime)}
                 </p>
               </div>
               <Button
@@ -5429,27 +4298,25 @@ They will no longer be able to open or edit this shared roster unless it is shar
 
             <div className="mt-4 rounded-2xl border border-emerald-100 bg-emerald-50/70 p-3">
               <p className="text-xs font-semibold leading-snug text-emerald-900/80">
-                Opens this shared roster in Fair Teams on this device. It does
-                not overwrite the Google Sheet.
+                Opens this shared roster in Fair Teams on this device. It does not overwrite the Google Sheet.
               </p>
             </div>
 
-            {!isGoogleSheetOwnedByMe(googleSheetActionFile) &&
-              getGoogleSheetSharedByName(googleSheetActionFile) && (
-                <div className="mt-3 rounded-2xl border border-emerald-100 bg-emerald-50/70 p-3">
-                  <div className="text-[10px] font-black uppercase tracking-wide text-emerald-700">
-                    Shared by
-                  </div>
-                  <div className="mt-1 truncate text-xs font-black text-[#102A43]">
-                    {getGoogleSheetSharedByName(googleSheetActionFile)}
-                  </div>
-                  {getGoogleSheetSharedByEmail(googleSheetActionFile) && (
-                    <div className="mt-0.5 truncate text-[10px] font-semibold text-emerald-700/75">
-                      {getGoogleSheetSharedByEmail(googleSheetActionFile)}
-                    </div>
-                  )}
+            {!isGoogleSheetOwnedByMe(googleSheetActionFile) && getGoogleSheetSharedByName(googleSheetActionFile) && (
+              <div className="mt-3 rounded-2xl border border-emerald-100 bg-emerald-50/70 p-3">
+                <div className="text-[10px] font-black uppercase tracking-wide text-emerald-700">
+                  Shared by
                 </div>
-              )}
+                <div className="mt-1 truncate text-xs font-black text-[#102A43]">
+                  {getGoogleSheetSharedByName(googleSheetActionFile)}
+                </div>
+                {getGoogleSheetSharedByEmail(googleSheetActionFile) && (
+                  <div className="mt-0.5 truncate text-[10px] font-semibold text-emerald-700/75">
+                    {getGoogleSheetSharedByEmail(googleSheetActionFile)}
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="mt-3 rounded-2xl border border-slate-100 bg-slate-50/80 p-3">
               <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
@@ -5480,17 +4347,13 @@ They will no longer be able to open or edit this shared roster unless it is shar
                     Danger zone
                   </div>
                   <p className="mt-1 text-xs font-semibold leading-snug text-red-800/85">
-                    Delete shared roster for everyone moves the Google Sheet to
-                    trash. Other organizers will lose access to this shared
-                    roster.
+                    Delete shared roster for everyone moves the Google Sheet to trash. Other organizers will lose access to this shared roster.
                   </p>
                   <Button
                     type="button"
                     variant="outline"
                     className="mt-3 h-10 w-full rounded-2xl border-red-200 bg-white text-xs font-black text-red-700 hover:bg-red-100 hover:text-red-800"
-                    onClick={() =>
-                      startGoogleSheetDeleteConfirm(googleSheetActionFile)
-                    }
+                    onClick={() => startGoogleSheetDeleteConfirm(googleSheetActionFile)}
                     disabled={googleSheetOpening || googleSheetDeleting}
                   >
                     Delete shared roster for everyone
@@ -5518,18 +4381,10 @@ They will no longer be able to open or edit this shared roster unless it is shar
           role="dialog"
           aria-modal="true"
         >
-          <div
-            className={`w-full max-w-sm rounded-3xl border bg-white p-4 shadow-2xl ${activeRosterIsShared ? "border-violet-100" : "border-red-100"}`}
-          >
+          <div className={`w-full max-w-sm rounded-3xl border bg-white p-4 shadow-2xl ${activeRosterIsShared ? "border-violet-100" : "border-red-100"}`}>
             <div className="flex items-start gap-3">
-              <div
-                className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl ${activeRosterIsShared ? "bg-violet-50 text-violet-600" : "bg-red-50 text-red-600"}`}
-              >
-                {activeRosterIsShared ? (
-                  <Share2 className="h-5 w-5" />
-                ) : (
-                  <AlertTriangle className="h-5 w-5" />
-                )}
+              <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl ${activeRosterIsShared ? "bg-violet-50 text-violet-600" : "bg-red-50 text-red-600"}`}>
+                {activeRosterIsShared ? <Share2 className="h-5 w-5" /> : <AlertTriangle className="h-5 w-5" />}
               </div>
               <div className="min-w-0 flex-1">
                 <div className="text-[10px] font-black uppercase tracking-wide text-red-600">
@@ -5539,9 +4394,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   {googleSheetDeleteConfirm.file.name}
                 </h2>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  This moves the Google Sheet to trash. Other organizers will
-                  lose access to this shared roster. Local copies already saved
-                  on devices are not deleted.
+                  This moves the Google Sheet to trash. Other organizers will lose access to this shared roster. Local copies already saved on devices are not deleted.
                 </p>
               </div>
             </div>
@@ -5551,42 +4404,29 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 <div className="flex items-start gap-2">
                   <Info className="mt-0.5 h-4 w-4 shrink-0 text-violet-600" />
                   <p className="text-[11px] font-semibold leading-snug text-violet-900/80">
-                    Removing the local copy is safe. It does not delete the
-                    online shared roster, remove collaborators, or change other
-                    organizers’ copies.
+                    Removing the local copy is safe. It does not delete the online shared roster, remove collaborators, or change other organizers’ copies.
                   </p>
                 </div>
               </div>
             )}
 
-            <div
-              className={`mt-4 rounded-2xl border p-3 ${activeRosterIsShared ? "border-violet-100 bg-violet-50/70" : "border-red-100 bg-red-50/70"}`}
-            >
-              <div
-                className={`mb-2 flex items-center justify-between gap-2 text-[11px] font-black uppercase tracking-wide ${activeRosterIsShared ? "text-violet-700" : "text-red-700"}`}
-              >
+            <div className={`mt-4 rounded-2xl border p-3 ${activeRosterIsShared ? "border-violet-100 bg-violet-50/70" : "border-red-100 bg-red-50/70"}`}>
+              <div className={`mb-2 flex items-center justify-between gap-2 text-[11px] font-black uppercase tracking-wide ${activeRosterIsShared ? "text-violet-700" : "text-red-700"}`}>
                 <span>Slide to confirm</span>
-                <span>
-                  {googleSheetDeleteSlide >= 95
-                    ? "Ready"
-                    : `${googleSheetDeleteSlide}%`}
-                </span>
+                <span>{googleSheetDeleteSlide >= 95 ? "Ready" : `${googleSheetDeleteSlide}%`}</span>
               </div>
               <input
                 type="range"
                 min="0"
                 max="100"
                 value={googleSheetDeleteSlide}
-                onChange={(e) =>
-                  setGoogleSheetDeleteSlide(Number(e.target.value))
-                }
+                onChange={(e) => setGoogleSheetDeleteSlide(Number(e.target.value))}
                 className={`w-full ${activeRosterIsShared ? "accent-violet-600" : "accent-red-600"}`}
                 aria-label="Slide to confirm shared roster deletion"
                 disabled={googleSheetDeleting}
               />
               <p className="mt-2 text-[11px] font-semibold text-red-700/80">
-                Only the owner should do this. You can restore the Sheet from
-                Google Drive trash for a limited time if this was a mistake.
+                Only the owner should do this. You can restore the Sheet from Google Drive trash for a limited time if this was a mistake.
               </p>
             </div>
 
@@ -5597,9 +4437,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 onClick={confirmDeleteGoogleSheetRoster}
                 disabled={googleSheetDeleteSlide < 95 || googleSheetDeleting}
               >
-                {googleSheetDeleting
-                  ? "Deleting..."
-                  : "Delete shared roster for everyone"}
+                {googleSheetDeleting ? "Deleting..." : "Delete shared roster for everyone"}
               </Button>
               <Button
                 type="button"
@@ -5634,8 +4472,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   Roster changed elsewhere
                 </h2>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  This shared roster was changed after your last save. Get the
-                  latest changes before editing.
+                  This shared roster was changed after your last save. Get the latest changes before editing.
                 </p>
               </div>
             </div>
@@ -5682,8 +4519,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   Other changes found
                 </h2>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  This roster was changed elsewhere after your last save. Get
-                  latest first, or overwrite those changes.
+                  This roster was changed elsewhere after your last save. Get latest first, or overwrite those changes.
                 </p>
               </div>
             </div>
@@ -5694,9 +4530,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   Last sync here
                 </div>
                 <div className="mt-1 text-xs font-black text-[#102A43]">
-                  {formatSheetModifiedTime(
-                    googleSheetConflictConfirm.lastKnownRemoteModifiedAt,
-                  )}
+                  {formatSheetModifiedTime(googleSheetConflictConfirm.lastKnownRemoteModifiedAt)}
                 </div>
               </div>
               <div className="rounded-2xl border border-amber-100 bg-amber-50/80 p-3">
@@ -5704,17 +4538,14 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   Sheet updated
                 </div>
                 <div className="mt-1 text-xs font-black text-[#102A43]">
-                  {formatSheetModifiedTime(
-                    googleSheetConflictConfirm.file.modifiedTime,
-                  )}
+                  {formatSheetModifiedTime(googleSheetConflictConfirm.file.modifiedTime)}
                 </div>
               </div>
             </div>
 
             <div className="mt-3 rounded-2xl border border-amber-100 bg-amber-50/80 p-3">
               <p className="text-xs font-semibold leading-snug text-amber-800">
-                Recommended: get latest first, review the roster, then save
-                again if needed.
+                Recommended: get latest first, review the roster, then save again if needed.
               </p>
             </div>
 
@@ -5820,9 +4651,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                     disabled={googleSheetAccessLoading}
                     title="Refresh access list"
                   >
-                    <RefreshCw
-                      className={`mr-1 h-3 w-3 ${googleSheetAccessLoading ? "animate-spin" : ""}`}
-                    />
+                    <RefreshCw className={`mr-1 h-3 w-3 ${googleSheetAccessLoading ? "animate-spin" : ""}`} />
                     Refresh
                   </Button>
                 </div>
@@ -5838,31 +4667,26 @@ They will no longer be able to open or edit this shared roster unless it is shar
                         Owner
                       </div>
                       <div className="mt-1 grid gap-1.5">
-                        {googleSheetOwnerPermissions.length > 0 ? (
-                          googleSheetOwnerPermissions.map((permission) => {
-                            const display = drivePermissionDisplay(permission);
-                            return (
-                              <div
-                                key={permission.id}
-                                className="flex items-center justify-between gap-2 rounded-2xl bg-white px-3 py-2"
-                              >
-                                <div className="min-w-0">
-                                  <div className="truncate text-xs font-black text-[#102A43]">
-                                    {display.name}
-                                  </div>
-                                  {display.email && (
-                                    <div className="mt-0.5 truncate text-[10px] font-semibold text-slate-400">
-                                      {display.email}
-                                    </div>
-                                  )}
+                        {googleSheetOwnerPermissions.length > 0 ? googleSheetOwnerPermissions.map((permission) => {
+                          const display = drivePermissionDisplay(permission);
+                          return (
+                            <div key={permission.id} className="flex items-center justify-between gap-2 rounded-2xl bg-white px-3 py-2">
+                              <div className="min-w-0">
+                                <div className="truncate text-xs font-black text-[#102A43]">
+                                  {display.name}
                                 </div>
-                                <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-black text-emerald-700">
-                                  Owner
-                                </span>
+                                {display.email && (
+                                  <div className="mt-0.5 truncate text-[10px] font-semibold text-slate-400">
+                                    {display.email}
+                                  </div>
+                                )}
                               </div>
-                            );
-                          })
-                        ) : (
+                              <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-black text-emerald-700">
+                                Owner
+                              </span>
+                            </div>
+                          );
+                        }) : (
                           <div className="rounded-2xl bg-white px-3 py-2 text-xs font-semibold text-slate-500">
                             Owner not shown by Google Drive.
                           </div>
@@ -5875,26 +4699,14 @@ They will no longer be able to open or edit this shared roster unless it is shar
                         Editors
                       </div>
                       <div className="mt-1 grid gap-1.5">
-                        {googleSheetEditorPermissions.length > 0 ||
-                        googleSheetSavedEditorEntries.length > 0 ? (
+                        {googleSheetEditorPermissions.length > 0 || googleSheetSavedEditorEntries.length > 0 ? (
                           <>
                             {googleSheetEditorPermissions.map((permission) => {
-                              const removing =
-                                googleSheetRemovingPermissionId ===
-                                permission.id;
-                              const canRemove =
-                                connectedGoogleUserOwnsActiveSheet &&
-                                canRemoveDrivePermission(permission) &&
-                                !permissionEmailMatchesConnectedUser(
-                                  permission,
-                                );
-                              const display =
-                                drivePermissionDisplay(permission);
+                              const removing = googleSheetRemovingPermissionId === permission.id;
+                              const canRemove = connectedGoogleUserOwnsActiveSheet && canRemoveDrivePermission(permission) && !permissionEmailMatchesConnectedUser(permission);
+                              const display = drivePermissionDisplay(permission);
                               return (
-                                <div
-                                  key={permission.id}
-                                  className="flex items-center justify-between gap-2 rounded-2xl bg-white px-3 py-2"
-                                >
+                                <div key={permission.id} className="flex items-center justify-between gap-2 rounded-2xl bg-white px-3 py-2">
                                   <div className="min-w-0">
                                     <div className="truncate text-xs font-black text-[#102A43]">
                                       {display.name}
@@ -5915,14 +4727,8 @@ They will no longer be able to open or edit this shared roster unless it is shar
                                       type="button"
                                       variant="ghost"
                                       className="h-8 shrink-0 rounded-xl px-2 text-[10px] font-black text-red-600 hover:bg-red-50 hover:text-red-700"
-                                      onClick={() =>
-                                        removeGoogleSheetEditorAccess(
-                                          permission,
-                                        )
-                                      }
-                                      disabled={Boolean(
-                                        googleSheetRemovingPermissionId,
-                                      )}
+                                      onClick={() => removeGoogleSheetEditorAccess(permission)}
+                                      disabled={Boolean(googleSheetRemovingPermissionId)}
                                       title="Remove editor access"
                                     >
                                       <UserMinus className="mr-1 h-3 w-3" />
@@ -5937,10 +4743,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                               );
                             })}
                             {googleSheetSavedEditorEntries.map((entry) => (
-                              <div
-                                key={`saved-${entry.email}`}
-                                className="flex items-center justify-between gap-2 rounded-2xl bg-white px-3 py-2"
-                              >
+                              <div key={`saved-${entry.email}`} className="flex items-center justify-between gap-2 rounded-2xl bg-white px-3 py-2">
                                 <div className="min-w-0">
                                   <div className="truncate text-xs font-black text-[#102A43]">
                                     {entry.name}
@@ -5972,10 +4775,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                           {googleSheetOtherPermissions.map((permission) => {
                             const display = drivePermissionDisplay(permission);
                             return (
-                              <div
-                                key={permission.id}
-                                className="flex items-center justify-between gap-2 rounded-2xl bg-white px-3 py-2"
-                              >
+                              <div key={permission.id} className="flex items-center justify-between gap-2 rounded-2xl bg-white px-3 py-2">
                                 <div className="min-w-0">
                                   <div className="truncate text-xs font-black text-[#102A43]">
                                     {display.name}
@@ -6041,8 +4841,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   {googleSheetSharing ? "Sharing..." : "Add editor"}
                 </Button>
                 <p className="mt-2 text-[10px] font-semibold leading-snug text-slate-500">
-                  Name is only a friendly label. Email is the real Google
-                  access.
+                  Name is only a friendly label. Email is the real Google access.
                 </p>
               </div>
 
@@ -6062,9 +4861,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 >
                   <FolderOpen className="h-3.5 w-3.5" />
                   <span className="truncate text-xs font-black">
-                    {googleSheetOpening
-                      ? "Opening..."
-                      : "Open shared roster file"}
+                    {googleSheetOpening ? "Opening..." : "Open shared roster file"}
                   </span>
                 </Button>
               </div>
@@ -6074,27 +4871,19 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   Connection
                 </div>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  Stop syncing keeps this roster locally on this device. The
-                  shared roster is not deleted.
+                  Stop syncing keeps this roster locally on this device. The shared roster is not deleted.
                 </p>
                 <Button
                   type="button"
                   variant="outline"
                   className="mt-3 h-10 w-full justify-start rounded-2xl gap-2 border-slate-200 bg-white/90 px-3 text-slate-600 hover:bg-white hover:text-slate-800"
                   onClick={() => {
-                    if (disconnectActiveRosterFromGoogleSheet())
-                      setGoogleSheetShareOpen(false);
+                    if (disconnectActiveRosterFromGoogleSheet()) setGoogleSheetShareOpen(false);
                   }}
-                  disabled={
-                    googleSheetSyncing ||
-                    googleSheetOpening ||
-                    googleSheetSharing
-                  }
+                  disabled={googleSheetSyncing || googleSheetOpening || googleSheetSharing}
                 >
                   <X className="h-3.5 w-3.5" />
-                  <span className="truncate text-xs font-black">
-                    Stop syncing this roster
-                  </span>
+                  <span className="truncate text-xs font-black">Stop syncing this roster</span>
                 </Button>
               </div>
             </div>
@@ -6147,9 +4936,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   Backup and device transfer
                 </div>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  Cloud Backup saves a private text-only backup of your
-                  local/private rosters to Google Drive. Shared rosters stay
-                  online in Shared rosters and are not included.
+                  Cloud Backup saves a private text-only backup of your local/private rosters to Google Drive. Shared rosters stay online in Shared rosters and are not included.
                 </p>
               </div>
 
@@ -6158,9 +4945,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   Use across devices
                 </div>
                 <p className="mt-1 text-xs font-semibold leading-snug text-blue-800/85">
-                  Save local rosters on one device, then restore them on another
-                  device signed in with the same Google account. It is private
-                  manual backup/restore, not collaboration or live sync.
+                  Save local rosters on one device, then restore them on another device signed in with the same Google account. It is private manual backup/restore, not collaboration or live sync.
                 </p>
               </div>
             </div>
@@ -6210,9 +4995,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   Share one roster
                 </div>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  Shared Roster lets trusted co-organizers open the same roster
-                  in Fair Teams. You can see the owner and editors in People &
-                  access.
+                  Shared Roster lets trusted co-organizers open the same roster in Fair Teams. You can see the owner and editors in People & access.
                 </p>
               </div>
 
@@ -6221,9 +5004,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   Save and get latest
                 </div>
                 <p className="mt-1 text-xs font-semibold leading-snug text-emerald-800/85">
-                  It does not update automatically. Get latest before editing,
-                  then save changes when you finish. Player photos stay on each
-                  device.
+                  It does not update automatically. Get latest before editing, then save changes when you finish. Player photos stay on each device.
                 </p>
               </div>
             </div>
@@ -6255,8 +5036,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   Choose backup
                 </h2>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  Nothing changes yet. Pick a private backup to preview its
-                  rosters.
+                  Nothing changes yet. Pick a private backup to preview its rosters.
                 </p>
               </div>
               <Button
@@ -6289,8 +5069,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                             {file.name}
                           </span>
                           <span className="mt-0.5 block truncate text-[11px] font-bold text-blue-700/75">
-                            Backup file ·{" "}
-                            {formatDriveModifiedTime(file.modifiedTime)}
+                            Backup file · {formatDriveModifiedTime(file.modifiedTime)}
                           </span>
                         </span>
                         <span className="shrink-0 text-[11px] font-black uppercase tracking-wide text-blue-500">
@@ -6355,8 +5134,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   Delete this backup?
                 </h2>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  This moves the backup file to Google Drive trash. It does not
-                  change rosters already saved on this device.
+                  This moves the backup file to Google Drive trash. It does not change rosters already saved on this device.
                 </p>
               </div>
             </div>
@@ -6369,9 +5147,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 {driveBackupDeleteConfirm.file.name}
               </div>
               <div className="mt-0.5 text-[11px] font-bold text-red-700/80">
-                {formatDriveModifiedTime(
-                  driveBackupDeleteConfirm.file.modifiedTime,
-                )}
+                {formatDriveModifiedTime(driveBackupDeleteConfirm.file.modifiedTime)}
               </div>
             </div>
 
@@ -6414,8 +5190,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   Update active Drive backup?
                 </h2>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  This will overwrite the selected all-rosters Drive backup
-                  file.
+                  This will overwrite the selected all-rosters Drive backup file.
                 </p>
               </div>
             </div>
@@ -6435,9 +5210,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   Backup now
                 </div>
                 <div className="mt-1 text-xs font-black text-[#102A43]">
-                  {driveUpdateConfirm.readFailed
-                    ? "Could not check"
-                    : formatBackupSummary(driveUpdateConfirm.previous)}
+                  {driveUpdateConfirm.readFailed ? "Could not check" : formatBackupSummary(driveUpdateConfirm.previous)}
                 </div>
               </div>
               <div className="rounded-2xl border border-emerald-100 bg-emerald-50/80 p-3 text-center">
@@ -6452,9 +5225,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
 
             <div className="mt-3 rounded-2xl border border-amber-100 bg-amber-50/80 p-3">
               <p className="text-xs font-semibold leading-snug text-amber-800">
-                Make sure this is the correct private all-rosters backup before
-                updating. This will replace the backup file with the current
-                roster list from this device.
+                Make sure this is the correct private all-rosters backup before updating. This will replace the backup file with the current roster list from this device.
               </p>
             </div>
 
@@ -6536,16 +5307,11 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   Included rosters
                 </div>
                 <div className="space-y-1.5">
-                  {driveImportPreview.rosterNames
-                    .slice(0, 5)
-                    .map((name, index) => (
-                      <div
-                        key={`${name}-${index}`}
-                        className="truncate text-xs font-bold text-slate-700"
-                      >
-                        • {name}
-                      </div>
-                    ))}
+                  {driveImportPreview.rosterNames.slice(0, 5).map((name, index) => (
+                    <div key={`${name}-${index}`} className="truncate text-xs font-bold text-slate-700">
+                      • {name}
+                    </div>
+                  ))}
                   {driveImportPreview.rosterNames.length > 5 ? (
                     <div className="text-xs font-bold text-slate-400">
                       …and {driveImportPreview.rosterNames.length - 5} more
@@ -6558,9 +5324,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 <div className="flex gap-2">
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
                   <p className="text-xs font-semibold leading-snug text-amber-800">
-                    Drive backups are text-only. Player photos and logo images
-                    are not imported from Drive, but matching local photos/logos
-                    are preserved where possible.
+                    Drive backups are text-only. Player photos and logo images are not imported from Drive, but matching local photos/logos are preserved where possible.
                   </p>
                 </div>
               </div>
@@ -6611,12 +5375,9 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 <UserMinus className="h-5 w-5" />
               </div>
               <div className="min-w-0 flex-1">
-                <h2 className="text-base font-black text-[#102A43]">
-                  Leave shared roster?
-                </h2>
+                <h2 className="text-base font-black text-[#102A43]">Leave shared roster?</h2>
                 <p className="mt-1 text-sm font-semibold leading-snug text-slate-600">
-                  This removes your account from “{activeRosterName}” and
-                  removes the opened copy from this device.
+                  This removes your account from “{activeRosterName}” and removes the opened copy from this device.
                 </p>
               </div>
             </div>
@@ -6626,9 +5387,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 Account access
               </div>
               <p className="mt-1 text-[11px] font-semibold leading-snug text-violet-800/80">
-                Other organizers keep access. The owner keeps the online roster.
-                To only hide this device copy without leaving, use Hide on
-                device instead.
+                Other organizers keep access. The owner keeps the online roster. To only hide this device copy without leaving, use Hide on device instead.
               </p>
             </div>
 
@@ -6671,12 +5430,9 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 <Copy className="h-5 w-5" />
               </div>
               <div className="min-w-0 flex-1">
-                <h2 className="text-base font-black text-[#102A43]">
-                  Make private copy?
-                </h2>
+                <h2 className="text-base font-black text-[#102A43]">Make private copy?</h2>
                 <p className="mt-1 text-sm font-semibold leading-snug text-slate-600">
-                  Create a clean local roster from “{activeRosterName}”. The
-                  shared roster stays online and unchanged.
+                  Create a clean local roster from “{activeRosterName}”. The shared roster stays online and unchanged.
                 </p>
               </div>
             </div>
@@ -6686,9 +5442,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 Private copy
               </div>
               <p className="mt-1 text-[11px] font-semibold leading-snug text-violet-800/80">
-                The copy uses shared names and Club averages as starting skill.
-                Photos, special abilities, and advanced private traits are reset
-                so the roster starts clean.
+                The copy uses shared names and Club averages as starting skill. Photos, special abilities, and advanced private traits are reset so the roster starts clean.
               </p>
             </div>
 
@@ -6719,18 +5473,10 @@ They will no longer be able to open or edit this shared roster unless it is shar
           role="dialog"
           aria-modal="true"
         >
-          <div
-            className={`w-full max-w-sm rounded-3xl border bg-white p-4 shadow-2xl ${activeRosterIsShared ? "border-violet-100" : "border-red-100"}`}
-          >
+          <div className={`w-full max-w-sm rounded-3xl border bg-white p-4 shadow-2xl ${activeRosterIsShared ? "border-violet-100" : "border-red-100"}`}>
             <div className="flex items-start gap-3">
-              <div
-                className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl ${activeRosterIsShared ? "bg-violet-50 text-violet-600" : "bg-red-50 text-red-600"}`}
-              >
-                {activeRosterIsShared ? (
-                  <Share2 className="h-5 w-5" />
-                ) : (
-                  <AlertTriangle className="h-5 w-5" />
-                )}
+              <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl ${activeRosterIsShared ? "bg-violet-50 text-violet-600" : "bg-red-50 text-red-600"}`}>
+                {activeRosterIsShared ? <Share2 className="h-5 w-5" /> : <AlertTriangle className="h-5 w-5" />}
               </div>
               <div className="min-w-0 flex-1">
                 <h2 className="text-base font-black tracking-tight text-[#102A43]">
@@ -6755,20 +5501,14 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 <div className="flex items-start gap-2">
                   <Info className="mt-0.5 h-4 w-4 shrink-0 text-violet-600" />
                   <p className="text-[11px] font-semibold leading-snug text-violet-900/80">
-                    Removing/disassociating the local copy is safe. It does not
-                    delete the online shared roster, remove collaborators, or
-                    change other organizers’ copies.
+                    Removing/disassociating the local copy is safe. It does not delete the online shared roster, remove collaborators, or change other organizers’ copies.
                   </p>
                 </div>
               </div>
             )}
 
-            <div
-              className={`mt-4 rounded-2xl border p-3 ${activeRosterIsShared ? "border-violet-100 bg-violet-50/70" : "border-red-100 bg-red-50/70"}`}
-            >
-              <div
-                className={`mb-2 flex items-center justify-between gap-2 text-[11px] font-black uppercase tracking-wide ${activeRosterIsShared ? "text-violet-700" : "text-red-700"}`}
-              >
+            <div className={`mt-4 rounded-2xl border p-3 ${activeRosterIsShared ? "border-violet-100 bg-violet-50/70" : "border-red-100 bg-red-50/70"}`}>
+              <div className={`mb-2 flex items-center justify-between gap-2 text-[11px] font-black uppercase tracking-wide ${activeRosterIsShared ? "text-violet-700" : "text-red-700"}`}>
                 <span>Slide to confirm</span>
                 <span>
                   {clearRosterSlide >= 95 ? "Ready" : `${clearRosterSlide}%`}
@@ -6783,9 +5523,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 className={`w-full ${activeRosterIsShared ? "accent-violet-600" : "accent-red-600"}`}
                 aria-label="Slide to confirm roster action"
               />
-              <p
-                className={`mt-2 text-[11px] font-semibold ${activeRosterIsShared ? "text-violet-700/80" : "text-red-700/80"}`}
-              >
+              <p className={`mt-2 text-[11px] font-semibold ${activeRosterIsShared ? "text-violet-700/80" : "text-red-700/80"}`}>
                 Move the slider all the way right, then confirm.
               </p>
             </div>

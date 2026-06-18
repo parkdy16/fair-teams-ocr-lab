@@ -1489,6 +1489,28 @@ export function ClubTab({
         </div>
       )}
 
+      <section className="overflow-hidden rounded-[1.7rem] border border-violet-100 bg-violet-50/70 p-3 shadow-sm ring-1 ring-violet-50">
+        <div className="flex items-center gap-2 text-sm font-black text-[#102A43]">
+          Shared roster
+          <span className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.14)]" />
+        </div>
+
+        <div className="mt-3 grid gap-2">
+          <div className="min-w-0">{sharedToolsNode}</div>
+          <button
+            type="button"
+            className="flex items-center justify-between rounded-2xl border border-violet-100 bg-white/80 px-3 py-2 text-left shadow-sm active:bg-violet-50 disabled:opacity-40"
+            disabled={!onOpenPairingRules || playerCount < 2}
+            onClick={onOpenPairingRules}
+          >
+            <span className="text-[11px] font-black text-[#102A43]">Pairing rules</span>
+            <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-black text-violet-700">
+              {cleanPairingRuleCount > 0 ? cleanPairingRuleCount : "None"}
+            </span>
+          </button>
+        </div>
+      </section>
+
       <section className="overflow-hidden rounded-[1.7rem] border border-amber-100 bg-[#fffaf0] p-3 shadow-sm ring-1 ring-amber-50">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
@@ -1560,43 +1582,6 @@ export function ClubTab({
             {clubNotesError}
           </div>
         )}
-      </section>
-
-      <section className="overflow-hidden rounded-[1.7rem] border border-violet-100 bg-violet-50/70 p-3 shadow-sm ring-1 ring-violet-50">
-        <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 text-sm font-black text-[#102A43]">
-              Shared roster
-              <span className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.14)]" />
-            </div>
-            <div className="mt-0.5 text-[11px] font-black text-emerald-600">
-              Live · saved online
-            </div>
-          </div>
-          {!isSharedRoster && (
-            <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-slate-500 shadow-sm ring-1 ring-slate-100">
-              Local
-            </span>
-          )}
-        </div>
-
-        <div className="mt-3 grid gap-2">
-          <button
-            type="button"
-            className="rounded-2xl border border-violet-100 bg-white/85 px-3 py-3 text-left shadow-sm active:bg-violet-50 disabled:opacity-40"
-            disabled={!onOpenPairingRules || playerCount < 2}
-            onClick={onOpenPairingRules}
-          >
-            <span className="block truncate text-xs font-black text-[#102A43]">
-              Pairing rules
-            </span>
-            <span className="block truncate text-[11px] font-semibold text-slate-500">
-              {cleanPairingRuleCount} rule
-              {cleanPairingRuleCount === 1 ? "" : "s"}
-            </span>
-          </button>
-          <div className="min-w-0">{sharedToolsNode}</div>
-        </div>
       </section>
 
       <div className="grid gap-3">

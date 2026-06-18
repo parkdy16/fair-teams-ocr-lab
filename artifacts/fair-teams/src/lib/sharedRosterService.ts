@@ -169,16 +169,60 @@ function getCurrentSharedRosterUser() {
   return user;
 }
 
-function removeLocalOnlyPlayerData(player: RoomPlayer) {
-  const snapshot: Partial<RoomPlayer> = { ...player };
-  delete snapshot.profilePhoto;
-  return snapshot;
+function clampSharedSkill(value: unknown) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 5;
+  const rounded = Math.round(n * 2) / 2;
+  return Math.min(10, Math.max(1, Math.round(rounded * 10) / 10));
 }
 
-function makePhotoFreeRosterSnapshot(roster: RoomRoster) {
+function makeSharedPlayerSnapshot(player: RoomPlayer): RoomPlayer {
+  const skill = clampSharedSkill(player.skill);
+  const now = new Date().toISOString();
+  return {
+    id: player.id,
+    roomId: 1,
+    name: player.name,
+    aka: player.aka,
+    gender: player.gender,
+    skill,
+    attack: skill,
+    defense: skill,
+    speed: skill,
+    passing: skill,
+    stamina: skill,
+    physical: skill,
+    teamPlay: 2,
+    profilePhoto: undefined,
+    isGoalkeeper: false,
+    isPlaymaker: false,
+    isFinisher: false,
+    isDribbler: false,
+    isSentinel: false,
+    isEngine: false,
+    isVersatile: false,
+    isSpaceFinder: false,
+    isLongPass: false,
+    isTikiTaka: false,
+    isCrossing: false,
+    isAerial: false,
+    isPowerShot: false,
+    isBulldog: false,
+    isOrganizer: false,
+    isNew: Boolean(player.isNew),
+    funBadge: player.funBadge,
+    todayStatus: "here",
+    attending: false,
+    createdAt: player.createdAt || now,
+    updatedAt: now,
+  };
+}
+
+function makeSharedRosterSnapshot(roster: RoomRoster) {
   const snapshot: Partial<RoomRoster> = {
     ...roster,
-    players: roster.players.map(removeLocalOnlyPlayerData) as RoomPlayer[],
+    players: roster.players.map(makeSharedPlayerSnapshot) as RoomPlayer[],
+    pairingRules: roster.pairingRules || [],
   };
   delete snapshot.logo;
   delete snapshot.cloudSource;
@@ -191,13 +235,69 @@ function makeSharedRosterUpdateSnapshot(existingRosterData: unknown, roster: Roo
     : {};
   return cleanForFirestore({
     ...existing,
-    players: roster.players.map(removeLocalOnlyPlayerData) as RoomPlayer[],
+    players: roster.players.map(makeSharedPlayerSnapshot) as RoomPlayer[],
     pairingRules: roster.pairingRules || [],
   });
 }
 
 function cleanForFirestore<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
+}
+
+async function seedOwnerClubRatingsFromRoster(rosterId: string, players: RoomPlayer[]) {
+  const user = getCurrentSharedRosterUser();
+  const now = new Date().toISOString();
+  const firestore = getFairTeamsFirestore();
+  let batch = writeBatch(firestore);
+  let writes = 0;
+
+  const commitIfNeeded = async () => {
+    if (writes === 0) return;
+    await batch.commit();
+    batch = writeBatch(firestore);
+    writes = 0;
+  };
+
+  for (const player of players) {
+    if (!player.id) continue;
+    const skill = clampSharedSkill(player.skill);
+    const submissionRef = doc(firestore, "sharedRosters", rosterId, "clubRatingSubmissions", `${safeDocId(user.uid)}_${safeDocId(player.id)}`);
+    const summaryRef = doc(firestore, "sharedRosters", rosterId, "clubRatingSummaries", safeDocId(player.id));
+
+    batch.set(submissionRef, {
+      app: "Fair Teams",
+      schemaVersion: 1,
+      rosterId,
+      playerId: player.id,
+      userUid: user.uid,
+      userEmail: user.email,
+      userName: nameFromUser(user),
+      skill,
+      skipped: false,
+      updatedAt: serverTimestamp(),
+      updatedAtIso: now,
+    }, { merge: true });
+    writes += 1;
+
+    batch.set(summaryRef, {
+      app: "Fair Teams",
+      schemaVersion: 1,
+      rosterId,
+      playerId: player.id,
+      ratingCount: 1,
+      ratingSum: skill,
+      averageSkill: skill,
+      updatedAt: serverTimestamp(),
+      updatedAtIso: now,
+    }, { merge: true });
+    writes += 1;
+
+    if (writes >= 450) {
+      await commitIfNeeded();
+    }
+  }
+
+  await commitIfNeeded();
 }
 
 function timestampToIso(value: unknown): string | undefined {
@@ -407,7 +507,7 @@ export async function createFirebaseSharedRoster(roster: RoomRoster, groupId?: s
   const groupMemberNamesByEmail = { ...cleanNameMap(groupData.memberNamesByEmail), [normalizeEmail(user.email)]: organizerName };
   const groupMemberUidByEmail = { ...cleanStringMap(groupData.memberUidByEmail), [normalizeEmail(user.email)]: user.uid };
   const now = new Date().toISOString();
-  const rosterData = cleanForFirestore(makePhotoFreeRosterSnapshot(roster));
+  const rosterData = cleanForFirestore(makeSharedRosterSnapshot(roster));
   const playerCount = Array.isArray(rosterData.players) ? rosterData.players.length : 0;
   const payload = {
     app: "Fair Teams",
@@ -455,6 +555,7 @@ export async function createFirebaseSharedRoster(roster: RoomRoster, groupId?: s
     updatedAtIso: now,
   });
   await batch.commit();
+  await seedOwnerClubRatingsFromRoster(docRef.id, roster.players);
   return toRosterSummary(docRef.id, payload);
 }
 

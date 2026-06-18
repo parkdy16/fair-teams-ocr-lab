@@ -1507,22 +1507,30 @@ export function ClubTab({
                 View all
               </button>
             )}
+            <Button
+              type="button"
+              className="h-9 rounded-full bg-[#c8772a] px-3 text-[11px] font-black text-white hover:bg-[#af691f]"
+              onClick={() => setClubNotesOpen(true)}
+              disabled={!clubRatingsEnabled}
+            >
+              Post-it
+            </Button>
           </div>
         </div>
 
-        <div className="mt-4 flex gap-3 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="mt-3 flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {previewClubNotes.length > 0 ? (
             previewClubNotes.map((note, index) => (
               <div
                 key={note.id}
-                className="relative min-h-[8.4rem] w-[10.4rem] shrink-0 rounded-[0.7rem] border border-black/5 px-3 py-3 shadow-[0_9px_18px_rgba(15,23,42,0.12)]"
+                className="relative min-h-[6rem] w-[6.2rem] shrink-0 rounded-[0.8rem] border border-black/5 px-2.5 py-2.5 shadow-[0_7px_16px_rgba(15,23,42,0.10)]"
                 style={clubNoteStyle(index)}
               >
                 <div className="flex h-full flex-col">
-                  <div className="min-h-0 flex-1 text-sm font-black leading-snug text-[#102A43] line-clamp-4">
+                  <div className="min-h-0 flex-1 text-[12px] font-black leading-snug text-[#102A43] line-clamp-3">
                     {note.text}
                   </div>
-                  <div className="mt-2 truncate text-[10px] font-bold text-slate-600/80">
+                  <div className="mt-2 truncate pr-4 text-[9px] font-bold text-slate-600/80">
                     {note.createdByName || "Organizer"} ·{" "}
                     {formatEquipmentTimestamp(note.createdAt)}
                   </div>
@@ -1530,45 +1538,23 @@ export function ClubTab({
                 {canRemoveClubNote(note) && (
                   <button
                     type="button"
-                    className="absolute bottom-2 right-2 rounded-full bg-white/55 p-1.5 text-slate-600 shadow-sm active:scale-95 disabled:opacity-50"
+                    className="absolute bottom-2 right-2 rounded-full bg-white/55 p-1 text-slate-600 shadow-sm active:scale-95 disabled:opacity-50"
                     onClick={() => removeOwnClubNote(note)}
                     disabled={clubNoteDeletingId === note.id}
                     aria-label="Remove your Club note"
                   >
-                    <Trash2 className="h-3.5 w-3.5" />
+                    <Trash2 className="h-3 w-3" />
                   </button>
                 )}
               </div>
             ))
           ) : (
-            <div className="min-h-[7rem] w-full rounded-2xl border border-dashed border-amber-200 bg-white/60 px-3 py-3 text-sm font-black text-[#102A43]">
+            <div className="min-h-[5rem] w-full rounded-2xl border border-dashed border-amber-200 bg-white/60 px-3 py-3 text-sm font-black text-[#102A43]">
               Leave the first note for the organizers.
             </div>
           )}
         </div>
 
-        <div className="mt-2 flex items-end gap-2 rounded-2xl border border-amber-100 bg-white/80 p-2 shadow-sm">
-          <Textarea
-            value={clubNoteDraft}
-            onChange={(event) => setClubNoteDraft(event.target.value)}
-            disabled={!clubRatingsEnabled}
-            placeholder={
-              clubRatingsEnabled
-                ? "Puma ball died today — Joon"
-                : "Shared notes appear after sign-in."
-            }
-            className="min-h-[2.7rem] flex-1 resize-none border-0 bg-transparent p-1 text-sm font-semibold shadow-none focus-visible:ring-0"
-            maxLength={160}
-          />
-          <Button
-            type="button"
-            className="h-10 shrink-0 rounded-2xl bg-[#b75a0d] px-3 text-xs font-black text-white hover:bg-[#9a4708]"
-            disabled={!canAddClubNote}
-            onClick={addSharedClubNote}
-          >
-            Post
-          </Button>
-        </div>
         {clubNotesError && (
           <div className="mt-2 rounded-xl bg-amber-100/70 px-3 py-2 text-[11px] font-bold text-amber-900">
             {clubNotesError}
@@ -1594,29 +1580,27 @@ export function ClubTab({
           )}
         </div>
 
-        <div className="mt-3 grid grid-cols-3 overflow-hidden rounded-2xl border border-violet-100 bg-white/80 text-left shadow-sm">
+        <div className="mt-3 grid gap-2">
           <button
             type="button"
-            className="min-w-0 border-r border-violet-100 px-2.5 py-2.5 text-left active:bg-violet-50 disabled:opacity-40"
+            className="rounded-2xl border border-violet-100 bg-white/85 px-3 py-3 text-left shadow-sm active:bg-violet-50 disabled:opacity-40"
             disabled={!onOpenPairingRules || playerCount < 2}
             onClick={onOpenPairingRules}
           >
-            <span className="block truncate text-[11px] font-black text-[#102A43]">
-              Pairing
+            <span className="block truncate text-xs font-black text-[#102A43]">
+              Pairing rules
             </span>
-            <span className="block truncate text-[10px] font-semibold text-slate-500">
+            <span className="block truncate text-[11px] font-semibold text-slate-500">
               {cleanPairingRuleCount} rule
               {cleanPairingRuleCount === 1 ? "" : "s"}
             </span>
           </button>
-          <div className="col-span-2 min-w-0 px-2.5 py-2.5">
-            {sharedToolsNode}
-          </div>
+          <div className="min-w-0">{sharedToolsNode}</div>
         </div>
       </section>
 
-      <div className="grid grid-cols-2 gap-3">
-        <section className="h-full rounded-[1.7rem] border border-blue-100 bg-blue-50/60 p-3 shadow-sm ring-1 ring-blue-50">
+      <div className="grid gap-3">
+        <section className="rounded-[1.7rem] border border-blue-100 bg-blue-50/60 p-3 shadow-sm ring-1 ring-blue-50">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wide text-blue-600">
@@ -1710,7 +1694,7 @@ export function ClubTab({
             </div>
           )}
         </section>
-        <section className="h-full rounded-[1.7rem] border border-violet-100 bg-violet-50/60 p-3 shadow-sm ring-1 ring-violet-50">
+        <section className="rounded-[1.7rem] border border-violet-100 bg-violet-50/60 p-3 shadow-sm ring-1 ring-violet-50">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wide text-violet-600">
@@ -1853,8 +1837,37 @@ export function ClubTab({
               Club notes
             </DialogTitle>
           </DialogHeader>
+          <div className="border-b border-amber-100 bg-white/80 p-4">
+            <div className="flex items-end gap-2 rounded-2xl border border-amber-100 bg-white p-2 shadow-sm">
+              <Textarea
+                value={clubNoteDraft}
+                onChange={(event) => setClubNoteDraft(event.target.value)}
+                disabled={!clubRatingsEnabled}
+                placeholder={
+                  clubRatingsEnabled
+                    ? "Puma ball died today — Joon"
+                    : "Shared notes appear after sign-in."
+                }
+                className="min-h-[3.2rem] flex-1 resize-none border-0 bg-transparent p-1 text-sm font-semibold shadow-none focus-visible:ring-0"
+                maxLength={160}
+              />
+              <Button
+                type="button"
+                className="h-10 shrink-0 rounded-2xl bg-[#b75a0d] px-3 text-xs font-black text-white hover:bg-[#9a4708]"
+                disabled={!canAddClubNote}
+                onClick={addSharedClubNote}
+              >
+                {clubNoteSaving ? "Posting…" : "Post"}
+              </Button>
+            </div>
+            {clubNotesError && (
+              <div className="mt-2 rounded-xl bg-amber-100/70 px-3 py-2 text-[11px] font-bold text-amber-900">
+                {clubNotesError}
+              </div>
+            )}
+          </div>
           <div
-            className="max-h-[62svh] overflow-y-auto p-4"
+            className="max-h-[50svh] overflow-y-auto p-4"
             style={{ WebkitOverflowScrolling: "touch" }}
           >
             <div className="grid gap-2">

@@ -441,13 +441,13 @@ export function ClubTab({
         ? "Saving equipment…"
         : equipmentLoading
           ? equipmentKits.length > 0
-            ? "Online · syncing latest"
+            ? "Online · live board"
             : "Online · loading bags"
           : "Online · shared equipment"
     : equipmentWaitingForAccount
       ? "Connecting account…"
       : equipmentNeedsSignIn
-        ? "Sign in to sync equipment"
+        ? "Sign in for online equipment"
         : equipmentSharedConnecting
           ? "Connecting shared equipment…"
           : "Local preview";
@@ -460,13 +460,13 @@ export function ClubTab({
           ? "Saving equipment…"
           : equipmentLoading
             ? equipmentKits.length > 0
-              ? "Online · showing saved bags while syncing latest…"
+              ? "Online · loading latest bags…"
               : "Online · loading bags…"
             : `Online · shared equipment${equipmentLastSyncedAt ? ` · updated ${formatEquipmentTimestamp(equipmentLastSyncedAt)}` : ""}`
       : equipmentWaitingForAccount
         ? "Connecting account…"
         : equipmentNeedsSignIn
-          ? "Sign in to sync the shared equipment board."
+          ? "Sign in to use the shared equipment board online."
           : equipmentSharedConnecting
             ? "Connecting shared equipment…"
             : "Local preview · drag bags to move";
@@ -1105,7 +1105,7 @@ export function ClubTab({
             <UserCircle className="h-4 w-4 shrink-0 text-slate-400" />
             <span className="min-w-0">
               <span className="block truncate text-xs font-black text-[#102A43]">Hey, {clubGreetingName}</span>
-              <span className="block truncate text-[10px] font-bold text-slate-400">{equipmentCanSyncOnline ? "Online · club tools sync" : clubUser.email}</span>
+              <span className="block truncate text-[10px] font-bold text-slate-400">{equipmentCanSyncOnline ? "Online · live Club tools" : clubUser.email}</span>
             </span>
           </button>
           <button
@@ -1127,7 +1127,7 @@ export function ClubTab({
               Shared roster
             </div>
             <div className="mt-0.5 truncate text-[11px] font-semibold text-slate-400">
-              Invite organizers and keep {activeRosterName} in sync.
+              Invite organizers and keep {activeRosterName} live online.
             </div>
           </div>
           {!isSharedRoster && (

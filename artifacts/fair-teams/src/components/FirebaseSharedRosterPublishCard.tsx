@@ -40,7 +40,7 @@ function friendlyFirestoreError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error || "Something went wrong.");
   if (/permission-denied|Missing or insufficient permissions/i.test(message)) return "Permission denied.";
   if (/network/i.test(message)) return "Network error.";
-  if (/saved by someone else|changed elsewhere|Remote version/i.test(message)) return "Online version changed. Fair Teams will update and try again.";
+  if (/saved by someone else|changed elsewhere|Remote version/i.test(message)) return "Online roster changed. Fair Teams will update and try again.";
   return message.replace(/^Firebase:\s*/i, "");
 }
 
@@ -151,12 +151,12 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
     ? autoSyncStatus === "saving"
       ? "Saving online…"
       : autoSyncStatus === "syncing"
-        ? "Updating from online…"
+        ? "Live update received…"
         : autoSyncStatus === "error"
-          ? "Couldn’t sync automatically."
+          ? "Couldn’t update online."
           : activeHasLocalChanges
-            ? "Saving soon…"
-            : "Saved online"
+            ? "Saving online…"
+            : "Live · saved online"
     : "";
   const AutoStatusIcon = autoSyncStatus === "saving" || autoSyncStatus === "syncing" || activeHasLocalChanges ? Loader2 : CheckCircle2;
 
@@ -250,7 +250,7 @@ Your local roster will stay local. Fair Teams will copy shared identity fields o
           onRosterSaved?.(saved, activeRoster.id);
           await refreshSharedData();
           setAutoSyncStatus("saved");
-          setNotice({ tone: "success", text: "Saved online automatically." });
+          setNotice({ tone: "success", text: "Live · saved online automatically." });
         })
         .catch((error) => {
           setAutoSyncStatus("error");
@@ -466,7 +466,7 @@ Your local roster will stay local. Fair Teams will copy shared identity fields o
                         {busy === `remove:${email}` ? "…" : "Remove access"}
                       </button>
                     ) : (
-                      <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black ${isOwnerEmail ? "bg-violet-100 text-violet-700" : isCurrentUser ? "bg-emerald-100 text-emerald-700" : "bg-white text-slate-500"}`}>
+                      <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black ${isOwnerEmail ? "bg-violet-100 text-violet-700" : isCurrentUser ? "bg-violet-100 text-violet-700" : "bg-white text-slate-500"}`}>
                         {isOwnerEmail ? "Owner" : isCurrentUser ? "You" : "Organizer"}
                       </span>
                     )}
@@ -523,7 +523,7 @@ No shared roster is open on this device. Choose one below to open it on this dev
               const memberNamesByEmail = mergedMemberNames(group, roster);
               const savedByName = displayNameForEmail(roster.lastSavedByEmail || roster.ownerEmail, memberNamesByEmail, user?.email);
               return (
-                <div key={`modal-${roster.id}`} className={`grid ${showOnlineDelete ? "grid-cols-[1fr_auto_auto]" : "grid-cols-[1fr_auto]"} items-center gap-2 rounded-2xl px-3 py-2 ${linked ? "bg-emerald-50" : "bg-slate-50"}`}>
+                <div key={`modal-${roster.id}`} className={`grid ${showOnlineDelete ? "grid-cols-[1fr_auto_auto]" : "grid-cols-[1fr_auto]"} items-center gap-2 rounded-2xl px-3 py-2 ${linked ? "bg-violet-50" : "bg-slate-50"}`}>
                   <button type="button" onClick={() => { void handleOpenRoster(roster.id); setSharedRosterLibraryOpen(false); }} disabled={Boolean(busy)} className="min-w-0 text-left active:scale-[0.99]">
                     <span className="block truncate text-xs font-black text-[#102A43]">{roster.name}</span>
                     <span className="block truncate text-[10px] font-semibold text-slate-500">{linked ? "Open on this device" : "Open shared roster"} · saved by {savedByName}</span>
@@ -560,9 +560,9 @@ No shared roster is open on this device. Choose one below to open it on this dev
         {incomingInvites.length > 0 && (
           <div className="grid gap-1.5">
             {incomingInvites.slice(0, 2).map((invite) => (
-              <div key={invite.id} className="flex items-center justify-between gap-2 rounded-2xl border border-emerald-100 bg-emerald-50/80 px-3 py-2">
+              <div key={invite.id} className="flex items-center justify-between gap-2 rounded-2xl border border-violet-100 bg-violet-50/80 px-3 py-2">
                 <div className="min-w-0 truncate text-xs font-black text-[#102A43]">Invite: {invite.name}</div>
-                <Button type="button" variant="outline" className="h-8 rounded-xl border-emerald-100 bg-white px-2 text-[10px] font-black text-emerald-700" onClick={() => handleAcceptInvite(invite.id)} disabled={Boolean(busy)}>
+                <Button type="button" variant="outline" className="h-8 rounded-xl border-violet-100 bg-white px-2 text-[10px] font-black text-violet-700" onClick={() => handleAcceptInvite(invite.id)} disabled={Boolean(busy)}>
                   {busy === `accept:${invite.id}` ? "…" : "Accept"}
                 </Button>
               </div>
@@ -576,13 +576,13 @@ No shared roster is open on this device. Choose one below to open it on this dev
         </Button>
 
         {!activeSharedRoster ? (
-          <Button type="button" className="h-10 rounded-2xl bg-emerald-600 text-xs font-black text-white hover:bg-emerald-700" onClick={handleShareActiveRoster} disabled={!user || isEmptyRoster || Boolean(busy)}>
+          <Button type="button" className="h-10 rounded-2xl bg-violet-600 text-xs font-black text-white hover:bg-violet-700" onClick={handleShareActiveRoster} disabled={!user || isEmptyRoster || Boolean(busy)}>
             <Share2 className="mr-1.5 h-4 w-4" />
             {busy === "publish" ? "Creating…" : "Create shared copy"}
           </Button>
         ) : (
           <div className="grid gap-2">
-            <div className={`flex h-10 items-center justify-between rounded-2xl border px-3 text-xs font-black ${autoSyncStatus === "error" ? "border-rose-100 bg-rose-50 text-rose-700" : "border-emerald-100 bg-emerald-50 text-emerald-700"}`}>
+            <div className={`flex h-10 items-center justify-between rounded-2xl border px-3 text-xs font-black ${autoSyncStatus === "error" ? "border-rose-100 bg-rose-50 text-rose-700" : "border-violet-100 bg-violet-50 text-violet-700"}`}>
               <span>{autoStatusText}</span>
               <AutoStatusIcon className={`h-4 w-4 ${(autoSyncStatus === "saving" || autoSyncStatus === "syncing" || activeHasLocalChanges) ? "animate-spin" : ""}`} />
             </div>
@@ -593,7 +593,7 @@ No shared roster is open on this device. Choose one below to open it on this dev
           </div>
         )}
 
-        {notice && <div className={`rounded-2xl px-3 py-2 text-[11px] font-bold ${notice.tone === "error" ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>{notice.text}</div>}
+        {notice && <div className={`rounded-2xl px-3 py-2 text-[11px] font-bold ${notice.tone === "error" ? "bg-rose-50 text-rose-700" : "bg-violet-50 text-violet-700"}`}>{notice.text}</div>}
         {sharedRosterLibraryModal}
         {collaboratorsModal}
       </div>
@@ -602,11 +602,11 @@ No shared roster is open on this device. Choose one below to open it on this dev
   return (
     <div className="grid gap-3">
       {incomingInvites.length > 0 && (
-        <div className="grid gap-1.5 rounded-2xl border border-emerald-100 bg-emerald-50/70 p-2">
+        <div className="grid gap-1.5 rounded-2xl border border-violet-100 bg-violet-50/70 p-2">
           {incomingInvites.slice(0, 3).map((invite) => (
             <div key={invite.id} className="flex items-center justify-between gap-2 rounded-xl bg-white px-2 py-2">
               <div className="min-w-0 truncate text-xs font-black text-[#102A43]">{invite.name}</div>
-              <Button type="button" variant="outline" className="h-8 rounded-xl border-emerald-100 px-2 text-[10px] font-black text-emerald-700" onClick={() => handleAcceptInvite(invite.id)} disabled={Boolean(busy)}>
+              <Button type="button" variant="outline" className="h-8 rounded-xl border-violet-100 px-2 text-[10px] font-black text-violet-700" onClick={() => handleAcceptInvite(invite.id)} disabled={Boolean(busy)}>
                 {busy === `accept:${invite.id}` ? "Accepting…" : "Accept"}
               </Button>
             </div>
@@ -615,12 +615,12 @@ No shared roster is open on this device. Choose one below to open it on this dev
       )}
 
       {!activeSharedRoster ? (
-        <Button type="button" className="h-11 rounded-2xl bg-emerald-600 text-xs font-black text-white hover:bg-emerald-700" onClick={handleShareActiveRoster} disabled={!user || isEmptyRoster || Boolean(busy)}>
+        <Button type="button" className="h-11 rounded-2xl bg-violet-600 text-xs font-black text-white hover:bg-violet-700" onClick={handleShareActiveRoster} disabled={!user || isEmptyRoster || Boolean(busy)}>
           <Share2 className="mr-1.5 h-4 w-4" />
           {busy === "publish" ? "Creating…" : "Create shared copy"}
         </Button>
       ) : (
-        <div className={`flex h-11 items-center justify-between rounded-2xl border px-3 text-xs font-black ${autoSyncStatus === "error" ? "border-rose-100 bg-rose-50 text-rose-700" : "border-emerald-100 bg-emerald-50 text-emerald-700"}`}>
+        <div className={`flex h-11 items-center justify-between rounded-2xl border px-3 text-xs font-black ${autoSyncStatus === "error" ? "border-rose-100 bg-rose-50 text-rose-700" : "border-violet-100 bg-violet-50 text-violet-700"}`}>
           <span>{autoStatusText}</span>
           <AutoStatusIcon className={`h-4 w-4 ${(autoSyncStatus === "saving" || autoSyncStatus === "syncing" || activeHasLocalChanges) ? "animate-spin" : ""}`} />
         </div>
@@ -649,7 +649,7 @@ No shared roster is open on this device. Choose an online shared roster below to
               const memberNamesByEmail = mergedMemberNames(group, roster);
               const savedByName = displayNameForEmail(roster.lastSavedByEmail || roster.ownerEmail, memberNamesByEmail, user?.email);
               return (
-                <div key={roster.id} className={`grid ${showOnlineDelete ? "grid-cols-[1fr_auto_auto]" : "grid-cols-[1fr_auto]"} items-center gap-2 rounded-2xl px-3 py-2 ${linked ? "bg-emerald-50" : "bg-slate-50"}`}>
+                <div key={roster.id} className={`grid ${showOnlineDelete ? "grid-cols-[1fr_auto_auto]" : "grid-cols-[1fr_auto]"} items-center gap-2 rounded-2xl px-3 py-2 ${linked ? "bg-violet-50" : "bg-slate-50"}`}>
                   <button type="button" onClick={() => handleOpenRoster(roster.id)} disabled={Boolean(busy)} className="min-w-0 text-left active:scale-[0.99]">
                     <span className="block truncate text-xs font-black text-[#102A43]">{roster.name}</span>
                     <span className="block truncate text-[10px] font-semibold text-slate-500">saved by {savedByName}</span>
@@ -678,7 +678,7 @@ No shared roster is open on this device. Choose an online shared roster below to
         )}
       </div>
 
-      {notice && <div className={`rounded-2xl px-3 py-2 text-[11px] font-bold ${notice.tone === "error" ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>{notice.text}</div>}
+      {notice && <div className={`rounded-2xl px-3 py-2 text-[11px] font-bold ${notice.tone === "error" ? "bg-rose-50 text-rose-700" : "bg-violet-50 text-violet-700"}`}>{notice.text}</div>}
 
 {collaboratorsModal}
     </div>

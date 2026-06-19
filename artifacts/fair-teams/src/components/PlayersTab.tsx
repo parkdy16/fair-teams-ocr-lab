@@ -40,6 +40,7 @@ type SpeechRecognitionInstance = {
 type SpeechRecognitionConstructor = new () => SpeechRecognitionInstance;
 
 let rosterSortModeSession: "recent" | "alpha" | "skill" = "recent";
+let rosterSkillHiddenSession = true;
 
 type ClubRatingCoverageState = "none" | "needs" | "ready" | "complete";
 

@@ -1611,10 +1611,10 @@ export function ClubTab({
         )}
       </section>
 
-      <section className="overflow-hidden rounded-[1.7rem] border border-amber-100 bg-[#fffaf0] p-3 shadow-sm ring-1 ring-amber-50">
+      <section className="overflow-visible rounded-[1.7rem] border border-amber-100 bg-[#fffaf0] p-3 shadow-sm ring-1 ring-amber-50">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <div className="text-lg font-black leading-none text-[#a94f0a]">
+            <div className="text-[17px] font-black leading-none text-[#a94f0a]">
               Club notes
             </div>
             <div className="mt-1 h-0.5 w-20 rounded-full bg-[#c46a17]/70" />
@@ -1640,24 +1640,23 @@ export function ClubTab({
           </div>
         </div>
 
-        <div className="mt-3 flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="-mx-1 mt-2 flex gap-2 overflow-x-auto px-1 py-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {previewClubNotes.length > 0 ? (
             previewClubNotes.map((note, index) => (
               <div
                 key={note.id}
-                className="relative min-h-[6.75rem] w-[6.2rem] shrink-0 rounded-[0.8rem] border border-black/5 px-2.5 py-2.5 shadow-[0_7px_16px_rgba(15,23,42,0.10)]"
+                className="relative min-h-[6.7rem] w-[6.35rem] shrink-0 rounded-[0.8rem] border border-black/5 px-2.5 py-2.5 shadow-[0_9px_18px_rgba(15,23,42,0.12)]"
                 style={clubNoteStyle(index)}
               >
                 <div className="flex h-full flex-col">
                   <div
-                    className="min-h-0 flex-1 text-[15px] font-bold leading-[1.05] text-[#25364A]/90 line-clamp-3"
-                    style={{ fontFamily: '"Gaegu", "Outfit", system-ui, sans-serif' }}
+                    className="min-h-0 flex-1 text-[12.5px] font-normal leading-[1.18] text-[#25364A]/90 line-clamp-4"
+                    style={{ fontFamily: '"Coming Soon", "Outfit", system-ui, sans-serif' }}
                   >
                     {note.text}
                   </div>
-                  <div className="mt-2 pr-4 text-[9px] font-bold leading-tight text-slate-600/80">
+                  <div className="mt-1.5 pr-4 text-[9px] font-bold leading-tight text-slate-600/80">
                     <div className="truncate">— {note.createdByName || "Organizer"}</div>
-                    <div className="truncate">{formatClubNoteDate(note.createdAt)}</div>
                   </div>
                 </div>
                 {canRemoveClubNote(note) && (
@@ -1690,8 +1689,8 @@ export function ClubTab({
       <section className="rounded-[1.7rem] border border-sky-100 bg-[#f6fbff] p-3 shadow-sm ring-1 ring-sky-50">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wide text-blue-600">
-              <AntiqueBallIcon className="h-4 w-4" />
+            <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-wide text-blue-600">
+              <AntiqueBallIcon className="h-[18px] w-[18px]" />
               Equipment
             </div>
             <div className="hidden">
@@ -1833,8 +1832,8 @@ export function ClubTab({
                     <div className="flex items-start gap-2">
                       <div className="min-w-0 flex-1">
                         <div
-                          className="text-[18px] font-bold leading-[1.08] text-[#25364A]/90"
-                          style={{ fontFamily: '"Gaegu", "Outfit", system-ui, sans-serif' }}
+                          className="text-[15px] font-normal leading-[1.28] text-[#25364A]/90"
+                          style={{ fontFamily: '"Coming Soon", "Outfit", system-ui, sans-serif' }}
                         >
                           {note.text}
                         </div>

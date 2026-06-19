@@ -729,12 +729,6 @@ function App() {
     setRosterCloudBackupToolsOpen(false);
     setRosterSharedToolsOpen(false);
   };
-  const openJoinSharedRoster = () => {
-    closeRosterToolsPanel();
-    setRosterFilesOpen(false);
-    setActiveTab("club");
-  };
-
   const finishSharedInviteOpen = (openedRoster: RoomRoster) => {
     setTodayRosterChosen(true);
     closeRosterToolsPanel();
@@ -3290,7 +3284,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 todayRosterChosen={todayRosterChosen}
                 onTodayRosterChosen={() => setTodayRosterChosen(true)}
                 onChooseEmptyRoster={() => setActiveTab("players")}
-                onJoinSharedRoster={openJoinSharedRoster}
+                onOpenRosterPicker={() => setRosterPickerOpen(true)}
                 openOcrToken={todayOcrOpenToken}
                 ocrImportContext={ocrImportContext}
                 onOcrImportContextChange={setOcrImportContext}
@@ -4114,7 +4108,7 @@ This is a shared roster. Local Backup can only remove/disassociate this deviceâ€
             <div className="flex items-start justify-between gap-3 border-b border-slate-100 p-4 pb-3">
               <div>
                 <h2 className="text-base font-black tracking-tight text-[#102A43]">
-                  Current roster
+                  Change roster
                 </h2>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
                   Local rosters stay private. Shared rosters stay connected to your account.

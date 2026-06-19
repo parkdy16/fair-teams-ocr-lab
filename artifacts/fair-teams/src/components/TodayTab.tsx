@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import Tesseract from "tesseract.js";
 import type { RoomPlayer, RoomRoster } from "@/lib/localRoster";
 import type { Gender } from "@/lib/types";
+import { listenToSharedRosterUser, type SharedRosterUser } from "@/lib/sharedRosterService";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -13,7 +14,6 @@ import {
   Image as ImageIcon,
   Mic,
   Search,
-  Share2,
   Upload,
   X,
 } from "lucide-react";
@@ -73,14 +73,23 @@ function TodayStatusDots({
   );
 }
 
-function blurOnDoneKey(event: React.KeyboardEvent<HTMLInputElement>) {
-  if (event.key !== "Enter") return;
-  event.preventDefault();
-  event.currentTarget.blur();
-}
-
 function isFirebaseSharedRoster(roster: RoomRoster) {
   return roster.cloudSource?.provider === "firebase" && Boolean(roster.cloudSource.firebaseRosterId);
+}
+
+
+function fallbackOrganizerName(email: string) {
+  const prefix = email.split("@")[0] || "Organizer";
+  return prefix
+    .replace(/[._-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase()) || "Organizer";
+}
+
+function organizerGreetingName(user: SharedRosterUser | null) {
+  const name = user?.displayName?.trim() || (user?.email ? fallbackOrganizerName(user.email) : "");
+  return name ? name.split(/\s+/)[0] : "";
 }
 
 function RosterKindBadge({ roster }: { roster: RoomRoster }) {
@@ -1627,7 +1636,7 @@ export function TodayTab({
   todayRosterChosen = false,
   onTodayRosterChosen,
   onChooseEmptyRoster,
-  onJoinSharedRoster,
+  onOpenRosterPicker,
 }: {
   players: RoomPlayer[];
   setPlayers: (players: RoomPlayer[]) => void;
@@ -1644,7 +1653,7 @@ export function TodayTab({
   todayRosterChosen?: boolean;
   onTodayRosterChosen?: () => void;
   onChooseEmptyRoster?: () => void;
-  onJoinSharedRoster?: () => void;
+  onOpenRosterPicker?: () => void;
 }) {
   const [search, setSearch] = useState("");
   const [ocrOpen, setOcrOpen] = useState(false);
@@ -1663,6 +1672,15 @@ export function TodayTab({
   const quickRecognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const voiceShouldListenRef = useRef(false);
+  const [sharedRosterUser, setSharedRosterUser] = useState<SharedRosterUser | null>(null);
+
+  useEffect(() => {
+    const unsubscribe = listenToSharedRosterUser((nextUser) => {
+      setSharedRosterUser(nextUser);
+    });
+    return unsubscribe;
+  }, []);
+
   const [ocrInputSource, setOcrInputSource] = useState<
     "screenshot" | "voiceText"
   >("screenshot");
@@ -3090,8 +3108,7 @@ export function TodayTab({
 
   const activeRosterChoice =
     rosterChoices.find((roster) => roster.id === activeRosterId) || rosterChoices[0];
-  const localRosterChoices = rosterChoices.filter((roster) => !isFirebaseSharedRoster(roster));
-  const openedSharedRosterChoices = rosterChoices.filter(isFirebaseSharedRoster);
+  const startGreetingName = organizerGreetingName(sharedRosterUser);
   const chooseRosterFromStart = (roster: RoomRoster) => {
     onChooseRoster?.(roster.id);
     onTodayRosterChosen?.();
@@ -3104,10 +3121,12 @@ export function TodayTab({
     <div className="flex flex-col gap-4">
       {rosterChoices.length > 0 && !todayRosterReady ? (
         <div className="space-y-3">
-          <div className="rounded-3xl border border-slate-200 bg-white p-4 text-center shadow-sm">
-            <h2 className="text-xl font-black tracking-tight text-[#102A43]">Choose roster</h2>
-            <p className="mx-auto mt-1 max-w-xs text-xs font-semibold leading-relaxed text-slate-500">
-              Local rosters stay private on this device. Shared rosters open from your account.
+          <div className="px-1 pb-1 pt-2">
+            <h2 className="text-2xl font-black tracking-tight text-[#102A43]">
+              {startGreetingName ? `Hey, ${startGreetingName}` : "Hey,"}
+            </h2>
+            <p className="mt-1 text-sm font-semibold text-slate-500">
+              {startGreetingName ? "Choose where to start." : "Choose your roster."}
             </p>
           </div>
 
@@ -3133,72 +3152,23 @@ export function TodayTab({
             </button>
           ) : null}
 
-          <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="mb-3 flex items-start justify-between gap-3">
-              <div>
-                <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Local rosters</div>
-                <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  Private rosters saved on this device. Sharing creates a separate shared copy.
-                </p>
-              </div>
-              <span className="shrink-0 rounded-full bg-slate-100 px-2 py-1 text-[10px] font-black text-slate-500">
-                {localRosterChoices.length}
+          {onOpenRosterPicker ? (
+            <button
+              type="button"
+              onClick={onOpenRosterPicker}
+              className="flex w-full items-center justify-between rounded-3xl border border-slate-200 bg-white px-4 py-3 text-left shadow-sm transition-transform hover:bg-slate-50 active:scale-[0.99]"
+            >
+              <span className="min-w-0">
+                <span className="block text-sm font-black text-[#102A43]">Change roster</span>
+                <span className="mt-0.5 block text-xs font-semibold text-slate-500">
+                  Local and shared rosters
+                </span>
               </span>
-            </div>
-            {localRosterChoices.length > 0 ? (
-              <div className="space-y-2">
-                {localRosterChoices.map((roster) => (
-                  <button
-                    key={roster.id}
-                    type="button"
-                    onClick={() => chooseRosterFromStart(roster)}
-                    className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-slate-50/70 px-3 py-3 text-left transition-transform hover:bg-white active:scale-[0.99]"
-                  >
-                    <span className="min-w-0">
-                      <span className="flex min-w-0 items-center gap-1.5">
-                        <span className="truncate text-sm font-black text-[#102A43]">{roster.name}</span>
-                        <RosterKindBadge roster={roster} />
-                      </span>
-                      <span className="mt-0.5 block text-[11px] font-bold text-slate-500">
-                        {roster.players.length === 0 ? "Empty roster" : `${roster.players.length} player${roster.players.length === 1 ? "" : "s"}`}
-                      </span>
-                    </span>
-                    <span className="ml-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-slate-400">
-                      <ChevronRight className="h-4 w-4" />
-                    </span>
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-3 py-3 text-xs font-semibold text-slate-500">
-                No private local rosters on this device yet.
-              </div>
-            )}
-          </div>
-
-          <div className="rounded-3xl border border-violet-100 bg-violet-50/60 p-4 shadow-sm">
-            <div className="mb-3 flex items-start justify-between gap-3">
-              <div>
-                <div className="text-[10px] font-black uppercase tracking-wide text-violet-700">Shared rosters</div>
-                <p className="mt-1 text-xs font-semibold leading-snug text-violet-900/70">
-                  Cloud rosters for organizers. They stay shared and can be opened on this device after sign-in.
-                </p>
-              </div>
-              <span className="shrink-0 rounded-full bg-white px-2 py-1 text-[10px] font-black text-violet-700 shadow-sm">
-                {openedSharedRosterChoices.length} opened
+              <span className="ml-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-50 text-slate-400">
+                <ChevronRight className="h-4 w-4" />
               </span>
-            </div>
-            {onJoinSharedRoster ? (
-              <button
-                type="button"
-                onClick={onJoinSharedRoster}
-                className="flex w-full items-center justify-center gap-2 rounded-2xl border border-violet-100 bg-white px-3 py-3 text-xs font-black uppercase tracking-wide text-violet-700 shadow-sm transition active:scale-[0.99] hover:bg-violet-50"
-              >
-                <Share2 className="h-3.5 w-3.5" />
-                Open Shared rosters
-              </button>
-            ) : null}
-          </div>
+            </button>
+          ) : null}
         </div>
       ) : players.length === 0 ? (
         <div className="animate-in fade-in-0 slide-in-from-bottom-1 duration-200 rounded-3xl border border-dashed border-primary/25 bg-primary/5 p-5 text-center shadow-sm">
@@ -4233,8 +4203,6 @@ export function TodayTab({
                           setExpectedAttendeeCount(event.target.value)
                         }
                         placeholder="Example: 20"
-                        onKeyDown={blurOnDoneKey}
-                        enterKeyHint="done"
                         className="h-10 rounded-xl text-sm font-bold"
                       />
                     </div>

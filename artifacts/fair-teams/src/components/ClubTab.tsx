@@ -1649,7 +1649,10 @@ export function ClubTab({
                 style={clubNoteStyle(index)}
               >
                 <div className="flex h-full flex-col">
-                  <div className="min-h-0 flex-1 text-[12px] font-black leading-snug text-[#102A43] line-clamp-3">
+                  <div
+                    className="min-h-0 flex-1 text-[13px] font-semibold leading-[1.18] text-[#102A43]/90 line-clamp-3"
+                    style={{ fontFamily: '"Segoe Print", "Bradley Hand", "Noteworthy", "Marker Felt", cursive' }}
+                  >
                     {note.text}
                   </div>
                   <div className="mt-2 pr-4 text-[9px] font-bold leading-tight text-slate-600/80">
@@ -1829,7 +1832,10 @@ export function ClubTab({
                   >
                     <div className="flex items-start gap-2">
                       <div className="min-w-0 flex-1">
-                        <div className="text-sm font-black leading-snug text-[#102A43]">
+                        <div
+                          className="text-[15px] font-semibold leading-[1.2] text-[#102A43]/90"
+                          style={{ fontFamily: '"Segoe Print", "Bradley Hand", "Noteworthy", "Marker Felt", cursive' }}
+                        >
                           {note.text}
                         </div>
                         <div className="mt-1 text-[10px] font-bold leading-tight text-amber-700/70">

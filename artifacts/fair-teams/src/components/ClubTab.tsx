@@ -1650,11 +1650,8 @@ export function ClubTab({
               >
                 <div className="flex h-full flex-col">
                   <div
-                    className="min-h-0 flex-1 text-[12.5px] font-semibold leading-[1.22] text-[#25364A]/85 line-clamp-3"
-                    style={{
-                      letterSpacing: "0.003em",
-                      textShadow: "0.18px 0.18px 0 rgba(15, 42, 67, 0.08)",
-                    }}
+                    className="min-h-0 flex-1 text-[15px] font-bold leading-[1.05] text-[#25364A]/90 line-clamp-3"
+                    style={{ fontFamily: '"Gaegu", "Outfit", system-ui, sans-serif' }}
                   >
                     {note.text}
                   </div>
@@ -1836,11 +1833,8 @@ export function ClubTab({
                     <div className="flex items-start gap-2">
                       <div className="min-w-0 flex-1">
                         <div
-                          className="text-[14px] font-semibold leading-[1.28] text-[#25364A]/85"
-                          style={{
-                            letterSpacing: "0.003em",
-                            textShadow: "0.18px 0.18px 0 rgba(15, 42, 67, 0.08)",
-                          }}
+                          className="text-[18px] font-bold leading-[1.08] text-[#25364A]/90"
+                          style={{ fontFamily: '"Gaegu", "Outfit", system-ui, sans-serif' }}
                         >
                           {note.text}
                         </div>

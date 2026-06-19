@@ -445,8 +445,8 @@ function AntiqueBallIcon({ className = "h-4 w-4" }: { className?: string }) {
 const CLUB_NOTE_STYLES = [
   { background: "#FFF4BD", transform: "rotate(-1.2deg)" },
   { background: "#EFF7C8", transform: "rotate(0.8deg)" },
-  { background: "#FFE6EF", transform: "rotate(1.1deg)" },
-  { background: "#FFE4C7", transform: "rotate(-0.5deg)" },
+  { background: "#FFE8CC", transform: "rotate(1.1deg)" },
+  { background: "#FFF3DA", transform: "rotate(-0.5deg)" },
 ] as const;
 
 function clubNoteStyle(index: number) {
@@ -1640,9 +1640,10 @@ export function ClubTab({
           </div>
         </div>
 
-        <div className="-mx-2 mt-2 flex gap-2.5 overflow-x-auto px-3 py-4 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="-mx-2 mt-2 flex gap-2.5 overflow-x-auto px-3 py-4 pr-6 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {previewClubNotes.length > 0 ? (
-            previewClubNotes.map((note, index) => (
+            <>
+              {previewClubNotes.map((note, index) => (
               <div
                 key={note.id}
                 className="relative min-h-[6.7rem] w-[6.35rem] shrink-0 rounded-[0.8rem] border border-black/5 px-2.5 py-2.5 shadow-[0_8px_16px_rgba(130,85,35,0.11)] ring-1 ring-white/25"
@@ -1650,8 +1651,8 @@ export function ClubTab({
               >
                 <div className="flex h-full flex-col">
                   <div
-                    className="min-h-0 flex-1 text-[13px] font-normal leading-[1.08] text-[#25364A]/90 line-clamp-4"
-                    style={{ fontFamily: '"Patrick Hand", "Outfit", system-ui, sans-serif' }}
+                    className="min-h-0 flex-1 text-[12px] font-normal leading-[1.18] text-[#25364A]/90 line-clamp-4"
+                    style={{ fontFamily: '"Short Stack", "Outfit", system-ui, sans-serif' }}
                   >
                     {note.text}
                   </div>
@@ -1671,7 +1672,9 @@ export function ClubTab({
                   </button>
                 )}
               </div>
-            ))
+              ))}
+              <div className="w-2 shrink-0" aria-hidden="true" />
+            </>
           ) : (
             <div className="min-h-[5rem] w-full rounded-2xl border border-dashed border-amber-200 bg-white/60 px-3 py-3 text-sm font-black text-[#102A43]">
               Leave the first note for the organizers.
@@ -1832,8 +1835,8 @@ export function ClubTab({
                     <div className="flex items-start gap-2">
                       <div className="min-w-0 flex-1">
                         <div
-                          className="text-[15px] font-normal leading-[1.28] text-[#25364A]/90"
-                          style={{ fontFamily: '"Patrick Hand", "Outfit", system-ui, sans-serif' }}
+                          className="text-[14px] font-normal leading-[1.25] text-[#25364A]/90"
+                          style={{ fontFamily: '"Short Stack", "Outfit", system-ui, sans-serif' }}
                         >
                           {note.text}
                         </div>

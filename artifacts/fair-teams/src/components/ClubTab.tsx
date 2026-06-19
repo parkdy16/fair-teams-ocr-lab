@@ -445,12 +445,23 @@ function AntiqueBallIcon({ className = "h-4 w-4" }: { className?: string }) {
 const CLUB_NOTE_STYLES = [
   { background: "#FFF4BD", transform: "rotate(-1.2deg)" },
   { background: "#EFF7C8", transform: "rotate(0.8deg)" },
-  { background: "#FFD6B0", transform: "rotate(1.1deg)" },
+  { background: "#E8EAFF", transform: "rotate(1.1deg)" },
   { background: "#FFF3DA", transform: "rotate(-0.5deg)" },
 ] as const;
 
 function clubNoteStyle(index: number) {
   return CLUB_NOTE_STYLES[index % CLUB_NOTE_STYLES.length];
+}
+
+function clubNoteTextClass(text: string) {
+  const length = text.replace(/\s+/g, " ").trim().length;
+  if (length <= 14) {
+    return "min-h-0 flex-1 text-[18px] font-bold leading-[1.0] text-[#25364A]/90 line-clamp-3";
+  }
+  if (length <= 34) {
+    return "min-h-0 flex-1 text-[15.5px] font-bold leading-[1.03] text-[#25364A]/90 line-clamp-4";
+  }
+  return "min-h-0 flex-1 text-[13px] font-bold leading-[1.04] text-[#25364A]/90 line-clamp-4";
 }
 
 function getClubGreetingName(user: SharedRosterUser | null) {
@@ -1650,7 +1661,7 @@ export function ClubTab({
               >
                 <div className="flex h-full flex-col">
                   <div
-                    className="min-h-0 flex-1 text-[13px] font-bold leading-[1.04] text-[#25364A]/90 line-clamp-4"
+                    className={clubNoteTextClass(note.text)}
                     style={{ fontFamily: '"Patrick Hand", "Outfit", system-ui, sans-serif' }}
                   >
                     {note.text}

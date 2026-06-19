@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { UserMinus, Plus, Star, Zap, Search, X, Camera, Image as ImageIcon, Trash2, Pencil, Shield, Activity, Dumbbell, Target, Share2, Eye, EyeOff, ArrowDownAZ, Clock3, Mic } from "lucide-react";
+import { UserMinus, Plus, Star, Zap, Search, X, Camera, Image as ImageIcon, Trash2, Pencil, Shield, Activity, Dumbbell, Target, Share2, ArrowDownAZ, Clock3, Mic } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart, ResponsiveContainer } from "recharts";
 
@@ -38,7 +38,6 @@ type SpeechRecognitionInstance = {
 type SpeechRecognitionConstructor = new () => SpeechRecognitionInstance;
 
 let rosterSortModeSession: "recent" | "alpha" | "skill" = "recent";
-let rosterSkillHiddenSession = true;
 
 function cleanVoiceAddName(value: string) {
   return value
@@ -785,7 +784,7 @@ function VibePicker({ value, onChange }: { value?: FunBadge; onChange: (value?: 
   );
 }
 
-function blurOnDoneKey(event: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) {
+function blurOnDoneKey(event: React.KeyboardEvent<HTMLInputElement>) {
   if (event.key !== "Enter") return;
   event.preventDefault();
   event.currentTarget.blur();
@@ -974,7 +973,7 @@ function ProfileDialog({
               </div>
               <div className="space-y-1.5">
                 <Label className="text-[10px] uppercase font-bold text-violet-700/80 tracking-wider">AKA / Nickname</Label>
-                <Input value={draft.aka || ""} placeholder="Optional" onChange={e => updateDraft({ aka: e.target.value })} onKeyDown={blurOnDoneKey} enterKeyHint="done" className="h-10 border-violet-100 bg-white text-sm font-semibold" />
+                <Input value={draft.aka || ""} placeholder="Optional" onChange={e => updateDraft({ aka: e.target.value })} className="h-10 border-violet-100 bg-white text-sm font-semibold" />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-[10px] uppercase font-bold text-violet-700/80 tracking-wider">Player Vibe</Label>
@@ -1055,7 +1054,7 @@ function ProfileDialog({
                 </div>
                 <div className="flex-1 space-y-2 min-w-0">
                   <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">AKA / Nickname</Label>
-                  <Input value={draft.aka || ""} placeholder="Optional" onChange={e => updateDraft({ aka: e.target.value })} onKeyDown={blurOnDoneKey} enterKeyHint="done" className="h-10 text-sm font-semibold" />
+                  <Input value={draft.aka || ""} placeholder="Optional" onChange={e => updateDraft({ aka: e.target.value })} className="h-10 text-sm font-semibold" />
                   <div className="grid grid-cols-[1fr_auto] items-end gap-2">
                     <div className="space-y-1.5 min-w-0">
                       <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Player Vibe</Label>
@@ -1336,7 +1335,7 @@ export function PlayersTab({
   const [voiceAddStatus, setVoiceAddStatus] = useState("");
   const [addTraitHelp, setAddTraitHelp] = useState<(typeof SPECIAL_ABILITIES)[number] | null>(null);
   const voiceAddRecognitionRef = useRef<SpeechRecognitionInstance | null>(null);
-  const [hideOverall, setHideOverall] = useState(() => rosterSkillHiddenSession);
+  const hideOverall = true;
   const [sortMode, setSortMode] = useState<"recent" | "alpha" | "skill">(() => rosterSortModeSession);
   const lastOpenPairingRulesTokenRef = useRef(0);
 
@@ -1550,9 +1549,6 @@ export function PlayersTab({
     voiceAddRecognitionRef.current?.abort?.();
   }, []);
 
-  useEffect(() => {
-    rosterSkillHiddenSession = hideOverall;
-  }, [hideOverall]);
 
   useEffect(() => {
     rosterSortModeSession = sortMode;
@@ -1619,7 +1615,7 @@ export function PlayersTab({
     }
   };
 
-  const effectiveSortMode = isSharedRoster && sortMode === "skill" ? "recent" : sortMode;
+  const effectiveSortMode = sortMode;
 
   const sortedPlayers = [...players].sort((a, b) => {
     if (effectiveSortMode === "alpha") {
@@ -1632,8 +1628,8 @@ export function PlayersTab({
       return displayName(a).localeCompare(displayName(b));
     }
 
-    const aTime = new Date(a.createdAt || 0).getTime() || 0;
-    const bTime = new Date(b.createdAt || 0).getTime() || 0;
+    const aTime = new Date(a.updatedAt || a.createdAt || 0).getTime() || 0;
+    const bTime = new Date(b.updatedAt || b.createdAt || 0).getTime() || 0;
     if (bTime !== aTime) return bTime - aTime;
     return displayName(a).localeCompare(displayName(b));
   });
@@ -1995,7 +1991,6 @@ export function PlayersTab({
                       placeholder="Nickname or alternate spelling"
                       value={aka}
                       onChange={e => setAka(e.target.value)}
-                      onKeyDown={blurOnDoneKey}
                       className="h-10 border-violet-100 bg-white text-sm font-semibold"
                       enterKeyHint="done"
                       data-testid="input-player-aka"
@@ -2155,7 +2150,6 @@ export function PlayersTab({
                           placeholder="Nickname"
                           value={aka}
                           onChange={e => setAka(e.target.value)}
-                          onKeyDown={blurOnDoneKey}
                           className="h-10 text-sm font-semibold"
                           enterKeyHint="done"
                           data-testid="input-player-aka"
@@ -2289,28 +2283,14 @@ export function PlayersTab({
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => setSortMode(prev => isSharedRoster ? (prev === "recent" ? "alpha" : "recent") : (prev === "recent" ? "alpha" : prev === "alpha" ? "skill" : "recent"))}
+            onClick={() => setSortMode(prev => prev === "recent" ? "alpha" : prev === "alpha" ? "skill" : "recent")}
             className="h-8 rounded-xl px-2.5 text-[10px] font-black uppercase tracking-wide shadow-none border-primary/20 bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary"
-            title={effectiveSortMode === "recent" ? "Roster sorted by last added. Tap for A-Z." : effectiveSortMode === "alpha" ? (isSharedRoster ? "Roster sorted A-Z. Tap for Last Added." : "Roster sorted A-Z. Tap for Skill high to low.") : "Roster sorted by Skill high to low. Tap for Last Added."}
+            title={effectiveSortMode === "recent" ? "Roster sorted by last edited. Tap for A-Z." : effectiveSortMode === "alpha" ? "Roster sorted A-Z. Tap for Skill high to low." : "Roster sorted by Skill high to low. Tap for Last Edited."}
             data-testid="button-toggle-roster-sort"
           >
             {effectiveSortMode === "recent" ? <Clock3 className="mr-1 h-3 w-3" /> : effectiveSortMode === "alpha" ? <ArrowDownAZ className="mr-1 h-3 w-3" /> : <Star className="mr-1 h-3 w-3" />}
-            {effectiveSortMode === "recent" ? "Last Added" : effectiveSortMode === "alpha" ? "A-Z" : "Skill ↓"}
+            {effectiveSortMode === "recent" ? "Last Edited" : effectiveSortMode === "alpha" ? "A-Z" : "Skill ↓"}
           </Button>
-          {!isSharedRoster && (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setHideOverall(prev => !prev)}
-            className={`h-8 rounded-xl px-2.5 text-[10px] font-black uppercase tracking-wide shadow-none ${hideOverall ? "border-border bg-muted/35 text-muted-foreground" : "border-primary/20 bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary"}`}
-            title={hideOverall ? "Show roster skill" : "Hide roster skill"}
-            data-testid="button-toggle-roster-ovr"
-          >
-            {hideOverall ? <EyeOff className="mr-1 h-3 w-3" /> : <Eye className="mr-1 h-3 w-3" />}
-            Skill
-          </Button>
-          )}
         </div>
           <Button
             type="button"

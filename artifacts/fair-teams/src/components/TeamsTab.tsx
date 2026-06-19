@@ -737,30 +737,24 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
       {/* Controls */}
       <div className="bg-card border border-border px-3 py-2.5 rounded-xl shadow-sm flex flex-col gap-2">
         {isSharedRoster && (
-          <div className="rounded-xl border border-violet-100 bg-violet-50/80 p-2.5 shadow-sm">
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <div className="text-[10px] font-black uppercase tracking-wide text-violet-700">Shared roster</div>
-                <div className="mt-0.5 text-[11px] font-bold leading-snug text-[#102A43]">Balanced with Club average ratings</div>
+          <div className="rounded-xl border border-slate-100 bg-slate-50/70 px-3 py-2 shadow-sm">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0 truncate text-[11px] font-black text-[#102A43]">
+                Using Club average ratings
               </div>
               {clubNeedsMyRatingAttendingCount > 0 && (
                 <button
                   type="button"
-                  className="shrink-0 rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-violet-700 shadow-sm ring-1 ring-violet-100 active:scale-[0.98]"
+                  className="shrink-0 rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-slate-700 shadow-sm ring-1 ring-slate-100 active:scale-[0.98]"
                   onClick={onOpenClubRatings}
                 >
                   Rate in Club
                 </button>
               )}
             </div>
-            <div className="mt-1.5 text-[10px] font-semibold leading-snug text-violet-700/80">
-              {clubNoAverageAttendingCount > 0
-                ? `${clubNoAverageAttendingCount} selected player${clubNoAverageAttendingCount === 1 ? " has" : "s have"} no Club rating from anyone yet, so only ${clubNoAverageAttendingCount === 1 ? "that player uses" : "those players use"} temporary 5.0.`
-                : "Submitted organizer ratings are averaged quietly. Individual ratings stay private."}
-            </div>
-            {clubRatingError && (
-              <div className="mt-1.5 rounded-lg bg-amber-50 px-2 py-1 text-[10px] font-bold text-amber-700">
-                {clubRatingError}
+            {(clubNoAverageAttendingCount > 0 || clubRatingError) && (
+              <div className="mt-1.5 text-[10px] font-semibold leading-snug text-slate-500">
+                {clubRatingError || `${clubNoAverageAttendingCount} selected player${clubNoAverageAttendingCount === 1 ? " has" : "s have"} no Club rating yet, so temporary 5.0 is used.`}
               </div>
             )}
           </div>
@@ -818,19 +812,6 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
           </Button>
         </div>
 
-        {teams.length > 0 && !isSharedRoster && (
-          <div className="flex items-center justify-end">
-            <button
-              type="button"
-              onClick={() => setShowPlayerSkillNumbers((value) => !value)}
-              className={`rounded-full border px-2.5 py-1 text-[10px] font-black transition-colors ${showPlayerSkillNumbers ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-slate-50 text-slate-500"}`}
-              title={showPlayerSkillNumbers ? "Hide player skill numbers" : "Show player skill numbers"}
-              data-testid="button-toggle-team-skill-numbers"
-            >
-              {showPlayerSkillNumbers ? "Hide skill numbers" : "Show skill numbers"}
-            </button>
-          </div>
-        )}
 
         {isGenerating && (
           <div className="rounded-lg border border-emerald-300/35 bg-emerald-50/80 px-3 py-2 text-[11px] font-black text-emerald-700 shadow-inner">
@@ -899,15 +880,11 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
                         <input
                           className="min-w-0 w-full max-w-[8rem] rounded-md border border-border bg-background px-1.5 py-0.5 text-sm font-black leading-tight text-foreground outline-none focus:border-primary"
                           value={editingTeamName}
+                          autoFocus
                           onChange={e => setEditingTeamName(e.target.value)}
                           onBlur={commitTeamName}
-                          enterKeyHint="done"
                           onKeyDown={e => {
-                            if (e.key === "Enter") {
-                              e.preventDefault();
-                              e.currentTarget.blur();
-                              commitTeamName();
-                            }
+                            if (e.key === "Enter") commitTeamName();
                             if (e.key === "Escape") cancelTeamNameEdit();
                           }}
                           data-testid={`input-team-name-${team.id}`}

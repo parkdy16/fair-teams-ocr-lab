@@ -1640,18 +1640,18 @@ export function ClubTab({
           </div>
         </div>
 
-        <div className="-mx-1 mt-2 flex gap-2 overflow-x-auto px-1 py-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="-mx-2 mt-2 flex gap-2.5 overflow-x-auto px-3 py-4 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {previewClubNotes.length > 0 ? (
             previewClubNotes.map((note, index) => (
               <div
                 key={note.id}
-                className="relative min-h-[6.7rem] w-[6.35rem] shrink-0 rounded-[0.8rem] border border-black/5 px-2.5 py-2.5 shadow-[0_9px_18px_rgba(15,23,42,0.12)]"
+                className="relative min-h-[6.7rem] w-[6.35rem] shrink-0 rounded-[0.8rem] border border-black/5 px-2.5 py-2.5 shadow-[0_8px_16px_rgba(130,85,35,0.11)] ring-1 ring-white/25"
                 style={clubNoteStyle(index)}
               >
                 <div className="flex h-full flex-col">
                   <div
-                    className="min-h-0 flex-1 text-[12.5px] font-normal leading-[1.18] text-[#25364A]/90 line-clamp-4"
-                    style={{ fontFamily: '"Coming Soon", "Outfit", system-ui, sans-serif' }}
+                    className="min-h-0 flex-1 text-[13px] font-normal leading-[1.08] text-[#25364A]/90 line-clamp-4"
+                    style={{ fontFamily: '"Patrick Hand", "Outfit", system-ui, sans-serif' }}
                   >
                     {note.text}
                   </div>
@@ -1833,7 +1833,7 @@ export function ClubTab({
                       <div className="min-w-0 flex-1">
                         <div
                           className="text-[15px] font-normal leading-[1.28] text-[#25364A]/90"
-                          style={{ fontFamily: '"Coming Soon", "Outfit", system-ui, sans-serif' }}
+                          style={{ fontFamily: '"Patrick Hand", "Outfit", system-ui, sans-serif' }}
                         >
                           {note.text}
                         </div>

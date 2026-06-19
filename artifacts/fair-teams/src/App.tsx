@@ -3082,7 +3082,11 @@ They will no longer be able to open or edit this shared roster unless it is shar
       <Tabs
         value={activeTab}
         onValueChange={(value) => {
-          if (isAppTab(value)) setActiveTab(value);
+          if (!isAppTab(value)) return;
+          if (value === "players" && activeTab !== "players") {
+            setOpenPairingRulesToken(0);
+          }
+          setActiveTab(value);
         }}
         className="flex-1 flex flex-col min-h-0"
       >

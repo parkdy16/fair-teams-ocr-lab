@@ -445,7 +445,7 @@ function AntiqueBallIcon({ className = "h-4 w-4" }: { className?: string }) {
 const CLUB_NOTE_STYLES = [
   { background: "#FFF4BD", transform: "rotate(-1.2deg)" },
   { background: "#EFF7C8", transform: "rotate(0.8deg)" },
-  { background: "#F0E6FF", transform: "rotate(1.1deg)" },
+  { background: "#FFEFD6", transform: "rotate(1.1deg)" },
   { background: "#FFE4C7", transform: "rotate(-0.5deg)" },
 ] as const;
 

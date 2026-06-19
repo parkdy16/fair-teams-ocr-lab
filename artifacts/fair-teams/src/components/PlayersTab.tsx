@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { UserMinus, Plus, Star, Zap, Search, X, Camera, Image as ImageIcon, Trash2, Pencil, Shield, Activity, Dumbbell, Target, Share2, ArrowDownAZ, Clock3, Mic, Info } from "lucide-react";
+import { UserMinus, Plus, Star, Zap, Search, X, Camera, Image as ImageIcon, Trash2, Pencil, Shield, Activity, Dumbbell, Target, Share2, ArrowDownAZ, Clock3, Mic, Info, Eye, EyeOff } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart, ResponsiveContainer } from "recharts";
 import { listenToClubRatingSummaries, type ClubRatingSummary } from "@/lib/clubCollaborationService";
@@ -1371,7 +1371,7 @@ export function PlayersTab({
   const [voiceAddStatus, setVoiceAddStatus] = useState("");
   const [addTraitHelp, setAddTraitHelp] = useState<(typeof SPECIAL_ABILITIES)[number] | null>(null);
   const voiceAddRecognitionRef = useRef<SpeechRecognitionInstance | null>(null);
-  const hideOverall = true;
+  const [hideOverall, setHideOverall] = useState(() => rosterSkillHiddenSession);
   const [sortMode, setSortMode] = useState<"recent" | "alpha" | "skill">(() => rosterSortModeSession);
   const [clubRatingLegendOpen, setClubRatingLegendOpen] = useState(false);
   const [clubRatingSummaries, setClubRatingSummaries] = useState<ClubRatingSummary[]>([]);
@@ -1623,6 +1623,10 @@ export function PlayersTab({
   useEffect(() => {
     rosterSortModeSession = sortMode;
   }, [sortMode]);
+
+  useEffect(() => {
+    rosterSkillHiddenSession = hideOverall;
+  }, [hideOverall]);
 
   const updatePlayer = (playerId: string, data: Partial<RoomPlayer>) => {
     setPlayers(players.map(player => player.id === playerId ? normalizePlayer({ ...player, ...data, updatedAt: data.updatedAt || new Date().toISOString() }) : player));
@@ -2374,6 +2378,20 @@ export function PlayersTab({
               aria-label="Club rating status legend"
             >
               <Info className="h-3.5 w-3.5" />
+            </Button>
+          )}
+          {!isSharedRoster && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setHideOverall(prev => !prev)}
+              className={`h-8 rounded-xl px-2.5 text-[10px] font-black uppercase tracking-wide shadow-none ${hideOverall ? "border-border bg-muted/35 text-muted-foreground" : "border-primary/20 bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary"}`}
+              title={hideOverall ? "Show roster skill" : "Hide roster skill"}
+              data-testid="button-toggle-roster-ovr"
+            >
+              {hideOverall ? <EyeOff className="mr-1 h-3 w-3" /> : <Eye className="mr-1 h-3 w-3" />}
+              Skill
             </Button>
           )}
         </div>

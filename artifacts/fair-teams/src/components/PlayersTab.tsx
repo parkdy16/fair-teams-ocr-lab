@@ -7,9 +7,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { UserMinus, Plus, Star, Zap, Search, X, Camera, Image as ImageIcon, Trash2, Pencil, Shield, Activity, Dumbbell, Target, Share2, ArrowDownAZ, Clock3, Mic } from "lucide-react";
+import { UserMinus, Plus, Star, Zap, Search, X, Camera, Image as ImageIcon, Trash2, Pencil, Shield, Activity, Dumbbell, Target, Share2, ArrowDownAZ, Clock3, Mic, Info } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart, ResponsiveContainer } from "recharts";
+import { listenToClubRatingSummaries, type ClubRatingSummary } from "@/lib/clubCollaborationService";
 
 
 
@@ -38,6 +39,36 @@ type SpeechRecognitionInstance = {
 type SpeechRecognitionConstructor = new () => SpeechRecognitionInstance;
 
 let rosterSortModeSession: "recent" | "alpha" | "skill" = "recent";
+
+type ClubRatingCoverageState = "none" | "needs" | "ready" | "complete";
+
+function clubRatingCoverageStatus(summary: ClubRatingSummary | undefined, organizerCount: number) {
+  const ratingCount = Math.max(0, Number(summary?.ratingCount || 0));
+  const total = Math.max(1, organizerCount, ratingCount);
+  const ratio = total > 0 ? ratingCount / total : 0;
+  const state: ClubRatingCoverageState = ratingCount <= 0
+    ? "none"
+    : ratingCount >= total
+      ? "complete"
+      : ratio >= 2 / 3
+        ? "ready"
+        : "needs";
+  return { state, ratingCount, total };
+}
+
+function clubRatingDotClass(state: ClubRatingCoverageState) {
+  if (state === "complete") return "bg-emerald-500 ring-emerald-100";
+  if (state === "ready") return "bg-teal-500 ring-teal-100";
+  if (state === "needs") return "bg-amber-400 ring-amber-100";
+  return "bg-slate-300 ring-slate-100";
+}
+
+function clubRatingStatusLabel(state: ClubRatingCoverageState) {
+  if (state === "complete") return "Fully rated";
+  if (state === "ready") return "Rating ready";
+  if (state === "needs") return "Needs ratings";
+  return "No ratings yet";
+}
 
 function cleanVoiceAddName(value: string) {
   return value
@@ -1286,6 +1317,8 @@ export function PlayersTab({
   onReviewDone,
   openPairingRulesToken = 0,
   isSharedRoster = false,
+  sharedRosterId,
+  sharedOrganizerCount = 1,
 }: {
   players: RoomPlayer[];
   setPlayers: (players: RoomPlayer[]) => void;
@@ -1301,6 +1334,8 @@ export function PlayersTab({
   onReviewDone?: () => void;
   openPairingRulesToken?: number;
   isSharedRoster?: boolean;
+  sharedRosterId?: string;
+  sharedOrganizerCount?: number;
 }) {
   const [name, setName] = useState("");
   const [aka, setAka] = useState("");
@@ -1337,6 +1372,8 @@ export function PlayersTab({
   const voiceAddRecognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const hideOverall = true;
   const [sortMode, setSortMode] = useState<"recent" | "alpha" | "skill">(() => rosterSortModeSession);
+  const [clubRatingLegendOpen, setClubRatingLegendOpen] = useState(false);
+  const [clubRatingSummaries, setClubRatingSummaries] = useState<ClubRatingSummary[]>([]);
   const lastOpenPairingRulesTokenRef = useRef(0);
 
   useEffect(() => {
@@ -1346,6 +1383,24 @@ export function PlayersTab({
       setPairingRulesOpen(true);
     }
   }, [openPairingRulesToken, players.length, setPairingRules]);
+
+  useEffect(() => {
+    if (!isSharedRoster || !sharedRosterId) {
+      setClubRatingSummaries([]);
+      return;
+    }
+
+    try {
+      return listenToClubRatingSummaries(
+        sharedRosterId,
+        setClubRatingSummaries,
+        () => setClubRatingSummaries([]),
+      );
+    } catch {
+      setClubRatingSummaries([]);
+      return;
+    }
+  }, [isSharedRoster, sharedRosterId]);
 
   useEffect(() => {
     const hasRosterDialogOpen =
@@ -1633,6 +1688,8 @@ export function PlayersTab({
     if (bTime !== aTime) return bTime - aTime;
     return displayName(a).localeCompare(displayName(b));
   });
+
+  const clubRatingSummaryByPlayerId = useMemo(() => new Map(clubRatingSummaries.map((summary) => [summary.playerId, summary])), [clubRatingSummaries]);
 
   const filtered = search.trim()
     ? sortedPlayers.filter(p => displayName(p).toLowerCase().includes(search.toLowerCase()))
@@ -2291,6 +2348,19 @@ export function PlayersTab({
             {effectiveSortMode === "recent" ? <Clock3 className="mr-1 h-3 w-3" /> : effectiveSortMode === "alpha" ? <ArrowDownAZ className="mr-1 h-3 w-3" /> : <Star className="mr-1 h-3 w-3" />}
             {effectiveSortMode === "recent" ? "Last Edited" : effectiveSortMode === "alpha" ? "A-Z" : "Skill ↓"}
           </Button>
+          {isSharedRoster && (
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              onClick={() => setClubRatingLegendOpen(true)}
+              className="h-8 w-8 rounded-xl border-border bg-muted/20 text-muted-foreground shadow-none hover:bg-muted/40 hover:text-foreground"
+              title="Club rating status"
+              aria-label="Club rating status legend"
+            >
+              <Info className="h-3.5 w-3.5" />
+            </Button>
+          )}
         </div>
           <Button
             type="button"
@@ -2414,6 +2484,30 @@ export function PlayersTab({
         </DialogContent>
       </Dialog>
 
+      <Dialog open={clubRatingLegendOpen} onOpenChange={setClubRatingLegendOpen}>
+        <DialogContent className="max-w-xs rounded-3xl p-4">
+          <DialogHeader className="text-left">
+            <DialogTitle className="text-base font-black text-[#102A43]">Club rating status</DialogTitle>
+            <p className="text-[11px] font-semibold leading-snug text-muted-foreground">
+              Dots show how complete the organizer ratings are. They do not show player skill.
+            </p>
+          </DialogHeader>
+          <div className="mt-2 grid gap-2">
+            {[
+              { state: "none" as ClubRatingCoverageState, label: "No ratings yet" },
+              { state: "needs" as ClubRatingCoverageState, label: "Needs ratings" },
+              { state: "ready" as ClubRatingCoverageState, label: "Rating ready" },
+              { state: "complete" as ClubRatingCoverageState, label: "Fully rated" },
+            ].map((item) => (
+              <div key={item.state} className="flex items-center gap-2 rounded-2xl bg-muted/30 px-3 py-2 text-xs font-bold text-[#102A43]">
+                <span className={`h-2.5 w-2.5 rounded-full ring-4 ${clubRatingDotClass(item.state)}`} />
+                <span>{item.label}</span>
+              </div>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <div className="space-y-3">
         {players.length > 0 && (
           <div className="relative">
@@ -2452,6 +2546,9 @@ export function PlayersTab({
           <div className="flex flex-wrap items-start gap-2">
             {filtered.map(player => {
               const isFlipped = Boolean(flippedPlayerIds[player.id]);
+              const clubRatingStatus = isSharedRoster
+                ? clubRatingCoverageStatus(clubRatingSummaryByPlayerId.get(player.id), sharedOrganizerCount)
+                : null;
               return (
                 <div
                   key={player.id}
@@ -2475,6 +2572,17 @@ export function PlayersTab({
                     </div>
                     <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
                       {!isSharedRoster && !hideOverall ? <OverallBadge player={player} /> : null}
+                      {clubRatingStatus ? (
+                        <button
+                          type="button"
+                          onClick={() => setClubRatingLegendOpen(true)}
+                          className="flex h-6 w-4 items-center justify-center"
+                          title={`${clubRatingStatusLabel(clubRatingStatus.state)} · ${clubRatingStatus.ratingCount}/${clubRatingStatus.total} organizers rated`}
+                          aria-label={`${clubRatingStatusLabel(clubRatingStatus.state)}: ${clubRatingStatus.ratingCount} of ${clubRatingStatus.total} organizers rated`}
+                        >
+                          <span className={`h-2.5 w-2.5 rounded-full ring-4 ${clubRatingDotClass(clubRatingStatus.state)}`} />
+                        </button>
+                      ) : null}
                       <ProfileDialog
                         player={player}
                         onUpdate={(data) => updatePlayer(player.id, data)}

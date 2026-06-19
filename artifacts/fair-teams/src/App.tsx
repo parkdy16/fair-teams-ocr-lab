@@ -3268,6 +3268,8 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 onReviewDone={finishReviewPlayerQueue}
                 openPairingRulesToken={openPairingRulesToken}
                 isSharedRoster={activeRosterIsFirebaseShared}
+                sharedRosterId={activeFirebaseSource?.firebaseRosterId}
+                sharedOrganizerCount={rosterFirebaseSharedPeopleCount(activeRoster)}
               />
             </TabsContent>
             <TabsContent

@@ -80,7 +80,10 @@ function modalShell(title: string, onClose: () => void, body: React.ReactNode) {
     <Dialog open onOpenChange={(open) => {
       if (!open) onClose();
     }}>
-      <DialogContent className="max-h-[86svh] max-w-md overflow-y-auto rounded-3xl border border-slate-100 p-3 shadow-[0_14px_40px_rgba(15,23,42,0.16)]">
+      <DialogContent
+        className="max-h-[86svh] max-w-md overflow-y-auto rounded-3xl border border-slate-100 p-3 shadow-[0_14px_40px_rgba(15,23,42,0.16)]"
+        onOpenAutoFocus={(event) => event.preventDefault()}
+      >
         <DialogHeader className="px-1 pb-1 text-left">
           <DialogTitle className="text-sm font-black text-[#102A43]">{title}</DialogTitle>
         </DialogHeader>
@@ -510,33 +513,6 @@ Your local roster will stay local. Fair Teams will copy shared identity fields o
         </div>
       ) : (
         <>
-          {activeSharedRoster && (onMakePrivateCopy || onHideOnDevice) ? (
-            <div className="grid gap-2 rounded-2xl border border-violet-100 bg-violet-50/70 p-3">
-              <div className="text-[11px] font-black text-violet-800">Opened on this device</div>
-              <div className="grid grid-cols-2 gap-2">
-                {onMakePrivateCopy ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-10 rounded-2xl border-violet-100 bg-white px-3 text-xs font-black text-violet-700 hover:bg-violet-50 hover:text-violet-800"
-                    onClick={() => { setSharedRosterLibraryOpen(false); onMakePrivateCopy?.(); }}
-                  >
-                    Private copy
-                  </Button>
-                ) : <div />}
-                {onHideOnDevice ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-10 rounded-2xl border-violet-100 bg-white px-3 text-xs font-black text-violet-700 hover:bg-violet-50 hover:text-violet-800"
-                    onClick={() => { setSharedRosterLibraryOpen(false); onHideOnDevice?.(); }}
-                  >
-                    Hide on device
-                  </Button>
-                ) : <div />}
-              </div>
-            </div>
-          ) : null}
           {linkedRosters.length === 0 ? (
             <div className="rounded-2xl border border-violet-100 bg-violet-50/80 px-3 py-2 text-[11px] font-bold leading-snug text-violet-800">
 No shared roster is open on this device. Choose one below to open it on this device.
@@ -577,6 +553,35 @@ No shared roster is open on this device. Choose one below to open it on this dev
               );
             })}
           </div>
+          {activeSharedRoster && (onMakePrivateCopy || onHideOnDevice) ? (
+            <div className="grid gap-2 rounded-2xl border border-violet-100 bg-violet-50/70 p-3">
+              <div className="truncate text-[11px] font-black text-violet-800">
+                Current roster: {activeSharedRoster.name || "Shared roster"}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {onMakePrivateCopy ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-10 rounded-2xl border-violet-100 bg-white px-3 text-xs font-black text-violet-700 hover:bg-violet-50 hover:text-violet-800"
+                    onClick={() => { setSharedRosterLibraryOpen(false); onMakePrivateCopy?.(); }}
+                  >
+                    Private copy
+                  </Button>
+                ) : <div />}
+                {onHideOnDevice ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-10 rounded-2xl border-violet-100 bg-white px-3 text-xs font-black text-violet-700 hover:bg-violet-50 hover:text-violet-800"
+                    onClick={() => { setSharedRosterLibraryOpen(false); onHideOnDevice?.(); }}
+                  >
+                    Hide on device
+                  </Button>
+                ) : <div />}
+              </div>
+            </div>
+          ) : null}
         </>
       )}
     </div>,

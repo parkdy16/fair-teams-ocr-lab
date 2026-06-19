@@ -601,22 +601,22 @@ No shared roster is open on this device. Choose one below to open it on this dev
 
         {!activeSharedRoster ? (
           <div className="grid gap-2">
-            <Button type="button" variant="outline" className="h-10 rounded-2xl border-violet-100 bg-white px-3 text-xs font-black text-violet-700 shadow-sm hover:bg-violet-50" onClick={() => setSharedRosterLibraryOpen(true)} disabled={!user || Boolean(busy)}>
+            <Button type="button" variant="outline" className="h-9 rounded-2xl border-violet-100 bg-white/70 px-3 text-[11px] font-black text-violet-700 shadow-sm hover:bg-white" onClick={() => setSharedRosterLibraryOpen(true)} disabled={!user || Boolean(busy)}>
               <FolderOpen className="mr-1.5 h-4 w-4" />
-              Shared rosters
+              Rosters
             </Button>
-            <Button type="button" className="h-10 rounded-2xl bg-violet-600 text-xs font-black text-white hover:bg-violet-700" onClick={handleShareActiveRoster} disabled={!user || isEmptyRoster || Boolean(busy)}>
+            <Button type="button" className="h-9 rounded-2xl bg-violet-600 text-[11px] font-black text-white hover:bg-violet-700" onClick={handleShareActiveRoster} disabled={!user || isEmptyRoster || Boolean(busy)}>
               <Share2 className="mr-1.5 h-4 w-4" />
               {busy === "publish" ? "Creating…" : "Create shared copy"}
             </Button>
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-2">
-            <Button type="button" variant="outline" className="h-10 rounded-2xl border-violet-100 bg-white px-3 text-xs font-black text-violet-700 shadow-sm hover:bg-violet-50" onClick={() => setSharedRosterLibraryOpen(true)} disabled={!user || Boolean(busy)}>
-              <FolderOpen className="mr-1.5 h-4 w-4" />
-              Shared rosters
+            <Button type="button" variant="outline" className="h-full min-h-11 rounded-2xl border-violet-100 bg-white/70 px-2 text-[11px] font-black text-violet-700 shadow-sm hover:bg-white" onClick={() => setSharedRosterLibraryOpen(true)} disabled={!user || Boolean(busy)}>
+              <FolderOpen className="mr-1 h-4 w-4" />
+              Rosters
             </Button>
-            <Button type="button" variant="outline" className="h-10 rounded-2xl border-violet-100 bg-white px-2 text-xs font-black text-violet-700 shadow-sm hover:bg-violet-50" onClick={() => openCollaborators(activeSharedRosterId)} disabled={!user || Boolean(busy)}>
+            <Button type="button" variant="outline" className="h-full min-h-11 rounded-2xl border-violet-100 bg-white/70 px-2 text-[11px] font-black text-violet-700 shadow-sm hover:bg-white" onClick={() => openCollaborators(activeSharedRosterId)} disabled={!user || Boolean(busy)}>
               <Users className="mr-1 h-4 w-4" />
               Organizers
             </Button>

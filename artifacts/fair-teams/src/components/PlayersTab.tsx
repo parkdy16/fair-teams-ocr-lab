@@ -11,6 +11,7 @@ import { UserMinus, Plus, Star, Zap, Search, X, Camera, Image as ImageIcon, Tras
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart, ResponsiveContainer } from "recharts";
 import { listenToClubRatingSummaries, type ClubRatingSummary } from "@/lib/clubCollaborationService";
+import { listenToSharedRosterUser } from "@/lib/sharedRosterService";
 
 
 
@@ -1374,6 +1375,8 @@ export function PlayersTab({
   const [sortMode, setSortMode] = useState<"recent" | "alpha" | "skill">(() => rosterSortModeSession);
   const [clubRatingLegendOpen, setClubRatingLegendOpen] = useState(false);
   const [clubRatingSummaries, setClubRatingSummaries] = useState<ClubRatingSummary[]>([]);
+  const [sharedRosterAuthReady, setSharedRosterAuthReady] = useState(false);
+  const [sharedRosterUserUid, setSharedRosterUserUid] = useState<string | null>(null);
   const lastOpenPairingRulesTokenRef = useRef(0);
 
   useEffect(() => {
@@ -1385,7 +1388,19 @@ export function PlayersTab({
   }, [openPairingRulesToken, players.length, setPairingRules]);
 
   useEffect(() => {
+    return listenToSharedRosterUser((user) => {
+      setSharedRosterAuthReady(true);
+      setSharedRosterUserUid(user?.uid || null);
+    });
+  }, []);
+
+  useEffect(() => {
     if (!isSharedRoster || !sharedRosterId) {
+      setClubRatingSummaries([]);
+      return;
+    }
+    if (!sharedRosterAuthReady) return;
+    if (!sharedRosterUserUid) {
       setClubRatingSummaries([]);
       return;
     }
@@ -1400,7 +1415,7 @@ export function PlayersTab({
       setClubRatingSummaries([]);
       return;
     }
-  }, [isSharedRoster, sharedRosterId]);
+  }, [isSharedRoster, sharedRosterId, sharedRosterAuthReady, sharedRosterUserUid]);
 
   useEffect(() => {
     const hasRosterDialogOpen =

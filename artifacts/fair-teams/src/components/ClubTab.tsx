@@ -223,6 +223,16 @@ function formatEquipmentTimestamp(value?: number) {
   });
 }
 
+function formatClubNoteDate(value?: number) {
+  if (!value) return "date not recorded";
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "date not recorded";
+  return date.toLocaleDateString([], {
+    month: "short",
+    day: "numeric",
+  });
+}
+
 function buildSharedEquipmentHolders(
   labels: string[],
   equipmentKits: ClubEquipmentKit[],
@@ -1635,16 +1645,16 @@ export function ClubTab({
             previewClubNotes.map((note, index) => (
               <div
                 key={note.id}
-                className="relative min-h-[6rem] w-[6.2rem] shrink-0 rounded-[0.8rem] border border-black/5 px-2.5 py-2.5 shadow-[0_7px_16px_rgba(15,23,42,0.10)]"
+                className="relative min-h-[6.75rem] w-[6.2rem] shrink-0 rounded-[0.8rem] border border-black/5 px-2.5 py-2.5 shadow-[0_7px_16px_rgba(15,23,42,0.10)]"
                 style={clubNoteStyle(index)}
               >
                 <div className="flex h-full flex-col">
                   <div className="min-h-0 flex-1 text-[12px] font-black leading-snug text-[#102A43] line-clamp-3">
                     {note.text}
                   </div>
-                  <div className="mt-2 truncate pr-4 text-[9px] font-bold text-slate-600/80">
-                    {note.createdByName || "Organizer"} ·{" "}
-                    {formatEquipmentTimestamp(note.createdAt)}
+                  <div className="mt-2 pr-4 text-[9px] font-bold leading-tight text-slate-600/80">
+                    <div className="truncate">— {note.createdByName || "Organizer"}</div>
+                    <div className="truncate">{formatClubNoteDate(note.createdAt)}</div>
                   </div>
                 </div>
                 {canRemoveClubNote(note) && (
@@ -1822,9 +1832,9 @@ export function ClubTab({
                         <div className="text-sm font-black leading-snug text-[#102A43]">
                           {note.text}
                         </div>
-                        <div className="mt-1 text-[10px] font-bold text-amber-700/70">
-                          {note.createdByName || "Organizer"} ·{" "}
-                          {formatEquipmentTimestamp(note.createdAt)}
+                        <div className="mt-1 text-[10px] font-bold leading-tight text-amber-700/70">
+                          <div>— {note.createdByName || "Organizer"}</div>
+                          <div>{formatClubNoteDate(note.createdAt)}</div>
                         </div>
                       </div>
                       {canRemoveClubNote(note) && (

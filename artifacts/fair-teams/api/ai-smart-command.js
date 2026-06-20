@@ -1,4 +1,4 @@
-import { getFairTeamsKnowledgeForCommand, FAIR_TEAMS_KNOWLEDGE_VERSION } from "./fair-teams-knowledge.js";
+import { getFairTeamsKnowledgeForCommand, getDirectFairTeamsAnswerForCommand, FAIR_TEAMS_KNOWLEDGE_VERSION } from "./fair-teams-knowledge.js";
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 const DEFAULT_MODEL = process.env.OPENAI_SMART_COMMAND_MODEL || "gpt-4o-mini";
 const MAX_COMMAND_CHARS = 4000;
@@ -1198,9 +1198,6 @@ export default async function handler(req, res) {
   if (!branchAllowed()) {
     return res.status(403).json({ error: "AI Smart Command is not enabled for this branch." });
   }
-  if (!process.env.OPENAI_API_KEY) {
-    return res.status(500).json({ error: "OPENAI_API_KEY is not configured." });
-  }
 
   const body = req.body && typeof req.body === "object" ? req.body : {};
   const commandText = cleanString(body.commandText, MAX_COMMAND_CHARS);
@@ -1211,6 +1208,27 @@ export default async function handler(req, res) {
 
   if (!commandText) {
     return res.status(400).json({ error: "Missing commandText." });
+  }
+
+  const directFairTeamsAnswer = getDirectFairTeamsAnswerForCommand(commandText, context);
+  if (directFairTeamsAnswer) {
+    return res.status(200).json({
+      schemaVersion: 1,
+      ok: true,
+      detectedLanguage: "unknown",
+      normalizedIntent: cleanString(commandText, 300),
+      assistantSummary: directFairTeamsAnswer.assistantSummary,
+      confidence: directFairTeamsAnswer.confidence,
+      actions: [],
+      confirmations: [],
+      unresolved: [],
+      parseMode: "fair_teams_knowledge_base",
+      debugWarnings: [`Answered from Fair Teams knowledge topic: ${directFairTeamsAnswer.topic}`],
+    });
+  }
+
+  if (!process.env.OPENAI_API_KEY) {
+    return res.status(500).json({ error: "OPENAI_API_KEY is not configured." });
   }
 
   const payload = {

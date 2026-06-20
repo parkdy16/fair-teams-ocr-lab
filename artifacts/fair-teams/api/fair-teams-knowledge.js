@@ -78,6 +78,98 @@ function matchScore(section, normalizedText) {
   return score;
 }
 
+
+
+const APP_QUESTION_WORDS = [
+  "what", "whats", "what's", "how", "why", "when", "where", "difference", "different", "explain", "meaning", "mean", "does", "do", "can i", "can you", "should i", "is", "are", "was", "werden", "wie", "was", "warum", "unterschied", "erklar", "erklär", "무엇", "뭐", "차이", "어떻게", "왜", "설명", "의미"
+];
+
+const APP_FEATURE_WORDS = [
+  "fair teams", "roster", "local roster", "shared roster", "private roster", "non shared", "non-shared", "rating", "ratings", "skill", "ovr", "club rating", "club average", "normal rating", "local rating", "shared rating", "today", "teams", "5v5", "6v6", "players per team", "team count", "pairing", "keep together", "keep separate", "club", "club notes", "equipment", "equipment board", "bag", "smart import", "ocr", "lost and found", "screenshot", "crop", "review names", "cloud backup", "backup", "shared", "firebase", "voice", "assistant"
+];
+
+const ACTION_REQUEST_STARTERS = [
+  "add ", "create ", "make ", "select ", "unselect ", "move ", "give ", "put ", "set ", "change ", "rename ", "delete ", "remove ", "open ", "generate ", "lock ",
+  "can you add", "can you move", "can you select", "can you make", "please add", "please move", "bitte", "추가", "이동", "선택", "만들"
+];
+
+function hasAnyNormalized(normalizedText, words) {
+  return words.some((word) => {
+    const normalizedWord = normalize(word);
+    return normalizedWord && normalizedText.includes(normalizedWord);
+  });
+}
+
+function startsLikeActionRequest(normalizedText) {
+  return ACTION_REQUEST_STARTERS.some((starter) => normalizedText.startsWith(normalize(starter)));
+}
+
+function looksLikeFairTeamsQuestion(commandText = "") {
+  const normalizedText = normalize(commandText);
+  if (!normalizedText) return false;
+  const hasQuestionShape = commandText.includes("?") || hasAnyNormalized(normalizedText, APP_QUESTION_WORDS);
+  const hasAppFeature = hasAnyNormalized(normalizedText, APP_FEATURE_WORDS);
+  if (!hasQuestionShape || !hasAppFeature) return false;
+  // "Can you add/move/select..." is an app command, not a product Q&A question.
+  if (startsLikeActionRequest(normalizedText) && !/(what|how|why|difference|explain|meaning|mean|unterschied|차이|설명)/i.test(commandText)) return false;
+  return true;
+}
+
+function scoreTopic(section, normalizedText) {
+  let score = matchScore(section, normalizedText);
+  const title = normalize(section.title || "");
+  if (title && normalizedText.includes(title)) score += 4;
+  return score;
+}
+
+function detectKnowledgeTopic(commandText = "") {
+  const normalizedText = normalize(commandText);
+  const scored = Object.entries(KNOWLEDGE_SECTIONS)
+    .map(([id, section]) => ({ id, score: scoreTopic(section, normalizedText) }))
+    .sort((a, b) => b.score - a.score);
+
+  const hasRating = /(rating|ratings|skill|ovr|level|ability|bewertung|wertung|실력|등급|평점)/i.test(commandText);
+  const hasRosterMode = /(local|private|shared|non.?shared|normal|club|average|consensus|로컬|개인|공유|클럽|평균)/i.test(commandText);
+  const asksDifference = /(difference|different|versus| vs |compare|unterschied|차이)/i.test(commandText);
+  if (hasRating && (hasRosterMode || asksDifference)) return "ratings";
+
+  if (/(lost.?found|lost and found|ocr|smart import|screenshot|crop|scan|review names|meetup)/i.test(commandText)) return "smartImport";
+  if (/(cloud backup|backup|restore|shared roster collaboration|collaboration|sync|google drive)/i.test(commandText)) return "backupSync";
+  if (/(equipment|bag|bags|bibs|cones|ball|holder|gear)/i.test(commandText)) return "equipment";
+  if (/(club notes|post.?it|organizer note|club tab|club)/i.test(commandText)) return "clubNotes";
+  if (/(today|attendance|playing today|team generation|generate teams|5v5|6v6|teams|team count|players per team)/i.test(commandText)) return "todayTeams";
+  if (/(pairing|keep together|keep separate|separate|together|team lock|red team|blue team|color lock)/i.test(commandText)) return "pairingLocks";
+  if (/(local roster|private roster|shared roster|make private copy|duplicate to private|co.?organizer|collaborator)/i.test(commandText)) return "localSharedRosters";
+  if (/(voice|talk|microphone|transcribe|ai assistant|assistant)/i.test(commandText)) return "voiceAi";
+
+  return scored[0]?.score > 0 ? scored[0].id : null;
+}
+
+const DIRECT_FAIR_TEAMS_ANSWERS = {
+  ratings: `In Fair Teams, local/private/non-shared rating is the normal private rating system. It belongs to your own roster and is used directly when you generate teams. In a private roster, the player profile can include the main skill/OVR and, where available, private advanced details like attack, defense, passing, speed, and special traits.\n\nShared rating is different. In a shared/Club roster, each organizer submits their own private simple rating for a player. Other organizers do not see that individual rating. Fair Teams combines submitted organizer ratings into a Club average/consensus rating, and shared team generation uses that Club average. A collaborator should normally see the average only after rating that player, so they are not biased.`,
+  localSharedRosters: `A local/private roster is your own roster on your device. It uses the normal full Fair Teams workflow and your own private player ratings. A shared roster is an online Club roster for multiple organizers. It syncs shared-safe information such as names, AKA/aliases, category/vibe notes, Club ratings, notes, equipment, and collaboration data. Sharing should create a separate shared copy; it should not silently convert your local roster. If you want your own version of a shared roster, use a private copy.`,
+  smartImport: `Smart Import reads names from screenshots so you do not have to type attendance manually. The default flow uses offline OCR, crop boxes, Meetup/Other screenshot modes, Review Names, OCR report export, and Lost & Found. Lost & Found is there to rescue possible names that OCR did not confidently place in the main name list. AI or cloud OCR should stay optional, not replace the reliable offline default.`,
+  todayTeams: `The Today tab is where you select who is playing now. Team generation then uses those selected players to create balanced teams. “5v5” means five players per team, so it normally needs 10 selected players. “Make 6 teams” means six total teams, not 6v6. The assistant should set up selection, size/count, rules, and warnings; the Fair Teams generator still creates the final teams.`,
+  pairingLocks: `Pairing rules guide the team generator. “Keep Sarah and Tommy together” means try to place them on the same team. “Sarah and Tommy do not like each other” or “do not put them together” means keep them separate. Team locks are different: “George red” or “put George in red” means lock that player to a specific team/color when teams are generated.`,
+  clubNotes: `Club Notes are friendly organizer notes in the Club area, like a shared post-it board. They are meant for quick community/organizer notes such as “Puma ball died today — Joon.” Adding a note is relatively safe; deleting notes should require confirmation.`,
+  equipment: `The Equipment Board tracks football bags/items and who currently has them. Examples are balls, bibs, cones, pump, or jerseys. A command like “move the bibs bag to Sarah” means change the holder of that equipment item. In this AI branch, the assistant may understand equipment moves before every equipment action is actually wired to execute.`,
+  backupSync: `Cloud Backup is private manual backup/restore. It is not the same as collaboration. Shared roster collaboration is online/shared roster data for multiple organizers. Backup protects your own roster data; shared rosters are for co-organizers working on the same Club roster.`,
+  voiceAi: `The intended voice design is push-to-talk or tap-to-record first: record speech, transcribe it, show the transcript, then send it to the same Fair Teams assistant/action system. Realtime always-listening voice can come later. The assistant should be conversational, but app changes still go through safe capability handlers and confirmations.`,
+  privacySafety: `Fair Teams AI should be helpful but cautious. Simple setup actions can be previewed or applied with one tap. Risky changes need confirmation. Destructive actions like deleting players, rosters, backups, notes, or collaborator access should never happen automatically from one casual sentence.`,
+  core: `Fair Teams helps a casual football organizer keep a roster, select who is playing today, and generate balanced teams. The assistant can answer app questions and turn messy language into safe app actions, but the actual app handlers decide what can be applied.`
+};
+
+export function getDirectFairTeamsAnswerForCommand(commandText, context = {}) {
+  if (!looksLikeFairTeamsQuestion(commandText)) return null;
+  const topic = detectKnowledgeTopic(commandText) || "core";
+  const answer = DIRECT_FAIR_TEAMS_ANSWERS[topic] || DIRECT_FAIR_TEAMS_ANSWERS.core;
+  return {
+    topic,
+    assistantSummary: answer,
+    confidence: topic === "core" ? 0.76 : 0.92,
+  };
+}
+
 export function getFairTeamsKnowledgeForCommand(commandText, context = {}) {
   const text = normalize(`${commandText || ""} ${context?.activeTab || ""} ${context?.rosterMode || ""}`);
   const scored = Object.entries(KNOWLEDGE_SECTIONS)

@@ -192,5 +192,57 @@
       "cloud backup is private backup/restore",
       "shared roster collaboration is separate"
     ]
+  },
+  {
+    "id": "fair-teams-qa-local-vs-shared-rating-plain",
+    "command": "What is the difference between local rating and shared rating?",
+    "expected": [
+      "answered from Fair Teams knowledge",
+      "local/private rating is normal private rating",
+      "shared/Club rating uses private organizer submissions and Club average",
+      "actions empty"
+    ]
+  },
+  {
+    "id": "fair-teams-qa-private-vs-club-skill",
+    "command": "How is private skill different from Club average?",
+    "expected": [
+      "answered from Fair Teams knowledge",
+      "private roster uses organizer's own rating",
+      "Club average comes from shared organizer ratings"
+    ]
+  },
+  {
+    "id": "fair-teams-qa-rating-germanish",
+    "command": "Explain normal rating vs shared club rating in this app.",
+    "expected": [
+      "Fair Teams-specific rating answer",
+      "not generic sports metrics"
+    ]
+  },
+  {
+    "id": "fair-teams-qa-local-shared-roster-synonyms",
+    "command": "Can you explain private roster versus shared roster?",
+    "expected": [
+      "local/private roster",
+      "shared online Club roster",
+      "actions empty"
+    ]
+  },
+  {
+    "id": "fair-teams-qa-backup-vs-sync-synonyms",
+    "command": "Is cloud backup also syncing with other organizers?",
+    "expected": [
+      "cloud backup private",
+      "shared roster collaboration separate"
+    ]
+  },
+  {
+    "id": "fair-teams-qa-today-5v5",
+    "command": "Why does 5v5 need 10 players?",
+    "expected": [
+      "5 players per team",
+      "10 selected players"
+    ]
   }
 ]

@@ -134,5 +134,24 @@
       "equipment_add_item",
       "targetName:pump bag"
     ]
+  },
+  {
+    "id": "fair-teams-rating-qa-private-vs-shared",
+    "command": "What is the difference between non-shared roster rating and normal rating in detail?",
+    "expected": [
+      "assistantSummary app-specific",
+      "local/private/non-shared rating is normal private rating",
+      "shared/Club rating uses private organizer submissions and Club average",
+      "actions empty"
+    ]
+  },
+  {
+    "id": "fair-teams-rating-qa-club-average",
+    "command": "Can other organizers see my rating in a shared roster?",
+    "expected": [
+      "individual rating hidden",
+      "Club average/consensus used after ratings",
+      "actions empty"
+    ]
   }
 ]

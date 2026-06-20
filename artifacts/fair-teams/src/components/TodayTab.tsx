@@ -324,6 +324,8 @@ const OCR_JUNK_WORDS = new Set([
   "first event ooo",
   "member first event ooo",
   "i could",
+  // Keep short OCR fragments here only if downstream checks treat them as
+  // exact words. Substring matching with "na" once blocked Natasha/Katharina.
   "na",
   "where s the rsvp question",
   "i thought it was moved to august",
@@ -1139,10 +1141,14 @@ function isProbablyName(value: string) {
   if (!normalized) return false;
   if (OCR_JUNK_WORDS.has(normalized)) return false;
   if (
-    [...OCR_JUNK_WORDS].some(
-      (word) =>
-        normalized.includes(word) && normalized.length <= word.length + 8,
-    )
+    [...OCR_JUNK_WORDS].some((word) => {
+      // Reject junk as whole words/phrases only. Substring matching made short
+      // junk like "na", "no", or "yes" block real names such as Natasha,
+      // Katharina, Alanah, Noah, Nolan, or Yesim.
+      if (word.length < 3) return false;
+      const pattern = new RegExp(`(^|\\s)${escapeRegExp(word)}(?=\\s|$)`);
+      return pattern.test(normalized) && normalized.length <= word.length + 8;
+    })
   )
     return false;
   if (/\d/.test(clean)) return false;

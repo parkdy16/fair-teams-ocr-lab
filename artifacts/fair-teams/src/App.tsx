@@ -28,6 +28,7 @@ import { PlayersTab } from "@/components/PlayersTab";
 import { TodayTab } from "@/components/TodayTab";
 import { TeamsTab } from "@/components/TeamsTab";
 import { ClubTab } from "@/components/ClubTab";
+import { AiSmartCommandPanel } from "@/components/AiSmartCommandPanel";
 import type { PairingRule } from "@/lib/types";
 import { FirebaseSharedRosterAuthCard } from "@/components/FirebaseSharedRosterAuthCard";
 import { FirebaseSharedRosterPublishCard } from "@/components/FirebaseSharedRosterPublishCard";
@@ -3313,6 +3314,14 @@ They will no longer be able to open or edit this shared roster unless it is shar
               value="club"
               className="fairteams-tab-panel m-0 data-[state=active]:animate-in data-[state=active]:fade-in-50"
             >
+              <div className="mb-3">
+                <AiSmartCommandPanel
+                  players={players}
+                  rosterName={activeRosterName}
+                  rosterMode={activeRosterIsFirebaseShared ? "shared" : "local"}
+                  activeTab="club"
+                />
+              </div>
               <ClubTab
                 isActive={activeTab === "club"}
                 activeRosterName={activeRosterName}

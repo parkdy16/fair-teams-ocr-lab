@@ -32,6 +32,7 @@ function actionDetails(action: AiSmartCommandAction) {
   }
   if (action.newPlayerName) details.push(`new player: ${action.newPlayerName}`);
   if (action.playersPerTeam) details.push(`${action.playersPerTeam}v${action.playersPerTeam}`);
+  if (action.teamCount) details.push(`${action.teamCount} teams`);
   if (action.pairingKind) details.push(action.pairingKind.replace(/_/g, " "));
   if (action.teamLabel) details.push(`team: ${action.teamLabel}`);
   if (action.role) details.push(`role: ${action.role.replace(/_/g, " ")}`);

@@ -192,23 +192,67 @@ function detectPlayersPerTeam(text) {
   return null;
 }
 
+function detectTeamCount(text) {
+  const command = cleanString(text, MAX_COMMAND_CHARS);
+  if (!command) return null;
+
+  const patterns = [
+    /\b(?:make|create|generate|build|split(?:\s+into)?|divide(?:\s+into)?)\s+(\d{1,2})\s+teams?\b/i,
+    /\b(\d{1,2})\s+teams?\b/i,
+    /\b(\d{1,2})\s+mannschaften\b/i,
+    /\b(\d{1,2})\s+teams?\s*(?:machen|erstellen|bilden)\b/i,
+    /(\d{1,2})\s*개\s*팀/,
+    /(\d{1,2})\s*팀(?:으로|으로 나눠|으로 나누| 만들어| 만들)/,
+  ];
+
+  for (const pattern of patterns) {
+    const match = command.match(pattern);
+    if (!match) continue;
+    const value = Number(match[1]);
+    if (Number.isFinite(value) && value >= 2 && value <= 12) return value;
+  }
+  return null;
+}
+
+function detectSelectAllRosterPlayers(text) {
+  const command = normalizeForMatching(text);
+  if (!command) return false;
+
+  const patterns = [
+    /\b(select|choose|pick|mark|add)\b.*\b(all|everyone|everybody)\b.*\b(roster|players|people)?\b/i,
+    /\b(all|everyone|everybody)\b.*\b(playing|today|roster|players|selected)\b/i,
+    /\b(entire|whole)\b.*\b(roster|team list|player list)\b/i,
+    /\balle\b.*\b(spieler|leute|kader)\b/i,
+    /\balle\b.*\b(heute|auswahlen|markieren)\b/i,
+    /모든\s*(선수|사람|멤버)/,
+    /(전체|전부|다)\s*(선택|참석|오늘|로스터)/,
+    /(로스터|명단)\s*(전체|전부|다)/,
+  ];
+  return patterns.some((pattern) => pattern.test(command));
+}
+
 function buildCommandHints(commandText, roster) {
   const rosterIndex = buildRosterNameIndex(roster);
   const candidateNames = Array.from(new Set(splitLikelyNameList(commandText)));
   const candidatePlayers = candidateNames.map((candidate) => matchNameCandidate(candidate, rosterIndex));
   const playersPerTeam = detectPlayersPerTeam(commandText);
+  const teamCount = detectTeamCount(commandText);
+  const selectAllRosterPlayers = detectSelectAllRosterPlayers(commandText);
   const matchedCount = candidatePlayers.filter((item) => item.status === "matched" || item.status === "possible_match").length;
   const unknownCount = candidatePlayers.filter((item) => item.status === "unknown").length;
   return {
-    appKnowledgeVersion: "2026-06-20.smart-command-v3-capability-manifest",
+    appKnowledgeVersion: "2026-06-20.smart-command-v4-deterministic-hints",
     candidateNames,
     candidatePlayers,
+    selectAllRosterPlayers,
     detectedPlayersPerTeam: playersPerTeam,
+    detectedTeamCount: teamCount,
     expectedPlayerCountForRequestedGame: playersPerTeam ? playersPerTeam * 2 : null,
     listedPlayerCount: candidateNames.length || null,
+    selectedAllPlayerCount: selectAllRosterPlayers ? roster.length : null,
     matchedListedPlayerCount: matchedCount || null,
     unknownListedPlayerCount: unknownCount || null,
-    instruction: "These are deterministic hints from Fair Teams before calling AI. Use them unless the user text clearly contradicts them. Every candidate name must be represented in actions, confirmations, or unresolved items.",
+    instruction: "These are deterministic hints from Fair Teams before calling AI. Use them unless the user text clearly contradicts them. Every candidate name must be represented in actions, confirmations, or unresolved items. If selectAllRosterPlayers is true, select every roster player. If detectedTeamCount is set, set that many teams; do not confuse it with players per team.",
   };
 }
 
@@ -238,6 +282,8 @@ Today/player-list rules:
 - "Joon, Jorge, Jan are playing today" = select Joon, Jorge, Jan.
 - "Joon, Jorge, Jan. 5v5" also likely means select those names for Today.
 - "5v5" means playersPerTeam=5, not five total players. Normally 5v5 needs 10 selected players.
+- "make 6 teams" means teamCount=6, not 6v6.
+- "select all players on the roster", "everyone is playing", "alle Spieler", or "모든 선수" means select every player in the current roster for Today.
 - If only 5 names are listed for 5v5, set team size but add unresolved/missing_context explaining the mismatch.
 
 Pairing rules:
@@ -413,6 +459,152 @@ const jsonSchema = {
   }
 };
 
+
+function makePlayerRef(player, spokenName) {
+  return {
+    playerId: player?.id || null,
+    rosterName: player?.name || null,
+    spokenName: spokenName || player?.name || "",
+    confidence: player?.id ? 1 : 0,
+  };
+}
+
+function baseAction(type, overrides = {}) {
+  return {
+    type,
+    playerRefs: [],
+    newPlayerName: null,
+    suggestedSkill: null,
+    playersPerTeam: null,
+    teamCount: null,
+    pairingKind: null,
+    teamLabel: null,
+    role: null,
+    attribute: null,
+    distribution: null,
+    noteText: null,
+    colorName: null,
+    targetName: null,
+    targetArea: null,
+    capabilityId: null,
+    supportStatus: "preview_only",
+    requiresConfirmation: false,
+    reason: null,
+    ...overrides,
+  };
+}
+
+function buildDeterministicActions(commandHints, roster) {
+  const actions = [];
+
+  if (commandHints.selectAllRosterPlayers && roster.length > 0) {
+    actions.push(baseAction("select_players", {
+      playerRefs: roster.map((player) => makePlayerRef(player)),
+      capabilityId: "today.select_players",
+      supportStatus: "preview_only",
+      reason: "Select every player in the current roster for Today.",
+    }));
+  }
+
+  if (commandHints.detectedPlayersPerTeam) {
+    actions.push(baseAction("set_team_size", {
+      playersPerTeam: commandHints.detectedPlayersPerTeam,
+      capabilityId: "teams.set_team_size",
+      supportStatus: "preview_only",
+      reason: `Set the match to ${commandHints.detectedPlayersPerTeam}v${commandHints.detectedPlayersPerTeam}.`,
+    }));
+  }
+
+  if (commandHints.detectedTeamCount) {
+    actions.push(baseAction("set_team_count", {
+      teamCount: commandHints.detectedTeamCount,
+      capabilityId: "teams.set_team_count",
+      supportStatus: "preview_only",
+      reason: `Create ${commandHints.detectedTeamCount} teams.`,
+    }));
+  }
+
+  return actions;
+}
+
+function hasAction(actions, type) {
+  return Array.isArray(actions) && actions.some((action) => action?.type === type);
+}
+
+function mergeDeterministicActions(parsed, commandHints, roster) {
+  if (!parsed || typeof parsed !== "object") return parsed;
+  const deterministicActions = buildDeterministicActions(commandHints, roster);
+  const merged = { ...parsed, actions: Array.isArray(parsed.actions) ? [...parsed.actions] : [] };
+
+  for (const action of deterministicActions) {
+    if (!hasAction(merged.actions, action.type)) merged.actions.unshift(action);
+  }
+
+  const unresolved = Array.isArray(parsed.unresolved) ? [...parsed.unresolved] : [];
+  if (commandHints.detectedTeamCount && commandHints.selectAllRosterPlayers && roster.length > 0 && roster.length < commandHints.detectedTeamCount) {
+    unresolved.push({
+      text: `${roster.length} players for ${commandHints.detectedTeamCount} teams`,
+      issue: "missing_context",
+      message: `You have ${roster.length} roster players, which is fewer than ${commandHints.detectedTeamCount} teams.`,
+    });
+  }
+  merged.unresolved = unresolved;
+
+  if (deterministicActions.length > 0 && typeof merged.assistantSummary === "string") {
+    merged.assistantSummary = merged.assistantSummary || "Fair Teams understood the command.";
+  }
+  return merged;
+}
+
+function extractJsonObject(text) {
+  const raw = cleanString(text, 20000);
+  if (!raw) return "";
+  const unfenced = raw
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+  if (unfenced.startsWith("{") && unfenced.endsWith("}")) return unfenced;
+  const first = unfenced.indexOf("{");
+  const last = unfenced.lastIndexOf("}");
+  if (first >= 0 && last > first) return unfenced.slice(first, last + 1);
+  return "";
+}
+
+function deterministicFallbackResponse(commandText, commandHints, roster) {
+  const actions = buildDeterministicActions(commandHints, roster);
+  const unresolved = [];
+
+  if (actions.length === 0) {
+    unresolved.push({
+      text: commandText,
+      issue: "unknown_intent",
+      message: "I understood this as a Fair Teams request, but this command is not wired safely yet.",
+    });
+  }
+
+  if (commandHints.detectedTeamCount && commandHints.selectAllRosterPlayers && roster.length > 0 && roster.length < commandHints.detectedTeamCount) {
+    unresolved.push({
+      text: `${roster.length} players for ${commandHints.detectedTeamCount} teams`,
+      issue: "missing_context",
+      message: `You have ${roster.length} roster players, which is fewer than ${commandHints.detectedTeamCount} teams.`,
+    });
+  }
+
+  return {
+    schemaVersion: 1,
+    ok: actions.length > 0,
+    detectedLanguage: "unknown",
+    normalizedIntent: cleanString(commandText, 300),
+    assistantSummary: actions.length > 0
+      ? "Fair Teams used local command hints because the AI response was malformed."
+      : "Fair Teams could not safely convert this command yet.",
+    confidence: actions.length > 0 ? 0.72 : 0.25,
+    actions,
+    confirmations: [],
+    unresolved,
+  };
+}
+
 function systemPrompt() {
   return `You are Fair Teams Smart Command, a multilingual command parser for a casual football team-making app.
 
@@ -426,7 +618,9 @@ Output contract:
 - detectedLanguage may be any BCP-47-like language string such as en, de, ko, es, mixed, or unknown.
 - Preserve player names exactly as user says them when uncertain. Do not translate names.
 - Use the provided commandHints. Every candidateName from commandHints must appear in select_players, add_new_player_suggestion, confirmations, or unresolved.
+- If commandHints.selectAllRosterPlayers is true, create select_players containing every roster player.
 - When commandHints detects playersPerTeam, create set_team_size unless the user clearly meant something else.
+- When commandHints detects teamCount, create set_team_count. "make 6 teams" means teamCount=6, not 6v6.
 - If commandHints says a listed player is unknown, create add_new_player_suggestion for that exact name and missing_player confirmation.
 - If commandHints says only 5 listed names were provided for 5v5, still set playersPerTeam=5 and add unresolved missing_context.
 - AI does not generate final teams. It only returns safe app actions for Fair Teams to execute.
@@ -514,9 +708,10 @@ export default async function handler(req, res) {
   }
 
   try {
-    const parsed = JSON.parse(outputText);
-    return res.status(200).json(parsed);
+    const jsonText = extractJsonObject(outputText) || outputText;
+    const parsed = JSON.parse(jsonText);
+    return res.status(200).json(mergeDeterministicActions(parsed, commandHints, roster));
   } catch {
-    return res.status(502).json({ error: "AI returned invalid JSON." });
+    return res.status(200).json(deterministicFallbackResponse(commandText, commandHints, roster));
   }
 }

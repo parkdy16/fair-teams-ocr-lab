@@ -1,4 +1,4 @@
-export const FAIR_TEAMS_KNOWLEDGE_VERSION = "2026-06-20.kb-v1";
+export const FAIR_TEAMS_KNOWLEDGE_VERSION = "2026-06-20.kb-answer-style-v2";
 
 function clean(value, max = 4000) {
   return typeof value === "string" ? value.replace(/\s+/g, " ").trim().slice(0, max) : "";
@@ -15,7 +15,7 @@ const KNOWLEDGE_SECTIONS = {
   core: {
     title: "Fair Teams core model",
     keywords: ["fair teams", "app", "what can you do", "how does this work", "help"],
-    text: `Fair Teams is a casual football organizer app. The core workflow is: keep a roster of known players, mark who is playing today, then generate balanced teams. The assistant should be friendly, but its special role is app help and safe app actions. It should not pretend it can change data unless a capability is wired. It can explain supported features, preview understood actions, and ask for confirmation when changes are risky.`,
+    text: `Fair Teams is a casual football organizer app. The core workflow is: keep a roster of known players, mark who is playing today, then generate balanced teams. The assistant should sound like a helpful organizer, not a developer changelog. For product questions, explain what the feature is for and how users should think about it. Only mention whether an AI action is available when the user is explicitly asking the assistant to perform that action or asks about AI capability.`,
   },
   localSharedRosters: {
     title: "Local/private rosters vs shared rosters",
@@ -50,7 +50,7 @@ const KNOWLEDGE_SECTIONS = {
   equipment: {
     title: "Equipment Board",
     keywords: ["equipment", "bag", "bags", "ball", "bibs", "cones", "pump", "holder", "who has", "move bag", "gear"],
-    text: `The Equipment Board tracks bags/items such as balls, bibs, cones, pump, or jerseys and who currently holds them. It is useful for organizers who share responsibility for equipment. Commands like "move the bibs bag to Sarah" or "George has the cones now" mean move/change the holder of an equipment item. In the current AI branch, equipment actions may be understood but not fully wired to execute yet, so the assistant should clearly say it understands and whether it is apply-able.`,
+    text: `The Equipment Board is a simple 'who has what?' board for a football group. It tracks bags/items such as balls, bibs, cones, pumps, jerseys, or any group gear that someone might take home after a match. It helps organizers quickly see who currently has each item before the next game, instead of checking old chats or asking everyone again. Commands like "move the bibs bag to Sarah" or "George has the cones now" mean move/change the holder of an equipment item. For normal product questions, explain the user benefit and do not mention beta branches, wiring, implementation status, or technical limitations. Only mention that Equipment Board changes cannot be applied from chat yet when the user specifically asks the assistant to move/change equipment.`,
   },
   backupSync: {
     title: "Backup, sync, and collaboration",
@@ -60,12 +60,12 @@ const KNOWLEDGE_SECTIONS = {
   voiceAi: {
     title: "AI assistant and voice design",
     keywords: ["ai", "assistant", "voice", "talk", "speak", "microphone", "transcribe", "ask fair teams"],
-    text: `The AI assistant should feel conversational but remain focused on Fair Teams. It can answer simple app questions and interpret commands. The safest first voice design is push-to-talk or tap-to-record: record audio, transcribe it, show the transcript, then pass the text to the same assistant/action system. Realtime always-listening voice is a later feature. AI actions should be controlled by capability handlers, not free-form model decisions.`,
+    text: `The AI assistant should feel conversational but remain focused on Fair Teams. It can answer simple app questions and interpret commands. The safest first voice design is push-to-talk or tap-to-record: record audio, transcribe it, show the transcript, then pass the text to the same assistant/action system. If asked about future/live voice, explain the intended user experience simply. Avoid exposing developer terms unless the user asks about implementation. AI actions should still be controlled by safe app handlers and confirmations.`,
   },
   privacySafety: {
     title: "Safety, confirmation, and limits",
     keywords: ["delete", "remove", "safe", "confirmation", "privacy", "can you do", "not wired", "why can't"],
-    text: `Safe simple actions can be applied or one-tap applied. Risky actions require confirmation. Destructive actions such as deleting players, rosters, backups, notes, or collaborator access must never happen automatically from one casual sentence. If the assistant understands a request but the app has no handler yet, it should say it understands but that the action is not wired yet. If the knowledge base does not contain a Fair Teams detail, it should say it does not have that detail yet rather than guessing.`,
+    text: `Safe simple actions can be applied or one-tap applied. Risky actions require confirmation. Destructive actions such as deleting players, rosters, backups, notes, or collaborator access must never happen automatically from one casual sentence. For feature explanations, keep the answer user-facing and do not mention implementation status. For action requests that cannot currently be applied from chat, say plainly: 'I understand what you want, but I cannot change that from chat yet.' If the knowledge base does not contain a Fair Teams detail, say the assistant does not have that Fair Teams detail yet rather than guessing.`,
   },
 };
 
@@ -152,11 +152,11 @@ const DIRECT_FAIR_TEAMS_ANSWERS = {
   todayTeams: `The Today tab is where you select who is playing now. Team generation then uses those selected players to create balanced teams. “5v5” means five players per team, so it normally needs 10 selected players. “Make 6 teams” means six total teams, not 6v6. The assistant should set up selection, size/count, rules, and warnings; the Fair Teams generator still creates the final teams.`,
   pairingLocks: `Pairing rules guide the team generator. “Keep Sarah and Tommy together” means try to place them on the same team. “Sarah and Tommy do not like each other” or “do not put them together” means keep them separate. Team locks are different: “George red” or “put George in red” means lock that player to a specific team/color when teams are generated.`,
   clubNotes: `Club Notes are friendly organizer notes in the Club area, like a shared post-it board. They are meant for quick community/organizer notes such as “Puma ball died today — Joon.” Adding a note is relatively safe; deleting notes should require confirmation.`,
-  equipment: `The Equipment Board tracks football bags/items and who currently has them. Examples are balls, bibs, cones, pump, or jerseys. A command like “move the bibs bag to Sarah” means change the holder of that equipment item. In this AI branch, the assistant may understand equipment moves before every equipment action is actually wired to execute.`,
+  equipment: `Equipment is like a small “who has what?” board for your football group. Use it for balls, bibs, cones, pumps, jerseys, or any bag/item someone might take home after a match. Before the next game, organizers can quickly see who has each item instead of searching Signal/WhatsApp or asking everyone again. If the roster is shared, it works especially well as a shared organizer board for group gear.`,
   backupSync: `Cloud Backup is private manual backup/restore. It is not the same as collaboration. Shared roster collaboration is online/shared roster data for multiple organizers. Backup protects your own roster data; shared rosters are for co-organizers working on the same Club roster.`,
   voiceAi: `The intended voice design is push-to-talk or tap-to-record first: record speech, transcribe it, show the transcript, then send it to the same Fair Teams assistant/action system. Realtime always-listening voice can come later. The assistant should be conversational, but app changes still go through safe capability handlers and confirmations.`,
   privacySafety: `Fair Teams AI should be helpful but cautious. Simple setup actions can be previewed or applied with one tap. Risky changes need confirmation. Destructive actions like deleting players, rosters, backups, notes, or collaborator access should never happen automatically from one casual sentence.`,
-  core: `Fair Teams helps a casual football organizer keep a roster, select who is playing today, and generate balanced teams. The assistant can answer app questions and turn messy language into safe app actions, but the actual app handlers decide what can be applied.`
+  core: `Fair Teams helps a casual football organizer keep a roster, select who is playing today, and generate balanced teams. The assistant can answer app questions and help turn messy instructions into safe app actions. It should explain features in plain organizer language, not technical implementation language.`
 };
 
 export function getDirectFairTeamsAnswerForCommand(commandText, context = {}) {
@@ -199,7 +199,7 @@ export function getFairTeamsKnowledgeForCommand(commandText, context = {}) {
 
   return {
     version: FAIR_TEAMS_KNOWLEDGE_VERSION,
-    selectionRule: "Use these Fair Teams knowledge sections as source of truth for app-specific Q&A. If the user asks a Fair Teams question and the answer is not covered here, say you do not have that Fair Teams detail yet instead of guessing.",
+    selectionRule: "Use these Fair Teams knowledge sections as source of truth for app-specific Q&A. For feature-explanation questions, answer like a helpful organizer and do not mention beta branches, wiring, implementation status, JSON, APIs, schemas, or developer details unless the user explicitly asks about implementation. If the user asks the assistant to perform an action that is not available from chat yet, say plainly that you understand but cannot change that from chat yet. If the user asks a Fair Teams question and the answer is not covered here, say you do not have that Fair Teams detail yet instead of guessing.",
     topics: selected.slice(0, 6).map((section) => ({ id: section.id, title: section.title, text: section.text })),
   };
 }

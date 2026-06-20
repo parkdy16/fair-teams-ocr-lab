@@ -244,5 +244,9 @@
       "5 players per team",
       "10 selected players"
     ]
+  },
+  {
+    "input": "What is equipment for?",
+    "expected": "Explains Equipment Board as a who-has-what board for balls, bibs, cones, pumps, jerseys; should not mention AI branch, wiring, JSON, or implementation status."
   }
 ]

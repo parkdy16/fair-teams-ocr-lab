@@ -1,20 +1,7 @@
-declare const process: { env: Record<string, string | undefined> };
-
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 const DEFAULT_MODEL = process.env.OPENAI_SMART_COMMAND_MODEL || "gpt-4o-mini";
 const MAX_COMMAND_CHARS = 4000;
 const MAX_ROSTER_PLAYERS = 80;
-
-type RequestLike = {
-  method?: string;
-  body?: unknown;
-};
-
-type ResponseLike = {
-  status: (code: number) => ResponseLike;
-  json: (body: unknown) => void;
-  setHeader?: (name: string, value: string) => void;
-};
 
 function serverEnabled() {
   return String(process.env.AI_SMART_COMMAND_SERVER_ENABLED || "").toLowerCase() === "true";
@@ -35,19 +22,19 @@ function branchAllowed() {
   return branch === allowed || branch.includes(allowed);
 }
 
-function cleanString(value: unknown, max = 300) {
+function cleanString(value, max = 300) {
   return typeof value === "string" ? value.replace(/\s+/g, " ").trim().slice(0, max) : "";
 }
 
-function cleanNumber(value: unknown) {
+function cleanNumber(value) {
   const numberValue = Number(value);
   return Number.isFinite(numberValue) ? numberValue : undefined;
 }
 
-function cleanRoster(raw: unknown) {
+function cleanRoster(raw) {
   if (!Array.isArray(raw)) return [];
   return raw.slice(0, MAX_ROSTER_PLAYERS).map((player) => {
-    const item = player && typeof player === "object" ? player as Record<string, unknown> : {};
+    const item = player && typeof player === "object" ? player : {};
     return {
       id: cleanString(item.id, 120),
       name: cleanString(item.name, 120),
@@ -73,8 +60,8 @@ function cleanRoster(raw: unknown) {
   }).filter((player) => player.id && player.name);
 }
 
-function cleanContext(raw: unknown) {
-  const item = raw && typeof raw === "object" ? raw as Record<string, unknown> : {};
+function cleanContext(raw) {
+  const item = raw && typeof raw === "object" ? raw : {};
   return {
     rosterName: cleanString(item.rosterName, 120),
     rosterMode: cleanString(item.rosterMode, 30),
@@ -201,7 +188,7 @@ Important behavior:
 - Be concise in assistantSummary and use the user's likely UI language.`;
 }
 
-export default async function handler(req: RequestLike, res: ResponseLike) {
+export default async function handler(req, res) {
   res.setHeader?.("Cache-Control", "no-store");
 
   if (req.method !== "POST") {
@@ -217,7 +204,7 @@ export default async function handler(req: RequestLike, res: ResponseLike) {
     return res.status(500).json({ error: "OPENAI_API_KEY is not configured." });
   }
 
-  const body = req.body && typeof req.body === "object" ? req.body as Record<string, unknown> : {};
+  const body = req.body && typeof req.body === "object" ? req.body : {};
   const commandText = cleanString(body.commandText, MAX_COMMAND_CHARS);
   const roster = cleanRoster(body.roster);
   const context = cleanContext(body.context);
@@ -267,8 +254,8 @@ export default async function handler(req: RequestLike, res: ResponseLike) {
   const outputText = typeof aiPayload?.output_text === "string"
     ? aiPayload.output_text
     : Array.isArray(aiPayload?.output)
-      ? aiPayload.output.flatMap((item: any) => Array.isArray(item?.content) ? item.content : [])
-          .map((content: any) => content?.text || "")
+      ? aiPayload.output.flatMap((item) => Array.isArray(item?.content) ? item.content : [])
+          .map((content) => content?.text || "")
           .join("\n")
           .trim()
       : "";

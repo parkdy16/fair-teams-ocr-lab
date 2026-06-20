@@ -1,4 +1,4 @@
-export const FAIR_TEAMS_KNOWLEDGE_VERSION = "2026-06-20.kb-answer-style-v2";
+export const FAIR_TEAMS_KNOWLEDGE_VERSION = "2026-06-20.roster-copy-v1";
 
 function clean(value, max = 4000) {
   return typeof value === "string" ? value.replace(/\s+/g, " ").trim().slice(0, max) : "";
@@ -21,6 +21,11 @@ const KNOWLEDGE_SECTIONS = {
     title: "Local/private rosters vs shared rosters",
     keywords: ["local", "private", "non shared", "non-shared", "shared roster", "cloud", "club roster", "make private copy", "duplicate to private"],
     text: `A local/private roster belongs to the device/user and uses the normal full Fair Teams player profile. Sharing should create a separate shared roster copy, not silently convert the local roster. A shared roster is an online Club roster for multiple organizers. It syncs shared-safe fields and uses Club ratings for team generation. If a user wants their own private version of a shared roster, the intended action is make/duplicate a private copy. Local backups are private backups and should not be treated as collaboration.`,
+  },
+  rosterCopy: {
+    title: "Copying or duplicating rosters",
+    keywords: ["copy roster", "copy one roster", "copy a roster", "duplicate roster", "duplicate a roster", "new roster from", "copy to new roster", "clone roster", "same roster", "make private copy", "private copy", "export this roster", "import one roster", "import as new roster", "add as new roster"],
+    text: `There are two common roster-copy cases in Fair Teams. For a local/private roster, the safe current workflow is to use Roster Tools > Local Backup > Export this roster, then use Import one roster and choose that exported file. Fair Teams imports it as a separate new roster with a unique name, so the original stays unchanged; the user can rename the copied roster afterward. For a shared roster, use Make private copy. That creates a clean local roster from the shared roster while the shared roster stays online and unchanged. A private copy of a shared roster copies shared names and uses Club averages as starting skill, but photos, special abilities, and private advanced traits are reset so it starts clean. If the user asks for a one-tap duplicate command, explain the safest available path instead of pretending there is a direct duplicate button unless the current UI has one.`,
   },
   ratings: {
     title: "Ratings, normal rating, private rating, Club rating",
@@ -85,7 +90,7 @@ const APP_QUESTION_WORDS = [
 ];
 
 const APP_FEATURE_WORDS = [
-  "fair teams", "roster", "local roster", "shared roster", "private roster", "non shared", "non-shared", "rating", "ratings", "skill", "ovr", "club rating", "club average", "normal rating", "local rating", "shared rating", "today", "teams", "5v5", "6v6", "players per team", "team count", "pairing", "keep together", "keep separate", "club", "club notes", "equipment", "equipment board", "bag", "smart import", "ocr", "lost and found", "screenshot", "crop", "review names", "cloud backup", "backup", "shared", "firebase", "voice", "assistant"
+  "fair teams", "roster", "copy roster", "duplicate roster", "new roster", "make private copy", "export this roster", "import one roster", "local roster", "shared roster", "private roster", "non shared", "non-shared", "rating", "ratings", "skill", "ovr", "club rating", "club average", "normal rating", "local rating", "shared rating", "today", "teams", "5v5", "6v6", "players per team", "team count", "pairing", "keep together", "keep separate", "club", "club notes", "equipment", "equipment board", "bag", "smart import", "ocr", "lost and found", "screenshot", "crop", "review names", "cloud backup", "backup", "shared", "firebase", "voice", "assistant"
 ];
 
 const ACTION_REQUEST_STARTERS = [
@@ -133,13 +138,14 @@ function detectKnowledgeTopic(commandText = "") {
   const asksDifference = /(difference|different|versus| vs |compare|unterschied|차이)/i.test(commandText);
   if (hasRating && (hasRosterMode || asksDifference)) return "ratings";
 
+  if (/(copy|duplicate|clone|export|import|new roster|private copy|make private copy|add as new roster).{0,40}roster|roster.{0,40}(copy|duplicate|clone|export|import|new roster|private copy|make private copy|add as new roster)/i.test(commandText)) return "rosterCopy";
   if (/(lost.?found|lost and found|ocr|smart import|screenshot|crop|scan|review names|meetup)/i.test(commandText)) return "smartImport";
   if (/(cloud backup|backup|restore|shared roster collaboration|collaboration|sync|google drive)/i.test(commandText)) return "backupSync";
   if (/(equipment|bag|bags|bibs|cones|ball|holder|gear)/i.test(commandText)) return "equipment";
   if (/(club notes|post.?it|organizer note|club tab|club)/i.test(commandText)) return "clubNotes";
   if (/(today|attendance|playing today|team generation|generate teams|5v5|6v6|teams|team count|players per team)/i.test(commandText)) return "todayTeams";
   if (/(pairing|keep together|keep separate|separate|together|team lock|red team|blue team|color lock)/i.test(commandText)) return "pairingLocks";
-  if (/(local roster|private roster|shared roster|make private copy|duplicate to private|co.?organizer|collaborator)/i.test(commandText)) return "localSharedRosters";
+  if (/(local roster|private roster|shared roster|co.?organizer|collaborator)/i.test(commandText)) return "localSharedRosters";
   if (/(voice|talk|microphone|transcribe|ai assistant|assistant)/i.test(commandText)) return "voiceAi";
 
   return scored[0]?.score > 0 ? scored[0].id : null;
@@ -148,6 +154,9 @@ function detectKnowledgeTopic(commandText = "") {
 const DIRECT_FAIR_TEAMS_ANSWERS = {
   ratings: `In Fair Teams, local/private/non-shared rating is the normal private rating system. It belongs to your own roster and is used directly when you generate teams. In a private roster, the player profile can include the main skill/OVR and, where available, private advanced details like attack, defense, passing, speed, and special traits.\n\nShared rating is different. In a shared/Club roster, each organizer submits their own private simple rating for a player. Other organizers do not see that individual rating. Fair Teams combines submitted organizer ratings into a Club average/consensus rating, and shared team generation uses that Club average. A collaborator should normally see the average only after rating that player, so they are not biased.`,
   localSharedRosters: `A local/private roster is your own roster on your device. It uses the normal full Fair Teams workflow and your own private player ratings. A shared roster is an online Club roster for multiple organizers. It syncs shared-safe information such as names, AKA/aliases, category/vibe notes, Club ratings, notes, equipment, and collaboration data. Sharing should create a separate shared copy; it should not silently convert your local roster. If you want your own version of a shared roster, use a private copy.`,
+  rosterCopy: `If you want to copy a local roster into a new roster, use the safe backup/import path: open Roster Tools, go to Local Backup, tap Export this roster, then tap Import one roster and choose the file you just exported. Fair Teams adds it as a separate new roster with a unique name, so the original roster stays unchanged. You can rename the copied roster afterward.
+
+If the roster is a shared roster and you want your own local version, use Make private copy instead. That keeps the shared roster online and unchanged, and creates a clean local copy using shared names and Club averages as starting skill. Photos, special abilities, and private advanced traits are reset in that private copy.`,
   smartImport: `Smart Import reads names from screenshots so you do not have to type attendance manually. The default flow uses offline OCR, crop boxes, Meetup/Other screenshot modes, Review Names, OCR report export, and Lost & Found. Lost & Found is there to rescue possible names that OCR did not confidently place in the main name list. AI or cloud OCR should stay optional, not replace the reliable offline default.`,
   todayTeams: `The Today tab is where you select who is playing now. Team generation then uses those selected players to create balanced teams. “5v5” means five players per team, so it normally needs 10 selected players. “Make 6 teams” means six total teams, not 6v6. The assistant should set up selection, size/count, rules, and warnings; the Fair Teams generator still creates the final teams.`,
   pairingLocks: `Pairing rules guide the team generator. “Keep Sarah and Tommy together” means try to place them on the same team. “Sarah and Tommy do not like each other” or “do not put them together” means keep them separate. Team locks are different: “George red” or “put George in red” means lock that player to a specific team/color when teams are generated.`,
@@ -188,6 +197,12 @@ export function getFairTeamsKnowledgeForCommand(commandText, context = {}) {
   for (const section of scored) {
     if (section.id !== "core") add(section.id);
     if (selected.length >= 5) break;
+  }
+
+  if (/(copy|duplicate|clone|export|import|new roster|private copy|make private copy|add as new roster)/i.test(commandText || "")) {
+    add("rosterCopy");
+    add("localSharedRosters");
+    add("backupSync");
   }
 
   // Questions about the app often mention vague words like "normal", "difference", or "how does it work".

@@ -248,5 +248,27 @@
   {
     "input": "What is equipment for?",
     "expected": "Explains Equipment Board as a who-has-what board for balls, bibs, cones, pumps, jerseys; should not mention AI branch, wiring, JSON, or implementation status."
+  },
+  {
+    "id": "fair-teams-qa-copy-local-roster",
+    "command": "If I want to copy one roster to a new roster, what do I have to do?",
+    "expected": [
+      "Roster Tools",
+      "Local Backup",
+      "Export this roster",
+      "Import one roster",
+      "separate new roster",
+      "original stays unchanged"
+    ]
+  },
+  {
+    "id": "fair-teams-qa-shared-roster-private-copy",
+    "command": "How do I make a private copy of a shared roster?",
+    "expected": [
+      "Make private copy",
+      "shared roster stays online and unchanged",
+      "Club averages as starting skill",
+      "photos and special abilities reset"
+    ]
   }
 ]

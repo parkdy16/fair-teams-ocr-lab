@@ -5626,6 +5626,143 @@ This is a shared roster. Local Backup can only remove/disassociate this device�
         </div>
       )}
 
+
+      {localImportPreview && (
+        <div
+          className="fixed inset-0 z-[60] flex items-end justify-center bg-black/45 p-4 sm:items-center"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="flex max-h-[calc(100dvh-2rem)] w-full max-w-sm flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
+            <div className="flex items-start justify-between gap-3 border-b border-slate-100 p-4 pb-3">
+              <div className="min-w-0">
+                <div className="text-[10px] font-black uppercase tracking-wide text-[#102A43]/55">
+                  {localImportPreview.mode === "backup" ? "Local backup files" : "Local roster file"}
+                </div>
+                <h2 className="mt-1 truncate text-base font-black tracking-tight text-[#102A43]">
+                  Import this file?
+                </h2>
+                <p className="mt-1 truncate text-xs font-semibold text-slate-500">
+                  {localImportPreview.sourceName}
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 shrink-0 rounded-xl"
+                onClick={closeLocalImportPreview}
+                title="Close"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-3 text-center">
+                  <div className="text-xl font-black text-[#102A43]">
+                    {localImportPreview.rosterCount}
+                  </div>
+                  <div className="text-[10px] font-black uppercase tracking-wide text-blue-500">
+                    Rosters
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-3 text-center">
+                  <div className="text-xl font-black text-[#102A43]">
+                    {localImportPreview.playerCount}
+                  </div>
+                  <div className="text-[10px] font-black uppercase tracking-wide text-emerald-600">
+                    Players
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-3 rounded-2xl border border-slate-100 bg-slate-50/80 p-3">
+                <div className="mb-2 text-[10px] font-black uppercase tracking-wide text-slate-400">
+                  Included rosters
+                </div>
+                <div className="space-y-1.5">
+                  {localImportPreview.rosterNames.slice(0, 5).map((name, index) => (
+                    <div key={`${name}-${index}`} className="truncate text-xs font-bold text-slate-700">
+                      • {name}
+                    </div>
+                  ))}
+                  {localImportPreview.rosterNames.length > 5 ? (
+                    <div className="text-xs font-bold text-slate-400">
+                      …and {localImportPreview.rosterNames.length - 5} more
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="mt-3 rounded-2xl border border-amber-100 bg-amber-50/80 p-3">
+                <div className="flex gap-2">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                  <p className="text-xs font-semibold leading-snug text-amber-800">
+                    {localImportPreview.mode === "backup"
+                      ? "This adds rosters from the backup file. Your current rosters stay in the app."
+                      : `This imports the file as a separate roster. Your current roster “${activeRosterName}” stays unchanged.`}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-2 border-t border-slate-100 p-4">
+              <Button
+                type="button"
+                className="h-11 rounded-2xl bg-[#102A43] text-white hover:bg-[#0b2036]"
+                onClick={confirmLocalImport}
+              >
+                {localImportPreview.mode === "backup" ? "Add rosters from backup" : "Import as new roster"}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                className="h-10 rounded-2xl text-slate-500"
+                onClick={closeLocalImportPreview}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {rosterToolsNotice && (
+        <div
+          className="fixed inset-0 z-[60] flex items-end justify-center bg-black/45 p-4 sm:items-center"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="w-full max-w-sm rounded-3xl border border-slate-200 bg-white p-4 shadow-2xl">
+            <div className="flex items-start gap-3">
+              <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl ${rosterToolsNotice.tone === "success" ? "bg-emerald-50 text-emerald-600" : rosterToolsNotice.tone === "warning" ? "bg-amber-50 text-amber-600" : rosterToolsNotice.tone === "error" ? "bg-red-50 text-red-600" : "bg-blue-50 text-blue-600"}`}>
+                {rosterToolsNotice.tone === "success" ? <Check className="h-5 w-5" /> : <AlertTriangle className="h-5 w-5" />}
+              </div>
+              <div className="min-w-0 flex-1">
+                <h2 className="text-base font-black tracking-tight text-[#102A43]">
+                  {rosterToolsNotice.title}
+                </h2>
+                <p className="mt-1 whitespace-pre-line text-xs font-semibold leading-snug text-slate-500">
+                  {rosterToolsNotice.message}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <Button
+                type="button"
+                className="h-10 w-full rounded-2xl bg-[#102A43] text-xs font-black text-white hover:bg-[#0b2036]"
+                onClick={() => setRosterToolsNotice(null)}
+              >
+                OK
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {clearRosterOpen && (
         <div
           className="fixed inset-0 z-50 flex items-end justify-center bg-black/45 p-4 sm:items-center"

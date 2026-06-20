@@ -155,6 +155,8 @@ type OcrScreenshotReport = {
   imageHeight: number | null;
   cropPercent?: CropBox | null;
   cropPixelApprox?: { x: number; y: number; w: number; h: number } | null;
+  cropAreasPercent?: CropBox[] | null;
+  cropAreasPixelApprox?: Array<{ x: number; y: number; w: number; h: number } | null> | null;
   passes: string[];
 };
 
@@ -199,6 +201,10 @@ function cropPercentToPixels(crop: CropBox | null | undefined, width: number | n
     w: Math.round((crop.w / 100) * width),
     h: Math.round((crop.h / 100) * height),
   };
+}
+
+function isUsableCropBox(crop: CropBox | null | undefined): crop is CropBox {
+  return Boolean(crop && crop.w >= 3 && crop.h >= 3);
 }
 
 function downloadJsonFile(filename: string, data: unknown) {
@@ -1851,8 +1857,12 @@ export function TodayTab({
     useState(false);
   const [activeCropIndex, setActiveCropIndex] = useState(0);
   const [cropBoxes, setCropBoxes] = useState<Record<number, CropBox>>({});
+  const [secondaryCropBoxes, setSecondaryCropBoxes] = useState<Record<number, CropBox>>({});
+  const [useTwoOtherCropAreas, setUseTwoOtherCropAreas] = useState(false);
+  const [activeCropArea, setActiveCropArea] = useState<0 | 1>(0);
   const [cropDragStart, setCropDragStart] = useState<{
     index: number;
+    area: 0 | 1;
     x: number;
     y: number;
   } | null>(null);
@@ -2683,6 +2693,9 @@ export function TodayTab({
     setSelectedScreenshots([]);
     setActiveCropIndex(0);
     setCropBoxes({});
+    setSecondaryCropBoxes({});
+    setUseTwoOtherCropAreas(false);
+    setActiveCropArea(0);
     setCropDragStart(null);
     setDraftCropBox(null);
     setOcrText("");
@@ -2722,8 +2735,9 @@ export function TodayTab({
     event.preventDefault();
     event.currentTarget.setPointerCapture?.(event.pointerId);
     const point = getPointerCropPoint(event);
+    const area = useTwoOtherCropAreas ? activeCropArea : 0;
     setActiveCropIndex(index);
-    setCropDragStart({ index, ...point });
+    setCropDragStart({ index, area, ...point });
     setDraftCropBox({ x: point.x, y: point.y, w: 0, h: 0 });
   };
 
@@ -2741,16 +2755,32 @@ export function TodayTab({
   const finishCropDrag = () => {
     if (!cropDragStart || !draftCropBox) return;
     if (draftCropBox.w >= 3 && draftCropBox.h >= 3) {
-      setCropBoxes((current) => ({
-        ...current,
-        [cropDragStart.index]: draftCropBox,
-      }));
+      if (cropDragStart.area === 1) {
+        setSecondaryCropBoxes((current) => ({
+          ...current,
+          [cropDragStart.index]: draftCropBox,
+        }));
+      } else {
+        setCropBoxes((current) => ({
+          ...current,
+          [cropDragStart.index]: draftCropBox,
+        }));
+      }
     }
     setCropDragStart(null);
     setDraftCropBox(null);
   };
 
   const clearActiveCrop = () => {
+    if (activeCropArea === 1) {
+      setSecondaryCropBoxes((current) => {
+        const next = { ...current };
+        delete next[activeCropIndex];
+        return next;
+      });
+      return;
+    }
+
     setCropBoxes((current) => {
       const next = { ...current };
       delete next[activeCropIndex];
@@ -2858,8 +2888,10 @@ export function TodayTab({
     index: number,
     cropPercent: CropBox | null | undefined,
     passes: string[],
+    cropAreas: CropBox[] = [],
   ): Promise<OcrScreenshotReport> => {
     const dimensions = await readImageDimensions(file);
+    const usableCropAreas = cropAreas.filter(isUsableCropBox);
     return {
       index,
       name: file.name,
@@ -2874,6 +2906,13 @@ export function TodayTab({
         dimensions.width,
         dimensions.height,
       ),
+      cropAreasPercent: usableCropAreas.length > 1 ? usableCropAreas : null,
+      cropAreasPixelApprox:
+        usableCropAreas.length > 1
+          ? usableCropAreas.map((cropArea) =>
+              cropPercentToPixels(cropArea, dimensions.width, dimensions.height),
+            )
+          : null,
       passes,
     };
   };
@@ -2906,27 +2945,53 @@ export function TodayTab({
           `Reading ${index + 1} of ${selectedScreenshots.length}: ${file.name}`,
         );
 
+        const activeCropAreas =
+          screenshotImportMode === "other" && useTwoOtherCropAreas
+            ? [cropBoxes[index], secondaryCropBoxes[index]].filter(
+                isUsableCropBox,
+              )
+            : [cropBoxes[index]].filter(isUsableCropBox);
+        const cropSegments =
+          screenshotImportMode === "other" && activeCropAreas.length > 0
+            ? activeCropAreas
+            : [cropBoxes[index]];
         const passLabels =
           screenshotImportMode === "other"
-            ? ["crop-raw", "crop-gray", "crop-threshold"]
+            ? activeCropAreas.length > 1
+              ? activeCropAreas.flatMap((_, areaIndex) => [
+                  `area-${areaIndex + 1}-crop-raw`,
+                  `area-${areaIndex + 1}-crop-gray`,
+                  `area-${areaIndex + 1}-crop-threshold`,
+                ])
+              : ["crop-raw", "crop-gray", "crop-threshold"]
             : ["original"];
         screenshotReports.push(
-          await buildScreenshotReport(file, index, cropBoxes[index], passLabels),
+          await buildScreenshotReport(
+            file,
+            index,
+            cropBoxes[index],
+            passLabels,
+            activeCropAreas,
+          ),
         );
 
         const sources =
           screenshotImportMode === "other"
-            ? [
-                await cropScreenshotForOcr(file, cropBoxes[index], {
-                  variant: "raw",
-                }),
-                await cropScreenshotForOcr(file, cropBoxes[index], {
-                  variant: "gray",
-                }),
-                await cropScreenshotForOcr(file, cropBoxes[index], {
-                  variant: "threshold",
-                }),
-              ]
+            ? (
+                await Promise.all(
+                  cropSegments.flatMap((cropSegment) => [
+                    cropScreenshotForOcr(file, cropSegment, {
+                      variant: "raw",
+                    }),
+                    cropScreenshotForOcr(file, cropSegment, {
+                      variant: "gray",
+                    }),
+                    cropScreenshotForOcr(file, cropSegment, {
+                      variant: "threshold",
+                    }),
+                  ]),
+                )
+              )
             : [file];
 
         const imageTexts: string[] = [];
@@ -2996,7 +3061,9 @@ export function TodayTab({
       setOcrProgress(100);
       setOcrStatus(
         screenshotImportMode === "other"
-          ? "Crop scan complete. Review names below."
+          ? useTwoOtherCropAreas
+            ? "Two-area crop scan complete. Review names below."
+            : "Crop scan complete. Review names below."
           : "Scan complete. Review names below.",
       );
     } catch (error) {
@@ -3858,6 +3925,9 @@ export function TodayTab({
                     );
                     setActiveCropIndex(0);
                     setCropBoxes({});
+                    setSecondaryCropBoxes({});
+                    setUseTwoOtherCropAreas(false);
+                    setActiveCropArea(0);
                     setCropDragStart(null);
                     setDraftCropBox(null);
                     setOcrText("");
@@ -3980,32 +4050,74 @@ export function TodayTab({
                       </div>
 
                       <div className="mt-2 flex items-center gap-1.5 overflow-x-auto pb-1 landscape:mt-0 landscape:flex-1 landscape:flex-col landscape:items-stretch landscape:gap-1.5 landscape:overflow-x-hidden landscape:overflow-y-auto landscape:pb-0">
-                        {selectedScreenshotPreviews.map((preview, index) => (
-                          <button
-                            key={`${preview.name}-tab-${index}`}
-                            type="button"
-                            onClick={() => setActiveCropIndex(index)}
-                            className={`h-8 min-w-8 shrink-0 rounded-full border px-3 text-xs font-black shadow-sm transition landscape:w-full landscape:px-2 ${
-                              activeCropIndex === index
-                                ? "border-primary bg-primary/10 text-primary"
-                                : cropBoxes[index]
-                                  ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                                  : "border-border bg-background text-muted-foreground"
-                            }`}
-                          >
-                            {cropBoxes[index] ? "✓ " : ""}
-                            {index + 1}
-                          </button>
-                        ))}
+                        {selectedScreenshotPreviews.map((preview, index) => {
+                          const hasAnyCrop =
+                            Boolean(cropBoxes[index]) ||
+                            Boolean(secondaryCropBoxes[index]);
+                          return (
+                            <button
+                              key={`${preview.name}-tab-${index}`}
+                              type="button"
+                              onClick={() => setActiveCropIndex(index)}
+                              className={`h-8 min-w-8 shrink-0 rounded-full border px-3 text-xs font-black shadow-sm transition landscape:w-full landscape:px-2 ${
+                                activeCropIndex === index
+                                  ? "border-primary bg-primary/10 text-primary"
+                                  : hasAnyCrop
+                                    ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                                    : "border-border bg-background text-muted-foreground"
+                              }`}
+                            >
+                              {hasAnyCrop ? "✓ " : ""}
+                              {index + 1}
+                            </button>
+                          );
+                        })}
+                        <Button
+                          type="button"
+                          variant={useTwoOtherCropAreas ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => {
+                            setUseTwoOtherCropAreas((value) => {
+                              const next = !value;
+                              if (!next) setActiveCropArea(0);
+                              return next;
+                            });
+                          }}
+                          className="h-9 shrink-0 rounded-2xl px-3 text-xs font-black shadow-sm landscape:w-full landscape:px-2"
+                        >
+                          {useTwoOtherCropAreas ? "2 areas" : "1 area"}
+                        </Button>
+                        {useTwoOtherCropAreas && (
+                          <div className="flex shrink-0 gap-1 rounded-2xl bg-muted p-1 landscape:w-full">
+                            {[0, 1].map((area) => (
+                              <button
+                                key={`crop-area-${area}`}
+                                type="button"
+                                onClick={() => setActiveCropArea(area as 0 | 1)}
+                                className={`h-7 rounded-xl px-2 text-[10px] font-black transition landscape:flex-1 ${
+                                  activeCropArea === area
+                                    ? "bg-background text-primary shadow-sm"
+                                    : "text-muted-foreground"
+                                }`}
+                              >
+                                Area {area + 1}
+                              </button>
+                            ))}
+                          </div>
+                        )}
                         <Button
                           type="button"
                           variant="outline"
                           size="sm"
                           onClick={clearActiveCrop}
-                          disabled={!cropBoxes[activeCropIndex]}
+                          disabled={
+                            activeCropArea === 1
+                              ? !secondaryCropBoxes[activeCropIndex]
+                              : !cropBoxes[activeCropIndex]
+                          }
                           className="ml-auto h-9 shrink-0 rounded-2xl px-3 text-xs font-black shadow-sm landscape:ml-0 landscape:mt-auto landscape:w-full landscape:px-2"
                         >
-                          Clear box
+                          Clear area
                         </Button>
                       </div>
                     </div>
@@ -4036,22 +4148,70 @@ export function TodayTab({
                                 draggable={false}
                               />
                               {(() => {
-                                const box =
-                                  cropDragStart?.index === activeCropIndex &&
-                                  draftCropBox
-                                    ? draftCropBox
-                                    : cropBoxes[activeCropIndex];
-                                if (!box) return null;
+                                const areas = [
+                                  {
+                                    area: 0 as const,
+                                    label: "1",
+                                    box:
+                                      cropDragStart?.index === activeCropIndex &&
+                                      cropDragStart.area === 0 &&
+                                      draftCropBox
+                                        ? draftCropBox
+                                        : cropBoxes[activeCropIndex],
+                                  },
+                                  {
+                                    area: 1 as const,
+                                    label: "2",
+                                    box:
+                                      useTwoOtherCropAreas &&
+                                      cropDragStart?.index === activeCropIndex &&
+                                      cropDragStart.area === 1 &&
+                                      draftCropBox
+                                        ? draftCropBox
+                                        : useTwoOtherCropAreas
+                                          ? secondaryCropBoxes[activeCropIndex]
+                                          : undefined,
+                                  },
+                                ].filter((item) => Boolean(item.box));
+
+                                if (!areas.length) return null;
+
                                 return (
-                                  <div
-                                    className="pointer-events-none absolute border-2 border-primary bg-primary/15 shadow-[0_0_0_9999px_rgba(15,23,42,0.28)]"
-                                    style={{
-                                      left: `${box.x}%`,
-                                      top: `${box.y}%`,
-                                      width: `${box.w}%`,
-                                      height: `${box.h}%`,
-                                    }}
-                                  />
+                                  <>
+                                    {areas.map(({ area, label, box }) => {
+                                      const isActive =
+                                        !useTwoOtherCropAreas ||
+                                        activeCropArea === area;
+                                      return (
+                                        <div
+                                          key={`crop-overlay-${area}`}
+                                          className={`pointer-events-none absolute border-2 shadow-[0_0_0_9999px_rgba(15,23,42,0.22)] ${
+                                            isActive
+                                              ? "border-primary bg-primary/15"
+                                              : "border-amber-400 bg-amber-300/15"
+                                          }`}
+                                          style={{
+                                            left: `${box!.x}%`,
+                                            top: `${box!.y}%`,
+                                            width: `${box!.w}%`,
+                                            height: `${box!.h}%`,
+                                          }}
+                                        >
+                                          {useTwoOtherCropAreas && (
+                                            <span
+                                              className={`absolute left-1 top-1 rounded-full px-1.5 py-0.5 text-[10px] font-black shadow-sm ${
+                                                isActive
+                                                  ? "bg-primary text-primary-foreground"
+                                                  : "bg-amber-400 text-slate-900"
+                                              }`}
+                                            >
+                                              {label}
+                                            </span>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                  </>
                                 );
                               })()}
                             </div>

@@ -354,6 +354,20 @@ function looksLikeEquipmentText(text) {
   return /(equipment|bag|bags|ball bag|bib bag|bibs|vests|cones|pump|football|balls|jerseys|kit|gear|ausrustung|ausrüstung|tasche|balltasche|balle|bälle|leibchen|hütchen|pumpe|trikots|장비|가방|공|조끼|콘|펌프)/iu.test(command);
 }
 
+function looksLikeFairTeamsQuestion(text) {
+  const command = cleanString(text, MAX_COMMAND_CHARS);
+  const normalized = normalizeForMatching(command);
+  if (!normalized) return false;
+  if (/[?？]$/.test(command.trim())) return true;
+  return /^(what|why|how|where|when|who|which|can you explain|could you explain|tell me about|explain|was|wie|warum|wo|wann|wer|welche|was ist|wie funktioniert|erklar|erklär|erzaehl|erzähl|무엇|뭐|왜|어떻게|어디|언제|누가|설명|알려)/iu.test(normalized);
+}
+
+function looksLikeEquipmentActionText(text) {
+  const command = cleanString(text, MAX_COMMAND_CHARS);
+  if (!looksLikeEquipmentText(command)) return false;
+  return /(move|give|assign|hand|transfer|put|set|change|bring|take|has|holds|holder|carry|carries|shift|add|create|make|new|verschieb|gib|hat|zu|bei|hinzufugen|hinzufügen|erstellen|옮겨|줘|담당|가지|가져|넘겨|추가|만들|등록)/iu.test(command);
+}
+
 function cleanEquipmentItemName(value) {
   return cleanString(value, 120)
     .replace(/^(the|a|an|this|that|one|specific|equipment|bag|item)\s+/i, "")
@@ -379,7 +393,7 @@ function matchDestinationPlayer(value, rosterIndex) {
 
 function detectEquipmentAction(text, roster) {
   const command = cleanString(text, MAX_COMMAND_CHARS);
-  if (!command || !looksLikeEquipmentText(command)) return null;
+  if (!command || !looksLikeEquipmentText(command) || !looksLikeEquipmentActionText(command)) return null;
 
   const rosterIndex = buildRosterNameIndex(roster);
   const quoted = extractQuotedText(command);
@@ -1101,6 +1115,30 @@ function looksLikeCasualConversation(text) {
   return false;
 }
 
+function hasStrongAppCommandIntent(commandText, commandHints) {
+  const text = cleanString(commandText, MAX_COMMAND_CHARS);
+  const hints = commandHints && typeof commandHints === "object" ? commandHints : {};
+
+  // Action hints should win over product Q&A routing. Otherwise commands like
+  // "Joon and Jorge are playing today" can be mistaken for a Today-tab help question.
+  if (Array.isArray(hints.candidateNames) && hints.candidateNames.length > 0) return true;
+  if (hints.selectAllRosterPlayers) return true;
+  if (hints.detectedClubNoteText) return true;
+  if (hints.detectedRosterColor) return true;
+  if (hints.detectedRosterRename) return true;
+  if (hints.detectedTargetArea) return true;
+  if (hints.detectedSpreadRole) return true;
+  if (hints.detectedEquipmentAction) return true;
+
+  // Size/count alone can appear in explanatory questions, so require a verb/action frame.
+  if ((hints.detectedPlayersPerTeam || hints.detectedTeamCount) && detectGenerateTeams(text)) return true;
+  if (hints.detectedGenerateTeams) return true;
+
+  // Imperative/action wording should beat question routing even if the sentence contains a tab name.
+  return /\b(select|choose|pick|mark|add|remove|move|give|assign|set|make|create|generate|split|divide|keep|separate|pair|lock|put|rename|change|open|show|go to)\b/iu.test(text)
+    || /(선택|추가|삭제|옮겨|나눠|만들|생성|바꿔|변경|열어|보여|같이|떨어뜨려|따로)/u.test(text);
+}
+
 function deterministicFallbackResponse(commandText, commandHints, roster, fallbackReason = "AI response could not be parsed safely.") {
   const plan = buildDeterministicPlan(commandHints, roster);
   const unresolved = [...plan.unresolved];
@@ -1210,7 +1248,8 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "Missing commandText." });
   }
 
-  const directFairTeamsAnswer = getDirectFairTeamsAnswerForCommand(commandText, context);
+  const strongAppCommandIntent = hasStrongAppCommandIntent(commandText, commandHints);
+  const directFairTeamsAnswer = strongAppCommandIntent ? null : getDirectFairTeamsAnswerForCommand(commandText, context);
   if (directFairTeamsAnswer) {
     return res.status(200).json({
       schemaVersion: 1,
@@ -1240,7 +1279,7 @@ export default async function handler(req, res) {
       {
         role: "user",
         content: JSON.stringify({
-          task: "Reply as the Fair Teams Assistant. If this is conversation or a simple question, answer naturally in assistantSummary with no actions. If this is a Fair Teams product question, answer from fairTeamsKnowledge and the operating manual, not from generic sports-app assumptions. If this is a Fair Teams app request, parse it into safe actions using commandHints. Do not drop any listed player names. If a person is named as playing today, they must appear either as a matched playerRef in select_players, add_new_player_suggestion, missing/ambiguous confirmation, or unresolved item.",
+          task: "Reply as the Fair Teams Assistant. If this is conversation or a simple question, answer naturally in assistantSummary with no actions. If this is a Fair Teams product question, answer from fairTeamsKnowledge and the operating manual, not from generic sports-app assumptions. If this is a Fair Teams app request, parse it into safe actions using commandHints. Action requests always beat product Q&A. Do not explain the Today tab when the user gives a player list for today; select those players. Do not drop any listed player names. If a person is named as playing today, they must appear either as a matched playerRef in select_players, add_new_player_suggestion, missing/ambiguous confirmation, or unresolved item.",
           commandText,
           context,
           roster,

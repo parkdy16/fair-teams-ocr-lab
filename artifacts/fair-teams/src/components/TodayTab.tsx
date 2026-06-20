@@ -144,6 +144,106 @@ type OcrMatchStatus = "match" | "suggest" | "new";
 type ScreenshotImportMode = "meetup" | "other";
 type CropBox = { x: number; y: number; w: number; h: number };
 
+type OcrScreenshotReport = {
+  index: number;
+  name: string;
+  type: string;
+  sizeBytes: number;
+  lastModified: string | null;
+  imageWidth: number | null;
+  imageHeight: number | null;
+  cropPercent?: CropBox | null;
+  cropPixelApprox?: { x: number; y: number; w: number; h: number } | null;
+  passes: string[];
+};
+
+function safeIsoDate(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return null;
+  try {
+    return new Date(value).toISOString();
+  } catch {
+    return null;
+  }
+}
+
+function readImageDimensions(file: File) {
+  return new Promise<{ width: number | null; height: number | null }>((resolve) => {
+    if (typeof URL === "undefined" || typeof Image === "undefined") {
+      resolve({ width: null, height: null });
+      return;
+    }
+
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+    const finish = (dimensions: { width: number | null; height: number | null }) => {
+      URL.revokeObjectURL(url);
+      resolve(dimensions);
+    };
+
+    image.onload = () =>
+      finish({
+        width: image.naturalWidth || null,
+        height: image.naturalHeight || null,
+      });
+    image.onerror = () => finish({ width: null, height: null });
+    image.src = url;
+  });
+}
+
+function cropPercentToPixels(crop: CropBox | null | undefined, width: number | null, height: number | null) {
+  if (!crop || !width || !height) return null;
+  return {
+    x: Math.round((crop.x / 100) * width),
+    y: Math.round((crop.y / 100) * height),
+    w: Math.round((crop.w / 100) * width),
+    h: Math.round((crop.h / 100) * height),
+  };
+}
+
+function downloadJsonFile(filename: string, data: unknown) {
+  if (typeof document === "undefined" || typeof URL === "undefined") return;
+
+  const blob = new Blob([JSON.stringify(data, null, 2)], {
+    type: "application/json;charset=utf-8",
+  });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
+function sanitizeReportFilenamePart(value: string) {
+  return (value || "scan")
+    .replace(/[^a-z0-9_-]+/gi, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48)
+    .toLowerCase() || "scan";
+}
+
+function getViewportReport() {
+  if (typeof window === "undefined") return null;
+  const visualViewport = window.visualViewport;
+  return {
+    userAgent: navigator.userAgent,
+    language: navigator.language,
+    viewportWidth: window.innerWidth,
+    viewportHeight: window.innerHeight,
+    devicePixelRatio: window.devicePixelRatio || 1,
+    screenWidth: window.screen?.width ?? null,
+    screenHeight: window.screen?.height ?? null,
+    screenAvailWidth: window.screen?.availWidth ?? null,
+    screenAvailHeight: window.screen?.availHeight ?? null,
+    visualViewportWidth: visualViewport?.width ?? null,
+    visualViewportHeight: visualViewport?.height ?? null,
+    visualViewportScale: visualViewport?.scale ?? null,
+    orientation: window.screen?.orientation?.type ?? null,
+  };
+}
+
 type OcrNameCandidate = {
   name: string;
   status: OcrMatchStatus;
@@ -1687,6 +1787,7 @@ export function TodayTab({
   const [screenshotImportMode, setScreenshotImportMode] =
     useState<ScreenshotImportMode>("meetup");
   const [selectedScreenshots, setSelectedScreenshots] = useState<File[]>([]);
+  const [ocrScreenshotReport, setOcrScreenshotReport] = useState<OcrScreenshotReport[]>([]);
   const [ocrText, setOcrText] = useState("");
   const [ocrRunning, setOcrRunning] = useState(false);
   const [ocrProgress, setOcrProgress] = useState(0);
@@ -2189,6 +2290,7 @@ export function TodayTab({
     setOcrText("");
     setOcrProgress(0);
     setOcrStatus("");
+    setOcrScreenshotReport([]);
     setShowRawOcrText(false);
     setManualRawOcrName("");
     setManualOcrCandidateNames([]);
@@ -2709,6 +2811,31 @@ export function TodayTab({
       URL.revokeObjectURL(url);
     }
   };
+  const buildScreenshotReport = async (
+    file: File,
+    index: number,
+    cropPercent: CropBox | null | undefined,
+    passes: string[],
+  ): Promise<OcrScreenshotReport> => {
+    const dimensions = await readImageDimensions(file);
+    return {
+      index,
+      name: file.name,
+      type: file.type || "unknown",
+      sizeBytes: file.size,
+      lastModified: safeIsoDate(file.lastModified),
+      imageWidth: dimensions.width,
+      imageHeight: dimensions.height,
+      cropPercent: cropPercent ?? null,
+      cropPixelApprox: cropPercentToPixels(
+        cropPercent,
+        dimensions.width,
+        dimensions.height,
+      ),
+      passes,
+    };
+  };
+
   const runOcr = async () => {
     if (selectedScreenshots.length === 0 || ocrRunning) return;
 
@@ -2717,6 +2844,7 @@ export function TodayTab({
     setOcrText("");
     setOcrProgress(0);
     setOcrStatus("Starting scan…");
+    setOcrScreenshotReport([]);
     setManualRawOcrName("");
     setManualOcrCandidateNames([]);
     setRawOcrAddedNames([]);
@@ -2726,12 +2854,21 @@ export function TodayTab({
     setEditedOcrTokenSelections({});
 
     const chunks: string[] = [];
+    const screenshotReports: OcrScreenshotReport[] = [];
 
     try {
       for (let index = 0; index < selectedScreenshots.length; index += 1) {
         const file = selectedScreenshots[index];
         setOcrStatus(
           `Reading ${index + 1} of ${selectedScreenshots.length}: ${file.name}`,
+        );
+
+        const passLabels =
+          screenshotImportMode === "other"
+            ? ["crop-raw", "crop-gray", "crop-threshold"]
+            : ["original"];
+        screenshotReports.push(
+          await buildScreenshotReport(file, index, cropBoxes[index], passLabels),
         );
 
         const sources =
@@ -2811,6 +2948,7 @@ export function TodayTab({
         );
       }
 
+      setOcrScreenshotReport(screenshotReports);
       setOcrText(chunks.join("\n\n"));
       setOcrProgress(100);
       setOcrStatus(
@@ -3048,6 +3186,136 @@ export function TodayTab({
       return;
     }
     finalizeAddSelectedOcrMatches();
+  };
+
+  const exportOcrReport = async () => {
+    const selectedKeys = new Set(selectedOcrCandidateKeys);
+    const screenshots =
+      ocrScreenshotReport.length > 0
+        ? ocrScreenshotReport
+        : await Promise.all(
+            selectedScreenshots.map((file, index) =>
+              buildScreenshotReport(
+                file,
+                index,
+                cropBoxes[index],
+                screenshotImportMode === "other"
+                  ? ["crop-raw", "crop-gray", "crop-threshold"]
+                  : ["original"],
+              ),
+            ),
+          );
+
+    const candidateReports = reviewNames.map((candidate) => {
+      const key = ocrCandidateKey(candidate);
+      const resolvedMatch = resolveOcrMatch(candidate);
+      const reviewStatus = getOcrReviewStatus(candidate);
+      const tokens = getOcrNameTokens(candidate);
+      const tokenSelection = getOcrTokenSelection(candidate);
+      const editedName = getEditedOcrCandidateName(candidate);
+      return {
+        key,
+        originalName: candidate.name,
+        editedName,
+        status: reviewStatus,
+        selected: selectedKeys.has(key),
+        score: candidate.score ?? null,
+        resolvedMatch: resolvedMatch
+          ? {
+              id: resolvedMatch.id,
+              name: resolvedMatch.name,
+              aka: resolvedMatch.aka || null,
+            }
+          : null,
+        suggestions: candidate.suggestions.slice(0, 5).map(({ player, score }) => ({
+          id: player.id,
+          name: player.name,
+          aka: player.aka || null,
+          score,
+        })),
+        tokens: tokens.map((token, index) => ({
+          text: token,
+          kept: tokenSelection[index] ?? true,
+        })),
+      };
+    });
+
+    const selectedFinalNames = selectedOcrCandidates.map((candidate) => {
+      const resolvedMatch = resolveOcrMatch(candidate);
+      const reviewStatus = getOcrReviewStatus(candidate);
+      return {
+        sourceName: candidate.name,
+        finalName: resolvedMatch
+          ? displayName(resolvedMatch)
+          : getEditedOcrCandidateName(candidate) || candidate.name,
+        type: resolvedMatch ? "existing" : reviewStatus,
+        rosterPlayerId: resolvedMatch?.id ?? null,
+      };
+    });
+
+    const report = {
+      reportVersion: 1,
+      createdAt: new Date().toISOString(),
+      appArea: "Fair Teams OCR import",
+      importContext: ocrImportContext,
+      inputSource: ocrInputSource,
+      screenshotImportMode:
+        ocrInputSource === "screenshot" ? screenshotImportMode : null,
+      viewport: getViewportReport(),
+      screenshots,
+      scan: {
+        status: ocrStatus,
+        progress: ocrProgress,
+        expectedCount: hasExpectedAttendeeNumber
+          ? Math.round(expectedAttendeeNumber)
+          : null,
+        rawText: ocrText,
+        rawLineCount: ocrRawLineCount,
+        rawWordCount: ocrRawWordCount,
+        detectedReviewNameCount: reviewNames.length,
+        rosterMatchCount,
+        suggestionCount: suggestions,
+        newNameCount: newNames,
+        missingFromExpected: hasExpectedAttendeeNumber ? missingFromScan : null,
+      },
+      rosterAtScanTime: players.map((player) => ({
+        id: player.id,
+        name: player.name,
+        aka: player.aka || null,
+        isNew: Boolean(player.isNew),
+      })),
+      reviewCandidates: candidateReports,
+      selectedFinalNames,
+      rawLineReview: rawOcrLineEntries.map((entry) => ({
+        index: entry.index,
+        text: entry.text,
+        normalized: entry.normalized,
+        suggestedName: entry.suggestedName || null,
+        rawSuggestions: entry.rawSuggestions,
+        foundCandidateKeys: entry.foundCandidates.map(ocrCandidateKey),
+      })),
+      manualCorrections: {
+        chosenMatchIds: chosenOcrMatchIds,
+        editedNames: editedOcrCandidateNames,
+        editedTokenSelections: editedOcrTokenSelections,
+        manualCandidateNames: manualOcrCandidateNames,
+        rawOcrAddedNames,
+        rawOcrCreatedPlayerIds,
+        selectedCandidateKeys: selectedOcrCandidateKeys,
+      },
+      notes:
+        "No screenshot image is included. Screen and image dimensions are included because screenshot size/device size can affect OCR behavior.",
+    };
+
+    const mode =
+      ocrInputSource === "screenshot"
+        ? screenshotImportMode
+        : "voice-text";
+    const filename = `fair-teams-ocr-report-${mode}-${sanitizeReportFilenamePart(
+      selectedScreenshotNames[0] || "names",
+    )}-${new Date().toISOString().slice(0, 10)}.json`;
+    downloadJsonFile(filename, report);
+    setOcrStatus("OCR report exported.");
   };
 
   const selectAllOcrMatches = () => {
@@ -3796,13 +4064,26 @@ export function TodayTab({
                       ? "List Summary"
                       : "Scan Summary"}
                   </div>
-                  {hasExpectedAttendeeNumber && (
-                    <div
-                      className={`rounded-full px-2 py-0.5 text-[10px] font-black ${missingFromScan > 0 ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}
-                    >
-                      {scannedNameCount} / {Math.round(expectedAttendeeNumber)}
-                    </div>
-                  )}
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    {hasExpectedAttendeeNumber && (
+                      <div
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-black ${missingFromScan > 0 ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}
+                      >
+                        {scannedNameCount} / {Math.round(expectedAttendeeNumber)}
+                      </div>
+                    )}
+                    {ocrInputSource === "screenshot" && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={exportOcrReport}
+                        className="h-7 rounded-xl px-2 text-[10px] font-black"
+                      >
+                        Export report
+                      </Button>
+                    )}
+                  </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2 text-[11px] font-black">
                   <span className="rounded-full bg-muted/60 px-2 py-1 text-foreground">

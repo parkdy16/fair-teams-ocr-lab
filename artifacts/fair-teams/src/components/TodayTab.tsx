@@ -144,6 +144,8 @@ declare global {
 type OcrMatchStatus = "match" | "suggest" | "new";
 type ScreenshotImportMode = "meetup" | "other";
 type CropBox = { x: number; y: number; w: number; h: number };
+type CropDragMode = "draw" | "move" | "resize";
+type CropResizeHandle = "nw" | "ne" | "sw" | "se";
 
 type OcrScreenshotReport = {
   index: number;
@@ -203,7 +205,7 @@ function cropPercentToPixels(crop: CropBox | null | undefined, width: number | n
   };
 }
 
-function isUsableCropBox(crop: CropBox | null | undefined): crop is CropBox {
+function isUsableCropBox(crop: CropBox | null | undefined) {
   return Boolean(crop && crop.w >= 3 && crop.h >= 3);
 }
 
@@ -1860,11 +1862,15 @@ export function TodayTab({
   const [secondaryCropBoxes, setSecondaryCropBoxes] = useState<Record<number, CropBox>>({});
   const [useTwoOtherCropAreas, setUseTwoOtherCropAreas] = useState(false);
   const [activeCropArea, setActiveCropArea] = useState<0 | 1>(0);
+  const cropSurfaceRef = useRef<HTMLDivElement | null>(null);
   const [cropDragStart, setCropDragStart] = useState<{
     index: number;
     area: 0 | 1;
     x: number;
     y: number;
+    mode: CropDragMode;
+    handle?: CropResizeHandle;
+    startBox?: CropBox;
   } | null>(null);
   const [draftCropBox, setDraftCropBox] = useState<CropBox | null>(null);
   const [newPlayerReviewPrompt, setNewPlayerReviewPrompt] = useState<{
@@ -2714,8 +2720,29 @@ export function TodayTab({
     setEditedOcrTokenSelections({});
   };
 
-  const getPointerCropPoint = (event: React.PointerEvent<HTMLDivElement>) => {
-    const rect = event.currentTarget.getBoundingClientRect();
+  const clampCropBox = (box: CropBox): CropBox => {
+    const w = Math.min(100, Math.max(0, box.w));
+    const h = Math.min(100, Math.max(0, box.h));
+    return {
+      x: Math.min(100 - w, Math.max(0, box.x)),
+      y: Math.min(100 - h, Math.max(0, box.y)),
+      w,
+      h,
+    };
+  };
+
+  const getCropBoxForArea = (index: number, area: 0 | 1) =>
+    area === 1 ? secondaryCropBoxes[index] : cropBoxes[index];
+
+  const saveCropBoxForArea = (index: number, area: 0 | 1, box: CropBox) => {
+    const setter = area === 1 ? setSecondaryCropBoxes : setCropBoxes;
+    setter((current) => ({ ...current, [index]: clampCropBox(box) }));
+  };
+
+  const getPointerCropPoint = (event: React.PointerEvent<HTMLElement>) => {
+    const rect =
+      cropSurfaceRef.current?.getBoundingClientRect() ||
+      event.currentTarget.getBoundingClientRect();
     const x = Math.min(
       100,
       Math.max(0, ((event.clientX - rect.left) / rect.width) * 100),
@@ -2729,7 +2756,7 @@ export function TodayTab({
 
   const startCropDrag = (
     index: number,
-    event: React.PointerEvent<HTMLDivElement>,
+    event: React.PointerEvent<HTMLElement>,
   ) => {
     if (screenshotImportMode !== "other" || ocrRunning || ocrText) return;
     event.preventDefault();
@@ -2737,14 +2764,119 @@ export function TodayTab({
     const point = getPointerCropPoint(event);
     const area = useTwoOtherCropAreas ? activeCropArea : 0;
     setActiveCropIndex(index);
-    setCropDragStart({ index, area, ...point });
+    setCropDragStart({ index, area, mode: "draw", ...point });
     setDraftCropBox({ x: point.x, y: point.y, w: 0, h: 0 });
   };
 
-  const moveCropDrag = (event: React.PointerEvent<HTMLDivElement>) => {
+  const startCropMove = (
+    index: number,
+    area: 0 | 1,
+    event: React.PointerEvent<HTMLElement>,
+  ) => {
+    if (screenshotImportMode !== "other" || ocrRunning || ocrText) return;
+    const box = getCropBoxForArea(index, area);
+    if (!box) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    const point = getPointerCropPoint(event);
+    setActiveCropIndex(index);
+    setActiveCropArea(area);
+    setCropDragStart({
+      index,
+      area,
+      mode: "move",
+      startBox: box,
+      ...point,
+    });
+    setDraftCropBox(box);
+  };
+
+  const startCropResize = (
+    index: number,
+    area: 0 | 1,
+    handle: CropResizeHandle,
+    event: React.PointerEvent<HTMLElement>,
+  ) => {
+    if (screenshotImportMode !== "other" || ocrRunning || ocrText) return;
+    const box = getCropBoxForArea(index, area);
+    if (!box) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    const point = getPointerCropPoint(event);
+    setActiveCropIndex(index);
+    setActiveCropArea(area);
+    setCropDragStart({
+      index,
+      area,
+      mode: "resize",
+      handle,
+      startBox: box,
+      ...point,
+    });
+    setDraftCropBox(box);
+  };
+
+  const moveCropDrag = (event: React.PointerEvent<HTMLElement>) => {
     if (!cropDragStart) return;
     event.preventDefault();
     const point = getPointerCropPoint(event);
+
+    if (cropDragStart.mode === "move" && cropDragStart.startBox) {
+      const dx = point.x - cropDragStart.x;
+      const dy = point.y - cropDragStart.y;
+      setDraftCropBox(
+        clampCropBox({
+          ...cropDragStart.startBox,
+          x: cropDragStart.startBox.x + dx,
+          y: cropDragStart.startBox.y + dy,
+        }),
+      );
+      return;
+    }
+
+    if (
+      cropDragStart.mode === "resize" &&
+      cropDragStart.startBox &&
+      cropDragStart.handle
+    ) {
+      const minSize = 3;
+      const startBox = cropDragStart.startBox;
+      let left = startBox.x;
+      let right = startBox.x + startBox.w;
+      let top = startBox.y;
+      let bottom = startBox.y + startBox.h;
+
+      if (cropDragStart.handle.includes("w")) {
+        left = Math.min(point.x, right - minSize);
+      }
+      if (cropDragStart.handle.includes("e")) {
+        right = Math.max(point.x, left + minSize);
+      }
+      if (cropDragStart.handle.includes("n")) {
+        top = Math.min(point.y, bottom - minSize);
+      }
+      if (cropDragStart.handle.includes("s")) {
+        bottom = Math.max(point.y, top + minSize);
+      }
+
+      left = Math.max(0, Math.min(100 - minSize, left));
+      right = Math.min(100, Math.max(minSize, right));
+      top = Math.max(0, Math.min(100 - minSize, top));
+      bottom = Math.min(100, Math.max(minSize, bottom));
+
+      setDraftCropBox(
+        clampCropBox({
+          x: left,
+          y: top,
+          w: Math.max(minSize, right - left),
+          h: Math.max(minSize, bottom - top),
+        }),
+      );
+      return;
+    }
+
     const x = Math.min(cropDragStart.x, point.x);
     const y = Math.min(cropDragStart.y, point.y);
     const w = Math.abs(point.x - cropDragStart.x);
@@ -2755,16 +2887,15 @@ export function TodayTab({
   const finishCropDrag = () => {
     if (!cropDragStart || !draftCropBox) return;
     if (draftCropBox.w >= 3 && draftCropBox.h >= 3) {
-      if (cropDragStart.area === 1) {
-        setSecondaryCropBoxes((current) => ({
-          ...current,
-          [cropDragStart.index]: draftCropBox,
-        }));
-      } else {
-        setCropBoxes((current) => ({
-          ...current,
-          [cropDragStart.index]: draftCropBox,
-        }));
+      saveCropBoxForArea(cropDragStart.index, cropDragStart.area, draftCropBox);
+
+      if (
+        cropDragStart.mode === "draw" &&
+        useTwoOtherCropAreas &&
+        cropDragStart.area === 0 &&
+        !secondaryCropBoxes[cropDragStart.index]
+      ) {
+        setActiveCropArea(1);
       }
     }
     setCropDragStart(null);
@@ -4018,8 +4149,10 @@ export function TodayTab({
                       <div className="flex items-center justify-between gap-2 landscape:flex-col landscape:items-stretch">
                         <div className="min-w-0 landscape:text-center">
                           <div className="text-sm font-black leading-tight text-foreground landscape:text-xs">
-                            Crop {activeCropIndex + 1}/
-                            {selectedScreenshotPreviews.length}
+                            {useTwoOtherCropAreas ? "Read two lists" : "Read one list"}
+                          </div>
+                          <div className="mt-0.5 text-[10px] font-bold text-muted-foreground">
+                            Screenshot {activeCropIndex + 1}/{selectedScreenshotPreviews.length}
                           </div>
                         </div>
                         <div className="flex shrink-0 items-center gap-2 landscape:grid landscape:grid-cols-1 landscape:gap-1.5">
@@ -4039,12 +4172,14 @@ export function TodayTab({
                             disabled={
                               ocrRunning ||
                               !selectedScreenshots.every((_, screenshotIndex) =>
-                                Boolean(cropBoxes[screenshotIndex]),
+                                Boolean(cropBoxes[screenshotIndex]) &&
+                                (!useTwoOtherCropAreas ||
+                                  Boolean(secondaryCropBoxes[screenshotIndex])),
                               )
                             }
                             className="h-10 rounded-2xl px-4 text-xs font-black shadow-sm landscape:w-full landscape:px-2"
                           >
-                            Scan
+                            {useTwoOtherCropAreas ? "Scan 2 lists" : "Scan list"}
                           </Button>
                         </div>
                       </div>
@@ -4072,37 +4207,62 @@ export function TodayTab({
                             </button>
                           );
                         })}
-                        <Button
-                          type="button"
-                          variant={useTwoOtherCropAreas ? "default" : "outline"}
-                          size="sm"
-                          onClick={() => {
-                            setUseTwoOtherCropAreas((value) => {
-                              const next = !value;
-                              if (!next) setActiveCropArea(0);
-                              return next;
-                            });
-                          }}
-                          className="h-9 shrink-0 rounded-2xl px-3 text-xs font-black shadow-sm landscape:w-full landscape:px-2"
-                        >
-                          {useTwoOtherCropAreas ? "2 areas" : "1 area"}
-                        </Button>
+                        <div className="flex shrink-0 gap-1 rounded-2xl bg-muted p-1 landscape:w-full landscape:flex-col">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setUseTwoOtherCropAreas(false);
+                              setActiveCropArea(0);
+                            }}
+                            className={`h-8 rounded-xl px-2 text-[10px] font-black transition landscape:w-full ${
+                              !useTwoOtherCropAreas
+                                ? "bg-background text-primary shadow-sm"
+                                : "text-muted-foreground"
+                            }`}
+                          >
+                            One list
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setUseTwoOtherCropAreas(true);
+                              setActiveCropArea(0);
+                            }}
+                            className={`h-8 rounded-xl px-2 text-[10px] font-black transition landscape:w-full ${
+                              useTwoOtherCropAreas
+                                ? "bg-background text-primary shadow-sm"
+                                : "text-muted-foreground"
+                            }`}
+                          >
+                            Two lists
+                          </button>
+                        </div>
                         {useTwoOtherCropAreas && (
-                          <div className="flex shrink-0 gap-1 rounded-2xl bg-muted p-1 landscape:w-full">
-                            {[0, 1].map((area) => (
-                              <button
-                                key={`crop-area-${area}`}
-                                type="button"
-                                onClick={() => setActiveCropArea(area as 0 | 1)}
-                                className={`h-7 rounded-xl px-2 text-[10px] font-black transition landscape:flex-1 ${
-                                  activeCropArea === area
-                                    ? "bg-background text-primary shadow-sm"
-                                    : "text-muted-foreground"
-                                }`}
-                              >
-                                Area {area + 1}
-                              </button>
-                            ))}
+                          <div className="flex shrink-0 gap-1 rounded-2xl bg-muted p-1 landscape:w-full landscape:flex-col">
+                            {[0, 1].map((area) => {
+                              const saved = area === 1
+                                ? Boolean(secondaryCropBoxes[activeCropIndex])
+                                : Boolean(cropBoxes[activeCropIndex]);
+                              return (
+                                <button
+                                  key={`crop-area-${area}`}
+                                  type="button"
+                                  onClick={() => setActiveCropArea(area as 0 | 1)}
+                                  className={`h-8 rounded-xl px-2 text-[10px] font-black transition landscape:w-full ${
+                                    activeCropArea === area
+                                      ? area === 0
+                                        ? "bg-teal-50 text-teal-800 shadow-sm ring-1 ring-teal-200"
+                                        : "bg-orange-50 text-orange-800 shadow-sm ring-1 ring-orange-200"
+                                      : saved
+                                        ? "bg-background text-emerald-700"
+                                        : "text-muted-foreground"
+                                  }`}
+                                >
+                                  {saved ? "✓ " : ""}
+                                  List {area + 1}
+                                </button>
+                              );
+                            })}
                           </div>
                         )}
                         <Button
@@ -4117,7 +4277,7 @@ export function TodayTab({
                           }
                           className="ml-auto h-9 shrink-0 rounded-2xl px-3 text-xs font-black shadow-sm landscape:ml-0 landscape:mt-auto landscape:w-full landscape:px-2"
                         >
-                          Clear area
+                          Clear list
                         </Button>
                       </div>
                     </div>
@@ -4127,6 +4287,7 @@ export function TodayTab({
                         <div className="min-h-0 min-w-0 flex-1 overflow-hidden bg-slate-950 p-0.5">
                           <div className="flex h-full w-full items-center justify-center overflow-hidden">
                             <div
+                              ref={cropSurfaceRef}
                               className="relative flex max-h-full max-w-full touch-none items-center justify-center overflow-hidden"
                               onPointerDown={(event) =>
                                 startCropDrag(activeCropIndex, event)
@@ -4151,7 +4312,7 @@ export function TodayTab({
                                 const areas = [
                                   {
                                     area: 0 as const,
-                                    label: "1",
+                                    label: "List 1",
                                     box:
                                       cropDragStart?.index === activeCropIndex &&
                                       cropDragStart.area === 0 &&
@@ -4161,7 +4322,7 @@ export function TodayTab({
                                   },
                                   {
                                     area: 1 as const,
-                                    label: "2",
+                                    label: "List 2",
                                     box:
                                       useTwoOtherCropAreas &&
                                       cropDragStart?.index === activeCropIndex &&
@@ -4174,21 +4335,47 @@ export function TodayTab({
                                   },
                                 ].filter((item) => Boolean(item.box));
 
-                                if (!areas.length) return null;
-
                                 return (
                                   <>
+                                    {areas.length === 0 && (
+                                      <div className="pointer-events-none absolute inset-x-3 bottom-3 rounded-2xl bg-slate-950/70 px-3 py-2 text-center text-[11px] font-bold text-white shadow-lg">
+                                        {useTwoOtherCropAreas
+                                          ? `Drag around List ${activeCropArea + 1}.`
+                                          : "Drag around the names you want Fair Teams to read."}
+                                      </div>
+                                    )}
                                     {areas.map(({ area, label, box }) => {
                                       const isActive =
                                         !useTwoOtherCropAreas ||
                                         activeCropArea === area;
+                                      const boxTone =
+                                        area === 0
+                                          ? {
+                                              border: "border-teal-400",
+                                              fill: "bg-teal-300/15",
+                                              badge: "bg-teal-500 text-white",
+                                              handle: "bg-teal-400 ring-teal-100",
+                                            }
+                                          : {
+                                              border: "border-orange-400",
+                                              fill: "bg-orange-300/15",
+                                              badge: "bg-orange-400 text-slate-950",
+                                              handle: "bg-orange-400 ring-orange-100",
+                                            };
+                                      const handles: Array<{
+                                        handle: CropResizeHandle;
+                                        className: string;
+                                      }> = [
+                                        { handle: "nw", className: "-left-3 -top-3 cursor-nwse-resize" },
+                                        { handle: "ne", className: "-right-3 -top-3 cursor-nesw-resize" },
+                                        { handle: "sw", className: "-bottom-3 -left-3 cursor-nesw-resize" },
+                                        { handle: "se", className: "-bottom-3 -right-3 cursor-nwse-resize" },
+                                      ];
                                       return (
                                         <div
                                           key={`crop-overlay-${area}`}
-                                          className={`pointer-events-none absolute border-2 shadow-[0_0_0_9999px_rgba(15,23,42,0.22)] ${
-                                            isActive
-                                              ? "border-primary bg-primary/15"
-                                              : "border-amber-400 bg-amber-300/15"
+                                          className={`absolute border-2 shadow-[0_0_0_9999px_rgba(15,23,42,0.20)] ${boxTone.border} ${boxTone.fill} ${
+                                            isActive ? "pointer-events-auto" : "pointer-events-auto opacity-80"
                                           }`}
                                           style={{
                                             left: `${box!.x}%`,
@@ -4196,18 +4383,32 @@ export function TodayTab({
                                             width: `${box!.w}%`,
                                             height: `${box!.h}%`,
                                           }}
+                                          onPointerDown={(event) =>
+                                            startCropMove(activeCropIndex, area, event)
+                                          }
                                         >
-                                          {useTwoOtherCropAreas && (
-                                            <span
-                                              className={`absolute left-1 top-1 rounded-full px-1.5 py-0.5 text-[10px] font-black shadow-sm ${
-                                                isActive
-                                                  ? "bg-primary text-primary-foreground"
-                                                  : "bg-amber-400 text-slate-900"
-                                              }`}
-                                            >
-                                              {label}
-                                            </span>
-                                          )}
+                                          <span
+                                            className={`pointer-events-none absolute left-1 top-1 rounded-full px-1.5 py-0.5 text-[10px] font-black shadow-sm ${boxTone.badge}`}
+                                          >
+                                            {useTwoOtherCropAreas ? label : "List"}
+                                          </span>
+                                          {isActive &&
+                                            handles.map(({ handle, className }) => (
+                                              <button
+                                                key={`crop-handle-${area}-${handle}`}
+                                                type="button"
+                                                aria-label={`Resize ${label}`}
+                                                className={`absolute h-7 w-7 rounded-full ${boxTone.handle} shadow-lg ring-4 ${className}`}
+                                                onPointerDown={(event) =>
+                                                  startCropResize(
+                                                    activeCropIndex,
+                                                    area,
+                                                    handle,
+                                                    event,
+                                                  )
+                                                }
+                                              />
+                                            ))}
                                         </div>
                                       );
                                     })}

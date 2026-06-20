@@ -883,7 +883,7 @@ const OTHER_SCREENSHOT_JUNK_WORDS = new Set([
 ]);
 
 const OTHER_SCREENSHOT_LABEL_PATTERN =
-  /^\s*(?:attending|players?|participants?|names?|lineup|roster|team|confirmed|coming|available|list)\b\s*(?:tonight|today)?\s*[:\-–—]+\s*/i;
+  /^\s*(?:attending|players?|participants?|names?|lineup|roster|team|confirmed|coming|available|list)\b\s*(?:tonight|today)?\s*(?:[:\-–—.]\s*)+/i;
 
 function stripOtherScreenshotListPrefix(value: string) {
   return value
@@ -947,21 +947,33 @@ function splitOtherScreenshotNameSegments(rawLine: string) {
   if (!withoutPrefix) return [];
 
   const labelMatch = rawLine.match(
-    /\b(?:attending|players?|participants?|names?|lineup|roster|confirmed|coming|available)\b\s*[:\-–—]\s*(.+)$/i,
+    /\b(?:attending|players?|participants?|names?|lineup|roster|confirmed|coming|available)\b\s*(?:[:\-–—.]\s*)+(.+)$/i,
   );
   const source = labelMatch?.[1] ?? withoutPrefix;
 
-  // Email/WhatsApp screenshots often contain comma-separated lists, while
-  // roster apps usually show one name per line. Do not split plain space-only
-  // lines into loose OCR words; that was the source of junk like "UI"/"Lz".
+  // Email/WhatsApp/Gmail screenshots often contain comma-separated name
+  // sequences inside a sentence, for example:
+  // "players. Nicole, Joon, Sascha..."
+  // Split only on visible separators; plain space-only team sheets should stay
+  // line-based so two columns are not broken into loose OCR words.
   if (/[;,/|]/.test(source)) {
     return source
       .split(/[;,/|]+/)
-      .map((part) => part.trim())
+      .map((part) => stripOtherScreenshotListPrefix(part.trim()))
       .filter(Boolean);
   }
 
   return [source];
+}
+
+function extractDelimitedOtherScreenshotNames(rawLine: string, roster: RoomPlayer[]) {
+  if (!/[;,/|]/.test(rawLine)) return [];
+
+  return splitOtherScreenshotNameSegments(rawLine)
+    .map((segment) =>
+      cleanDetectedNameCandidate(stripOtherScreenshotListPrefix(segment)),
+    )
+    .filter((segment) => segment && isProbablyOtherScreenshotName(segment, roster));
 }
 
 
@@ -1041,6 +1053,12 @@ function extractOtherScreenshotNames(text: string, roster: RoomPlayer[]) {
       });
   } else {
     for (const rawLine of rawLines) {
+      const delimitedNames = extractDelimitedOtherScreenshotNames(rawLine, roster);
+      if (delimitedNames.length > 0) {
+        names.push(...delimitedNames);
+        continue;
+      }
+
       const isStructuredNameLine =
         /^\s*(?:\d{1,3}|[a-z])\s*[.)\]:\-–—]+\s+/i.test(rawLine) ||
         /^\s*[•●▪︎◆◇▶︎►✓✔☑-]+\s+/.test(rawLine) ||
@@ -4226,7 +4244,10 @@ export function TodayTab({
                             type="button"
                             onClick={() => {
                               setUseTwoOtherCropAreas(true);
-                              setActiveCropArea(0);
+                              // If the user already drew the first list as a
+                              // single crop, jump straight to List 2 so they
+                              // can draw the second rectangle immediately.
+                              setActiveCropArea(cropBoxes[activeCropIndex] ? 1 : 0);
                             }}
                             className={`h-8 rounded-xl px-2 text-[10px] font-black transition landscape:w-full ${
                               useTwoOtherCropAreas

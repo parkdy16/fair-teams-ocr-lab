@@ -56,10 +56,110 @@ function friendlyAiError(error: unknown) {
 }
 
 function parseModeLabel(mode?: AiSmartCommandResponse["parseMode"]) {
-  if (mode === "local_fallback") return "Local safety fallback";
+  if (mode === "local_fallback") return "Local reply / safety fallback";
   if (mode === "ai_with_local_hints") return "AI + app rules";
   if (mode === "ai") return "AI parser";
   return "AI beta";
+}
+
+type LocalAssistantReply = {
+  summary: string;
+  normalizedIntent: string;
+  detectedLanguage?: string;
+};
+
+function compactCommandText(text: string) {
+  return text
+    .toLowerCase()
+    .replace(/[.!?。！？,，]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function looksLikeAppCommand(text: string) {
+  return /\b(roster|player|players|team|teams|today|club|note|notes|select|make|generate|pair|separate|together|red|blue|green|yellow|color|colour|rename|equipment|add|delete|remove|skill)\b/i.test(text)
+    || /(팀|선수|명단|오늘|클럽|노트|메모|추가|삭제|분리|같이|빨강|파랑|색|장비)/.test(text);
+}
+
+function localAssistantReplyFor(commandText: string): LocalAssistantReply | null {
+  const raw = commandText.trim();
+  const text = compactCommandText(raw);
+  if (!text) return null;
+
+  const wordCount = text.split(" ").filter(Boolean).length;
+
+  const isHelp =
+    /^(help|what can you do|what do you do|how does this work|show examples|examples|commands?)$/.test(text)
+    || /^(hilfe|was kannst du|beispiele|befehle)$/.test(text)
+    || /(뭐 할 수|무엇을 할 수|도움|예시|명령)/.test(raw);
+
+  if (isHelp) {
+    return {
+      normalizedIntent: "local_help",
+      detectedLanguage: "local",
+      summary:
+        "Try commands like: “Select George, Sarah and Tommy for today.” · “Make 5v5 teams.” · “Keep Sarah and Tommy separate.” · “Add a Club note saying bring two balls.”",
+    };
+  }
+
+  const isThanks =
+    /^(thanks|thank you|thx|cheers|ok thanks|okay thanks)$/.test(text)
+    || /^(danke|danke dir|vielen dank|merci)$/.test(text)
+    || /(고마워|고맙|감사)/.test(raw);
+
+  if (isThanks && wordCount <= 5) {
+    return {
+      normalizedIntent: "local_thanks",
+      detectedLanguage: "local",
+      summary: "You’re welcome. Send another Fair Teams command whenever you want.",
+    };
+  }
+
+  const isGreeting =
+    /^(hi|hello|hey|hey there|yo|hiya|good morning|good afternoon|good evening)$/.test(text)
+    || /^(hallo|hi|hey|moin|servus|guten morgen|guten tag|guten abend)$/.test(text)
+    || /^(안녕|안녕하세요|하이|ㅎㅇ)/.test(raw)
+    || /^(bonjour|hola|ciao|salut|hej|merhaba)$/.test(text);
+
+  if (isGreeting && wordCount <= 5 && !looksLikeAppCommand(raw)) {
+    return {
+      normalizedIntent: "local_greeting",
+      detectedLanguage: "local",
+      summary:
+        "Hey — tell me what you want to do with Today players, teams, pairing rules, Club notes, or roster changes. For examples, type “help.”",
+    };
+  }
+
+  const isDismissal =
+    /^(never mind|nevermind|forget it|cancel|stop|no thanks|not now)$/.test(text)
+    || /^(egal|abbrechen|stopp|nicht jetzt)$/.test(text)
+    || /(취소|됐어|그만|나중에)/.test(raw);
+
+  if (isDismissal && wordCount <= 5) {
+    return {
+      normalizedIntent: "local_dismissal",
+      detectedLanguage: "local",
+      summary: "No problem. I won’t change anything.",
+    };
+  }
+
+  return null;
+}
+
+function makeLocalAssistantResponse(reply: LocalAssistantReply): AiSmartCommandResponse {
+  return {
+    schemaVersion: 1,
+    ok: true,
+    detectedLanguage: reply.detectedLanguage || "local",
+    normalizedIntent: reply.normalizedIntent,
+    assistantSummary: reply.summary,
+    confidence: 1,
+    actions: [],
+    confirmations: [],
+    unresolved: [],
+    parseMode: "local_fallback",
+    debugWarnings: ["Answered locally before calling the AI backend."],
+  };
 }
 
 export function AiSmartCommandPanel({
@@ -86,12 +186,24 @@ export function AiSmartCommandPanel({
 
   const submit = async () => {
     if (busy) return;
-    setBusy(true);
+    const trimmedCommand = commandText.trim();
+    if (!trimmedCommand) return;
+
     setError("");
     setApplyMessage("");
+
+    const localReply = localAssistantReplyFor(trimmedCommand);
+    if (localReply) {
+      const parsed = makeLocalAssistantResponse(localReply);
+      setResult(parsed);
+      onParsed?.(parsed);
+      return;
+    }
+
+    setBusy(true);
     try {
       const parsed = await parseFairTeamsSmartCommand({
-        commandText,
+        commandText: trimmedCommand,
         roster: players,
         context: createAiSmartCommandContext({ rosterName, rosterMode, activeTab }),
       });
@@ -167,8 +279,14 @@ export function AiSmartCommandPanel({
           <div className="mt-1 text-[11px] font-semibold text-slate-500">
             Language: {result.detectedLanguage} · Confidence: {Math.round(result.confidence * 100)}% · {parseModeLabel(result.parseMode)}
           </div>
-          <div className="mt-3 grid gap-1.5">
-            {result.actions.map((action, index) => {
+          {result.actions.length === 0 && (
+            <div className="mt-3 rounded-xl bg-violet-50 px-3 py-2 text-[11px] font-bold leading-snug text-violet-800">
+              Local reply — no AI call used.
+            </div>
+          )}
+          {result.actions.length > 0 && (
+            <div className="mt-3 grid gap-1.5">
+              {result.actions.map((action, index) => {
               const capability = getAiCommandCapability(action);
               const canApply = Boolean(onApplyAction && aiCommandActionCanApply(action));
               const key = `${action.type}-${index}`;
@@ -203,9 +321,10 @@ export function AiSmartCommandPanel({
                     </div>
                   )}
                 </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
           {result.confirmations.length > 0 && (
             <div className="mt-3 grid gap-1.5">
               <div className="text-[10px] font-black uppercase tracking-wide text-amber-600">Needs check</div>

@@ -2,51 +2,110 @@
   {
     "id": "today-player-list-5v5-missing-player",
     "command": "Joon, Jorge, Jan, Arthur, Kira are playing today. Make 5v5 teams.",
-    "expects": ["select_players", "add_new_player_suggestion", "set_team_size", "missing_context"]
+    "expects": [
+      "select_players",
+      "add_new_player_suggestion",
+      "set_team_size",
+      "missing_context"
+    ]
   },
   {
     "id": "select-all-six-teams",
     "command": "Select all players on the roster and make 6 teams.",
-    "expects": ["select_players", "set_team_count", "generate_teams"]
+    "expects": [
+      "select_players",
+      "set_team_count",
+      "generate_teams"
+    ]
   },
   {
     "id": "club-note-quoted",
     "command": "Can you add a note saying \"oh im so cool\" on Club Notes?",
-    "expects": ["club_add_note"]
+    "expects": [
+      "club_add_note"
+    ]
   },
   {
     "id": "roster-color-unwired",
     "command": "Change this roster color to navy.",
-    "expects": ["set_roster_color", "understood_not_wired"]
+    "expects": [
+      "set_roster_color",
+      "understood_not_wired"
+    ]
   },
   {
     "id": "pairing-separate",
     "command": "Sarah and Tommy do not like each other. Keep them separate.",
-    "expects": ["add_pairing_rule", "keep_separate"]
+    "expects": [
+      "add_pairing_rule",
+      "keep_separate"
+    ]
   },
   {
     "id": "team-lock-color",
     "command": "George is wearing red, so put him in red team.",
-    "expects": ["lock_player_to_team", "red"]
+    "expects": [
+      "lock_player_to_team",
+      "red"
+    ]
   },
   {
     "id": "spread-defenders",
     "command": "Separate one good defender into each team when you generate teams.",
-    "expects": ["spread_role_across_teams", "defender", "generate_teams"]
+    "expects": [
+      "spread_role_across_teams",
+      "defender",
+      "generate_teams"
+    ]
   },
   {
     "id": "korean-mixed-command",
     "command": "조지는 빨강팀. 사라랑 토미는 같이 두지 말고 6대6으로 해줘.",
-    "expects": ["lock_player_to_team", "add_pairing_rule", "set_team_size"]
+    "expects": [
+      "lock_player_to_team",
+      "add_pairing_rule",
+      "set_team_size"
+    ]
   },
   {
     "id": "german-command",
     "command": "Bitte alle Spieler auswählen und 4 Teams machen.",
-    "expects": ["select_players", "set_team_count"]
+    "expects": [
+      "select_players",
+      "set_team_count"
+    ]
   },
   {
     "id": "navigation-unwired",
     "command": "Open the Today tab.",
-    "expects": ["open_app_area", "understood_not_wired"]
+    "expects": [
+      "open_app_area",
+      "understood_not_wired"
+    ]
+  },
+  {
+    "id": "local-greeting-hey-there",
+    "command": "hey there",
+    "expected": [
+      "local_reply",
+      "no_api_call"
+    ]
+  },
+  {
+    "id": "local-help-what-can-you-do",
+    "command": "what can you do?",
+    "expected": [
+      "local_help",
+      "examples",
+      "no_api_call"
+    ]
+  },
+  {
+    "id": "local-thanks",
+    "command": "thanks",
+    "expected": [
+      "local_thanks",
+      "no_api_call"
+    ]
   }
 ]

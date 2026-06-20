@@ -935,12 +935,20 @@ function isProbablyOtherScreenshotName(value: string, roster: RoomPlayer[]) {
     }
   }
 
-  if (
-    /\b(i|we|you|he|she|they|it|this|that|but|would|like|come|join|plan|moved|time|thing|attend|club|anymore|gathering|question|list|event|search|checked|attendees?|team|teams|done|share|players?|message|chat|football|soccer|shirt|shirts|bring|meeting|tonight|tomorrow|today)\b/i.test(
-      clean,
-    )
-  ) {
-    return false;
+  const stopwordMatch = clean.match(
+    /\b(i|we|you|he|she|they|it|this|that|but|would|like|come|join|plan|moved|time|thing|attend|club|anymore|gathering|question|list|event|search|checked|attendees?|team|teams|done|share|players?|message|chat|football|soccer|shirt|shirts|bring|meeting|tonight|tomorrow|today)\b/i,
+  );
+  if (stopwordMatch) {
+    // Prefer showing a noisy candidate with removable chips over hiding a real
+    // name. Still reject pure UI/comment phrases, but allow a label/prefix when
+    // it is followed by at least one good-looking name token.
+    const hasNameAfterStopword = words.some(
+      (word) =>
+        word.length >= 3 &&
+        !OTHER_SCREENSHOT_JUNK_WORDS.has(word) &&
+        !/^(players?|team|teams|list|event|search|today|tomorrow|tonight)$/.test(word),
+    );
+    if (!hasNameAfterStopword) return false;
   }
 
   // All-caps multi-word OCR is usually header/UI text rather than names.
@@ -4219,37 +4227,35 @@ export function TodayTab({
               screenshotImportMode === "other" && (
                 <div className="fixed inset-0 z-[9999] h-[100dvh] w-[100dvw] overflow-hidden bg-background shadow-2xl">
                   <div className="flex h-full w-full flex-col gap-0 landscape:flex-row">
-                    <div className="shrink-0 border-b bg-background/95 px-3 pb-2 pt-[calc(env(safe-area-inset-top)+6px)] shadow-sm backdrop-blur landscape:flex landscape:w-28 landscape:flex-col landscape:gap-2 landscape:border-b-0 landscape:border-r landscape:px-2 landscape:pb-[calc(env(safe-area-inset-bottom)+8px)] landscape:pl-[calc(env(safe-area-inset-left)+8px)] landscape:pt-2">
+                    <div className="shrink-0 border-b bg-background/95 px-2.5 pb-1.5 pt-[calc(env(safe-area-inset-top)+5px)] shadow-sm backdrop-blur landscape:flex landscape:w-24 landscape:flex-col landscape:gap-1.5 landscape:border-b-0 landscape:border-r landscape:px-1.5 landscape:pb-[calc(env(safe-area-inset-bottom)+6px)] landscape:pl-[calc(env(safe-area-inset-left)+6px)] landscape:pt-1.5">
                       <div className="flex items-center justify-between gap-2 landscape:flex-col landscape:items-stretch">
-                        <div className="min-w-0 landscape:text-center">
-                          <div className="flex items-center gap-1.5 landscape:justify-center">
-                            <div className="text-sm font-black leading-tight text-foreground landscape:text-xs">
-                              {useTwoOtherCropAreas ? "Read two lists" : "Read one list"}
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => setCropHelpOpen((value) => !value)}
-                              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-muted-foreground transition ${
-                                cropHelpOpen
-                                  ? "border-primary/30 bg-primary/10 text-primary"
-                                  : "border-border bg-background"
-                              }`}
-                              aria-label="Crop instructions"
-                            >
-                              <Info className="h-3.5 w-3.5" />
-                            </button>
+                        <div className="flex min-w-0 items-center gap-1.5 landscape:justify-center">
+                          <div className="truncate text-[12px] font-black leading-tight text-foreground landscape:text-center landscape:text-[11px]">
+                            Crop names
                           </div>
-                          <div className="mt-0.5 text-[10px] font-bold text-muted-foreground">
-                            Screenshot {activeCropIndex + 1}/{selectedScreenshotPreviews.length}
+                          <button
+                            type="button"
+                            onClick={() => setCropHelpOpen((value) => !value)}
+                            className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-muted-foreground transition ${
+                              cropHelpOpen
+                                ? "border-primary/30 bg-primary/10 text-primary"
+                                : "border-border bg-background"
+                            }`}
+                            aria-label="Crop instructions"
+                          >
+                            <Info className="h-3.5 w-3.5" />
+                          </button>
+                          <div className="shrink-0 text-[10px] font-black text-muted-foreground landscape:hidden">
+                            {activeCropIndex + 1}/{selectedScreenshotPreviews.length}
                           </div>
                         </div>
-                        <div className="flex shrink-0 items-center gap-2 landscape:grid landscape:grid-cols-1 landscape:gap-1.5">
+                        <div className="flex shrink-0 items-center gap-1.5 landscape:grid landscape:grid-cols-1">
                           <Button
                             type="button"
                             variant="ghost"
                             size="sm"
                             onClick={clearOcrSelection}
-                            className="h-10 rounded-2xl px-3 text-xs font-black landscape:w-full landscape:px-2"
+                            className="h-8 rounded-xl px-2 text-[11px] font-black landscape:w-full landscape:px-1.5"
                           >
                             Cancel
                           </Button>
@@ -4265,28 +4271,25 @@ export function TodayTab({
                                   Boolean(secondaryCropBoxes[screenshotIndex])),
                               )
                             }
-                            className="h-10 rounded-2xl px-4 text-xs font-black shadow-sm landscape:w-full landscape:px-2"
+                            className="h-8 rounded-xl px-3 text-[11px] font-black shadow-sm landscape:w-full landscape:px-1.5"
                           >
-                            {useTwoOtherCropAreas ? "Scan 2 lists" : "Scan list"}
+                            Scan
                           </Button>
                         </div>
                       </div>
 
                       {cropHelpOpen && (
-                        <div className="mt-2 rounded-2xl border border-sky-100 bg-sky-50 px-3 py-2 text-[10px] font-bold leading-snug text-sky-900 landscape:text-[9px]">
-                          <div className="font-black">How crop works</div>
-                          <div className="mt-1">
-                            <b>Screenshot</b> buttons choose the image. <b>One/Two lists</b> choose how many separate name areas to read on that image. In Two lists, tap <b>List 1</b> or <b>List 2</b>, draw the box, then drag inside to move or drag corners to resize.
-                          </div>
+                        <div className="mt-1 rounded-xl border border-sky-100 bg-sky-50 px-2 py-1.5 text-[10px] font-bold leading-tight text-sky-900 landscape:text-[9px]">
+                          Drag around names. Use <b>②</b> for two separate lists. Drag inside to move; corners to resize.
                         </div>
                       )}
 
-                      <div className="mt-2 space-y-1.5 landscape:mt-0 landscape:flex landscape:flex-1 landscape:flex-col landscape:gap-1.5 landscape:space-y-0 landscape:overflow-y-auto">
-                        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 landscape:flex-col landscape:items-stretch landscape:overflow-x-hidden landscape:pb-0">
-                          <span className="shrink-0 px-1 text-[9px] font-black uppercase tracking-wide text-muted-foreground landscape:text-center">
-                            Screenshot
+                      <div className="mt-1.5 flex items-center gap-1.5 overflow-x-auto pb-0.5 landscape:mt-0 landscape:flex-1 landscape:flex-col landscape:items-stretch landscape:overflow-x-hidden landscape:overflow-y-auto landscape:pb-0">
+                        <div className="flex shrink-0 items-center gap-1 landscape:flex-col landscape:items-stretch">
+                          <span className="px-0.5 text-[8px] font-black uppercase tracking-wide text-muted-foreground landscape:text-center">
+                            Image
                           </span>
-                          <div className="flex gap-1.5 landscape:flex-col">
+                          <div className="flex gap-1 landscape:flex-col">
                             {selectedScreenshotPreviews.map((preview, index) => {
                               const hasAnyCrop =
                                 Boolean(cropBoxes[index]) ||
@@ -4296,7 +4299,7 @@ export function TodayTab({
                                   key={`${preview.name}-tab-${index}`}
                                   type="button"
                                   onClick={() => setActiveCropIndex(index)}
-                                  className={`h-8 min-w-8 shrink-0 rounded-full border px-3 text-xs font-black shadow-sm transition landscape:w-full landscape:px-2 ${
+                                  className={`h-7 min-w-7 shrink-0 rounded-full border px-2 text-[11px] font-black shadow-sm transition landscape:w-full landscape:px-1.5 ${
                                     activeCropIndex === index
                                       ? "border-primary bg-primary/10 text-primary"
                                       : hasAnyCrop
@@ -4305,32 +4308,33 @@ export function TodayTab({
                                   }`}
                                   aria-label={`Screenshot ${index + 1}`}
                                 >
-                                  {hasAnyCrop ? "✓ " : ""}
-                                  {index + 1}
+                                  {hasAnyCrop ? "✓" : index + 1}
                                 </button>
                               );
                             })}
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 landscape:flex-col landscape:items-stretch landscape:overflow-x-hidden landscape:pb-0">
-                          <span className="shrink-0 px-1 text-[9px] font-black uppercase tracking-wide text-muted-foreground landscape:text-center">
+                        <div className="flex shrink-0 items-center gap-1 landscape:flex-col landscape:items-stretch">
+                          <span className="px-0.5 text-[8px] font-black uppercase tracking-wide text-muted-foreground landscape:text-center">
                             Read
                           </span>
-                          <div className="flex shrink-0 gap-1 rounded-2xl bg-muted p-1 landscape:w-full landscape:flex-col">
+                          <div className="flex gap-1 rounded-xl bg-muted p-0.5 landscape:w-full landscape:flex-col">
                             <button
                               type="button"
                               onClick={() => {
                                 setUseTwoOtherCropAreas(false);
                                 setActiveCropArea(0);
                               }}
-                              className={`h-8 rounded-xl px-2 text-[10px] font-black transition landscape:w-full ${
+                              className={`flex h-7 min-w-8 items-center justify-center rounded-lg px-1.5 text-[10px] font-black transition landscape:w-full ${
                                 !useTwoOtherCropAreas
                                   ? "bg-background text-primary shadow-sm"
                                   : "text-muted-foreground"
                               }`}
+                              aria-label="Read one list"
+                              title="Read one list"
                             >
-                              One list
+                              <span className="flex h-4 w-5 items-center justify-center rounded border border-current/40 text-[9px] leading-none">1</span>
                             </button>
                             <button
                               type="button"
@@ -4341,23 +4345,25 @@ export function TodayTab({
                                 // can draw the second rectangle immediately.
                                 setActiveCropArea(cropBoxes[activeCropIndex] ? 1 : 0);
                               }}
-                              className={`h-8 rounded-xl px-2 text-[10px] font-black transition landscape:w-full ${
+                              className={`flex h-7 min-w-8 items-center justify-center rounded-lg px-1.5 text-[10px] font-black transition landscape:w-full ${
                                 useTwoOtherCropAreas
                                   ? "bg-background text-primary shadow-sm"
                                   : "text-muted-foreground"
                               }`}
+                              aria-label="Read two lists"
+                              title="Read two lists"
                             >
-                              Two lists
+                              <span className="flex h-4 w-5 items-center justify-center rounded border border-current/40 text-[9px] leading-none">2</span>
                             </button>
                           </div>
                         </div>
 
                         {useTwoOtherCropAreas && (
-                          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 landscape:flex-col landscape:items-stretch landscape:overflow-x-hidden landscape:pb-0">
-                            <span className="shrink-0 px-1 text-[9px] font-black uppercase tracking-wide text-muted-foreground landscape:text-center">
+                          <div className="flex shrink-0 items-center gap-1 landscape:flex-col landscape:items-stretch">
+                            <span className="px-0.5 text-[8px] font-black uppercase tracking-wide text-muted-foreground landscape:text-center">
                               Box
                             </span>
-                            <div className="flex shrink-0 gap-1 rounded-2xl bg-muted p-1 landscape:w-full landscape:flex-col">
+                            <div className="flex gap-1 rounded-xl bg-muted p-0.5 landscape:w-full landscape:flex-col">
                               {[0, 1].map((area) => {
                                 const saved = area === 1
                                   ? Boolean(secondaryCropBoxes[activeCropIndex])
@@ -4367,7 +4373,7 @@ export function TodayTab({
                                     key={`crop-area-${area}`}
                                     type="button"
                                     onClick={() => setActiveCropArea(area as 0 | 1)}
-                                    className={`h-8 rounded-xl px-2 text-[10px] font-black transition landscape:w-full ${
+                                    className={`flex h-7 min-w-8 items-center justify-center rounded-lg px-1.5 text-[10px] font-black transition landscape:w-full ${
                                       activeCropArea === area
                                         ? area === 0
                                           ? "bg-teal-50 text-teal-800 shadow-sm ring-1 ring-teal-200"
@@ -4376,9 +4382,10 @@ export function TodayTab({
                                           ? "bg-background text-emerald-700"
                                           : "text-muted-foreground"
                                     }`}
+                                    aria-label={`Box ${area + 1}`}
+                                    title={`Box ${area + 1}`}
                                   >
-                                    {saved ? "✓ " : ""}
-                                    List {area + 1}
+                                    {saved ? "✓" : area + 1}
                                   </button>
                                 );
                               })}
@@ -4396,9 +4403,9 @@ export function TodayTab({
                               ? !secondaryCropBoxes[activeCropIndex]
                               : !cropBoxes[activeCropIndex]
                           }
-                          className="ml-auto h-9 shrink-0 rounded-2xl px-3 text-xs font-black shadow-sm landscape:ml-0 landscape:mt-auto landscape:w-full landscape:px-2"
+                          className="ml-auto h-7 shrink-0 rounded-xl px-2 text-[10px] font-black shadow-sm landscape:ml-0 landscape:mt-auto landscape:w-full landscape:px-1.5"
                         >
-                          Clear box
+                          Clear
                         </Button>
                       </div>
                     </div>
@@ -4487,10 +4494,10 @@ export function TodayTab({
                                         handle: CropResizeHandle;
                                         className: string;
                                       }> = [
-                                        { handle: "nw", className: "-left-2 -top-2 cursor-nwse-resize" },
-                                        { handle: "ne", className: "-right-2 -top-2 cursor-nesw-resize" },
-                                        { handle: "sw", className: "-bottom-2 -left-2 cursor-nesw-resize" },
-                                        { handle: "se", className: "-bottom-2 -right-2 cursor-nwse-resize" },
+                                        { handle: "nw", className: "-left-1.5 -top-1.5 cursor-nwse-resize" },
+                                        { handle: "ne", className: "-right-1.5 -top-1.5 cursor-nesw-resize" },
+                                        { handle: "sw", className: "-bottom-1.5 -left-1.5 cursor-nesw-resize" },
+                                        { handle: "se", className: "-bottom-1.5 -right-1.5 cursor-nwse-resize" },
                                       ];
                                       return (
                                         <div
@@ -4519,7 +4526,7 @@ export function TodayTab({
                                                 key={`crop-handle-${area}-${handle}`}
                                                 type="button"
                                                 aria-label={`Resize ${label}`}
-                                                className={`absolute h-5 w-5 rounded-full ${boxTone.handle} shadow-md ring-2 ${className}`}
+                                                className={`absolute h-3.5 w-3.5 rounded-full ${boxTone.handle} shadow-sm ring-1 ${className}`}
                                                 onPointerDown={(event) =>
                                                   startCropResize(
                                                     activeCropIndex,

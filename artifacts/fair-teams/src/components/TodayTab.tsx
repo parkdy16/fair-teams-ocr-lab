@@ -4098,26 +4098,23 @@ export function TodayTab({
                   </div>
                   {scannedThumbnailsExpanded &&
                     selectedScreenshotPreviews.length > 0 && (
-                      <div className="mt-2 flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                      <div className="mt-2 grid grid-cols-2 gap-2.5">
                         {selectedScreenshotPreviews.map((preview, index) => (
                           <button
                             key={`${preview.name}-scanned-preview-${index}`}
                             type="button"
-                            className="w-20 shrink-0 overflow-hidden rounded-xl border bg-background text-left shadow-sm active:scale-[0.99]"
-                            onClick={() => {
-                              setActiveCropIndex(index);
-                              setScannedThumbnailsExpanded(false);
-                            }}
+                            className="min-w-0 overflow-hidden rounded-2xl border bg-background text-left shadow-sm active:scale-[0.99]"
+                            onClick={() => setActiveCropIndex(index)}
                             title={preview.name}
                           >
                             <div className="aspect-[9/16] bg-slate-100">
                               <img
                                 src={preview.url}
                                 alt={preview.name}
-                                className="h-full w-full object-cover"
+                                className="h-full w-full object-contain"
                               />
                             </div>
-                            <div className="truncate px-1.5 py-1 text-[9px] font-bold text-muted-foreground">
+                            <div className="truncate px-2 py-1.5 text-[9px] font-bold text-muted-foreground">
                               {index + 1}. {preview.name}
                             </div>
                           </button>

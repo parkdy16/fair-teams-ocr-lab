@@ -2619,22 +2619,29 @@ export function TodayTab({
         .map((name) => normalizeForMatch(name))
         .filter(Boolean),
     );
-    setSelectedOcrCandidateKeys(
-      reviewNames
-        .filter((candidate) => {
-          if (manualCandidateKeySet.has(normalizeForMatch(candidate.name)))
-            return true;
-          if (candidate.status === "match" && candidate.bestMatch) return true;
-          if (
-            voiceOpen &&
-            ocrInputSource === "voiceText" &&
-            candidate.status === "new"
-          )
-            return true;
-          return false;
-        })
-        .map(ocrCandidateKey),
-    );
+    const validReviewKeys = new Set(reviewNames.map(ocrCandidateKey));
+    const autoSelectedKeys = reviewNames
+      .filter((candidate) => {
+        if (manualCandidateKeySet.has(normalizeForMatch(candidate.name)))
+          return true;
+        if (candidate.status === "match" && candidate.bestMatch) return true;
+        if (
+          voiceOpen &&
+          ocrInputSource === "voiceText" &&
+          candidate.status === "new"
+        )
+          return true;
+        return false;
+      })
+      .map(ocrCandidateKey);
+
+    setSelectedOcrCandidateKeys((current) => {
+      const next = new Set(
+        current.filter((key) => validReviewKeys.has(key)),
+      );
+      autoSelectedKeys.forEach((key) => next.add(key));
+      return Array.from(next);
+    });
   }, [reviewNames, voiceOpen, ocrInputSource, manualOcrCandidateNames]);
 
   const clearOcrSelection = () => {

@@ -1919,6 +1919,14 @@ export function TodayTab({
   const [activeCropArea, setActiveCropArea] = useState<0 | 1>(0);
   const [cropHelpOpen, setCropHelpOpen] = useState(false);
   const cropSurfaceRef = useRef<HTMLDivElement | null>(null);
+  const cropPreviewFrameRef = useRef<HTMLDivElement | null>(null);
+  const [cropPreviewFrameSize, setCropPreviewFrameSize] = useState({
+    width: 0,
+    height: 0,
+  });
+  const [cropImageNaturalSizes, setCropImageNaturalSizes] = useState<
+    Record<number, { width: number; height: number }>
+  >({});
   const [cropDragStart, setCropDragStart] = useState<{
     index: number;
     area: 0 | 1;
@@ -2776,6 +2784,65 @@ export function TodayTab({
     setEditedOcrCandidateNames({});
     setEditedOcrTokenSelections({});
   };
+
+  useEffect(() => {
+    const frame = cropPreviewFrameRef.current;
+    if (!frame) return;
+
+    const updateFrameSize = () => {
+      const rect = frame.getBoundingClientRect();
+      setCropPreviewFrameSize({
+        width: Math.max(0, Math.floor(rect.width)),
+        height: Math.max(0, Math.floor(rect.height)),
+      });
+    };
+
+    updateFrameSize();
+
+    const ResizeObserverConstructor =
+      typeof ResizeObserver !== "undefined" ? ResizeObserver : null;
+    const resizeObserver = ResizeObserverConstructor
+      ? new ResizeObserverConstructor(updateFrameSize)
+      : null;
+
+    resizeObserver?.observe(frame);
+    window.addEventListener("resize", updateFrameSize);
+
+    return () => {
+      resizeObserver?.disconnect();
+      window.removeEventListener("resize", updateFrameSize);
+    };
+  }, [
+    activeCropIndex,
+    selectedScreenshotPreviews.length,
+    screenshotImportMode,
+    ocrText,
+    ocrRunning,
+    cropHelpOpen,
+    useTwoOtherCropAreas,
+  ]);
+
+  const activeCropDisplaySize = useMemo(() => {
+    const natural = cropImageNaturalSizes[activeCropIndex];
+    const frameWidth = cropPreviewFrameSize.width;
+    const frameHeight = cropPreviewFrameSize.height;
+
+    if (!natural || !natural.width || !natural.height || !frameWidth || !frameHeight) {
+      return null;
+    }
+
+    const scale = Math.min(
+      frameWidth / natural.width,
+      frameHeight / natural.height,
+    );
+
+    if (!Number.isFinite(scale) || scale <= 0) return null;
+
+    return {
+      width: Math.max(1, Math.floor(natural.width * scale)),
+      height: Math.max(1, Math.floor(natural.height * scale)),
+    };
+  }, [activeCropIndex, cropImageNaturalSizes, cropPreviewFrameSize]);
 
   const clampCropBox = (box: CropBox): CropBox => {
     const w = Math.min(100, Math.max(0, box.w));
@@ -4413,10 +4480,24 @@ export function TodayTab({
                     {selectedScreenshotPreviews[activeCropIndex] && (
                       <>
                         <div className="min-h-0 min-w-0 flex-1 overflow-hidden bg-slate-950">
-                          <div className="flex h-full w-full items-center justify-center overflow-hidden">
+                          <div
+                            ref={cropPreviewFrameRef}
+                            className="flex h-full w-full items-center justify-center overflow-hidden"
+                          >
                             <div
                               ref={cropSurfaceRef}
-                              className="relative inline-flex max-h-full max-w-full touch-none items-center justify-center overflow-hidden"
+                              className="relative touch-none overflow-hidden"
+                              style={
+                                activeCropDisplaySize
+                                  ? {
+                                      width: `${activeCropDisplaySize.width}px`,
+                                      height: `${activeCropDisplaySize.height}px`,
+                                    }
+                                  : {
+                                      width: "100%",
+                                      height: "100%",
+                                    }
+                              }
                               onPointerDown={(event) =>
                                 startCropDrag(activeCropIndex, event)
                               }
@@ -4433,8 +4514,30 @@ export function TodayTab({
                                   selectedScreenshotPreviews[activeCropIndex]
                                     .name
                                 }
-                                className="block h-auto max-h-full w-auto max-w-full select-none object-contain"
+                                className="absolute inset-0 block h-full w-full select-none object-contain"
                                 draggable={false}
+                                onLoad={(event) => {
+                                  const image = event.currentTarget;
+                                  const naturalWidth = image.naturalWidth || 0;
+                                  const naturalHeight = image.naturalHeight || 0;
+                                  if (!naturalWidth || !naturalHeight) return;
+                                  setCropImageNaturalSizes((current) => {
+                                    const existing = current[activeCropIndex];
+                                    if (
+                                      existing?.width === naturalWidth &&
+                                      existing?.height === naturalHeight
+                                    ) {
+                                      return current;
+                                    }
+                                    return {
+                                      ...current,
+                                      [activeCropIndex]: {
+                                        width: naturalWidth,
+                                        height: naturalHeight,
+                                      },
+                                    };
+                                  });
+                                }}
                               />
                               {(() => {
                                 const areas = [

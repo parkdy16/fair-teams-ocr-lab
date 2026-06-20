@@ -13,6 +13,7 @@ import {
   ClipboardList,
   Eye,
   Image as ImageIcon,
+  Info,
   Mic,
   Search,
   Upload,
@@ -900,10 +901,14 @@ function isProbablyOtherScreenshotName(value: string, roster: RoomPlayer[]) {
   if (!clean || !normalized) return false;
   if (OTHER_SCREENSHOT_JUNK_WORDS.has(normalized)) return false;
   if (
-    [...OTHER_SCREENSHOT_JUNK_WORDS].some(
-      (word) =>
-        normalized.includes(word) && normalized.length <= word.length + 8,
-    )
+    [...OTHER_SCREENSHOT_JUNK_WORDS].some((word) => {
+      // Very short OCR junk such as "na" or "hi" should only be rejected as an
+      // exact word. Substring matching rejected real names like Natasha,
+      // Katharina, and Alanah because they contain "na".
+      if (word.length < 3) return false;
+      const pattern = new RegExp(`(^|\\s)${escapeRegExp(word)}(?=\\s|$)`);
+      return pattern.test(normalized) && normalized.length <= word.length + 8;
+    })
   ) {
     return false;
   }
@@ -1898,6 +1903,7 @@ export function TodayTab({
   const [secondaryCropBoxes, setSecondaryCropBoxes] = useState<Record<number, CropBox>>({});
   const [useTwoOtherCropAreas, setUseTwoOtherCropAreas] = useState(false);
   const [activeCropArea, setActiveCropArea] = useState<0 | 1>(0);
+  const [cropHelpOpen, setCropHelpOpen] = useState(false);
   const cropSurfaceRef = useRef<HTMLDivElement | null>(null);
   const [cropDragStart, setCropDragStart] = useState<{
     index: number;
@@ -2738,6 +2744,7 @@ export function TodayTab({
     setSecondaryCropBoxes({});
     setUseTwoOtherCropAreas(false);
     setActiveCropArea(0);
+    setCropHelpOpen(false);
     setCropDragStart(null);
     setDraftCropBox(null);
     setOcrText("");
@@ -4209,8 +4216,22 @@ export function TodayTab({
                     <div className="shrink-0 border-b bg-background/95 px-3 pb-2 pt-[calc(env(safe-area-inset-top)+6px)] shadow-sm backdrop-blur landscape:flex landscape:w-28 landscape:flex-col landscape:gap-2 landscape:border-b-0 landscape:border-r landscape:px-2 landscape:pb-[calc(env(safe-area-inset-bottom)+8px)] landscape:pl-[calc(env(safe-area-inset-left)+8px)] landscape:pt-2">
                       <div className="flex items-center justify-between gap-2 landscape:flex-col landscape:items-stretch">
                         <div className="min-w-0 landscape:text-center">
-                          <div className="text-sm font-black leading-tight text-foreground landscape:text-xs">
-                            {useTwoOtherCropAreas ? "Read two lists" : "Read one list"}
+                          <div className="flex items-center gap-1.5 landscape:justify-center">
+                            <div className="text-sm font-black leading-tight text-foreground landscape:text-xs">
+                              {useTwoOtherCropAreas ? "Read two lists" : "Read one list"}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setCropHelpOpen((value) => !value)}
+                              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-muted-foreground transition ${
+                                cropHelpOpen
+                                  ? "border-primary/30 bg-primary/10 text-primary"
+                                  : "border-border bg-background"
+                              }`}
+                              aria-label="Crop instructions"
+                            >
+                              <Info className="h-3.5 w-3.5" />
+                            </button>
                           </div>
                           <div className="mt-0.5 text-[10px] font-bold text-muted-foreground">
                             Screenshot {activeCropIndex + 1}/{selectedScreenshotPreviews.length}
@@ -4245,90 +4266,120 @@ export function TodayTab({
                         </div>
                       </div>
 
-                      <div className="mt-2 flex items-center gap-1.5 overflow-x-auto pb-1 landscape:mt-0 landscape:flex-1 landscape:flex-col landscape:items-stretch landscape:gap-1.5 landscape:overflow-x-hidden landscape:overflow-y-auto landscape:pb-0">
-                        {selectedScreenshotPreviews.map((preview, index) => {
-                          const hasAnyCrop =
-                            Boolean(cropBoxes[index]) ||
-                            Boolean(secondaryCropBoxes[index]);
-                          return (
-                            <button
-                              key={`${preview.name}-tab-${index}`}
-                              type="button"
-                              onClick={() => setActiveCropIndex(index)}
-                              className={`h-8 min-w-8 shrink-0 rounded-full border px-3 text-xs font-black shadow-sm transition landscape:w-full landscape:px-2 ${
-                                activeCropIndex === index
-                                  ? "border-primary bg-primary/10 text-primary"
-                                  : hasAnyCrop
-                                    ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                                    : "border-border bg-background text-muted-foreground"
-                              }`}
-                            >
-                              {hasAnyCrop ? "✓ " : ""}
-                              {index + 1}
-                            </button>
-                          );
-                        })}
-                        <div className="flex shrink-0 gap-1 rounded-2xl bg-muted p-1 landscape:w-full landscape:flex-col">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setUseTwoOtherCropAreas(false);
-                              setActiveCropArea(0);
-                            }}
-                            className={`h-8 rounded-xl px-2 text-[10px] font-black transition landscape:w-full ${
-                              !useTwoOtherCropAreas
-                                ? "bg-background text-primary shadow-sm"
-                                : "text-muted-foreground"
-                            }`}
-                          >
-                            One list
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setUseTwoOtherCropAreas(true);
-                              // If the user already drew the first list as a
-                              // single crop, jump straight to List 2 so they
-                              // can draw the second rectangle immediately.
-                              setActiveCropArea(cropBoxes[activeCropIndex] ? 1 : 0);
-                            }}
-                            className={`h-8 rounded-xl px-2 text-[10px] font-black transition landscape:w-full ${
-                              useTwoOtherCropAreas
-                                ? "bg-background text-primary shadow-sm"
-                                : "text-muted-foreground"
-                            }`}
-                          >
-                            Two lists
-                          </button>
+                      {cropHelpOpen && (
+                        <div className="mt-2 rounded-2xl border border-sky-100 bg-sky-50 px-3 py-2 text-[10px] font-bold leading-snug text-sky-900 landscape:text-[9px]">
+                          <div className="font-black">How crop works</div>
+                          <div className="mt-1">
+                            <b>Screenshot</b> buttons choose the image. <b>One/Two lists</b> choose how many separate name areas to read on that image. In Two lists, tap <b>List 1</b> or <b>List 2</b>, draw the box, then drag inside to move or drag corners to resize.
+                          </div>
                         </div>
-                        {useTwoOtherCropAreas && (
-                          <div className="flex shrink-0 gap-1 rounded-2xl bg-muted p-1 landscape:w-full landscape:flex-col">
-                            {[0, 1].map((area) => {
-                              const saved = area === 1
-                                ? Boolean(secondaryCropBoxes[activeCropIndex])
-                                : Boolean(cropBoxes[activeCropIndex]);
+                      )}
+
+                      <div className="mt-2 space-y-1.5 landscape:mt-0 landscape:flex landscape:flex-1 landscape:flex-col landscape:gap-1.5 landscape:space-y-0 landscape:overflow-y-auto">
+                        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 landscape:flex-col landscape:items-stretch landscape:overflow-x-hidden landscape:pb-0">
+                          <span className="shrink-0 px-1 text-[9px] font-black uppercase tracking-wide text-muted-foreground landscape:text-center">
+                            Screenshot
+                          </span>
+                          <div className="flex gap-1.5 landscape:flex-col">
+                            {selectedScreenshotPreviews.map((preview, index) => {
+                              const hasAnyCrop =
+                                Boolean(cropBoxes[index]) ||
+                                Boolean(secondaryCropBoxes[index]);
                               return (
                                 <button
-                                  key={`crop-area-${area}`}
+                                  key={`${preview.name}-tab-${index}`}
                                   type="button"
-                                  onClick={() => setActiveCropArea(area as 0 | 1)}
-                                  className={`h-8 rounded-xl px-2 text-[10px] font-black transition landscape:w-full ${
-                                    activeCropArea === area
-                                      ? area === 0
-                                        ? "bg-teal-50 text-teal-800 shadow-sm ring-1 ring-teal-200"
-                                        : "bg-orange-50 text-orange-800 shadow-sm ring-1 ring-orange-200"
-                                      : saved
-                                        ? "bg-background text-emerald-700"
-                                        : "text-muted-foreground"
+                                  onClick={() => setActiveCropIndex(index)}
+                                  className={`h-8 min-w-8 shrink-0 rounded-full border px-3 text-xs font-black shadow-sm transition landscape:w-full landscape:px-2 ${
+                                    activeCropIndex === index
+                                      ? "border-primary bg-primary/10 text-primary"
+                                      : hasAnyCrop
+                                        ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                                        : "border-border bg-background text-muted-foreground"
                                   }`}
+                                  aria-label={`Screenshot ${index + 1}`}
                                 >
-                                  {saved ? "✓ " : ""}
-                                  List {area + 1}
+                                  {hasAnyCrop ? "✓ " : ""}
+                                  {index + 1}
                                 </button>
                               );
                             })}
                           </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 landscape:flex-col landscape:items-stretch landscape:overflow-x-hidden landscape:pb-0">
+                          <span className="shrink-0 px-1 text-[9px] font-black uppercase tracking-wide text-muted-foreground landscape:text-center">
+                            Read
+                          </span>
+                          <div className="flex shrink-0 gap-1 rounded-2xl bg-muted p-1 landscape:w-full landscape:flex-col">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setUseTwoOtherCropAreas(false);
+                                setActiveCropArea(0);
+                              }}
+                              className={`h-8 rounded-xl px-2 text-[10px] font-black transition landscape:w-full ${
+                                !useTwoOtherCropAreas
+                                  ? "bg-background text-primary shadow-sm"
+                                  : "text-muted-foreground"
+                              }`}
+                            >
+                              One list
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setUseTwoOtherCropAreas(true);
+                                // If the user already drew the first list as a
+                                // single crop, jump straight to List 2 so they
+                                // can draw the second rectangle immediately.
+                                setActiveCropArea(cropBoxes[activeCropIndex] ? 1 : 0);
+                              }}
+                              className={`h-8 rounded-xl px-2 text-[10px] font-black transition landscape:w-full ${
+                                useTwoOtherCropAreas
+                                  ? "bg-background text-primary shadow-sm"
+                                  : "text-muted-foreground"
+                              }`}
+                            >
+                              Two lists
+                            </button>
+                          </div>
+                        </div>
+
+                        {useTwoOtherCropAreas && (
+                          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 landscape:flex-col landscape:items-stretch landscape:overflow-x-hidden landscape:pb-0">
+                            <span className="shrink-0 px-1 text-[9px] font-black uppercase tracking-wide text-muted-foreground landscape:text-center">
+                              Box
+                            </span>
+                            <div className="flex shrink-0 gap-1 rounded-2xl bg-muted p-1 landscape:w-full landscape:flex-col">
+                              {[0, 1].map((area) => {
+                                const saved = area === 1
+                                  ? Boolean(secondaryCropBoxes[activeCropIndex])
+                                  : Boolean(cropBoxes[activeCropIndex]);
+                                return (
+                                  <button
+                                    key={`crop-area-${area}`}
+                                    type="button"
+                                    onClick={() => setActiveCropArea(area as 0 | 1)}
+                                    className={`h-8 rounded-xl px-2 text-[10px] font-black transition landscape:w-full ${
+                                      activeCropArea === area
+                                        ? area === 0
+                                          ? "bg-teal-50 text-teal-800 shadow-sm ring-1 ring-teal-200"
+                                          : "bg-orange-50 text-orange-800 shadow-sm ring-1 ring-orange-200"
+                                        : saved
+                                          ? "bg-background text-emerald-700"
+                                          : "text-muted-foreground"
+                                    }`}
+                                  >
+                                    {saved ? "✓ " : ""}
+                                    List {area + 1}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
                         )}
+
                         <Button
                           type="button"
                           variant="outline"
@@ -4341,7 +4392,7 @@ export function TodayTab({
                           }
                           className="ml-auto h-9 shrink-0 rounded-2xl px-3 text-xs font-black shadow-sm landscape:ml-0 landscape:mt-auto landscape:w-full landscape:px-2"
                         >
-                          Clear list
+                          Clear box
                         </Button>
                       </div>
                     </div>
@@ -4430,10 +4481,10 @@ export function TodayTab({
                                         handle: CropResizeHandle;
                                         className: string;
                                       }> = [
-                                        { handle: "nw", className: "-left-3 -top-3 cursor-nwse-resize" },
-                                        { handle: "ne", className: "-right-3 -top-3 cursor-nesw-resize" },
-                                        { handle: "sw", className: "-bottom-3 -left-3 cursor-nesw-resize" },
-                                        { handle: "se", className: "-bottom-3 -right-3 cursor-nwse-resize" },
+                                        { handle: "nw", className: "-left-2 -top-2 cursor-nwse-resize" },
+                                        { handle: "ne", className: "-right-2 -top-2 cursor-nesw-resize" },
+                                        { handle: "sw", className: "-bottom-2 -left-2 cursor-nesw-resize" },
+                                        { handle: "se", className: "-bottom-2 -right-2 cursor-nwse-resize" },
                                       ];
                                       return (
                                         <div
@@ -4462,7 +4513,7 @@ export function TodayTab({
                                                 key={`crop-handle-${area}-${handle}`}
                                                 type="button"
                                                 aria-label={`Resize ${label}`}
-                                                className={`absolute h-7 w-7 rounded-full ${boxTone.handle} shadow-lg ring-4 ${className}`}
+                                                className={`absolute h-5 w-5 rounded-full ${boxTone.handle} shadow-md ring-2 ${className}`}
                                                 onPointerDown={(event) =>
                                                   startCropResize(
                                                     activeCropIndex,

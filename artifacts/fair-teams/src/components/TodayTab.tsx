@@ -2668,9 +2668,12 @@ export function TodayTab({
       .map(ocrCandidateKey);
 
     setSelectedOcrCandidateKeys((current) => {
-      const next = new Set(
-        current.filter((key) => validReviewKeys.has(key)),
-      );
+      // Keep the user's current Review Names selection while OCR candidates are
+      // being re-built. Adding a missed name from Raw OCR can temporarily change
+      // the review list; filtering here made already-selected cards disappear.
+      // Stale keys are harmless because selectedOcrCandidates is derived from
+      // the current reviewNames list.
+      const next = new Set(current);
       autoSelectedKeys.forEach((key) => next.add(key));
       return Array.from(next);
     });
@@ -3050,6 +3053,13 @@ export function TodayTab({
 
     if (existingReviewCandidate) {
       const key = ocrCandidateKey(existingReviewCandidate);
+      // If this candidate was previously edited or collapsed into a similar
+      // name (for example Elli/Ella), selecting it from Raw OCR should restore
+      // the name the user just chose.
+      setEditedOcrCandidateNames((current) => ({
+        ...current,
+        [key]: cleanedName,
+      }));
       setSelectedOcrCandidateKeys((current) =>
         current.includes(key) ? current : [...current, key],
       );
@@ -3075,6 +3085,10 @@ export function TodayTab({
       );
       return existing ? current : [...current, cleanedName];
     });
+    setEditedOcrCandidateNames((current) => ({
+      ...current,
+      [reviewKey]: cleanedName,
+    }));
     setSelectedOcrCandidateKeys((current) =>
       current.includes(reviewKey) ? current : [...current, reviewKey],
     );
@@ -4470,6 +4484,9 @@ export function TodayTab({
                           setManualRawOcrName(event.target.value)
                         }
                         placeholder="Type missing name from raw text"
+                        autoCapitalize="words"
+                        autoCorrect="off"
+                        spellCheck={false}
                         className="h-9 rounded-xl text-xs font-bold"
                       />
                       <Button

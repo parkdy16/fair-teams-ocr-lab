@@ -4473,7 +4473,7 @@ export function TodayTab({
 
                     {cropHelpOpen && (
                       <div className="pointer-events-none absolute left-2 right-2 top-[calc(env(safe-area-inset-top)+48px)] z-30 rounded-2xl border border-sky-100 bg-sky-50/95 px-3 py-2 text-[10px] font-bold leading-snug text-sky-900 shadow-lg backdrop-blur landscape:left-[calc(env(safe-area-inset-left)+6.3rem)] landscape:right-2 landscape:top-2 landscape:max-w-sm">
-                        Drag to select where names are. Use Image 1/2 to switch screenshots. If names are in separate areas, like two columns, tap <b>②</b> and draw Box 1 and Box 2 separately.
+                        Drag to select where names are. Use <b>Image 1/2</b> to switch screenshots. If names are in separate areas, like two columns, choose <b>Read: 2</b>, then draw <b>Box 1</b> and <b>Box 2</b> separately.
                       </div>
                     )}
 

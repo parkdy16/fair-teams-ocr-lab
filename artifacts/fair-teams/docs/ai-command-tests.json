@@ -111,5 +111,28 @@
   {
     "command": "how is the weather today?",
     "expected": "Explain live weather is not connected yet; do not invent weather."
+  },
+  {
+    "command": "move the bibs bag to Sarah",
+    "expected": [
+      "equipment_move_item",
+      "targetName:bibs bag",
+      "holder:Sarah"
+    ]
+  },
+  {
+    "command": "George has the cones now",
+    "expected": [
+      "equipment_move_item",
+      "targetName:cones",
+      "holder:George"
+    ]
+  },
+  {
+    "command": "add a pump bag to equipment",
+    "expected": [
+      "equipment_add_item",
+      "targetName:pump bag"
+    ]
   }
 ]

@@ -347,6 +347,117 @@ function detectSpreadRole(text) {
   return null;
 }
 
+function looksLikeEquipmentText(text) {
+  const command = cleanString(text, MAX_COMMAND_CHARS);
+  if (!command) return false;
+  return /(equipment|bag|bags|ball bag|bib bag|bibs|vests|cones|pump|football|balls|jerseys|kit|gear|ausrustung|ausrüstung|tasche|balltasche|balle|bälle|leibchen|hütchen|pumpe|trikots|장비|가방|공|조끼|콘|펌프)/iu.test(command);
+}
+
+function cleanEquipmentItemName(value) {
+  return cleanString(value, 120)
+    .replace(/^(the|a|an|this|that|one|specific|equipment|bag|item)\s+/i, "")
+    .replace(/\s+(from|to|with|bei|zu|an|에게|한테)\s+.*$/iu, "")
+    .replace(/[.!?。！？]+$/g, "")
+    .trim();
+}
+
+function matchDestinationPlayer(value, rosterIndex) {
+  const name = cleanString(value, 80).replace(/[.!?。！？]+$/g, "").trim();
+  if (!name) return null;
+  const match = matchNameCandidate(name, rosterIndex);
+  if ((match.status === "matched" || match.status === "possible_match") && match.playerId) {
+    return {
+      playerId: match.playerId,
+      rosterName: match.rosterName || name,
+      spokenName: name,
+      confidence: match.confidence || 0.8,
+    };
+  }
+  return { playerId: null, rosterName: null, spokenName: name, confidence: 0 };
+}
+
+function detectEquipmentAction(text, roster) {
+  const command = cleanString(text, MAX_COMMAND_CHARS);
+  if (!command || !looksLikeEquipmentText(command)) return null;
+
+  const rosterIndex = buildRosterNameIndex(roster);
+  const quoted = extractQuotedText(command);
+  const isAdd = /\b(add|create|make|new|write|put)\b/i.test(command) && /\b(equipment|bag|item|gear|ball|bibs|cones|pump|장비|가방|공|조끼|콘|펌프)\b/iu.test(command);
+  const isMove = /(move|give|assign|hand|transfer|put|set|change|bring|take|has|holds|holder|carry|carries|shift|move it|verschieb|gib|hat|zu|bei|옮겨|줘|담당|가지|가져|넘겨)/iu.test(command);
+
+  if (isMove) {
+    const patterns = [
+      /(?:move|give|assign|hand|transfer|put|set|change|bring|take)\s+(?:the\s+)?(.+?)\s+(?:from\s+.+?\s+)?(?:to|for|with|under)\s+([\p{L}\p{N} ._'-]{2,80})/iu,
+      /(?:move|give|assign|hand|transfer|put|set|change|bring|take)\s+(?:the\s+)?(.+?)\s+(?:zu|bei|an)\s+([\p{L}\p{N} ._'-]{2,80})/iu,
+      /(?:move|give|assign|hand|transfer|put|set|change|bring|take)\s+(?:the\s+)?(.+?)\s+(?:에게|한테|로|으로)\s*([\p{L}\p{N} ._'-]{2,80})/iu,
+      /([\p{L}\p{N} ._'-]{2,80})\s+(?:has|holds|takes|gets|carries)\s+(?:the\s+)?(.+?)(?:$|[.!?。！？])/iu,
+      /([\p{L}\p{N} ._'-]{2,80})\s+(?:hat|nimmt|tragt|trägt|bekommt)\s+(?:die|den|das)?\s*(.+?)(?:$|[.!?。！？])/iu,
+      /([\p{L}\p{N} ._'-]{2,80})\s*(?:가|이)?\s*(.+?)\s*(?:가져|가지|담당|들고|맡아)/iu,
+    ];
+
+    for (const pattern of patterns) {
+      const match = command.match(pattern);
+      if (!match) continue;
+      const first = cleanString(match[1], 120);
+      const second = cleanString(match[2], 120);
+      const destinationFirst = /\b(has|holds|takes|gets|carries|hat|nimmt|tragt|trägt|bekommt)\b/i.test(match[0]) || /(?:가져|가지|담당|들고|맡아)/.test(match[0]);
+      const itemName = cleanEquipmentItemName(quoted || (destinationFirst ? second : first));
+      const destinationName = cleanString(destinationFirst ? first : second, 80);
+      const destinationRef = matchDestinationPlayer(destinationName, rosterIndex);
+      return {
+        type: "equipment_move_item",
+        targetName: itemName || null,
+        playerRefs: destinationRef ? [destinationRef] : [],
+        rawDestinationName: destinationName || null,
+        noteText: destinationName ? `Move ${itemName || "equipment item"} to ${destinationName}.` : null,
+        missing: !itemName ? "item" : !destinationName ? "destination" : null,
+      };
+    }
+
+    const itemOnly = cleanEquipmentItemName(quoted || command.replace(/^(please\s+)?(move|give|assign|hand|transfer|put|set|change|bring|take)\s+/i, ""));
+    return {
+      type: "equipment_move_item",
+      targetName: itemOnly || null,
+      playerRefs: [],
+      rawDestinationName: null,
+      noteText: itemOnly ? `Move ${itemOnly}.` : null,
+      missing: itemOnly ? "destination" : "item_and_destination",
+    };
+  }
+
+  if (isAdd) {
+    const patterns = [
+      /(?:add|create|make|new)\s+(?:an?\s+)?(?:equipment\s+)?(?:bag|item)?\s*(.+)$/iu,
+      /(?:add|create|make|new)\s+(.+?)\s+(?:to|in|on)\s+(?:the\s+)?equipment(?:\s+board)?$/iu,
+      /(?:장비|가방|공|조끼|콘|펌프)\s*(?:추가|만들|등록)\s*:?\s*(.+)$/iu,
+    ];
+    for (const pattern of patterns) {
+      const match = command.match(pattern);
+      const itemName = cleanEquipmentItemName(quoted || match?.[1]);
+      if (itemName) {
+        return {
+          type: "equipment_add_item",
+          targetName: itemName,
+          playerRefs: [],
+          rawDestinationName: null,
+          noteText: itemName,
+          missing: null,
+        };
+      }
+    }
+    return { type: "equipment_add_item", targetName: null, playerRefs: [], rawDestinationName: null, noteText: null, missing: "item" };
+  }
+
+  return {
+    type: "equipment_move_item",
+    targetName: null,
+    playerRefs: [],
+    rawDestinationName: null,
+    noteText: null,
+    missing: "item_and_destination",
+  };
+}
+
 function buildCommandHints(commandText, roster) {
   const rosterIndex = buildRosterNameIndex(roster);
   const candidateNames = Array.from(new Set(splitLikelyNameList(commandText)));
@@ -360,6 +471,7 @@ function buildCommandHints(commandText, roster) {
   const targetArea = detectOpenArea(commandText);
   const generateTeams = detectGenerateTeams(commandText);
   const spreadRole = detectSpreadRole(commandText);
+  const equipmentAction = detectEquipmentAction(commandText, roster);
   const matchedCount = candidatePlayers.filter((item) => item.status === "matched" || item.status === "possible_match").length;
   const unknownCount = candidatePlayers.filter((item) => item.status === "unknown").length;
   return {
@@ -375,12 +487,13 @@ function buildCommandHints(commandText, roster) {
     detectedTargetArea: targetArea,
     detectedGenerateTeams: generateTeams,
     detectedSpreadRole: spreadRole,
+    detectedEquipmentAction: equipmentAction,
     expectedPlayerCountForRequestedGame: playersPerTeam ? playersPerTeam * 2 : null,
     listedPlayerCount: candidateNames.length || null,
     selectedAllPlayerCount: selectAllRosterPlayers ? roster.length : null,
     matchedListedPlayerCount: matchedCount || null,
     unknownListedPlayerCount: unknownCount || null,
-    instruction: "These are deterministic hints from Fair Teams before calling AI. Use them unless the user text clearly contradicts them. Every candidate name must be represented in actions, confirmations, or unresolved items. If selectAllRosterPlayers is true, select every roster player. If detectedTeamCount is set, set that many teams; do not confuse it with players per team. If detectedClubNoteText, roster color, roster rename, target area, generate teams, or spread role is set, return the matching app action even if not executable yet.",
+    instruction: "These are deterministic hints from Fair Teams before calling AI. Use them unless the user text clearly contradicts them. Every candidate name must be represented in actions, confirmations, or unresolved items. If selectAllRosterPlayers is true, select every roster player. If detectedTeamCount is set, set that many teams; do not confuse it with players per team. If detectedClubNoteText, roster color, roster rename, target area, generate teams, spread role, or detectedEquipmentAction is set, return the matching app action even if not executable yet. Equipment move requests should mention the bag/item in targetName and the destination holder in playerRefs when known.",
   };
 }
 
@@ -397,6 +510,7 @@ Main app areas:
 2. Today: today's attendance/selection. Commands like "X is playing", "X kommt", "X 오늘 와", or a plain comma-separated list usually mean select those players for Today.
 3. Teams: generated team results. Commands like "make teams" or "generate" request generation after setup actions are applied.
 4. Club/shared rosters: shared rosters use simpler shared identity/Club rating ideas. Avoid private advanced assumptions unless data is present.
+5. Equipment Board: shared/local organizer space for football bags and equipment. Bags/items have names and holders/owners. Commands like "move bib bag to Sarah", "George has the cones now", "give the blue ball bag to Tommy", "bibs Tasche zu Jan", or "조지에게 공 가방 줘" are equipment_move_item. Use targetName for the bag/item and playerRefs for the destination holder when the person is known. If the bag/item or destination is missing, ask a clarifying question instead of failing.
 
 Important roster rules:
 - Match player names using name and aka/aliases.
@@ -473,8 +587,8 @@ Understood but not wired yet:
 12. roster.set_color -> type set_roster_color. Extract colorName/targetName.
 13. roster.rename -> type rename_roster. Extract targetName.
 14. navigation.open_area -> type open_app_area. Extract targetArea roster/today/teams/club.
-15. equipment.add_item -> type equipment_add_item. Extract targetName/noteText when useful.
-16. equipment.move_item -> type equipment_move_item. Extract targetName/playerRefs when useful.
+15. equipment.add_item -> type equipment_add_item. Extract targetName/noteText when useful. Understood but not wired yet.
+16. equipment.move_item -> type equipment_move_item. Extract targetName for the bag/item and playerRefs for the destination holder. Understood but not wired yet. If the item or destination is unclear, ask a clarifying question and use supportStatus="needs_confirmation".
 17. club.delete_note -> type club_delete_note. Destructive; requires confirmation and not executable yet.
 
 Field rules:
@@ -752,6 +866,34 @@ function buildDeterministicPlan(commandHints, roster) {
     }));
   }
 
+  if (commandHints.detectedEquipmentAction) {
+    const equipment = commandHints.detectedEquipmentAction;
+    const capabilityId = equipment.type === "equipment_add_item" ? "equipment.add_item" : "equipment.move_item";
+    const label = equipment.type === "equipment_add_item" ? "Add equipment item" : "Move equipment item";
+    actions.push(baseAction(equipment.type, {
+      playerRefs: Array.isArray(equipment.playerRefs) ? equipment.playerRefs : [],
+      targetName: equipment.targetName || null,
+      noteText: equipment.noteText || null,
+      capabilityId,
+      supportStatus: equipment.missing ? "needs_confirmation" : "understood_not_wired",
+      requiresConfirmation: Boolean(equipment.missing),
+      reason: equipment.missing
+        ? `${label} understood, but Fair Teams needs the ${equipment.missing.replace(/_/g, " ")}.`
+        : `${label} understood, but Equipment Board changes are not wired to AI yet.`,
+    }));
+    if (equipment.missing) {
+      unresolved.push({
+        text: equipment.targetName || "equipment request",
+        issue: "missing_context",
+        message: equipment.missing === "destination"
+          ? "Which person should hold this equipment bag?"
+          : equipment.missing === "item"
+            ? "Which equipment bag or item should I move?"
+            : "Which equipment bag should move, and who should hold it?",
+      });
+    }
+  }
+
   if (commandHints.detectedGenerateTeams) {
     actions.push(baseAction("generate_teams", {
       capabilityId: "teams.generate",
@@ -1019,6 +1161,7 @@ Output contract:
 - AI does not generate final teams. It only returns safe app actions for Fair Teams to execute.
 - Do not claim something is impossible just because it is not wired. Return the best matching app action with supportStatus=understood_not_wired.
 - For Club Notes requests, return club_add_note with noteText and supportStatus=executable.
+- For Equipment Board move requests, return equipment_move_item with targetName for the bag/item and playerRefs for the destination holder if known. Do not answer that you cannot understand; if incomplete, ask which bag or which person.
 - For obvious app commands in commandHints, return the action even if you also need to ask follow-up questions.
 - For conversation-only messages, do not use unsupported_action. Just put the natural reply in assistantSummary and leave actions/confirmations/unresolved empty.
 - Never return prose outside JSON. Never omit required fields.

@@ -99,12 +99,20 @@ export const AI_SMART_COMMAND_CAPABILITIES: AiSmartCommandCapability[] = [
     examples: ["rename this roster Lazy Lousy Saturday"],
   },
   {
-    id: "equipment.manage",
+    id: "equipment.add_item",
     actionType: "equipment_add_item",
-    label: "Equipment board",
+    label: "Add equipment item",
     supportStatus: "understood_not_wired",
-    description: "Understand equipment requests, but do not execute yet.",
-    examples: ["add a ball bag with two balls", "move bibs to Sarah"],
+    description: "Understand adding a bag/item to the Equipment Board. Real equipment edits are not wired yet.",
+    examples: ["add a ball bag with two balls", "create a bibs bag"],
+  },
+  {
+    id: "equipment.move_item",
+    actionType: "equipment_move_item",
+    label: "Move equipment bag",
+    supportStatus: "understood_not_wired",
+    description: "Understand moving an equipment bag/item to a holder. Real equipment moves are not wired yet.",
+    examples: ["move the bibs bag to Sarah", "George has the cones now", "blue ball bag to Tommy"],
   },
 ];
 

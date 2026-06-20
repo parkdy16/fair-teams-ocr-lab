@@ -963,6 +963,24 @@ function splitOtherScreenshotNameSegments(rawLine: string) {
       .filter(Boolean);
   }
 
+  // OCR sometimes drops commas from sentence-style lists after a label:
+  // "players. Nicole Joon Sascha Vivian Jay Enaree"
+  // In this specific labelled case, split title-cased single-word runs into
+  // separate names. Do not apply this to ordinary team-sheet lines like
+  // "Andrew Daniel", where the space is part of one person's name.
+  if (labelMatch) {
+    const words = source.split(/\s+/).map((word) => cleanOcrLine(word)).filter(Boolean);
+    const canSplitLabelList =
+      words.length >= 3 &&
+      words.length <= 24 &&
+      words.every((word) => /^[A-ZÀ-ÖØ-Þ][A-Za-zÀ-ÖØ-öø-ÿ'.-]{2,}$/.test(word)) &&
+      !words.some((word) => NAME_PARTICLES.has(tokenKey(word)));
+
+    if (canSplitLabelList) {
+      return words;
+    }
+  }
+
   return [source];
 }
 
@@ -2937,6 +2955,30 @@ export function TodayTab({
     });
   };
 
+  const expandCropBoxForOcr = (cropBox: CropBox) => {
+    // Give OCR a little breathing room around tight mobile crop boxes. This is
+    // especially helpful for wrapped sentence lists where the second line sits
+    // just below the user's crop, but keep the visible crop box unchanged.
+    const extraX = Math.min(1.2, Math.max(0.45, cropBox.w * 0.015));
+    const extraTop = Math.min(1.0, Math.max(0.35, cropBox.h * 0.08));
+    const extraBottom =
+      cropBox.h < 12
+        ? Math.min(3.4, Math.max(1.4, cropBox.h * 0.35))
+        : Math.min(1.4, Math.max(0.45, cropBox.h * 0.1));
+
+    const x = Math.max(0, cropBox.x - extraX);
+    const y = Math.max(0, cropBox.y - extraTop);
+    const right = Math.min(100, cropBox.x + cropBox.w + extraX);
+    const bottom = Math.min(100, cropBox.y + cropBox.h + extraBottom);
+
+    return {
+      x,
+      y,
+      w: Math.max(1, right - x),
+      h: Math.max(1, bottom - y),
+    };
+  };
+
   const cropScreenshotForOcr = async (
     file: File,
     cropBox?: CropBox,
@@ -2953,15 +2995,16 @@ export function TodayTab({
         img.src = url;
       });
 
-      const sx = Math.round((cropBox.x / 100) * image.naturalWidth);
-      const sy = Math.round((cropBox.y / 100) * image.naturalHeight);
+      const scanCropBox = expandCropBoxForOcr(cropBox);
+      const sx = Math.round((scanCropBox.x / 100) * image.naturalWidth);
+      const sy = Math.round((scanCropBox.y / 100) * image.naturalHeight);
       const sw = Math.max(
         1,
-        Math.round((cropBox.w / 100) * image.naturalWidth),
+        Math.round((scanCropBox.w / 100) * image.naturalWidth),
       );
       const sh = Math.max(
         1,
-        Math.round((cropBox.h / 100) * image.naturalHeight),
+        Math.round((scanCropBox.h / 100) * image.naturalHeight),
       );
       const scale = options.variant === "raw" ? 4 : 5;
       const padding = 48;

@@ -12,9 +12,25 @@ export type AiSmartCommandActionType =
   | "spread_role_across_teams"
   | "balance_by_attribute"
   | "generate_teams"
+  | "club_add_note"
+  | "club_delete_note"
+  | "set_roster_color"
+  | "rename_roster"
+  | "open_app_area"
+  | "equipment_add_item"
+  | "equipment_move_item"
   | "ask_confirmation"
   | "ask_clarifying_question"
+  | "unsupported_action"
   | "no_action";
+
+export type AiSmartCommandSupportStatus =
+  | "executable"
+  | "preview_only"
+  | "understood_not_wired"
+  | "needs_confirmation"
+  | "unsafe"
+  | "unknown";
 
 export type AiSmartCommandPairingKind = "keep_together" | "keep_separate" | "unknown";
 
@@ -48,13 +64,27 @@ export type AiSmartCommandAction = {
   role: AiSmartCommandRole | null;
   attribute: string | null;
   distribution: string | null;
+  noteText: string | null;
+  colorName: string | null;
+  targetName: string | null;
+  targetArea: string | null;
+  capabilityId: string | null;
+  supportStatus: AiSmartCommandSupportStatus | null;
   requiresConfirmation: boolean;
   reason: string | null;
 };
 
 export type AiSmartCommandConfirmation = {
   id: string;
-  type: "missing_player" | "ambiguous_player" | "add_rule" | "add_new_player" | "destructive_action" | "unclear";
+  type:
+    | "missing_player"
+    | "ambiguous_player"
+    | "add_rule"
+    | "add_new_player"
+    | "apply_action"
+    | "unsupported"
+    | "destructive_action"
+    | "unclear";
   message: string;
   playerRefs: AiSmartCommandPlayerRef[];
   suggestedActionType: AiSmartCommandActionType | null;

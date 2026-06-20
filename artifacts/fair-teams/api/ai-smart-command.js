@@ -200,7 +200,7 @@ function buildCommandHints(commandText, roster) {
   const matchedCount = candidatePlayers.filter((item) => item.status === "matched" || item.status === "possible_match").length;
   const unknownCount = candidatePlayers.filter((item) => item.status === "unknown").length;
   return {
-    appKnowledgeVersion: "2026-06-20.smart-command-v2",
+    appKnowledgeVersion: "2026-06-20.smart-command-v3-capability-manifest",
     candidateNames,
     candidatePlayers,
     detectedPlayersPerTeam: playersPerTeam,
@@ -267,6 +267,51 @@ Safety rules:
 }
 
 
+
+function fairTeamsCapabilityManifest() {
+  return `FAIR TEAMS AI CAPABILITY MANIFEST
+
+Important design rule:
+- The AI may understand many app requests, but it may only mark actions as executable when the current app patch has an actual safe handler.
+- If the intent is understood but not wired, return the appropriate action type with supportStatus="understood_not_wired" and explain that it is not wired yet.
+- If the action is safe to preview but not apply yet, use supportStatus="preview_only".
+- If the action is currently executable, use supportStatus="executable".
+
+Currently executable in this test patch:
+1. club.add_note -> type club_add_note
+   - Adds a non-destructive post-it text to Club Notes.
+   - Extract noteText exactly from commands like "add a note saying ...", "put ... in Club Notes", "Club Notes에 ... 적어줘".
+   - Requires current shared roster + signed-in user at app level. If missing, the app will reject safely.
+
+Currently understood but preview-only:
+2. today.select_players -> type select_players
+3. teams.set_team_size -> type set_team_size
+4. teams.set_team_count -> type set_team_count
+5. teams.pairing_rule -> type add_pairing_rule
+6. teams.lock_player -> type lock_player_to_team
+7. teams.spread_role -> type spread_role_across_teams
+8. teams.balance_attribute -> type balance_by_attribute
+9. teams.generate -> type generate_teams
+10. roster.add_new_player -> type add_new_player_suggestion
+11. roster.set_new_player_skill -> type set_new_player_skill
+
+Understood but not wired yet:
+12. roster.set_color -> type set_roster_color. Extract colorName/targetName.
+13. roster.rename -> type rename_roster. Extract targetName.
+14. navigation.open_area -> type open_app_area. Extract targetArea roster/today/teams/club.
+15. equipment.add_item -> type equipment_add_item. Extract targetName/noteText when useful.
+16. equipment.move_item -> type equipment_move_item. Extract targetName/playerRefs when useful.
+17. club.delete_note -> type club_delete_note. Destructive; requires confirmation and not executable yet.
+
+Field rules:
+- Always include capabilityId for known capabilities, e.g. club.add_note or roster.set_color.
+- Use noteText only for note/equipment text content.
+- Use colorName for colors like navy, pink, red, blue, purple.
+- Use targetName for roster names, equipment names, or rename targets.
+- Use targetArea for app areas such as roster, today, teams, club.
+- Use unsupported_action only if the request is outside Fair Teams app capability, not just unwired.`;
+}
+
 const jsonSchema = {
   name: "fair_teams_smart_command",
   strict: true,
@@ -286,9 +331,9 @@ const jsonSchema = {
         items: {
           type: "object",
           additionalProperties: false,
-          required: ["type", "playerRefs", "newPlayerName", "suggestedSkill", "playersPerTeam", "teamCount", "pairingKind", "teamLabel", "role", "attribute", "distribution", "requiresConfirmation", "reason"],
+          required: ["type", "playerRefs", "newPlayerName", "suggestedSkill", "playersPerTeam", "teamCount", "pairingKind", "teamLabel", "role", "attribute", "distribution", "noteText", "colorName", "targetName", "targetArea", "capabilityId", "supportStatus", "requiresConfirmation", "reason"],
           properties: {
-            type: { type: "string", enum: ["select_players", "unselect_players", "add_new_player_suggestion", "set_new_player_skill", "set_team_size", "set_team_count", "add_pairing_rule", "lock_player_to_team", "spread_role_across_teams", "balance_by_attribute", "generate_teams", "ask_confirmation", "ask_clarifying_question", "no_action"] },
+            type: { type: "string", enum: ["select_players", "unselect_players", "add_new_player_suggestion", "set_new_player_skill", "set_team_size", "set_team_count", "add_pairing_rule", "lock_player_to_team", "spread_role_across_teams", "balance_by_attribute", "generate_teams", "club_add_note", "club_delete_note", "set_roster_color", "rename_roster", "open_app_area", "equipment_add_item", "equipment_move_item", "ask_confirmation", "ask_clarifying_question", "unsupported_action", "no_action"] },
             playerRefs: {
               type: "array",
               items: {
@@ -312,6 +357,12 @@ const jsonSchema = {
             role: { type: ["string", "null"], enum: ["defender", "attacker", "goalkeeper", "playmaker", "fast_player", "strong_player", "beginner", "experienced_player", "unknown", null] },
             attribute: { type: ["string", "null"] },
             distribution: { type: ["string", "null"] },
+            noteText: { type: ["string", "null"] },
+            colorName: { type: ["string", "null"] },
+            targetName: { type: ["string", "null"] },
+            targetArea: { type: ["string", "null"] },
+            capabilityId: { type: ["string", "null"] },
+            supportStatus: { type: ["string", "null"], enum: ["executable", "preview_only", "understood_not_wired", "needs_confirmation", "unsafe", "unknown", null] },
             requiresConfirmation: { type: "boolean" },
             reason: { type: ["string", "null"] }
           }
@@ -325,7 +376,7 @@ const jsonSchema = {
           required: ["id", "type", "message", "playerRefs", "suggestedActionType"],
           properties: {
             id: { type: "string" },
-            type: { type: "string", enum: ["missing_player", "ambiguous_player", "add_rule", "add_new_player", "destructive_action", "unclear"] },
+            type: { type: "string", enum: ["missing_player", "ambiguous_player", "add_rule", "add_new_player", "apply_action", "unsupported", "destructive_action", "unclear"] },
             message: { type: "string" },
             playerRefs: {
               type: "array",
@@ -341,7 +392,7 @@ const jsonSchema = {
                 }
               }
             },
-            suggestedActionType: { type: ["string", "null"], enum: ["select_players", "unselect_players", "add_new_player_suggestion", "set_new_player_skill", "set_team_size", "set_team_count", "add_pairing_rule", "lock_player_to_team", "spread_role_across_teams", "balance_by_attribute", "generate_teams", "ask_confirmation", "ask_clarifying_question", "no_action", null] }
+            suggestedActionType: { type: ["string", "null"], enum: ["select_players", "unselect_players", "add_new_player_suggestion", "set_new_player_skill", "set_team_size", "set_team_count", "add_pairing_rule", "lock_player_to_team", "spread_role_across_teams", "balance_by_attribute", "generate_teams", "club_add_note", "club_delete_note", "set_roster_color", "rename_roster", "open_app_area", "equipment_add_item", "equipment_move_item", "ask_confirmation", "ask_clarifying_question", "unsupported_action", "no_action", null] }
           }
         }
       },
@@ -367,6 +418,8 @@ function systemPrompt() {
 
 ${fairTeamsOperatingManual()}
 
+${fairTeamsCapabilityManifest()}
+
 Output contract:
 - Return the same language-independent JSON action schema regardless of input language.
 - The user may speak or type in any language, including mixed-language commands.
@@ -377,6 +430,8 @@ Output contract:
 - If commandHints says a listed player is unknown, create add_new_player_suggestion for that exact name and missing_player confirmation.
 - If commandHints says only 5 listed names were provided for 5v5, still set playersPerTeam=5 and add unresolved missing_context.
 - AI does not generate final teams. It only returns safe app actions for Fair Teams to execute.
+- Do not claim something is impossible just because it is not wired. Return the best matching app action with supportStatus=understood_not_wired.
+- For Club Notes requests, return club_add_note with noteText and supportStatus=executable.
 - Be concise in assistantSummary and use the user's likely UI language.`;
 }
 export default async function handler(req, res) {

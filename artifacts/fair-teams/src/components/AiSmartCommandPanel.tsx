@@ -1,6 +1,16 @@
 import React, { useMemo, useState } from "react";
 import { parseFairTeamsSmartCommand, createAiSmartCommandContext } from "@/lib/aiSmartCommandClient";
-import { isAiSmartCommandEnabled, type AiSmartCommandResponse, type AiSmartCommandRosterPlayer } from "@/lib/aiSmartCommandTypes";
+import {
+  isAiSmartCommandEnabled,
+  type AiSmartCommandAction,
+  type AiSmartCommandResponse,
+  type AiSmartCommandRosterPlayer,
+} from "@/lib/aiSmartCommandTypes";
+import {
+  aiCommandActionCanApply,
+  aiCommandSupportLabel,
+  getAiCommandCapability,
+} from "@/lib/aiSmartCommandCapabilities";
 
 type AiSmartCommandPanelProps = {
   players: AiSmartCommandRosterPlayer[];
@@ -8,25 +18,28 @@ type AiSmartCommandPanelProps = {
   rosterMode?: "local" | "shared";
   activeTab?: string;
   onParsed?: (result: AiSmartCommandResponse) => void;
+  onApplyAction?: (action: AiSmartCommandAction) => Promise<void> | void;
 };
 
 function actionLabel(actionType: string) {
   return actionType.replace(/_/g, " ");
 }
 
-function actionDetails(action: AiSmartCommandResponse["actions"][number]) {
-  const parts: string[] = [];
+function actionDetails(action: AiSmartCommandAction) {
+  const details: string[] = [];
   if (action.playerRefs.length > 0) {
-    parts.push(action.playerRefs.map((player) => player.rosterName || player.spokenName).join(", "));
+    details.push(action.playerRefs.map((player) => player.rosterName || player.spokenName).join(", "));
   }
-  if (action.newPlayerName) parts.push(action.newPlayerName);
-  if (action.playersPerTeam) parts.push(`${action.playersPerTeam}v${action.playersPerTeam}`);
-  if (action.teamCount) parts.push(`${action.teamCount} teams`);
-  if (action.pairingKind) parts.push(action.pairingKind.replace(/_/g, " "));
-  if (action.teamLabel) parts.push(action.teamLabel);
-  if (action.role) parts.push(action.role.replace(/_/g, " "));
-  if (action.distribution) parts.push(action.distribution.replace(/_/g, " "));
-  return parts.join(" · ");
+  if (action.newPlayerName) details.push(`new player: ${action.newPlayerName}`);
+  if (action.playersPerTeam) details.push(`${action.playersPerTeam}v${action.playersPerTeam}`);
+  if (action.pairingKind) details.push(action.pairingKind.replace(/_/g, " "));
+  if (action.teamLabel) details.push(`team: ${action.teamLabel}`);
+  if (action.role) details.push(`role: ${action.role.replace(/_/g, " ")}`);
+  if (action.noteText) details.push(`note: “${action.noteText}”`);
+  if (action.colorName) details.push(`color: ${action.colorName}`);
+  if (action.targetName) details.push(`target: ${action.targetName}`);
+  if (action.targetArea) details.push(`area: ${action.targetArea}`);
+  return details.join(" · ");
 }
 
 export function AiSmartCommandPanel({
@@ -35,15 +48,18 @@ export function AiSmartCommandPanel({
   rosterMode = "local",
   activeTab,
   onParsed,
+  onApplyAction,
 }: AiSmartCommandPanelProps) {
   const enabled = isAiSmartCommandEnabled();
   const [commandText, setCommandText] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<AiSmartCommandResponse | null>(null);
+  const [applyingKey, setApplyingKey] = useState<string | null>(null);
+  const [applyMessage, setApplyMessage] = useState("");
 
   const placeholder = useMemo(() => {
-    return "Try: George, Sarah, Tommy, Kira. 6v6. Sarah and Tommy don’t like each other. George red.";
+    return "Try: add a note saying bring pump · George red · Sarah and Tommy don’t like each other · change roster color to navy";
   }, []);
 
   if (!enabled) return null;
@@ -52,6 +68,7 @@ export function AiSmartCommandPanel({
     if (busy) return;
     setBusy(true);
     setError("");
+    setApplyMessage("");
     try {
       const parsed = await parseFairTeamsSmartCommand({
         commandText,
@@ -67,6 +84,22 @@ export function AiSmartCommandPanel({
     }
   };
 
+  const applyAction = async (action: AiSmartCommandAction, index: number) => {
+    if (!onApplyAction || !aiCommandActionCanApply(action)) return;
+    const key = `${action.type}-${index}`;
+    setApplyingKey(key);
+    setError("");
+    setApplyMessage("");
+    try {
+      await onApplyAction(action);
+      setApplyMessage("Applied.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not apply this action yet.");
+    } finally {
+      setApplyingKey(null);
+    }
+  };
+
   return (
     <section className="rounded-3xl border border-violet-100 bg-violet-50/70 p-3 shadow-sm">
       <div className="flex items-start justify-between gap-3">
@@ -74,7 +107,7 @@ export function AiSmartCommandPanel({
           <div className="text-[10px] font-black uppercase tracking-wide text-violet-600">Experimental</div>
           <h3 className="mt-0.5 text-base font-black text-[#102A43]">Ask Fair Teams</h3>
           <p className="mt-0.5 text-[11px] font-semibold leading-snug text-violet-800/75">
-            Multilingual smart command test. It suggests safe app actions, but does not change anything automatically yet.
+            Multilingual command test. Fair Teams understands many app actions; only safely wired actions can be applied.
           </p>
         </div>
         <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-violet-700 shadow-sm">AI beta</span>
@@ -102,6 +135,11 @@ export function AiSmartCommandPanel({
           {error}
         </div>
       )}
+      {applyMessage && (
+        <div className="mt-2 rounded-2xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700">
+          {applyMessage}
+        </div>
+      )}
 
       {result && (
         <div className="mt-3 rounded-2xl bg-white p-3 text-xs text-[#102A43] shadow-sm">
@@ -110,12 +148,43 @@ export function AiSmartCommandPanel({
             Language: {result.detectedLanguage} · Confidence: {Math.round(result.confidence * 100)}%
           </div>
           <div className="mt-3 grid gap-1.5">
-            {result.actions.map((action, index) => (
-              <div key={`${action.type}-${index}`} className="rounded-xl bg-slate-50 px-3 py-2 font-bold">
-                {actionLabel(action.type)}
-                {actionDetails(action) ? ` · ${actionDetails(action)}` : ""}
-              </div>
-            ))}
+            {result.actions.map((action, index) => {
+              const capability = getAiCommandCapability(action);
+              const canApply = Boolean(onApplyAction && aiCommandActionCanApply(action));
+              const key = `${action.type}-${index}`;
+              return (
+                <div key={key} className="rounded-xl bg-slate-50 px-3 py-2 font-bold">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="capitalize">{capability?.label || actionLabel(action.type)}</div>
+                      <div className="mt-0.5 text-[10px] font-black uppercase tracking-wide text-slate-500">
+                        {aiCommandSupportLabel(action)}
+                      </div>
+                    </div>
+                    {canApply && (
+                      <button
+                        type="button"
+                        className="shrink-0 rounded-full bg-violet-600 px-3 py-1 text-[10px] font-black uppercase tracking-wide text-white disabled:opacity-50"
+                        disabled={applyingKey === key}
+                        onClick={() => applyAction(action, index)}
+                      >
+                        {applyingKey === key ? "Applying…" : "Apply"}
+                      </button>
+                    )}
+                  </div>
+                  {actionDetails(action) && (
+                    <div className="mt-1 text-[11px] font-semibold leading-snug text-slate-600">
+                      {actionDetails(action)}
+                    </div>
+                  )}
+                  {action.reason && (
+                    <div className="mt-1 text-[11px] font-semibold leading-snug text-slate-500">
+                      {action.reason}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
           {result.confirmations.length > 0 && (
             <div className="mt-3 grid gap-1.5">
@@ -129,9 +198,9 @@ export function AiSmartCommandPanel({
           )}
           {result.unresolved.length > 0 && (
             <div className="mt-3 grid gap-1.5">
-              <div className="text-[10px] font-black uppercase tracking-wide text-rose-500">Couldn’t finish</div>
+              <div className="text-[10px] font-black uppercase tracking-wide text-slate-500">Not handled yet</div>
               {result.unresolved.map((item, index) => (
-                <div key={`${item.issue}-${index}`} className="rounded-xl bg-rose-50 px-3 py-2 font-bold text-rose-700">
+                <div key={`${item.issue}-${index}`} className="rounded-xl bg-slate-100 px-3 py-2 font-bold text-slate-700">
                   {item.message || item.text}
                 </div>
               ))}

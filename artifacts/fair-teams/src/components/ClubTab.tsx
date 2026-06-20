@@ -10,6 +10,8 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FirebaseSharedRosterAuthCard } from "@/components/FirebaseSharedRosterAuthCard";
+import { AiSmartCommandPanel } from "@/components/AiSmartCommandPanel";
+import type { AiSmartCommandAction } from "@/lib/aiSmartCommandTypes";
 import { getFairTeamsAuth } from "@/lib/firebaseClient";
 import {
   listenToSharedRosterUser,
@@ -998,6 +1000,35 @@ export function ClubTab({
     }
   };
 
+  const applyAiSmartCommandAction = async (action: AiSmartCommandAction) => {
+    if (action.type !== "club_add_note") {
+      throw new Error("Fair Teams understands this, but it is not wired to apply yet.");
+    }
+
+    const noteText = action.noteText?.trim();
+    if (!noteText) {
+      throw new Error("I understood a Club note request, but no note text was found.");
+    }
+
+    if (!sharedRosterId || !clubRatingsEnabled) {
+      throw new Error("Club Notes can be added by AI after you are signed in on a shared roster.");
+    }
+
+    setClubNoteSaving(true);
+    setClubNotesError("");
+    try {
+      await addClubNote(sharedRosterId, noteText);
+      setClubNoteDraft("");
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Could not add Club note.";
+      setClubNotesError(message);
+      throw new Error(message);
+    } finally {
+      setClubNoteSaving(false);
+    }
+  };
+
   const removeOwnClubNote = async (note: ClubNote) => {
     if (!sharedRosterId || !canRemoveClubNote(note) || clubNoteDeletingId)
       return;
@@ -1464,6 +1495,14 @@ export function ClubTab({
           <FirebaseSharedRosterAuthCard />
         </DialogContent>
       </Dialog>
+
+      <AiSmartCommandPanel
+        players={players}
+        rosterName={activeRosterName}
+        rosterMode={isSharedRoster ? "shared" : "local"}
+        activeTab="club"
+        onApplyAction={applyAiSmartCommandAction}
+      />
 
       <section className="overflow-hidden rounded-[1.7rem] border border-violet-100 bg-[#f8f3ff] p-3 shadow-sm ring-1 ring-violet-50">
         <div className="flex items-center justify-between gap-3">

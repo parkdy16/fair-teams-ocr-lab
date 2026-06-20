@@ -71,7 +71,7 @@ export const AI_SMART_COMMAND_CAPABILITIES: AiSmartCommandCapability[] = [
     actionType: "add_new_player_suggestion",
     label: "Suggest new player",
     supportStatus: "needs_confirmation",
-    description: "Recognize names that are not yet in the roster and ask before adding.",
+    description: "Recognize names that are not yet in the roster and add them only after the user taps the confirmation action.",
     examples: ["Kira is playing today", "Kira is experienced"],
   },
   {
@@ -127,7 +127,9 @@ export function getAiCommandCapability(action: AiSmartCommandAction) {
 export function aiCommandActionCanApply(action: AiSmartCommandAction) {
   const capability = getAiCommandCapability(action);
   const status = action.supportStatus || capability?.supportStatus || "unknown";
-  if (status === "unsafe" || status === "needs_confirmation") return false;
+  if (status === "unsafe") return false;
+  if (action.type === "add_new_player_suggestion") return Boolean(action.newPlayerName?.trim());
+  if (status === "needs_confirmation") return false;
   const executable = status === "executable" || capability?.supportStatus === "executable";
   if (!executable) return false;
 
@@ -158,7 +160,7 @@ export function aiCommandSupportLabel(action: AiSmartCommandAction) {
     case "understood_not_wired":
       return "Understood · not wired yet";
     case "needs_confirmation":
-      return "Needs confirmation";
+      return action.type === "add_new_player_suggestion" ? "Tap to confirm" : "Needs confirmation";
     case "unsafe":
       return "Protected";
     default:

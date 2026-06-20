@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from "react";
-import { parseFairTeamsSmartCommand, createAiSmartCommandContext } from "@/lib/aiSmartCommandClient";
+import React, { useMemo, useRef, useState } from "react";
+import { parseFairTeamsSmartCommand, createAiSmartCommandContext, transcribeFairTeamsVoiceCommand } from "@/lib/aiSmartCommandClient";
 import {
   isAiSmartCommandEnabled,
   type AiSmartCommandAction,
@@ -31,6 +31,7 @@ function actionDetails(action: AiSmartCommandAction) {
     details.push(action.playerRefs.map((player) => player.rosterName || player.spokenName).join(", "));
   }
   if (action.newPlayerName) details.push(`new player: ${action.newPlayerName}`);
+  if (action.suggestedSkill) details.push(`skill ${action.suggestedSkill}`);
   if (action.playersPerTeam) details.push(`${action.playersPerTeam}v${action.playersPerTeam}`);
   if (action.teamCount) details.push(`${action.teamCount} teams`);
   if (action.pairingKind) details.push(action.pairingKind.replace(/_/g, " "));
@@ -81,6 +82,7 @@ function actionCardTone(action: AiSmartCommandAction) {
 
 function actionPrimaryVerb(action: AiSmartCommandAction) {
   if (action.type === "club_add_note") return "Add note";
+  if (action.type === "add_new_player_suggestion") return "Add player";
   if (action.type === "select_players") return "Select";
   if (action.type === "set_team_size" || action.type === "set_team_count") return "Set";
   if (action.type === "generate_teams") return "Generate";
@@ -98,6 +100,12 @@ export function AiSmartCommandPanel({
   const enabled = isAiSmartCommandEnabled();
   const [commandText, setCommandText] = useState("");
   const [busy, setBusy] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [voiceBusy, setVoiceBusy] = useState(false);
+  const [voiceTranscript, setVoiceTranscript] = useState("");
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
   const [error, setError] = useState("");
   const [result, setResult] = useState<AiSmartCommandResponse | null>(null);
   const [applyingKey, setApplyingKey] = useState<string | null>(null);
@@ -109,15 +117,13 @@ export function AiSmartCommandPanel({
 
   if (!enabled) return null;
 
-  const submit = async () => {
+  const submitText = async (rawCommand: string) => {
     if (busy) return;
-    const trimmedCommand = commandText.trim();
+    const trimmedCommand = rawCommand.trim();
     if (!trimmedCommand) return;
 
     setError("");
     setApplyMessage("");
-
-
     setBusy(true);
     try {
       const parsed = await parseFairTeamsSmartCommand({
@@ -132,6 +138,78 @@ export function AiSmartCommandPanel({
     } finally {
       setBusy(false);
     }
+  };
+
+  const submit = async () => {
+    await submitText(commandText);
+  };
+
+  const stopVoiceTracks = () => {
+    mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+    mediaStreamRef.current = null;
+  };
+
+  const startVoiceRecording = async () => {
+    if (busy || voiceBusy || recording) return;
+    if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      setError("Voice recording is not available in this browser yet.");
+      return;
+    }
+
+    setError("");
+    setApplyMessage("");
+    setVoiceTranscript("");
+    audioChunksRef.current = [];
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+      const preferredTypes = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"];
+      const mimeType = preferredTypes.find((type) => MediaRecorder.isTypeSupported(type));
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      mediaRecorderRef.current = recorder;
+      recorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) audioChunksRef.current.push(event.data);
+      };
+      recorder.onerror = () => {
+        setError("Voice recording failed. Try again in a moment.");
+        setRecording(false);
+        stopVoiceTracks();
+      };
+      recorder.onstop = async () => {
+        setRecording(false);
+        setVoiceBusy(true);
+        try {
+          const audioBlob = new Blob(audioChunksRef.current, { type: recorder.mimeType || "audio/webm" });
+          stopVoiceTracks();
+          const { transcript } = await transcribeFairTeamsVoiceCommand(audioBlob);
+          setVoiceTranscript(transcript);
+          setCommandText(transcript);
+          await submitText(transcript);
+        } catch (err) {
+          setError(friendlyAiError(err));
+        } finally {
+          setVoiceBusy(false);
+          mediaRecorderRef.current = null;
+          audioChunksRef.current = [];
+        }
+      };
+      recorder.start();
+      setRecording(true);
+    } catch (err) {
+      stopVoiceTracks();
+      setRecording(false);
+      setError(err instanceof Error && /permission|denied/i.test(err.message) ? "Microphone permission was blocked. Allow microphone access and try again." : "Could not start voice recording.");
+    }
+  };
+
+  const stopVoiceRecording = () => {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder || recorder.state === "inactive") {
+      setRecording(false);
+      stopVoiceTracks();
+      return;
+    }
+    recorder.stop();
   };
 
   const applyAction = async (action: AiSmartCommandAction, index: number) => {
@@ -171,14 +249,34 @@ export function AiSmartCommandPanel({
         placeholder={placeholder}
       />
 
-      <button
-        type="button"
-        onClick={submit}
-        disabled={busy || !commandText.trim()}
-        className="mt-2 h-10 w-full rounded-2xl bg-[#102A43] px-4 text-xs font-black uppercase tracking-wide text-white disabled:opacity-45"
-      >
-        {busy ? "Thinking…" : "Send"}
-      </button>
+      <div className="mt-2 grid grid-cols-[1fr_auto] gap-2">
+        <button
+          type="button"
+          onClick={submit}
+          disabled={busy || voiceBusy || !commandText.trim()}
+          className="h-10 rounded-2xl bg-[#102A43] px-4 text-xs font-black uppercase tracking-wide text-white disabled:opacity-45"
+        >
+          {busy ? "Thinking…" : "Send"}
+        </button>
+        <button
+          type="button"
+          onClick={recording ? stopVoiceRecording : startVoiceRecording}
+          disabled={busy || voiceBusy}
+          className={`h-10 rounded-2xl px-4 text-xs font-black uppercase tracking-wide text-white disabled:opacity-45 ${recording ? "bg-rose-600" : "bg-violet-600"}`}
+        >
+          {voiceBusy ? "Hearing…" : recording ? "Done" : "Voice"}
+        </button>
+      </div>
+      {recording && (
+        <div className="mt-2 rounded-2xl border border-rose-100 bg-rose-50 px-3 py-2 text-xs font-black text-rose-700">
+          Listening… tap Done when you finish speaking.
+        </div>
+      )}
+      {voiceTranscript && !recording && (
+        <div className="mt-2 rounded-2xl border border-violet-100 bg-white px-3 py-2 text-[11px] font-semibold text-violet-800">
+          I heard: “{voiceTranscript}”
+        </div>
+      )}
 
       {error && (
         <div className="mt-2 rounded-2xl border border-rose-100 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700">

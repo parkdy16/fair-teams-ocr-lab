@@ -61,3 +61,30 @@ export function createAiSmartCommandContext(context: AiSmartCommandContext): AiS
     uiLanguage: context.uiLanguage || (typeof navigator !== "undefined" ? navigator.language : undefined),
   };
 }
+
+export async function transcribeFairTeamsVoiceCommand(audioBlob: Blob): Promise<{ transcript: string; language?: string }> {
+  if (!audioBlob || audioBlob.size === 0) throw new Error("No voice recording found.");
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Could not read voice recording."));
+    reader.readAsDataURL(audioBlob);
+  });
+
+  const response = await fetch("/api/ai-voice-transcribe", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      audioBase64: dataUrl,
+      mimeType: audioBlob.type || "audio/webm",
+    }),
+  });
+
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(payload?.error || "Fair Teams voice could not transcribe that recording.");
+  }
+  const transcript = typeof payload?.transcript === "string" ? payload.transcript.trim() : "";
+  if (!transcript) throw new Error("I could not hear a clear command. Try again closer to the phone.");
+  return { transcript, language: typeof payload?.language === "string" ? payload.language : undefined };
+}

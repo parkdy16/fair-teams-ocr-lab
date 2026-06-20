@@ -1227,6 +1227,72 @@ function App() {
       return `Selected ${playerIds.size} player${playerIds.size === 1 ? "" : "s"} for Today.`;
     }
 
+    if (action.type === "add_new_player_suggestion") {
+      const newPlayerName = action.newPlayerName?.trim();
+      if (!newPlayerName) {
+        throw new Error("I understood a new-player request, but no player name was found.");
+      }
+
+      const normalizeLookupName = (name: string) =>
+        name
+          .toLowerCase()
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .replace(/[^\p{L}\p{N}\s]/gu, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+      const nextNameKey = normalizeLookupName(newPlayerName);
+      const duplicate = players.find((player) => {
+        const names = [player.name, player.aka]
+          .join(" ")
+          .split(/[,/;|·•]+|\baka\b|\bAKA\b/i)
+          .map((part) => normalizeLookupName(part))
+          .filter(Boolean);
+        return names.includes(nextNameKey);
+      });
+      if (duplicate) {
+        replacePlayers(
+          players.map((player) =>
+            player.id === duplicate.id
+              ? { ...player, attending: true, todayStatus: "here" }
+              : player,
+          ),
+        );
+        setTodayRosterChosen(true);
+        setActiveTab("today");
+        return `${duplicate.name} is already in this roster, so I selected them for Today.`;
+      }
+
+      const suggestedSkill =
+        typeof action.suggestedSkill === "number" && Number.isFinite(action.suggestedSkill)
+          ? Math.min(10, Math.max(1, Math.round(action.suggestedSkill * 2) / 2))
+          : 5;
+      const now = new Date().toISOString();
+      const nextPlayer = normalizePlayer(
+        {
+          name: newPlayerName,
+          skill: suggestedSkill,
+          attack: suggestedSkill,
+          defense: suggestedSkill,
+          speed: suggestedSkill,
+          passing: suggestedSkill,
+          stamina: suggestedSkill,
+          physical: suggestedSkill,
+          teamPlay: 2,
+          attending: true,
+          todayStatus: "here",
+          isNew: true,
+          createdAt: now,
+          updatedAt: now,
+        },
+        players.length,
+      );
+      replacePlayers([...players, nextPlayer]);
+      setTodayRosterChosen(true);
+      setActiveTab("today");
+      return `Added ${nextPlayer.name} as a new player and selected them for Today.`;
+    }
+
     if (action.type === "set_team_count") {
       if (typeof action.teamCount !== "number") {
         throw new Error("I understood a team-count request, but no team count was found.");

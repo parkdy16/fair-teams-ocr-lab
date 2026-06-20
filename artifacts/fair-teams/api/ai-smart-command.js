@@ -885,7 +885,7 @@ function normalizeParsedResponse(parsed, commandText) {
     ok: typeof item.ok === "boolean" ? item.ok : actions.length > 0,
     detectedLanguage: cleanString(item.detectedLanguage, 40) || "unknown",
     normalizedIntent: cleanString(item.normalizedIntent, 300) || cleanString(commandText, 300),
-    assistantSummary: cleanString(item.assistantSummary, 300) || "Fair Teams understood the command.",
+    assistantSummary: cleanString(item.assistantSummary, 700) || "Fair Teams understood the command.",
     confidence: Number.isFinite(Number(item.confidence)) ? Math.max(0, Math.min(1, Number(item.confidence))) : 0.5,
     actions,
     confirmations,
@@ -935,15 +935,41 @@ function extractJsonObject(text) {
   return "";
 }
 
+
+function looksLikeCasualConversation(text) {
+  const normalized = normalizeForMatching(text);
+  if (!normalized) return false;
+  const short = normalized.split(" ").filter(Boolean).length <= 8;
+  if (/^(hi|hello|hey|hey there|yo|hallo|moin|servus|안녕|안녕하세요|bonjour|hola|ciao|thanks|thank you|danke|고마워)/i.test(text.trim())) return true;
+  if (short && /(what can you do|help|weather|wetter|날씨|how are you|who are you)/i.test(text)) return true;
+  return false;
+}
+
 function deterministicFallbackResponse(commandText, commandHints, roster, fallbackReason = "AI response could not be parsed safely.") {
   const plan = buildDeterministicPlan(commandHints, roster);
   const unresolved = [...plan.unresolved];
+
+  if (plan.actions.length === 0 && looksLikeCasualConversation(commandText)) {
+    return {
+      schemaVersion: 1,
+      ok: true,
+      detectedLanguage: "unknown",
+      normalizedIntent: cleanString(commandText, 300),
+      assistantSummary: "I’m here, but I could not connect to the AI assistant cleanly just now. Try again in a moment.",
+      confidence: 0.35,
+      actions: [],
+      confirmations: [],
+      unresolved: [],
+      parseMode: "local_fallback",
+      debugWarnings: [fallbackReason],
+    };
+  }
 
   if (plan.actions.length === 0) {
     unresolved.push({
       text: commandText,
       issue: "unknown_intent",
-      message: "Fair Teams understood this as an app request, but this command is not wired safely yet.",
+      message: "I understood you, but I could not safely turn that into a Fair Teams action yet.",
     });
   }
 
@@ -953,8 +979,8 @@ function deterministicFallbackResponse(commandText, commandHints, roster, fallba
     detectedLanguage: "unknown",
     normalizedIntent: cleanString(commandText, 300),
     assistantSummary: plan.actions.length > 0
-      ? "Fair Teams used local app rules because the AI answer was not reliable."
-      : "Fair Teams could not safely convert this command yet.",
+      ? "I used Fair Teams app rules because the AI answer was not reliable."
+      : "I can talk with you, but I could not safely handle that request yet.",
     confidence: plan.actions.length > 0 ? 0.72 : 0.25,
     actions: plan.actions,
     confirmations: plan.confirmations,
@@ -965,11 +991,19 @@ function deterministicFallbackResponse(commandText, commandHints, roster, fallba
 }
 
 function systemPrompt() {
-  return `You are Fair Teams Smart Command, a multilingual command parser for a casual football team-making app.
+  return `You are Fair Teams Assistant, a friendly multilingual assistant for a casual football team-making app.
 
 ${fairTeamsOperatingManual()}
 
 ${fairTeamsCapabilityManifest()}
+
+Conversation behavior:
+- The user should be able to talk to you naturally. You are not only a command parser.
+- If the user sends a greeting, thanks, small talk, or asks what you can do, answer warmly in assistantSummary with actions=[], confirmations=[], unresolved=[], ok=true.
+- If the user asks a simple general question, answer briefly when it does not require live/current data and does not distract from Fair Teams.
+- If the user asks for live/current outside data such as weather, news, scores, prices, or schedules, do not invent it because no live data tool is connected in Fair Teams yet. Say that live data is not connected yet and gently steer back to Fair Teams.
+- If the user asks something outside Fair Teams but harmless, be brief and helpful. If it is too broad, explain that your main role is Fair Teams setup.
+- App actions still matter: when the user asks for roster, Today, team, pairing, Club Notes, equipment, or app settings changes, return safe structured actions underneath the assistant message.
 
 Output contract:
 - Return the same language-independent JSON action schema regardless of input language.
@@ -986,8 +1020,9 @@ Output contract:
 - Do not claim something is impossible just because it is not wired. Return the best matching app action with supportStatus=understood_not_wired.
 - For Club Notes requests, return club_add_note with noteText and supportStatus=executable.
 - For obvious app commands in commandHints, return the action even if you also need to ask follow-up questions.
+- For conversation-only messages, do not use unsupported_action. Just put the natural reply in assistantSummary and leave actions/confirmations/unresolved empty.
 - Never return prose outside JSON. Never omit required fields.
-- Be concise in assistantSummary and use the user's likely UI language.`;
+- Be concise, natural, and friendly in assistantSummary. Use the user's likely UI language.`;
 }
 export default async function handler(req, res) {
   res.setHeader?.("Cache-Control", "no-store");
@@ -1024,7 +1059,7 @@ export default async function handler(req, res) {
       {
         role: "user",
         content: JSON.stringify({
-          task: "Parse the user command into Fair Teams actions using the operating manual and deterministic commandHints. Do not drop any listed player names. If a person is named as playing today, they must appear either as a matched playerRef in select_players, add_new_player_suggestion, missing/ambiguous confirmation, or unresolved item.",
+          task: "Reply as the Fair Teams Assistant. If this is conversation or a simple question, answer naturally in assistantSummary with no actions. If this is a Fair Teams app request, parse it into safe actions using the operating manual and deterministic commandHints. Do not drop any listed player names. If a person is named as playing today, they must appear either as a matched playerRef in select_players, add_new_player_suggestion, missing/ambiguous confirmation, or unresolved item.",
           commandText,
           context,
           roster,

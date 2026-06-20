@@ -107,5 +107,9 @@
       "local_thanks",
       "no_api_call"
     ]
+  },
+  {
+    "command": "how is the weather today?",
+    "expected": "Explain live weather is not connected yet; do not invent weather."
   }
 ]

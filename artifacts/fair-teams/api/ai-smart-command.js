@@ -72,6 +72,201 @@ function cleanContext(raw) {
   };
 }
 
+function normalizeForMatching(value) {
+  return cleanString(value, 180)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function playerNameVariants(player) {
+  const variants = [player.name];
+  if (player.aka) {
+    player.aka
+      .split(/[,/;|·•]+|\baka\b|\bAKA\b/)
+      .map((part) => cleanString(part, 80))
+      .filter(Boolean)
+      .forEach((part) => variants.push(part));
+  }
+  return Array.from(new Set(variants.map((name) => cleanString(name, 80)).filter(Boolean)));
+}
+
+function buildRosterNameIndex(roster) {
+  const index = [];
+  for (const player of roster) {
+    for (const variant of playerNameVariants(player)) {
+      const normalized = normalizeForMatching(variant);
+      if (normalized) {
+        index.push({ normalized, label: variant, playerId: player.id, rosterName: player.name });
+      }
+    }
+  }
+  return index;
+}
+
+function splitLikelyNameList(text) {
+  const command = cleanString(text, MAX_COMMAND_CHARS);
+  if (!command) return [];
+
+  const firstSentence = command.split(/[.!?。！？]/)[0] || command;
+  let segment = firstSentence;
+
+  const listMarkers = [
+    /\bare playing today\b/i,
+    /\bplaying today\b/i,
+    /\bare coming today\b/i,
+    /\bcoming today\b/i,
+    /\bspielen heute\b/i,
+    /\bkommen heute\b/i,
+    /\bheute dabei\b/i,
+    /\bfor today\b/i,
+    /\bselect\b/i,
+    /\badd to today\b/i,
+    /오늘\s*(와|와요|옴|뛰어|뜀|참석|참가)/,
+  ];
+
+  for (const marker of listMarkers) {
+    const match = segment.match(marker);
+    if (match && typeof match.index === "number") {
+      segment = segment.slice(0, match.index);
+      break;
+    }
+  }
+
+  const hasListShape = /[,\n]/.test(segment) || /\b(and|und|그리고|랑|와|과)\b/.test(segment);
+  if (!hasListShape) return [];
+
+  return segment
+    .replace(/\b(players?|people|spieler|today|heute|playing|coming|make|teams?)\b/gi, " ")
+    .split(/[,\n]+|\s+and\s+|\s+und\s+|\s+그리고\s+|\s*랑\s*|\s*와\s*|\s*과\s*/i)
+    .map((part) => cleanString(part, 80))
+    .map((part) => part.replace(/^(and|und|그리고)\s+/i, "").trim())
+    .filter((part) => part.length >= 2 && part.length <= 50)
+    .filter((part) => !/\b(\d+\s*(v|vs|gegen|대)\s*\d*|make|team|teams|spieler|players?)\b/i.test(part));
+}
+
+function matchNameCandidate(candidate, rosterIndex) {
+  const normalizedCandidate = normalizeForMatching(candidate);
+  if (!normalizedCandidate) return { status: "unknown", spokenName: candidate, matches: [] };
+
+  const exact = rosterIndex.filter((entry) => entry.normalized === normalizedCandidate);
+  if (exact.length === 1) {
+    return { status: "matched", spokenName: candidate, playerId: exact[0].playerId, rosterName: exact[0].rosterName, matchedAlias: exact[0].label, confidence: 0.98 };
+  }
+  if (exact.length > 1) {
+    return { status: "ambiguous", spokenName: candidate, matches: exact.slice(0, 5).map((entry) => ({ playerId: entry.playerId, rosterName: entry.rosterName, matchedAlias: entry.label })) };
+  }
+
+  const loose = rosterIndex.filter((entry) => entry.normalized.includes(normalizedCandidate) || normalizedCandidate.includes(entry.normalized));
+  const uniqueLoose = [];
+  for (const entry of loose) {
+    if (!uniqueLoose.some((item) => item.playerId === entry.playerId)) uniqueLoose.push(entry);
+  }
+  if (uniqueLoose.length === 1 && normalizedCandidate.length >= 3) {
+    return { status: "possible_match", spokenName: candidate, playerId: uniqueLoose[0].playerId, rosterName: uniqueLoose[0].rosterName, matchedAlias: uniqueLoose[0].label, confidence: 0.72 };
+  }
+  if (uniqueLoose.length > 1) {
+    return { status: "ambiguous", spokenName: candidate, matches: uniqueLoose.slice(0, 5).map((entry) => ({ playerId: entry.playerId, rosterName: entry.rosterName, matchedAlias: entry.label })) };
+  }
+  return { status: "unknown", spokenName: candidate, matches: [] };
+}
+
+function detectPlayersPerTeam(text) {
+  const command = cleanString(text, MAX_COMMAND_CHARS);
+  const patterns = [
+    /\b(\d{1,2})\s*(?:v|vs|versus|gegen|대)\s*(\d{1,2})?\b/i,
+    /\b(\d{1,2})\s*(?:a\s*side|per\s*team)\b/i,
+    /(\d{1,2})\s*명씩/,
+  ];
+  for (const pattern of patterns) {
+    const match = command.match(pattern);
+    if (match) {
+      const left = Number(match[1]);
+      const right = match[2] ? Number(match[2]) : left;
+      if (Number.isFinite(left) && left > 0 && left <= 20 && (!right || right === left)) return left;
+    }
+  }
+  return null;
+}
+
+function buildCommandHints(commandText, roster) {
+  const rosterIndex = buildRosterNameIndex(roster);
+  const candidateNames = Array.from(new Set(splitLikelyNameList(commandText)));
+  const candidatePlayers = candidateNames.map((candidate) => matchNameCandidate(candidate, rosterIndex));
+  const playersPerTeam = detectPlayersPerTeam(commandText);
+  const matchedCount = candidatePlayers.filter((item) => item.status === "matched" || item.status === "possible_match").length;
+  const unknownCount = candidatePlayers.filter((item) => item.status === "unknown").length;
+  return {
+    appKnowledgeVersion: "2026-06-20.smart-command-v2",
+    candidateNames,
+    candidatePlayers,
+    detectedPlayersPerTeam: playersPerTeam,
+    expectedPlayerCountForRequestedGame: playersPerTeam ? playersPerTeam * 2 : null,
+    listedPlayerCount: candidateNames.length || null,
+    matchedListedPlayerCount: matchedCount || null,
+    unknownListedPlayerCount: unknownCount || null,
+    instruction: "These are deterministic hints from Fair Teams before calling AI. Use them unless the user text clearly contradicts them. Every candidate name must be represented in actions, confirmations, or unresolved items.",
+  };
+}
+
+function fairTeamsOperatingManual() {
+  return `FAIR TEAMS APP OPERATING MANUAL
+
+Core app idea:
+- Fair Teams helps a casual football organizer keep a roster, mark who is playing today, and generate balanced teams.
+- The AI is an interpreter. It translates messy user language into allowed Fair Teams actions. It must not directly invent final teams.
+- The existing app/team generator remains responsible for balancing and final team generation.
+
+Main app areas:
+1. Roster: all known players in the selected roster. Existing players have IDs. Unknown spoken names are not roster players yet.
+2. Today: today's attendance/selection. Commands like "X is playing", "X kommt", "X 오늘 와", or a plain comma-separated list usually mean select those players for Today.
+3. Teams: generated team results. Commands like "make teams" or "generate" request generation after setup actions are applied.
+4. Club/shared rosters: shared rosters use simpler shared identity/Club rating ideas. Avoid private advanced assumptions unless data is present.
+
+Important roster rules:
+- Match player names using name and aka/aliases.
+- Do not invent player IDs.
+- If the user names an existing player, return that player in playerRefs.
+- If the user names someone not in the roster, return add_new_player_suggestion and a missing_player confirmation.
+- If a name could be several players, return ambiguous_player confirmation.
+- Do not silently ignore names in a player list.
+
+Today/player-list rules:
+- "Joon, Jorge, Jan are playing today" = select Joon, Jorge, Jan.
+- "Joon, Jorge, Jan. 5v5" also likely means select those names for Today.
+- "5v5" means playersPerTeam=5, not five total players. Normally 5v5 needs 10 selected players.
+- If only 5 names are listed for 5v5, set team size but add unresolved/missing_context explaining the mismatch.
+
+Pairing rules:
+- "Sarah and Tommy don't like each other", "nicht zusammen", "같이 두지 마" = add_pairing_rule keep_separate.
+- "Sarah and Tommy came together", "couple", "same car", "같이" when positive = keep_together.
+
+Team locks / colors:
+- "George red", "George wears red", "George 빨강팀" = lock_player_to_team with teamLabel red.
+- Team labels can be colors or app team labels. Keep the label exactly as user intended.
+
+Balancing preferences:
+- "one good defender in each team" = spread_role_across_teams, role defender, distribution one_per_team.
+- "separate strong players" = balance_by_attribute or spread_role_across_teams with strong_player when appropriate.
+- Use player stats/flags if present: defense, attack, passing, speed, skill, goalkeeper, playmaker, finisher, dribbler, sentinel, engine, versatile, space finder.
+- If the role cannot be inferred from data, ask a clarifying question instead of pretending.
+
+New player and skill rules:
+- "Kira is a bit experienced" can suggest skill around 7/10.
+- Beginner/new = 3-4. Average/okay = 5. Experienced/good = 7. Very strong = 8-9.
+- Adding a player or setting a new-player skill requires confirmation.
+
+Safety rules:
+- No destructive roster changes without confirmation.
+- Do not remove players unless the user explicitly asks and confirmation is required.
+- Keep output concise and actionable.
+- Prefer doing obvious safe setup actions and asking only for exceptions.`;
+}
+
+
 const jsonSchema = {
   name: "fair_teams_smart_command",
   strict: true,
@@ -170,28 +365,20 @@ const jsonSchema = {
 function systemPrompt() {
   return `You are Fair Teams Smart Command, a multilingual command parser for a casual football team-making app.
 
-Important behavior:
-- The user may speak or type in any language, including mixed-language commands. Understand the intent and return the same action schema.
+${fairTeamsOperatingManual()}
+
+Output contract:
 - Return the same language-independent JSON action schema regardless of input language.
+- The user may speak or type in any language, including mixed-language commands.
+- detectedLanguage may be any BCP-47-like language string such as en, de, ko, es, mixed, or unknown.
 - Preserve player names exactly as user says them when uncertain. Do not translate names.
-- Match spoken names to roster players using name and aka/aliases. Return roster player IDs only when confident.
-- Never invent roster player IDs.
-- Treat phrases like "are playing today", "spielen heute", "kommen heute", "오늘 와", "오늘 뛰어", "for today", "select", "add to today", and bare comma-separated player lists as a request to select those players for today's game.
-- When the command includes a player list, create a select_players action containing EVERY confidently matched existing roster player from that list. Do not drop names just because the user also asks to generate teams.
-- If a listed player is not in the roster, create an add_new_player_suggestion action for that exact name AND add a missing_player confirmation asking whether to add them.
-- If a listed name is ambiguous or similar to multiple roster names/aliases, add an ambiguous_player confirmation instead of guessing.
-- If user says "make 5v5" or similar but only names fewer than 10 total players in the command, still set playersPerTeam 5, but add unresolved missing_context explaining that 10 players are needed for 5v5 and only the named/selected players were found.
-- If user gives a rough skill description like "a bit experienced", "quite good", "Anfänger", "잘해", map it to suggestedSkill on 1-10 if clearly implied. Use null if not clear.
-- Interpret social phrases: "they don't like each other", "they fight", "nicht zusammen", "같이 두지 마" as keep_separate. "came together", "couple", "친구라 같이" as keep_together.
-- Interpret team constraints: "George red", "put George in red", "George trägt rot", "조지는 빨강팀" as lock_player_to_team with teamLabel red.
-- Interpret "6v6", "six versus six", "sechs gegen sechs", "6대6" as set_team_size playersPerTeam 6.
-- Interpret "separate one good defender into each team" as spread_role_across_teams role defender distribution one_per_team.
-- In shared roster mode, avoid private advanced-stat assumptions unless the roster data provides clear role signals. Ask a clarifying question if needed.
+- Use the provided commandHints. Every candidateName from commandHints must appear in select_players, add_new_player_suggestion, confirmations, or unresolved.
+- When commandHints detects playersPerTeam, create set_team_size unless the user clearly meant something else.
+- If commandHints says a listed player is unknown, create add_new_player_suggestion for that exact name and missing_player confirmation.
+- If commandHints says only 5 listed names were provided for 5v5, still set playersPerTeam=5 and add unresolved missing_context.
 - AI does not generate final teams. It only returns safe app actions for Fair Teams to execute.
-- Destructive changes require confirmation.
 - Be concise in assistantSummary and use the user's likely UI language.`;
 }
-
 export default async function handler(req, res) {
   res.setHeader?.("Cache-Control", "no-store");
 
@@ -212,6 +399,7 @@ export default async function handler(req, res) {
   const commandText = cleanString(body.commandText, MAX_COMMAND_CHARS);
   const roster = cleanRoster(body.roster);
   const context = cleanContext(body.context);
+  const commandHints = buildCommandHints(commandText, roster);
 
   if (!commandText) {
     return res.status(400).json({ error: "Missing commandText." });
@@ -226,10 +414,11 @@ export default async function handler(req, res) {
       {
         role: "user",
         content: JSON.stringify({
-          task: "Parse the user command into Fair Teams actions. Pay special attention to every player name mentioned in commandText. If a person is named as playing today, they must appear either as a matched playerRef in select_players or as a missing/ambiguous confirmation.",
+          task: "Parse the user command into Fair Teams actions using the operating manual and deterministic commandHints. Do not drop any listed player names. If a person is named as playing today, they must appear either as a matched playerRef in select_players, add_new_player_suggestion, missing/ambiguous confirmation, or unresolved item.",
           commandText,
           context,
           roster,
+          commandHints,
         }),
       },
     ],

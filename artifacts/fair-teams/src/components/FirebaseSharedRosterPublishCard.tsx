@@ -628,7 +628,7 @@ No shared roster is open on this device. Choose one below to open it on this dev
           </div>
         )}
 
-        {notice && <div className={`rounded-2xl px-3 py-2 text-[11px] font-bold ${notice.tone === "error" ? "bg-rose-50 text-rose-700" : "bg-violet-50 text-violet-700"}`}>{notice.text}</div>}
+        {notice?.tone === "error" && <div className="rounded-2xl bg-rose-50 px-3 py-2 text-[11px] font-bold text-rose-700">{notice.text}</div>}
         {sharedRosterLibraryModal}
         {collaboratorsModal}
       </div>

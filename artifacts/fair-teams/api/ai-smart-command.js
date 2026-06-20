@@ -231,6 +231,122 @@ function detectSelectAllRosterPlayers(text) {
   return patterns.some((pattern) => pattern.test(command));
 }
 
+function extractQuotedText(text) {
+  const command = cleanString(text, MAX_COMMAND_CHARS);
+  const quotePatterns = [
+    /["“”']([^"“”']{1,240})["“”']/,
+    /[„‚]([^„‚]{1,240})[“‘]/,
+  ];
+  for (const pattern of quotePatterns) {
+    const match = command.match(pattern);
+    if (match?.[1]) return cleanString(match[1], 240);
+  }
+  return "";
+}
+
+function detectClubNoteText(text) {
+  const command = cleanString(text, MAX_COMMAND_CHARS);
+  if (!command || !/(note|notes|post.?it|club notes|notiz|notizen|memo|메모|노트|공지)/i.test(command)) return null;
+
+  const quoted = extractQuotedText(command);
+  if (quoted) return quoted;
+
+  const patterns = [
+    /(?:add|create|write|put|leave)\s+(?:a\s+)?(?:club\s+)?note\s+(?:saying|that says|with text)?\s*(.+)$/i,
+    /(?:add|create|write|put|leave)\s+(.+?)\s+(?:to|in|on)\s+(?:club\s+)?notes?$/i,
+    /(?:notiz|notizen)\s+(?:hinzufugen|erstellen|schreiben)\s*:?\s*(.+)$/i,
+    /(?:메모|노트)\s*(?:추가|남겨|적어|써)\s*:?\s*(.+)$/i,
+    /(.+?)\s*(?:라고|이라고)?\s*(?:메모|노트)\s*(?:추가|남겨|적어|써)/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = command.match(pattern);
+    const value = cleanString(match?.[1], 240);
+    if (value) return value.replace(/^(saying|that says|text)\s+/i, "").trim();
+  }
+
+  return "";
+}
+
+function detectRosterColor(text) {
+  const command = cleanString(text, MAX_COMMAND_CHARS);
+  const patterns = [
+    /(?:change|set|make)\s+(?:this\s+)?(?:roster|list|team\s+list)\s+color\s+(?:to\s+)?([\p{L}\p{N} -]{2,40})/iu,
+    /(?:change|set|make)\s+(?:this\s+)?(?:roster|list|team\s+list)\s+([\p{L}\p{N} -]{2,40})\s*(?:color|colou?r)?$/iu,
+    /(?:roster|liste|kader)\s*(?:farbe|color)\s*(?:auf|to)?\s*([\p{L}\p{N} -]{2,40})/iu,
+    /(?:로스터|명단)\s*(?:색|색깔)\s*([\p{L}\p{N} -]{2,40})/iu,
+  ];
+  for (const pattern of patterns) {
+    const match = command.match(pattern);
+    const color = cleanString(match?.[1], 40).replace(/[.!?。！？]+$/, "");
+    if (color) return color;
+  }
+  return null;
+}
+
+function detectRosterRename(text) {
+  const command = cleanString(text, MAX_COMMAND_CHARS);
+  const quoted = extractQuotedText(command);
+  const patterns = [
+    /(?:rename|call)\s+(?:this\s+)?(?:roster|list|team\s+list)\s+(?:to\s+)?(.+)$/i,
+    /(?:roster|list|team\s+list)\s+(?:name\s+)?(?:to|as)\s+(.+)$/i,
+    /(?:kader|liste)\s+(?:umbenennen|nennen)\s*(?:in|zu)?\s*(.+)$/i,
+    /(?:로스터|명단)\s*(?:이름|제목)?\s*(?:바꿔|변경)\s*(.+)$/i,
+  ];
+  for (const pattern of patterns) {
+    const match = command.match(pattern);
+    if (!match) continue;
+    const target = cleanString(quoted || match?.[1], 120).replace(/[.!?。！？]+$/, "");
+    if (target) return target;
+  }
+  return null;
+}
+
+function detectOpenArea(text) {
+  const normalized = normalizeForMatching(text);
+  if (!normalized) return null;
+  const hasOpen = /\b(open|show|go to|switch to|bring me to|zeige|offne|geh zu|로 가|열어|보여)\b/i.test(normalized);
+  if (!hasOpen) return null;
+  if (/\b(roster|players|spieler|kader|명단|선수)\b/i.test(normalized)) return "roster";
+  if (/\b(today|attendance|heute|오늘|참석)\b/i.test(normalized)) return "today";
+  if (/\b(teams|team results|mannschaften|팀)\b/i.test(normalized)) return "teams";
+  if (/\b(club|organizers|notes|equipment|클럽|메모|장비)\b/i.test(normalized)) return "club";
+  return null;
+}
+
+function detectGenerateTeams(text) {
+  const normalized = normalizeForMatching(text);
+  if (!normalized) return false;
+  const patterns = [
+    /\b(make|create|generate|build|split|divide)\b.*\bteams?\b/i,
+    /\bteams?\b.*\b(make|create|generate|build)\b/i,
+    /\bteams?\s*(?:machen|erstellen|bilden|generieren)\b/i,
+    /\bmannschaften\s*(?:machen|erstellen|bilden)\b/i,
+    /(팀)\s*(만들|짜|나눠|생성)/,
+  ];
+  return patterns.some((pattern) => pattern.test(normalized));
+}
+
+function detectSpreadRole(text) {
+  const normalized = normalizeForMatching(text);
+  if (!normalized) return null;
+  const roleMap = [
+    { role: "defender", patterns: [/defender/i, /defense/i, /verteidiger/i, /수비/] },
+    { role: "attacker", patterns: [/attacker/i, /striker/i, /forward/i, /sturm/i, /공격/] },
+    { role: "goalkeeper", patterns: [/goalkeeper/i, /keeper/i, /torwart/i, /키퍼|골키퍼/] },
+    { role: "strong_player", patterns: [/strong/i, /best/i, /stark/i, /잘하는|강한/] },
+    { role: "beginner", patterns: [/beginner/i, /new player/i, /anfanger/i, /초보/] },
+  ];
+  const hasSpread = /(one|each|every|spread|separate|distribute|balance|jeder|pro team|나눠|각 팀|한 명씩)/i.test(normalized);
+  if (!hasSpread) return null;
+  for (const item of roleMap) {
+    if (item.patterns.some((pattern) => pattern.test(normalized))) {
+      return { role: item.role, distribution: "spread_across_teams" };
+    }
+  }
+  return null;
+}
+
 function buildCommandHints(commandText, roster) {
   const rosterIndex = buildRosterNameIndex(roster);
   const candidateNames = Array.from(new Set(splitLikelyNameList(commandText)));
@@ -238,21 +354,33 @@ function buildCommandHints(commandText, roster) {
   const playersPerTeam = detectPlayersPerTeam(commandText);
   const teamCount = detectTeamCount(commandText);
   const selectAllRosterPlayers = detectSelectAllRosterPlayers(commandText);
+  const clubNoteText = detectClubNoteText(commandText);
+  const rosterColor = detectRosterColor(commandText);
+  const rosterRename = detectRosterRename(commandText);
+  const targetArea = detectOpenArea(commandText);
+  const generateTeams = detectGenerateTeams(commandText);
+  const spreadRole = detectSpreadRole(commandText);
   const matchedCount = candidatePlayers.filter((item) => item.status === "matched" || item.status === "possible_match").length;
   const unknownCount = candidatePlayers.filter((item) => item.status === "unknown").length;
   return {
-    appKnowledgeVersion: "2026-06-20.smart-command-v4-deterministic-hints",
+    appKnowledgeVersion: "2026-06-20.smart-command-v5-reliability-framework",
     candidateNames,
     candidatePlayers,
     selectAllRosterPlayers,
     detectedPlayersPerTeam: playersPerTeam,
     detectedTeamCount: teamCount,
+    detectedClubNoteText: clubNoteText,
+    detectedRosterColor: rosterColor,
+    detectedRosterRename: rosterRename,
+    detectedTargetArea: targetArea,
+    detectedGenerateTeams: generateTeams,
+    detectedSpreadRole: spreadRole,
     expectedPlayerCountForRequestedGame: playersPerTeam ? playersPerTeam * 2 : null,
     listedPlayerCount: candidateNames.length || null,
     selectedAllPlayerCount: selectAllRosterPlayers ? roster.length : null,
     matchedListedPlayerCount: matchedCount || null,
     unknownListedPlayerCount: unknownCount || null,
-    instruction: "These are deterministic hints from Fair Teams before calling AI. Use them unless the user text clearly contradicts them. Every candidate name must be represented in actions, confirmations, or unresolved items. If selectAllRosterPlayers is true, select every roster player. If detectedTeamCount is set, set that many teams; do not confuse it with players per team.",
+    instruction: "These are deterministic hints from Fair Teams before calling AI. Use them unless the user text clearly contradicts them. Every candidate name must be represented in actions, confirmations, or unresolved items. If selectAllRosterPlayers is true, select every roster player. If detectedTeamCount is set, set that many teams; do not confuse it with players per team. If detectedClubNoteText, roster color, roster rename, target area, generate teams, or spread role is set, return the matching app action even if not executable yet.",
   };
 }
 
@@ -494,11 +622,64 @@ function baseAction(type, overrides = {}) {
   };
 }
 
-function buildDeterministicActions(commandHints, roster) {
+function buildDeterministicPlan(commandHints, roster) {
   const actions = [];
+  const confirmations = [];
+  const unresolved = [];
+
+  const matchedRefs = [];
+  for (const candidate of commandHints.candidatePlayers || []) {
+    if ((candidate.status === "matched" || candidate.status === "possible_match") && candidate.playerId) {
+      matchedRefs.push({
+        playerId: candidate.playerId,
+        rosterName: candidate.rosterName || candidate.spokenName,
+        spokenName: candidate.spokenName,
+        confidence: candidate.confidence || (candidate.status === "matched" ? 0.98 : 0.72),
+      });
+    }
+    if (candidate.status === "unknown") {
+      actions.push(baseAction("add_new_player_suggestion", {
+        newPlayerName: candidate.spokenName,
+        capabilityId: "roster.add_new_player",
+        supportStatus: "needs_confirmation",
+        requiresConfirmation: true,
+        reason: `${candidate.spokenName} is not in this roster yet.`,
+      }));
+      confirmations.push({
+        id: `missing-${normalizeForMatching(candidate.spokenName) || candidate.spokenName}`,
+        type: "missing_player",
+        message: `${candidate.spokenName} is not in this roster. Add as a new player?`,
+        playerRefs: [{ playerId: null, rosterName: null, spokenName: candidate.spokenName, confidence: 0 }],
+        suggestedActionType: "add_new_player_suggestion",
+      });
+    }
+    if (candidate.status === "ambiguous") {
+      confirmations.push({
+        id: `ambiguous-${normalizeForMatching(candidate.spokenName) || candidate.spokenName}`,
+        type: "ambiguous_player",
+        message: `${candidate.spokenName} could match more than one player. Please choose the right one.`,
+        playerRefs: (candidate.matches || []).map((match) => ({
+          playerId: match.playerId || null,
+          rosterName: match.rosterName || null,
+          spokenName: candidate.spokenName,
+          confidence: 0.5,
+        })),
+        suggestedActionType: "select_players",
+      });
+    }
+  }
+
+  if (matchedRefs.length > 0) {
+    actions.unshift(baseAction("select_players", {
+      playerRefs: matchedRefs,
+      capabilityId: "today.select_players",
+      supportStatus: "preview_only",
+      reason: "Select the named existing players for Today.",
+    }));
+  }
 
   if (commandHints.selectAllRosterPlayers && roster.length > 0) {
-    actions.push(baseAction("select_players", {
+    actions.unshift(baseAction("select_players", {
       playerRefs: roster.map((player) => makePlayerRef(player)),
       capabilityId: "today.select_players",
       supportStatus: "preview_only",
@@ -524,23 +705,69 @@ function buildDeterministicActions(commandHints, roster) {
     }));
   }
 
-  return actions;
-}
-
-function hasAction(actions, type) {
-  return Array.isArray(actions) && actions.some((action) => action?.type === type);
-}
-
-function mergeDeterministicActions(parsed, commandHints, roster) {
-  if (!parsed || typeof parsed !== "object") return parsed;
-  const deterministicActions = buildDeterministicActions(commandHints, roster);
-  const merged = { ...parsed, actions: Array.isArray(parsed.actions) ? [...parsed.actions] : [] };
-
-  for (const action of deterministicActions) {
-    if (!hasAction(merged.actions, action.type)) merged.actions.unshift(action);
+  if (typeof commandHints.detectedClubNoteText === "string") {
+    actions.push(baseAction("club_add_note", {
+      noteText: commandHints.detectedClubNoteText,
+      capabilityId: "club.add_note",
+      supportStatus: commandHints.detectedClubNoteText ? "executable" : "needs_confirmation",
+      requiresConfirmation: !commandHints.detectedClubNoteText,
+      reason: commandHints.detectedClubNoteText ? "Add this text to Club Notes." : "The command mentions Club Notes, but the note text is unclear.",
+    }));
   }
 
-  const unresolved = Array.isArray(parsed.unresolved) ? [...parsed.unresolved] : [];
+  if (commandHints.detectedRosterColor) {
+    actions.push(baseAction("set_roster_color", {
+      colorName: commandHints.detectedRosterColor,
+      capabilityId: "roster.set_color",
+      supportStatus: "understood_not_wired",
+      reason: "Fair Teams understood the color change, but roster color changes are not wired to AI yet.",
+    }));
+  }
+
+  if (commandHints.detectedRosterRename) {
+    actions.push(baseAction("rename_roster", {
+      targetName: commandHints.detectedRosterRename,
+      capabilityId: "roster.rename",
+      supportStatus: "understood_not_wired",
+      reason: "Fair Teams understood the rename request, but roster rename is not wired to AI yet.",
+    }));
+  }
+
+  if (commandHints.detectedTargetArea) {
+    actions.push(baseAction("open_app_area", {
+      targetArea: commandHints.detectedTargetArea,
+      capabilityId: "navigation.open_area",
+      supportStatus: "understood_not_wired",
+      reason: "Fair Teams understood the navigation request, but AI navigation is not wired yet.",
+    }));
+  }
+
+  if (commandHints.detectedSpreadRole) {
+    actions.push(baseAction("spread_role_across_teams", {
+      role: commandHints.detectedSpreadRole.role,
+      distribution: commandHints.detectedSpreadRole.distribution,
+      capabilityId: "teams.spread_role",
+      supportStatus: "preview_only",
+      reason: `Spread ${commandHints.detectedSpreadRole.role.replace(/_/g, " ")} across teams.`,
+    }));
+  }
+
+  if (commandHints.detectedGenerateTeams) {
+    actions.push(baseAction("generate_teams", {
+      capabilityId: "teams.generate",
+      supportStatus: "preview_only",
+      reason: "Generate teams after setup actions are applied.",
+    }));
+  }
+
+  if (commandHints.detectedPlayersPerTeam && commandHints.listedPlayerCount && commandHints.listedPlayerCount < commandHints.expectedPlayerCountForRequestedGame) {
+    unresolved.push({
+      text: `${commandHints.listedPlayerCount} listed players for ${commandHints.detectedPlayersPerTeam}v${commandHints.detectedPlayersPerTeam}`,
+      issue: "missing_context",
+      message: `${commandHints.detectedPlayersPerTeam}v${commandHints.detectedPlayersPerTeam} needs ${commandHints.expectedPlayerCountForRequestedGame} players, but only ${commandHints.listedPlayerCount} names were listed.`,
+    });
+  }
+
   if (commandHints.detectedTeamCount && commandHints.selectAllRosterPlayers && roster.length > 0 && roster.length < commandHints.detectedTeamCount) {
     unresolved.push({
       text: `${roster.length} players for ${commandHints.detectedTeamCount} teams`,
@@ -548,11 +775,149 @@ function mergeDeterministicActions(parsed, commandHints, roster) {
       message: `You have ${roster.length} roster players, which is fewer than ${commandHints.detectedTeamCount} teams.`,
     });
   }
-  merged.unresolved = unresolved;
 
-  if (deterministicActions.length > 0 && typeof merged.assistantSummary === "string") {
-    merged.assistantSummary = merged.assistantSummary || "Fair Teams understood the command.";
+  return { actions, confirmations, unresolved };
+}
+
+function buildDeterministicActions(commandHints, roster) {
+  return buildDeterministicPlan(commandHints, roster).actions;
+}
+
+function hasAction(actions, type) {
+  return Array.isArray(actions) && actions.some((action) => action?.type === type);
+}
+
+const KNOWN_ACTION_TYPES = new Set(jsonSchema.schema.properties.actions.items.properties.type.enum);
+const KNOWN_CONFIRMATION_TYPES = new Set(jsonSchema.schema.properties.confirmations.items.properties.type.enum);
+const KNOWN_UNRESOLVED_ISSUES = new Set(jsonSchema.schema.properties.unresolved.items.properties.issue.enum);
+const KNOWN_SUPPORT_STATUSES = new Set(["executable", "preview_only", "understood_not_wired", "needs_confirmation", "unsafe", "unknown"]);
+
+const CAPABILITY_STATUS_BY_ACTION = {
+  select_players: ["today.select_players", "preview_only"],
+  unselect_players: ["today.select_players", "preview_only"],
+  set_team_size: ["teams.set_team_size", "preview_only"],
+  set_team_count: ["teams.set_team_count", "preview_only"],
+  add_pairing_rule: ["teams.pairing_rule", "preview_only"],
+  lock_player_to_team: ["teams.lock_player", "preview_only"],
+  spread_role_across_teams: ["teams.spread_role", "preview_only"],
+  balance_by_attribute: ["teams.balance_attribute", "preview_only"],
+  generate_teams: ["teams.generate", "preview_only"],
+  add_new_player_suggestion: ["roster.add_new_player", "needs_confirmation"],
+  set_new_player_skill: ["roster.set_new_player_skill", "needs_confirmation"],
+  club_add_note: ["club.add_note", "executable"],
+  club_delete_note: ["club.delete_note", "unsafe"],
+  set_roster_color: ["roster.set_color", "understood_not_wired"],
+  rename_roster: ["roster.rename", "understood_not_wired"],
+  open_app_area: ["navigation.open_area", "understood_not_wired"],
+  equipment_add_item: ["equipment.add_item", "understood_not_wired"],
+  equipment_move_item: ["equipment.move_item", "understood_not_wired"],
+};
+
+function normalizePlayerRef(ref) {
+  const item = ref && typeof ref === "object" ? ref : {};
+  return {
+    playerId: typeof item.playerId === "string" && item.playerId ? item.playerId : null,
+    rosterName: typeof item.rosterName === "string" && item.rosterName ? cleanString(item.rosterName, 120) : null,
+    spokenName: cleanString(item.spokenName, 120),
+    confidence: Number.isFinite(Number(item.confidence)) ? Math.max(0, Math.min(1, Number(item.confidence))) : 0,
+  };
+}
+
+function normalizeAction(action) {
+  const item = action && typeof action === "object" ? action : {};
+  const rawType = cleanString(item.type, 80);
+  const type = KNOWN_ACTION_TYPES.has(rawType) ? rawType : "unsupported_action";
+  const capabilityDefault = CAPABILITY_STATUS_BY_ACTION[type] || [null, type === "unsupported_action" ? "understood_not_wired" : "unknown"];
+  const rawStatus = cleanString(item.supportStatus, 40);
+  const supportStatus = KNOWN_SUPPORT_STATUSES.has(rawStatus) ? rawStatus : capabilityDefault[1];
+  const playerRefs = Array.isArray(item.playerRefs) ? item.playerRefs.map(normalizePlayerRef).filter((ref) => ref.spokenName || ref.rosterName || ref.playerId) : [];
+  return baseAction(type, {
+    playerRefs,
+    newPlayerName: typeof item.newPlayerName === "string" && item.newPlayerName.trim() ? cleanString(item.newPlayerName, 120) : null,
+    suggestedSkill: Number.isFinite(Number(item.suggestedSkill)) ? Math.max(1, Math.min(10, Number(item.suggestedSkill))) : null,
+    playersPerTeam: Number.isFinite(Number(item.playersPerTeam)) ? Number(item.playersPerTeam) : null,
+    teamCount: Number.isFinite(Number(item.teamCount)) ? Number(item.teamCount) : null,
+    pairingKind: ["keep_together", "keep_separate", "unknown"].includes(item.pairingKind) ? item.pairingKind : null,
+    teamLabel: typeof item.teamLabel === "string" && item.teamLabel.trim() ? cleanString(item.teamLabel, 80) : null,
+    role: ["defender", "attacker", "goalkeeper", "playmaker", "fast_player", "strong_player", "beginner", "experienced_player", "unknown"].includes(item.role) ? item.role : null,
+    attribute: typeof item.attribute === "string" && item.attribute.trim() ? cleanString(item.attribute, 80) : null,
+    distribution: typeof item.distribution === "string" && item.distribution.trim() ? cleanString(item.distribution, 120) : null,
+    noteText: typeof item.noteText === "string" && item.noteText.trim() ? cleanString(item.noteText, 240) : null,
+    colorName: typeof item.colorName === "string" && item.colorName.trim() ? cleanString(item.colorName, 40) : null,
+    targetName: typeof item.targetName === "string" && item.targetName.trim() ? cleanString(item.targetName, 120) : null,
+    targetArea: typeof item.targetArea === "string" && item.targetArea.trim() ? cleanString(item.targetArea, 40) : null,
+    capabilityId: typeof item.capabilityId === "string" && item.capabilityId.trim() ? cleanString(item.capabilityId, 80) : capabilityDefault[0],
+    supportStatus,
+    requiresConfirmation: Boolean(item.requiresConfirmation) || supportStatus === "needs_confirmation" || supportStatus === "unsafe",
+    reason: typeof item.reason === "string" && item.reason.trim() ? cleanString(item.reason, 300) : null,
+  });
+}
+
+function normalizeConfirmation(confirmation, index) {
+  const item = confirmation && typeof confirmation === "object" ? confirmation : {};
+  const rawType = cleanString(item.type, 40);
+  return {
+    id: cleanString(item.id, 80) || `check-${index}`,
+    type: KNOWN_CONFIRMATION_TYPES.has(rawType) ? rawType : "unclear",
+    message: cleanString(item.message, 300) || "Fair Teams needs your confirmation.",
+    playerRefs: Array.isArray(item.playerRefs) ? item.playerRefs.map(normalizePlayerRef) : [],
+    suggestedActionType: KNOWN_ACTION_TYPES.has(cleanString(item.suggestedActionType, 80)) ? cleanString(item.suggestedActionType, 80) : null,
+  };
+}
+
+function normalizeUnresolved(unresolved, index) {
+  const item = unresolved && typeof unresolved === "object" ? unresolved : {};
+  const rawIssue = cleanString(item.issue, 40);
+  return {
+    text: cleanString(item.text, 300),
+    issue: KNOWN_UNRESOLVED_ISSUES.has(rawIssue) ? rawIssue : "unknown_intent",
+    message: cleanString(item.message, 300) || "Fair Teams understood this, but it is not wired safely yet.",
+  };
+}
+
+function normalizeParsedResponse(parsed, commandText) {
+  const item = parsed && typeof parsed === "object" ? parsed : {};
+  const actions = Array.isArray(item.actions) ? item.actions.map(normalizeAction) : [];
+  const confirmations = Array.isArray(item.confirmations) ? item.confirmations.map(normalizeConfirmation) : [];
+  const unresolved = Array.isArray(item.unresolved) ? item.unresolved.map(normalizeUnresolved) : [];
+  return {
+    schemaVersion: 1,
+    ok: typeof item.ok === "boolean" ? item.ok : actions.length > 0,
+    detectedLanguage: cleanString(item.detectedLanguage, 40) || "unknown",
+    normalizedIntent: cleanString(item.normalizedIntent, 300) || cleanString(commandText, 300),
+    assistantSummary: cleanString(item.assistantSummary, 300) || "Fair Teams understood the command.",
+    confidence: Number.isFinite(Number(item.confidence)) ? Math.max(0, Math.min(1, Number(item.confidence))) : 0.5,
+    actions,
+    confirmations,
+    unresolved,
+    parseMode: "ai",
+  };
+}
+
+function mergeUniqueByKey(existing, incoming, keyFn) {
+  const output = Array.isArray(existing) ? [...existing] : [];
+  for (const item of incoming || []) {
+    const key = keyFn(item);
+    if (!output.some((old) => keyFn(old) === key)) output.push(item);
   }
+  return output;
+}
+
+function mergeDeterministicActions(parsed, commandHints, roster) {
+  const normalized = normalizeParsedResponse(parsed, commandHints?.commandText || "");
+  const deterministic = buildDeterministicPlan(commandHints, roster);
+  const merged = { ...normalized };
+
+  merged.actions = mergeUniqueByKey(
+    deterministic.actions,
+    normalized.actions,
+    (action) => `${action.type}:${action.newPlayerName || action.noteText || action.colorName || action.targetName || action.targetArea || action.playersPerTeam || action.teamCount || action.pairingKind || action.teamLabel || action.playerRefs.map((p) => p.playerId || p.spokenName).join("+")}`,
+  );
+  merged.confirmations = mergeUniqueByKey(normalized.confirmations, deterministic.confirmations, (item) => item.id || item.message);
+  merged.unresolved = mergeUniqueByKey(normalized.unresolved, deterministic.unresolved, (item) => `${item.issue}:${item.text || item.message}`);
+
+  if (deterministic.actions.length > 0) merged.parseMode = "ai_with_local_hints";
+  if (merged.actions.length > 0) merged.ok = true;
   return merged;
 }
 
@@ -570,38 +935,32 @@ function extractJsonObject(text) {
   return "";
 }
 
-function deterministicFallbackResponse(commandText, commandHints, roster) {
-  const actions = buildDeterministicActions(commandHints, roster);
-  const unresolved = [];
+function deterministicFallbackResponse(commandText, commandHints, roster, fallbackReason = "AI response could not be parsed safely.") {
+  const plan = buildDeterministicPlan(commandHints, roster);
+  const unresolved = [...plan.unresolved];
 
-  if (actions.length === 0) {
+  if (plan.actions.length === 0) {
     unresolved.push({
       text: commandText,
       issue: "unknown_intent",
-      message: "I understood this as a Fair Teams request, but this command is not wired safely yet.",
-    });
-  }
-
-  if (commandHints.detectedTeamCount && commandHints.selectAllRosterPlayers && roster.length > 0 && roster.length < commandHints.detectedTeamCount) {
-    unresolved.push({
-      text: `${roster.length} players for ${commandHints.detectedTeamCount} teams`,
-      issue: "missing_context",
-      message: `You have ${roster.length} roster players, which is fewer than ${commandHints.detectedTeamCount} teams.`,
+      message: "Fair Teams understood this as an app request, but this command is not wired safely yet.",
     });
   }
 
   return {
     schemaVersion: 1,
-    ok: actions.length > 0,
+    ok: plan.actions.length > 0,
     detectedLanguage: "unknown",
     normalizedIntent: cleanString(commandText, 300),
-    assistantSummary: actions.length > 0
-      ? "Fair Teams used local command hints because the AI response was malformed."
+    assistantSummary: plan.actions.length > 0
+      ? "Fair Teams used local app rules because the AI answer was not reliable."
       : "Fair Teams could not safely convert this command yet.",
-    confidence: actions.length > 0 ? 0.72 : 0.25,
-    actions,
-    confirmations: [],
+    confidence: plan.actions.length > 0 ? 0.72 : 0.25,
+    actions: plan.actions,
+    confirmations: plan.confirmations,
     unresolved,
+    parseMode: "local_fallback",
+    debugWarnings: [fallbackReason],
   };
 }
 
@@ -626,6 +985,8 @@ Output contract:
 - AI does not generate final teams. It only returns safe app actions for Fair Teams to execute.
 - Do not claim something is impossible just because it is not wired. Return the best matching app action with supportStatus=understood_not_wired.
 - For Club Notes requests, return club_add_note with noteText and supportStatus=executable.
+- For obvious app commands in commandHints, return the action even if you also need to ask follow-up questions.
+- Never return prose outside JSON. Never omit required fields.
 - Be concise in assistantSummary and use the user's likely UI language.`;
 }
 export default async function handler(req, res) {
@@ -648,7 +1009,7 @@ export default async function handler(req, res) {
   const commandText = cleanString(body.commandText, MAX_COMMAND_CHARS);
   const roster = cleanRoster(body.roster);
   const context = cleanContext(body.context);
-  const commandHints = buildCommandHints(commandText, roster);
+  const commandHints = { ...buildCommandHints(commandText, roster), commandText };
 
   if (!commandText) {
     return res.status(400).json({ error: "Missing commandText." });
@@ -679,19 +1040,24 @@ export default async function handler(req, res) {
     },
   };
 
-  const aiResponse = await fetch(OPENAI_RESPONSES_URL, {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
+  let aiResponse;
+  try {
+    aiResponse = await fetch(OPENAI_RESPONSES_URL, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    return res.status(200).json(deterministicFallbackResponse(commandText, commandHints, roster, "OpenAI request failed before completion."));
+  }
 
   const aiPayload = await aiResponse.json().catch(() => null);
   if (!aiResponse.ok) {
     const message = aiPayload?.error?.message || "OpenAI request failed.";
-    return res.status(502).json({ error: message });
+    return res.status(200).json(deterministicFallbackResponse(commandText, commandHints, roster, message));
   }
 
   const outputText = typeof aiPayload?.output_text === "string"
@@ -704,7 +1070,7 @@ export default async function handler(req, res) {
       : "";
 
   if (!outputText) {
-    return res.status(502).json({ error: "AI returned no structured output." });
+    return res.status(200).json(deterministicFallbackResponse(commandText, commandHints, roster, "AI returned no structured output."));
   }
 
   try {
@@ -712,6 +1078,6 @@ export default async function handler(req, res) {
     const parsed = JSON.parse(jsonText);
     return res.status(200).json(mergeDeterministicActions(parsed, commandHints, roster));
   } catch {
-    return res.status(200).json(deterministicFallbackResponse(commandText, commandHints, roster));
+    return res.status(200).json(deterministicFallbackResponse(commandText, commandHints, roster, "AI returned malformed JSON."));
   }
 }

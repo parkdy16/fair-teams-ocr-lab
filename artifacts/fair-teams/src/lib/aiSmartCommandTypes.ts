@@ -96,6 +96,8 @@ export type AiSmartCommandUnresolved = {
   message: string;
 };
 
+export type AiSmartCommandParseMode = "ai" | "ai_with_local_hints" | "local_fallback";
+
 export type AiSmartCommandResponse = {
   schemaVersion: 1;
   ok: boolean;
@@ -106,6 +108,8 @@ export type AiSmartCommandResponse = {
   actions: AiSmartCommandAction[];
   confirmations: AiSmartCommandConfirmation[];
   unresolved: AiSmartCommandUnresolved[];
+  parseMode?: AiSmartCommandParseMode;
+  debugWarnings?: string[];
 };
 
 export type AiSmartCommandRosterPlayer = {

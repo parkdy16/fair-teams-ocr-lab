@@ -43,6 +43,25 @@ function actionDetails(action: AiSmartCommandAction) {
   return details.join(" · ");
 }
 
+function friendlyAiError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error || "");
+  if (/json|structured|parse|schema/i.test(message)) {
+    return "Fair Teams understood part of this, but the AI answer was not clean enough. Try again or use a shorter command.";
+  }
+  if (/disabled|branch|configured|key/i.test(message)) return message;
+  if (/openai|request failed|502|network|fetch/i.test(message)) {
+    return "Fair Teams AI could not connect cleanly. Try again in a moment.";
+  }
+  return message || "Fair Teams AI command failed.";
+}
+
+function parseModeLabel(mode?: AiSmartCommandResponse["parseMode"]) {
+  if (mode === "local_fallback") return "Local safety fallback";
+  if (mode === "ai_with_local_hints") return "AI + app rules";
+  if (mode === "ai") return "AI parser";
+  return "AI beta";
+}
+
 export function AiSmartCommandPanel({
   players,
   rosterName,
@@ -79,7 +98,7 @@ export function AiSmartCommandPanel({
       setResult(parsed);
       onParsed?.(parsed);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Fair Teams AI command failed.");
+      setError(friendlyAiError(err));
     } finally {
       setBusy(false);
     }
@@ -146,7 +165,7 @@ export function AiSmartCommandPanel({
         <div className="mt-3 rounded-2xl bg-white p-3 text-xs text-[#102A43] shadow-sm">
           <div className="font-black">{result.assistantSummary || "Command parsed."}</div>
           <div className="mt-1 text-[11px] font-semibold text-slate-500">
-            Language: {result.detectedLanguage} · Confidence: {Math.round(result.confidence * 100)}%
+            Language: {result.detectedLanguage} · Confidence: {Math.round(result.confidence * 100)}% · {parseModeLabel(result.parseMode)}
           </div>
           <div className="mt-3 grid gap-1.5">
             {result.actions.map((action, index) => {

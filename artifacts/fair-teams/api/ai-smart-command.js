@@ -176,7 +176,11 @@ Important behavior:
 - Preserve player names exactly as user says them when uncertain. Do not translate names.
 - Match spoken names to roster players using name and aka/aliases. Return roster player IDs only when confident.
 - Never invent roster player IDs.
-- If a player is missing from the roster, use add_new_player_suggestion and add a confirmation.
+- Treat phrases like "are playing today", "spielen heute", "kommen heute", "오늘 와", "오늘 뛰어", "for today", "select", "add to today", and bare comma-separated player lists as a request to select those players for today's game.
+- When the command includes a player list, create a select_players action containing EVERY confidently matched existing roster player from that list. Do not drop names just because the user also asks to generate teams.
+- If a listed player is not in the roster, create an add_new_player_suggestion action for that exact name AND add a missing_player confirmation asking whether to add them.
+- If a listed name is ambiguous or similar to multiple roster names/aliases, add an ambiguous_player confirmation instead of guessing.
+- If user says "make 5v5" or similar but only names fewer than 10 total players in the command, still set playersPerTeam 5, but add unresolved missing_context explaining that 10 players are needed for 5v5 and only the named/selected players were found.
 - If user gives a rough skill description like "a bit experienced", "quite good", "Anfänger", "잘해", map it to suggestedSkill on 1-10 if clearly implied. Use null if not clear.
 - Interpret social phrases: "they don't like each other", "they fight", "nicht zusammen", "같이 두지 마" as keep_separate. "came together", "couple", "친구라 같이" as keep_together.
 - Interpret team constraints: "George red", "put George in red", "George trägt rot", "조지는 빨강팀" as lock_player_to_team with teamLabel red.
@@ -222,6 +226,7 @@ export default async function handler(req, res) {
       {
         role: "user",
         content: JSON.stringify({
+          task: "Parse the user command into Fair Teams actions. Pay special attention to every player name mentioned in commandText. If a person is named as playing today, they must appear either as a matched playerRef in select_players or as a missing/ambiguous confirmation.",
           commandText,
           context,
           roster,

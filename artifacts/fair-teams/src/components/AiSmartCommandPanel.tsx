@@ -14,6 +14,21 @@ function actionLabel(actionType: string) {
   return actionType.replace(/_/g, " ");
 }
 
+function actionDetails(action: AiSmartCommandResponse["actions"][number]) {
+  const parts: string[] = [];
+  if (action.playerRefs.length > 0) {
+    parts.push(action.playerRefs.map((player) => player.rosterName || player.spokenName).join(", "));
+  }
+  if (action.newPlayerName) parts.push(action.newPlayerName);
+  if (action.playersPerTeam) parts.push(`${action.playersPerTeam}v${action.playersPerTeam}`);
+  if (action.teamCount) parts.push(`${action.teamCount} teams`);
+  if (action.pairingKind) parts.push(action.pairingKind.replace(/_/g, " "));
+  if (action.teamLabel) parts.push(action.teamLabel);
+  if (action.role) parts.push(action.role.replace(/_/g, " "));
+  if (action.distribution) parts.push(action.distribution.replace(/_/g, " "));
+  return parts.join(" · ");
+}
+
 export function AiSmartCommandPanel({
   players,
   rosterName,
@@ -98,10 +113,7 @@ export function AiSmartCommandPanel({
             {result.actions.map((action, index) => (
               <div key={`${action.type}-${index}`} className="rounded-xl bg-slate-50 px-3 py-2 font-bold">
                 {actionLabel(action.type)}
-                {action.playerRefs.length > 0 ? ` · ${action.playerRefs.map((player) => player.rosterName || player.spokenName).join(", ")}` : ""}
-                {action.playersPerTeam ? ` · ${action.playersPerTeam}v${action.playersPerTeam}` : ""}
-                {action.pairingKind ? ` · ${action.pairingKind.replace(/_/g, " ")}` : ""}
-                {action.teamLabel ? ` · ${action.teamLabel}` : ""}
+                {actionDetails(action) ? ` · ${actionDetails(action)}` : ""}
               </div>
             ))}
           </div>
@@ -111,6 +123,16 @@ export function AiSmartCommandPanel({
               {result.confirmations.map((confirmation) => (
                 <div key={confirmation.id} className="rounded-xl bg-amber-50 px-3 py-2 font-bold text-amber-800">
                   {confirmation.message}
+                </div>
+              ))}
+            </div>
+          )}
+          {result.unresolved.length > 0 && (
+            <div className="mt-3 grid gap-1.5">
+              <div className="text-[10px] font-black uppercase tracking-wide text-rose-500">Couldn’t finish</div>
+              {result.unresolved.map((item, index) => (
+                <div key={`${item.issue}-${index}`} className="rounded-xl bg-rose-50 px-3 py-2 font-bold text-rose-700">
+                  {item.message || item.text}
                 </div>
               ))}
             </div>

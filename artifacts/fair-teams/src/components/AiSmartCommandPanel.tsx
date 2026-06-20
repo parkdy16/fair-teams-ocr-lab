@@ -62,6 +62,31 @@ function parseModeLabel(mode?: AiSmartCommandResponse["parseMode"]) {
   return "AI beta";
 }
 
+function actionCardTitle(action: AiSmartCommandAction) {
+  const capability = getAiCommandCapability(action);
+  if (capability?.label) return capability.label;
+  if (action.type === "no_action") return "No app action needed";
+  if (action.type === "unsupported_action") return "Not a Fair Teams action";
+  return actionLabel(action.type);
+}
+
+function actionCardTone(action: AiSmartCommandAction) {
+  const status = action.supportStatus || getAiCommandCapability(action)?.supportStatus || "unknown";
+  if (status === "executable") return "border-emerald-100 bg-emerald-50 text-emerald-900";
+  if (status === "needs_confirmation") return "border-amber-100 bg-amber-50 text-amber-900";
+  if (status === "unsafe") return "border-rose-100 bg-rose-50 text-rose-900";
+  if (status === "understood_not_wired") return "border-slate-200 bg-slate-50 text-slate-700";
+  return "border-violet-100 bg-violet-50 text-[#102A43]";
+}
+
+function actionPrimaryVerb(action: AiSmartCommandAction) {
+  if (action.type === "club_add_note") return "Add note";
+  if (action.type === "select_players") return "Select";
+  if (action.type === "set_team_size" || action.type === "set_team_count") return "Set";
+  if (action.type === "generate_teams") return "Generate";
+  return "Apply";
+}
+
 export function AiSmartCommandPanel({
   players,
   rosterName,
@@ -132,7 +157,7 @@ export function AiSmartCommandPanel({
           <div className="text-[10px] font-black uppercase tracking-wide text-violet-600">Experimental</div>
           <h3 className="mt-0.5 text-base font-black text-[#102A43]">Fair Teams Assistant</h3>
           <p className="mt-0.5 text-[11px] font-semibold leading-snug text-violet-800/75">
-            Talk naturally. I can chat a little, then turn Fair Teams requests into safe app actions.
+            Talk naturally. I can explain Fair Teams, then show safe action cards when something can be done.
           </p>
         </div>
         <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-violet-700 shadow-sm">AI beta</span>
@@ -173,21 +198,20 @@ export function AiSmartCommandPanel({
           </div>
           {(result.actions.length > 0 || result.confirmations.length > 0 || result.unresolved.length > 0) && (
             <div className="mt-2 text-[10px] font-black uppercase tracking-wide text-slate-400" title={`${result.detectedLanguage} · ${Math.round(result.confidence * 100)}% · ${parseModeLabel(result.parseMode)}`}>
-              Fair Teams actions
+              Action cards
             </div>
           )}
           {result.actions.length > 0 && (
             <div className="mt-2 grid gap-1.5">
               {result.actions.map((action, index) => {
-              const capability = getAiCommandCapability(action);
               const canApply = Boolean(onApplyAction && aiCommandActionCanApply(action));
               const key = `${action.type}-${index}`;
               return (
-                <div key={key} className="rounded-xl bg-slate-50 px-3 py-2 font-bold">
+                <div key={key} className={`rounded-2xl border px-3 py-2.5 font-bold shadow-sm ${actionCardTone(action)}`}>
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <div className="capitalize">{capability?.label || actionLabel(action.type)}</div>
-                      <div className="mt-0.5 text-[10px] font-black uppercase tracking-wide text-slate-500">
+                      <div>{actionCardTitle(action)}</div>
+                      <div className="mt-0.5 text-[10px] font-black uppercase tracking-wide opacity-70">
                         {aiCommandSupportLabel(action)}
                       </div>
                     </div>
@@ -198,17 +222,17 @@ export function AiSmartCommandPanel({
                         disabled={applyingKey === key}
                         onClick={() => applyAction(action, index)}
                       >
-                        {applyingKey === key ? "Applying…" : "Apply"}
+                        {applyingKey === key ? "Applying…" : actionPrimaryVerb(action)}
                       </button>
                     )}
                   </div>
                   {actionDetails(action) && (
-                    <div className="mt-1 text-[11px] font-semibold leading-snug text-slate-600">
+                    <div className="mt-1.5 text-[11px] font-semibold leading-snug opacity-80">
                       {actionDetails(action)}
                     </div>
                   )}
                   {action.reason && (
-                    <div className="mt-1 text-[11px] font-semibold leading-snug text-slate-500">
+                    <div className="mt-1 text-[11px] font-semibold leading-snug opacity-70">
                       {action.reason}
                     </div>
                   )}
@@ -219,7 +243,7 @@ export function AiSmartCommandPanel({
           )}
           {result.confirmations.length > 0 && (
             <div className="mt-3 grid gap-1.5">
-              <div className="text-[10px] font-black uppercase tracking-wide text-amber-600">Needs check</div>
+              <div className="text-[10px] font-black uppercase tracking-wide text-amber-600">I need you to check</div>
               {result.confirmations.map((confirmation) => (
                 <div key={confirmation.id} className="rounded-xl bg-amber-50 px-3 py-2 font-bold text-amber-800">
                   {confirmation.message}
@@ -229,7 +253,7 @@ export function AiSmartCommandPanel({
           )}
           {result.unresolved.length > 0 && (
             <div className="mt-3 grid gap-1.5">
-              <div className="text-[10px] font-black uppercase tracking-wide text-slate-500">Could use a follow-up</div>
+              <div className="text-[10px] font-black uppercase tracking-wide text-slate-500">Follow-up needed</div>
               {result.unresolved.map((item, index) => (
                 <div key={`${item.issue}-${index}`} className="rounded-xl bg-slate-100 px-3 py-2 font-bold text-slate-700">
                   {item.message || item.text}

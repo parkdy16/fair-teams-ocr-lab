@@ -153,5 +153,44 @@
       "Club average/consensus used after ratings",
       "actions empty"
     ]
+  },
+  {
+    "id": "fair-teams-qa-local-vs-shared-roster",
+    "command": "In this app, what is the difference between local roster and shared roster?",
+    "expected": [
+      "app-specific answer",
+      "local/private roster stays on device",
+      "shared roster is online/collaborative",
+      "actions empty"
+    ]
+  },
+  {
+    "id": "fair-teams-qa-lost-and-found",
+    "command": "What is Lost & Found in Smart Import?",
+    "expected": [
+      "app-specific answer",
+      "rescues names missed by OCR",
+      "Review Names or Smart Import context",
+      "do not invent scoring details"
+    ]
+  },
+  {
+    "id": "fair-teams-qa-equipment-board",
+    "command": "How does the Equipment Board work?",
+    "expected": [
+      "app-specific answer",
+      "bags/items",
+      "holders",
+      "organizer equipment tracking"
+    ]
+  },
+  {
+    "id": "fair-teams-qa-cloud-backup-vs-shared",
+    "command": "Is Cloud Backup the same as shared roster collaboration?",
+    "expected": [
+      "app-specific answer",
+      "cloud backup is private backup/restore",
+      "shared roster collaboration is separate"
+    ]
   }
 ]

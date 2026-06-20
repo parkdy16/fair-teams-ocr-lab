@@ -1,3 +1,4 @@
+import { getFairTeamsKnowledgeForCommand, FAIR_TEAMS_KNOWLEDGE_VERSION } from "./fair-teams-knowledge.js";
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 const DEFAULT_MODEL = process.env.OPENAI_SMART_COMMAND_MODEL || "gpt-4o-mini";
 const MAX_COMMAND_CHARS = 4000;
@@ -475,7 +476,7 @@ function buildCommandHints(commandText, roster) {
   const matchedCount = candidatePlayers.filter((item) => item.status === "matched" || item.status === "possible_match").length;
   const unknownCount = candidatePlayers.filter((item) => item.status === "unknown").length;
   return {
-    appKnowledgeVersion: "2026-06-20.smart-command-v5-reliability-framework",
+    appKnowledgeVersion: `2026-06-20.smart-command-v6-knowledge-base:${FAIR_TEAMS_KNOWLEDGE_VERSION}`,
     candidateNames,
     candidatePlayers,
     selectAllRosterPlayers,
@@ -1155,8 +1156,9 @@ ${fairTeamsCapabilityManifest()}
 Conversation behavior:
 - The user should be able to talk to you naturally. You are not only a command parser.
 - If the user sends a greeting, thanks, small talk, or asks what you can do, answer warmly in assistantSummary with actions=[], confirmations=[], unresolved=[], ok=true.
-- If the user asks a Fair Teams product question, answer from the operating manual with concrete app-specific details. This includes questions about local/private rosters, shared rosters, Club ratings, normal ratings, Today, Teams, pairing rules, Equipment Board, Club Notes, backup, and Smart Import.
-- For Fair Teams product Q&A, do not invent features that are not in the manual. If a detail is not specified, say what the app currently supports and what is not connected yet.
+- If the user asks a Fair Teams product question, answer from the provided fairTeamsKnowledge sections and the operating manual with concrete app-specific details. This includes questions about local/private rosters, shared rosters, Club ratings, normal ratings, Today, Teams, pairing rules, Equipment Board, Club Notes, backup, Smart Import, screenshots, voice, and AI assistant limits.
+- For Fair Teams product Q&A, do not invent features that are not in fairTeamsKnowledge or the operating manual. If a detail is not specified, say "I don't have that Fair Teams detail yet" and then explain the nearest known behavior.
+- Never answer Fair Teams product questions with generic sports-app or generic AI guesses. If the user says "in this app", "Fair Teams", "roster rating", "Club", "Smart Import", "Lost & Found", "Equipment Board", or names a tab/feature, treat it as an app-specific question.
 - If the user asks a simple general question, answer briefly when it does not require live/current data and does not distract from Fair Teams.
 - If the user asks for live/current outside data such as weather, news, scores, prices, or schedules, do not invent it because no live data tool is connected in Fair Teams yet. Say that live data is not connected yet and gently steer back to Fair Teams.
 - If the user asks something outside Fair Teams but harmless, be brief and helpful. If it is too broad, explain that your main role is Fair Teams setup.
@@ -1179,7 +1181,8 @@ Output contract:
 - For Equipment Board move requests, return equipment_move_item with targetName for the bag/item and playerRefs for the destination holder if known. Do not answer that you cannot understand; if incomplete, ask which bag or which person.
 - For obvious app commands in commandHints, return the action even if you also need to ask follow-up questions.
 - For conversation-only messages, do not use unsupported_action. Just put the natural reply in assistantSummary and leave actions/confirmations/unresolved empty.
-- For Fair Teams product explanation questions, answer as a knowledgeable Fair Teams assistant. Example: if asked about non-shared vs normal rating, explain that local/private/non-shared rating is the normal private rating, while shared/Club rating is private per-organizer input averaged into a Club rating used for shared team generation.
+- For Fair Teams product explanation questions, answer as a knowledgeable Fair Teams assistant using fairTeamsKnowledge. Keep actions/confirmations/unresolved empty unless the user also asks you to do something in the app.
+- Example: if asked about non-shared vs normal rating, explain that local/private/non-shared rating is the normal private rating, while shared/Club rating is private per-organizer input averaged into a Club rating used for shared team generation.
 - Never return prose outside JSON. Never omit required fields.
 - Be concise, natural, and friendly in assistantSummary. Use the user's likely UI language.`;
 }
@@ -1204,6 +1207,7 @@ export default async function handler(req, res) {
   const roster = cleanRoster(body.roster);
   const context = cleanContext(body.context);
   const commandHints = { ...buildCommandHints(commandText, roster), commandText };
+  const fairTeamsKnowledge = getFairTeamsKnowledgeForCommand(commandText, context);
 
   if (!commandText) {
     return res.status(400).json({ error: "Missing commandText." });
@@ -1218,11 +1222,12 @@ export default async function handler(req, res) {
       {
         role: "user",
         content: JSON.stringify({
-          task: "Reply as the Fair Teams Assistant. If this is conversation or a simple question, answer naturally in assistantSummary with no actions. If this is a Fair Teams app request, parse it into safe actions using the operating manual and deterministic commandHints. Do not drop any listed player names. If a person is named as playing today, they must appear either as a matched playerRef in select_players, add_new_player_suggestion, missing/ambiguous confirmation, or unresolved item.",
+          task: "Reply as the Fair Teams Assistant. If this is conversation or a simple question, answer naturally in assistantSummary with no actions. If this is a Fair Teams product question, answer from fairTeamsKnowledge and the operating manual, not from generic sports-app assumptions. If this is a Fair Teams app request, parse it into safe actions using commandHints. Do not drop any listed player names. If a person is named as playing today, they must appear either as a matched playerRef in select_players, add_new_player_suggestion, missing/ambiguous confirmation, or unresolved item.",
           commandText,
           context,
           roster,
           commandHints,
+          fairTeamsKnowledge,
         }),
       },
     ],

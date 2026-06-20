@@ -4278,12 +4278,6 @@ export function TodayTab({
                         </div>
                       </div>
 
-                      {cropHelpOpen && (
-                        <div className="mt-1 rounded-xl border border-sky-100 bg-sky-50 px-2 py-1.5 text-[10px] font-bold leading-tight text-sky-900 landscape:text-[9px]">
-                          Drag around names. Use <b>②</b> for two separate lists. Drag inside to move; corners to resize.
-                        </div>
-                      )}
-
                       <div className="mt-1.5 flex items-center gap-1.5 overflow-x-auto pb-0.5 landscape:mt-0 landscape:flex-1 landscape:flex-col landscape:items-stretch landscape:overflow-x-hidden landscape:overflow-y-auto landscape:pb-0">
                         <div className="flex shrink-0 items-center gap-1 landscape:flex-col landscape:items-stretch">
                           <span className="px-0.5 text-[8px] font-black uppercase tracking-wide text-muted-foreground landscape:text-center">
@@ -4410,13 +4404,19 @@ export function TodayTab({
                       </div>
                     </div>
 
+                    {cropHelpOpen && (
+                      <div className="pointer-events-none absolute left-2 right-2 top-[calc(env(safe-area-inset-top)+48px)] z-30 rounded-2xl border border-sky-100 bg-sky-50/95 px-3 py-2 text-[10px] font-bold leading-snug text-sky-900 shadow-lg backdrop-blur landscape:left-[calc(env(safe-area-inset-left)+6.3rem)] landscape:right-2 landscape:top-2 landscape:max-w-sm">
+                        Drag to select where names are. Use Image 1/2 to switch screenshots. If names are in separate areas, like two columns, tap <b>②</b> and draw Box 1 and Box 2 separately.
+                      </div>
+                    )}
+
                     {selectedScreenshotPreviews[activeCropIndex] && (
                       <>
-                        <div className="min-h-0 min-w-0 flex-1 overflow-hidden bg-slate-950 p-0.5">
+                        <div className="min-h-0 min-w-0 flex-1 overflow-hidden bg-slate-950">
                           <div className="flex h-full w-full items-center justify-center overflow-hidden">
                             <div
                               ref={cropSurfaceRef}
-                              className="relative flex max-h-full max-w-full touch-none items-center justify-center overflow-hidden"
+                              className="relative inline-flex max-h-full max-w-full touch-none items-center justify-center overflow-hidden"
                               onPointerDown={(event) =>
                                 startCropDrag(activeCropIndex, event)
                               }

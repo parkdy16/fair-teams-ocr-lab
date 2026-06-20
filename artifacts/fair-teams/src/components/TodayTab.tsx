@@ -11,6 +11,7 @@ import {
   ChevronRight,
   Clock3,
   ClipboardList,
+  Eye,
   Image as ImageIcon,
   Mic,
   Search,
@@ -457,6 +458,28 @@ const OCR_LEADING_NAME_NOISE = new Set([
   "sir",
   "jr",
   "sr",
+]);
+
+// Meetup screenshots often place RSVP answers or tiny UI fragments directly
+// before/after the bold attendee name in the OCR text. Keep the chips visible
+// in Review Names, but preselect only the likely name words.
+const OCR_REVIEW_LEADING_NAME_NOISE = new Set([
+  "yup",
+  "yes",
+  "yess",
+  "ja",
+  "jaaa",
+  "can",
+  "eyed",
+  "agree",
+  "agreed",
+]);
+
+const OCR_REVIEW_TRAILING_NAME_NOISE = new Set([
+  "ory",
+  "vee",
+  "srogey",
+  "is",
 ]);
 
 const OCR_NAME_PREFIX_PHRASES = [
@@ -1824,6 +1847,8 @@ export function TodayTab({
   const [selectedScreenshotPreviews, setSelectedScreenshotPreviews] = useState<
     Array<{ name: string; url: string }>
   >([]);
+  const [scannedThumbnailsExpanded, setScannedThumbnailsExpanded] =
+    useState(false);
   const [activeCropIndex, setActiveCropIndex] = useState(0);
   const [cropBoxes, setCropBoxes] = useState<Record<number, CropBox>>({});
   const [cropDragStart, setCropDragStart] = useState<{
@@ -2091,6 +2116,12 @@ export function TodayTab({
       // keep every word visible as a tap-to-restore chip so real names like
       // "Abou George" are not silently destroyed.
       if (index === 0 && (key === "about" || key === "could")) return false;
+      if (index === 0 && OCR_REVIEW_LEADING_NAME_NOISE.has(key)) return false;
+      if (
+        index === tokens.length - 1 &&
+        OCR_REVIEW_TRAILING_NAME_NOISE.has(key)
+      )
+        return false;
       if (index === 0 && key === "see" && nextKey === "more") return false;
       if (index === 1 && tokenKey(tokens[0]) === "see" && key === "more")
         return false;
@@ -2291,6 +2322,7 @@ export function TodayTab({
     setOcrProgress(0);
     setOcrStatus("");
     setOcrScreenshotReport([]);
+    setScannedThumbnailsExpanded(false);
     setShowRawOcrText(false);
     setManualRawOcrName("");
     setManualOcrCandidateNames([]);
@@ -2852,6 +2884,7 @@ export function TodayTab({
     setOcrProgress(0);
     setOcrStatus("Starting scan…");
     setOcrScreenshotReport([]);
+    setScannedThumbnailsExpanded(false);
     setManualRawOcrName("");
     setManualOcrCandidateNames([]);
     setRawOcrAddedNames([]);
@@ -4026,18 +4059,71 @@ export function TodayTab({
                       {selectedScreenshotNames.length === 1 ? "" : "s"}{" "}
                       {ocrText ? "scanned" : "loaded"}
                     </div>
-                    {!ocrRunning && !ocrText && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={clearOcrSelection}
-                        className="h-7 shrink-0 px-2 text-[10px] font-black"
-                      >
-                        Clear
-                      </Button>
-                    )}
+                    <div className="flex shrink-0 items-center gap-1">
+                      {selectedScreenshotPreviews.length > 0 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() =>
+                            setScannedThumbnailsExpanded((open) => !open)
+                          }
+                          className="h-7 w-7 rounded-lg text-muted-foreground"
+                          aria-label={
+                            scannedThumbnailsExpanded
+                              ? "Hide uploaded screenshots"
+                              : "Show uploaded screenshots"
+                          }
+                          title={
+                            scannedThumbnailsExpanded
+                              ? "Hide screenshots"
+                              : "Show screenshots"
+                          }
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                      {!ocrRunning && !ocrText && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={clearOcrSelection}
+                          className="h-7 shrink-0 px-2 text-[10px] font-black"
+                        >
+                          Clear
+                        </Button>
+                      )}
+                    </div>
                   </div>
+                  {scannedThumbnailsExpanded &&
+                    selectedScreenshotPreviews.length > 0 && (
+                      <div className="mt-2 flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                        {selectedScreenshotPreviews.map((preview, index) => (
+                          <button
+                            key={`${preview.name}-scanned-preview-${index}`}
+                            type="button"
+                            className="w-20 shrink-0 overflow-hidden rounded-xl border bg-background text-left shadow-sm active:scale-[0.99]"
+                            onClick={() => {
+                              setActiveCropIndex(index);
+                              setScannedThumbnailsExpanded(false);
+                            }}
+                            title={preview.name}
+                          >
+                            <div className="aspect-[9/16] bg-slate-100">
+                              <img
+                                src={preview.url}
+                                alt={preview.name}
+                                className="h-full w-full object-cover"
+                              />
+                            </div>
+                            <div className="truncate px-1.5 py-1 text-[9px] font-bold text-muted-foreground">
+                              {index + 1}. {preview.name}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                 </div>
               )}
 

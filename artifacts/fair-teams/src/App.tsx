@@ -29,6 +29,7 @@ import { TodayTab } from "@/components/TodayTab";
 import { TeamsTab } from "@/components/TeamsTab";
 import { ClubTab } from "@/components/ClubTab";
 import type { PairingRule } from "@/lib/types";
+import type { AiSmartCommandAction } from "@/lib/aiSmartCommandTypes";
 import { FirebaseSharedRosterAuthCard } from "@/components/FirebaseSharedRosterAuthCard";
 import { FirebaseSharedRosterPublishCard } from "@/components/FirebaseSharedRosterPublishCard";
 import { Button } from "@/components/ui/button";
@@ -400,6 +401,7 @@ function App() {
   }, []);
 
   const [activeTab, setActiveTab] = useState<AppTab>("today");
+  const [aiTeamSetup, setAiTeamSetup] = useState<{ token: number; teamCount: number | null }>({ token: 0, teamCount: null });
   const [clubBackTargetOpen, setClubBackTargetOpen] = useState(false);
   const [openPairingRulesToken, setOpenPairingRulesToken] = useState(0);
   const activeTabRef = useRef<AppTab>("today");
@@ -1193,6 +1195,94 @@ function App() {
           : roster,
       ),
     }));
+  };
+
+  const prepareTeamsFromAi = (teamCount: number) => {
+    const safeTeamCount = Math.min(6, Math.max(2, Math.round(teamCount)));
+    setAiTeamSetup({ token: Date.now(), teamCount: safeTeamCount });
+    setActiveTab("teams");
+    return safeTeamCount;
+  };
+
+  const applyAiSmartCommandActionFromApp = async (action: AiSmartCommandAction) => {
+    if (action.type === "select_players") {
+      const playerIds = new Set(
+        action.playerRefs
+          .map((playerRef) => playerRef.playerId)
+          .filter((playerId): playerId is string => Boolean(playerId)),
+      );
+      if (playerIds.size === 0) {
+        throw new Error("I understood a player-selection request, but could not match any roster players.");
+      }
+
+      replacePlayers(
+        players.map((player) =>
+          playerIds.has(player.id)
+            ? { ...player, attending: true, todayStatus: "here" }
+            : player,
+        ),
+      );
+      setTodayRosterChosen(true);
+      setActiveTab("today");
+      return `Selected ${playerIds.size} player${playerIds.size === 1 ? "" : "s"} for Today.`;
+    }
+
+    if (action.type === "set_team_count") {
+      if (typeof action.teamCount !== "number") {
+        throw new Error("I understood a team-count request, but no team count was found.");
+      }
+      const safeTeamCount = prepareTeamsFromAi(action.teamCount);
+      return `Prepared the Teams tab for ${safeTeamCount} team${safeTeamCount === 1 ? "" : "s"}.`;
+    }
+
+    if (action.type === "set_team_size") {
+      const playersPerTeam = action.playersPerTeam;
+      if (typeof playersPerTeam !== "number" || playersPerTeam < 1) {
+        throw new Error("I understood a team-size request, but no team size was found.");
+      }
+      const selectedCount = players.filter((player) => player.attending).length;
+      if (selectedCount < playersPerTeam * 2) {
+        throw new Error(`${playersPerTeam}v${playersPerTeam} needs at least ${playersPerTeam * 2} selected players. Select more players first.`);
+      }
+      if (selectedCount % playersPerTeam !== 0) {
+        throw new Error(`${playersPerTeam}v${playersPerTeam} does not fit ${selectedCount} selected players evenly. Select ${playersPerTeam * 2}, ${playersPerTeam * 3}, or ${playersPerTeam * 4} players, or use a team-count command instead.`);
+      }
+      const safeTeamCount = prepareTeamsFromAi(selectedCount / playersPerTeam);
+      return `Prepared ${safeTeamCount} team${safeTeamCount === 1 ? "" : "s"} for ${playersPerTeam}v${playersPerTeam}.`;
+    }
+
+    if (action.type === "add_pairing_rule") {
+      const kind = action.pairingKind === "keep_together" ? "together" : action.pairingKind === "keep_separate" ? "separate" : null;
+      const playerIds = action.playerRefs
+        .map((playerRef) => playerRef.playerId)
+        .filter((playerId): playerId is string => Boolean(playerId));
+      const [playerAId, playerBId] = playerIds;
+      if (!kind || !playerAId || !playerBId || playerAId === playerBId) {
+        throw new Error("I understood a pairing rule, but could not match two roster players.");
+      }
+
+      const duplicate = pairingRules.some((rule) => {
+        const samePlayers =
+          (rule.playerAId === playerAId && rule.playerBId === playerBId) ||
+          (rule.playerAId === playerBId && rule.playerBId === playerAId);
+        return rule.kind === kind && samePlayers;
+      });
+      if (duplicate) {
+        return "That pairing rule already exists.";
+      }
+
+      const nextRule: PairingRule = {
+        id: `ai-pair-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        kind,
+        playerAId,
+        playerBId,
+        createdAt: new Date().toISOString(),
+      };
+      replacePairingRules([...pairingRules, nextRule]);
+      return kind === "together" ? "Added a Keep Together rule." : "Added a Keep Separate rule.";
+    }
+
+    throw new Error("Fair Teams understands this, but it is not wired to apply yet.");
   };
 
 
@@ -3307,6 +3397,8 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 isSharedRoster={activeRosterIsFirebaseShared}
                 sharedRosterId={activeFirebaseSource?.firebaseRosterId}
                 onOpenClubRatings={() => setActiveTab("club")}
+                aiTeamSetupToken={aiTeamSetup.token}
+                aiTeamCount={aiTeamSetup.teamCount}
               />
             </TabsContent>
             <TabsContent
@@ -3330,6 +3422,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   setOpenPairingRulesToken((token) => token + 1);
                 }}
                 onOpenTeams={() => setActiveTab("teams")}
+                onApplyAiSmartCommandAction={applyAiSmartCommandActionFromApp}
                 sharedToolsNode={(
                   <FirebaseSharedRosterPublishCard
                     variant="compact"

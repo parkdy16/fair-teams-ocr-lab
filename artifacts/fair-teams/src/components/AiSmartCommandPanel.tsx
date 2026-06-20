@@ -18,7 +18,7 @@ type AiSmartCommandPanelProps = {
   rosterMode?: "local" | "shared";
   activeTab?: string;
   onParsed?: (result: AiSmartCommandResponse) => void;
-  onApplyAction?: (action: AiSmartCommandAction) => Promise<void> | void;
+  onApplyAction?: (action: AiSmartCommandAction) => Promise<string | void> | string | void;
 };
 
 function actionLabel(actionType: string) {
@@ -141,8 +141,8 @@ export function AiSmartCommandPanel({
     setError("");
     setApplyMessage("");
     try {
-      await onApplyAction(action);
-      setApplyMessage("Applied.");
+      const message = await onApplyAction(action);
+      setApplyMessage(typeof message === "string" && message.trim() ? message : "Applied.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not apply this action yet.");
     } finally {

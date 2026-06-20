@@ -178,6 +178,8 @@ type TeamsTabProps = {
   isSharedRoster?: boolean;
   sharedRosterId?: string;
   onOpenClubRatings?: () => void;
+  aiTeamSetupToken?: number;
+  aiTeamCount?: number | null;
 };
 
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number | [number, number, number, number]) {
@@ -397,7 +399,7 @@ function drawTextBadge(
 }
 
 
-export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, sharedRosterId, onOpenClubRatings }: TeamsTabProps) {
+export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, sharedRosterId, onOpenClubRatings, aiTeamSetupToken = 0, aiTeamCount = null }: TeamsTabProps) {
   const [numTeams, setNumTeams] = useState<number>(2);
   const [fieldSize, setFieldSize] = useState<FieldSize>(() => loadFieldSize());
   const [showFieldHelp, setShowFieldHelp] = useState(false);
@@ -422,6 +424,16 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
   useEffect(() => {
     localStorage.setItem(FIELD_SIZE_STORAGE_KEY, fieldSize);
   }, [fieldSize]);
+
+  useEffect(() => {
+    if (!aiTeamSetupToken || typeof aiTeamCount !== "number") return;
+    const safeTeamCount = Math.min(6, Math.max(2, Math.round(aiTeamCount)));
+    setNumTeams(safeTeamCount);
+    setSwap(null);
+    setTeamStatsOpen({});
+    setShowPlayerSkillNumbers(false);
+    setPresentTeamsOpen(false);
+  }, [aiTeamSetupToken, aiTeamCount]);
 
   useEffect(() => {
     if (!isSharedRoster || !sharedRosterId) {

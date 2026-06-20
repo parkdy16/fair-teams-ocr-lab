@@ -65,6 +65,7 @@ type ClubTabProps = {
   pairingRules?: PairingRule[];
   onOpenPairingRules?: () => void;
   onOpenTeams?: () => void;
+  onApplyAiSmartCommandAction?: (action: AiSmartCommandAction) => Promise<string | void> | string | void;
 };
 
 type EquipmentHolder = {
@@ -495,6 +496,8 @@ export function ClubTab({
   equipmentHolderNamesByEmail = {},
   pairingRules = [],
   onOpenPairingRules,
+  onOpenTeams,
+  onApplyAiSmartCommandAction,
 }: ClubTabProps) {
   const [clubRatingSummaries, setClubRatingSummaries] = useState<
     ClubRatingSummary[]
@@ -776,7 +779,12 @@ export function ClubTab({
   }, [clubRatingsEnabled, sharedRosterId]);
 
   useEffect(() => {
-    if (!clubRatingsEnabled || !sharedRosterId) {
+    const authUser = getFairTeamsAuth().currentUser;
+    const notesReady = Boolean(
+      isSharedRoster && sharedRosterId && (clubUser?.email || authUser?.email),
+    );
+
+    if (!notesReady || !sharedRosterId) {
       setClubNotes([]);
       setClubNotesError("");
       return;
@@ -795,7 +803,7 @@ export function ClubTab({
       );
       return;
     }
-  }, [clubRatingsEnabled, sharedRosterId]);
+  }, [clubUser?.email, isSharedRoster, sharedRosterId]);
 
   const myRatingByPlayerId = useMemo(() => {
     return new Map(myClubRatings.map((rating) => [rating.playerId, rating]));
@@ -863,9 +871,22 @@ export function ClubTab({
       ? "Sign in to rate this shared roster."
       : "Available when this roster is shared.";
   const previewClubNotes = clubNotes.slice(0, 3);
-  const currentUserUid = getFairTeamsAuth().currentUser?.uid || "";
+  const authUser = getFairTeamsAuth().currentUser;
+  const currentUserUid = authUser?.uid || "";
+  const clubNotesEnabled = Boolean(
+    isSharedRoster && sharedRosterId && (clubUser?.email || authUser?.email),
+  );
+  const clubNotesUnavailableReason = !isSharedRoster
+    ? "Club Notes belong to shared rosters. Open or create a shared roster first."
+    : !sharedRosterId
+      ? "This shared roster is still connecting. Try again in a moment."
+      : !authReady
+        ? "Connecting your Fair Teams account. Try again in a moment."
+        : !(clubUser?.email || authUser?.email)
+          ? "Sign in to add Club Notes."
+          : "";
   const canAddClubNote =
-    clubRatingsEnabled && clubNoteDraft.trim().length > 0 && !clubNoteSaving;
+    clubNotesEnabled && clubNoteDraft.trim().length > 0 && !clubNoteSaving;
   const canRemoveClubNote = (note: ClubNote) =>
     Boolean(currentUserUid && note.createdByUid === currentUserUid);
 
@@ -985,7 +1006,7 @@ export function ClubTab({
   };
 
   const addSharedClubNote = async () => {
-    if (!sharedRosterId || !canAddClubNote) return;
+    if (!sharedRosterId || !clubNotesEnabled || !canAddClubNote) return;
     setClubNoteSaving(true);
     setClubNotesError("");
     try {
@@ -1002,6 +1023,9 @@ export function ClubTab({
 
   const applyAiSmartCommandAction = async (action: AiSmartCommandAction) => {
     if (action.type !== "club_add_note") {
+      if (onApplyAiSmartCommandAction) {
+        return await onApplyAiSmartCommandAction(action);
+      }
       throw new Error("Fair Teams understands this, but it is not wired to apply yet.");
     }
 
@@ -1010,8 +1034,8 @@ export function ClubTab({
       throw new Error("I understood a Club note request, but no note text was found.");
     }
 
-    if (!sharedRosterId || !clubRatingsEnabled) {
-      throw new Error("Club Notes can be added by AI after you are signed in on a shared roster.");
+    if (!sharedRosterId || !clubNotesEnabled) {
+      throw new Error(clubNotesUnavailableReason || "Club Notes are not ready yet.");
     }
 
     setClubNoteSaving(true);
@@ -1019,6 +1043,7 @@ export function ClubTab({
     try {
       await addClubNote(sharedRosterId, noteText);
       setClubNoteDraft("");
+      return "Added to Club Notes.";
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Could not add Club note.";
@@ -1683,7 +1708,7 @@ export function ClubTab({
               type="button"
               className="h-9 rounded-full bg-[#c8772a] px-3 text-[11px] font-black text-white hover:bg-[#af691f]"
               onClick={() => setClubNotesOpen(true)}
-              disabled={!clubRatingsEnabled}
+              disabled={!clubNotesEnabled}
             >
               Post-it
             </Button>
@@ -1844,11 +1869,11 @@ export function ClubTab({
               <Textarea
                 value={clubNoteDraft}
                 onChange={(event) => setClubNoteDraft(event.target.value)}
-                disabled={!clubRatingsEnabled}
+                disabled={!clubNotesEnabled}
                 placeholder={
-                  clubRatingsEnabled
+                  clubNotesEnabled
                     ? "Puma ball died today — Joon"
-                    : "Shared notes appear after sign-in."
+                    : clubNotesUnavailableReason || "Shared notes appear after sign-in."
                 }
                 className="min-h-[3.2rem] flex-1 resize-none border-0 bg-transparent p-1 text-sm font-semibold shadow-none focus-visible:ring-0"
                 maxLength={160}

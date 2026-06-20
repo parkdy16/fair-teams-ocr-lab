@@ -1,4 +1,4 @@
-export type AiSmartCommandLanguage = "en" | "de" | "ko" | "mixed" | "unknown";
+export type AiSmartCommandLanguage = string;
 
 export type AiSmartCommandActionType =
   | "select_players"

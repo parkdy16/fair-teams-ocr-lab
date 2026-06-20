@@ -1,3 +1,5 @@
+declare const process: { env: Record<string, string | undefined> };
+
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 const DEFAULT_MODEL = process.env.OPENAI_SMART_COMMAND_MODEL || "gpt-4o-mini";
 const MAX_COMMAND_CHARS = 4000;
@@ -93,7 +95,7 @@ const jsonSchema = {
     properties: {
       schemaVersion: { type: "number" },
       ok: { type: "boolean" },
-      detectedLanguage: { type: "string", enum: ["en", "de", "ko", "mixed", "unknown"] },
+      detectedLanguage: { type: "string" },
       normalizedIntent: { type: "string" },
       assistantSummary: { type: "string" },
       confidence: { type: "number" },
@@ -182,7 +184,7 @@ function systemPrompt() {
   return `You are Fair Teams Smart Command, a multilingual command parser for a casual football team-making app.
 
 Important behavior:
-- The user may speak or type in English, German, Korean, or mixed language. Understand all of them.
+- The user may speak or type in any language, including mixed-language commands. Understand the intent and return the same action schema.
 - Return the same language-independent JSON action schema regardless of input language.
 - Preserve player names exactly as user says them when uncertain. Do not translate names.
 - Match spoken names to roster players using name and aka/aliases. Return roster player IDs only when confident.

@@ -113,7 +113,7 @@ function actionPrimaryVerb(action: AiSmartCommandAction) {
   return "Apply";
 }
 
-const AI_ASSISTANT_VERSION_LABEL = "AI beta · v1.6 clean names";
+const AI_ASSISTANT_VERSION_LABEL = "AI beta · v1.7 edit names";
 
 type AiRosterMatch = {
   player: AiSmartCommandRosterPlayer;
@@ -393,6 +393,40 @@ function isAiNameReviewAction(action: AiSmartCommandAction) {
   return ["select_players", "unselect_players", "mark_players_late", "add_pairing_rule", "lock_player_to_team"].includes(action.type) && action.playerRefs.length > 0;
 }
 
+function buildAiReviewOptions(heardName: string, players: AiSmartCommandRosterPlayer[]): AiReviewOption[] {
+  const ranked = rankedOcrStyleRosterMatches(heardName, players, 5);
+  const seen = new Set<string>();
+  const options: AiReviewOption[] = [];
+  for (const match of ranked) {
+    if (seen.has(match.player.id)) continue;
+    seen.add(match.player.id);
+    options.push({
+      kind: "existing",
+      playerId: match.player.id,
+      rosterName: match.player.name,
+      heardName,
+      score: match.score,
+    });
+  }
+  options.push({ kind: "new", heardName, rosterName: heardName });
+  options.push({ kind: "skip", heardName });
+  return options;
+}
+
+function rebuildAiReviewItemWithEditedName(item: AiReviewItem, editedName: string | undefined, players: AiSmartCommandRosterPlayer[]): AiReviewItem {
+  const heardName = displayAiHeardName(editedName || item.heardName);
+  if (!heardName) return item;
+  return {
+    ...item,
+    heardName,
+    options: buildAiReviewOptions(heardName, players),
+  };
+}
+
+function applyAiReviewNameEdits(items: AiReviewItem[], edits: Record<string, string>, players: AiSmartCommandRosterPlayer[]) {
+  return items.map((item) => rebuildAiReviewItemWithEditedName(item, edits[item.key], players));
+}
+
 function buildAiReviewItems(result: AiSmartCommandResponse | null, players: AiSmartCommandRosterPlayer[]): AiReviewItem[] {
   if (!result || !players.length) return [];
   const byKey = new Map<string, AiReviewItem>();
@@ -423,25 +457,10 @@ function buildAiReviewItems(result: AiSmartCommandResponse | null, players: AiSm
     if (item.issue === "unknown_player" || item.issue === "ambiguous_player") addHeardName(item.text);
   }
 
-  const items = Array.from(byKey.values()).map((item) => {
-    const ranked = rankedOcrStyleRosterMatches(item.heardName, players, 5);
-    const seen = new Set<string>();
-    const options: AiReviewOption[] = [];
-    for (const match of ranked) {
-      if (seen.has(match.player.id)) continue;
-      seen.add(match.player.id);
-      options.push({
-        kind: "existing",
-        playerId: match.player.id,
-        rosterName: match.player.name,
-        heardName: item.heardName,
-        score: match.score,
-      });
-    }
-    options.push({ kind: "new", heardName: item.heardName, rosterName: item.heardName });
-    options.push({ kind: "skip", heardName: item.heardName });
-    return { ...item, options };
-  });
+  const items = Array.from(byKey.values()).map((item) => ({
+    ...item,
+    options: buildAiReviewOptions(item.heardName, players),
+  }));
 
   return items.filter((item) => item.options.some((option) => option.kind === "existing") || item.heardName.length >= 2);
 }
@@ -744,6 +763,7 @@ export function AiSmartCommandPanel({
   const [showTodayShortcut, setShowTodayShortcut] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [reviewSelections, setReviewSelections] = useState<Record<string, string>>({});
+  const [reviewNameEdits, setReviewNameEdits] = useState<Record<string, string>>({});
 
   const placeholder = useMemo(() => {
     return "Talk to Fair Teams… try: hey there · how does this work? · George red · make 5v5 teams";
@@ -781,19 +801,22 @@ export function AiSmartCommandPanel({
     });
   }, [enabled, storageKey, commandText, voiceTranscript, error, result, applyMessage, showTodayShortcut, busy, voiceBusy, recording]);
 
-  const aiReviewItems = useMemo(() => buildAiReviewItems(result, players), [result, players]);
+  const baseAiReviewItems = useMemo(() => buildAiReviewItems(result, players), [result, players]);
+  const aiReviewItems = useMemo(() => applyAiReviewNameEdits(baseAiReviewItems, reviewNameEdits, players), [baseAiReviewItems, reviewNameEdits, players]);
   const hasAiReviewItems = aiReviewItems.length > 0;
   const aiReviewStats = useMemo(() => getAiReviewStats(aiReviewItems, reviewSelections), [aiReviewItems, reviewSelections]);
   const selectedPlayerIdCounts = useMemo(() => getSelectedPlayerIdCounts(aiReviewItems, reviewSelections), [aiReviewItems, reviewSelections]);
 
   useEffect(() => {
-    if (!hasAiReviewItems) {
+    if (!baseAiReviewItems.length) {
       setReviewOpen(false);
       setReviewSelections({});
+      setReviewNameEdits({});
       return;
     }
-    setReviewSelections(getAiReviewDefaultSelections(aiReviewItems));
-  }, [hasAiReviewItems, aiReviewItems]);
+    setReviewNameEdits({});
+    setReviewSelections(getAiReviewDefaultSelections(baseAiReviewItems));
+  }, [baseAiReviewItems]);
 
   const clearAssistantSession = () => {
     clearPersistedAiAssistantState(storageKey);
@@ -805,6 +828,14 @@ export function AiSmartCommandPanel({
     setShowTodayShortcut(false);
     setReviewOpen(false);
     setReviewSelections({});
+    setReviewNameEdits({});
+  };
+
+  const updateReviewHeardName = (item: AiReviewItem, value: string) => {
+    setReviewNameEdits((current) => ({ ...current, [item.key]: value }));
+    const updated = rebuildAiReviewItemWithEditedName(item, value, players);
+    const firstExisting = updated.options.find((option) => option.kind === "existing");
+    setReviewSelections((current) => ({ ...current, [item.key]: firstExisting?.playerId || "new" }));
   };
 
   const applyReviewedAiNames = async () => {
@@ -1206,8 +1237,20 @@ export function AiSmartCommandPanel({
                   <div key={item.key} className="rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2.5">
                     <div className="flex items-start justify-between gap-2">
                       <div>
-                        <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Heard</div>
-                        <div className="text-sm font-black text-[#102A43]">{item.heardName}</div>
+                        <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Heard · tap to correct</div>
+                        <input
+                          type="text"
+                          value={reviewNameEdits[item.key] ?? item.heardName}
+                          onChange={(event) => updateReviewHeardName(item, event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              event.currentTarget.blur();
+                            }
+                          }}
+                          className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-sm font-black text-[#102A43] outline-none focus:border-violet-300 focus:ring-2 focus:ring-violet-100"
+                          placeholder="Correct heard name"
+                        />
                       </div>
                       <button
                         type="button"
@@ -1226,6 +1269,9 @@ export function AiSmartCommandPanel({
                         </div>
                       ) : null;
                     })()}
+                    <div className="mt-2 text-[10px] font-bold leading-snug text-slate-400">
+                      Edit the heard name to refresh roster suggestions.
+                    </div>
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       {item.options.map((option) => {
                         const value = option.kind === "existing" ? option.playerId! : option.kind;

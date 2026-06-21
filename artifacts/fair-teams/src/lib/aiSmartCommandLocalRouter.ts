@@ -236,6 +236,7 @@ function stripCommandNoise(value: string) {
     .replace(/\b(okay|ok|yes|yeah|yep|please|pls|uh|um|erm|hey|fair teams?)\b/g, " ")
     .replace(/\b(current|today|the)\s+(?:today\s+)?tab\b/g, " ")
     .replace(/\b(?:from|in|on|to)\s+(?:the\s+)?(?:current\s+)?today(?:\s+tab)?\b/g, " ")
+    .replace(/\b(?:who\s+else|and\s+who\s+else|who\s+is\s+else)\b/g, " ")
     .replace(/\b(?:as|like|for)\s+(?:a\s+)?new\s+(?:player|person|name|roster\s+player)\b/g, " ")
     .replace(/\b(?:new\s+player|new\s+person|new\s+name|roster\s+player)\b/g, " ")
     .replace(/\b(that s it|thats it|that is it|that s all|thats all|that is all|and that s it|and thats it|and that is it)\b.*$/g, " ")
@@ -246,7 +247,7 @@ function stripCommandNoise(value: string) {
 function cleanNameChunkForMatching(value: string) {
   let text = stripCommandNoise(value);
   text = text
-    .replace(/\b(players?|people|members|present|currently|playing|here|fair|balanced|teams?|make|create|generate|prepare|build|sort|of|a|the|from|now|are|is|was|were|be|select|choose|add|also|plus|too|forgot|late|remove|unselect|deselect|take|out|not|coming|cannot|can t|cancel|absent|play|playing|with)\b/g, " ")
+    .replace(/\b(players?|people|members|present|currently|playing|here|fair|balanced|teams?|make|create|generate|prepare|build|sort|of|a|the|from|now|are|is|was|were|be|select|choose|add|also|plus|too|forgot|late|remove|unselect|deselect|take|out|not|coming|cannot|can t|cancel|absent|play|playing|with|who|else|we|i|have|has|got|heard|said|mentioned|these|those|this|that)\b/g, " ")
     .replace(/\b(v|vs|versus)\b/g, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -293,6 +294,7 @@ function extractExplicitNewPlayerNames(commandText: string) {
     .replace(/\b(?:add|create|make|suggest|put|mark|select)\b/g, " ")
     .replace(/\b(?:to|into|in|on)\s+(?:the\s+)?(?:roster|player\s+list)\b/g, " ")
     .replace(/\b(?:to|for)\s+(?:the\s+)?(?:current\s+)?today(?:\s+tab)?\b/g, " ")
+    .replace(/\b(?:who\s+else|and\s+who\s+else|who\s+is\s+else)\b/g, " ")
     .replace(/\b(?:as|like|for)\s+(?:a\s+)?new\s+(?:player|person|name|roster\s+player)\b/g, " ")
     .replace(/\b(?:new\s+player|new\s+person|new\s+name|roster\s+player)\b/g, " ")
     .replace(/\b(?:and\s+)?(?:mark|select)\s+(?:him|her|them|those|these)?\s*(?:as\s+)?(?:present|here|playing)\b/g, " ")
@@ -383,6 +385,11 @@ function extractMaybeListSegment(commandText: string) {
     "players present",
     "players playing today",
     "playing today",
+    "today we have",
+    "today i have",
+    "we have",
+    "we got",
+    "we ve got",
     "who is here",
     "who are here",
     "who are playing",
@@ -404,8 +411,34 @@ function extractMaybeListSegment(commandText: string) {
 
   if (bestIndex < 0) return normalized;
   let segment = normalized.slice(bestIndex + bestMarker.length).trim();
+
+  // In mixed commands like “Today we have Joon, Jorge… can you make teams?”,
+  // only the attendance list should be sent to name matching. Otherwise the
+  // team request can be misread as fake player names.
+  const stopPhrases = [
+    "can you make",
+    "could you make",
+    "please make",
+    "make a team",
+    "make teams",
+    "make fair",
+    "create a team",
+    "create teams",
+    "generate a team",
+    "generate teams",
+    "prepare teams",
+    "build teams",
+    "split into teams",
+  ];
+  let stopIndex = -1;
+  stopPhrases.forEach((phrase) => {
+    const index = segment.indexOf(phrase);
+    if (index >= 0 && (stopIndex < 0 || index < stopIndex)) stopIndex = index;
+  });
+  if (stopIndex >= 0) segment = segment.slice(0, stopIndex).trim();
+
   segment = stripCommandNoise(segment)
-    .replace(/^\b(are|is|as|include|including|players|player|people|members|today|now|currently|present|playing|here|with)\b\s*/g, "")
+    .replace(/^\b(are|is|as|include|including|players|player|people|members|today|now|currently|present|playing|here|with|have|got)\b\s*/g, "")
     .replace(/\s+/g, " ")
     .trim();
   return segment || stripCommandNoise(normalized) || normalized;
@@ -433,6 +466,17 @@ function wantsReplaceToday(commandText: string) {
 function wantsAddToToday(commandText: string) {
   const normalized = normalizeText(commandText);
   return /\b(add|also|plus|too|as well|forgot|late|just arrived|is here|are here|came|coming|joined)\b/.test(normalized);
+}
+
+function wantsExactTodayList(commandText: string) {
+  const normalized = normalizeText(commandText);
+  return /\b(?:today\s+(?:we\s+)?have|today\s+(?:i\s+)?have|we\s+have|we\s+got|we\s+ve\s+got|here\s+today|these\s+(?:people|players)|with\s+these\s+(?:people|players)|the\s+(?:people|players)\s+(?:i\s+)?mentioned|this\s+group)\b/.test(normalized);
+}
+
+function shouldPreferAttendanceListBeforeTeams(commandText: string) {
+  const normalized = normalizeText(commandText);
+  const hasTeamRequest = /\b(make|create|generate|prepare|build|split|divide|fair|balanced|team|teams)\b/.test(normalized);
+  return hasTeamRequest && wantsExactTodayList(commandText);
 }
 
 function currentTodaySelectionCount(players: AiSmartCommandRosterPlayer[]) {
@@ -730,7 +774,8 @@ function parsePresentPlayerSelectionCommand(
   if (matched.length === 0 && unresolved.length === 0) return null;
 
   const removeMode = wantsRemoveFromToday(commandText);
-  const replaceMode = wantsReplaceToday(commandText);
+  const exactListMode = wantsExactTodayList(commandText);
+  const replaceMode = wantsReplaceToday(commandText) || exactListMode;
   const addMode = wantsAddToToday(commandText);
   const existingSelectionCount = currentTodaySelectionCount(players);
   const ambiguousWithExistingSelection = !removeMode && !replaceMode && existingSelectionCount > 0;
@@ -779,7 +824,14 @@ function parsePresentPlayerSelectionCommand(
     selectAction.playerRefs = makePlayerRefs();
     actions.push(selectAction);
 
-    if (ambiguousWithExistingSelection && !addMode) {
+    if (replaceMode && exactListMode && existingSelectionCount > 0) {
+      const addAction = createEmptyAction("select_players");
+      addAction.capabilityId = "today.select_players";
+      addAction.distribution = "add_today_selection";
+      addAction.playerRefs = makePlayerRefs();
+      addAction.reason = "Alternative: add these matched players to the existing Today selection without clearing anyone else.";
+      actions.push(addAction);
+    } else if (ambiguousWithExistingSelection && !addMode) {
       const replaceAction = createEmptyAction("select_players");
       replaceAction.capabilityId = "today.select_players";
       replaceAction.distribution = "replace_today_selection";
@@ -838,9 +890,11 @@ function parsePresentPlayerSelectionCommand(
     : !removeMode && wantsBalancedTeams(commandText) && matched.length >= 4
       ? " I also prepared a 2-team setup."
       : "";
-  const ambiguityText = ambiguousWithExistingSelection && !addMode
-    ? ` You already have ${existingSelectionCount} player${existingSelectionCount === 1 ? "" : "s"} selected, so I will not clear them unless you tap Replace Today.`
-    : "";
+  const ambiguityText = exactListMode && replaceMode && existingSelectionCount > 0
+    ? ` You already have ${existingSelectionCount} player${existingSelectionCount === 1 ? "" : "s"} selected, so I treated this as today’s new list. Use the add option if you only meant to add them.`
+    : ambiguousWithExistingSelection && !addMode
+      ? ` You already have ${existingSelectionCount} player${existingSelectionCount === 1 ? "" : "s"} selected, so I will not clear them unless you tap Replace Today.`
+      : "";
 
   return localResponse({
     normalizedIntent: removeMode ? "Remove matched players from Today" : replaceMode ? "Replace Today selection with matched players" : "Update Today selection with matched players",
@@ -990,7 +1044,16 @@ export function parseFairTeamsLocalSmartCommand(
   const explicitNewPlayer = parseExplicitNewPlayerCommand(commandText, players);
   if (explicitNewPlayer) return explicitNewPlayer;
 
-  // Team-generation and shuffle commands must be handled before name-list parsing.
+  // Mixed attendance + team commands are common: “Today we have Joon, Jorge…
+  // can you make teams?” In that case, parse and confirm the named Today list
+  // before using any previously selected players. Plain team setup commands like
+  // “make teams of 2” still go to the team orchestrator first.
+  if (shouldPreferAttendanceListBeforeTeams(commandText)) {
+    const presentSelectionFirst = parsePresentPlayerSelectionCommand(commandText, players);
+    if (presentSelectionFirst) return presentSelectionFirst;
+  }
+
+  // Team-generation and shuffle commands must be handled before generic name-list parsing.
   // Otherwise natural phrases like “shuffle the teams” or “make teams of 2” can be
   // misread as fake player names.
   const teamGeneration = parseGenerateTeamsFromSelectionCommand(commandText, players, context);

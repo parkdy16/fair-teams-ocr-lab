@@ -26,29 +26,64 @@ function json(res, status, payload) {
   res.end(JSON.stringify(payload));
 }
 
+function normalizeMimeType(value, fallback = "audio/webm") {
+  const raw = typeof value === "string" ? value.trim().toLowerCase() : "";
+  const text = raw || fallback;
+
+  // Browser MediaRecorder often returns values like "audio/webm;codecs=opus".
+  // OpenAI cares most that the uploaded file extension/container match the bytes,
+  // so keep only the canonical container MIME type.
+  if (text.includes("webm")) return "audio/webm";
+  if (text.includes("mp4") || text.includes("m4a") || text.includes("aac")) return "audio/m4a";
+  if (text.includes("mpeg") || text.includes("mp3")) return "audio/mpeg";
+  if (text.includes("wav") || text.includes("wave")) return "audio/wav";
+  if (text.includes("ogg") || text.includes("opus")) return "audio/ogg";
+  if (/^audio\/[a-z0-9.+-]+$/.test(text)) return text;
+  return fallback;
+}
+
 function parseAudioBase64(value) {
   if (typeof value !== "string" || !value.trim()) return null;
   const trimmed = value.trim();
-  const match = trimmed.match(/^data:([^;]+);base64,(.+)$/);
-  const mimeType = match?.[1] || "audio/webm";
-  const body = match?.[2] || trimmed;
+  const match = trimmed.match(/^data:([^,]+);base64,(.+)$/s);
+  const mimeType = normalizeMimeType(match?.[1] || "audio/webm");
+  const body = (match?.[2] || trimmed).replace(/\s/g, "");
   const buffer = Buffer.from(body, "base64");
   if (!buffer.length) return null;
   return { buffer, mimeType };
 }
 
-function cleanMimeType(value, fallback) {
-  const text = typeof value === "string" ? value.trim().toLowerCase() : "";
-  if (/^audio\/[a-z0-9.+-]+/.test(text)) return text;
-  return fallback || "audio/webm";
+function inferMimeTypeFromBytes(buffer, fallback) {
+  if (!Buffer.isBuffer(buffer) || buffer.length < 4) return fallback;
+  const start4 = buffer.subarray(0, 4).toString("hex");
+  const start12 = buffer.subarray(0, 12).toString("latin1");
+
+  // EBML header: WebM/Matroska
+  if (start4 === "1a45dfa3") return "audio/webm";
+  // RIFF....WAVE
+  if (start12.startsWith("RIFF") && start12.includes("WAVE")) return "audio/wav";
+  // ID3 tag or MPEG frame sync
+  if (buffer.subarray(0, 3).toString("latin1") === "ID3" || (buffer[0] === 0xff && (buffer[1] & 0xe0) === 0xe0)) return "audio/mpeg";
+  // MP4/M4A usually has ftyp at bytes 4-7
+  if (buffer.subarray(4, 8).toString("latin1") === "ftyp") return "audio/m4a";
+  // OggS
+  if (buffer.subarray(0, 4).toString("latin1") === "OggS") return "audio/ogg";
+
+  return fallback;
 }
 
 function extensionForMime(mimeType) {
-  if (/mp4|m4a/.test(mimeType)) return "m4a";
-  if (/mpeg|mp3/.test(mimeType)) return "mp3";
-  if (/wav/.test(mimeType)) return "wav";
-  if (/ogg/.test(mimeType)) return "ogg";
+  const text = normalizeMimeType(mimeType);
+  if (text === "audio/m4a" || text === "audio/mp4") return "m4a";
+  if (text === "audio/mpeg") return "mp3";
+  if (text === "audio/wav") return "wav";
+  if (text === "audio/ogg") return "ogg";
   return "webm";
+}
+
+function shortAudioDebug(buffer) {
+  if (!Buffer.isBuffer(buffer) || !buffer.length) return "empty";
+  return buffer.subarray(0, Math.min(buffer.length, 12)).toString("hex");
 }
 
 export default async function handler(req, res) {
@@ -78,11 +113,28 @@ export default async function handler(req, res) {
     return json(res, 413, { error: "Voice recording is too long. Try a shorter command." });
   }
 
-  const mimeType = cleanMimeType(body.mimeType, parsedAudio.mimeType);
+  const declaredMimeType = normalizeMimeType(body.mimeType, parsedAudio.mimeType);
+  const mimeType = inferMimeTypeFromBytes(parsedAudio.buffer, declaredMimeType);
+  const filename = `fair-teams-voice.${extensionForMime(mimeType)}`;
+
+  // Useful in Vercel logs while testing Android/Samsung voice capture. Does not log audio content.
+  console.log("Fair Teams voice upload", {
+    declaredMimeType,
+    parsedMimeType: parsedAudio.mimeType,
+    finalMimeType: mimeType,
+    filename,
+    size: parsedAudio.buffer.length,
+    headerHex: shortAudioDebug(parsedAudio.buffer),
+  });
+
+  if (parsedAudio.buffer.length < 1024) {
+    return json(res, 400, { error: "The voice recording was too short or empty. Try again and speak for a moment longer." });
+  }
+
   const audioBlob = new Blob([parsedAudio.buffer], { type: mimeType });
   const form = new FormData();
   form.append("model", DEFAULT_TRANSCRIBE_MODEL);
-  form.append("file", audioBlob, `fair-teams-voice.${extensionForMime(mimeType)}`);
+  form.append("file", audioBlob, filename);
   form.append("response_format", "json");
 
   try {
@@ -95,6 +147,14 @@ export default async function handler(req, res) {
     const payload = await response.json().catch(() => null);
     if (!response.ok) {
       const message = payload?.error?.message || "OpenAI transcription failed.";
+      console.error("Fair Teams voice OpenAI error", {
+        status: response.status,
+        message,
+        finalMimeType: mimeType,
+        filename,
+        size: parsedAudio.buffer.length,
+        headerHex: shortAudioDebug(parsedAudio.buffer),
+      });
       return json(res, response.status, { error: message });
     }
 

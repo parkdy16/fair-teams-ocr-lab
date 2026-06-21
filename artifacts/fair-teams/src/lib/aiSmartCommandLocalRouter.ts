@@ -126,6 +126,8 @@ function voiceNameKey(value: string) {
     .replace(/jorge/g, "jorj")
     .replace(/brijesh/g, "briesh")
     .replace(/brijes/g, "briesh")
+    .replace(/brioche/g, "briesh")
+    .replace(/brioch/g, "briesh")
     .replace(/briesh/g, "briesh")
     .replace(/ph/g, "f")
     .replace(/ije/g, "ie")
@@ -197,6 +199,187 @@ function createAddPlayerAction(name: string): AiSmartCommandAction {
   return action;
 }
 
+function createUseExistingPlayerAction(player: AiSmartCommandRosterPlayer, spokenName: string, reason?: string): AiSmartCommandAction {
+  const action = createEmptyAction("select_players");
+  action.capabilityId = "today.select_players";
+  action.distribution = "add_today_selection";
+  action.playerRefs = [{
+    playerId: player.id,
+    rosterName: player.name,
+    spokenName: displaySpokenName(spokenName),
+    confidence: 0.9,
+  }];
+  action.reason = reason || `Possible existing match for “${displaySpokenName(spokenName)}”. Use this if you meant ${player.name} instead of adding a new player.`;
+  return action;
+}
+
+function cleanupSpellingHints(value: string) {
+  let text = normalizeText(value);
+
+  // Voice users often clarify spelling: “Fillip with F”, “Philip spelled with F”.
+  // Keep the name, remove the hint words, and only lightly adjust common first-letter hints.
+  text = text.replace(/\b(philip|phillip|filip|fillip)\s+(?:spelled\s+)?with\s+(?:an?\s+)?f\b/g, (match, name) => {
+    if (String(name).startsWith("ph")) return "filip";
+    return String(name);
+  });
+  text = text.replace(/\b(filip|fillip|philip|phillip)\s+(?:spelled\s+)?with\s+(?:a\s+)?ph\b/g, "philip");
+  text = text.replace(/\b([a-z][a-z-]{1,})\s+(?:spelled\s+)?with\s+(?:an?\s+)?[a-z]\b/g, "$1");
+  text = text.replace(/\b(?:spelled|written)\s+(?:with\s+)?(?:an?\s+)?[a-z]\b/g, " ");
+  return text.replace(/\s+/g, " ").trim();
+}
+
+function stripCommandNoise(value: string) {
+  return cleanupSpellingHints(value)
+    .replace(/\b(okay|ok|yes|yeah|yep|please|pls|uh|um|erm|hey|fair teams?)\b/g, " ")
+    .replace(/\b(current|today|the)\s+(?:today\s+)?tab\b/g, " ")
+    .replace(/\b(?:from|in|on|to)\s+(?:the\s+)?(?:current\s+)?today(?:\s+tab)?\b/g, " ")
+    .replace(/\b(?:as|like|for)\s+(?:a\s+)?new\s+(?:player|person|name|roster\s+player)\b/g, " ")
+    .replace(/\b(?:new\s+player|new\s+person|new\s+name|roster\s+player)\b/g, " ")
+    .replace(/\b(that s it|thats it|that is it|that s all|thats all|that is all|and that s it|and thats it|and that is it)\b.*$/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function cleanNameChunkForMatching(value: string) {
+  let text = stripCommandNoise(value);
+  text = text
+    .replace(/\b(players?|people|members|present|currently|playing|here|fair|balanced|teams?|make|create|generate|prepare|build|sort|of|a|the|from|now|are|is|was|were|be|select|choose|add|also|plus|too|forgot|late|remove|unselect|deselect|take|out|not|coming|cannot|can t|cancel|absent|play|playing|with)\b/g, " ")
+    .replace(/\b(v|vs|versus)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (/^(new|player|players|today|tab|current|okay|ok|yes|yeah|and|or|with|from|to|the|a|an)$/i.test(text)) return "";
+  if (/^\d+$/.test(text)) return "";
+  return text;
+}
+
+function splitPotentialNameList(value: string) {
+  const cleaned = stripCommandNoise(value)
+    .replace(/\b(?:and also|as well as|together with)\b/g, " and ")
+    .replace(/\+/g, " and ");
+
+  return cleaned
+    .split(/,|\band\b|\bplus\b|&/i)
+    .map(cleanNameChunkForMatching)
+    .filter((part) => part.length >= 2);
+}
+
+function wantsExplicitNewPlayer(commandText: string) {
+  const normalized = normalizeText(commandText);
+  return /\b(add|create|make|suggest)\b.*\bnew\s+(player|person|name|roster\s+player)\b/.test(normalized) ||
+    /\b(?:as|like|for)\s+(?:a\s+)?new\s+(?:player|person|name|roster\s+player)\b/.test(normalized) ||
+    /\bnot\s+(?:in|on)\s+(?:the\s+)?roster\b/.test(normalized);
+}
+
+function bestRosterNameMatch(name: string, players: AiSmartCommandRosterPlayer[]) {
+  const candidateRows = players.flatMap((player) =>
+    candidateNamesForPlayer(player).map((candidate) => ({ player, candidate })),
+  );
+
+  let best: { player: AiSmartCommandRosterPlayer; candidate: string; score: number } | null = null;
+  let secondBestScore = 0;
+  candidateRows.forEach(({ player, candidate }) => {
+    const score = fuzzyNameMatchScore(name, candidate);
+    if (score > (best?.score || 0)) {
+      secondBestScore = best?.score || 0;
+      best = { player, candidate, score };
+    } else if (score > secondBestScore) {
+      secondBestScore = score;
+    }
+  });
+
+  return best ? { ...best, secondBestScore } : null;
+}
+
+function extractExplicitNewPlayerNames(commandText: string) {
+  let text = cleanupSpellingHints(commandText);
+  text = text
+    .replace(/^\s*(okay|ok|yes|yeah|please|pls|hey)\s+/g, "")
+    .replace(/\b(?:can you|could you|please|pls|i want to|i need to|let s|lets)\b/g, " ")
+    .replace(/\b(?:add|create|make|suggest|put|mark|select)\b/g, " ")
+    .replace(/\b(?:to|into|in|on)\s+(?:the\s+)?(?:roster|player\s+list)\b/g, " ")
+    .replace(/\b(?:to|for)\s+(?:the\s+)?(?:current\s+)?today(?:\s+tab)?\b/g, " ")
+    .replace(/\b(?:as|like|for)\s+(?:a\s+)?new\s+(?:player|person|name|roster\s+player)\b/g, " ")
+    .replace(/\b(?:new\s+player|new\s+person|new\s+name|roster\s+player)\b/g, " ")
+    .replace(/\b(?:and\s+)?(?:mark|select)\s+(?:him|her|them|those|these)?\s*(?:as\s+)?(?:present|here|playing)\b/g, " ")
+    .replace(/\b(?:today|current tab|today tab|current today tab)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return [...new Set(splitPotentialNameList(text).map(displaySpokenName).filter(Boolean))].slice(0, 6);
+}
+
+function parseExplicitNewPlayerCommand(
+  commandText: string,
+  players: AiSmartCommandRosterPlayer[],
+): AiSmartCommandResponse | null {
+  if (!wantsExplicitNewPlayer(commandText)) return null;
+
+  const names = extractExplicitNewPlayerNames(commandText);
+  if (names.length === 0) return localResponse({
+    normalizedIntent: "Add new player, but no clean name found",
+    assistantSummary: "I understood that you want to add a new player, but I could not isolate the name cleanly. Try saying “add Raphael as new player.”",
+    confidence: 0.78,
+    actions: [],
+    confirmations: [],
+    unresolved: [{
+      text: commandText,
+      issue: "missing_context",
+      message: "I could not find a clean new-player name in that command.",
+    }],
+    debugWarnings: ["Explicit new-player intent detected, but no clean name survived command-word cleanup."],
+  });
+
+  const actions: AiSmartCommandAction[] = [];
+  const confirmations: AiSmartCommandResponse["confirmations"] = [];
+  const unresolved: AiSmartCommandResponse["unresolved"] = [];
+  const possibleMatches: string[] = [];
+
+  names.forEach((name) => {
+    const addAction = createAddPlayerAction(name);
+    addAction.reason = `Add ${name} as a new roster player, then mark them present for Today.`;
+    actions.push(addAction);
+
+    const similar = bestRosterNameMatch(name, players);
+    if (similar && similar.score >= 0.84) {
+      const exactSame = compactKey(similar.player.name) === compactKey(name) || candidateNamesForPlayer(similar.player).some((candidate) => compactKey(candidate) === compactKey(name));
+      if (exactSame) {
+        actions.push(createUseExistingPlayerAction(similar.player, name, `${similar.player.name} is already in this roster. Use this if you meant the existing player instead of creating a duplicate.`));
+        possibleMatches.push(`${name} is already close to ${similar.player.name}`);
+      } else if (similar.score - similar.secondBestScore >= 0.03) {
+        actions.push(createUseExistingPlayerAction(similar.player, name));
+        confirmations.push({
+          id: `similar-${compactKey(name)}-${similar.player.id}`,
+          type: "ambiguous_player",
+          message: `“${name}” looks similar to existing roster player ${similar.player.name}. Add ${name} only if this is a different person.`,
+          playerRefs: [{
+            playerId: similar.player.id,
+            rosterName: similar.player.name,
+            spokenName: name,
+            confidence: similar.score,
+          }],
+          suggestedActionType: "select_players",
+        });
+        possibleMatches.push(`${name} ↔ ${similar.player.name}`);
+      }
+    }
+  });
+
+  const matchText = possibleMatches.length > 0
+    ? ` I also found possible existing match${possibleMatches.length === 1 ? "" : "es"}: ${possibleMatches.join(", ")}.`
+    : "";
+
+  return localResponse({
+    normalizedIntent: "Add explicit new player",
+    assistantSummary: `I understood this as a new-player request: ${names.join(", ")}.${matchText} I will not silently merge a new-player request into an existing roster name.`,
+    confidence: 0.95,
+    actions,
+    confirmations,
+    unresolved,
+    debugWarnings: ["Handled by explicit new-player parser before normal fuzzy roster matching."],
+  });
+}
+
 function extractMaybeListSegment(commandText: string) {
   const normalized = normalizeText(commandText);
   const markers = [
@@ -211,7 +394,8 @@ function extractMaybeListSegment(commandText: string) {
     "who are playing",
     "today are",
     "here are",
-    "with",
+    "with players",
+    "with the players",
   ];
 
   let bestIndex = -1;
@@ -226,20 +410,18 @@ function extractMaybeListSegment(commandText: string) {
 
   if (bestIndex < 0) return normalized;
   let segment = normalized.slice(bestIndex + bestMarker.length).trim();
-  segment = segment
+  segment = stripCommandNoise(segment)
     .replace(/^\b(are|is|as|include|including|players|player|people|members|today|now|currently|present|playing|here|with)\b\s*/g, "")
-    .replace(/\b(yeah|yes|okay|ok|uh|um|erm|please)\b/g, " ")
-    .replace(/\b(that s it|thats it|that is it|that s all|thats all|that is all|and that s it|and thats it|and that is it)\b.*$/g, " ")
     .replace(/\s+/g, " ")
     .trim();
-  return segment || normalized;
+  return segment || stripCommandNoise(normalized) || normalized;
 }
 
 function likelyPresentPlayerCommand(commandText: string) {
   const normalized = normalizeText(commandText);
   const hasRosterListLanguage = /\b(present|currently present|playing today|here|today|selected|select|choose|add|also|remove|unselect|deselect|not coming|out|absent|late)\b/.test(normalized);
   const hasTeamMakingLanguage = /\b(make|create|generate|prepare|build|sort|fair|team|teams|5v5|4v4|3v3|2v2)\b/.test(normalized);
-  const hasListSignal = /,|\band\b/.test(commandText) || /\bwith\b/.test(normalized);
+  const hasListSignal = /,|\band\b|\bplus\b|&/.test(commandText);
   const hasSinglePersonCorrectionLanguage = /\b(add|also|plus|forgot|late|remove|unselect|deselect|not coming|isn t coming|is not coming|not playing|not here|out today)\b/.test(normalized);
   return (hasRosterListLanguage && (hasListSignal || hasTeamMakingLanguage)) || hasSinglePersonCorrectionLanguage;
 }
@@ -265,7 +447,7 @@ function currentTodaySelectionCount(players: AiSmartCommandRosterPlayer[]) {
 
 function findPlayersMentioned(commandText: string, players: AiSmartCommandRosterPlayer[]) {
   const segment = extractMaybeListSegment(commandText);
-  const normalizedSegment = normalizeText(segment);
+  const normalizedSegment = stripCommandNoise(segment);
   const matched = new Map<string, { player: AiSmartCommandRosterPlayer; spokenName: string; score: number }>();
 
   const candidateRows = players.flatMap((player) =>
@@ -280,12 +462,7 @@ function findPlayersMentioned(commandText: string, players: AiSmartCommandRoster
     }
   });
 
-  const chunks = segment
-    .split(/,|\band\b|\+|&/i)
-    .map((part) => normalizeText(part))
-    .map((part) => part.replace(/\b(players?|people|today|present|currently|playing|here|fair|teams?|make|create|generate|prepare|build|sort|of|a|the|with|from|now|are|is|add|also|plus|forgot|late|remove|unselect|deselect|not|coming|playing)\b/g, " "))
-    .map((part) => part.replace(/\s+/g, " ").trim())
-    .filter((part) => part.length >= 2);
+  const chunks = splitPotentialNameList(segment);
 
   const unresolved: string[] = [];
   chunks.forEach((originalChunk) => {
@@ -317,7 +494,34 @@ function findPlayersMentioned(commandText: string, players: AiSmartCommandRoster
         matched.set(best.player.id, { player: best.player, spokenName: chunk, score: best.score });
       }
     } else if (!/\b(v|vs|versus)\b|^\d+$/.test(chunk)) {
-      unresolved.push(chunk);
+      // Voice transcripts sometimes arrive without commas: “June Ian Tanya Briesh”.
+      // If the whole chunk is too messy, try each word as a possible spoken name.
+      const looseWords = chunk.split(/\s+/).map(cleanNameChunkForMatching).filter((part) => part.length >= 2);
+      let matchedLooseWord = false;
+      looseWords.forEach((looseWord) => {
+        let looseBest: { player: AiSmartCommandRosterPlayer; candidate: string; score: number } | null = null;
+        let looseSecondBestScore = 0;
+        candidateRows.forEach(({ player, candidate }) => {
+          const score = fuzzyNameMatchScore(looseWord, candidate);
+          if (score > (looseBest?.score || 0)) {
+            looseSecondBestScore = looseBest?.score || 0;
+            looseBest = { player, candidate, score };
+          } else if (score > looseSecondBestScore) {
+            looseSecondBestScore = score;
+          }
+        });
+
+        if (looseBest && looseBest.score >= 0.84 && looseBest.score - looseSecondBestScore >= 0.04) {
+          const existing = matched.get(looseBest.player.id);
+          if (!existing || looseBest.score > existing.score) {
+            matched.set(looseBest.player.id, { player: looseBest.player, spokenName: looseWord, score: looseBest.score });
+          }
+          matchedLooseWord = true;
+        } else if (looseWord.length >= 2 && !/^\d+$/.test(looseWord)) {
+          unresolved.push(looseWord);
+        }
+      });
+      if (!matchedLooseWord && looseWords.length === 0) unresolved.push(chunk);
     }
   });
 
@@ -363,7 +567,7 @@ function parsePresentPlayerSelectionCommand(
       normalizedIntent: "Update Today, but no roster names matched",
       assistantSummary: "I understood that you want to update Today, but I could not match those names to this roster.",
       confidence: 0.84,
-      actions: uniqueUnresolved.slice(0, 3).map(createAddPlayerAction),
+      actions: removeMode ? [] : uniqueUnresolved.slice(0, 3).map(createAddPlayerAction),
       confirmations: [],
       unresolved: uniqueUnresolved.map((name) => ({
         text: name,
@@ -427,7 +631,7 @@ function parsePresentPlayerSelectionCommand(
   }
 
   const uniqueUnresolved = [...new Set(unresolved)].slice(0, 8);
-  if (uniqueUnresolved.length > 0) {
+  if (uniqueUnresolved.length > 0 && !removeMode) {
     actions.push(...uniqueUnresolved.slice(0, 3).map(createAddPlayerAction));
   }
 
@@ -600,6 +804,9 @@ export function parseFairTeamsLocalSmartCommand(
   commandText: string,
   players: AiSmartCommandRosterPlayer[],
 ): AiSmartCommandResponse | null {
+  const explicitNewPlayer = parseExplicitNewPlayerCommand(commandText, players);
+  if (explicitNewPlayer) return explicitNewPlayer;
+
   const presentSelection = parsePresentPlayerSelectionCommand(commandText, players);
   if (presentSelection) return presentSelection;
 

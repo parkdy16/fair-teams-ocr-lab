@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { parseFairTeamsSmartCommand, createAiSmartCommandContext, transcribeFairTeamsVoiceCommand } from "@/lib/aiSmartCommandClient";
 import { applyFairTeamsAiTruthGuard, guardFairTeamsSmartCommandBeforeAi } from "@/lib/aiSmartCommandTrustGuard";
+import { parseFairTeamsLocalSmartCommand } from "@/lib/aiSmartCommandLocalRouter";
 import {
   isAiSmartCommandEnabled,
   type AiSmartCommandAction,
@@ -341,6 +342,13 @@ export function AiSmartCommandPanel({
       if (localTrustGuard) {
         setResult(localTrustGuard);
         onParsed?.(localTrustGuard);
+        return;
+      }
+
+      const localSmartCommand = parseFairTeamsLocalSmartCommand(trimmedCommand, players);
+      if (localSmartCommand) {
+        setResult(localSmartCommand);
+        onParsed?.(localSmartCommand);
         return;
       }
 

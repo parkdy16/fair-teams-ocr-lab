@@ -115,18 +115,86 @@ function levenshtein(a: string, b: string) {
   return previous[b.length];
 }
 
+function voiceNameKey(value: string) {
+  let key = compactKey(value);
+  if (!key) return "";
+
+  // Android/Samsung voice transcription often writes names phonetically in English.
+  // This stays roster-relative: it only helps when a spoken chunk is close to a real roster name.
+  key = key
+    .replace(/george/g, "jorj")
+    .replace(/jorge/g, "jorj")
+    .replace(/brijesh/g, "briesh")
+    .replace(/brijes/g, "briesh")
+    .replace(/briesh/g, "briesh")
+    .replace(/ph/g, "f")
+    .replace(/ije/g, "ie")
+    .replace(/ij/g, "i")
+    .replace(/y/g, "i")
+    .replace(/ee/g, "i")
+    .replace(/oo/g, "u")
+    .replace(/ue/g, "u")
+    .replace(/^geor/g, "jor")
+    .replace(/^geo/g, "jo")
+    .replace(/z/g, "s")
+    .replace(/sh$/g, "s")
+    .replace(/e$/g, "");
+
+  // Joon/June and similar vowel noise. Keep one vowel, not the exact spelling.
+  return key.replace(/[aeiou]+/g, (match) => match[0]);
+}
+
+function likelySameSpokenName(spoken: string, candidate: string) {
+  const a = voiceNameKey(spoken);
+  const b = voiceNameKey(candidate);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  if (a.length >= 5 && b.length >= 5 && a[0] === b[0]) {
+    const distance = levenshtein(a, b);
+    const similarity = 1 - distance / Math.max(a.length, b.length);
+    return similarity >= 0.84;
+  }
+  return false;
+}
+
 function fuzzyNameMatchScore(spoken: string, candidate: string) {
   const a = compactKey(spoken);
   const b = compactKey(candidate);
   if (!a || !b) return 0;
   if (a === b) return 1;
+
+  const spokenKey = voiceNameKey(spoken);
+  const candidateKey = voiceNameKey(candidate);
+  if (spokenKey && candidateKey && spokenKey === candidateKey) return 0.96;
+
+  if (likelySameSpokenName(spoken, candidate)) return 0.9;
+
   if (a.length >= 4 && b.length >= 4) {
     const distance = levenshtein(a, b);
     const maxLength = Math.max(a.length, b.length);
     const similarity = 1 - distance / maxLength;
     if (similarity >= 0.86) return similarity;
+    if (similarity >= 0.82 && a.slice(0, 2) === b.slice(0, 2) && Math.min(a.length, b.length) >= 5) return similarity;
   }
   return 0;
+}
+
+function displaySpokenName(spokenName: string) {
+  return normalizeText(spokenName)
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function createAddPlayerAction(name: string): AiSmartCommandAction {
+  const action = createEmptyAction("add_new_player_suggestion");
+  action.capabilityId = "roster.add_new_player";
+  action.supportStatus = "executable";
+  action.newPlayerName = displaySpokenName(name);
+  action.suggestedSkill = 5;
+  action.reason = "Add this missing name to the roster, then mark them present for Today.";
+  return action;
 }
 
 function extractMaybeListSegment(commandText: string) {
@@ -169,10 +237,30 @@ function extractMaybeListSegment(commandText: string) {
 
 function likelyPresentPlayerCommand(commandText: string) {
   const normalized = normalizeText(commandText);
-  const hasRosterListLanguage = /\b(present|currently present|playing today|here|today|selected|select|choose)\b/.test(normalized);
+  const hasRosterListLanguage = /\b(present|currently present|playing today|here|today|selected|select|choose|add|also|remove|unselect|deselect|not coming|out|absent|late)\b/.test(normalized);
   const hasTeamMakingLanguage = /\b(make|create|generate|prepare|build|sort|fair|team|teams|5v5|4v4|3v3|2v2)\b/.test(normalized);
   const hasListSignal = /,|\band\b/.test(commandText) || /\bwith\b/.test(normalized);
-  return hasRosterListLanguage && (hasListSignal || hasTeamMakingLanguage);
+  const hasSinglePersonCorrectionLanguage = /\b(add|also|plus|forgot|late|remove|unselect|deselect|not coming|isn t coming|is not coming|not playing|not here|out today)\b/.test(normalized);
+  return (hasRosterListLanguage && (hasListSignal || hasTeamMakingLanguage)) || hasSinglePersonCorrectionLanguage;
+}
+
+function wantsRemoveFromToday(commandText: string) {
+  const normalized = normalizeText(commandText);
+  return /\b(remove|unselect|deselect|take out|not coming|isn t coming|is not coming|can t come|cannot come|cancel|absent|out today|not playing|not here)\b/.test(normalized);
+}
+
+function wantsReplaceToday(commandText: string) {
+  const normalized = normalizeText(commandText);
+  return /\b(only|exactly|replace|clear|reset|start over|instead|use these|these are all|that is everyone|thats everyone|everyone is)\b/.test(normalized);
+}
+
+function wantsAddToToday(commandText: string) {
+  const normalized = normalizeText(commandText);
+  return /\b(add|also|plus|too|as well|forgot|late|just arrived|is here|are here|came|coming|joined)\b/.test(normalized);
+}
+
+function currentTodaySelectionCount(players: AiSmartCommandRosterPlayer[]) {
+  return players.filter((player) => Boolean(player.attending)).length;
 }
 
 function findPlayersMentioned(commandText: string, players: AiSmartCommandRosterPlayer[]) {
@@ -195,7 +283,7 @@ function findPlayersMentioned(commandText: string, players: AiSmartCommandRoster
   const chunks = segment
     .split(/,|\band\b|\+|&/i)
     .map((part) => normalizeText(part))
-    .map((part) => part.replace(/\b(players?|people|today|present|currently|playing|here|fair|teams?|make|create|generate|prepare|build|sort|of|a|the|with|now|are|is)\b/g, " "))
+    .map((part) => part.replace(/\b(players?|people|today|present|currently|playing|here|fair|teams?|make|create|generate|prepare|build|sort|of|a|the|with|from|now|are|is|add|also|plus|forgot|late|remove|unselect|deselect|not|coming|playing)\b/g, " "))
     .map((part) => part.replace(/\s+/g, " ").trim())
     .filter((part) => part.length >= 2);
 
@@ -223,7 +311,7 @@ function findPlayersMentioned(commandText: string, players: AiSmartCommandRoster
       }
     });
 
-    if (best && best.score >= 0.88 && best.score - secondBestScore >= 0.04) {
+    if (best && best.score >= 0.84 && best.score - secondBestScore >= 0.04) {
       const existing = matched.get(best.player.id);
       if (!existing || best.score > existing.score) {
         matched.set(best.player.id, { player: best.player, spokenName: chunk, score: best.score });
@@ -263,69 +351,123 @@ function parsePresentPlayerSelectionCommand(
   const { matched, unresolved } = findPlayersMentioned(commandText, players);
   if (matched.length === 0 && unresolved.length === 0) return null;
 
+  const removeMode = wantsRemoveFromToday(commandText);
+  const replaceMode = wantsReplaceToday(commandText);
+  const addMode = wantsAddToToday(commandText);
+  const existingSelectionCount = currentTodaySelectionCount(players);
+  const ambiguousWithExistingSelection = !removeMode && !replaceMode && existingSelectionCount > 0;
+
   if (matched.length === 0) {
+    const uniqueUnresolved = [...new Set(unresolved)].slice(0, 8);
     return localResponse({
-      normalizedIntent: "Select present players",
-      assistantSummary: "I understood that you want to select present players, but I could not match those names to this roster.",
-      confidence: 0.9,
-      actions: [],
+      normalizedIntent: "Update Today, but no roster names matched",
+      assistantSummary: "I understood that you want to update Today, but I could not match those names to this roster.",
+      confidence: 0.84,
+      actions: uniqueUnresolved.slice(0, 3).map(createAddPlayerAction),
       confirmations: [],
-      unresolved: unresolved.slice(0, 8).map((name) => ({
+      unresolved: uniqueUnresolved.map((name) => ({
         text: name,
         issue: "unknown_player",
-        message: `I could not find “${name}” in this roster.`,
+        message: `I could not find “${displaySpokenName(name)}” in this roster.`,
       })),
       debugWarnings: ["Handled by local present-player parser with no roster matches."],
     });
   }
 
-  const selectAction = createEmptyAction("select_players");
-  selectAction.capabilityId = "today.select_players";
-  selectAction.distribution = "replace_today_selection";
-  selectAction.reason = "This replaces today's current selection with the players you named.";
-  selectAction.playerRefs = matched.map(({ player, spokenName, score }) => ({
+  const makePlayerRefs = () => matched.map(({ player, spokenName, score }) => ({
     playerId: player.id,
     rosterName: player.name,
     spokenName,
-    confidence: Math.min(1, Math.max(0.7, score)),
+    confidence: Math.min(1, Math.max(0.72, score)),
   }));
 
-  const actions: AiSmartCommandAction[] = [selectAction];
+  const actions: AiSmartCommandAction[] = [];
+  if (removeMode) {
+    const removeAction = createEmptyAction("unselect_players");
+    removeAction.capabilityId = "today.unselect_players";
+    removeAction.distribution = "remove_today_selection";
+    removeAction.playerRefs = makePlayerRefs();
+    removeAction.reason = "Remove these matched players from Today without changing anyone else.";
+    actions.push(removeAction);
+  } else {
+    const selectAction = createEmptyAction("select_players");
+    selectAction.capabilityId = "today.select_players";
+    selectAction.distribution = replaceMode ? "replace_today_selection" : "add_today_selection";
+    selectAction.reason = replaceMode
+      ? "Replace Today with only these matched players."
+      : existingSelectionCount > 0
+        ? "Add these matched players to the existing Today selection. This will not clear players already selected."
+        : "Select these matched players for Today.";
+    selectAction.playerRefs = makePlayerRefs();
+    actions.push(selectAction);
+
+    if (ambiguousWithExistingSelection && !addMode) {
+      const replaceAction = createEmptyAction("select_players");
+      replaceAction.capabilityId = "today.select_players";
+      replaceAction.distribution = "replace_today_selection";
+      replaceAction.playerRefs = makePlayerRefs();
+      replaceAction.reason = "Alternative: clear the current Today selection and use only these matched players.";
+      actions.push(replaceAction);
+    }
+  }
+
   const playersPerTeam = parseTeamSize(commandText);
-  if (playersPerTeam) {
+  if (!removeMode && playersPerTeam) {
     const sizeAction = createEmptyAction("set_team_size");
     sizeAction.capabilityId = "teams.set_team_size";
     sizeAction.playersPerTeam = playersPerTeam;
-    sizeAction.reason = `${playersPerTeam}v${playersPerTeam} after selecting the named present players.`;
+    sizeAction.reason = `${playersPerTeam}v${playersPerTeam}.`;
     actions.push(sizeAction);
-  } else if (wantsBalancedTeams(commandText) && matched.length >= 4) {
+  } else if (!removeMode && wantsBalancedTeams(commandText) && matched.length >= 4) {
     const teamCountAction = createEmptyAction("set_team_count");
     teamCountAction.capabilityId = "teams.set_team_count";
     teamCountAction.teamCount = 2;
-    teamCountAction.reason = "No team size was specified, so Fair Teams will prepare 2 balanced teams after you select these players.";
+    teamCountAction.reason = "Prepare a two-team setup from the current Today selection.";
     actions.push(teamCountAction);
   }
 
-  const names = matched.map(({ player }) => player.name);
-  const missedText = unresolved.length > 0 ? ` I could not confidently match: ${unresolved.slice(0, 5).join(", ")}.` : "";
-  const teamText = playersPerTeam
+  const uniqueUnresolved = [...new Set(unresolved)].slice(0, 8);
+  if (uniqueUnresolved.length > 0) {
+    actions.push(...uniqueUnresolved.slice(0, 3).map(createAddPlayerAction));
+  }
+
+  const names = matched.map(({ player, spokenName, score }) => {
+    const heard = displaySpokenName(spokenName);
+    const heardKey = compactKey(heard);
+    const rosterKey = compactKey(player.name);
+    return score < 0.99 && heardKey && rosterKey && heardKey !== rosterKey
+      ? `${heard} → ${player.name}`
+      : player.name;
+  });
+  const missedText = uniqueUnresolved.length > 0 ? ` I could not confidently match: ${uniqueUnresolved.slice(0, 5).map(displaySpokenName).join(", ")}.` : "";
+  const modeText = removeMode
+    ? "remove from Today"
+    : replaceMode
+      ? "replace Today with"
+      : existingSelectionCount > 0
+        ? "add to Today"
+        : "select for Today";
+  const teamText = !removeMode && playersPerTeam
     ? ` I also prepared a ${playersPerTeam}v${playersPerTeam} setup.`
-    : wantsBalancedTeams(commandText) && matched.length >= 4
+    : !removeMode && wantsBalancedTeams(commandText) && matched.length >= 4
       ? " I also prepared a 2-team setup."
       : "";
+  const ambiguityText = ambiguousWithExistingSelection && !addMode
+    ? ` You already have ${existingSelectionCount} player${existingSelectionCount === 1 ? "" : "s"} selected, so I will not clear them unless you tap Replace Today.`
+    : "";
 
   return localResponse({
-    normalizedIntent: `Select named present players${playersPerTeam ? ` for ${playersPerTeam}v${playersPerTeam}` : ""}`,
-    assistantSummary: `I matched ${matched.length} present player${matched.length === 1 ? "" : "s"}: ${names.join(", ")}.${teamText}${missedText}`,
-    confidence: unresolved.length > 0 ? 0.9 : 0.98,
+    normalizedIntent: removeMode ? "Remove matched players from Today" : replaceMode ? "Replace Today selection with matched players" : "Update Today selection with matched players",
+    assistantSummary: `I matched ${matched.length} player${matched.length === 1 ? "" : "s"} to ${modeText}: ${names.join(", ")}.${teamText}${ambiguityText}${missedText}`,
+    confidence: unresolved.length > 0 ? 0.88 : 0.98,
     actions,
     confirmations: [],
-    unresolved: unresolved.slice(0, 8).map((name) => ({
+    unresolved: uniqueUnresolved.map((name) => ({
       text: name,
       issue: "unknown_player",
-      message: `I could not confidently match “${name}” to this roster.`,
+      message: `I could not confidently match “${displaySpokenName(name)}” to this roster.`,
     })),
-    debugWarnings: ["Handled by Fair Teams local present-player parser."],
+    debugWarnings: ["Handled by Fair Teams local present-player parser with fuzzy roster matching and safe Today selection mode."],
   });
 }
 

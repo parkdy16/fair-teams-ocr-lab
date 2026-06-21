@@ -19,6 +19,14 @@ export const AI_SMART_COMMAND_CAPABILITIES: AiSmartCommandCapability[] = [
     examples: ["Joon, Jorge and Sarah are playing today", "오늘 조지랑 사라 와요"],
   },
   {
+    id: "today.unselect_players",
+    actionType: "unselect_players",
+    label: "Remove players from Today",
+    supportStatus: "executable",
+    description: "Remove existing roster players from Today without changing the rest of the current selection.",
+    examples: ["remove George from today", "Joon is not coming", "take Brijesh out"],
+  },
+  {
     id: "teams.set_team_size",
     actionType: "set_team_size",
     label: "Set team size",
@@ -134,7 +142,7 @@ export function aiCommandActionCanApply(action: AiSmartCommandAction) {
   if (!executable) return false;
 
   if (action.type === "club_add_note") return Boolean(action.noteText?.trim());
-  if (action.type === "select_players") return action.playerRefs.some((player) => Boolean(player.playerId));
+  if (action.type === "select_players" || action.type === "unselect_players") return action.playerRefs.some((player) => Boolean(player.playerId));
   if (action.type === "set_team_count") return typeof action.teamCount === "number";
   if (action.type === "set_team_size") return typeof action.playersPerTeam === "number";
   if (action.type === "add_pairing_rule") {

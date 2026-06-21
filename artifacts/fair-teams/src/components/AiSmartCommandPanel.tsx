@@ -166,6 +166,11 @@ function parseModeLabel(mode?: AiSmartCommandResponse["parseMode"]) {
 }
 
 function actionCardTitle(action: AiSmartCommandAction) {
+  if (action.type === "select_players") {
+    if (/replace|exact|only/i.test(String(action.distribution || ""))) return "Replace Today selection";
+    return "Add/select for Today";
+  }
+  if (action.type === "unselect_players") return "Remove from Today";
   const capability = getAiCommandCapability(action);
   if (capability?.label) return capability.label;
   if (action.type === "no_action") return "No app action needed";
@@ -185,7 +190,10 @@ function actionCardTone(action: AiSmartCommandAction) {
 function actionPrimaryVerb(action: AiSmartCommandAction) {
   if (action.type === "club_add_note") return "Add note";
   if (action.type === "add_new_player_suggestion") return "Add player";
-  if (action.type === "select_players") return "Select";
+  if (action.type === "select_players") {
+    return /replace|exact|only/i.test(String(action.distribution || "")) ? "Replace Today" : "Add to Today";
+  }
+  if (action.type === "unselect_players") return "Remove";
   if (action.type === "set_team_size" || action.type === "set_team_count") return "Set";
   if (action.type === "generate_teams") return "Generate";
   return "Apply";
@@ -457,7 +465,7 @@ export function AiSmartCommandPanel({
     try {
       const message = await onApplyAction(action);
       setApplyMessage(typeof message === "string" && message.trim() ? message : "Applied.");
-      if (action.type === "select_players" || action.type === "add_new_player_suggestion") {
+      if (action.type === "select_players" || action.type === "unselect_players" || action.type === "add_new_player_suggestion") {
         setShowTodayShortcut(true);
       }
     } catch (err) {

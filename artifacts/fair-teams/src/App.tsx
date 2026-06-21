@@ -1229,8 +1229,29 @@ function App() {
       );
       setTodayRosterChosen(true);
       return shouldReplaceTodaySelection
-        ? `Selected exactly ${playerIds.size} player${playerIds.size === 1 ? "" : "s"} for Today.`
-        : `Selected ${playerIds.size} player${playerIds.size === 1 ? "" : "s"} for Today.`;
+        ? `Replaced Today with ${playerIds.size} player${playerIds.size === 1 ? "" : "s"}.`
+        : `Added/selected ${playerIds.size} player${playerIds.size === 1 ? "" : "s"} for Today without clearing the current selection.`;
+    }
+
+    if (action.type === "unselect_players") {
+      const playerIds = new Set(
+        action.playerRefs
+          .map((playerRef) => playerRef.playerId)
+          .filter((playerId): playerId is string => Boolean(playerId)),
+      );
+      if (playerIds.size === 0) {
+        throw new Error("I understood a remove-from-Today request, but could not match any roster players.");
+      }
+
+      replacePlayers(
+        players.map((player) =>
+          playerIds.has(player.id)
+            ? { ...player, attending: false, todayStatus: "" }
+            : player,
+        ),
+      );
+      setTodayRosterChosen(true);
+      return `Removed ${playerIds.size} player${playerIds.size === 1 ? "" : "s"} from Today without changing anyone else.`;
     }
 
     if (action.type === "add_new_player_suggestion") {
@@ -1294,7 +1315,11 @@ function App() {
       );
       replacePlayers([...players, nextPlayer]);
       setTodayRosterChosen(true);
-      return `Added ${nextPlayer.name} as a new player and selected them for Today.`;
+      setReviewPlayerQueue([nextPlayer.id]);
+      setReviewPlayerIndex(0);
+      setReviewAutoOpenPlayerId(nextPlayer.id);
+      setActiveTab("players");
+      return `Added ${nextPlayer.name} as a new player, selected them for Today, and opened their player profile for review.`;
     }
 
     if (action.type === "set_team_count") {

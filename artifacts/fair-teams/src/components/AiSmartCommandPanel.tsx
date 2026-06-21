@@ -283,8 +283,14 @@ function buildLocalRosterStatFallbackAnswer(
 function isRankedRosterSelectionAction(action: AiSmartCommandAction | null | undefined) {
   return Boolean(
     action?.type === "select_players" &&
-      /ranked_roster_selection/i.test(String(action.distribution || "") + " " + String(action.reason || "")),
+      /(ranked_roster_selection|bulk_all_except|bulk_all_roster)/i.test(String(action.distribution || "") + " " + String(action.reason || "")),
   );
+}
+
+function bulkRosterSelectionExcludedText(action: AiSmartCommandAction) {
+  const reason = String(action.reason || "");
+  const match = reason.match(/excluding (.+?)\.?$/i);
+  return match?.[1]?.trim() || "";
 }
 
 function parseModeLabel(mode?: AiSmartCommandResponse["parseMode"]) {
@@ -296,7 +302,7 @@ function parseModeLabel(mode?: AiSmartCommandResponse["parseMode"]) {
 
 function actionCardTitle(action: AiSmartCommandAction) {
   if (action.type === "select_players") {
-    if (isRankedRosterSelectionAction(action)) return "Use roster ranking";
+    if (isRankedRosterSelectionAction(action)) return bulkRosterSelectionExcludedText(action) ? "Select roster except…" : "Use roster selection";
     if (/possible existing match/i.test(String(action.reason || ""))) return "Use existing player";
     if (/then_generate/i.test(String(action.distribution || "")) || action.teamCount) return "Replace Today + generate";
     if (/replace|exact|only/i.test(String(action.distribution || ""))) return "Replace Today selection";
@@ -339,7 +345,7 @@ function actionPrimaryVerb(action: AiSmartCommandAction) {
   return "Apply";
 }
 
-const AI_ASSISTANT_VERSION_LABEL = "AI beta · v1.24 safe help answers";
+const AI_ASSISTANT_VERSION_LABEL = "AI beta · v1.25 bulk roster UX";
 
 type AiRosterMatch = {
   player: AiSmartCommandRosterPlayer;
@@ -1082,7 +1088,9 @@ function actionImpactLine(action: AiSmartCommandAction) {
 
   if (action.type === "select_players") {
     if (isRankedRosterSelectionAction(action)) {
-      return `Will clear Today and select ${count} ${playerWord} from the roster ranking.`;
+      const excluded = bulkRosterSelectionExcludedText(action);
+      if (excluded) return `Will clear Today and select ${count} roster players, leaving out ${excluded}.`;
+      return `Will clear Today and select ${count} ${playerWord} from the roster.`;
     }
     if (/then_generate/i.test(String(action.distribution || "")) || action.teamCount) {
       const teamText = action.teamCount

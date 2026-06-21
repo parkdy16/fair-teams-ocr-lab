@@ -588,15 +588,128 @@ function detectRosterQueryCount(text, playersPerTeam, teamCount) {
   return null;
 }
 
+function compactRosterNameKey(value) {
+  return normalizeForMatching(value)
+    .replace(/\s+/g, "")
+    .replace(/oo/g, "u")
+    .replace(/ou/g, "u")
+    .replace(/ph/g, "f")
+    .replace(/ck/g, "k")
+    .replace(/e$/g, "");
+}
+
+function consonantRosterNameKey(value) {
+  return compactRosterNameKey(value).replace(/[aeiouy]/g, "");
+}
+
+function splitExcludedRosterNames(value) {
+  return cleanString(value, 300)
+    .replace(/^(?:the\s+)?(?:player|players|person|people)\s+/i, "")
+    .split(/[,;\n]+|\s+and\s+|\s+und\s+|\s+그리고\s+|\s*랑\s*|\s*와\s*|\s*과\s*/i)
+    .map((part) => cleanString(part, 80)
+      .replace(/^(?:except|excluding|without|but\s+not|not|minus)\s+/i, "")
+      .replace(/\b(?:please|thanks|then|make|generate|teams?|players?|roster)\b/gi, " ")
+      .replace(/[.!?。！？,;]+$/g, "")
+      .replace(/\s+/g, " ")
+      .trim())
+    .filter((part) => part.length >= 2 && part.length <= 80);
+}
+
+function matchExcludedRosterName(candidate, rosterIndex) {
+  const direct = matchNameCandidate(candidate, rosterIndex);
+  if ((direct.status === "matched" || direct.status === "possible_match" || direct.status === "ambiguous") && (direct.playerId || direct.matches?.length)) {
+    return direct;
+  }
+
+  const candidateKey = compactRosterNameKey(candidate);
+  const candidateConsonants = consonantRosterNameKey(candidate);
+  if (!candidateKey && !candidateConsonants) return { status: "unknown", spokenName: candidate, matches: [] };
+
+  const close = [];
+  for (const entry of rosterIndex || []) {
+    const entryKey = compactRosterNameKey(entry.label || entry.rosterName || entry.normalized);
+    const entryConsonants = consonantRosterNameKey(entry.label || entry.rosterName || entry.normalized);
+    const soundMatch = candidateKey && entryKey && candidateKey === entryKey;
+    const consonantMatch = candidateConsonants && entryConsonants && candidateConsonants === entryConsonants && candidateConsonants.length >= 2;
+    const startsClose = candidateKey.length >= 3 && entryKey.length >= 3 && (candidateKey.startsWith(entryKey) || entryKey.startsWith(candidateKey));
+    if (soundMatch || consonantMatch || startsClose) close.push(entry);
+  }
+
+  const unique = [];
+  for (const entry of close) {
+    if (!unique.some((item) => item.playerId === entry.playerId)) unique.push(entry);
+  }
+  if (unique.length === 1) {
+    return { status: "possible_match", spokenName: candidate, playerId: unique[0].playerId, rosterName: unique[0].rosterName, matchedAlias: unique[0].label, confidence: 0.74 };
+  }
+  if (unique.length > 1) {
+    return { status: "ambiguous", spokenName: candidate, matches: unique.slice(0, 5).map((entry) => ({ playerId: entry.playerId, rosterName: entry.rosterName, matchedAlias: entry.label })) };
+  }
+  return { status: "unknown", spokenName: candidate, matches: [] };
+}
+
+function detectSelectAllExceptRosterPlayers(text, roster, selectAllRosterPlayers) {
+  const raw = cleanString(text, MAX_COMMAND_CHARS);
+  if (!selectAllRosterPlayers || !Array.isArray(roster) || roster.length === 0) return null;
+  const match = raw.match(/\b(?:except|excluding|without|but\s+not|other\s+than|minus)\s+(.+?)(?:\b(?:and\s+then|then|make|generate|split|divide|with|from|on\s+my\s+roster)\b|$)/i);
+  if (!match?.[1]) return null;
+
+  const rosterIndex = buildRosterNameIndex(roster);
+  const rawNames = Array.from(new Set(splitExcludedRosterNames(match[1])));
+  if (rawNames.length === 0) return null;
+
+  const excludedPlayerRefs = [];
+  const ambiguous = [];
+  const unknown = [];
+  for (const name of rawNames) {
+    const candidate = matchExcludedRosterName(name, rosterIndex);
+    if ((candidate.status === "matched" || candidate.status === "possible_match") && candidate.playerId) {
+      if (!excludedPlayerRefs.some((ref) => ref.playerId === candidate.playerId)) {
+        excludedPlayerRefs.push({
+          playerId: candidate.playerId,
+          rosterName: candidate.rosterName || candidate.spokenName,
+          spokenName: candidate.spokenName,
+          confidence: candidate.confidence || (candidate.status === "matched" ? 0.98 : 0.74),
+        });
+      }
+    } else if (candidate.status === "ambiguous") {
+      ambiguous.push({
+        spokenName: name,
+        matches: (candidate.matches || []).map((item) => ({
+          playerId: item.playerId || null,
+          rosterName: item.rosterName || null,
+          spokenName: name,
+          confidence: 0.55,
+        })),
+      });
+    } else {
+      unknown.push(name);
+    }
+  }
+
+  const excludedIds = new Set(excludedPlayerRefs.map((ref) => ref.playerId).filter(Boolean));
+  const selectedPlayerRefs = roster
+    .filter((player) => player?.id && !excludedIds.has(player.id))
+    .map((player) => makePlayerRef(player));
+
+  return {
+    rawNames,
+    excludedPlayerRefs,
+    selectedPlayerRefs,
+    ambiguous,
+    unknown,
+    rosterCount: roster.length,
+    selectedCount: selectedPlayerRefs.length,
+  };
+}
+
 function extractExcludedRosterRefs(text, roster) {
   const raw = cleanString(text, MAX_COMMAND_CHARS);
   const match = raw.match(/\b(?:except|excluding|without|not)\s+(.+?)(?:\b(?:and\s+then|then|make|generate|with|from|on\s+my\s+roster)\b|$)/i);
   if (!match?.[1]) return [];
   const rosterIndex = buildRosterNameIndex(roster);
-  return splitLikelyNameList(match[1])
-    .concat(match[1].split(/[,;]|\s+and\s+/i).map((part) => cleanString(part, 80)))
-    .filter(Boolean)
-    .map((candidate) => matchNameCandidate(candidate, rosterIndex))
+  return splitExcludedRosterNames(match[1])
+    .map((candidate) => matchExcludedRosterName(candidate, rosterIndex))
     .filter((candidate) => (candidate.status === "matched" || candidate.status === "possible_match") && candidate.playerId)
     .map((candidate) => ({ playerId: candidate.playerId, rosterName: candidate.rosterName || candidate.spokenName, spokenName: candidate.spokenName, confidence: candidate.confidence || 0.8 }));
 }
@@ -764,11 +877,12 @@ function buildRosterDataAnswer(commandText, roster, context = {}) {
 
 function buildCommandHints(commandText, roster) {
   const rosterIndex = buildRosterNameIndex(roster);
-  const candidateNames = Array.from(new Set(splitLikelyNameList(commandText)));
-  const candidatePlayers = candidateNames.map((candidate) => matchNameCandidate(candidate, rosterIndex));
   const playersPerTeam = detectPlayersPerTeam(commandText);
   const teamCount = detectTeamCount(commandText);
   const selectAllRosterPlayers = detectSelectAllRosterPlayers(commandText);
+  const detectedSelectAllExceptRosterPlayers = detectSelectAllExceptRosterPlayers(commandText, roster, selectAllRosterPlayers);
+  const candidateNames = selectAllRosterPlayers ? [] : Array.from(new Set(splitLikelyNameList(commandText)));
+  const candidatePlayers = candidateNames.map((candidate) => matchNameCandidate(candidate, rosterIndex));
   const clubNoteText = detectClubNoteText(commandText);
   const rosterColor = detectRosterColor(commandText);
   const rosterRename = detectRosterRename(commandText);
@@ -784,6 +898,7 @@ function buildCommandHints(commandText, roster) {
     candidateNames,
     candidatePlayers,
     selectAllRosterPlayers,
+    detectedSelectAllExceptRosterPlayers,
     detectedPlayersPerTeam: playersPerTeam,
     detectedTeamCount: teamCount,
     detectedClubNoteText: clubNoteText,
@@ -797,10 +912,10 @@ function buildCommandHints(commandText, roster) {
     expectedPlayerCountForRequestedGame: playersPerTeam ? playersPerTeam * 2 : null,
     listedPlayerCount: candidateNames.length || null,
     strictAttendanceExtraction: candidateNames.length >= 8 ? "long_list_do_not_drop_names" : "normal",
-    selectedAllPlayerCount: selectAllRosterPlayers ? roster.length : null,
+    selectedAllPlayerCount: detectedSelectAllExceptRosterPlayers?.selectedCount || (selectAllRosterPlayers ? roster.length : null),
     matchedListedPlayerCount: matchedCount || null,
     unknownListedPlayerCount: unknownCount || null,
-    instruction: `These are deterministic hints from Fair Teams before calling AI. Use them unless the user text clearly contradicts them. Every candidate name must be represented in actions, confirmations, or unresolved items. For long attendance lists, do not summarize, truncate, or silently drop uncertain names; include low-confidence person-name candidates instead. If selectAllRosterPlayers is true, select every roster player. If detectedTeamCount is set, set that many teams; do not confuse it with players per team. If detectedVisibleRosterPlayerQuery is set, use those selectedPlayerRefs as a roster-pool selection before generating teams; this is for requests like top 10 strongest, weakest 8, fastest players, best defenders, best attackers, best passers, or stamina/endurance queries. For roster-data questions like “who has the lowest stamina in my roster?”, answer with names and visible values, not an action card. If detectedClubNoteText, roster color, roster rename, target area, generate teams, spread role, or detectedEquipmentAction is set, return the matching app action even if not executable yet. Equipment move requests should mention the bag/item in targetName and the destination holder in playerRefs when known.`,
+    instruction: `These are deterministic hints from Fair Teams before calling AI. Use them unless the user text clearly contradicts them. Every candidate name must be represented in actions, confirmations, or unresolved items. For long attendance lists, do not summarize, truncate, or silently drop uncertain names; include low-confidence person-name candidates instead. If detectedSelectAllExceptRosterPlayers is set, use that bulk roster selection and do not manually list/review names. If selectAllRosterPlayers is true, select every roster player. If detectedTeamCount is set, set that many teams; do not confuse it with players per team. If detectedVisibleRosterPlayerQuery is set, use those selectedPlayerRefs as a roster-pool selection before generating teams; this is for requests like top 10 strongest, weakest 8, fastest players, best defenders, best attackers, best passers, or stamina/endurance queries. For roster-data questions like “who has the lowest stamina in my roster?”, answer with names and visible values, not an action card. If detectedClubNoteText, roster color, roster rename, target area, generate teams, spread role, or detectedEquipmentAction is set, return the matching app action even if not executable yet. Equipment move requests should mention the bag/item in targetName and the destination holder in playerRefs when known.`,
   };
 }
 
@@ -1070,8 +1185,43 @@ function buildDeterministicPlan(commandHints, roster) {
   const confirmations = [];
   const unresolved = [];
 
+  if (commandHints.detectedSelectAllExceptRosterPlayers) {
+    const bulk = commandHints.detectedSelectAllExceptRosterPlayers;
+    for (const item of bulk.ambiguous || []) {
+      confirmations.push({
+        id: `exclude-ambiguous-${normalizeForMatching(item.spokenName) || item.spokenName}`,
+        type: "ambiguous_player",
+        message: `I heard “${item.spokenName}” as the excluded player. Please choose which roster player to leave out.`,
+        playerRefs: item.matches || [],
+        suggestedActionType: "select_players",
+      });
+    }
+    for (const name of bulk.unknown || []) {
+      unresolved.push({
+        text: name,
+        issue: "unknown_player",
+        message: `I heard “${name}” as an excluded player, but I could not confidently match that to this roster.`,
+      });
+    }
+    if ((bulk.ambiguous?.length || 0) === 0 && (bulk.unknown?.length || 0) === 0 && bulk.selectedPlayerRefs?.length > 0) {
+      const excludedNames = (bulk.excludedPlayerRefs || []).map((ref) => ref.rosterName || ref.spokenName).filter(Boolean).join(", ");
+      actions.push(baseAction("select_players", {
+        playerRefs: bulk.selectedPlayerRefs,
+        capabilityId: "today.select_players",
+        supportStatus: "executable",
+        distribution: "replace_today_selection:bulk_all_except",
+        reason: `Select ${bulk.selectedPlayerRefs.length} of ${bulk.rosterCount || roster.length} roster players${excludedNames ? `, excluding ${excludedNames}` : ""}.`,
+      }));
+    }
+  }
 
-  if (commandHints.detectedVisibleRosterPlayerQuery?.selectedPlayerRefs?.length > 0) {
+  const bulkSelectionNeedsClarification = Boolean(
+    commandHints.detectedSelectAllExceptRosterPlayers &&
+      ((commandHints.detectedSelectAllExceptRosterPlayers.ambiguous?.length || 0) > 0 ||
+        (commandHints.detectedSelectAllExceptRosterPlayers.unknown?.length || 0) > 0),
+  );
+
+  if (!bulkSelectionNeedsClarification && commandHints.detectedVisibleRosterPlayerQuery?.selectedPlayerRefs?.length > 0) {
     const query = commandHints.detectedVisibleRosterPlayerQuery;
     const label = query.label || query.metric || "selected";
     actions.push(baseAction("select_players", {
@@ -1141,16 +1291,17 @@ function buildDeterministicPlan(commandHints, roster) {
     }));
   }
 
-  if (commandHints.selectAllRosterPlayers && roster.length > 0) {
+  if (!commandHints.detectedSelectAllExceptRosterPlayers && commandHints.selectAllRosterPlayers && roster.length > 0) {
     actions.unshift(baseAction("select_players", {
       playerRefs: roster.map((player) => makePlayerRef(player)),
       capabilityId: "today.select_players",
-      supportStatus: "preview_only",
+      supportStatus: "executable",
+      distribution: "replace_today_selection:bulk_all_roster",
       reason: "Select every player in the current roster for Today.",
     }));
   }
 
-  if (commandHints.detectedPlayersPerTeam) {
+  if (!bulkSelectionNeedsClarification && commandHints.detectedPlayersPerTeam) {
     actions.push(baseAction("set_team_size", {
       playersPerTeam: commandHints.detectedPlayersPerTeam,
       capabilityId: "teams.set_team_size",
@@ -1159,7 +1310,7 @@ function buildDeterministicPlan(commandHints, roster) {
     }));
   }
 
-  if (commandHints.detectedTeamCount) {
+  if (!bulkSelectionNeedsClarification && commandHints.detectedTeamCount) {
     actions.push(baseAction("set_team_count", {
       teamCount: commandHints.detectedTeamCount,
       capabilityId: "teams.set_team_count",
@@ -1243,7 +1394,7 @@ function buildDeterministicPlan(commandHints, roster) {
     }
   }
 
-  if (commandHints.detectedGenerateTeams) {
+  if (!bulkSelectionNeedsClarification && commandHints.detectedGenerateTeams) {
     actions.push(baseAction("generate_teams", {
       capabilityId: "teams.generate",
       supportStatus: "preview_only",
@@ -1251,7 +1402,7 @@ function buildDeterministicPlan(commandHints, roster) {
     }));
   }
 
-  if (commandHints.detectedPlayersPerTeam && commandHints.listedPlayerCount && commandHints.listedPlayerCount < commandHints.expectedPlayerCountForRequestedGame) {
+  if (!bulkSelectionNeedsClarification && commandHints.detectedPlayersPerTeam && commandHints.listedPlayerCount && commandHints.listedPlayerCount < commandHints.expectedPlayerCountForRequestedGame) {
     unresolved.push({
       text: `${commandHints.listedPlayerCount} listed players for ${commandHints.detectedPlayersPerTeam}v${commandHints.detectedPlayersPerTeam}`,
       issue: "missing_context",
@@ -1259,7 +1410,7 @@ function buildDeterministicPlan(commandHints, roster) {
     });
   }
 
-  if (commandHints.detectedTeamCount && commandHints.selectAllRosterPlayers && roster.length > 0 && roster.length < commandHints.detectedTeamCount) {
+  if (!bulkSelectionNeedsClarification && commandHints.detectedTeamCount && commandHints.selectAllRosterPlayers && roster.length > 0 && roster.length < commandHints.detectedTeamCount) {
     unresolved.push({
       text: `${roster.length} players for ${commandHints.detectedTeamCount} teams`,
       issue: "missing_context",
@@ -1395,6 +1546,18 @@ function mergeUniqueByKey(existing, incoming, keyFn) {
   return output;
 }
 
+function isBulkRosterSelectionAction(action) {
+  const distribution = String(action?.distribution || "");
+  const reason = String(action?.reason || "");
+  return action?.type === "select_players" && (
+    distribution.includes("bulk_all_except") ||
+    distribution.includes("bulk_all_roster") ||
+    distribution.includes("ranked_roster_selection") ||
+    /select \d+ of \d+ roster players/i.test(reason) ||
+    /select every player in the current roster/i.test(reason)
+  );
+}
+
 const PLAYER_ACTION_TYPES = new Set([
   "select_players",
   "unselect_players",
@@ -1406,7 +1569,7 @@ const PLAYER_ACTION_TYPES = new Set([
 ]);
 
 function isPlayerNameAction(action) {
-  return Boolean(action && PLAYER_ACTION_TYPES.has(action.type));
+  return Boolean(action && PLAYER_ACTION_TYPES.has(action.type) && !isBulkRosterSelectionAction(action));
 }
 
 function isPlayerNameConfirmation(confirmation) {
@@ -1436,9 +1599,11 @@ function filterOutPlayerNameNoise(plan) {
 function mergeDeterministicActions(parsed, commandHints, roster) {
   const normalized = normalizeParsedResponse(parsed, commandHints?.commandText || "");
   const rawDeterministic = buildDeterministicPlan(commandHints, roster);
+  const hasDeterministicBulkSelection = rawDeterministic.actions.some(isBulkRosterSelectionAction);
   const aiHandledPlayerNames = hasAiExtractedPlayers(normalized);
-  const deterministic = aiHandledPlayerNames ? filterOutPlayerNameNoise(rawDeterministic) : rawDeterministic;
-  const merged = { ...normalized };
+  const deterministic = aiHandledPlayerNames && !hasDeterministicBulkSelection ? filterOutPlayerNameNoise(rawDeterministic) : rawDeterministic;
+  const normalizedForMerge = hasDeterministicBulkSelection ? filterOutPlayerNameNoise(normalized) : normalized;
+  const merged = { ...normalizedForMerge };
 
   // Important: when the AI has already hand-picked the people from the transcript,
   // do not re-add local regex candidate names. The local hints can contain filler
@@ -1447,11 +1612,11 @@ function mergeDeterministicActions(parsed, commandHints, roster) {
   // AI be the source of truth for the initial name list.
   merged.actions = mergeUniqueByKey(
     deterministic.actions,
-    normalized.actions,
+    normalizedForMerge.actions,
     (action) => `${action.type}:${action.newPlayerName || action.noteText || action.colorName || action.targetName || action.targetArea || action.playersPerTeam || action.teamCount || action.pairingKind || action.teamLabel || action.playerRefs.map((p) => p.playerId || p.spokenName).join("+")}`,
   );
-  merged.confirmations = mergeUniqueByKey(normalized.confirmations, deterministic.confirmations, (item) => item.id || item.message);
-  merged.unresolved = mergeUniqueByKey(normalized.unresolved, deterministic.unresolved, (item) => `${item.issue}:${item.text || item.message}`);
+  merged.confirmations = mergeUniqueByKey(normalizedForMerge.confirmations, deterministic.confirmations, (item) => item.id || item.message);
+  merged.unresolved = mergeUniqueByKey(normalizedForMerge.unresolved, deterministic.unresolved, (item) => `${item.issue}:${item.text || item.message}`);
 
   if (rawDeterministic.actions.length > 0) merged.parseMode = "ai_with_local_hints";
   if (merged.actions.length > 0) merged.ok = true;
@@ -1648,6 +1813,7 @@ function hasStrongAppCommandIntent(commandText, commandHints) {
   // Action hints should win over product Q&A routing. Otherwise commands like
   // "Joon and Jorge are playing today" can be mistaken for a Today-tab help question.
   if (Array.isArray(hints.candidateNames) && hints.candidateNames.length > 0) return true;
+  if (hints.detectedSelectAllExceptRosterPlayers) return true;
   if (hints.selectAllRosterPlayers) return true;
   if (hints.detectedClubNoteText) return true;
   if (hints.detectedRosterColor) return true;
@@ -1748,6 +1914,7 @@ Output contract:
 - If the command includes a phrase such as "four new players" but does not provide those names, do not invent names from "four" or "new". Use unresolved missing_context for the missing names.
 - For attendance commands, use add_new_player_suggestion only for plausible human names. Never create new-player suggestions for app words, sentence fragments, or multi-word blobs that include filler words.
 - If commandHints.strictAttendanceExtraction is long_list_do_not_drop_names, treat the command as an attendance register: be exhaustive, preserve order, and include uncertain person-name candidates as unresolved/add_new_player_suggestion rather than dropping them. The word "person-name" is important: app/instruction words must still be excluded.
+- If commandHints.detectedSelectAllExceptRosterPlayers is set, use that precomputed select_players action. Do not run name review and do not manually re-list all players.
 - If commandHints.selectAllRosterPlayers is true, create select_players containing every roster player.
 - When commandHints detects playersPerTeam, create set_team_size unless the user clearly meant something else.
 - When commandHints detects teamCount, create set_team_count. "make 6 teams" means teamCount=6, not 6v6.

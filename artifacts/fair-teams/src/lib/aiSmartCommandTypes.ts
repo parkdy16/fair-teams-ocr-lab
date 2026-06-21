@@ -97,7 +97,7 @@ export type AiSmartCommandUnresolved = {
   message: string;
 };
 
-export type AiSmartCommandParseMode = "ai" | "ai_with_local_hints" | "local_fallback";
+export type AiSmartCommandParseMode = "ai" | "ai_with_local_hints" | "local_fallback" | "openai_question_answer" | "fair_teams_knowledge_base" | "question_answer_fallback" | "fair_teams_roster_data_answer";
 
 export type AiSmartCommandResponse = {
   schemaVersion: 1;

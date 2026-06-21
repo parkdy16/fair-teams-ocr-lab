@@ -1,4 +1,4 @@
-export const FAIR_TEAMS_KNOWLEDGE_VERSION = "2026-06-21.openai-answer-engine-v1";
+export const FAIR_TEAMS_KNOWLEDGE_VERSION = "2026-06-21.safe-help-answer-v1";
 
 function clean(value, max = 4000) {
   return typeof value === "string" ? value.replace(/\s+/g, " ").trim().slice(0, max) : "";

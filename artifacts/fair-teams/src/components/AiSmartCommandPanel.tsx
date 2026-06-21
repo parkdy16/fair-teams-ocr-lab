@@ -60,6 +60,9 @@ function friendlyAiError(error: unknown) {
   if (/openai|request failed|502|network|fetch/i.test(message)) {
     return "Fair Teams AI could not connect cleanly. Try again in a moment.";
   }
+  if (/fair teams ai command failed|ai command failed/i.test(message)) {
+    return "I could not answer that cleanly, but I can still help with basic Fair Teams questions. Try asking: “How do I add a player?” or “How do I edit a player?”";
+  }
   return message || "I could not answer that cleanly. Try asking again in a shorter way.";
 }
 
@@ -195,6 +198,39 @@ function buildSharedRosterRatingHelpAnswer(
   } as any;
 }
 
+function looksLikeBasicPlayerHelpQuestion(commandText: string) {
+  const text = String(commandText || "").trim();
+  if (!text) return null;
+  const isHowTo = /\?|\b(how\s+do\s+i|how\s+to|where\s+do\s+i|where\s+is|show\s+me\s+how|help\s+me)\b/i.test(text);
+  if (!isHowTo) return null;
+  if (/\b(add|create|new)\b.*\b(player|players)\b/i.test(text) || /\b(player|players)\b.*\b(add|create|new)\b/i.test(text)) return "add_player";
+  if (/\b(edit|change|update|rename)\b.*\b(player|players|player card|details)\b/i.test(text) || /\b(player|players|player card|details)\b.*\b(edit|change|update|rename)\b/i.test(text)) return "edit_player";
+  return null;
+}
+
+function buildBasicPlayerHelpAnswer(commandText: string): AiSmartCommandResponse | null {
+  const topic = looksLikeBasicPlayerHelpQuestion(commandText);
+  if (!topic) return null;
+
+  const assistantSummary = topic === "add_player"
+    ? "To add a player, go to the Roster tab and tap Add Player. Add the player’s name first, then you can fill in rating/details if you want. After adding them, they become part of this roster and can be selected in Today for team generation."
+    : "To edit a player, go to the Roster tab and tap that player’s card. From there you can update their name, AKA/aliases, rating/details, visible traits, notes/category, and local photo if your roster uses those fields. Local roster edits stay private on your device; shared rosters only sync shared-safe player info.";
+
+  return {
+    schemaVersion: 1,
+    ok: true,
+    detectedLanguage: "unknown",
+    normalizedIntent: commandText.slice(0, 300),
+    assistantSummary,
+    confidence: 0.86,
+    actions: [],
+    confirmations: [],
+    unresolved: [],
+    parseMode: "local_fallback" as any,
+    debugWarnings: ["Answered basic player help locally before AI routing."],
+  } as any;
+}
+
 function buildLocalRosterStatFallbackAnswer(
   commandText: string,
   players: AiSmartCommandRosterPlayer[],
@@ -303,7 +339,7 @@ function actionPrimaryVerb(action: AiSmartCommandAction) {
   return "Apply";
 }
 
-const AI_ASSISTANT_VERSION_LABEL = "AI beta · v1.23 OpenAI answers";
+const AI_ASSISTANT_VERSION_LABEL = "AI beta · v1.24 safe help answers";
 
 type AiRosterMatch = {
   player: AiSmartCommandRosterPlayer;
@@ -1327,6 +1363,17 @@ export function AiSmartCommandPanel({
         currentTeamCount: typeof currentTeamCount === "number" ? currentTeamCount : undefined,
         currentTeamsGenerated,
       });
+
+      const directBasicHelp = buildBasicPlayerHelpAnswer(trimmedCommand)
+        || buildPlayerRatingHowToHelpAnswer(trimmedCommand, rosterMode)
+        || buildSharedRosterRatingHelpAnswer(trimmedCommand, rosterMode)
+        || buildLocalRosterStatFallbackAnswer(trimmedCommand, players);
+      if (directBasicHelp) {
+        setResult(directBasicHelp);
+        onParsed?.(directBasicHelp);
+        return;
+      }
+
       try {
         // OpenAI/server route makes the first meaning decision. The local guard is
         // now only a fallback when the server cannot answer, so product questions
@@ -1382,7 +1429,7 @@ export function AiSmartCommandPanel({
           if (localStatAnswer) {
             setResult(localStatAnswer);
             onParsed?.(localStatAnswer);
-          } else if (/Fair Teams AI command failed|AI command failed/i.test(friendlyAiError(err)) && /(rate|rating|ratings|skill|ovr)/i.test(trimmedCommand)) {
+          } else if (/Fair Teams AI command failed|AI command failed/i.test(friendlyAiError(err)) && /\b(rate|rating|ratings|skill|ovr)\b/i.test(trimmedCommand)) {
             const safeRatingHelp = buildPlayerRatingHowToHelpAnswer("How do I rate a player?", rosterMode);
             if (safeRatingHelp) {
               setResult({

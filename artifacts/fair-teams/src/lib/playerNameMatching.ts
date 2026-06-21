@@ -150,6 +150,10 @@ export function voiceNameAlternates(name: string | null | undefined) {
     phillip: ["Philip", "Filip", "Fillip"],
     filip: ["Philip", "Phillip", "Fillip"],
     fillip: ["Philip", "Phillip", "Filip"],
+    anari: ["Enaree", "Anaree", "Inari"],
+    enaree: ["Anari", "Anaree", "Inari"],
+    anaree: ["Anari", "Enaree", "Inari"],
+    inari: ["Anari", "Enaree", "Anaree"],
     rafael: ["Raphael"],
     raphael: ["Rafael"],
   };
@@ -178,6 +182,10 @@ export function voiceNameSoundKey(value: string | null | undefined) {
     .replace(/brioche/g, "briesh")
     .replace(/brioch/g, "briesh")
     .replace(/briesh/g, "briesh")
+    .replace(/^anari$/g, "enari")
+    .replace(/^anaree$/g, "enari")
+    .replace(/^enaree$/g, "enari")
+    .replace(/^inari$/g, "enari")
     .replace(/ph/g, "f")
     .replace(/ck/g, "k")
     .replace(/qu/g, "kw")

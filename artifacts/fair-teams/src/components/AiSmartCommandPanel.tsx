@@ -113,7 +113,7 @@ function actionPrimaryVerb(action: AiSmartCommandAction) {
   return "Apply";
 }
 
-const AI_ASSISTANT_VERSION_LABEL = "AI beta · v1.2 OCR match";
+const AI_ASSISTANT_VERSION_LABEL = "AI beta · v1.3 ranking";
 
 type AiRosterMatch = {
   player: AiSmartCommandRosterPlayer;
@@ -134,33 +134,55 @@ function aiNameKey(value?: string | null) {
   return normalizePlayerNameForMatch(cleanAiSpokenName(value)).replace(/\s+/g, "");
 }
 
-function findOcrStyleRosterMatch(spokenName: string | null | undefined, players: AiSmartCommandRosterPlayer[]): AiRosterMatch | null {
+function rankedOcrStyleRosterMatches(spokenName: string | null | undefined, players: AiSmartCommandRosterPlayer[], limit = 5): AiRosterMatch[] {
   const cleaned = cleanAiSpokenName(spokenName);
   const normalized = normalizePlayerNameForMatch(cleaned);
-  if (!normalized || normalized.length < 2) return null;
+  if (!normalized || normalized.length < 2) return [];
 
-  const exactPlayers = players.filter((player) =>
-    candidateNamesForRosterPlayer(player, { includeDisplayName: true }).includes(normalized),
-  );
-  if (exactPlayers.length === 1) {
-    return { player: exactPlayers[0], score: 100, secondBestScore: 0 };
-  }
+  const rows = players
+    .map((player) => {
+      const candidates = candidateNamesForRosterPlayer(player, { includeDisplayName: true });
+      const isExact = candidates.includes(normalized);
+      const score = isExact ? 100 : scorePlayerNameMatch(cleaned, player, { includeDisplayName: true });
+      return { player, score, secondBestScore: 0 };
+    })
+    .filter((row) => row.player?.id && row.score > 0)
+    .sort((a, b) => b.score - a.score || String(a.player.name || "").localeCompare(String(b.player.name || "")));
 
-  const best = bestPlayerNameMatch(cleaned, players, { includeDisplayName: true });
-  if (!best || !best.player?.id) return null;
-
+  if (!rows.length) return [];
+  const bestScore = rows[0].score;
   const wordCount = normalized.split(/\s+/).filter(Boolean).length;
   const suggestThreshold = wordCount === 1 ? 78 : 72;
-  const strongAutoThreshold = wordCount === 1 ? 88 : 84;
-  const score = Math.max(best.score, scorePlayerNameMatch(cleaned, best.player, { includeDisplayName: true }));
+  if (bestScore < suggestThreshold) return [];
 
-  if (score < suggestThreshold) return null;
+  const closeWindow = bestScore >= 96 ? 8 : 10;
+  const kept = rows
+    .filter((row) => row.score >= suggestThreshold && row.score >= bestScore - closeWindow)
+    .slice(0, limit);
 
-  // If two roster players are nearly tied, do not silently choose one. The
-  // assistant should ask/check instead of creating a fake new player.
-  if (score < strongAutoThreshold && best.secondBestScore >= score - 4) return null;
+  return kept.map((row, index) => ({
+    ...row,
+    secondBestScore: index === 0 ? (kept[1]?.score || rows[1]?.score || 0) : bestScore,
+  }));
+}
 
-  return { player: best.player, score, secondBestScore: best.secondBestScore };
+function findOcrStyleRosterMatch(spokenName: string | null | undefined, players: AiSmartCommandRosterPlayer[]): AiRosterMatch | null {
+  return rankedOcrStyleRosterMatches(spokenName, players, 1)[0] || null;
+}
+
+function isAmbiguousRosterName(spokenName: string | null | undefined, players: AiSmartCommandRosterPlayer[]) {
+  const matches = rankedOcrStyleRosterMatches(spokenName, players, 5);
+  if (matches.length <= 1) return false;
+  const bestScore = matches[0].score;
+  const secondScore = matches[1].score;
+  const cleaned = cleanAiSpokenName(spokenName);
+  const normalized = normalizePlayerNameForMatch(cleaned);
+  const firstToken = normalized.split(/\s+/).filter(Boolean)[0] || normalized;
+  const sameBaseCount = matches.filter((match) => {
+    const rosterFirst = normalizePlayerNameForMatch(match.player.name).split(/\s+/).filter(Boolean)[0] || "";
+    return rosterFirst && scorePlayerNameMatch(firstToken, { id: match.player.id, name: rosterFirst, aka: match.player.aka }, { includeDisplayName: true }) >= 86;
+  }).length;
+  return secondScore >= bestScore - 6 || sameBaseCount >= 2;
 }
 
 function makeExistingPlayerActionFromAiName(
@@ -207,6 +229,7 @@ function repairAiPlayerRefsWithRosterMatcher(
   const playerRefs = action.playerRefs.map((ref) => {
     if (ref.playerId) return ref;
     const spokenName = ref.spokenName || ref.rosterName || "";
+    if (isAmbiguousRosterName(spokenName, players)) return ref;
     const match = findOcrStyleRosterMatch(spokenName, players);
     if (!match) return ref;
     resolvedNames.add(aiNameKey(spokenName));
@@ -232,10 +255,10 @@ function enhanceAiResultWithOcrStyleRosterMatching(
   const extraActions: AiSmartCommandAction[] = [];
   const repairedActions = response.actions.flatMap((action): AiSmartCommandAction[] => {
     if (action.type === "add_new_player_suggestion" && action.newPlayerName) {
-      const match = findOcrStyleRosterMatch(action.newPlayerName, players);
-      if (match) {
+      const matches = rankedOcrStyleRosterMatches(action.newPlayerName, players, 5);
+      if (matches.length > 0) {
         resolvedNames.add(aiNameKey(action.newPlayerName));
-        return [makeExistingPlayerActionFromAiName(action.newPlayerName, match, action)];
+        return matches.map((match) => makeExistingPlayerActionFromAiName(action.newPlayerName!, match, action));
       }
     }
     return [repairAiPlayerRefsWithRosterMatcher(action, players, resolvedNames)];
@@ -245,10 +268,10 @@ function enhanceAiResultWithOcrStyleRosterMatching(
     if (item.issue !== "unknown_player" && item.issue !== "ambiguous_player") continue;
     const key = aiNameKey(item.text);
     if (!key || resolvedNames.has(key)) continue;
-    const match = findOcrStyleRosterMatch(item.text, players);
-    if (!match) continue;
+    const matches = rankedOcrStyleRosterMatches(item.text, players, 5);
+    if (matches.length === 0) continue;
     resolvedNames.add(key);
-    extraActions.push(makeExistingPlayerActionFromAiName(item.text, match));
+    matches.forEach((match) => extraActions.push(makeExistingPlayerActionFromAiName(item.text, match)));
   }
 
   if (resolvedNames.size === 0 && extraActions.length === 0) return response;
@@ -273,8 +296,8 @@ function enhanceAiResultWithOcrStyleRosterMatching(
     confirmations,
     unresolved,
     parseMode: response.parseMode === "local_fallback" ? response.parseMode : "ai_with_local_hints",
-    assistantSummary: `${response.assistantSummary} I also checked close roster-name matches before suggesting new players.`,
-    debugWarnings: [...(response.debugWarnings || []), "AI names repaired with OCR-style roster matcher before display."],
+    assistantSummary: `${response.assistantSummary} I also checked close roster-name matches and kept close alternatives when names were ambiguous.`,
+    debugWarnings: [...(response.debugWarnings || []), "AI names repaired with OCR-style roster matcher and ranked alternatives before display."],
   };
 }
 

@@ -113,7 +113,7 @@ function actionPrimaryVerb(action: AiSmartCommandAction) {
   return "Apply";
 }
 
-const AI_ASSISTANT_VERSION_LABEL = "AI beta · v1.4 review";
+const AI_ASSISTANT_VERSION_LABEL = "AI beta · v1.5 review polish";
 
 type AiRosterMatch = {
   player: AiSmartCommandRosterPlayer;
@@ -146,6 +146,74 @@ function cleanAiSpokenName(value?: string | null) {
 
 function aiNameKey(value?: string | null) {
   return normalizePlayerNameForMatch(cleanAiSpokenName(value)).replace(/\s+/g, "");
+}
+
+function isLikelyFullRosterName(value: string, players: AiSmartCommandRosterPlayer[]) {
+  const cleaned = cleanAiSpokenName(value);
+  const normalized = normalizePlayerNameForMatch(cleaned);
+  if (!normalized) return false;
+  const match = bestPlayerNameMatch(cleaned, players, { includeDisplayName: true });
+  if (!match || match.score < 94 || match.score < match.secondBestScore + 7) return false;
+  // Do not preserve a long merged blob just because it contains one roster token.
+  // Only keep it whole when the matched roster candidate itself equals the heard phrase.
+  return aiNameKey(match.candidate) === aiNameKey(cleaned);
+}
+
+function splitNameWordsPreservingInitials(words: string[]) {
+  const names: string[] = [];
+  for (let index = 0; index < words.length; index += 1) {
+    const word = words[index];
+    const next = words[index + 1];
+    if (!word || word.length < 2) continue;
+    if (next && /^[A-Za-z]$/.test(next) && word.length >= 3) {
+      names.push(`${word} ${next.toUpperCase()}`);
+      index += 1;
+      continue;
+    }
+    if (/^[A-Za-z]$/.test(word)) continue;
+    names.push(word);
+  }
+  return names;
+}
+
+function splitAiHeardNameForReview(rawName: string | null | undefined, players: AiSmartCommandRosterPlayer[]) {
+  const cleaned = cleanAiSpokenName(rawName);
+  if (!cleaned) return [];
+
+  const delimiterParts = String(rawName || cleaned)
+    .replace(/[“”"']/g, " ")
+    .split(/[,;\n]+|\s+&\s+|\s+\+\s+|\s+and\s+|\s+und\s+|\s+그리고\s+/i)
+    .map((part) => cleanAiSpokenName(part))
+    .filter((part) => part.length >= 2);
+
+  const parts = delimiterParts.length > 1 ? delimiterParts : [cleaned];
+  const names: string[] = [];
+  for (const part of parts) {
+    const normalizedWords = normalizePlayerNameForMatch(part).split(/\s+/).filter(Boolean);
+    if (normalizedWords.length <= 2 || isLikelyFullRosterName(part, players)) {
+      names.push(displayAiHeardName(part));
+      continue;
+    }
+    splitNameWordsPreservingInitials(part.split(/\s+/).filter(Boolean)).forEach((name) => names.push(displayAiHeardName(name)));
+  }
+
+  const seen = new Set<string>();
+  return names.filter((name) => {
+    const key = aiNameKey(name);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function displayAiHeardName(value?: string | null) {
+  const cleaned = cleanAiSpokenName(value);
+  if (!cleaned) return "";
+  return cleaned
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => /^[A-Za-z]$/.test(word) ? word.toUpperCase() : word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
 }
 
 function rankedOcrStyleRosterMatches(spokenName: string | null | undefined, players: AiSmartCommandRosterPlayer[], limit = 5): AiRosterMatch[] {
@@ -329,11 +397,15 @@ function buildAiReviewItems(result: AiSmartCommandResponse | null, players: AiSm
   if (!result || !players.length) return [];
   const byKey = new Map<string, AiReviewItem>();
   const addHeardName = (rawName?: string | null) => {
-    const heardName = cleanAiSpokenName(rawName) || String(rawName || "").trim();
-    const key = aiNameKey(heardName);
-    if (!key || heardName.length < 2) return null;
-    if (!byKey.has(key)) byKey.set(key, { key, heardName, options: [] });
-    return byKey.get(key)!;
+    const heardNames = splitAiHeardNameForReview(rawName, players);
+    const added: AiReviewItem[] = [];
+    for (const heardName of heardNames) {
+      const key = aiNameKey(heardName);
+      if (!key || heardName.length < 2) continue;
+      if (!byKey.has(key)) byKey.set(key, { key, heardName, options: [] });
+      added.push(byKey.get(key)!);
+    }
+    return added[0] || null;
   };
 
   for (const action of result.actions || []) {
@@ -389,15 +461,52 @@ function reviewOptionLabel(option: AiReviewOption) {
   return `${option.rosterName || "Player"}${scoreText}`;
 }
 
+function reviewItemNeedsAttention(item: AiReviewItem) {
+  const existingOptions = item.options.filter((option) => option.kind === "existing");
+  if (existingOptions.length === 0) return true;
+  const bestScore = existingOptions[0]?.score || 0;
+  const secondScore = existingOptions[1]?.score || 0;
+  return bestScore < 94 || existingOptions.length > 1 && secondScore >= bestScore - 8;
+}
+
+function getAiReviewStats(items: AiReviewItem[], selections: Record<string, string>) {
+  const heard = items.length;
+  const selectedPlayerIds = items
+    .map((item) => selections[item.key])
+    .filter((value): value is string => Boolean(value && value !== "new" && value !== "skip"));
+  const uniqueSelected = new Set(selectedPlayerIds).size;
+  const needsReview = items.filter(reviewItemNeedsAttention).length;
+  const duplicateSelected = Math.max(0, selectedPlayerIds.length - uniqueSelected);
+  return {
+    heard,
+    matched: Math.max(0, heard - needsReview),
+    needsReview,
+    selected: uniqueSelected,
+    duplicateSelected,
+  };
+}
+
+function getSelectedPlayerIdCounts(items: AiReviewItem[], selections: Record<string, string>) {
+  const counts = new Map<string, number>();
+  for (const item of items) {
+    const selected = selections[item.key];
+    if (!selected || selected === "new" || selected === "skip") continue;
+    counts.set(selected, (counts.get(selected) || 0) + 1);
+  }
+  return counts;
+}
+
 function buildActionFromReviewSelections(
   result: AiSmartCommandResponse,
   items: AiReviewItem[],
   selections: Record<string, string>,
 ): AiSmartCommandAction | null {
+  const seenPlayerIds = new Set<string>();
   const playerRefs = items.flatMap((item) => {
     const selected = selections[item.key];
     const option = item.options.find((candidate) => candidate.kind === "existing" && candidate.playerId === selected);
-    if (!option?.playerId) return [];
+    if (!option?.playerId || seenPlayerIds.has(option.playerId)) return [];
+    seenPlayerIds.add(option.playerId);
     return [{
       playerId: option.playerId,
       rosterName: option.rosterName || null,
@@ -673,6 +782,8 @@ export function AiSmartCommandPanel({
 
   const aiReviewItems = useMemo(() => buildAiReviewItems(result, players), [result, players]);
   const hasAiReviewItems = aiReviewItems.length > 0;
+  const aiReviewStats = useMemo(() => getAiReviewStats(aiReviewItems, reviewSelections), [aiReviewItems, reviewSelections]);
+  const selectedPlayerIdCounts = useMemo(() => getSelectedPlayerIdCounts(aiReviewItems, reviewSelections), [aiReviewItems, reviewSelections]);
 
   useEffect(() => {
     if (!hasAiReviewItems) {
@@ -702,8 +813,11 @@ export function AiSmartCommandPanel({
       setError("Choose at least one existing roster player before applying.");
       return;
     }
-    await applyAction(action, -1);
-    setReviewOpen(false);
+    const applied = await applyAction(action, -1);
+    if (applied) {
+      setReviewOpen(false);
+      onOpenToday?.();
+    }
   };
 
   if (!enabled) return null;
@@ -840,7 +954,7 @@ export function AiSmartCommandPanel({
   };
 
   const applyAction = async (action: AiSmartCommandAction, index: number) => {
-    if (!onApplyAction || !aiCommandActionCanApply(action)) return;
+    if (!onApplyAction || !aiCommandActionCanApply(action)) return false;
     const key = `${action.type}-${index}`;
     setApplyingKey(key);
     setError("");
@@ -852,8 +966,10 @@ export function AiSmartCommandPanel({
       if (action.type === "select_players" || action.type === "unselect_players" || action.type === "mark_players_late" || action.type === "add_new_player_suggestion") {
         setShowTodayShortcut(true);
       }
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not apply this action yet.");
+      return false;
     } finally {
       setApplyingKey(null);
     }
@@ -957,7 +1073,7 @@ export function AiSmartCommandPanel({
                 <div className="min-w-0">
                   <div className="text-[13px] leading-tight">Review AI names</div>
                   <div className="mt-1 text-[11px] font-semibold leading-snug opacity-80">
-                    Check heard names against your roster before changing Today.
+                    {aiReviewStats.heard} names heard · {aiReviewStats.matched} matched · {aiReviewStats.needsReview} need review
                   </div>
                 </div>
                 <button
@@ -1055,10 +1171,10 @@ export function AiSmartCommandPanel({
               ))}
             </div>
           )}
-          {result.unresolved.length > 0 && (
+          {result.unresolved.filter((item) => !(hasAiReviewItems && (item.issue === "unknown_player" || item.issue === "ambiguous_player"))).length > 0 && (
             <div className="mt-3 grid gap-1.5">
               <div className="text-[10px] font-black uppercase tracking-wide text-slate-500">{unresolvedTitle(result)}</div>
-              {result.unresolved.map((item, index) => (
+              {result.unresolved.filter((item) => !(hasAiReviewItems && (item.issue === "unknown_player" || item.issue === "ambiguous_player"))).map((item, index) => (
                 <div key={`${item.issue}-${index}`} className="rounded-xl bg-slate-100 px-3 py-2 font-bold text-slate-700">
                   {item.message || item.text}
                 </div>
@@ -1075,8 +1191,13 @@ export function AiSmartCommandPanel({
               <div className="text-[10px] font-black uppercase tracking-wide text-violet-500">Fair Teams Assistant</div>
               <div className="mt-0.5 text-lg font-black text-[#102A43]">Review AI names</div>
               <div className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                Like Screenshot Import, confirm the roster match before Today changes. New-player choices stay manual for now.
+                {aiReviewStats.heard} names heard · {aiReviewStats.matched} matched · {aiReviewStats.needsReview} need review
               </div>
+              {aiReviewStats.duplicateSelected > 0 && (
+                <div className="mt-2 rounded-2xl bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-800">
+                  {aiReviewStats.duplicateSelected} duplicate selection{aiReviewStats.duplicateSelected === 1 ? "" : "s"} found. Duplicates will only be applied once.
+                </div>
+              )}
             </div>
             <div className="max-h-[58vh] overflow-y-auto px-4 py-3">
               <div className="grid gap-2">
@@ -1095,6 +1216,15 @@ export function AiSmartCommandPanel({
                         Skip
                       </button>
                     </div>
+                    {(() => {
+                      const selected = reviewSelections[item.key];
+                      const duplicate = Boolean(selected && selected !== "new" && selected !== "skip" && (selectedPlayerIdCounts.get(selected) || 0) > 1);
+                      return duplicate ? (
+                        <div className="mt-2 rounded-xl bg-amber-100 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wide text-amber-800">
+                          Duplicate match — this player will only be selected once
+                        </div>
+                      ) : null;
+                    })()}
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       {item.options.map((option) => {
                         const value = option.kind === "existing" ? option.playerId! : option.kind;
@@ -1132,7 +1262,7 @@ export function AiSmartCommandPanel({
                 disabled={!onApplyAction || applyingKey === "select_players--1"}
                 className="h-11 rounded-2xl bg-[#102A43] text-xs font-black uppercase tracking-wide text-white disabled:opacity-45"
               >
-                {applyingKey === "select_players--1" ? "Applying…" : "Apply reviewed names"}
+                {applyingKey === "select_players--1" ? "Applying…" : `Apply ${aiReviewStats.selected} player${aiReviewStats.selected === 1 ? "" : "s"}`}
               </button>
             </div>
           </div>

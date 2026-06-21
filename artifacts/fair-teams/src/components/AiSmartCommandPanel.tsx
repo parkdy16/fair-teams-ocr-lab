@@ -113,7 +113,7 @@ function actionPrimaryVerb(action: AiSmartCommandAction) {
   return "Apply";
 }
 
-const AI_ASSISTANT_VERSION_LABEL = "AI beta · v1.8 resolver";
+const AI_ASSISTANT_VERSION_LABEL = "AI beta · v1.9 review add";
 
 type AiRosterMatch = {
   player: AiSmartCommandRosterPlayer;
@@ -494,6 +494,7 @@ function getAiReviewStats(items: AiReviewItem[], selections: Record<string, stri
   const selectedPlayerIds = items
     .map((item) => selections[item.key])
     .filter((value): value is string => Boolean(value && value !== "new" && value !== "skip"));
+  const newSelectedCount = items.filter((item) => selections[item.key] === "new").length;
   const uniqueSelected = new Set(selectedPlayerIds).size;
   const needsReview = items.filter(reviewItemNeedsAttention).length;
   const duplicateSelected = Math.max(0, selectedPlayerIds.length - uniqueSelected);
@@ -501,8 +502,9 @@ function getAiReviewStats(items: AiReviewItem[], selections: Record<string, stri
     heard,
     matched: Math.max(0, heard - needsReview),
     needsReview,
-    selected: uniqueSelected,
+    selected: uniqueSelected + newSelectedCount,
     duplicateSelected,
+    newSelectedCount,
   };
 }
 
@@ -516,11 +518,62 @@ function getSelectedPlayerIdCounts(items: AiReviewItem[], selections: Record<str
   return counts;
 }
 
-function buildActionFromReviewSelections(
+function makeReviewAddNewPlayerAction(item: AiReviewItem): AiSmartCommandAction | null {
+  const newPlayerName = displayAiHeardName(item.heardName);
+  if (!newPlayerName || newPlayerName.length < 2) return null;
+  return {
+    type: "add_new_player_suggestion",
+    playerRefs: [],
+    newPlayerName,
+    suggestedSkill: null,
+    playersPerTeam: null,
+    teamCount: null,
+    pairingKind: null,
+    teamLabel: null,
+    role: null,
+    attribute: null,
+    distribution: "add_today_selection",
+    noteText: null,
+    colorName: null,
+    targetName: null,
+    targetArea: null,
+    capabilityId: "roster.add_new_player",
+    supportStatus: "executable",
+    requiresConfirmation: false,
+    reason: `Reviewed AI name as a new roster player: “${newPlayerName}”.`,
+  };
+}
+
+function makeReviewGenerateTeamsAction(teamAction?: AiSmartCommandAction | null, fallbackTeamCount?: number | null): AiSmartCommandAction {
+  return {
+    type: "generate_teams",
+    playerRefs: [],
+    newPlayerName: null,
+    suggestedSkill: null,
+    playersPerTeam: teamAction?.playersPerTeam ?? null,
+    teamCount: teamAction?.teamCount ?? fallbackTeamCount ?? null,
+    pairingKind: null,
+    teamLabel: null,
+    role: null,
+    attribute: null,
+    distribution: "from_reviewed_today_selection",
+    noteText: null,
+    colorName: null,
+    targetName: null,
+    targetArea: null,
+    capabilityId: "teams.generate",
+    supportStatus: "executable",
+    requiresConfirmation: false,
+    reason: "Generate teams after applying reviewed AI names.",
+  };
+}
+
+function buildActionsFromReviewSelections(
   result: AiSmartCommandResponse,
   items: AiReviewItem[],
   selections: Record<string, string>,
-): AiSmartCommandAction | null {
+  fallbackTeamCount?: number | null,
+): AiSmartCommandAction[] {
   const seenPlayerIds = new Set<string>();
   const playerRefs = items.flatMap((item) => {
     const selected = selections[item.key];
@@ -534,33 +587,51 @@ function buildActionFromReviewSelections(
       confidence: Math.min(1, Math.max(0.72, (option.score || 90) / 100)),
     }];
   });
-  if (playerRefs.length === 0) return null;
 
+  const actions: AiSmartCommandAction[] = [];
   const teamAction = result.actions.find(actionHasTeamFollowup);
   const shouldGenerate = Boolean(teamAction) || /generate|make|team/i.test(result.normalizedIntent || "");
-  return {
-    type: "select_players",
-    playerRefs,
-    newPlayerName: null,
-    suggestedSkill: null,
-    playersPerTeam: teamAction?.playersPerTeam ?? null,
-    teamCount: teamAction?.teamCount ?? null,
-    pairingKind: null,
-    teamLabel: null,
-    role: null,
-    attribute: null,
-    distribution: shouldGenerate ? "replace_today_selection_then_generate" : "replace_today_selection",
-    noteText: null,
-    colorName: null,
-    targetName: null,
-    targetArea: null,
-    capabilityId: "today.select_players",
-    supportStatus: "executable",
-    requiresConfirmation: false,
-    reason: shouldGenerate
-      ? "Reviewed AI names, then replace Today and generate teams."
-      : "Reviewed AI names, then replace Today with confirmed players.",
-  };
+  const hasNewSelections = items.some((item) => selections[item.key] === "new");
+
+  if (playerRefs.length > 0) {
+    actions.push({
+      type: "select_players",
+      playerRefs,
+      newPlayerName: null,
+      suggestedSkill: null,
+      playersPerTeam: !hasNewSelections && shouldGenerate ? teamAction?.playersPerTeam ?? null : null,
+      teamCount: !hasNewSelections && shouldGenerate ? teamAction?.teamCount ?? fallbackTeamCount ?? null : null,
+      pairingKind: null,
+      teamLabel: null,
+      role: null,
+      attribute: null,
+      distribution: shouldGenerate && !hasNewSelections ? "replace_today_selection_then_generate" : "replace_today_selection",
+      noteText: null,
+      colorName: null,
+      targetName: null,
+      targetArea: null,
+      capabilityId: "today.select_players",
+      supportStatus: "executable",
+      requiresConfirmation: false,
+      reason: "Reviewed AI names, then replace Today with confirmed existing players.",
+    });
+  }
+
+  const seenNewNames = new Set<string>();
+  for (const item of items) {
+    if (selections[item.key] !== "new") continue;
+    const newKey = aiNameKey(item.heardName);
+    if (!newKey || seenNewNames.has(newKey)) continue;
+    seenNewNames.add(newKey);
+    const addAction = makeReviewAddNewPlayerAction(item);
+    if (addAction) actions.push(addAction);
+  }
+
+  if (shouldGenerate && hasNewSelections && actions.length > 0 && (teamAction?.teamCount || teamAction?.playersPerTeam || fallbackTeamCount)) {
+    actions.push(makeReviewGenerateTeamsAction(teamAction, fallbackTeamCount));
+  }
+
+  return actions;
 }
 
 function shouldHideActionBecauseReviewHandlesIt(action: AiSmartCommandAction) {
@@ -840,13 +911,20 @@ export function AiSmartCommandPanel({
 
   const applyReviewedAiNames = async () => {
     if (!result || !onApplyAction) return;
-    const action = buildActionFromReviewSelections(result, aiReviewItems, reviewSelections);
-    if (!action) {
-      setError("Choose at least one existing roster player before applying.");
+    const actions = buildActionsFromReviewSelections(result, aiReviewItems, reviewSelections, currentTeamCount);
+    if (actions.length === 0) {
+      setError("Choose at least one roster player or add a new player before applying.");
       return;
     }
-    const applied = await applyAction(action, -1);
-    if (applied) {
+
+    setError("");
+    let appliedAny = false;
+    for (let index = 0; index < actions.length; index += 1) {
+      const applied = await applyAction(actions[index], -1 - index);
+      if (!applied) return;
+      appliedAny = true;
+    }
+    if (appliedAny) {
       setReviewOpen(false);
       onOpenToday?.();
     }
@@ -1217,7 +1295,7 @@ export function AiSmartCommandPanel({
       )}
 
       {reviewOpen && result && (
-        <div className="fixed inset-0 z-[80] flex items-end justify-center bg-slate-900/35 px-3 pb-3 pt-10 sm:items-center sm:pb-10">
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/35 px-3 py-6">
           <div className="max-h-[88vh] w-full max-w-lg overflow-hidden rounded-[28px] bg-white shadow-2xl">
             <div className="border-b border-slate-100 px-4 py-3">
               <div className="text-[10px] font-black uppercase tracking-wide text-violet-500">Fair Teams Assistant</div>
@@ -1276,7 +1354,7 @@ export function AiSmartCommandPanel({
                       {item.options.map((option) => {
                         const value = option.kind === "existing" ? option.playerId! : option.kind;
                         const selected = reviewSelections[item.key] === value;
-                        const disabled = option.kind === "new";
+                        const disabled = false;
                         return (
                           <button
                             key={`${item.key}-${value}`}
@@ -1284,7 +1362,7 @@ export function AiSmartCommandPanel({
                             disabled={disabled}
                             onClick={() => setReviewSelections((current) => ({ ...current, [item.key]: value }))}
                             className={`rounded-full px-2.5 py-1.5 text-[10px] font-black leading-none shadow-sm disabled:opacity-45 ${selected ? "bg-violet-600 text-white" : "bg-white text-slate-700"}`}
-                            title={disabled ? "Use the separate Add new player action when this is truly new." : undefined}
+                            title={option.kind === "new" ? "Add this as a new roster player and mark them present Today." : undefined}
                           >
                             {reviewOptionLabel(option)}
                           </button>

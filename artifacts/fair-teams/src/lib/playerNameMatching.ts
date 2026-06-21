@@ -168,6 +168,10 @@ export function voiceNameAlternates(name: string | null | undefined) {
     onursah: ["Onursha", "Unursha", "Onur Shah"],
     rafael: ["Raphael"],
     raphael: ["Rafael"],
+    sari: ["Ceri", "Seri"],
+    seri: ["Ceri", "Sari"],
+    ceri: ["Sari", "Seri", "Keri"],
+    keri: ["Ceri", "Sari"],
   };
 
   return alternatesByName[normalized] ?? [];
@@ -211,6 +215,9 @@ export function voiceNameSoundKey(value: string | null | undefined) {
     .replace(/^onursah$/g, "onursha")
     .replace(/^unursha$/g, "onursha")
     .replace(/^onurshah$/g, "onursha")
+    .replace(/^sari/g, "ceri")
+    .replace(/^seri/g, "ceri")
+    .replace(/^keri/g, "ceri")
     .replace(/ph/g, "f")
     .replace(/ck/g, "k")
     .replace(/qu/g, "kw")
@@ -260,6 +267,23 @@ function scoreCandidateName(inputName: string, candidate: string) {
   const candidateWords = tokenWords(normalizedCandidate);
   const inputFirstName = inputWords[0] ?? "";
   const candidateFirstName = candidateWords[0] ?? "";
+
+  const inputLastName = inputWords[inputWords.length - 1] ?? "";
+  const candidateLastName = candidateWords[candidateWords.length - 1] ?? "";
+  if (inputWords.length >= 2 && candidateWords.length >= 2 && inputLastName.length >= 4 && inputLastName === candidateLastName) {
+    const firstNameScore = nameSimilarityScore(inputFirstName, candidateFirstName);
+    const firstNameSpeechScore = speechSoundSimilarityScore(inputFirstName, candidateFirstName);
+    const firstNameAlternateScore = Math.max(
+      0,
+      ...voiceNameAlternates(inputFirstName).map((alternate) => nameSimilarityScore(alternate, candidateFirstName)),
+      ...voiceNameAlternates(candidateFirstName).map((alternate) => nameSimilarityScore(inputFirstName, alternate)),
+    );
+    if (inputFirstName === candidateFirstName) return 99;
+    if (firstNameAlternateScore >= 92) return 94;
+    if (firstNameSpeechScore >= 82) return 92;
+    if (firstNameScore >= 58) return 88;
+    return 82;
+  }
 
   if (candidateWords.length === 1 && candidateFirstName.length >= 3 && inputWords.includes(candidateFirstName)) {
     return candidateFirstName.length >= 4 ? 96 : 93;

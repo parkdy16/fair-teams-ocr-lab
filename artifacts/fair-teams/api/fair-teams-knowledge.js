@@ -1,4 +1,4 @@
-export const FAIR_TEAMS_KNOWLEDGE_VERSION = "2026-06-21.openai-first-v1";
+export const FAIR_TEAMS_KNOWLEDGE_VERSION = "2026-06-21.player-query-v1";
 
 function clean(value, max = 4000) {
   return typeof value === "string" ? value.replace(/\s+/g, " ").trim().slice(0, max) : "";
@@ -31,6 +31,12 @@ const KNOWLEDGE_SECTIONS = {
     title: "Ratings, normal rating, private rating, Club rating",
     keywords: ["rating", "ratings", "skill", "ovr", "normal rating", "non shared rating", "non-shared rating", "private rating", "club rating", "average rating", "consensus", "advanced", "attack", "defense", "passing", "speed"],
     text: `In Fair Teams, a non-shared/local/private roster uses the normal private rating system. That rating belongs to the organizer's private roster and is used directly by team generation. The private/local player profile can include main skill/OVR and, where available, private advanced details like attack, defense, passing, speed, and special traits. A shared/Club roster is different: each organizer submits their own private simple rating for a player. Other organizers do not see individual ratings. Fair Teams averages submitted organizer ratings into a Club average/consensus rating, and shared team generation uses that Club average. A collaborator should normally see a Club average only after submitting their own rating for that player, to avoid bias. Organizers can skip players they do not know and rate them later. If the user asks about "non-shared roster rating vs normal rating", explain that those are effectively the same if they mean local/private roster rating; the real difference is local/private rating versus shared/Club average rating.`,
+  },
+
+  playerQueries: {
+    title: "Natural roster/player queries",
+    keywords: ["top players", "strongest", "weakest", "best defenders", "fastest", "best passers", "highest rated", "lowest rated", "use 10 players", "pick players from roster"],
+    text: `Fair Teams should understand natural player-pool requests using visible player data. Visible player variables include name/AKA, skill/OVR, attack, defense, speed, passing, special traits such as goalkeeper/playmaker/finisher/dribbler/sentinel/engine/versatile/space finder, gender/category, vibe/fun badge, and attending status. Examples: "make teams with the 10 strongest players" means select the top 10 by skill/OVR from the roster first, then generate teams. "weakest 8" means sort by skill/OVR ascending. "fastest" uses speed, "best defenders" uses defense, "best attackers" uses attack, and "best passers/playmakers" uses passing. If a request is vague, the assistant should ask a friendly clarifying question rather than guessing.`,
   },
   todayTeams: {
     title: "Today tab and team generation",
@@ -90,7 +96,7 @@ const APP_QUESTION_WORDS = [
 ];
 
 const APP_FEATURE_WORDS = [
-  "fair teams", "roster", "copy roster", "duplicate roster", "new roster", "make private copy", "export this roster", "import one roster", "local roster", "shared roster", "private roster", "non shared", "non-shared", "rating", "ratings", "skill", "ovr", "club rating", "club average", "normal rating", "local rating", "shared rating", "today", "teams", "5v5", "6v6", "players per team", "team count", "pairing", "keep together", "keep separate", "club", "club notes", "equipment", "equipment board", "bag", "smart import", "ocr", "lost and found", "screenshot", "crop", "review names", "cloud backup", "backup", "shared", "firebase", "voice", "assistant"
+  "fair teams", "roster", "copy roster", "duplicate roster", "new roster", "make private copy", "export this roster", "import one roster", "local roster", "shared roster", "private roster", "non shared", "non-shared", "rating", "ratings", "skill", "ovr", "club rating", "club average", "normal rating", "local rating", "shared rating", "top players", "strongest", "weakest", "fastest", "best defenders", "best attackers", "best passers", "today", "teams", "5v5", "6v6", "players per team", "team count", "pairing", "keep together", "keep separate", "club", "club notes", "equipment", "equipment board", "bag", "smart import", "ocr", "lost and found", "screenshot", "crop", "review names", "cloud backup", "backup", "shared", "firebase", "voice", "assistant"
 ];
 
 const ACTION_REQUEST_STARTERS = [
@@ -143,6 +149,7 @@ function detectKnowledgeTopic(commandText = "") {
   if (/(cloud backup|backup|restore|shared roster collaboration|collaboration|sync|google drive)/i.test(commandText)) return "backupSync";
   if (/(equipment|bag|bags|bibs|cones|ball|holder|gear)/i.test(commandText)) return "equipment";
   if (/(club notes|post.?it|organizer note|club tab|club)/i.test(commandText)) return "clubNotes";
+  if (/(top players|strongest|weakest|fastest|best defenders|best attackers|best passers|highest rated|lowest rated)/i.test(commandText)) return "playerQueries";
   if (/(today|attendance|playing today|team generation|generate teams|5v5|6v6|teams|team count|players per team)/i.test(commandText)) return "todayTeams";
   if (/(pairing|keep together|keep separate|separate|together|team lock|red team|blue team|color lock)/i.test(commandText)) return "pairingLocks";
   if (/(local roster|private roster|shared roster|co.?organizer|collaborator)/i.test(commandText)) return "localSharedRosters";
@@ -158,6 +165,7 @@ const DIRECT_FAIR_TEAMS_ANSWERS = {
 
 If the roster is a shared roster and you want your own local version, use Make private copy instead. That keeps the shared roster online and unchanged, and creates a clean local copy using shared names and Club averages as starting skill. Photos, special abilities, and private advanced traits are reset in that private copy.`,
   smartImport: `Smart Import reads names from screenshots so you do not have to type attendance manually. The default flow uses offline OCR, crop boxes, Meetup/Other screenshot modes, Review Names, OCR report export, and Lost & Found. Lost & Found is there to rescue possible names that OCR did not confidently place in the main name list. AI or cloud OCR should stay optional, not replace the reliable offline default.`,
+  playerQueries: `You can ask Fair Teams for player pools in normal language, using the data you can already see on player cards. For example, “make teams with the 10 strongest players” should pick the top 10 by skill/OVR from the roster first, then generate teams. “Fastest players” uses speed, “best defenders” uses defense, “best attackers” uses attack, and “best passers/playmakers” uses passing. If the request is unclear, Fair Teams should ask before changing Today.`,
   todayTeams: `The Today tab is where you select who is playing now. Team generation then uses those selected players to create balanced teams. “5v5” means five players per team, so it normally needs 10 selected players. “Make 6 teams” means six total teams, not 6v6. The assistant should set up selection, size/count, rules, and warnings; the Fair Teams generator still creates the final teams.`,
   pairingLocks: `Pairing rules guide the team generator. “Keep Sarah and Tommy together” means try to place them on the same team. “Sarah and Tommy do not like each other” or “do not put them together” means keep them separate. Team locks are different: “George red” or “put George in red” means lock that player to a specific team/color when teams are generated.`,
   clubNotes: `Club Notes are friendly organizer notes in the Club area, like a shared post-it board. They are meant for quick community/organizer notes such as “Puma ball died today — Joon.” Adding a note is relatively safe; deleting notes should require confirmation.`,

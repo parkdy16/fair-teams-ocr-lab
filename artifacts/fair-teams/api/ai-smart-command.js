@@ -473,6 +473,112 @@ function detectEquipmentAction(text, roster) {
   };
 }
 
+
+function getVisiblePlayerMetric(player, metric) {
+  const item = player && typeof player === "object" ? player : {};
+  if (metric === "attack") return cleanNumber(item.attack);
+  if (metric === "defense") return cleanNumber(item.defense);
+  if (metric === "speed") return cleanNumber(item.speed);
+  if (metric === "passing") return cleanNumber(item.passing);
+  return cleanNumber(item.skill);
+}
+
+function detectRosterQueryMetric(text) {
+  const raw = cleanString(text, MAX_COMMAND_CHARS);
+  const normalized = normalizeForMatching(raw);
+  if (!normalized) return null;
+
+  if (/\b(fastest|speed|quickest|pace|schnell|속도|빠른)\b/i.test(raw)) return { metric: "speed", direction: "desc", label: "fastest" };
+  if (/\b(best\s+defenders?|defenders?|defensive|defense|verteidiger|수비)\b/i.test(raw)) return { metric: "defense", direction: "desc", label: "best defenders" };
+  if (/\b(best\s+attackers?|attackers?|strikers?|forwards?|attacking|attack|finisher|sturm|공격)\b/i.test(raw)) return { metric: "attack", direction: "desc", label: "best attackers" };
+  if (/\b(best\s+passers?|passing|passers?|playmakers?|spielmacher|패스)\b/i.test(raw)) return { metric: "passing", direction: "desc", label: "best passers" };
+  if (/\b(weakest|lowest\s+rated|lowest\s+skill|beginners?|newbies?|least\s+strong|schwach|anfanger|anfänger|초보|약한)\b/i.test(raw)) return { metric: "skill", direction: "asc", label: "weakest" };
+  if (/\b(strongest|best|top|highest\s+rated|highest\s+skill|highest\s+ovr|most\s+skilled|skilled|stark|beste|강한|잘하는)\b/i.test(raw)) return { metric: "skill", direction: "desc", label: "strongest" };
+  return null;
+}
+
+function detectRosterQueryCount(text, playersPerTeam, teamCount) {
+  const raw = cleanString(text, MAX_COMMAND_CHARS);
+  const patterns = [
+    /\b(?:top|best|strongest|weakest|fastest|highest\s+rated|lowest\s+rated)\s+(\d{1,2})\b/i,
+    /\b(?:use|pick|select|choose|take|with|from)\s+(?:the\s+)?(\d{1,2})\s+(?:top|best|strongest|weakest|fastest|highest\s+rated|lowest\s+rated|players?)\b/i,
+    /\b(\d{1,2})\s+(?:top|best|strongest|weakest|fastest|highest\s+rated|lowest\s+rated|players?)\b/i,
+  ];
+  for (const pattern of patterns) {
+    const match = raw.match(pattern);
+    const value = Number(match?.[1]);
+    if (Number.isFinite(value) && value >= 1 && value <= MAX_ROSTER_PLAYERS) return value;
+  }
+  if (playersPerTeam && teamCount) return playersPerTeam * teamCount;
+  if (playersPerTeam && /\b(?:v|vs|a\s*side|per\s*team)\b/i.test(raw)) return playersPerTeam * 2;
+  return null;
+}
+
+function extractExcludedRosterRefs(text, roster) {
+  const raw = cleanString(text, MAX_COMMAND_CHARS);
+  const match = raw.match(/\b(?:except|excluding|without|not)\s+(.+?)(?:\b(?:and\s+then|then|make|generate|with|from|on\s+my\s+roster)\b|$)/i);
+  if (!match?.[1]) return [];
+  const rosterIndex = buildRosterNameIndex(roster);
+  return splitLikelyNameList(match[1])
+    .concat(match[1].split(/[,;]|\s+and\s+/i).map((part) => cleanString(part, 80)))
+    .filter(Boolean)
+    .map((candidate) => matchNameCandidate(candidate, rosterIndex))
+    .filter((candidate) => (candidate.status === "matched" || candidate.status === "possible_match") && candidate.playerId)
+    .map((candidate) => ({ playerId: candidate.playerId, rosterName: candidate.rosterName || candidate.spokenName, spokenName: candidate.spokenName, confidence: candidate.confidence || 0.8 }));
+}
+
+function detectVisibleRosterPlayerQuery(text, roster, playersPerTeam, teamCount) {
+  const raw = cleanString(text, MAX_COMMAND_CHARS);
+  const normalized = normalizeForMatching(raw);
+  if (!normalized || !Array.isArray(roster) || roster.length === 0) return null;
+
+  const metric = detectRosterQueryMetric(raw);
+  if (!metric) return null;
+
+  const hasRosterPool = /\b(roster|player\s*list|all\s+players|everyone|everybody|whole\s+list|kader|명단|로스터)\b/i.test(raw);
+  const hasSelectionIntent = /\b(use|pick|select|choose|take|with|from|make|create|generate|split|divide)\b/i.test(raw) || /(선택|골라|뽑아|팀|만들|나눠)/u.test(raw);
+  const count = detectRosterQueryCount(raw, playersPerTeam, teamCount);
+
+  // Avoid hijacking vague balancing requests like "make strong teams". We only
+  // treat this as a roster-pool query when the user gives a count/format or clearly
+  // says to use the roster/list/everyone as the source pool.
+  if (!hasSelectionIntent || (!count && !hasRosterPool)) return null;
+
+  const excludedRefs = extractExcludedRosterRefs(raw, roster);
+  const excludedIds = new Set(excludedRefs.map((ref) => ref.playerId).filter(Boolean));
+  const eligible = roster.filter((player) => player?.id && !excludedIds.has(player.id));
+  if (eligible.length === 0) return null;
+
+  const direction = metric.direction === "asc" ? "asc" : "desc";
+  const sorted = [...eligible].sort((a, b) => {
+    const av = getVisiblePlayerMetric(a, metric.metric);
+    const bv = getVisiblePlayerMetric(b, metric.metric);
+    const safeA = Number.isFinite(av) ? av : (direction === "asc" ? Number.POSITIVE_INFINITY : Number.NEGATIVE_INFINITY);
+    const safeB = Number.isFinite(bv) ? bv : (direction === "asc" ? Number.POSITIVE_INFINITY : Number.NEGATIVE_INFINITY);
+    if (safeA !== safeB) return direction === "asc" ? safeA - safeB : safeB - safeA;
+    return String(a.name || "").localeCompare(String(b.name || ""));
+  });
+
+  const finalCount = count || Math.min(sorted.length, playersPerTeam ? playersPerTeam * 2 : 10);
+  const selected = sorted.slice(0, Math.max(1, Math.min(finalCount, sorted.length)));
+  return {
+    metric: metric.metric,
+    direction,
+    label: metric.label,
+    count: finalCount,
+    selectedPlayerRefs: selected.map((player) => ({
+      playerId: player.id,
+      rosterName: player.name,
+      spokenName: player.name,
+      confidence: 1,
+    })),
+    excludedPlayerRefs: excludedRefs,
+    availableCount: eligible.length,
+    requestedCount: count,
+    source: hasRosterPool ? "roster" : "visible_roster_data",
+  };
+}
+
 function buildCommandHints(commandText, roster) {
   const rosterIndex = buildRosterNameIndex(roster);
   const candidateNames = Array.from(new Set(splitLikelyNameList(commandText)));
@@ -487,10 +593,11 @@ function buildCommandHints(commandText, roster) {
   const generateTeams = detectGenerateTeams(commandText);
   const spreadRole = detectSpreadRole(commandText);
   const equipmentAction = detectEquipmentAction(commandText, roster);
+  const visibleRosterPlayerQuery = detectVisibleRosterPlayerQuery(commandText, roster, playersPerTeam, teamCount);
   const matchedCount = candidatePlayers.filter((item) => item.status === "matched" || item.status === "possible_match").length;
   const unknownCount = candidatePlayers.filter((item) => item.status === "unknown").length;
   return {
-    appKnowledgeVersion: `2026-06-20.smart-command-v6-knowledge-base:${FAIR_TEAMS_KNOWLEDGE_VERSION}`,
+    appKnowledgeVersion: `2026-06-21.player-query-v1:${FAIR_TEAMS_KNOWLEDGE_VERSION}`,
     candidateNames,
     candidatePlayers,
     selectAllRosterPlayers,
@@ -503,13 +610,14 @@ function buildCommandHints(commandText, roster) {
     detectedGenerateTeams: generateTeams,
     detectedSpreadRole: spreadRole,
     detectedEquipmentAction: equipmentAction,
+    detectedVisibleRosterPlayerQuery: visibleRosterPlayerQuery,
     expectedPlayerCountForRequestedGame: playersPerTeam ? playersPerTeam * 2 : null,
     listedPlayerCount: candidateNames.length || null,
     strictAttendanceExtraction: candidateNames.length >= 8 ? "long_list_do_not_drop_names" : "normal",
     selectedAllPlayerCount: selectAllRosterPlayers ? roster.length : null,
     matchedListedPlayerCount: matchedCount || null,
     unknownListedPlayerCount: unknownCount || null,
-    instruction: "These are deterministic hints from Fair Teams before calling AI. Use them unless the user text clearly contradicts them. Every candidate name must be represented in actions, confirmations, or unresolved items. For long attendance lists, do not summarize, truncate, or silently drop uncertain names; include low-confidence person-name candidates instead. If selectAllRosterPlayers is true, select every roster player. If detectedTeamCount is set, set that many teams; do not confuse it with players per team. If detectedClubNoteText, roster color, roster rename, target area, generate teams, spread role, or detectedEquipmentAction is set, return the matching app action even if not executable yet. Equipment move requests should mention the bag/item in targetName and the destination holder in playerRefs when known.",
+    instruction: "These are deterministic hints from Fair Teams before calling AI. Use them unless the user text clearly contradicts them. Every candidate name must be represented in actions, confirmations, or unresolved items. For long attendance lists, do not summarize, truncate, or silently drop uncertain names; include low-confidence person-name candidates instead. If selectAllRosterPlayers is true, select every roster player. If detectedTeamCount is set, set that many teams; do not confuse it with players per team. If detectedVisibleRosterPlayerQuery is set, use those selectedPlayerRefs as a roster-pool selection before generating teams; this is for requests like top 10 strongest, weakest 8, fastest players, best defenders, best attackers, or best passers. If detectedClubNoteText, roster color, roster rename, target area, generate teams, spread role, or detectedEquipmentAction is set, return the matching app action even if not executable yet. Equipment move requests should mention the bag/item in targetName and the destination holder in playerRefs when known.",
   };
 }
 
@@ -548,6 +656,14 @@ Important roster rules:
 - If the user names someone not in the roster, return add_new_player_suggestion and a missing_player confirmation.
 - If a name could be several players, return ambiguous_player confirmation.
 - Do not silently ignore names in a player list. For long lists, preserve the spoken order and include every possible person-name candidate, even if confidence is low.
+
+
+Visible player-query rules:
+- The assistant may use visible player-card/profile data as variables when the user asks for a roster pool, such as "10 strongest players", "top 12", "weakest 8", "fastest players", "best defenders", "best attackers", or "best passers".
+- Use visible fields only: name/AKA, skill/OVR, attack, defense, speed, passing, goalkeeper/playmaker/finisher/dribbler/sentinel/engine/versatile/space-finder flags, gender/category, vibe/fun badge, and attending status.
+- For "strongest", "best", "top", or "highest rated", sort by skill/OVR descending. For "weakest" or "beginners", sort by skill/OVR ascending. For "fastest", sort by speed. For "best defenders", sort by defense. For "best attackers", sort by attack. For "best passers" or "playmakers", sort by passing.
+- If the user says "make teams with the 10 strongest players on my roster", first replace Today with those 10 roster players, then generate teams. Do not reinterpret that as merely a vague balancing preference.
+- If the user only says something vague like "make strong teams" without a count/source/filter, treat it as a balancing preference or ask a clarifying question.
 
 Today/player-list rules:
 - "Joon, Jorge, Jan are playing today" = select Joon, Jorge, Jan.
@@ -770,6 +886,26 @@ function buildDeterministicPlan(commandHints, roster) {
   const actions = [];
   const confirmations = [];
   const unresolved = [];
+
+
+  if (commandHints.detectedVisibleRosterPlayerQuery?.selectedPlayerRefs?.length > 0) {
+    const query = commandHints.detectedVisibleRosterPlayerQuery;
+    const label = query.label || query.metric || "selected";
+    actions.push(baseAction("select_players", {
+      playerRefs: query.selectedPlayerRefs,
+      capabilityId: "today.select_players",
+      supportStatus: "executable",
+      distribution: `replace_today_selection:ranked_roster_selection:${query.metric}:${query.direction}`,
+      reason: `Use the ${query.selectedPlayerRefs.length} ${label} players from the roster based on visible ${query.metric || "skill"} values.`,
+    }));
+    if (query.requestedCount && query.selectedPlayerRefs.length < query.requestedCount) {
+      unresolved.push({
+        text: `${query.requestedCount} requested ${label} players`,
+        issue: "missing_context",
+        message: `Only ${query.selectedPlayerRefs.length} eligible roster players were available for that request.`,
+      });
+    }
+  }
 
   const matchedRefs = [];
   for (const candidate of commandHints.candidatePlayers || []) {
@@ -1236,6 +1372,7 @@ function hasStrongAppCommandIntent(commandText, commandHints) {
   if (hints.detectedTargetArea) return true;
   if (hints.detectedSpreadRole) return true;
   if (hints.detectedEquipmentAction) return true;
+  if (hints.detectedVisibleRosterPlayerQuery) return true;
 
   // Size/count alone can appear in explanatory questions, so require a verb/action frame.
   if ((hints.detectedPlayersPerTeam || hints.detectedTeamCount) && detectGenerateTeams(text)) return true;
@@ -1394,8 +1531,8 @@ export default async function handler(req, res) {
   }
 
   const task = answerQuestionMode
-    ? "AI ASSISTANT V1.16 OPENAI-FIRST QUESTION MODE. The user is asking a Fair Teams product question, not asking you to perform an app action. Answer naturally from fairTeamsKnowledge and the operating manual. Return actions=[], confirmations=[], unresolved=[]. Do not create backup/import/team/action cards just because the question mentions those features. Answer from the user's perspective, in friendly plain language. For comparisons, explain when to use each feature. If the answer is not in fairTeamsKnowledge, say you do not have that Fair Teams detail yet and explain the nearest known behavior."
-    : "AI PLANNER V1.16 OPENAI-FIRST STRICT NAME EXTRACTOR. Reply as the Fair Teams Assistant. If this is conversation or a simple question, answer naturally in assistantSummary with no actions. If this is a Fair Teams product question, answer from fairTeamsKnowledge and the operating manual, not from generic sports-app assumptions. If this is a Fair Teams app request, read commandText yourself and build a safe action plan. Use commandHints only as helper clues, not as the source of truth. Action requests always beat product Q&A. For attendance commands, first do a strict name-extraction pass over commandText: identify the continuous spoken/typed attendance list, preserve order, and output ONLY real person-name candidates from that list. Do not copy noisy commandHints candidate names. Never output instruction/filler words such as have, has, had, new, four, like, to, from, in, on, with, here, today, only, make, team, teams, players, people, okay, or let's as player names unless that exact word is an existing roster.name or roster.aka. If the user says a count such as 'four new players' without saying their names, do not create names from the count; add unresolved missing_context saying the new player names were not provided. After the strict name list is built, match each name against roster.name and roster.aka. Prefer plausible existing roster IDs over add_new_player_suggestion for speech errors such as June/Joon, Yan/Jan, Anya/Tanja, Briesh/Presh/Brijesh, Ayesha/Ayashini, Unursha/Onursha, Sari Savage/Ceri Savage. For mixed commands like 'Arthur is here, Ayashini, Anna... let's make a team', return select_players first, then set_team_count/set_team_size if stated, then generate_teams. Do not generate from current Today selection when names are present. Completeness still matters: if 21 real people are named, account for 21 people, but uncertainty should become unresolved/add_new_player_suggestion for plausible human names only, never app words or sentence fragments.";
+    ? "AI ASSISTANT V1.17 PLAYER-QUERY QUESTION MODE. The user is asking a Fair Teams product question, not asking you to perform an app action. Answer naturally from fairTeamsKnowledge and the operating manual. Return actions=[], confirmations=[], unresolved=[]. Do not create backup/import/team/action cards just because the question mentions those features. Answer from the user's perspective, in friendly plain language. For comparisons, explain when to use each feature. If the answer is not in fairTeamsKnowledge, say you do not have that Fair Teams detail yet and explain the nearest known behavior."
+    : "AI PLANNER V1.17 PLAYER-QUERY STRICT NAME EXTRACTOR. Reply as the Fair Teams Assistant. If this is conversation or a simple question, answer naturally in assistantSummary with no actions. If this is a Fair Teams product question, answer from fairTeamsKnowledge and the operating manual, not from generic sports-app assumptions. If this is a Fair Teams app request, read commandText yourself and build a safe action plan. Use commandHints only as helper clues, not as the source of truth. For roster-pool requests such as "make teams with 10 strongest players on my roster", use visible roster data: select the ranked roster players first, then generate teams if requested. Action requests always beat product Q&A. For attendance commands, first do a strict name-extraction pass over commandText: identify the continuous spoken/typed attendance list, preserve order, and output ONLY real person-name candidates from that list. Do not copy noisy commandHints candidate names. Never output instruction/filler words such as have, has, had, new, four, like, to, from, in, on, with, here, today, only, make, team, teams, players, people, okay, or let's as player names unless that exact word is an existing roster.name or roster.aka. If the user says a count such as 'four new players' without saying their names, do not create names from the count; add unresolved missing_context saying the new player names were not provided. After the strict name list is built, match each name against roster.name and roster.aka. Prefer plausible existing roster IDs over add_new_player_suggestion for speech errors such as June/Joon, Yan/Jan, Anya/Tanja, Briesh/Presh/Brijesh, Ayesha/Ayashini, Unursha/Onursha, Sari Savage/Ceri Savage. For mixed commands like 'Arthur is here, Ayashini, Anna... let's make a team', return select_players first, then set_team_count/set_team_size if stated, then generate_teams. Do not generate from current Today selection when names are present. Completeness still matters: if 21 real people are named, account for 21 people, but uncertainty should become unresolved/add_new_player_suggestion for plausible human names only, never app words or sentence fragments.";
 
   const payload = {
     model: DEFAULT_MODEL,

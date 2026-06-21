@@ -73,6 +73,14 @@ function isAiAnswerOnlyResult(response: AiSmartCommandResponse | null | undefine
   return !hasActions && !hasConfirmations && !hasUnresolved && /knowledge|answer|conversation|chat/i.test(mode);
 }
 
+
+function isRankedRosterSelectionAction(action: AiSmartCommandAction | null | undefined) {
+  return Boolean(
+    action?.type === "select_players" &&
+      /ranked_roster_selection/i.test(String(action.distribution || "") + " " + String(action.reason || "")),
+  );
+}
+
 function parseModeLabel(mode?: AiSmartCommandResponse["parseMode"]) {
   if (mode === "local_fallback") return "Local reply / safety fallback";
   if (mode === "ai_with_local_hints") return "AI + app rules";
@@ -82,6 +90,7 @@ function parseModeLabel(mode?: AiSmartCommandResponse["parseMode"]) {
 
 function actionCardTitle(action: AiSmartCommandAction) {
   if (action.type === "select_players") {
+    if (isRankedRosterSelectionAction(action)) return "Use roster ranking";
     if (/possible existing match/i.test(String(action.reason || ""))) return "Use existing player";
     if (/then_generate/i.test(String(action.distribution || "")) || action.teamCount) return "Replace Today + generate";
     if (/replace|exact|only/i.test(String(action.distribution || ""))) return "Replace Today selection";
@@ -112,6 +121,7 @@ function actionPrimaryVerb(action: AiSmartCommandAction) {
   if (action.type === "club_add_note") return "Add note";
   if (action.type === "add_new_player_suggestion") return "Add player";
   if (action.type === "select_players") {
+    if (isRankedRosterSelectionAction(action)) return "Use players";
     if (/then_generate/i.test(String(action.distribution || "")) || action.teamCount) return "Replace + Generate";
     return /replace|exact|only/i.test(String(action.distribution || "")) ? "Replace Today" : "Add to Today";
   }
@@ -123,7 +133,7 @@ function actionPrimaryVerb(action: AiSmartCommandAction) {
   return "Apply";
 }
 
-const AI_ASSISTANT_VERSION_LABEL = "AI beta · v1.16 OpenAI first";
+const AI_ASSISTANT_VERSION_LABEL = "AI beta · v1.17 player query";
 
 type AiRosterMatch = {
   player: AiSmartCommandRosterPlayer;
@@ -544,6 +554,7 @@ function actionHasTeamFollowup(action: AiSmartCommandAction) {
 }
 
 function isAiNameReviewAction(action: AiSmartCommandAction) {
+  if (isRankedRosterSelectionAction(action)) return false;
   if (action.type === "add_new_player_suggestion" && action.newPlayerName) return true;
   return ["select_players", "unselect_players", "mark_players_late", "add_pairing_rule", "lock_player_to_team"].includes(action.type) && action.playerRefs.length > 0;
 }
@@ -613,6 +624,7 @@ function buildAiReviewItems(result: AiSmartCommandResponse | null, players: AiSm
   const transcriptCandidates = extractTranscriptNameCandidates(sourceText, players);
 
   for (const action of result.actions || []) {
+    if (isRankedRosterSelectionAction(action)) continue;
     if (action.type === "add_new_player_suggestion" && action.newPlayerName) {
       addHeardName(action.newPlayerName, "ai");
     }
@@ -863,6 +875,9 @@ function actionImpactLine(action: AiSmartCommandAction) {
   const playerWord = count === 1 ? "player" : "players";
 
   if (action.type === "select_players") {
+    if (isRankedRosterSelectionAction(action)) {
+      return `Will clear Today and select ${count} ${playerWord} from the roster ranking.`;
+    }
     if (/then_generate/i.test(String(action.distribution || "")) || action.teamCount) {
       const teamText = action.teamCount
         ? `${action.teamCount} team${action.teamCount === 1 ? "" : "s"}`

@@ -1189,26 +1189,32 @@ function looksLikeFairTeamsAnswerQuestion(text) {
   return !explicitFollowUpAction;
 }
 
-function looksLikeDirectAppActionRequest(text) {
+
+function hasExplicitAppActionRequest(text) {
   const raw = cleanString(text, MAX_COMMAND_CHARS);
+  if (!raw) return false;
   const normalized = normalizeForMatching(raw);
-  if (!normalized) return false;
+  const actionVerb = "select|choose|pick|mark|add|remove|move|give|assign|set|make|create|generate|split|divide|keep|separate|pair|lock|put|rename|change|open|show|go to|back up|backup|restore|import|export|delete|clear|save";
 
-  // "Can you select Joon?" is a command. "Can I restore later?" is a product question.
-  const assistantActionQuestion = /^(?:please\s+)?(?:can|could|would)\s+you\s+(?:please\s+)?(?:select|choose|pick|mark|add|remove|move|give|assign|set|make|create|generate|split|divide|keep|separate|pair|lock|put|rename|change|open|show|go to|back up|backup)\b/i.test(raw);
+  // Direct imperatives should remain action commands.
+  if (new RegExp(`^(please\\s+)?(${actionVerb})\\b`, "iu").test(raw)) return true;
 
-  // "What is Cloud Backup, and back up my roster" should still become an action request.
-  const mixedQuestionThenAction = /\b(?:and|then|also)\s+(?:select|choose|pick|mark|add|remove|move|give|assign|set|make|create|generate|split|divide|keep|separate|pair|lock|put|rename|change|open|show|go to|back up|backup)\b/i.test(raw);
+  // "Can you ..." usually asks the assistant to do it. "Can I ..." is usually a product question.
+  if (new RegExp(`^can\\s+you\\s+(${actionVerb})\\b`, "iu").test(raw)) return true;
+  if (new RegExp(`^could\\s+you\\s+(${actionVerb})\\b`, "iu").test(raw)) return true;
 
-  // Plain imperatives should not be treated as Q&A just because they mention a feature.
-  const imperativeStart = /^(?:please\s+)?(?:select|choose|pick|mark|add|remove|move|give|assign|set|make|create|generate|split|divide|keep|separate|pair|lock|put|rename|change|open|show|go to|back up|backup)\b/i.test(normalized);
+  // Mixed question + explicit follow-up action: answer card is not enough.
+  if (new RegExp(`\\b(and\\s+then|then|also)\\s+(${actionVerb})\\b`, "iu").test(raw)) return true;
 
-  return assistantActionQuestion || mixedQuestionThenAction || imperativeStart;
+  // Clear attendance/team commands can look question-like because they mention Today/Teams.
+  if (/\b(playing today|are playing|is playing|coming today|is here|are here)\b/iu.test(normalized)) return true;
+  if (/\b(make|create|generate|shuffle|reroll)\b.*\bteams?\b/iu.test(normalized)) return true;
+
+  return false;
 }
 
-function wantsFairTeamsAnswerBeforeActions(text) {
-  if (looksLikeDirectAppActionRequest(text)) return false;
-  return looksLikeFairTeamsAnswerQuestion(text) || Boolean(getDirectFairTeamsAnswerForCommand(text));
+function shouldUseQuestionFirstAnswerMode(text) {
+  return looksLikeFairTeamsAnswerQuestion(text) && !hasExplicitAppActionRequest(text);
 }
 
 function normalizeKnowledgeAnswerResponse(parsed, commandText, fallbackAnswer = null) {
@@ -1372,12 +1378,27 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "Missing commandText." });
   }
 
-  // Question mode must be decided before action routing. Otherwise feature words like
-  // "backup", "shared roster", or "teams" can be stolen by action hints before the
-  // assistant gets a chance to answer the user's product question.
-  const answerQuestionMode = wantsFairTeamsAnswerBeforeActions(commandText);
-  const strongAppCommandIntent = answerQuestionMode ? false : hasStrongAppCommandIntent(commandText, commandHints);
+  // Question firewall: clear Fair Teams product questions must be answered before
+  // local/action routing sees feature words like "backup", "restore", "shared roster", or "teams".
+  const answerQuestionMode = shouldUseQuestionFirstAnswerMode(commandText);
   const directFairTeamsAnswer = answerQuestionMode ? getDirectFairTeamsAnswerForCommand(commandText, context) : null;
+  const strongAppCommandIntent = answerQuestionMode ? false : hasStrongAppCommandIntent(commandText, commandHints);
+
+  if (answerQuestionMode && directFairTeamsAnswer) {
+    return res.status(200).json({
+      schemaVersion: 1,
+      ok: true,
+      detectedLanguage: "unknown",
+      normalizedIntent: cleanString(commandText, 300),
+      assistantSummary: directFairTeamsAnswer.assistantSummary,
+      confidence: directFairTeamsAnswer.confidence,
+      actions: [],
+      confirmations: [],
+      unresolved: [],
+      parseMode: "fair_teams_knowledge_base",
+      debugWarnings: [`Question-first answer from Fair Teams knowledge topic: ${directFairTeamsAnswer.topic}`],
+    });
+  }
 
   if (!process.env.OPENAI_API_KEY) {
     if (directFairTeamsAnswer) {
@@ -1399,7 +1420,7 @@ export default async function handler(req, res) {
   }
 
   const task = answerQuestionMode
-    ? "AI ASSISTANT V1.13 KNOWLEDGE ANSWER MODE. The user is asking a Fair Teams product question, not asking you to perform an app action. Answer naturally from fairTeamsKnowledge and the operating manual. Return actions=[], confirmations=[], unresolved=[]. Do not create backup/import/team/action cards just because the question mentions those features. Answer from the user's perspective, in friendly plain language. For comparisons, explain when to use each feature. If the answer is not in fairTeamsKnowledge, say you do not have that Fair Teams detail yet and explain the nearest known behavior."
+    ? "AI ASSISTANT V1.15 QUESTION-FIRST KNOWLEDGE MODE. The user is asking a Fair Teams product question, not asking you to perform an app action. Answer naturally from fairTeamsKnowledge and the operating manual. Return actions=[], confirmations=[], unresolved=[]. Do not create backup/import/team/action cards just because the question mentions those features. Answer from the user's perspective, in friendly plain language. For comparisons, explain when to use each feature. If the answer is not in fairTeamsKnowledge, say you do not have that Fair Teams detail yet and explain the nearest known behavior."
     : "AI PLANNER V1.12 STRICT NAME EXTRACTOR. Reply as the Fair Teams Assistant. If this is conversation or a simple question, answer naturally in assistantSummary with no actions. If this is a Fair Teams product question, answer from fairTeamsKnowledge and the operating manual, not from generic sports-app assumptions. If this is a Fair Teams app request, read commandText yourself and build a safe action plan. Use commandHints only as helper clues, not as the source of truth. Action requests always beat product Q&A. For attendance commands, first do a strict name-extraction pass over commandText: identify the continuous spoken/typed attendance list, preserve order, and output ONLY real person-name candidates from that list. Do not copy noisy commandHints candidate names. Never output instruction/filler words such as have, has, had, new, four, like, to, from, in, on, with, here, today, only, make, team, teams, players, people, okay, or let's as player names unless that exact word is an existing roster.name or roster.aka. If the user says a count such as 'four new players' without saying their names, do not create names from the count; add unresolved missing_context saying the new player names were not provided. After the strict name list is built, match each name against roster.name and roster.aka. Prefer plausible existing roster IDs over add_new_player_suggestion for speech errors such as June/Joon, Yan/Jan, Anya/Tanja, Briesh/Presh/Brijesh, Ayesha/Ayashini, Unursha/Onursha, Sari Savage/Ceri Savage. For mixed commands like 'Arthur is here, Ayashini, Anna... let's make a team', return select_players first, then set_team_count/set_team_size if stated, then generate_teams. Do not generate from current Today selection when names are present. Completeness still matters: if 21 real people are named, account for 21 people, but uncertainty should become unresolved/add_new_player_suggestion for plausible human names only, never app words or sentence fragments.";
 
   const payload = {

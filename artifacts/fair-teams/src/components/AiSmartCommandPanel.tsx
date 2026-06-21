@@ -345,7 +345,7 @@ function actionPrimaryVerb(action: AiSmartCommandAction) {
   return "Apply";
 }
 
-const AI_ASSISTANT_VERSION_LABEL = "AI beta · v1.25 bulk roster UX";
+const AI_ASSISTANT_VERSION_LABEL = "AI beta · v1.26 safer bulk exclusions";
 
 type AiRosterMatch = {
   player: AiSmartCommandRosterPlayer;

@@ -617,7 +617,21 @@ function splitExcludedRosterNames(value) {
 
 function matchExcludedRosterName(candidate, rosterIndex) {
   const direct = matchNameCandidate(candidate, rosterIndex);
-  if ((direct.status === "matched" || direct.status === "possible_match" || direct.status === "ambiguous") && (direct.playerId || direct.matches?.length)) {
+  if (direct.status === "matched" && direct.playerId) {
+    return direct;
+  }
+  if (direct.status === "possible_match" && direct.playerId) {
+    return {
+      status: "ambiguous",
+      spokenName: candidate,
+      matches: [{
+        playerId: direct.playerId,
+        rosterName: direct.rosterName || null,
+        matchedAlias: direct.matchedAlias || direct.rosterName || null,
+      }],
+    };
+  }
+  if (direct.status === "ambiguous" && direct.matches?.length) {
     return direct;
   }
 
@@ -640,7 +654,11 @@ function matchExcludedRosterName(candidate, rosterIndex) {
     if (!unique.some((item) => item.playerId === entry.playerId)) unique.push(entry);
   }
   if (unique.length === 1) {
-    return { status: "possible_match", spokenName: candidate, playerId: unique[0].playerId, rosterName: unique[0].rosterName, matchedAlias: unique[0].label, confidence: 0.74 };
+    return {
+      status: "ambiguous",
+      spokenName: candidate,
+      matches: [{ playerId: unique[0].playerId, rosterName: unique[0].rosterName, matchedAlias: unique[0].label }],
+    };
   }
   if (unique.length > 1) {
     return { status: "ambiguous", spokenName: candidate, matches: unique.slice(0, 5).map((entry) => ({ playerId: entry.playerId, rosterName: entry.rosterName, matchedAlias: entry.label })) };
@@ -710,8 +728,8 @@ function extractExcludedRosterRefs(text, roster) {
   const rosterIndex = buildRosterNameIndex(roster);
   return splitExcludedRosterNames(match[1])
     .map((candidate) => matchExcludedRosterName(candidate, rosterIndex))
-    .filter((candidate) => (candidate.status === "matched" || candidate.status === "possible_match") && candidate.playerId)
-    .map((candidate) => ({ playerId: candidate.playerId, rosterName: candidate.rosterName || candidate.spokenName, spokenName: candidate.spokenName, confidence: candidate.confidence || 0.8 }));
+    .filter((candidate) => candidate.status === "matched" && candidate.playerId)
+    .map((candidate) => ({ playerId: candidate.playerId, rosterName: candidate.rosterName || candidate.spokenName, spokenName: candidate.spokenName, confidence: candidate.confidence || 0.98 }));
 }
 
 function detectVisibleRosterPlayerQuery(text, roster, playersPerTeam, teamCount) {
@@ -1599,6 +1617,27 @@ function filterOutPlayerNameNoise(plan) {
 function mergeDeterministicActions(parsed, commandHints, roster) {
   const normalized = normalizeParsedResponse(parsed, commandHints?.commandText || "");
   const rawDeterministic = buildDeterministicPlan(commandHints, roster);
+  const bulkExcept = commandHints?.detectedSelectAllExceptRosterPlayers || null;
+  const bulkExceptNeedsClarification = Boolean(
+    bulkExcept &&
+      ((bulkExcept.ambiguous?.length || 0) > 0 || (bulkExcept.unknown?.length || 0) > 0),
+  );
+  if (bulkExceptNeedsClarification) {
+    return {
+      ...normalized,
+      ok: true,
+      assistantSummary: "I need to confirm who to leave out before selecting almost the whole roster.",
+      confidence: 0.86,
+      actions: [],
+      confirmations: rawDeterministic.confirmations,
+      unresolved: rawDeterministic.unresolved,
+      parseMode: "local_bulk_roster_clarification",
+      debugWarnings: [
+        ...(Array.isArray(normalized.debugWarnings) ? normalized.debugWarnings : []),
+        "Bulk all-except roster request blocked AI player selection until excluded player is confirmed.",
+      ],
+    };
+  }
   const hasDeterministicBulkSelection = rawDeterministic.actions.some(isBulkRosterSelectionAction);
   const aiHandledPlayerNames = hasAiExtractedPlayers(normalized);
   const deterministic = aiHandledPlayerNames && !hasDeterministicBulkSelection ? filterOutPlayerNameNoise(rawDeterministic) : rawDeterministic;

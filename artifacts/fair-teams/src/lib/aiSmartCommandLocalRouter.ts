@@ -247,7 +247,7 @@ function stripCommandNoise(value: string) {
 function cleanNameChunkForMatching(value: string) {
   let text = stripCommandNoise(value);
   text = text
-    .replace(/\b(players?|people|members|present|currently|playing|here|but|except|though|although|fair|balanced|teams?|make|create|generate|prepare|build|sort|of|a|the|from|now|are|is|was|were|be|select|choose|add|also|plus|too|forgot|late|remove|unselect|deselect|take|out|not|coming|cannot|can t|cancel|absent|play|playing|with|who|else|we|i|have|has|got|heard|said|mentioned|these|those|this|that)\b/g, " ")
+    .replace(/\b(players?|people|members|present|currently|playing|here|but|except|though|although|fair|balanced|teams?|make|create|generate|prepare|build|sort|of|a|the|from|now|are|is|was|were|be|select|choose|add|also|plus|too|forgot|late|remove|unselect|deselect|take|out|not|coming|cannot|can t|cancel|absent|play|playing|with|who|else|we|i|have|has|got|heard|said|mentioned|these|those|this|that|only|all|everyone|everybody|let|lets|one|two|three|four|five|six|seven|eight|nine|ten)\b/g, " ")
     .replace(/\b(v|vs|versus)\b/g, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -419,31 +419,37 @@ function extractMaybeListSegment(commandText: string) {
     }
   });
 
-  if (bestIndex < 0) return normalized;
+  if (bestIndex < 0) {
+    const commandFree = normalized
+      .replace(/\b(?:can\s+you|could\s+you|please|let\s+s|lets)?\s*(?:make|create|generate|prepare|build|split|divide)(?:\s+into)?\s+(?:\d{1,2}|one|two|three|four|five|six|seven|eight)?\s*(?:fair\s+|balanced\s+)?teams?\b/g, " ")
+      .replace(/\b(?:make|create|generate|prepare|build)\s+(?:a\s+)?(?:fair\s+|balanced\s+)?team\b/g, " ")
+      .replace(/\b(?:\d{1,2}|one|two|three|four|five|six|seven|eight)\s+teams?\b/g, " ")
+      .replace(/\b(?:these|those)\s+(?:are|were)\s+(?:the\s+)?(?:only|all)\s+(?:players?|people|members)\b/g, " ")
+      .replace(/\b(?:this|that)\s+(?:is|was)\s+(?:the\s+)?(?:only|all)\s+(?:players?|people|members|group)\b/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    return stripCommandNoise(commandFree) || normalized;
+  }
   let segment = normalized.slice(bestIndex + bestMarker.length).trim();
 
-  // In mixed commands like “Today we have Joon, Jorge… can you make teams?”,
+  // In mixed commands like “Today we have Joon, Jorge… make 2 teams”,
   // only the attendance list should be sent to name matching. Otherwise the
-  // team request can be misread as fake player names.
-  const stopPhrases = [
-    "can you make",
-    "could you make",
-    "please make",
-    "make a team",
-    "make teams",
-    "make fair",
-    "create a team",
-    "create teams",
-    "generate a team",
-    "generate teams",
-    "prepare teams",
-    "build teams",
-    "split into teams",
+  // team request — or ending phrases such as “these are the only players” —
+  // can be misread as fake player names. Keep this before command-word cleanup
+  // so words like “only” do not survive as unresolved player names.
+  const stopPatterns = [
+    /\b(?:can\s+you|could\s+you|please)?\s*(?:make|create|generate|prepare|build|split|divide)(?:\s+into)?\s+(?:\d{1,2}|one|two|three|four|five|six|seven|eight)?\s*(?:fair\s+|balanced\s+)?teams?\b/,
+    /\b(?:make|create|generate|prepare|build)\s+(?:a\s+)?(?:fair\s+|balanced\s+)?team\b/,
+    /\b(?:\d{1,2}|one|two|three|four|five|six|seven|eight)\s+teams?\b/,
+    /\b(?:these|those)\s+(?:are|were)\s+(?:the\s+)?(?:only|all)\s+(?:players?|people|members)\b/,
+    /\b(?:this|that)\s+(?:is|was)\s+(?:the\s+)?(?:only|all)\s+(?:players?|people|members|group)\b/,
+    /\b(?:that\s+s|thats|that\s+is|this\s+is)\s+(?:everyone|everybody|all)\b/,
+    /\b(?:everyone|everybody)\s+(?:is\s+)?(?:here|present|playing)\b/,
   ];
   let stopIndex = -1;
-  stopPhrases.forEach((phrase) => {
-    const index = segment.indexOf(phrase);
-    if (index >= 0 && (stopIndex < 0 || index < stopIndex)) stopIndex = index;
+  stopPatterns.forEach((pattern) => {
+    const match = segment.match(pattern);
+    if (match?.index !== undefined && (stopIndex < 0 || match.index < stopIndex)) stopIndex = match.index;
   });
   if (stopIndex >= 0) segment = segment.slice(0, stopIndex).trim();
 
@@ -521,7 +527,8 @@ function wantsExactTodayList(commandText: string) {
 function shouldPreferAttendanceListBeforeTeams(commandText: string) {
   const normalized = normalizeText(commandText);
   const hasTeamRequest = /\b(make|create|generate|prepare|build|split|divide|fair|balanced|team|teams)\b/.test(normalized);
-  return hasTeamRequest && wantsExactTodayList(commandText);
+  const hasAttendancePhrase = wantsExactTodayList(commandText) || /\b(?:is|are)\s+(?:here|present|playing|coming)\b/.test(normalized);
+  return hasTeamRequest && hasAttendancePhrase;
 }
 
 function currentTodaySelectionCount(players: AiSmartCommandRosterPlayer[]) {
@@ -564,16 +571,22 @@ function findPlayersMentioned(commandText: string, players: AiSmartCommandRoster
     const looseWords = !/\b(v|vs|versus)\b|^\d+$/.test(chunk)
       ? chunk.split(/\s+/).map(cleanNameChunkForMatching).filter((part) => part.length >= 2)
       : [];
-    const shouldAlsoTryLooseWords = looseWords.length >= 2 && (!best || best.score < 0.99);
+    const chunkWords = chunk.split(/\s+/).filter(Boolean);
+    // If a voice transcript arrives as one long comma-free run of names, do not
+    // let the whole run become the spoken label for one fuzzy match. Match each
+    // word instead, so “Gwen June George Ian Briesh” does not become
+    // “Gwen June George Ian Briesh → Brijesh”.
+    const allowWholeChunkFuzzy = chunkWords.length <= 3 || best?.score === 1;
+    const shouldAlsoTryLooseWords = looseWords.length >= 2 && (!best || best.score < 0.99 || !allowWholeChunkFuzzy);
 
-    if (best && best.score >= 0.84 && best.score - best.secondBestScore >= 0.04) {
+    if (allowWholeChunkFuzzy && best && best.score >= 0.84 && best.score - best.secondBestScore >= 0.04) {
       const existing = matched.get(best.player.id);
       if (!existing || best.score > existing.score) {
         matched.set(best.player.id, { player: best.player, spokenName: chunk, score: best.score });
       }
     }
 
-    if (!best || best.score < 0.84 || shouldAlsoTryLooseWords) {
+    if (!best || best.score < 0.84 || shouldAlsoTryLooseWords || !allowWholeChunkFuzzy) {
       // Voice transcripts sometimes arrive without commas: “June Ian Tanya Briesh”.
       // Try each word too, but only when the full chunk was not an exact/confident full-name match.
       let matchedLooseWord = false;
@@ -1022,6 +1035,21 @@ function parsePresentPlayerSelectionCommand(
   const lateMatched = lateSegment ? findPlayersMentioned(lateSegment, players).matched : [];
   const latePlayerIds = new Set(lateMatched.map((item) => item.player.id));
 
+  const playersPerTeam = parseTeamSize(commandText);
+  const requestedTeamCount = parseRequestedTeamCount(commandText);
+  const explicitLayout = parseExplicitTeamLayout(commandText);
+  const requestedPlayersPerTeam = explicitLayout?.playersPerTeam || playersPerTeam;
+  const requestedTeamCountFromLayout = explicitLayout?.teamCount || requestedTeamCount;
+  const canGenerateAfterSelection = !removeMode && wantsBalancedTeams(commandText) && matched.length >= 2;
+  let generateTeamCount = canGenerateAfterSelection ? requestedTeamCountFromLayout : null;
+  if (canGenerateAfterSelection && !generateTeamCount && requestedPlayersPerTeam && matched.length % requestedPlayersPerTeam === 0 && matched.length >= requestedPlayersPerTeam * 2) {
+    generateTeamCount = matched.length / requestedPlayersPerTeam;
+  }
+  if (canGenerateAfterSelection && !generateTeamCount && matched.length >= 4) {
+    generateTeamCount = 2;
+  }
+  const canAttachGenerateToSelection = Boolean(generateTeamCount && generateTeamCount >= 2 && matched.length >= generateTeamCount);
+
   const actions: AiSmartCommandAction[] = [];
   if (removeMode) {
     const removeAction = createEmptyAction("unselect_players");
@@ -1033,12 +1061,20 @@ function parsePresentPlayerSelectionCommand(
   } else {
     const selectAction = createEmptyAction("select_players");
     selectAction.capabilityId = "today.select_players";
-    selectAction.distribution = replaceMode ? "replace_today_selection" : "add_today_selection";
-    selectAction.reason = replaceMode
-      ? "Replace Today with only these matched players."
-      : existingSelectionCount > 0
-        ? "Add these matched players to the existing Today selection. This will not clear players already selected."
-        : "Select these matched players for Today.";
+    selectAction.distribution = canAttachGenerateToSelection
+      ? "replace_today_selection_then_generate"
+      : replaceMode
+        ? "replace_today_selection"
+        : "add_today_selection";
+    selectAction.teamCount = canAttachGenerateToSelection ? generateTeamCount : null;
+    selectAction.playersPerTeam = canAttachGenerateToSelection ? requestedPlayersPerTeam : null;
+    selectAction.reason = canAttachGenerateToSelection
+      ? `Clear Today, select these ${matched.length} matched players, then generate ${generateTeamCount} fair teams.`
+      : replaceMode
+        ? "Replace Today with only these matched players."
+        : existingSelectionCount > 0
+          ? "Add these matched players to the existing Today selection. This will not clear players already selected."
+          : "Select these matched players for Today.";
     selectAction.playerRefs = makePlayerRefs();
     actions.push(selectAction);
 
@@ -1068,26 +1104,25 @@ function parsePresentPlayerSelectionCommand(
     }))));
   }
 
-  const playersPerTeam = parseTeamSize(commandText);
-  if (!removeMode && playersPerTeam) {
+  if (!removeMode && !canAttachGenerateToSelection && requestedPlayersPerTeam) {
     const sizeAction = createEmptyAction("set_team_size");
     sizeAction.capabilityId = "teams.set_team_size";
-    sizeAction.playersPerTeam = playersPerTeam;
-    sizeAction.reason = `${playersPerTeam}v${playersPerTeam}.`;
+    sizeAction.playersPerTeam = requestedPlayersPerTeam;
+    sizeAction.reason = `${requestedPlayersPerTeam}v${requestedPlayersPerTeam}.`;
     actions.push(sizeAction);
-  } else if (!removeMode && wantsBalancedTeams(commandText) && matched.length >= 4) {
+  } else if (!removeMode && !canAttachGenerateToSelection && wantsBalancedTeams(commandText) && generateTeamCount) {
     const teamCountAction = createEmptyAction("set_team_count");
     teamCountAction.capabilityId = "teams.set_team_count";
-    teamCountAction.teamCount = 2;
-    teamCountAction.reason = "Prepare a two-team setup from the current Today selection.";
+    teamCountAction.teamCount = generateTeamCount;
+    teamCountAction.reason = `Prepare a ${generateTeamCount}-team setup from the current Today selection.`;
     actions.push(teamCountAction);
 
     const generateAction = createEmptyAction("generate_teams");
     generateAction.capabilityId = "teams.generate";
     generateAction.supportStatus = "executable";
-    generateAction.teamCount = 2;
+    generateAction.teamCount = generateTeamCount;
     generateAction.distribution = wantsDifferentTeamMix(commandText) ? "shuffle_equals" : "balanced";
-    generateAction.reason = "Generate two fair teams after these matched players are selected.";
+    generateAction.reason = `Generate ${generateTeamCount} fair teams after these matched players are selected.`;
     actions.push(generateAction);
   }
 
@@ -1121,16 +1156,18 @@ function parsePresentPlayerSelectionCommand(
   const missedText = uniqueUnresolved.length > 0 ? ` I could not confidently match: ${uniqueUnresolved.slice(0, 5).map(displaySpokenName).join(", ")}.` : "";
   const modeText = removeMode
     ? "remove from Today"
-    : replaceMode
+    : canAttachGenerateToSelection || replaceMode
       ? "replace Today with"
       : existingSelectionCount > 0
         ? "add to Today"
         : "select for Today";
-  const teamText = !removeMode && playersPerTeam
-    ? ` I also prepared a ${playersPerTeam}v${playersPerTeam} setup.`
-    : !removeMode && wantsBalancedTeams(commandText) && matched.length >= 4
-      ? " I also prepared a 2-team setup."
-      : "";
+  const teamText = !removeMode && canAttachGenerateToSelection && generateTeamCount
+    ? ` I will also generate ${generateTeamCount} fair teams after selecting them.`
+    : !removeMode && requestedPlayersPerTeam
+      ? ` I also prepared a ${requestedPlayersPerTeam}v${requestedPlayersPerTeam} setup.`
+      : !removeMode && wantsBalancedTeams(commandText) && generateTeamCount
+        ? ` I also prepared a ${generateTeamCount}-team setup.`
+        : "";
   const lateText = !removeMode && lateMatched.length > 0
     ? ` I also found late player${lateMatched.length === 1 ? "" : "s"}: ${lateMatched.map((item) => item.player.name).join(", ")}.`
     : "";

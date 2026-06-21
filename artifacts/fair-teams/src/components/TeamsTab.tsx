@@ -180,6 +180,8 @@ type TeamsTabProps = {
   onOpenClubRatings?: () => void;
   aiTeamSetupToken?: number;
   aiTeamCount?: number | null;
+  aiAutoGenerate?: boolean;
+  aiShuffleEquals?: boolean;
 };
 
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number | [number, number, number, number]) {
@@ -399,7 +401,7 @@ function drawTextBadge(
 }
 
 
-export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, sharedRosterId, onOpenClubRatings, aiTeamSetupToken = 0, aiTeamCount = null }: TeamsTabProps) {
+export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, sharedRosterId, onOpenClubRatings, aiTeamSetupToken = 0, aiTeamCount = null, aiAutoGenerate = false, aiShuffleEquals = false }: TeamsTabProps) {
   const [numTeams, setNumTeams] = useState<number>(2);
   const [fieldSize, setFieldSize] = useState<FieldSize>(() => loadFieldSize());
   const [showFieldHelp, setShowFieldHelp] = useState(false);
@@ -420,20 +422,11 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
   const [gameToolsOpen, setGameToolsOpen] = useState(false);
   const [cardScreen, setCardScreen] = useState<"yellow" | "red" | null>(null);
   const generateTimerRef = useRef<number | null>(null);
+  const lastAiTeamSetupTokenRef = useRef<number>(0);
 
   useEffect(() => {
     localStorage.setItem(FIELD_SIZE_STORAGE_KEY, fieldSize);
   }, [fieldSize]);
-
-  useEffect(() => {
-    if (!aiTeamSetupToken || typeof aiTeamCount !== "number") return;
-    const safeTeamCount = Math.min(6, Math.max(2, Math.round(aiTeamCount)));
-    setNumTeams(safeTeamCount);
-    setSwap(null);
-    setTeamStatsOpen({});
-    setShowPlayerSkillNumbers(false);
-    setPresentTeamsOpen(false);
-  }, [aiTeamSetupToken, aiTeamCount]);
 
   useEffect(() => {
     if (!isSharedRoster || !sharedRosterId) {
@@ -617,8 +610,10 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
     </div>
   ) : null;
 
-  const handleGenerate = (shuffleEquals = false) => {
+  const startTeamGeneration = (teamCount: number, shuffleEquals = false) => {
     if (attendingPlayers.length < 2 || isGenerating) return;
+    const safeTeamCount = Math.min(6, Math.max(2, Math.round(teamCount)));
+    setNumTeams(safeTeamCount);
     setSwap(null);
     setTeamStatsOpen({});
     setShowPlayerSkillNumbers(false);
@@ -627,7 +622,7 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
     setIsGenerating(true);
     setDrawStep(0);
 
-    const nextTeams = generateTeams(attendingPlayers, numTeams, shuffleEquals, fieldSize, pairingRules);
+    const nextTeams = generateTeams(attendingPlayers, safeTeamCount, shuffleEquals, fieldSize, pairingRules);
 
     if (generateTimerRef.current !== null) window.clearTimeout(generateTimerRef.current);
     generateTimerRef.current = window.setTimeout(() => {
@@ -636,7 +631,7 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
         id: `history-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         createdAt: new Date().toISOString(),
         fieldSize,
-        numTeams,
+        numTeams: safeTeamCount,
         totalPlayers: attendingPlayers.length,
         teams: nextTeams,
       };
@@ -646,6 +641,25 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
       window.setTimeout(() => setJustGenerated(false), 1200);
     }, 880);
   };
+
+  const handleGenerate = (shuffleEquals = false) => {
+    startTeamGeneration(numTeams, shuffleEquals);
+  };
+
+  useEffect(() => {
+    if (!aiTeamSetupToken || typeof aiTeamCount !== "number") return;
+    if (lastAiTeamSetupTokenRef.current === aiTeamSetupToken) return;
+    lastAiTeamSetupTokenRef.current = aiTeamSetupToken;
+    const safeTeamCount = Math.min(6, Math.max(2, Math.round(aiTeamCount)));
+    setNumTeams(safeTeamCount);
+    setSwap(null);
+    setTeamStatsOpen({});
+    setShowPlayerSkillNumbers(false);
+    setPresentTeamsOpen(false);
+    if (aiAutoGenerate) {
+      window.setTimeout(() => startTeamGeneration(safeTeamCount, aiShuffleEquals), 0);
+    }
+  }, [aiTeamSetupToken, aiTeamCount, aiAutoGenerate, aiShuffleEquals, attendingPlayers, fieldSize, pairingRules, isGenerating]);
 
   const handleColorChange = (teamId: string, color: TeamColor) => {
     const label = colorFor(color).label;

@@ -401,7 +401,7 @@ function App() {
   }, []);
 
   const [activeTab, setActiveTab] = useState<AppTab>("today");
-  const [aiTeamSetup, setAiTeamSetup] = useState<{ token: number; teamCount: number | null }>({ token: 0, teamCount: null });
+  const [aiTeamSetup, setAiTeamSetup] = useState<{ token: number; teamCount: number | null; autoGenerate?: boolean; shuffleEquals?: boolean }>({ token: 0, teamCount: null, autoGenerate: false, shuffleEquals: false });
   const [clubBackTargetOpen, setClubBackTargetOpen] = useState(false);
   const [openPairingRulesToken, setOpenPairingRulesToken] = useState(0);
   const activeTabRef = useRef<AppTab>("today");
@@ -1197,9 +1197,14 @@ function App() {
     }));
   };
 
-  const prepareTeamsFromAi = (teamCount: number) => {
+  const prepareTeamsFromAi = (teamCount: number, options: { autoGenerate?: boolean; shuffleEquals?: boolean } = {}) => {
     const safeTeamCount = Math.min(6, Math.max(2, Math.round(teamCount)));
-    setAiTeamSetup({ token: Date.now(), teamCount: safeTeamCount });
+    setAiTeamSetup({
+      token: Date.now(),
+      teamCount: safeTeamCount,
+      autoGenerate: Boolean(options.autoGenerate),
+      shuffleEquals: Boolean(options.shuffleEquals),
+    });
     setActiveTab("teams");
     return safeTeamCount;
   };
@@ -1344,6 +1349,34 @@ function App() {
       }
       const safeTeamCount = prepareTeamsFromAi(selectedCount / playersPerTeam);
       return `Prepared ${safeTeamCount} team${safeTeamCount === 1 ? "" : "s"} for ${playersPerTeam}v${playersPerTeam}.`;
+    }
+
+    if (action.type === "generate_teams") {
+      const selectedCount = players.filter((player) => player.attending).length;
+      if (selectedCount < 2) {
+        throw new Error("Select at least two players in Today before generating teams.");
+      }
+
+      let teamCount = typeof action.teamCount === "number" ? action.teamCount : null;
+      const playersPerTeam = action.playersPerTeam;
+      if (!teamCount && typeof playersPerTeam === "number" && playersPerTeam > 0) {
+        if (selectedCount < playersPerTeam * 2) {
+          throw new Error(`${playersPerTeam}v${playersPerTeam} needs at least ${playersPerTeam * 2} selected players. Select more players first.`);
+        }
+        if (selectedCount % playersPerTeam !== 0) {
+          throw new Error(`${playersPerTeam}v${playersPerTeam} does not fit ${selectedCount} selected players evenly. Ask for a number of teams instead.`);
+        }
+        teamCount = selectedCount / playersPerTeam;
+      }
+      if (!teamCount) {
+        throw new Error("I understood a generate-teams request, but I need the number of teams first.");
+      }
+      if (teamCount < 2 || selectedCount < teamCount) {
+        throw new Error(`I can’t make ${teamCount} teams from ${selectedCount} selected player${selectedCount === 1 ? "" : "s"}.`);
+      }
+      const shuffleEquals = /shuffle|different|mix|fresh|new/i.test(`${action.distribution || ""} ${action.reason || ""}`);
+      const safeTeamCount = prepareTeamsFromAi(teamCount, { autoGenerate: true, shuffleEquals });
+      return `Generated ${safeTeamCount} fair team${safeTeamCount === 1 ? "" : "s"} from ${selectedCount} selected player${selectedCount === 1 ? "" : "s"}.`;
     }
 
     if (action.type === "add_pairing_rule") {
@@ -3494,6 +3527,8 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 onOpenClubRatings={() => setActiveTab("club")}
                 aiTeamSetupToken={aiTeamSetup.token}
                 aiTeamCount={aiTeamSetup.teamCount}
+                aiAutoGenerate={Boolean(aiTeamSetup.autoGenerate)}
+                aiShuffleEquals={Boolean(aiTeamSetup.shuffleEquals)}
               />
             </TabsContent>
             <TabsContent

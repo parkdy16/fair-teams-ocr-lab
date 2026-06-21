@@ -514,6 +514,176 @@ function parseTeamSize(commandText: string) {
   return teamSizeMatch ? Number(teamSizeMatch[1]) : null;
 }
 
+function wordNumberToInt(value: string) {
+  const normalized = normalizeText(value);
+  const map: Record<string, number> = {
+    one: 1,
+    two: 2,
+    three: 3,
+    four: 4,
+    five: 5,
+    six: 6,
+    seven: 7,
+    eight: 8,
+    nine: 9,
+    ten: 10,
+  };
+  return map[normalized] || null;
+}
+
+function parseRequestedTeamCount(commandText: string) {
+  const normalized = normalizeText(commandText).replace(/[×x]/g, "v");
+  const numericMatch = normalized.match(/\b(?:make|create|generate|prepare|build|split|divide)(?:\s+into)?\s+(\d{1,2})\s+teams?\b/) ||
+    normalized.match(/\b(\d{1,2})\s+teams?\b/);
+  if (numericMatch) {
+    const value = Number(numericMatch[1]);
+    if (Number.isFinite(value) && value >= 2 && value <= 8) return value;
+  }
+
+  const wordMatch = normalized.match(/\b(?:make|create|generate|prepare|build|split|divide)(?:\s+into)?\s+(one|two|three|four|five|six|seven|eight)\s+teams?\b/) ||
+    normalized.match(/\b(one|two|three|four|five|six|seven|eight)\s+teams?\b/);
+  if (wordMatch) {
+    const value = wordNumberToInt(wordMatch[1]);
+    if (value && value >= 2 && value <= 8) return value;
+  }
+  return null;
+}
+
+function wantsTeamGenerationFromCurrentSelection(commandText: string) {
+  const normalized = normalizeText(commandText);
+  const hasGenerateVerb = /\b(make|create|generate|prepare|build|split|divide|draw|mix|shuffle)\b/.test(normalized);
+  const hasTeamWord = /\b(fair|balanced|team|teams|5v5|4v4|3v3|2v2)\b/.test(normalized.replace(/[×x]/g, "v"));
+  const refersToCurrentSelection = /\b(selected|selection|currently selected|today|today tab|present|here|playing|current players|these players|them)\b/.test(normalized);
+  return hasGenerateVerb && hasTeamWord && (refersToCurrentSelection || !/,|\band\b|\bplus\b|&/.test(commandText));
+}
+
+function wantsDifferentTeamMix(commandText: string) {
+  const normalized = normalizeText(commandText);
+  return /\b(different|new|again|reshuffle|shuffle|mix|mixed|mix up|configuration|reroll|another)\b/.test(normalized);
+}
+
+function parseGenerateTeamsFromSelectionCommand(
+  commandText: string,
+  players: AiSmartCommandRosterPlayer[],
+): AiSmartCommandResponse | null {
+  if (!wantsTeamGenerationFromCurrentSelection(commandText)) return null;
+
+  const selectedPlayers = players.filter((player) => Boolean(player.attending));
+  const selectedCount = selectedPlayers.length;
+  const requestedTeamCount = parseRequestedTeamCount(commandText);
+  const requestedPlayersPerTeam = parseTeamSize(commandText);
+  const wantsShuffle = wantsDifferentTeamMix(commandText);
+
+  if (selectedCount < 2) {
+    const openToday = createEmptyAction("open_app_area");
+    openToday.capabilityId = "navigation.open_area";
+    openToday.supportStatus = "understood_not_wired";
+    openToday.targetArea = "Today";
+    openToday.reason = "Select who is playing in Today first, then generate fair teams.";
+    return localResponse({
+      normalizedIntent: "Generate teams from Today selection",
+      assistantSummary: "I can help make teams, but there are not enough players selected in Today yet. Select who is playing first, then ask me to make teams.",
+      confidence: 0.93,
+      actions: [openToday],
+      confirmations: [],
+      unresolved: [{
+        text: "Today selection",
+        issue: "missing_context",
+        message: "Select at least two players in Today before generating teams.",
+      }],
+      debugWarnings: ["Handled by local team-generation orchestrator: no selected players."],
+    });
+  }
+
+  let teamCount = requestedTeamCount;
+  if (!teamCount && requestedPlayersPerTeam) {
+    if (selectedCount < requestedPlayersPerTeam * 2) {
+      return localResponse({
+        normalizedIntent: `Generate ${requestedPlayersPerTeam}v${requestedPlayersPerTeam} teams`,
+        assistantSummary: `${requestedPlayersPerTeam}v${requestedPlayersPerTeam} needs at least ${requestedPlayersPerTeam * 2} selected players, but Today has ${selectedCount}. Add more players or ask for a different team setup.`,
+        confidence: 0.94,
+        actions: [],
+        confirmations: [],
+        unresolved: [{
+          text: `${selectedCount} selected players for ${requestedPlayersPerTeam}v${requestedPlayersPerTeam}`,
+          issue: "missing_context",
+          message: `${requestedPlayersPerTeam}v${requestedPlayersPerTeam} needs ${requestedPlayersPerTeam * 2} players.`,
+        }],
+        debugWarnings: ["Handled by local team-generation orchestrator: not enough players for requested v-size."],
+      });
+    }
+    if (selectedCount % requestedPlayersPerTeam !== 0) {
+      return localResponse({
+        normalizedIntent: `Generate ${requestedPlayersPerTeam}v${requestedPlayersPerTeam} teams`,
+        assistantSummary: `${requestedPlayersPerTeam}v${requestedPlayersPerTeam} does not fit ${selectedCount} selected players evenly. Ask for a number of teams instead, or adjust Today selection.`,
+        confidence: 0.92,
+        actions: [],
+        confirmations: [],
+        unresolved: [{
+          text: `${selectedCount} selected players for ${requestedPlayersPerTeam}v${requestedPlayersPerTeam}`,
+          issue: "missing_context",
+          message: `${selectedCount} selected players cannot be divided evenly into ${requestedPlayersPerTeam}-player teams.`,
+        }],
+        debugWarnings: ["Handled by local team-generation orchestrator: uneven requested v-size."],
+      });
+    }
+    teamCount = selectedCount / requestedPlayersPerTeam;
+  }
+
+  if (!teamCount) {
+    const suggested = selectedCount >= 4 ? 2 : null;
+    return localResponse({
+      normalizedIntent: "Generate teams, missing team count",
+      assistantSummary: suggested
+        ? `I can make fair teams from the ${selectedCount} players selected in Today. How many teams should I make? For example: “make 2 teams.”`
+        : `I can make teams from the ${selectedCount} selected players, but I need the number of teams first.`,
+      confidence: 0.9,
+      actions: [],
+      confirmations: [],
+      unresolved: [{
+        text: "team count",
+        issue: "missing_context",
+        message: "How many teams should I make?",
+      }],
+      debugWarnings: ["Handled by local team-generation orchestrator: team count clarification needed."],
+    });
+  }
+
+  if (teamCount < 2 || teamCount > 8 || selectedCount < teamCount) {
+    return localResponse({
+      normalizedIntent: "Generate teams, invalid team count",
+      assistantSummary: `I can’t make ${teamCount} teams from ${selectedCount} selected player${selectedCount === 1 ? "" : "s"}. Choose fewer teams or select more players.`,
+      confidence: 0.93,
+      actions: [],
+      confirmations: [],
+      unresolved: [{
+        text: `${teamCount} teams from ${selectedCount} players`,
+        issue: "missing_context",
+        message: "The selected player count does not fit that team count.",
+      }],
+      debugWarnings: ["Handled by local team-generation orchestrator: invalid team count."],
+    });
+  }
+
+  const generateAction = createEmptyAction("generate_teams");
+  generateAction.capabilityId = "teams.generate";
+  generateAction.supportStatus = "executable";
+  generateAction.teamCount = teamCount;
+  generateAction.playersPerTeam = requestedPlayersPerTeam;
+  generateAction.distribution = wantsShuffle ? "shuffle_equals" : "balanced";
+  generateAction.reason = `${wantsShuffle ? "Generate a fresh mixed version" : "Generate fair teams"} from the ${selectedCount} players currently selected in Today.`;
+
+  return localResponse({
+    normalizedIntent: `Generate ${teamCount} teams from Today selection`,
+    assistantSummary: `I can make ${teamCount} fair team${teamCount === 1 ? "" : "s"} from the ${selectedCount} players selected in Today.${wantsShuffle ? " I’ll try a fresh mix." : ""}`,
+    confidence: 0.98,
+    actions: [generateAction],
+    confirmations: [],
+    unresolved: [],
+    debugWarnings: ["Handled by local team-generation orchestrator before server AI."],
+  });
+}
+
 function wantsBalancedTeams(commandText: string) {
   const normalized = normalizeText(commandText);
   return /\b(make|create|generate|prepare|build)\b/.test(normalized) && /\b(fair|balanced|team|teams)\b/.test(normalized);
@@ -601,6 +771,14 @@ function parsePresentPlayerSelectionCommand(
     teamCountAction.teamCount = 2;
     teamCountAction.reason = "Prepare a two-team setup from the current Today selection.";
     actions.push(teamCountAction);
+
+    const generateAction = createEmptyAction("generate_teams");
+    generateAction.capabilityId = "teams.generate";
+    generateAction.supportStatus = "executable";
+    generateAction.teamCount = 2;
+    generateAction.distribution = wantsDifferentTeamMix(commandText) ? "shuffle_equals" : "balanced";
+    generateAction.reason = "Generate two fair teams after these matched players are selected.";
+    actions.push(generateAction);
   }
 
   const uniqueUnresolved = [...new Set(unresolved)].slice(0, 8);
@@ -782,6 +960,9 @@ export function parseFairTeamsLocalSmartCommand(
 
   const presentSelection = parsePresentPlayerSelectionCommand(commandText, players);
   if (presentSelection) return presentSelection;
+
+  const teamGeneration = parseGenerateTeamsFromSelectionCommand(commandText, players);
+  if (teamGeneration) return teamGeneration;
 
   const rankedSelection = parseRankedRosterSelectionCommand(commandText, players);
   if (rankedSelection) return rankedSelection;

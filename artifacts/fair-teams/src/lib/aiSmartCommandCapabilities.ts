@@ -70,9 +70,9 @@ export const AI_SMART_COMMAND_CAPABILITIES: AiSmartCommandCapability[] = [
     id: "teams.generate",
     actionType: "generate_teams",
     label: "Generate teams",
-    supportStatus: "preview_only",
-    description: "Understand generate/make teams requests. Actual generation will be wired later.",
-    examples: ["make teams", "팀 만들어줘"],
+    supportStatus: "executable",
+    description: "Generate fair teams from the players currently selected in Today after the user confirms the action card.",
+    examples: ["make two teams from today's selected players", "generate teams", "팀 만들어줘"],
   },
   {
     id: "roster.add_new_player",
@@ -145,6 +145,7 @@ export function aiCommandActionCanApply(action: AiSmartCommandAction) {
   if (action.type === "select_players" || action.type === "unselect_players") return action.playerRefs.some((player) => Boolean(player.playerId));
   if (action.type === "set_team_count") return typeof action.teamCount === "number";
   if (action.type === "set_team_size") return typeof action.playersPerTeam === "number";
+  if (action.type === "generate_teams") return typeof action.teamCount === "number" || typeof action.playersPerTeam === "number";
   if (action.type === "add_pairing_rule") {
     return (
       (action.pairingKind === "keep_together" || action.pairingKind === "keep_separate") &&

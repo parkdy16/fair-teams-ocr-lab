@@ -256,6 +256,11 @@ function actionImpactLine(action: AiSmartCommandAction) {
   if (action.type === "set_team_count" && action.teamCount) {
     return `Will set up ${action.teamCount} teams.`;
   }
+  if (action.type === "generate_teams") {
+    if (action.teamCount) return `Will generate ${action.teamCount} fair team${action.teamCount === 1 ? "" : "s"} from the current Today selection.`;
+    if (action.playersPerTeam) return `Will generate ${action.playersPerTeam}v${action.playersPerTeam} teams from the current Today selection.`;
+    return "Will generate fair teams from the current Today selection.";
+  }
   if (action.type === "club_add_note") {
     return "Will add this as a Club note.";
   }

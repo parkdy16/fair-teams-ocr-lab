@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { RoomPlayer } from "@/lib/localRoster";
 import { FieldSize, PairingRule, Player, Team, TeamColor } from "@/lib/types";
 import { getSpecialSkillStatBoosts } from "@/lib/playerAbilityEffects";
@@ -9,6 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { Shuffle, ArrowLeftRight, Download, HelpCircle, Clock, Palette, Sparkles, BarChart3, List, Maximize2, X, Volume2, Square } from "lucide-react";
 import fairTeamsLogo from "@/assets/fairteams-logo.png";
+
+const PRESENT_TEAMS_SCROLL_FIX_VERSION = "present-fullscreen-portal-v1";
 
 const COLOR_OPTIONS: { value: TeamColor; label: string; hex: string; textHex: string }[] = [
   { value: "red",    label: "Red",    hex: "#ef4444", textHex: "#fff"    },
@@ -1091,16 +1094,17 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
         </div>
       )}
 
-      {presentTeamsOpen && teams.length > 0 && (
+      {presentTeamsOpen && teams.length > 0 && typeof document !== "undefined" && createPortal(
         <div
-          className="fixed inset-0 z-[90] overflow-hidden bg-slate-950 text-white"
-          style={{ height: "100dvh" }}
+          className="fixed inset-0 z-[90] flex overflow-hidden bg-slate-950 text-white"
           role="dialog"
           aria-modal="true"
           aria-label="Present teams"
+          data-present-teams-version={PRESENT_TEAMS_SCROLL_FIX_VERSION}
+          style={{ height: "100dvh", minHeight: "100svh", maxHeight: "100dvh" }}
         >
-          <div className="flex h-full min-h-0 flex-col overflow-hidden">
-            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-slate-950/95 px-3 py-2">
+          <div className="flex min-h-0 h-full w-full flex-col overflow-hidden">
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-slate-950/95 px-3 py-2 pt-[max(0.5rem,env(safe-area-inset-top))]">
               <div className="min-w-0">
                 <p className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-300">Fair Teams</p>
                 <h2 className="truncate text-lg font-black tracking-tight">Today's Teams</h2>
@@ -1117,8 +1121,8 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
             </div>
 
             <div
-              className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-2"
-              style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-y" }}
+              className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain px-2 py-2"
+              style={{ WebkitOverflowScrolling: "touch" }}
             >
               <div className="mx-auto grid max-w-5xl grid-cols-2 gap-1.5">
                 {teams.map((team) => {
@@ -1227,7 +1231,8 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
               />
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {historyPanel}

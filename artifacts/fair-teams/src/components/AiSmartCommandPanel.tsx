@@ -506,7 +506,7 @@ export function AiSmartCommandPanel({
           </p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
-          <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-violet-700 shadow-sm">AI beta · v0.2.2 repair</span>
+          <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-violet-700 shadow-sm">AI beta · v0.2.3 names</span>
           {(commandText.trim() || result || applyMessage || error || voiceTranscript) && (
             <button
               type="button"

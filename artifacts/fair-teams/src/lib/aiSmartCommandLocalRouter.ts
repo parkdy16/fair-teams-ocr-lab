@@ -407,6 +407,20 @@ function extractMaybeListSegment(commandText: string) {
     "here are",
     "with players",
     "with the players",
+    "make a team with",
+    "make teams with",
+    "make fair teams with",
+    "make balanced teams with",
+    "create a team with",
+    "create teams with",
+    "generate a team with",
+    "generate teams with",
+    "prepare a team with",
+    "prepare teams with",
+    "build a team with",
+    "build teams with",
+    "team with",
+    "teams with",
   ];
 
   let bestIndex = -1;
@@ -461,7 +475,8 @@ function likelyPresentPlayerCommand(commandText: string) {
   const hasListSignal = /,|\band\b|\bplus\b|&/.test(commandText);
   const hasSinglePersonCorrectionLanguage = /\b(add|also|plus|forgot|late|remove|unselect|deselect|not coming|isn t coming|is not coming|not playing|not here|out today)\b/.test(normalized);
   const hasPlainVoiceAttendancePhrase = /\b(are here|are playing|are coming|playing today|coming today|today we have|we have|we got|they are here)\b/.test(normalized);
-  return (hasRosterListLanguage && (hasListSignal || hasTeamMakingLanguage || hasPlainVoiceAttendancePhrase)) || hasSinglePersonCorrectionLanguage;
+  const hasTeamWithNameList = hasTeamMakingLanguage && hasListSignal && /\bwith\b/.test(normalized);
+  return (hasRosterListLanguage && (hasListSignal || hasTeamMakingLanguage || hasPlainVoiceAttendancePhrase)) || hasTeamWithNameList || hasSinglePersonCorrectionLanguage;
 }
 
 function wantsRemoveFromToday(commandText: string) {

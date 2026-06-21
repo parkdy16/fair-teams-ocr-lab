@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { parseFairTeamsSmartCommand, createAiSmartCommandContext, transcribeFairTeamsVoiceCommand } from "@/lib/aiSmartCommandClient";
 import { applyFairTeamsAiTruthGuard, guardFairTeamsSmartCommandBeforeAi } from "@/lib/aiSmartCommandTrustGuard";
 import { parseFairTeamsLocalSmartCommand } from "@/lib/aiSmartCommandLocalRouter";
+import { bestPlayerNameMatch, candidateNamesForRosterPlayer, normalizePlayerNameForMatch, scorePlayerNameMatch } from "@/lib/playerNameMatching";
 import {
   isAiSmartCommandEnabled,
   type AiSmartCommandAction,
@@ -110,6 +111,171 @@ function actionPrimaryVerb(action: AiSmartCommandAction) {
   if (action.type === "set_team_size" || action.type === "set_team_count") return "Set";
   if (action.type === "generate_teams") return /shuffle|different|mix|fresh|reroll/i.test(String(action.distribution || "") + " " + String(action.reason || "")) ? "Shuffle" : "Generate";
   return "Apply";
+}
+
+const AI_ASSISTANT_VERSION_LABEL = "AI beta · v1.2 OCR match";
+
+type AiRosterMatch = {
+  player: AiSmartCommandRosterPlayer;
+  score: number;
+  secondBestScore: number;
+};
+
+function cleanAiSpokenName(value?: string | null) {
+  return String(value || "")
+    .replace(/[“”"']/g, " ")
+    .replace(/\b(?:is|are|was|were|here|today|playing|coming|players?|people|with|and|so|let'?s|make|team|teams|only)\b/gi, " ")
+    .replace(/[^A-Za-zÀ-ÖØ-öø-ÿ0-9 ._-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function aiNameKey(value?: string | null) {
+  return normalizePlayerNameForMatch(cleanAiSpokenName(value)).replace(/\s+/g, "");
+}
+
+function findOcrStyleRosterMatch(spokenName: string | null | undefined, players: AiSmartCommandRosterPlayer[]): AiRosterMatch | null {
+  const cleaned = cleanAiSpokenName(spokenName);
+  const normalized = normalizePlayerNameForMatch(cleaned);
+  if (!normalized || normalized.length < 2) return null;
+
+  const exactPlayers = players.filter((player) =>
+    candidateNamesForRosterPlayer(player, { includeDisplayName: true }).includes(normalized),
+  );
+  if (exactPlayers.length === 1) {
+    return { player: exactPlayers[0], score: 100, secondBestScore: 0 };
+  }
+
+  const best = bestPlayerNameMatch(cleaned, players, { includeDisplayName: true });
+  if (!best || !best.player?.id) return null;
+
+  const wordCount = normalized.split(/\s+/).filter(Boolean).length;
+  const suggestThreshold = wordCount === 1 ? 78 : 72;
+  const strongAutoThreshold = wordCount === 1 ? 88 : 84;
+  const score = Math.max(best.score, scorePlayerNameMatch(cleaned, best.player, { includeDisplayName: true }));
+
+  if (score < suggestThreshold) return null;
+
+  // If two roster players are nearly tied, do not silently choose one. The
+  // assistant should ask/check instead of creating a fake new player.
+  if (score < strongAutoThreshold && best.secondBestScore >= score - 4) return null;
+
+  return { player: best.player, score, secondBestScore: best.secondBestScore };
+}
+
+function makeExistingPlayerActionFromAiName(
+  spokenName: string,
+  match: AiRosterMatch,
+  template?: AiSmartCommandAction,
+): AiSmartCommandAction {
+  return {
+    type: "select_players",
+    playerRefs: [{
+      playerId: match.player.id,
+      rosterName: match.player.name,
+      spokenName: cleanAiSpokenName(spokenName) || spokenName,
+      confidence: Math.min(1, Math.max(0.72, match.score / 100)),
+    }],
+    newPlayerName: null,
+    suggestedSkill: null,
+    playersPerTeam: template?.playersPerTeam ?? null,
+    teamCount: template?.teamCount ?? null,
+    pairingKind: null,
+    teamLabel: null,
+    role: null,
+    attribute: null,
+    distribution: "add_today_selection",
+    noteText: null,
+    colorName: null,
+    targetName: null,
+    targetArea: null,
+    capabilityId: "today.select_players",
+    supportStatus: "executable",
+    requiresConfirmation: false,
+    reason: `Possible existing match from the roster matcher: “${cleanAiSpokenName(spokenName) || spokenName}” → ${match.player.name}.`,
+  };
+}
+
+function repairAiPlayerRefsWithRosterMatcher(
+  action: AiSmartCommandAction,
+  players: AiSmartCommandRosterPlayer[],
+  resolvedNames: Set<string>,
+): AiSmartCommandAction {
+  if (!["select_players", "unselect_players", "mark_players_late", "add_pairing_rule", "lock_player_to_team"].includes(action.type)) return action;
+  if (!Array.isArray(action.playerRefs) || action.playerRefs.length === 0) return action;
+
+  const playerRefs = action.playerRefs.map((ref) => {
+    if (ref.playerId) return ref;
+    const spokenName = ref.spokenName || ref.rosterName || "";
+    const match = findOcrStyleRosterMatch(spokenName, players);
+    if (!match) return ref;
+    resolvedNames.add(aiNameKey(spokenName));
+    return {
+      ...ref,
+      playerId: match.player.id,
+      rosterName: match.player.name,
+      spokenName: cleanAiSpokenName(spokenName) || spokenName,
+      confidence: Math.min(1, Math.max(0.72, match.score / 100)),
+    };
+  });
+
+  return { ...action, playerRefs };
+}
+
+function enhanceAiResultWithOcrStyleRosterMatching(
+  response: AiSmartCommandResponse,
+  players: AiSmartCommandRosterPlayer[],
+): AiSmartCommandResponse {
+  if (!players.length || !response?.actions) return response;
+
+  const resolvedNames = new Set<string>();
+  const extraActions: AiSmartCommandAction[] = [];
+  const repairedActions = response.actions.flatMap((action): AiSmartCommandAction[] => {
+    if (action.type === "add_new_player_suggestion" && action.newPlayerName) {
+      const match = findOcrStyleRosterMatch(action.newPlayerName, players);
+      if (match) {
+        resolvedNames.add(aiNameKey(action.newPlayerName));
+        return [makeExistingPlayerActionFromAiName(action.newPlayerName, match, action)];
+      }
+    }
+    return [repairAiPlayerRefsWithRosterMatcher(action, players, resolvedNames)];
+  });
+
+  for (const item of response.unresolved || []) {
+    if (item.issue !== "unknown_player" && item.issue !== "ambiguous_player") continue;
+    const key = aiNameKey(item.text);
+    if (!key || resolvedNames.has(key)) continue;
+    const match = findOcrStyleRosterMatch(item.text, players);
+    if (!match) continue;
+    resolvedNames.add(key);
+    extraActions.push(makeExistingPlayerActionFromAiName(item.text, match));
+  }
+
+  if (resolvedNames.size === 0 && extraActions.length === 0) return response;
+
+  const seenActionKeys = new Set<string>();
+  const actions = [...repairedActions, ...extraActions].filter((action) => {
+    const key = `${action.type}:${action.newPlayerName || action.playerRefs.map((ref) => ref.playerId || ref.spokenName).join("+")}:${action.teamCount || ""}:${action.playersPerTeam || ""}:${action.distribution || ""}`;
+    if (seenActionKeys.has(key)) return false;
+    seenActionKeys.add(key);
+    return true;
+  });
+
+  const unresolved = (response.unresolved || []).filter((item) => !resolvedNames.has(aiNameKey(item.text)));
+  const confirmations = (response.confirmations || []).filter((item) => {
+    const candidateKeys = [item.message, ...item.playerRefs.map((ref) => ref.spokenName || ref.rosterName)].map(aiNameKey).filter(Boolean);
+    return !candidateKeys.some((key) => resolvedNames.has(key));
+  });
+
+  return {
+    ...response,
+    actions,
+    confirmations,
+    unresolved,
+    parseMode: response.parseMode === "local_fallback" ? response.parseMode : "ai_with_local_hints",
+    assistantSummary: `${response.assistantSummary} I also checked close roster-name matches before suggesting new players.`,
+    debugWarnings: [...(response.debugWarnings || []), "AI names repaired with OCR-style roster matcher before display."],
+  };
 }
 
 
@@ -375,8 +541,9 @@ export function AiSmartCommandPanel({
       });
       const localTrustGuard = guardFairTeamsSmartCommandBeforeAi(trimmedCommand, commandContext);
       if (localTrustGuard) {
-        setResult(localTrustGuard);
-        onParsed?.(localTrustGuard);
+        const enhanced = enhanceAiResultWithOcrStyleRosterMatching(localTrustGuard, players);
+        setResult(enhanced);
+        onParsed?.(enhanced);
         return;
       }
 
@@ -386,21 +553,22 @@ export function AiSmartCommandPanel({
           roster: players,
           context: commandContext,
         });
-        const parsed = applyFairTeamsAiTruthGuard(trimmedCommand, parsedRaw);
+        const parsed = enhanceAiResultWithOcrStyleRosterMatching(applyFairTeamsAiTruthGuard(trimmedCommand, parsedRaw), players);
         setResult(parsed);
         onParsed?.(parsed);
         return;
       } catch (aiErr) {
         const localSmartCommand = parseFairTeamsLocalSmartCommand(trimmedCommand, players, commandContext);
         if (localSmartCommand) {
-          setResult({
+          const enhancedLocal = enhanceAiResultWithOcrStyleRosterMatching({
             ...localSmartCommand,
             debugWarnings: [
               ...((localSmartCommand as any).debugWarnings || []),
               `AI planner unavailable; used local fallback: ${aiErr instanceof Error ? aiErr.message : String(aiErr || "unknown error")}`,
             ],
-          });
-          onParsed?.(localSmartCommand);
+          }, players);
+          setResult(enhancedLocal);
+          onParsed?.(enhancedLocal);
           return;
         }
         throw aiErr;
@@ -516,7 +684,7 @@ export function AiSmartCommandPanel({
           </p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
-          <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-violet-700 shadow-sm">AI beta · v1.1 match</span>
+          <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-violet-700 shadow-sm">{AI_ASSISTANT_VERSION_LABEL}</span>
           {(commandText.trim() || result || applyMessage || error || voiceTranscript) && (
             <button
               type="button"

@@ -45,10 +45,10 @@ function cleanRoster(raw) {
       defense: cleanNumber(item.defense),
       speed: cleanNumber(item.speed),
       passing: cleanNumber(item.passing),
-      stamina: cleanNumber(item.stamina),
-      endurance: cleanNumber(item.endurance),
-      fitness: cleanNumber(item.fitness),
-      physical: cleanNumber(item.physical),
+      stamina: cleanNumber(item.stamina ?? item.stats?.stamina ?? item.attributes?.stamina ?? item.traits?.stamina ?? item.endurance ?? item.fitness ?? item.physical ?? item.workRate ?? item.workrate),
+      endurance: cleanNumber(item.endurance ?? item.stats?.endurance ?? item.attributes?.endurance ?? item.traits?.endurance),
+      fitness: cleanNumber(item.fitness ?? item.stats?.fitness ?? item.attributes?.fitness ?? item.traits?.fitness),
+      physical: cleanNumber(item.physical ?? item.stats?.physical ?? item.attributes?.physical ?? item.traits?.physical ?? item.workRate ?? item.workrate),
       isGoalkeeper: Boolean(item.isGoalkeeper),
       isPlaymaker: Boolean(item.isPlaymaker),
       isFinisher: Boolean(item.isFinisher),
@@ -485,6 +485,9 @@ function getVisiblePlayerMetric(player, metric) {
   if (metric === "speed") return cleanNumber(item.speed);
   if (metric === "passing") return cleanNumber(item.passing);
   if (metric === "stamina") {
+    // Stamina must stay its own field. Do not fall back to overall skill/OVR.
+    // If there is no numeric stamina/endurance/fitness value, Engine is handled
+    // separately as a visible high-stamina trait in buildRosterDataAnswer().
     const direct = cleanNumber(item.stamina);
     if (Number.isFinite(direct)) return direct;
     const endurance = cleanNumber(item.endurance);
@@ -493,10 +496,61 @@ function getVisiblePlayerMetric(player, metric) {
     if (Number.isFinite(fitness)) return fitness;
     const physical = cleanNumber(item.physical);
     if (Number.isFinite(physical)) return physical;
-    if (item.isEngine) return 10;
     return undefined;
   }
   return cleanNumber(item.skill);
+}
+
+function getRosterTraitFlag(player, trait) {
+  const item = player && typeof player === "object" ? player : {};
+  const map = {
+    goalkeeper: "isGoalkeeper",
+    keeper: "isGoalkeeper",
+    playmaker: "isPlaymaker",
+    passer: "isPlaymaker",
+    finisher: "isFinisher",
+    dribbler: "isDribbler",
+    sentinel: "isSentinel",
+    engine: "isEngine",
+    staminaTrait: "isEngine",
+    versatile: "isVersatile",
+    spaceFinder: "isSpaceFinder",
+    organizer: "isOrganizer",
+  };
+  const key = map[trait];
+  return key ? Boolean(item[key]) : false;
+}
+
+function rosterTraitLabel(trait) {
+  const labels = {
+    goalkeeper: "Goalkeeper",
+    keeper: "Goalkeeper",
+    playmaker: "Playmaker",
+    passer: "Playmaker",
+    finisher: "Finisher",
+    dribbler: "Dribbler",
+    sentinel: "Sentinel",
+    engine: "Engine",
+    staminaTrait: "Engine/stamina trait",
+    versatile: "Versatile",
+    spaceFinder: "Space Finder",
+    organizer: "Organizer",
+  };
+  return labels[trait] || trait;
+}
+
+function detectRosterTraitQuestion(text) {
+  const raw = cleanString(text, MAX_COMMAND_CHARS);
+  if (/\b(goalkeepers?|keepers?|torwart|키퍼|골키퍼)\b/i.test(raw)) return { trait: "goalkeeper", label: "Goalkeeper" };
+  if (/\b(playmakers?|passers?|spielmacher|플레이메이커)\b/i.test(raw)) return { trait: "playmaker", label: "Playmaker" };
+  if (/\b(finishers?|scorers?|strikers?|골잡이|마무리)\b/i.test(raw)) return { trait: "finisher", label: "Finisher" };
+  if (/\b(dribblers?|드리블)\b/i.test(raw)) return { trait: "dribbler", label: "Dribbler" };
+  if (/\b(sentinels?|defensive\s+specialists?|수비형)\b/i.test(raw)) return { trait: "sentinel", label: "Sentinel" };
+  if (/\b(engines?|stamina\s+trait|high\s+stamina|endurance\s+trait|체력)\b/i.test(raw)) return { trait: "engine", label: "Engine/stamina trait" };
+  if (/\b(versatile|all.?rounders?|올라운드)\b/i.test(raw)) return { trait: "versatile", label: "Versatile" };
+  if (/\b(space\s*finders?|off.?ball|공간)\b/i.test(raw)) return { trait: "spaceFinder", label: "Space Finder" };
+  if (/\b(organizers?|오거나이저)\b/i.test(raw)) return { trait: "organizer", label: "Organizer" };
+  return null;
 }
 
 function detectRosterQueryMetric(text) {
@@ -621,8 +675,48 @@ function detectRosterAnswerLimit(text) {
 function buildRosterDataAnswer(commandText, roster, context = {}) {
   if (!isRosterDataQuestion(commandText) || !Array.isArray(roster) || roster.length === 0) return null;
   const metric = detectRosterQueryMetric(commandText);
-  if (!metric) return null;
+  const traitQuestion = detectRosterTraitQuestion(commandText);
+  if (!metric && !traitQuestion) return null;
   const limit = detectRosterAnswerLimit(commandText);
+  const modeNote = context?.rosterMode === "shared"
+    ? "I used the shared roster values available to the assistant."
+    : "I used the local/private roster values available to the assistant.";
+
+  if (traitQuestion && (!metric || metric.metric === "stamina")) {
+    const positiveRows = roster.filter((player) => player?.id && player?.name && getRosterTraitFlag(player, traitQuestion.trait));
+    const negativeRows = roster.filter((player) => player?.id && player?.name && !getRosterTraitFlag(player, traitQuestion.trait));
+    const asksLow = /\b(lowest|least|worst|weakest|low|minimum|min|not|without|lack|lacking|없는|낮은|최저)\b/i.test(commandText);
+    const selectedRows = (asksLow ? negativeRows : positiveRows).slice(0, Math.max(1, Math.min(limit, roster.length)));
+    const label = rosterTraitLabel(traitQuestion.trait);
+    if (traitQuestion.trait === "engine" && asksLow) {
+      const names = selectedRows.map((player, index) => `${index + 1}. ${player.name} — not marked Engine`).join("\n");
+      return {
+        topic: "rosterTraitData",
+        confidence: 0.9,
+        assistantSummary: names
+          ? `I do not have a separate numeric stamina score for everyone here. What I can see is the Engine trait, which means high stamina/work-rate. So the lower-stamina group is the players not marked Engine:\n${names}\n\nI would not rank these as exact lowest-to-highest stamina unless we add a real stamina number. ${modeNote}`
+          : `I do not have a separate numeric stamina score, and everyone I can see is marked Engine. ${modeNote}`,
+      };
+    }
+    if (selectedRows.length === 0) {
+      return {
+        topic: "rosterTraitData",
+        confidence: 0.86,
+        assistantSummary: asksLow
+          ? `Everyone I can see is marked ${label}, so I cannot list players without that trait. ${modeNote}`
+          : `I do not see anyone marked ${label} in this roster. ${modeNote}`,
+      };
+    }
+    const names = selectedRows.map((player, index) => `${index + 1}. ${player.name} — ${asksLow ? `not marked ${label}` : label}`).join("\n");
+    return {
+      topic: "rosterTraitData",
+      confidence: 0.9,
+      assistantSummary: asksLow
+        ? `These players are not marked ${label}:\n${names}\n\n${modeNote}`
+        : `These players are marked ${label}:\n${names}\n\n${modeNote}`,
+    };
+  }
+
   const direction = metric.direction === "asc" ? "asc" : "desc";
   const rows = roster
     .map((player) => ({ player, value: getVisiblePlayerMetric(player, metric.metric) }))
@@ -630,14 +724,24 @@ function buildRosterDataAnswer(commandText, roster, context = {}) {
 
   if (rows.length === 0) {
     const metricLabel = metric.metric === "stamina" ? "stamina/endurance" : metric.metric;
-    const engineCount = metric.metric === "stamina" ? roster.filter((player) => player?.isEngine).length : 0;
-    const fallback = metric.metric === "stamina" && engineCount > 0
-      ? `I can see the Engine trait, but I do not have a separate numeric stamina value for everyone in this AI context. Engine players are the stamina-like players; players without Engine are simply not marked as high-stamina, but I cannot fairly say who has the lowest stamina from that alone.`
-      : `I do not have a visible ${metricLabel} value for this roster in the AI context yet, so I cannot rank that safely.`;
+    const engineRows = metric.metric === "stamina" ? roster.filter((player) => player?.id && player?.name && player?.isEngine) : [];
+    const nonEngineRows = metric.metric === "stamina" ? roster.filter((player) => player?.id && player?.name && !player?.isEngine) : [];
+    if (metric.metric === "stamina" && (engineRows.length > 0 || nonEngineRows.length > 0)) {
+      const asksLow = direction === "asc";
+      const rowsToShow = (asksLow ? nonEngineRows : engineRows).slice(0, Math.max(1, Math.min(limit, roster.length)));
+      const names = rowsToShow.map((player, index) => `${index + 1}. ${player.name} — ${asksLow ? "not marked Engine" : "Engine"}`).join("\n");
+      return {
+        topic: "rosterTraitData",
+        confidence: 0.88,
+        assistantSummary: names
+          ? `I do not have a separate numeric stamina score for everyone here. I can only use the visible Engine trait as the stamina-like signal.\n${names}\n\nSo I can show the ${asksLow ? "players not marked Engine" : "Engine players"}, but I should not pretend this is an exact stamina ranking. ${modeNote}`
+          : `I do not have a separate numeric stamina score or Engine trait data for this roster, so I cannot rank stamina safely. ${modeNote}`,
+      };
+    }
     return {
       topic: "rosterData",
       confidence: 0.78,
-      assistantSummary: fallback,
+      assistantSummary: `I do not have a visible ${metricLabel} value for this roster in the AI context yet, so I cannot rank that safely. I will not use overall skill/OVR as a substitute because you asked for ${metricLabel} specifically.`,
     };
   }
 
@@ -651,9 +755,6 @@ function buildRosterDataAnswer(commandText, roster, context = {}) {
     ? `${selected[0].player.name} has the ${metric.label || metricLabel} in this roster`
     : `Here are the ${selected.length} ${metric.label || metricLabel} players in this roster`;
   const list = selected.map((row, index) => `${index + 1}. ${row.player.name} — ${metricLabel} ${row.value}`).join("\n");
-  const modeNote = context?.rosterMode === "shared"
-    ? "I used the shared roster values available to the assistant."
-    : "I used the local/private roster values available to the assistant.";
   return {
     topic: "rosterData",
     confidence: 0.9,
@@ -679,7 +780,7 @@ function buildCommandHints(commandText, roster) {
   const matchedCount = candidatePlayers.filter((item) => item.status === "matched" || item.status === "possible_match").length;
   const unknownCount = candidatePlayers.filter((item) => item.status === "unknown").length;
   return {
-    appKnowledgeVersion: `2026-06-21.roster-stat-answer-v1:${FAIR_TEAMS_KNOWLEDGE_VERSION}`,
+    appKnowledgeVersion: `2026-06-21.trait-aware-roster-answer-v1:${FAIR_TEAMS_KNOWLEDGE_VERSION}`,
     candidateNames,
     candidatePlayers,
     selectAllRosterPlayers,
@@ -743,7 +844,7 @@ Important roster rules:
 Visible player-query rules:
 - The assistant may use visible player-card/profile data as variables when the user asks for a roster pool, such as "10 strongest players", "top 12", "weakest 8", "fastest players", "best defenders", "best attackers", or "best passers".
 - Use visible fields only: name/AKA, skill/OVR, attack, defense, speed, passing, goalkeeper/playmaker/finisher/dribbler/sentinel/engine/versatile/space-finder flags, gender/category, vibe/fun badge, and attending status.
-- For "strongest", "best", "top", or "highest rated", sort by skill/OVR descending. For "weakest" or "beginners", sort by skill/OVR ascending. For "fastest", sort by speed. For "best defenders", sort by defense. For "best attackers", sort by attack. For "best passers" or "playmakers", sort by passing. For "stamina", "endurance", "fitness", or "engine", use the visible stamina/endurance/fitness value if present; otherwise Engine is only a stamina-like trait and should not be treated as a full lowest-stamina ranking.
+- For "strongest", "best", "top", or "highest rated", sort by skill/OVR descending. For "weakest" or "beginners", sort by skill/OVR ascending. For "fastest", sort by speed. For "best defenders", sort by defense. For "best attackers", sort by attack. For "best passers" or "playmakers", sort by passing. For "stamina", "endurance", "fitness", or "engine", use the visible stamina/endurance/fitness value if present; otherwise use Engine only as a visible high-stamina trait. Never use overall skill/OVR as a substitute for stamina or other specific traits.
 - If the user says "make teams with the 10 strongest players on my roster", first replace Today with those 10 roster players, then generate teams. Do not reinterpret that as merely a vague balancing preference.
 - If the user only says something vague like "make strong teams" without a count/source/filter, treat it as a balancing preference or ask a clarifying question.
 
@@ -1630,8 +1731,8 @@ export default async function handler(req, res) {
   }
 
   const task = answerQuestionMode
-    ? "AI ASSISTANT V1.18 ROSTER-STATS QUESTION MODE. The user is asking a Fair Teams product question, not asking you to perform an app action. Answer naturally from fairTeamsKnowledge and the operating manual. Return actions=[], confirmations=[], unresolved=[]. Do not create backup/import/team/action cards just because the question mentions those features. Answer from the user's perspective, in friendly plain language. For comparisons, explain when to use each feature. If the answer is not in fairTeamsKnowledge, say you do not have that Fair Teams detail yet and explain the nearest known behavior."
-    : "AI PLANNER V1.18 ROSTER-STATS STRICT NAME EXTRACTOR. Reply as the Fair Teams Assistant. If this is conversation or a simple question, answer naturally in assistantSummary with no actions. If this is a Fair Teams product question, answer from fairTeamsKnowledge and the operating manual, not from generic sports-app assumptions. If this is a Fair Teams app request, read commandText yourself and build a safe action plan. Use commandHints only as helper clues, not as the source of truth. For roster-pool requests such as "make teams with 10 strongest players on my roster", use visible roster data: select the ranked roster players first, then generate teams if requested. For roster-data questions such as "who has the lowest stamina in my roster?", answer with names/values and no actions. Action requests always beat product Q&A. For attendance commands, first do a strict name-extraction pass over commandText: identify the continuous spoken/typed attendance list, preserve order, and output ONLY real person-name candidates from that list. Do not copy noisy commandHints candidate names. Never output instruction/filler words such as have, has, had, new, four, like, to, from, in, on, with, here, today, only, make, team, teams, players, people, okay, or let's as player names unless that exact word is an existing roster.name or roster.aka. If the user says a count such as 'four new players' without saying their names, do not create names from the count; add unresolved missing_context saying the new player names were not provided. After the strict name list is built, match each name against roster.name and roster.aka. Prefer plausible existing roster IDs over add_new_player_suggestion for speech errors such as June/Joon, Yan/Jan, Anya/Tanja, Briesh/Presh/Brijesh, Ayesha/Ayashini, Unursha/Onursha, Sari Savage/Ceri Savage. For mixed commands like 'Arthur is here, Ayashini, Anna... let's make a team', return select_players first, then set_team_count/set_team_size if stated, then generate_teams. Do not generate from current Today selection when names are present. Completeness still matters: if 21 real people are named, account for 21 people, but uncertainty should become unresolved/add_new_player_suggestion for plausible human names only, never app words or sentence fragments.";
+    ? "AI ASSISTANT V1.19 TRAIT-AWARE ROSTER-STATS QUESTION MODE. The user is asking a Fair Teams product question, not asking you to perform an app action. Answer naturally from fairTeamsKnowledge and the operating manual. Return actions=[], confirmations=[], unresolved=[]. Do not create backup/import/team/action cards just because the question mentions those features. Answer from the user's perspective, in friendly plain language. For comparisons, explain when to use each feature. If the answer is not in fairTeamsKnowledge, say you do not have that Fair Teams detail yet and explain the nearest known behavior."
+    : "AI PLANNER V1.19 TRAIT-AWARE ROSTER-STATS STRICT NAME EXTRACTOR. Reply as the Fair Teams Assistant. If this is conversation or a simple question, answer naturally in assistantSummary with no actions. If this is a Fair Teams product question, answer from fairTeamsKnowledge and the operating manual, not from generic sports-app assumptions. If this is a Fair Teams app request, read commandText yourself and build a safe action plan. Use commandHints only as helper clues, not as the source of truth. For roster-pool requests such as "make teams with 10 strongest players on my roster", use visible roster data: select the ranked roster players first, then generate teams if requested. For roster-data questions such as "who has the lowest stamina in my roster?", answer with the exact requested stat/trait and no actions. Do not substitute overall skill/OVR when the user asks about stamina, speed, defense, passing, attack, or a special trait. Action requests always beat product Q&A. For attendance commands, first do a strict name-extraction pass over commandText: identify the continuous spoken/typed attendance list, preserve order, and output ONLY real person-name candidates from that list. Do not copy noisy commandHints candidate names. Never output instruction/filler words such as have, has, had, new, four, like, to, from, in, on, with, here, today, only, make, team, teams, players, people, okay, or let's as player names unless that exact word is an existing roster.name or roster.aka. If the user says a count such as 'four new players' without saying their names, do not create names from the count; add unresolved missing_context saying the new player names were not provided. After the strict name list is built, match each name against roster.name and roster.aka. Prefer plausible existing roster IDs over add_new_player_suggestion for speech errors such as June/Joon, Yan/Jan, Anya/Tanja, Briesh/Presh/Brijesh, Ayesha/Ayashini, Unursha/Onursha, Sari Savage/Ceri Savage. For mixed commands like 'Arthur is here, Ayashini, Anna... let's make a team', return select_players first, then set_team_count/set_team_size if stated, then generate_teams. Do not generate from current Today selection when names are present. Completeness still matters: if 21 real people are named, account for 21 people, but uncertainty should become unresolved/add_new_player_suggestion for plausible human names only, never app words or sentence fragments.";
 
   const payload = {
     model: DEFAULT_MODEL,

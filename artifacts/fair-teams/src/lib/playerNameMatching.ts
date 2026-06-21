@@ -145,7 +145,6 @@ export function voiceNameAlternates(name: string | null | undefined) {
     briish: ["Brijesh"],
     rish: ["Brijesh"],
     brijes: ["Brijesh"],
-    brijesh: ["Briesh", "Brioche", "Rish", "Brish"],
     philip: ["Phillip", "Filip", "Fillip"],
     phillip: ["Philip", "Filip", "Fillip"],
     filip: ["Philip", "Phillip", "Fillip"],
@@ -154,6 +153,19 @@ export function voiceNameAlternates(name: string | null | undefined) {
     enaree: ["Anari", "Anaree", "Inari"],
     anaree: ["Anari", "Enaree", "Inari"],
     inari: ["Anari", "Enaree", "Anaree"],
+    ayesha: ["Ayashini", "Ayeshni", "Ayeshini", "Ayishini", "Aishani"],
+    ayeshni: ["Ayashini", "Ayesha", "Ayeshini", "Ayishini", "Aishani"],
+    ayeshini: ["Ayashini", "Ayesha", "Ayeshni", "Ayishini"],
+    ayishini: ["Ayashini", "Ayesha", "Ayeshni", "Ayeshini"],
+    aishani: ["Ayashini", "Ayesha", "Ayeshni"],
+    ayashini: ["Ayesha", "Ayeshni", "Ayeshini", "Ayishini", "Aishani"],
+    presh: ["Brijesh", "Briesh", "Brish", "Prijesh"],
+    prash: ["Brijesh", "Briesh", "Brish"],
+    brijesh: ["Briesh", "Brioche", "Rish", "Brish", "Presh", "Prijesh"],
+    prijesh: ["Brijesh", "Presh", "Briesh"],
+    unursha: ["Onursha", "Onursah", "Onur Shah"],
+    onursha: ["Unursha", "Onursah", "Onur Shah"],
+    onursah: ["Onursha", "Unursha", "Onur Shah"],
     rafael: ["Raphael"],
     raphael: ["Rafael"],
   };
@@ -176,6 +188,9 @@ export function voiceNameSoundKey(value: string | null | undefined) {
     .replace(/^tania/g, "tanja")
     .replace(/brijesh/g, "briesh")
     .replace(/brijes/g, "briesh")
+    .replace(/^presh$/g, "briesh")
+    .replace(/^prash$/g, "briesh")
+    .replace(/^prijesh$/g, "briesh")
     .replace(/^rish/g, "briesh")
     .replace(/^brish/g, "briesh")
     .replace(/^briish/g, "briesh")
@@ -186,6 +201,16 @@ export function voiceNameSoundKey(value: string | null | undefined) {
     .replace(/^anaree$/g, "enari")
     .replace(/^enaree$/g, "enari")
     .replace(/^inari$/g, "enari")
+    .replace(/^ayashini$/g, "ayashini")
+    .replace(/^ayesha$/g, "ayashini")
+    .replace(/^ayeshni$/g, "ayashini")
+    .replace(/^ayeshini$/g, "ayashini")
+    .replace(/^ayishini$/g, "ayashini")
+    .replace(/^aishani$/g, "ayashini")
+    .replace(/^onursha$/g, "onursha")
+    .replace(/^onursah$/g, "onursha")
+    .replace(/^unursha$/g, "onursha")
+    .replace(/^onurshah$/g, "onursha")
     .replace(/ph/g, "f")
     .replace(/ck/g, "k")
     .replace(/qu/g, "kw")

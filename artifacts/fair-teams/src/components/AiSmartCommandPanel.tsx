@@ -113,7 +113,7 @@ function actionPrimaryVerb(action: AiSmartCommandAction) {
   return "Apply";
 }
 
-const AI_ASSISTANT_VERSION_LABEL = "AI beta · v1.7 edit names";
+const AI_ASSISTANT_VERSION_LABEL = "AI beta · v1.8 resolver";
 
 type AiRosterMatch = {
   player: AiSmartCommandRosterPlayer;

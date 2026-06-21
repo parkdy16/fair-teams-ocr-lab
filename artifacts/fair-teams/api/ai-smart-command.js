@@ -995,6 +995,116 @@ function normalizePlayerRef(ref) {
   };
 }
 
+function cleanSpokenNameForAiMatching(value) {
+  return cleanString(value, 160)
+    .replace(/[.!?。！？]+$/g, "")
+    .replace(/^(?:so|okay|ok|please|today|now)\s+/i, "")
+    .replace(/^(?:make|create|generate|build)\s+(?:a\s+)?team\s+(?:with|using)\s+/i, "")
+    .replace(/^(?:with|using|for)\s+/i, "")
+    .replace(/\b(?:is|are)\s+(?:here|playing|coming|in|available|today)\b/gi, "")
+    .replace(/\b(?:here|playing|coming|available|today|players?|people|team|teams?)\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function buildRosterById(roster) {
+  const map = new Map();
+  for (const player of roster || []) {
+    if (player?.id) map.set(player.id, player);
+  }
+  return map;
+}
+
+function resolvePlayerRefWithRoster(ref, rosterIndex, rosterById) {
+  const normalized = normalizePlayerRef(ref);
+  if (normalized.playerId && rosterById.has(normalized.playerId)) {
+    const player = rosterById.get(normalized.playerId);
+    return {
+      ...normalized,
+      rosterName: normalized.rosterName || player.name,
+      confidence: normalized.confidence || 0.98,
+    };
+  }
+
+  const rawCandidates = [normalized.rosterName, normalized.spokenName]
+    .map(cleanSpokenNameForAiMatching)
+    .filter(Boolean);
+
+  for (const candidate of rawCandidates) {
+    const match = matchNameCandidate(candidate, rosterIndex);
+    if ((match.status === "matched" || match.status === "possible_match") && match.playerId && rosterById.has(match.playerId)) {
+      return {
+        playerId: match.playerId,
+        rosterName: match.rosterName || candidate,
+        spokenName: normalized.spokenName || candidate,
+        confidence: Math.max(normalized.confidence || 0, match.confidence || 0.82),
+      };
+    }
+  }
+
+  return {
+    ...normalized,
+    spokenName: cleanSpokenNameForAiMatching(normalized.spokenName) || normalized.spokenName,
+    rosterName: cleanSpokenNameForAiMatching(normalized.rosterName) || normalized.rosterName,
+  };
+}
+
+function normalizedNamesFromAiSelectActions(actions) {
+  const names = new Set();
+  for (const action of actions || []) {
+    if (action?.type !== "select_players") continue;
+    for (const ref of action.playerRefs || []) {
+      [ref.spokenName, ref.rosterName].forEach((name) => {
+        const cleaned = normalizeForMatching(cleanSpokenNameForAiMatching(name));
+        if (cleaned) names.add(cleaned);
+      });
+    }
+  }
+  return names;
+}
+
+function filterDeterministicNoiseWhenAiMatched(deterministic, aiActions) {
+  const matchedNames = normalizedNamesFromAiSelectActions(aiActions);
+  if (matchedNames.size === 0) return deterministic;
+
+  const isCoveredName = (name) => {
+    const cleaned = normalizeForMatching(cleanSpokenNameForAiMatching(name));
+    return Boolean(cleaned && matchedNames.has(cleaned));
+  };
+
+  return {
+    actions: (deterministic.actions || []).filter((action) => {
+      if (action?.type === "add_new_player_suggestion" && isCoveredName(action.newPlayerName)) return false;
+      if (action?.type === "select_players") return false;
+      return true;
+    }),
+    confirmations: (deterministic.confirmations || []).filter((confirmation) => {
+      if (confirmation?.type === "missing_player") {
+        const refNames = (confirmation.playerRefs || []).map((ref) => ref.spokenName || ref.rosterName);
+        if (refNames.some(isCoveredName)) return false;
+        const guessedName = cleanString(confirmation.message, 120).replace(/ is not in.*$/i, "");
+        if (isCoveredName(guessedName)) return false;
+      }
+      return true;
+    }),
+    unresolved: deterministic.unresolved || [],
+  };
+}
+
+function resolveAiRosterMatches(parsed, roster) {
+  const item = parsed && typeof parsed === "object" ? parsed : {};
+  const rosterIndex = buildRosterNameIndex(roster);
+  const rosterById = buildRosterById(roster);
+  const actions = Array.isArray(item.actions) ? item.actions.map((action) => {
+    if (!action || typeof action !== "object") return action;
+    const playerRefs = Array.isArray(action.playerRefs)
+      ? action.playerRefs.map((ref) => resolvePlayerRefWithRoster(ref, rosterIndex, rosterById))
+      : action.playerRefs;
+    return { ...action, playerRefs };
+  }) : item.actions;
+  return { ...item, actions };
+}
+
 function normalizeAction(action) {
   const item = action && typeof action === "object" ? action : {};
   const rawType = cleanString(item.type, 80);
@@ -1076,19 +1186,24 @@ function mergeUniqueByKey(existing, incoming, keyFn) {
 }
 
 function mergeDeterministicActions(parsed, commandHints, roster) {
-  const normalized = normalizeParsedResponse(parsed, commandHints?.commandText || "");
-  const deterministic = buildDeterministicPlan(commandHints, roster);
+  const aiResolved = resolveAiRosterMatches(parsed, roster);
+  const normalized = normalizeParsedResponse(aiResolved, commandHints?.commandText || "");
+  const deterministicRaw = buildDeterministicPlan(commandHints, roster);
+  const deterministic = filterDeterministicNoiseWhenAiMatched(deterministicRaw, normalized.actions);
   const merged = { ...normalized };
 
+  // AI Planner is primary for language understanding and roster-name mapping.
+  // Deterministic app rules still add safe mechanical actions such as set team count
+  // or generate teams, but they should not override AI-matched player selections.
   merged.actions = mergeUniqueByKey(
-    deterministic.actions,
     normalized.actions,
-    (action) => `${action.type}:${action.newPlayerName || action.noteText || action.colorName || action.targetName || action.targetArea || action.playersPerTeam || action.teamCount || action.pairingKind || action.teamLabel || action.playerRefs.map((p) => p.playerId || p.spokenName).join("+")}`,
+    deterministic.actions,
+    (action) => `${action.type}:${action.newPlayerName || action.noteText || action.colorName || action.targetName || action.targetArea || action.playersPerTeam || action.teamCount || action.pairingKind || action.teamLabel || action.playerRefs.map((p) => p.playerId || p.spokenName || p.rosterName).join("+")}`,
   );
   merged.confirmations = mergeUniqueByKey(normalized.confirmations, deterministic.confirmations, (item) => item.id || item.message);
   merged.unresolved = mergeUniqueByKey(normalized.unresolved, deterministic.unresolved, (item) => `${item.issue}:${item.text || item.message}`);
 
-  if (deterministic.actions.length > 0) merged.parseMode = "ai_with_local_hints";
+  if (merged.actions.length > 0) merged.parseMode = deterministicRaw.actions.length > 0 ? "ai_planner_with_local_safety" : "ai_planner";
   if (merged.actions.length > 0) merged.ok = true;
   return merged;
 }
@@ -1209,6 +1324,10 @@ Output contract:
 - The user may speak or type in any language, including mixed-language commands.
 - detectedLanguage may be any BCP-47-like language string such as en, de, ko, es, mixed, or unknown.
 - Preserve player names exactly as user says them when uncertain. Do not translate names.
+- You receive the current roster with exact player IDs, names, and AKAs. For existing players, fill playerRefs with the roster player's exact id and exact roster name. Do not leave playerId null when a roster player is the likely intended person.
+- For voice/transcription variants, use roster context to choose the likely existing player when there is no exact roster name conflict, for example June -> Joon, Yan -> Jan, Anya -> Tanja, Briesh -> Brijesh, Onursa -> Onursah.
+- Strip attendance words such as "is here", "are here", "today", "with", "so", and "make a team" from spokenName before deciding whether a person is unknown.
+- Only create add_new_player_suggestion when the name cannot reasonably match any existing roster name or AKA.
 - You are the primary planner. Read commandText yourself first, then use commandHints as helpful clues only. Do not rely only on commandHints.
 - If commandHints misses, merges, or pollutes a name list, correct it from commandText. Example: "Arthur is here, Ayashini, Anna... let's make a team" is an attendance list plus generate-teams request.
 - Attendance/list patterns include "X is here, Y, Z", "today we have X, Y", "make a team with X, Y", "X, Y and Z are playing", and similar natural speech. Extract all person names before deciding to generate teams.
@@ -1286,7 +1405,7 @@ export default async function handler(req, res) {
       {
         role: "user",
         content: JSON.stringify({
-          task: "AI PLANNER V1. Reply as the Fair Teams Assistant. If this is conversation or a simple question, answer naturally in assistantSummary with no actions. If this is a Fair Teams product question, answer from fairTeamsKnowledge and the operating manual, not from generic sports-app assumptions. If this is a Fair Teams app request, read commandText yourself and build a safe action plan. Use commandHints only as helper clues, not as the source of truth. Action requests always beat product Q&A. For mixed commands like 'Arthur is here, Ayashini, Anna... let's make a team', extract the attendance list first, match names against roster/aka, then return select_players followed by generate_teams. Do not explain the Today tab and do not generate from current Today selection when names are present. Do not drop any listed player names. If a person is named as playing today, they must appear either as a matched playerRef in select_players, add_new_player_suggestion, missing/ambiguous confirmation, or unresolved item. Prefer plausible existing roster matches over adding new players for speech errors such as June/Joon, Yan/Jan, Anya/Tanja, Briesh/Brijesh.",
+          task: "AI PLANNER V1.1 roster matching. For app requests, you are the primary planner and likely-name matcher: use commandText plus roster IDs/names/AKAs to match spoken people to existing roster players before suggesting new players.  Reply as the Fair Teams Assistant. If this is conversation or a simple question, answer naturally in assistantSummary with no actions. If this is a Fair Teams product question, answer from fairTeamsKnowledge and the operating manual, not from generic sports-app assumptions. If this is a Fair Teams app request, read commandText yourself and build a safe action plan. Use commandHints only as helper clues, not as the source of truth. Action requests always beat product Q&A. For mixed commands like 'Arthur is here, Ayashini, Anna... let's make a team', extract the attendance list first, match names against roster/aka, then return select_players followed by generate_teams. Do not explain the Today tab and do not generate from current Today selection when names are present. Do not drop any listed player names. If a person is named as playing today, they must appear either as a matched playerRef in select_players, add_new_player_suggestion, missing/ambiguous confirmation, or unresolved item. Prefer plausible existing roster matches over adding new players for speech errors such as June/Joon, Yan/Jan, Anya/Tanja, Briesh/Brijesh.",
           commandText,
           context,
           roster,

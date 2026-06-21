@@ -1206,13 +1206,35 @@ function buildDeterministicPlan(commandHints, roster) {
   if (commandHints.detectedSelectAllExceptRosterPlayers) {
     const bulk = commandHints.detectedSelectAllExceptRosterPlayers;
     for (const item of bulk.ambiguous || []) {
+      const candidateMatches = (item.matches || []).filter((match) => match?.playerId);
       confirmations.push({
         id: `exclude-ambiguous-${normalizeForMatching(item.spokenName) || item.spokenName}`,
         type: "ambiguous_player",
-        message: `I heard “${item.spokenName}” as the excluded player. Please choose which roster player to leave out.`,
+        message: candidateMatches.length > 0
+          ? `I heard “${item.spokenName}” as the excluded player. Choose the player to leave out below.`
+          : `I heard “${item.spokenName}” as the excluded player. Please choose which roster player to leave out.`,
         playerRefs: item.matches || [],
         suggestedActionType: "select_players",
       });
+
+      // UX rule: for “select all except X”, do not ask AI to build/review a 60-name list.
+      // Offer one safe bulk action card per likely excluded-player match. The app computes
+      // the final selection locally from the roster and only applies after the user taps.
+      for (const match of candidateMatches.slice(0, 4)) {
+        const selectedRefs = roster
+          .filter((player) => player?.id && player.id !== match.playerId)
+          .map((player) => makePlayerRef(player));
+        const excludedName = match.rosterName || match.spokenName || item.spokenName;
+        actions.push(baseAction("select_players", {
+          playerRefs: selectedRefs,
+          playersPerTeam: commandHints.detectedPlayersPerTeam || null,
+          teamCount: commandHints.detectedTeamCount || null,
+          capabilityId: "today.select_players",
+          supportStatus: "executable",
+          distribution: `replace_today_selection:bulk_all_except_candidate${commandHints.detectedGenerateTeams ? ":then_generate" : ""}`,
+          reason: `Select ${selectedRefs.length} of ${bulk.rosterCount || roster.length} roster players, excluding ${excludedName}.`,
+        }));
+      }
     }
     for (const name of bulk.unknown || []) {
       unresolved.push({
@@ -1623,18 +1645,21 @@ function mergeDeterministicActions(parsed, commandHints, roster) {
       ((bulkExcept.ambiguous?.length || 0) > 0 || (bulkExcept.unknown?.length || 0) > 0),
   );
   if (bulkExceptNeedsClarification) {
+    const candidateActionCount = rawDeterministic.actions.filter(isBulkRosterSelectionAction).length;
     return {
       ...normalized,
       ok: true,
-      assistantSummary: "I need to confirm who to leave out before selecting almost the whole roster.",
+      assistantSummary: candidateActionCount > 0
+        ? "I found a likely match for the player to leave out. Tap the right choice below and I’ll select the rest of the roster locally."
+        : "I need to confirm who to leave out before selecting almost the whole roster.",
       confidence: 0.86,
-      actions: [],
+      actions: rawDeterministic.actions,
       confirmations: rawDeterministic.confirmations,
       unresolved: rawDeterministic.unresolved,
       parseMode: "local_bulk_roster_clarification",
       debugWarnings: [
         ...(Array.isArray(normalized.debugWarnings) ? normalized.debugWarnings : []),
-        "Bulk all-except roster request blocked AI player selection until excluded player is confirmed.",
+        "Bulk all-except roster request blocked AI player-list generation and used local candidate choices instead.",
       ],
     };
   }

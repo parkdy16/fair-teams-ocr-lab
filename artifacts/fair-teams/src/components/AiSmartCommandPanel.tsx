@@ -302,7 +302,10 @@ function parseModeLabel(mode?: AiSmartCommandResponse["parseMode"]) {
 
 function actionCardTitle(action: AiSmartCommandAction) {
   if (action.type === "select_players") {
-    if (isRankedRosterSelectionAction(action)) return bulkRosterSelectionExcludedText(action) ? "Select roster except…" : "Use roster selection";
+    if (isRankedRosterSelectionAction(action)) {
+      const excluded = bulkRosterSelectionExcludedText(action);
+      return excluded ? `Leave out ${excluded}` : "Use roster selection";
+    }
     if (/possible existing match/i.test(String(action.reason || ""))) return "Use existing player";
     if (/then_generate/i.test(String(action.distribution || "")) || action.teamCount) return "Replace Today + generate";
     if (/replace|exact|only/i.test(String(action.distribution || ""))) return "Replace Today selection";
@@ -345,7 +348,7 @@ function actionPrimaryVerb(action: AiSmartCommandAction) {
   return "Apply";
 }
 
-const AI_ASSISTANT_VERSION_LABEL = "AI beta · v1.26 safer bulk exclusions";
+const AI_ASSISTANT_VERSION_LABEL = "AI beta · v1.27 exclude chooser";
 
 type AiRosterMatch = {
   player: AiSmartCommandRosterPlayer;
@@ -846,7 +849,9 @@ function buildAiReviewItems(result: AiSmartCommandResponse | null, players: AiSm
       }
     }
   }
+  const hasBulkRosterSelectionAction = (result.actions || []).some(isRankedRosterSelectionAction);
   for (const item of result.unresolved || []) {
+    if (hasBulkRosterSelectionAction) continue;
     if (item.issue === "unknown_player" || item.issue === "ambiguous_player") addHeardName(item.text, "ai");
   }
 
@@ -1089,8 +1094,13 @@ function actionImpactLine(action: AiSmartCommandAction) {
   if (action.type === "select_players") {
     if (isRankedRosterSelectionAction(action)) {
       const excluded = bulkRosterSelectionExcludedText(action);
-      if (excluded) return `Will clear Today and select ${count} roster players, leaving out ${excluded}.`;
-      return `Will clear Today and select ${count} ${playerWord} from the roster.`;
+      const teamFollowup = action.teamCount
+        ? ` Then make ${action.teamCount} team${action.teamCount === 1 ? "" : "s"}.`
+        : /then_generate/i.test(String(action.distribution || ""))
+          ? " Then generate teams."
+          : "";
+      if (excluded) return `Will clear Today and select ${count} roster players, leaving out ${excluded}.${teamFollowup}`;
+      return `Will clear Today and select ${count} ${playerWord} from the roster.${teamFollowup}`;
     }
     if (/then_generate/i.test(String(action.distribution || "")) || action.teamCount) {
       const teamText = action.teamCount
@@ -1652,7 +1662,7 @@ export function AiSmartCommandPanel({
                 <div className="min-w-0">
                   <div className="text-[13px] leading-tight">Review AI names</div>
                   <div className="mt-1 text-[11px] font-semibold leading-snug opacity-80">
-                    {aiReviewStats.heard} names heard · {aiReviewStats.matched} matched · {aiReviewStats.needsReview} need review
+                    {aiReviewStats.heard} names heard · {aiReviewStats.selected} selected · {aiReviewStats.needsReview} need your check
                   </div>
                   {aiReviewSourceStats.transcript > aiReviewSourceStats.ai && (
                     <div className="mt-1 text-[10px] font-bold leading-snug opacity-70">
@@ -1775,7 +1785,7 @@ export function AiSmartCommandPanel({
               <div className="text-[10px] font-black uppercase tracking-wide text-violet-500">Fair Teams Assistant</div>
               <div className="mt-0.5 text-lg font-black text-[#102A43]">Review AI names</div>
               <div className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                {aiReviewStats.heard} names heard · {aiReviewStats.matched} matched · {aiReviewStats.needsReview} need review
+                {aiReviewStats.heard} names heard · {aiReviewStats.selected} selected · {aiReviewStats.needsReview} need your check
               </div>
               {aiReviewSourceStats.transcript > aiReviewSourceStats.ai && (
                 <div className="mt-1 text-[10px] font-bold leading-snug text-amber-600">

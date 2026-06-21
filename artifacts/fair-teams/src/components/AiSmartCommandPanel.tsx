@@ -113,7 +113,7 @@ function actionPrimaryVerb(action: AiSmartCommandAction) {
   return "Apply";
 }
 
-const AI_ASSISTANT_VERSION_LABEL = "AI beta · v1.5 review polish";
+const AI_ASSISTANT_VERSION_LABEL = "AI beta · v1.6 clean names";
 
 type AiRosterMatch = {
   player: AiSmartCommandRosterPlayer;
@@ -138,7 +138,7 @@ type AiReviewItem = {
 function cleanAiSpokenName(value?: string | null) {
   return String(value || "")
     .replace(/[“”"']/g, " ")
-    .replace(/\b(?:is|are|was|were|here|today|playing|coming|players?|people|with|and|so|let'?s|make|team|teams|only)\b/gi, " ")
+    .replace(/\b(?:is|are|was|were|here|today|playing|coming|players?|people|person|with|and|or|so|let'?s|make|team|teams|only|like|to|from|in|on|at|the|a|an|please|okay|ok|then|also|just|now|fair|teams?)\b/gi, " ")
     .replace(/[^A-Za-zÀ-ÖØ-öø-ÿ0-9 ._-]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -402,6 +402,7 @@ function buildAiReviewItems(result: AiSmartCommandResponse | null, players: AiSm
     for (const heardName of heardNames) {
       const key = aiNameKey(heardName);
       if (!key || heardName.length < 2) continue;
+      if (/^(like|to|from|in|on|at|the|a|an|with|and|or|so|ok|okay|please|team|teams|player|players)$/i.test(heardName.trim())) continue;
       if (!byKey.has(key)) byKey.set(key, { key, heardName, options: [] });
       added.push(byKey.get(key)!);
     }

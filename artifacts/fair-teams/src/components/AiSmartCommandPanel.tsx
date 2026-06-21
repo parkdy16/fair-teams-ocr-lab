@@ -74,6 +74,106 @@ function isAiAnswerOnlyResult(response: AiSmartCommandResponse | null | undefine
 }
 
 
+function normalizeAiStatFieldName(value: string) {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function getVisibleNumericPlayerValue(player: AiSmartCommandRosterPlayer, requestedField: string): number | null {
+  const item = player as any;
+  const field = normalizeAiStatFieldName(requestedField);
+  const candidates = field.includes("attack") || field.includes("attk") || field.includes("offen")
+    ? ["attack", "attk", "offense", "attacking"]
+    : field.includes("defen") || field.includes("def")
+      ? ["defense", "defence", "def"]
+      : field.includes("speed") || field.includes("pace") || field.includes("fast")
+        ? ["speed", "pace"]
+        : field.includes("pass") || field.includes("playmak")
+          ? ["passing", "pass"]
+          : field.includes("stamina") || field.includes("endur") || field.includes("fitness") || field.includes("physical")
+            ? ["stamina", "endurance", "fitness", "physical"]
+            : ["skill", "ovr", "overall", "rating"];
+
+  for (const key of candidates) {
+    const value = Number(item?.[key]);
+    if (Number.isFinite(value)) return value;
+  }
+  return null;
+}
+
+function detectRosterStatQuestionForFallback(commandText: string) {
+  const text = String(commandText || "").trim();
+  const normalized = normalizeAiStatFieldName(text);
+  if (!normalized || !/(\?|who|which|lowest|highest|best|worst|weakest|strongest|fastest|slowest|least|most)/i.test(text)) return null;
+  if (!/\b(roster|player|players|team|squad)\b/i.test(text)) return null;
+
+  const wantsLowest = /\b(lowest|least|worst|weakest|slowest|bottom)\b/i.test(text);
+  const wantsHighest = /\b(highest|most|best|strongest|fastest|top)\b/i.test(text);
+  if (!wantsLowest && !wantsHighest) return null;
+
+  const field = /\b(stamina|endurance|fitness|physical)\b/i.test(text) ? "stamina"
+    : /\b(attk|attack|attacking|offense|offence)\b/i.test(text) ? "attack"
+      : /\b(def|defense|defence|defending)\b/i.test(text) ? "defense"
+        : /\b(speed|pace|fastest|slowest)\b/i.test(text) ? "speed"
+          : /\b(pass|passing|playmaking|playmaker)\b/i.test(text) ? "passing"
+            : "OVR";
+
+  return { field, direction: wantsLowest ? "lowest" : "highest" } as const;
+}
+
+function buildLocalRosterStatFallbackAnswer(
+  commandText: string,
+  players: AiSmartCommandRosterPlayer[],
+): AiSmartCommandResponse | null {
+  const request = detectRosterStatQuestionForFallback(commandText);
+  if (!request || !Array.isArray(players) || players.length === 0) return null;
+
+  const rows = players
+    .map((player) => ({
+      player,
+      specificValue: getVisibleNumericPlayerValue(player, request.field),
+      ovrValue: getVisibleNumericPlayerValue(player, "OVR"),
+    }))
+    .filter((row) => Number.isFinite(Number(row.specificValue)) || Number.isFinite(Number(row.ovrValue)));
+
+  if (rows.length === 0) return null;
+
+  const hasSpecificField = rows.some((row) => Number.isFinite(Number(row.specificValue)));
+  const valueKey = hasSpecificField ? "specificValue" : "ovrValue";
+  const sorted = [...rows].sort((a, b) => {
+    const av = Number((a as any)[valueKey]);
+    const bv = Number((b as any)[valueKey]);
+    return request.direction === "lowest" ? av - bv : bv - av;
+  });
+  const shown = sorted.slice(0, Math.min(5, sorted.length));
+  const fieldLabel = hasSpecificField ? request.field : "OVR/skill";
+  const names = shown
+    .map((row, index) => `${index + 1}. ${row.player.name || "Player"} (${fieldLabel} ${Number((row as any)[valueKey])})`)
+    .join("\n");
+  const prefix = hasSpecificField
+    ? `Based on the visible ${request.field} values I can see, here are the ${request.direction} players:`
+    : `I cannot see a separate ${request.field} value for this roster here, so I will answer from the visible OVR/skill instead:`;
+
+  return {
+    schemaVersion: 1,
+    ok: true,
+    detectedLanguage: "unknown",
+    normalizedIntent: commandText.slice(0, 300),
+    assistantSummary: `${prefix}\n${names}`,
+    confidence: hasSpecificField ? 0.82 : 0.62,
+    actions: [],
+    confirmations: [],
+    unresolved: [],
+    parseMode: "local_fallback" as any,
+    debugWarnings: [hasSpecificField ? "Answered roster stat question locally after AI route failed." : "Requested stat was unavailable; answered with visible OVR/skill instead."],
+  } as any;
+}
+
+
 function isRankedRosterSelectionAction(action: AiSmartCommandAction | null | undefined) {
   return Boolean(
     action?.type === "select_players" &&
@@ -133,7 +233,7 @@ function actionPrimaryVerb(action: AiSmartCommandAction) {
   return "Apply";
 }
 
-const AI_ASSISTANT_VERSION_LABEL = "AI beta · v1.19 trait-aware stats";
+const AI_ASSISTANT_VERSION_LABEL = "AI beta · v1.20 graceful stat fallback";
 
 type AiRosterMatch = {
   player: AiSmartCommandRosterPlayer;
@@ -1198,7 +1298,13 @@ export function AiSmartCommandPanel({
         throw aiErr;
       }
     } catch (err) {
-      setError(friendlyAiError(err));
+      const localStatAnswer = buildLocalRosterStatFallbackAnswer(trimmedCommand, players);
+      if (localStatAnswer) {
+        setResult(localStatAnswer);
+        onParsed?.(localStatAnswer);
+      } else {
+        setError(friendlyAiError(err));
+      }
     } finally {
       setBusy(false);
     }

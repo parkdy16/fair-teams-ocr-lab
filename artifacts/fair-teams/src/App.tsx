@@ -1228,7 +1228,6 @@ function App() {
         }),
       );
       setTodayRosterChosen(true);
-      setActiveTab("today");
       return shouldReplaceTodaySelection
         ? `Selected exactly ${playerIds.size} player${playerIds.size === 1 ? "" : "s"} for Today.`
         : `Selected ${playerIds.size} player${playerIds.size === 1 ? "" : "s"} for Today.`;
@@ -1266,7 +1265,6 @@ function App() {
           ),
         );
         setTodayRosterChosen(true);
-        setActiveTab("today");
         return `${duplicate.name} is already in this roster, so I selected them for Today.`;
       }
 
@@ -1296,7 +1294,6 @@ function App() {
       );
       replacePlayers([...players, nextPlayer]);
       setTodayRosterChosen(true);
-      setActiveTab("today");
       return `Added ${nextPlayer.name} as a new player and selected them for Today.`;
     }
 
@@ -3496,6 +3493,10 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 }}
                 onOpenTeams={() => setActiveTab("teams")}
                 onApplyAiSmartCommandAction={applyAiSmartCommandActionFromApp}
+                onOpenTodayFromAi={() => {
+                  setTodayRosterChosen(true);
+                  setActiveTab("today");
+                }}
                 sharedToolsNode={(
                   <FirebaseSharedRosterPublishCard
                     variant="compact"

@@ -66,6 +66,7 @@ type ClubTabProps = {
   onOpenPairingRules?: () => void;
   onOpenTeams?: () => void;
   onApplyAiSmartCommandAction?: (action: AiSmartCommandAction) => Promise<string | void> | string | void;
+  onOpenTodayFromAi?: () => void;
 };
 
 type EquipmentHolder = {
@@ -498,6 +499,7 @@ export function ClubTab({
   onOpenPairingRules,
   onOpenTeams,
   onApplyAiSmartCommandAction,
+  onOpenTodayFromAi,
 }: ClubTabProps) {
   const [clubRatingSummaries, setClubRatingSummaries] = useState<
     ClubRatingSummary[]
@@ -1527,6 +1529,7 @@ export function ClubTab({
         rosterMode={isSharedRoster ? "shared" : "local"}
         activeTab="club"
         onApplyAction={applyAiSmartCommandAction}
+        onOpenToday={onOpenTodayFromAi}
       />
 
       <section className="overflow-hidden rounded-[1.7rem] border border-violet-100 bg-[#f8f3ff] p-3 shadow-sm ring-1 ring-violet-50">

@@ -19,6 +19,7 @@ type AiSmartCommandPanelProps = {
   activeTab?: string;
   onParsed?: (result: AiSmartCommandResponse) => void;
   onApplyAction?: (action: AiSmartCommandAction) => Promise<string | void> | string | void;
+  onOpenToday?: () => void;
 };
 
 
@@ -195,6 +196,7 @@ export function AiSmartCommandPanel({
   activeTab,
   onParsed,
   onApplyAction,
+  onOpenToday,
 }: AiSmartCommandPanelProps) {
   const enabled = isAiSmartCommandEnabled();
   const [commandText, setCommandText] = useState("");
@@ -209,6 +211,7 @@ export function AiSmartCommandPanel({
   const [result, setResult] = useState<AiSmartCommandResponse | null>(null);
   const [applyingKey, setApplyingKey] = useState<string | null>(null);
   const [applyMessage, setApplyMessage] = useState("");
+  const [showTodayShortcut, setShowTodayShortcut] = useState(false);
 
   const placeholder = useMemo(() => {
     return "Talk to Fair Teams… try: hey there · how does this work? · George red · make 5v5 teams";
@@ -223,6 +226,7 @@ export function AiSmartCommandPanel({
 
     setError("");
     setApplyMessage("");
+    setShowTodayShortcut(false);
     setBusy(true);
     try {
       const localRankedSelection = parseRankedRosterSelectionCommand(trimmedCommand, players);
@@ -264,6 +268,7 @@ export function AiSmartCommandPanel({
 
     setError("");
     setApplyMessage("");
+    setShowTodayShortcut(false);
     setVoiceTranscript("");
     audioChunksRef.current = [];
     try {
@@ -324,9 +329,13 @@ export function AiSmartCommandPanel({
     setApplyingKey(key);
     setError("");
     setApplyMessage("");
+    setShowTodayShortcut(false);
     try {
       const message = await onApplyAction(action);
       setApplyMessage(typeof message === "string" && message.trim() ? message : "Applied.");
+      if (action.type === "select_players" || action.type === "add_new_player_suggestion") {
+        setShowTodayShortcut(true);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not apply this action yet.");
     } finally {
@@ -391,7 +400,16 @@ export function AiSmartCommandPanel({
       )}
       {applyMessage && (
         <div className="mt-2 rounded-2xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700">
-          {applyMessage}
+          <div>{applyMessage}</div>
+          {showTodayShortcut && onOpenToday && (
+            <button
+              type="button"
+              onClick={onOpenToday}
+              className="mt-2 rounded-full bg-emerald-600 px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-white"
+            >
+              View Today
+            </button>
+          )}
         </div>
       )}
 

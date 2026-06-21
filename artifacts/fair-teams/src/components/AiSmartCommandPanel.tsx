@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { parseFairTeamsSmartCommand, createAiSmartCommandContext, transcribeFairTeamsVoiceCommand } from "@/lib/aiSmartCommandClient";
 import { applyFairTeamsAiTruthGuard, guardFairTeamsSmartCommandBeforeAi } from "@/lib/aiSmartCommandTrustGuard";
 import {
@@ -190,6 +190,69 @@ function actionPrimaryVerb(action: AiSmartCommandAction) {
   return "Apply";
 }
 
+type PersistedAiAssistantState = {
+  commandText?: string;
+  voiceTranscript?: string;
+  error?: string;
+  result?: AiSmartCommandResponse | null;
+  applyMessage?: string;
+  showTodayShortcut?: boolean;
+  updatedAt?: number;
+};
+
+const AI_ASSISTANT_SESSION_PREFIX = "fairteams.aiAssistant.club.v1";
+
+function safeStorageKey(rosterMode: string, rosterName?: string) {
+  const cleanName = (rosterName || "current-roster")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "current-roster";
+  return `${AI_ASSISTANT_SESSION_PREFIX}.${rosterMode}.${cleanName}`;
+}
+
+function readPersistedAiAssistantState(storageKey: string): PersistedAiAssistantState | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(storageKey);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as PersistedAiAssistantState;
+    if (!parsed || typeof parsed !== "object") return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writePersistedAiAssistantState(storageKey: string, state: PersistedAiAssistantState) {
+  if (typeof window === "undefined") return;
+  try {
+    const hasSomethingToRemember = Boolean(
+      state.commandText?.trim() ||
+        state.voiceTranscript?.trim() ||
+        state.error?.trim() ||
+        state.result ||
+        state.applyMessage?.trim(),
+    );
+    if (!hasSomethingToRemember) {
+      window.sessionStorage.removeItem(storageKey);
+      return;
+    }
+    window.sessionStorage.setItem(storageKey, JSON.stringify({ ...state, updatedAt: Date.now() }));
+  } catch {
+    // If session storage is unavailable or full, the assistant still works normally.
+  }
+}
+
+function clearPersistedAiAssistantState(storageKey: string) {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.removeItem(storageKey);
+  } catch {
+    // Ignore storage errors.
+  }
+}
+
 export function AiSmartCommandPanel({
   players,
   rosterName,
@@ -200,6 +263,7 @@ export function AiSmartCommandPanel({
   onOpenToday,
 }: AiSmartCommandPanelProps) {
   const enabled = isAiSmartCommandEnabled();
+  const storageKey = useMemo(() => safeStorageKey(rosterMode, rosterName), [rosterMode, rosterName]);
   const [commandText, setCommandText] = useState("");
   const [busy, setBusy] = useState(false);
   const [recording, setRecording] = useState(false);
@@ -217,6 +281,48 @@ export function AiSmartCommandPanel({
   const placeholder = useMemo(() => {
     return "Talk to Fair Teams… try: hey there · how does this work? · George red · make 5v5 teams";
   }, []);
+
+  useEffect(() => {
+    if (!enabled) return;
+    const saved = readPersistedAiAssistantState(storageKey);
+    if (!saved) {
+      setCommandText("");
+      setVoiceTranscript("");
+      setError("");
+      setResult(null);
+      setApplyMessage("");
+      setShowTodayShortcut(false);
+      return;
+    }
+    setCommandText(saved.commandText || "");
+    setVoiceTranscript(saved.voiceTranscript || "");
+    setError(saved.error || "");
+    setResult(saved.result || null);
+    setApplyMessage(saved.applyMessage || "");
+    setShowTodayShortcut(Boolean(saved.showTodayShortcut));
+  }, [enabled, storageKey]);
+
+  useEffect(() => {
+    if (!enabled || busy || voiceBusy || recording) return;
+    writePersistedAiAssistantState(storageKey, {
+      commandText,
+      voiceTranscript,
+      error,
+      result,
+      applyMessage,
+      showTodayShortcut,
+    });
+  }, [enabled, storageKey, commandText, voiceTranscript, error, result, applyMessage, showTodayShortcut, busy, voiceBusy, recording]);
+
+  const clearAssistantSession = () => {
+    clearPersistedAiAssistantState(storageKey);
+    setCommandText("");
+    setVoiceTranscript("");
+    setError("");
+    setResult(null);
+    setApplyMessage("");
+    setShowTodayShortcut(false);
+  };
 
   if (!enabled) return null;
 
@@ -363,7 +469,18 @@ export function AiSmartCommandPanel({
             Talk naturally. I can explain Fair Teams, then show safe action cards when something can be done.
           </p>
         </div>
-        <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-violet-700 shadow-sm">AI beta</span>
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-violet-700 shadow-sm">AI beta</span>
+          {(commandText.trim() || result || applyMessage || error || voiceTranscript) && (
+            <button
+              type="button"
+              onClick={clearAssistantSession}
+              className="rounded-full px-2 py-1 text-[10px] font-black uppercase tracking-wide text-violet-600 active:scale-[0.98]"
+            >
+              Clear
+            </button>
+          )}
+        </div>
       </div>
 
       <textarea

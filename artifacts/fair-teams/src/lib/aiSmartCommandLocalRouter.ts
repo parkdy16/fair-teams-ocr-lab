@@ -6,6 +6,7 @@ import {
 } from "./playerNameMatching";
 import type {
   AiSmartCommandAction,
+  AiSmartCommandContext,
   AiSmartCommandResponse,
   AiSmartCommandRosterPlayer,
 } from "./aiSmartCommandTypes";
@@ -560,20 +561,24 @@ function hasRequestedTeamSetupLanguage(commandText: string) {
   );
 }
 
-function wantsTeamGenerationFromCurrentSelection(commandText: string) {
+function wantsTeamGenerationFromCurrentSelection(commandText: string, context?: AiSmartCommandContext) {
   const normalized = normalizeText(commandText);
   const normalizedV = normalized.replace(/[×x]/g, "v");
-  const hasGenerateVerb = /\b(make|create|generate|prepare|build|split|divide|draw|mix|shuffle)\b/.test(normalized);
+  const hasGenerateVerb = /\b(make|create|generate|prepare|build|split|divide|draw|mix|shuffle|reshuffle|reroll)\b/.test(normalized);
   const hasTeamWord = /\b(fair|balanced|team|teams|5v5|4v4|3v3|2v2)\b/.test(normalizedV);
   const refersToCurrentSelection = /\b(selected|selection|currently selected|today|today tab|present|here|playing|current players|these players|them)\b/.test(normalized);
   const hasTeamSetupLanguage = hasRequestedTeamSetupLanguage(commandText);
+  const shuffleExistingTeams = Boolean(context?.currentTeamsGenerated) && /\b(shuffle|reshuffle|reroll|different mix|new mix|another mix|mix them up|mix again)\b/.test(normalized);
 
   // Older routing treated any comma/"and" in a team-generation sentence as a player list.
   // That made normal speech like “make teams of 2, so basically two teams” fall through to
   // the server AI, which could invent fake player names from command words. Team setup
   // language should be handled by the deterministic local team orchestrator first.
   const hasListSignal = /,|\band\b|\bplus\b|&/.test(commandText);
-  return hasGenerateVerb && hasTeamWord && (refersToCurrentSelection || hasTeamSetupLanguage || !hasListSignal);
+  return (
+    shuffleExistingTeams ||
+    (hasGenerateVerb && hasTeamWord && (refersToCurrentSelection || hasTeamSetupLanguage || !hasListSignal))
+  );
 }
 
 function wantsDifferentTeamMix(commandText: string) {
@@ -584,14 +589,19 @@ function wantsDifferentTeamMix(commandText: string) {
 function parseGenerateTeamsFromSelectionCommand(
   commandText: string,
   players: AiSmartCommandRosterPlayer[],
+  context?: AiSmartCommandContext,
 ): AiSmartCommandResponse | null {
-  if (!wantsTeamGenerationFromCurrentSelection(commandText)) return null;
+  if (!wantsTeamGenerationFromCurrentSelection(commandText, context)) return null;
 
   const selectedPlayers = players.filter((player) => Boolean(player.attending));
   const selectedCount = selectedPlayers.length;
   const requestedTeamCount = parseRequestedTeamCount(commandText);
   const requestedPlayersPerTeam = parseTeamSize(commandText);
   const wantsShuffle = wantsDifferentTeamMix(commandText);
+  const existingTeamCount = typeof context?.currentTeamCount === "number" && context.currentTeamCount >= 2
+    ? Math.round(context.currentTeamCount)
+    : null;
+  const shouldReuseExistingTeamCount = wantsShuffle && Boolean(context?.currentTeamsGenerated) && !requestedTeamCount && !requestedPlayersPerTeam;
 
   if (selectedCount < 2) {
     const openToday = createEmptyAction("open_app_area");
@@ -614,7 +624,7 @@ function parseGenerateTeamsFromSelectionCommand(
     });
   }
 
-  let teamCount = requestedTeamCount;
+  let teamCount = requestedTeamCount || (shouldReuseExistingTeamCount ? existingTeamCount : null);
   if (!teamCount && requestedPlayersPerTeam) {
     if (selectedCount < requestedPlayersPerTeam * 2) {
       return localResponse({
@@ -690,11 +700,13 @@ function parseGenerateTeamsFromSelectionCommand(
   generateAction.teamCount = teamCount;
   generateAction.playersPerTeam = requestedPlayersPerTeam;
   generateAction.distribution = wantsShuffle ? "shuffle_equals" : "balanced";
-  generateAction.reason = `${wantsShuffle ? "Generate a fresh mixed version" : "Generate fair teams"} from the ${selectedCount} players currently selected in Today.`;
+  generateAction.reason = `${wantsShuffle ? "Reshuffle using the same team setup" : "Generate fair teams"} from the ${selectedCount} players currently selected in Today.`;
 
   return localResponse({
     normalizedIntent: `Generate ${teamCount} teams from Today selection`,
-    assistantSummary: `I can make ${teamCount} fair team${teamCount === 1 ? "" : "s"} from the ${selectedCount} players selected in Today.${wantsShuffle ? " I’ll try a fresh mix." : ""}`,
+    assistantSummary: wantsShuffle
+      ? `I can reshuffle ${teamCount} team${teamCount === 1 ? "" : "s"} from the ${selectedCount} players selected in Today.`
+      : `I can make ${teamCount} fair team${teamCount === 1 ? "" : "s"} from the ${selectedCount} players selected in Today.`,
     confidence: 0.98,
     actions: [generateAction],
     confirmations: [],
@@ -973,15 +985,19 @@ function parseRosterQuestion(commandText: string, players: AiSmartCommandRosterP
 export function parseFairTeamsLocalSmartCommand(
   commandText: string,
   players: AiSmartCommandRosterPlayer[],
+  context?: AiSmartCommandContext,
 ): AiSmartCommandResponse | null {
   const explicitNewPlayer = parseExplicitNewPlayerCommand(commandText, players);
   if (explicitNewPlayer) return explicitNewPlayer;
 
+  // Team-generation and shuffle commands must be handled before name-list parsing.
+  // Otherwise natural phrases like “shuffle the teams” or “make teams of 2” can be
+  // misread as fake player names.
+  const teamGeneration = parseGenerateTeamsFromSelectionCommand(commandText, players, context);
+  if (teamGeneration) return teamGeneration;
+
   const presentSelection = parsePresentPlayerSelectionCommand(commandText, players);
   if (presentSelection) return presentSelection;
-
-  const teamGeneration = parseGenerateTeamsFromSelectionCommand(commandText, players);
-  if (teamGeneration) return teamGeneration;
 
   const rankedSelection = parseRankedRosterSelectionCommand(commandText, players);
   if (rankedSelection) return rankedSelection;

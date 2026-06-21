@@ -19,6 +19,8 @@ type AiSmartCommandPanelProps = {
   rosterName?: string;
   rosterMode?: "local" | "shared";
   activeTab?: string;
+  currentTeamCount?: number | null;
+  currentTeamsGenerated?: boolean;
   onParsed?: (result: AiSmartCommandResponse) => void;
   onApplyAction?: (action: AiSmartCommandAction) => Promise<string | void> | string | void;
   onOpenToday?: () => void;
@@ -173,6 +175,7 @@ function actionCardTitle(action: AiSmartCommandAction) {
   }
   if (action.type === "unselect_players") return "Remove from Today";
   if (action.type === "add_new_player_suggestion") return "Add new player";
+  if (action.type === "generate_teams" && /shuffle|different|mix|fresh|reroll/i.test(String(action.distribution || "") + " " + String(action.reason || ""))) return "Shuffle teams";
   const capability = getAiCommandCapability(action);
   if (capability?.label) return capability.label;
   if (action.type === "no_action") return "No app action needed";
@@ -197,7 +200,7 @@ function actionPrimaryVerb(action: AiSmartCommandAction) {
   }
   if (action.type === "unselect_players") return "Remove";
   if (action.type === "set_team_size" || action.type === "set_team_count") return "Set";
-  if (action.type === "generate_teams") return "Generate";
+  if (action.type === "generate_teams") return /shuffle|different|mix|fresh|reroll/i.test(String(action.distribution || "") + " " + String(action.reason || "")) ? "Shuffle" : "Generate";
   return "Apply";
 }
 
@@ -257,9 +260,14 @@ function actionImpactLine(action: AiSmartCommandAction) {
     return `Will set up ${action.teamCount} teams.`;
   }
   if (action.type === "generate_teams") {
-    if (action.teamCount) return `Will generate ${action.teamCount} fair team${action.teamCount === 1 ? "" : "s"} from the current Today selection.`;
-    if (action.playersPerTeam) return `Will generate ${action.playersPerTeam}v${action.playersPerTeam} teams from the current Today selection.`;
-    return "Will generate fair teams from the current Today selection.";
+    const isShuffle = /shuffle|different|mix|fresh|reroll/i.test(String(action.distribution || "") + " " + String(action.reason || ""));
+    if (action.teamCount) return isShuffle
+      ? `Will reshuffle ${action.teamCount} team${action.teamCount === 1 ? "" : "s"} from the current Today selection.`
+      : `Will generate ${action.teamCount} fair team${action.teamCount === 1 ? "" : "s"} from the current Today selection.`;
+    if (action.playersPerTeam) return isShuffle
+      ? `Will reshuffle ${action.playersPerTeam}v${action.playersPerTeam} teams from the current Today selection.`
+      : `Will generate ${action.playersPerTeam}v${action.playersPerTeam} teams from the current Today selection.`;
+    return isShuffle ? "Will reshuffle teams from the current Today selection." : "Will generate fair teams from the current Today selection.";
   }
   if (action.type === "club_add_note") {
     return "Will add this as a Club note.";
@@ -356,6 +364,8 @@ export function AiSmartCommandPanel({
   rosterName,
   rosterMode = "local",
   activeTab,
+  currentTeamCount = null,
+  currentTeamsGenerated = false,
   onParsed,
   onApplyAction,
   onOpenToday,
@@ -434,7 +444,13 @@ export function AiSmartCommandPanel({
     setShowTodayShortcut(false);
     setBusy(true);
     try {
-      const commandContext = createAiSmartCommandContext({ rosterName, rosterMode, activeTab });
+      const commandContext = createAiSmartCommandContext({
+        rosterName,
+        rosterMode,
+        activeTab,
+        currentTeamCount: typeof currentTeamCount === "number" ? currentTeamCount : undefined,
+        currentTeamsGenerated,
+      });
       const localTrustGuard = guardFairTeamsSmartCommandBeforeAi(trimmedCommand, commandContext);
       if (localTrustGuard) {
         setResult(localTrustGuard);
@@ -442,7 +458,7 @@ export function AiSmartCommandPanel({
         return;
       }
 
-      const localSmartCommand = parseFairTeamsLocalSmartCommand(trimmedCommand, players);
+      const localSmartCommand = parseFairTeamsLocalSmartCommand(trimmedCommand, players, commandContext);
       if (localSmartCommand) {
         setResult(localSmartCommand);
         onParsed?.(localSmartCommand);

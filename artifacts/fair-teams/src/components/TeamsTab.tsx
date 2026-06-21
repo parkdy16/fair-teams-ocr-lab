@@ -182,6 +182,7 @@ type TeamsTabProps = {
   aiTeamCount?: number | null;
   aiAutoGenerate?: boolean;
   aiShuffleEquals?: boolean;
+  onAiTeamStateChange?: (state: { hasTeams: boolean; teamCount: number; selectedCount: number }) => void;
 };
 
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number | [number, number, number, number]) {
@@ -401,7 +402,7 @@ function drawTextBadge(
 }
 
 
-export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, sharedRosterId, onOpenClubRatings, aiTeamSetupToken = 0, aiTeamCount = null, aiAutoGenerate = false, aiShuffleEquals = false }: TeamsTabProps) {
+export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, sharedRosterId, onOpenClubRatings, aiTeamSetupToken = 0, aiTeamCount = null, aiAutoGenerate = false, aiShuffleEquals = false, onAiTeamStateChange }: TeamsTabProps) {
   const [numTeams, setNumTeams] = useState<number>(2);
   const [fieldSize, setFieldSize] = useState<FieldSize>(() => loadFieldSize());
   const [showFieldHelp, setShowFieldHelp] = useState(false);
@@ -539,6 +540,14 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
   }, [clubRatingByPlayerId, players, usingClubRatings]);
   const hereNowCount = attendingPlayers.filter(p => !isNotHereYet(p)).length;
   const notHereYetPlayers = attendingPlayers.filter(isNotHereYet);
+
+  useEffect(() => {
+    onAiTeamStateChange?.({
+      hasTeams: teams.length > 0,
+      teamCount: numTeams,
+      selectedCount: attendingPlayers.length,
+    });
+  }, [attendingPlayers.length, numTeams, onAiTeamStateChange, teams.length]);
 
   const playWhistleSound = () => {
     try {

@@ -65,6 +65,8 @@ type ClubTabProps = {
   pairingRules?: PairingRule[];
   onOpenPairingRules?: () => void;
   onOpenTeams?: () => void;
+  currentTeamCount?: number | null;
+  currentTeamsGenerated?: boolean;
   onApplyAiSmartCommandAction?: (action: AiSmartCommandAction) => Promise<string | void> | string | void;
   onOpenTodayFromAi?: () => void;
 };
@@ -498,6 +500,8 @@ export function ClubTab({
   pairingRules = [],
   onOpenPairingRules,
   onOpenTeams,
+  currentTeamCount = null,
+  currentTeamsGenerated = false,
   onApplyAiSmartCommandAction,
   onOpenTodayFromAi,
 }: ClubTabProps) {
@@ -1528,6 +1532,8 @@ export function ClubTab({
         rosterName={activeRosterName}
         rosterMode={isSharedRoster ? "shared" : "local"}
         activeTab="club"
+        currentTeamCount={currentTeamCount}
+        currentTeamsGenerated={currentTeamsGenerated}
         onApplyAction={applyAiSmartCommandAction}
         onOpenToday={onOpenTodayFromAi}
       />

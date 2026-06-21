@@ -402,6 +402,7 @@ function App() {
 
   const [activeTab, setActiveTab] = useState<AppTab>("today");
   const [aiTeamSetup, setAiTeamSetup] = useState<{ token: number; teamCount: number | null; autoGenerate?: boolean; shuffleEquals?: boolean }>({ token: 0, teamCount: null, autoGenerate: false, shuffleEquals: false });
+  const [aiTeamsState, setAiTeamsState] = useState<{ hasTeams: boolean; teamCount: number; selectedCount: number }>({ hasTeams: false, teamCount: 2, selectedCount: 0 });
   const [clubBackTargetOpen, setClubBackTargetOpen] = useState(false);
   const [openPairingRulesToken, setOpenPairingRulesToken] = useState(0);
   const activeTabRef = useRef<AppTab>("today");
@@ -3529,6 +3530,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 aiTeamCount={aiTeamSetup.teamCount}
                 aiAutoGenerate={Boolean(aiTeamSetup.autoGenerate)}
                 aiShuffleEquals={Boolean(aiTeamSetup.shuffleEquals)}
+                onAiTeamStateChange={setAiTeamsState}
               />
             </TabsContent>
             <TabsContent
@@ -3552,6 +3554,8 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   setOpenPairingRulesToken((token) => token + 1);
                 }}
                 onOpenTeams={() => setActiveTab("teams")}
+                currentTeamCount={aiTeamsState.teamCount}
+                currentTeamsGenerated={aiTeamsState.hasTeams}
                 onApplyAiSmartCommandAction={applyAiSmartCommandActionFromApp}
                 onOpenTodayFromAi={() => {
                   setTodayRosterChosen(true);

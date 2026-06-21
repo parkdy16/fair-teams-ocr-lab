@@ -141,6 +141,7 @@ export type AiSmartCommandContext = {
   activeTab?: "roster" | "today" | "teams" | "club" | string;
   currentTeamCount?: number;
   currentPlayersPerTeam?: number;
+  currentTeamsGenerated?: boolean;
   uiLanguage?: string;
 };
 

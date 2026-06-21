@@ -58,6 +58,7 @@ export function createAiSmartCommandContext(context: AiSmartCommandContext): AiS
     activeTab: context.activeTab,
     currentTeamCount: context.currentTeamCount,
     currentPlayersPerTeam: context.currentPlayersPerTeam,
+    currentTeamsGenerated: context.currentTeamsGenerated,
     uiLanguage: context.uiLanguage || (typeof navigator !== "undefined" ? navigator.language : undefined),
   };
 }

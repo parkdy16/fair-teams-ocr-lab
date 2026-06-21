@@ -1092,9 +1092,15 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
       )}
 
       {presentTeamsOpen && teams.length > 0 && (
-        <div className="fixed inset-0 z-[90] bg-slate-950 text-white" role="dialog" aria-modal="true" aria-label="Present teams">
-          <div className="flex h-full flex-col">
-            <div className="flex items-center justify-between gap-3 border-b border-white/10 bg-slate-950/95 px-3 py-2">
+        <div
+          className="fixed inset-0 z-[90] overflow-hidden bg-slate-950 text-white"
+          style={{ height: "100dvh" }}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Present teams"
+        >
+          <div className="flex h-full min-h-0 flex-col overflow-hidden">
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-slate-950/95 px-3 py-2">
               <div className="min-w-0">
                 <p className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-300">Fair Teams</p>
                 <h2 className="truncate text-lg font-black tracking-tight">Today's Teams</h2>
@@ -1110,7 +1116,10 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto px-2 py-2">
+            <div
+              className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-2"
+              style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-y" }}
+            >
               <div className="mx-auto grid max-w-5xl grid-cols-2 gap-1.5">
                 {teams.map((team) => {
                   const col = colorFor(team.color);
@@ -1148,7 +1157,7 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
             </div>
 
             {gameToolsOpen && (
-              <div className="border-t border-white/10 bg-slate-900/95 px-2 py-2">
+              <div className="shrink-0 border-t border-white/10 bg-slate-900/95 px-2 py-2">
                 <div className="mx-auto flex max-w-5xl gap-2">
                   <button
                     type="button"
@@ -1181,7 +1190,7 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
               </div>
             )}
 
-            <div className="flex items-center justify-between gap-2 border-t border-white/10 bg-slate-950/95 px-2 py-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+            <div className="flex shrink-0 items-center justify-between gap-2 border-t border-white/10 bg-slate-950/95 px-2 py-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
               <p className="min-w-0 text-[11px] font-semibold leading-snug text-slate-400">
                 Show this screen to players. Save only when you need an image.
               </p>

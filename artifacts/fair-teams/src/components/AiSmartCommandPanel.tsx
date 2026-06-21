@@ -113,12 +113,26 @@ function actionPrimaryVerb(action: AiSmartCommandAction) {
   return "Apply";
 }
 
-const AI_ASSISTANT_VERSION_LABEL = "AI beta · v1.3 ranking";
+const AI_ASSISTANT_VERSION_LABEL = "AI beta · v1.4 review";
 
 type AiRosterMatch = {
   player: AiSmartCommandRosterPlayer;
   score: number;
   secondBestScore: number;
+};
+
+type AiReviewOption = {
+  kind: "existing" | "new" | "skip";
+  playerId?: string;
+  rosterName?: string;
+  heardName: string;
+  score?: number;
+};
+
+type AiReviewItem = {
+  key: string;
+  heardName: string;
+  options: AiReviewOption[];
 };
 
 function cleanAiSpokenName(value?: string | null) {
@@ -301,6 +315,128 @@ function enhanceAiResultWithOcrStyleRosterMatching(
   };
 }
 
+
+function actionHasTeamFollowup(action: AiSmartCommandAction) {
+  return /then_generate/i.test(String(action.distribution || "")) || Boolean(action.teamCount) || action.type === "generate_teams";
+}
+
+function isAiNameReviewAction(action: AiSmartCommandAction) {
+  if (action.type === "add_new_player_suggestion" && action.newPlayerName) return true;
+  return ["select_players", "unselect_players", "mark_players_late", "add_pairing_rule", "lock_player_to_team"].includes(action.type) && action.playerRefs.length > 0;
+}
+
+function buildAiReviewItems(result: AiSmartCommandResponse | null, players: AiSmartCommandRosterPlayer[]): AiReviewItem[] {
+  if (!result || !players.length) return [];
+  const byKey = new Map<string, AiReviewItem>();
+  const addHeardName = (rawName?: string | null) => {
+    const heardName = cleanAiSpokenName(rawName) || String(rawName || "").trim();
+    const key = aiNameKey(heardName);
+    if (!key || heardName.length < 2) return null;
+    if (!byKey.has(key)) byKey.set(key, { key, heardName, options: [] });
+    return byKey.get(key)!;
+  };
+
+  for (const action of result.actions || []) {
+    if (action.type === "add_new_player_suggestion" && action.newPlayerName) {
+      addHeardName(action.newPlayerName);
+    }
+    if (["select_players", "unselect_players", "mark_players_late", "add_pairing_rule", "lock_player_to_team"].includes(action.type)) {
+      for (const ref of action.playerRefs || []) {
+        addHeardName(ref.spokenName || ref.rosterName);
+      }
+    }
+  }
+  for (const item of result.unresolved || []) {
+    if (item.issue === "unknown_player" || item.issue === "ambiguous_player") addHeardName(item.text);
+  }
+
+  const items = Array.from(byKey.values()).map((item) => {
+    const ranked = rankedOcrStyleRosterMatches(item.heardName, players, 5);
+    const seen = new Set<string>();
+    const options: AiReviewOption[] = [];
+    for (const match of ranked) {
+      if (seen.has(match.player.id)) continue;
+      seen.add(match.player.id);
+      options.push({
+        kind: "existing",
+        playerId: match.player.id,
+        rosterName: match.player.name,
+        heardName: item.heardName,
+        score: match.score,
+      });
+    }
+    options.push({ kind: "new", heardName: item.heardName, rosterName: item.heardName });
+    options.push({ kind: "skip", heardName: item.heardName });
+    return { ...item, options };
+  });
+
+  return items.filter((item) => item.options.some((option) => option.kind === "existing") || item.heardName.length >= 2);
+}
+
+function getAiReviewDefaultSelections(items: AiReviewItem[]) {
+  const selections: Record<string, string> = {};
+  for (const item of items) {
+    const firstExisting = item.options.find((option) => option.kind === "existing");
+    selections[item.key] = firstExisting?.playerId || "new";
+  }
+  return selections;
+}
+
+function reviewOptionLabel(option: AiReviewOption) {
+  if (option.kind === "skip") return "Skip";
+  if (option.kind === "new") return `Add “${option.heardName}”`;
+  const scoreText = typeof option.score === "number" ? ` · ${Math.round(option.score)}%` : "";
+  return `${option.rosterName || "Player"}${scoreText}`;
+}
+
+function buildActionFromReviewSelections(
+  result: AiSmartCommandResponse,
+  items: AiReviewItem[],
+  selections: Record<string, string>,
+): AiSmartCommandAction | null {
+  const playerRefs = items.flatMap((item) => {
+    const selected = selections[item.key];
+    const option = item.options.find((candidate) => candidate.kind === "existing" && candidate.playerId === selected);
+    if (!option?.playerId) return [];
+    return [{
+      playerId: option.playerId,
+      rosterName: option.rosterName || null,
+      spokenName: item.heardName,
+      confidence: Math.min(1, Math.max(0.72, (option.score || 90) / 100)),
+    }];
+  });
+  if (playerRefs.length === 0) return null;
+
+  const teamAction = result.actions.find(actionHasTeamFollowup);
+  const shouldGenerate = Boolean(teamAction) || /generate|make|team/i.test(result.normalizedIntent || "");
+  return {
+    type: "select_players",
+    playerRefs,
+    newPlayerName: null,
+    suggestedSkill: null,
+    playersPerTeam: teamAction?.playersPerTeam ?? null,
+    teamCount: teamAction?.teamCount ?? null,
+    pairingKind: null,
+    teamLabel: null,
+    role: null,
+    attribute: null,
+    distribution: shouldGenerate ? "replace_today_selection_then_generate" : "replace_today_selection",
+    noteText: null,
+    colorName: null,
+    targetName: null,
+    targetArea: null,
+    capabilityId: "today.select_players",
+    supportStatus: "executable",
+    requiresConfirmation: false,
+    reason: shouldGenerate
+      ? "Reviewed AI names, then replace Today and generate teams."
+      : "Reviewed AI names, then replace Today with confirmed players.",
+  };
+}
+
+function shouldHideActionBecauseReviewHandlesIt(action: AiSmartCommandAction) {
+  return isAiNameReviewAction(action);
+}
 
 function compactNameForCompare(value?: string | null) {
   return String(value || "")
@@ -496,6 +632,8 @@ export function AiSmartCommandPanel({
   const [applyingKey, setApplyingKey] = useState<string | null>(null);
   const [applyMessage, setApplyMessage] = useState("");
   const [showTodayShortcut, setShowTodayShortcut] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [reviewSelections, setReviewSelections] = useState<Record<string, string>>({});
 
   const placeholder = useMemo(() => {
     return "Talk to Fair Teams… try: hey there · how does this work? · George red · make 5v5 teams";
@@ -533,6 +671,18 @@ export function AiSmartCommandPanel({
     });
   }, [enabled, storageKey, commandText, voiceTranscript, error, result, applyMessage, showTodayShortcut, busy, voiceBusy, recording]);
 
+  const aiReviewItems = useMemo(() => buildAiReviewItems(result, players), [result, players]);
+  const hasAiReviewItems = aiReviewItems.length > 0;
+
+  useEffect(() => {
+    if (!hasAiReviewItems) {
+      setReviewOpen(false);
+      setReviewSelections({});
+      return;
+    }
+    setReviewSelections(getAiReviewDefaultSelections(aiReviewItems));
+  }, [hasAiReviewItems, aiReviewItems]);
+
   const clearAssistantSession = () => {
     clearPersistedAiAssistantState(storageKey);
     setCommandText("");
@@ -541,6 +691,19 @@ export function AiSmartCommandPanel({
     setResult(null);
     setApplyMessage("");
     setShowTodayShortcut(false);
+    setReviewOpen(false);
+    setReviewSelections({});
+  };
+
+  const applyReviewedAiNames = async () => {
+    if (!result || !onApplyAction) return;
+    const action = buildActionFromReviewSelections(result, aiReviewItems, reviewSelections);
+    if (!action) {
+      setError("Choose at least one existing roster player before applying.");
+      return;
+    }
+    await applyAction(action, -1);
+    setReviewOpen(false);
   };
 
   if (!enabled) return null;
@@ -788,9 +951,44 @@ export function AiSmartCommandPanel({
               <span className="normal-case tracking-normal text-slate-300">{parseModeLabel(result.parseMode)}</span>
             </div>
           )}
-          {result.actions.length > 0 && (
+          {hasAiReviewItems && (
+            <div className="mt-2 rounded-2xl border border-amber-100 bg-amber-50 px-3 py-2.5 font-bold text-amber-900 shadow-sm">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="text-[13px] leading-tight">Review AI names</div>
+                  <div className="mt-1 text-[11px] font-semibold leading-snug opacity-80">
+                    Check heard names against your roster before changing Today.
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setReviewOpen(true)}
+                  className="shrink-0 rounded-full bg-amber-600 px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-white"
+                >
+                  Review
+                </button>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {aiReviewItems.slice(0, 10).map((item) => {
+                  const selected = reviewSelections[item.key];
+                  const option = item.options.find((candidate) => candidate.playerId === selected);
+                  return (
+                    <span key={item.key} className="rounded-full bg-white/75 px-2 py-1 text-[10px] font-black leading-none shadow-sm">
+                      {option?.rosterName && compactNameForCompare(option.rosterName) !== compactNameForCompare(item.heardName)
+                        ? `${item.heardName} → ${option.rosterName}`
+                        : option?.rosterName || item.heardName}
+                    </span>
+                  );
+                })}
+                {aiReviewItems.length > 10 && (
+                  <span className="rounded-full bg-white/75 px-2 py-1 text-[10px] font-black leading-none shadow-sm">+{aiReviewItems.length - 10} more</span>
+                )}
+              </div>
+            </div>
+          )}
+          {result.actions.filter((action) => !(hasAiReviewItems && shouldHideActionBecauseReviewHandlesIt(action))).length > 0 && (
             <div className="mt-2 grid gap-2">
-              {result.actions.map((action, index) => {
+              {result.actions.filter((action) => !(hasAiReviewItems && shouldHideActionBecauseReviewHandlesIt(action))).map((action, index) => {
               const canApply = Boolean(onApplyAction && aiCommandActionCanApply(action));
               const key = `${action.type}-${index}`;
               const playerLabels = actionPlayerSummary(action);
@@ -867,6 +1065,77 @@ export function AiSmartCommandPanel({
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {reviewOpen && result && (
+        <div className="fixed inset-0 z-[80] flex items-end justify-center bg-slate-900/35 px-3 pb-3 pt-10 sm:items-center sm:pb-10">
+          <div className="max-h-[88vh] w-full max-w-lg overflow-hidden rounded-[28px] bg-white shadow-2xl">
+            <div className="border-b border-slate-100 px-4 py-3">
+              <div className="text-[10px] font-black uppercase tracking-wide text-violet-500">Fair Teams Assistant</div>
+              <div className="mt-0.5 text-lg font-black text-[#102A43]">Review AI names</div>
+              <div className="mt-1 text-xs font-semibold leading-snug text-slate-500">
+                Like Screenshot Import, confirm the roster match before Today changes. New-player choices stay manual for now.
+              </div>
+            </div>
+            <div className="max-h-[58vh] overflow-y-auto px-4 py-3">
+              <div className="grid gap-2">
+                {aiReviewItems.map((item) => (
+                  <div key={item.key} className="rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Heard</div>
+                        <div className="text-sm font-black text-[#102A43]">{item.heardName}</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setReviewSelections((current) => ({ ...current, [item.key]: "skip" }))}
+                        className="rounded-full bg-white px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-slate-500 shadow-sm"
+                      >
+                        Skip
+                      </button>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {item.options.map((option) => {
+                        const value = option.kind === "existing" ? option.playerId! : option.kind;
+                        const selected = reviewSelections[item.key] === value;
+                        const disabled = option.kind === "new";
+                        return (
+                          <button
+                            key={`${item.key}-${value}`}
+                            type="button"
+                            disabled={disabled}
+                            onClick={() => setReviewSelections((current) => ({ ...current, [item.key]: value }))}
+                            className={`rounded-full px-2.5 py-1.5 text-[10px] font-black leading-none shadow-sm disabled:opacity-45 ${selected ? "bg-violet-600 text-white" : "bg-white text-slate-700"}`}
+                            title={disabled ? "Use the separate Add new player action when this is truly new." : undefined}
+                          >
+                            {reviewOptionLabel(option)}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="grid grid-cols-[1fr_1.3fr] gap-2 border-t border-slate-100 px-4 py-3">
+              <button
+                type="button"
+                onClick={() => setReviewOpen(false)}
+                className="h-11 rounded-2xl bg-slate-100 text-xs font-black uppercase tracking-wide text-slate-600"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={applyReviewedAiNames}
+                disabled={!onApplyAction || applyingKey === "select_players--1"}
+                className="h-11 rounded-2xl bg-[#102A43] text-xs font-black uppercase tracking-wide text-white disabled:opacity-45"
+              >
+                {applyingKey === "select_players--1" ? "Applying…" : "Apply reviewed names"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </section>

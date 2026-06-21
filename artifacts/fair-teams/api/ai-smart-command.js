@@ -550,6 +550,7 @@ Important roster rules:
 
 Today/player-list rules:
 - "Joon, Jorge, Jan are playing today" = select Joon, Jorge, Jan.
+- "Tanja is late" or "Joon, Jorge and Tanja are here, but Tanja is late" = select the named players and mark the late player with mark_players_late.
 - "Joon, Jorge, Jan. 5v5" also likely means select those names for Today.
 - "5v5" means playersPerTeam=5, not five total players. Normally 5v5 needs 10 selected players.
 - "make 6 teams" means teamCount=6, not 6v6.
@@ -649,7 +650,7 @@ const jsonSchema = {
           additionalProperties: false,
           required: ["type", "playerRefs", "newPlayerName", "suggestedSkill", "playersPerTeam", "teamCount", "pairingKind", "teamLabel", "role", "attribute", "distribution", "noteText", "colorName", "targetName", "targetArea", "capabilityId", "supportStatus", "requiresConfirmation", "reason"],
           properties: {
-            type: { type: "string", enum: ["select_players", "unselect_players", "add_new_player_suggestion", "set_new_player_skill", "set_team_size", "set_team_count", "add_pairing_rule", "lock_player_to_team", "spread_role_across_teams", "balance_by_attribute", "generate_teams", "club_add_note", "club_delete_note", "set_roster_color", "rename_roster", "open_app_area", "equipment_add_item", "equipment_move_item", "ask_confirmation", "ask_clarifying_question", "unsupported_action", "no_action"] },
+            type: { type: "string", enum: ["select_players", "unselect_players", "mark_players_late", "add_new_player_suggestion", "set_new_player_skill", "set_team_size", "set_team_count", "add_pairing_rule", "lock_player_to_team", "spread_role_across_teams", "balance_by_attribute", "generate_teams", "club_add_note", "club_delete_note", "set_roster_color", "rename_roster", "open_app_area", "equipment_add_item", "equipment_move_item", "ask_confirmation", "ask_clarifying_question", "unsupported_action", "no_action"] },
             playerRefs: {
               type: "array",
               items: {
@@ -708,7 +709,7 @@ const jsonSchema = {
                 }
               }
             },
-            suggestedActionType: { type: ["string", "null"], enum: ["select_players", "unselect_players", "add_new_player_suggestion", "set_new_player_skill", "set_team_size", "set_team_count", "add_pairing_rule", "lock_player_to_team", "spread_role_across_teams", "balance_by_attribute", "generate_teams", "club_add_note", "club_delete_note", "set_roster_color", "rename_roster", "open_app_area", "equipment_add_item", "equipment_move_item", "ask_confirmation", "ask_clarifying_question", "unsupported_action", "no_action", null] }
+            suggestedActionType: { type: ["string", "null"], enum: ["select_players", "unselect_players", "mark_players_late", "add_new_player_suggestion", "set_new_player_skill", "set_team_size", "set_team_count", "add_pairing_rule", "lock_player_to_team", "spread_role_across_teams", "balance_by_attribute", "generate_teams", "club_add_note", "club_delete_note", "set_roster_color", "rename_roster", "open_app_area", "equipment_add_item", "equipment_move_item", "ask_confirmation", "ask_clarifying_question", "unsupported_action", "no_action", null] }
           }
         }
       },
@@ -965,6 +966,7 @@ const KNOWN_SUPPORT_STATUSES = new Set(["executable", "preview_only", "understoo
 const CAPABILITY_STATUS_BY_ACTION = {
   select_players: ["today.select_players", "preview_only"],
   unselect_players: ["today.select_players", "preview_only"],
+  mark_players_late: ["today.mark_late", "executable"],
   set_team_size: ["teams.set_team_size", "preview_only"],
   set_team_count: ["teams.set_team_count", "preview_only"],
   add_pairing_rule: ["teams.pairing_rule", "preview_only"],
@@ -978,7 +980,7 @@ const CAPABILITY_STATUS_BY_ACTION = {
   club_delete_note: ["club.delete_note", "unsafe"],
   set_roster_color: ["roster.set_color", "understood_not_wired"],
   rename_roster: ["roster.rename", "understood_not_wired"],
-  open_app_area: ["navigation.open_area", "understood_not_wired"],
+  open_app_area: ["navigation.open_area", "executable"],
   equipment_add_item: ["equipment.add_item", "understood_not_wired"],
   equipment_move_item: ["equipment.move_item", "understood_not_wired"],
 };

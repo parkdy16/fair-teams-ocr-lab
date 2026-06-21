@@ -27,104 +27,6 @@ type AiSmartCommandPanelProps = {
 };
 
 
-function createEmptyAction(type: AiSmartCommandAction["type"]): AiSmartCommandAction {
-  return {
-    type,
-    playerRefs: [],
-    newPlayerName: null,
-    suggestedSkill: null,
-    playersPerTeam: null,
-    teamCount: null,
-    pairingKind: null,
-    teamLabel: null,
-    role: null,
-    attribute: null,
-    distribution: null,
-    noteText: null,
-    colorName: null,
-    targetName: null,
-    targetArea: null,
-    capabilityId: null,
-    supportStatus: "executable",
-    requiresConfirmation: false,
-    reason: null,
-  };
-}
-
-function parseRankedRosterSelectionCommand(
-  commandText: string,
-  players: AiSmartCommandRosterPlayer[],
-): AiSmartCommandResponse | null {
-  const normalized = commandText
-    .toLowerCase()
-    .replace(/[×x]/g, "v")
-    .replace(/versus|against|gegen/g, "v")
-    .replace(/[^a-z0-9.\s-]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  const wantsWeakest = /\b(weakest|worst|lowest|least skilled|beginners?)\b/.test(normalized);
-  const wantsStrongest = /\b(strongest|best|highest|top)\b/.test(normalized);
-  if (!wantsWeakest && !wantsStrongest) return null;
-  if (!/\b(roster|players?|squad)\b/.test(normalized)) return null;
-
-  const countMatch = normalized.match(/\b(?:weakest|worst|lowest|strongest|best|highest|top)\s+(\d{1,2})\b/) ||
-    normalized.match(/\b(\d{1,2})\s+(?:weakest|worst|lowest|strongest|best|highest|top)\b/);
-  const requestedCount = countMatch ? Number(countMatch[1]) : null;
-
-  const teamSizeMatch = normalized.match(/\b(\d{1,2})\s*v\s*\1\b/) || normalized.match(/\b(\d{1,2})\s+v\s+\1\b/);
-  const playersPerTeam = teamSizeMatch ? Number(teamSizeMatch[1]) : null;
-  const neededForTeamSize = playersPerTeam ? playersPerTeam * 2 : null;
-  const targetCount = requestedCount || neededForTeamSize;
-  if (!targetCount || targetCount < 2) return null;
-
-  const rankedPlayers = [...players]
-    .filter((player) => player.id && player.name)
-    .sort((a, b) => {
-      const aSkill = typeof a.skill === "number" ? a.skill : 5;
-      const bSkill = typeof b.skill === "number" ? b.skill : 5;
-      if (aSkill !== bSkill) return wantsWeakest ? aSkill - bSkill : bSkill - aSkill;
-      return String(a.name || "").localeCompare(String(b.name || ""));
-    })
-    .slice(0, targetCount);
-
-  if (rankedPlayers.length === 0) return null;
-
-  const selectAction = createEmptyAction("select_players");
-  selectAction.capabilityId = "today.select_players";
-  selectAction.distribution = "replace_today_selection";
-  selectAction.reason = `${wantsWeakest ? "Weakest" : "Strongest"} ${rankedPlayers.length} players by roster skill. This replaces today's current selection.`;
-  selectAction.playerRefs = rankedPlayers.map((player) => ({
-    playerId: player.id,
-    rosterName: player.name,
-    spokenName: player.name,
-    confidence: 1,
-  }));
-
-  const actions: AiSmartCommandAction[] = [selectAction];
-  if (playersPerTeam) {
-    const sizeAction = createEmptyAction("set_team_size");
-    sizeAction.capabilityId = "teams.set_team_size";
-    sizeAction.playersPerTeam = playersPerTeam;
-    sizeAction.reason = `${playersPerTeam}v${playersPerTeam} using the selected ${rankedPlayers.length} players.`;
-    actions.push(sizeAction);
-  }
-
-  return {
-    schemaVersion: 1,
-    ok: true,
-    detectedLanguage: "en",
-    normalizedIntent: `${wantsWeakest ? "Select weakest" : "Select strongest"} ${rankedPlayers.length} roster players${playersPerTeam ? ` for ${playersPerTeam}v${playersPerTeam}` : ""}`,
-    assistantSummary: `I found the ${wantsWeakest ? "weakest" : "strongest"} ${rankedPlayers.length} players in this roster by skill and prepared an exact Today selection.${playersPerTeam ? ` Then set up ${playersPerTeam}v${playersPerTeam}.` : ""}`,
-    confidence: 0.98,
-    actions,
-    confirmations: [],
-    unresolved: [],
-    parseMode: "local_fallback",
-    debugWarnings: ["Handled by Fair Teams local ranked-selection parser."],
-  };
-}
-
 function actionLabel(actionType: string) {
   return actionType.replace(/_/g, " ");
 }
@@ -175,7 +77,9 @@ function actionCardTitle(action: AiSmartCommandAction) {
     return "Add to Today";
   }
   if (action.type === "unselect_players") return "Remove from Today";
+  if (action.type === "mark_players_late") return "Mark late";
   if (action.type === "add_new_player_suggestion") return "Add new player";
+  if (action.type === "open_app_area") return action.targetArea ? `Open ${action.targetArea}` : "Open app area";
   if (action.type === "generate_teams" && /shuffle|different|mix|fresh|reroll/i.test(String(action.distribution || "") + " " + String(action.reason || ""))) return "Shuffle teams";
   const capability = getAiCommandCapability(action);
   if (capability?.label) return capability.label;
@@ -201,6 +105,8 @@ function actionPrimaryVerb(action: AiSmartCommandAction) {
     return /replace|exact|only/i.test(String(action.distribution || "")) ? "Replace Today" : "Add to Today";
   }
   if (action.type === "unselect_players") return "Remove";
+  if (action.type === "mark_players_late") return "Mark late";
+  if (action.type === "open_app_area") return "Open";
   if (action.type === "set_team_size" || action.type === "set_team_count") return "Set";
   if (action.type === "generate_teams") return /shuffle|different|mix|fresh|reroll/i.test(String(action.distribution || "") + " " + String(action.reason || "")) ? "Shuffle" : "Generate";
   return "Apply";
@@ -260,6 +166,9 @@ function actionImpactLine(action: AiSmartCommandAction) {
   if (action.type === "unselect_players") {
     return `Will remove ${count} ${playerWord} from Today without changing anyone else.`;
   }
+  if (action.type === "mark_players_late") {
+    return `Will mark ${count} ${playerWord} as late in Today and keep them selected.`;
+  }
   if (action.type === "add_new_player_suggestion") {
     return `Will add this as a new roster player and mark them present Today.`;
   }
@@ -281,6 +190,9 @@ function actionImpactLine(action: AiSmartCommandAction) {
   }
   if (action.type === "club_add_note") {
     return "Will add this as a Club note.";
+  }
+  if (action.type === "open_app_area") {
+    return action.targetArea ? `Will open ${action.targetArea}.` : "Will open the requested Fair Teams area.";
   }
   if (action.type === "unsupported_action") {
     return action.targetArea ? `Manual path: ${action.targetArea}` : "I understood this, but it is not wired as an app action yet.";
@@ -475,13 +387,6 @@ export function AiSmartCommandPanel({
         return;
       }
 
-      const localRankedSelection = parseRankedRosterSelectionCommand(trimmedCommand, players);
-      if (localRankedSelection) {
-        setResult(localRankedSelection);
-        onParsed?.(localRankedSelection);
-        return;
-      }
-
       const parsedRaw = await parseFairTeamsSmartCommand({
         commandText: trimmedCommand,
         roster: players,
@@ -580,7 +485,7 @@ export function AiSmartCommandPanel({
     try {
       const message = await onApplyAction(action);
       setApplyMessage(typeof message === "string" && message.trim() ? message : "Applied.");
-      if (action.type === "select_players" || action.type === "unselect_players" || action.type === "add_new_player_suggestion") {
+      if (action.type === "select_players" || action.type === "unselect_players" || action.type === "mark_players_late" || action.type === "add_new_player_suggestion") {
         setShowTodayShortcut(true);
       }
     } catch (err) {

@@ -247,12 +247,12 @@ function stripCommandNoise(value: string) {
 function cleanNameChunkForMatching(value: string) {
   let text = stripCommandNoise(value);
   text = text
-    .replace(/\b(players?|people|members|present|currently|playing|here|fair|balanced|teams?|make|create|generate|prepare|build|sort|of|a|the|from|now|are|is|was|were|be|select|choose|add|also|plus|too|forgot|late|remove|unselect|deselect|take|out|not|coming|cannot|can t|cancel|absent|play|playing|with|who|else|we|i|have|has|got|heard|said|mentioned|these|those|this|that)\b/g, " ")
+    .replace(/\b(players?|people|members|present|currently|playing|here|but|except|though|although|fair|balanced|teams?|make|create|generate|prepare|build|sort|of|a|the|from|now|are|is|was|were|be|select|choose|add|also|plus|too|forgot|late|remove|unselect|deselect|take|out|not|coming|cannot|can t|cancel|absent|play|playing|with|who|else|we|i|have|has|got|heard|said|mentioned|these|those|this|that)\b/g, " ")
     .replace(/\b(v|vs|versus)\b/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 
-  if (/^(new|player|players|today|tab|current|okay|ok|yes|yeah|and|or|with|from|to|the|a|an)$/i.test(text)) return "";
+  if (/^(new|player|players|today|tab|current|okay|ok|yes|yeah|and|or|but|except|though|although|with|from|to|the|a|an)$/i.test(text)) return "";
   if (/^\d+$/.test(text)) return "";
   return text;
 }
@@ -460,7 +460,8 @@ function likelyPresentPlayerCommand(commandText: string) {
   const hasTeamMakingLanguage = /\b(make|create|generate|prepare|build|sort|fair|team|teams|5v5|4v4|3v3|2v2)\b/.test(normalized);
   const hasListSignal = /,|\band\b|\bplus\b|&/.test(commandText);
   const hasSinglePersonCorrectionLanguage = /\b(add|also|plus|forgot|late|remove|unselect|deselect|not coming|isn t coming|is not coming|not playing|not here|out today)\b/.test(normalized);
-  return (hasRosterListLanguage && (hasListSignal || hasTeamMakingLanguage)) || hasSinglePersonCorrectionLanguage;
+  const hasPlainVoiceAttendancePhrase = /\b(are here|are playing|are coming|playing today|coming today|today we have|we have|we got|they are here)\b/.test(normalized);
+  return (hasRosterListLanguage && (hasListSignal || hasTeamMakingLanguage || hasPlainVoiceAttendancePhrase)) || hasSinglePersonCorrectionLanguage;
 }
 
 function wantsRemoveFromToday(commandText: string) {
@@ -476,6 +477,40 @@ function wantsReplaceToday(commandText: string) {
 function wantsAddToToday(commandText: string) {
   const normalized = normalizeText(commandText);
   return /\b(add|also|plus|too|as well|forgot|late|just arrived|is here|are here|came|coming|joined)\b/.test(normalized);
+}
+
+function wantsLateTodayStatus(commandText: string) {
+  const normalized = normalizeText(commandText);
+  return /\b(late|later|coming late|arriving late|will be late|is late|are late|comes later|come later|arrives later)\b/.test(normalized);
+}
+
+function extractLateNameSegment(commandText: string) {
+  const normalized = normalizeText(commandText);
+  if (!wantsLateTodayStatus(normalized)) return "";
+
+  const lateBefore = normalized.match(/\b(?:late|later)\s+(?:is|are|player|person|for)?\s*([a-z][a-z\s'-]{1,80})$/);
+  if (lateBefore?.[1]) return stripCommandNoise(lateBefore[1]);
+
+  const lateAfter = normalized.match(/([a-z][a-z\s,'-]{1,120})\s+(?:is|are|will be|will|comes?|come|arrives?|arrive|arriving|coming)?\s*(?:a bit\s+)?(?:late|later)\b/);
+  if (!lateAfter?.[1]) return "";
+
+  const beforeLate = stripCommandNoise(lateAfter[1])
+    .replace(/.*\b(?:but|except|although|though|and)\b\s+/g, " ")
+    .replace(/\b(?:everyone|everybody|all)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const candidates = splitPotentialNameList(beforeLate);
+  return candidates[candidates.length - 1] || beforeLate;
+}
+
+function createMarkLateAction(playerRefs: AiSmartCommandAction["playerRefs"]): AiSmartCommandAction {
+  const action = createEmptyAction("mark_players_late");
+  action.capabilityId = "today.mark_late";
+  action.supportStatus = "executable";
+  action.distribution = "mark_late_today";
+  action.playerRefs = playerRefs;
+  action.reason = "Mark these matched players as late in Today and keep them selected.";
+  return action;
 }
 
 function wantsExactTodayList(commandText: string) {
@@ -526,15 +561,21 @@ function findPlayersMentioned(commandText: string, players: AiSmartCommandRoster
 
     const best = bestRosterNameMatch(chunk, players);
 
+    const looseWords = !/\b(v|vs|versus)\b|^\d+$/.test(chunk)
+      ? chunk.split(/\s+/).map(cleanNameChunkForMatching).filter((part) => part.length >= 2)
+      : [];
+    const shouldAlsoTryLooseWords = looseWords.length >= 2 && (!best || best.score < 0.99);
+
     if (best && best.score >= 0.84 && best.score - best.secondBestScore >= 0.04) {
       const existing = matched.get(best.player.id);
       if (!existing || best.score > existing.score) {
         matched.set(best.player.id, { player: best.player, spokenName: chunk, score: best.score });
       }
-    } else if (!/\b(v|vs|versus)\b|^\d+$/.test(chunk)) {
+    }
+
+    if (!best || best.score < 0.84 || shouldAlsoTryLooseWords) {
       // Voice transcripts sometimes arrive without commas: “June Ian Tanya Briesh”.
-      // If the whole chunk is too messy, try each word as a possible spoken name.
-      const looseWords = chunk.split(/\s+/).map(cleanNameChunkForMatching).filter((part) => part.length >= 2);
+      // Try each word too, but only when the full chunk was not an exact/confident full-name match.
       let matchedLooseWord = false;
       looseWords.forEach((looseWord) => {
         const looseBest = bestRosterNameMatch(looseWord, players);
@@ -549,7 +590,7 @@ function findPlayersMentioned(commandText: string, players: AiSmartCommandRoster
           unresolved.push(looseWord);
         }
       });
-      if (!matchedLooseWord && looseWords.length === 0) unresolved.push(chunk);
+      if (!matchedLooseWord && looseWords.length === 0 && (!best || best.score < 0.84)) unresolved.push(chunk);
     }
   });
 
@@ -561,6 +602,132 @@ function findPlayersMentioned(commandText: string, players: AiSmartCommandRoster
   });
 
   return { matched: orderedMatched, unresolved: [...new Set(unresolved)] };
+}
+
+function parseOpenAreaCommand(commandText: string): AiSmartCommandResponse | null {
+  const normalized = normalizeText(commandText);
+  if (!/\b(open|show|go to|switch to|take me to|bring me to)\b/.test(normalized)) return null;
+  let targetArea: string | null = null;
+  if (/\b(roster|players?|player list)\b/.test(normalized)) targetArea = "Roster";
+  else if (/\b(today|attendance|who is here|present players)\b/.test(normalized)) targetArea = "Today";
+  else if (/\b(teams?|team results|generated teams)\b/.test(normalized)) targetArea = "Teams";
+  else if (/\b(club|organizers?|notes?|equipment|gear)\b/.test(normalized)) targetArea = "Club";
+  if (!targetArea) return null;
+
+  const action = createEmptyAction("open_app_area");
+  action.capabilityId = "navigation.open_area";
+  action.supportStatus = "executable";
+  action.targetArea = targetArea;
+  action.reason = `Open the ${targetArea} area.`;
+  return localResponse({
+    normalizedIntent: `Open ${targetArea}`,
+    assistantSummary: `I can open ${targetArea} for you.`,
+    confidence: 0.97,
+    actions: [action],
+    confirmations: [],
+    unresolved: [],
+    debugWarnings: ["Handled by local navigation parser."],
+  });
+}
+
+function wantsSelectAllRosterPlayers(commandText: string) {
+  const normalized = normalizeText(commandText);
+  return /\b(select|choose|mark|add|use)\b.*\b(all|everyone|everybody|entire roster|whole roster|all players)\b/.test(normalized) ||
+    /\b(all|everyone|everybody)\b.*\b(playing|here|today|selected|available)\b/.test(normalized) ||
+    /\b(entire|whole)\s+(?:current\s+)?roster\b/.test(normalized);
+}
+
+function parseSelectAllRosterCommand(
+  commandText: string,
+  players: AiSmartCommandRosterPlayer[],
+): AiSmartCommandResponse | null {
+  if (!wantsSelectAllRosterPlayers(commandText)) return null;
+  const rosterPlayers = players.filter((player) => player.id && player.name);
+  if (rosterPlayers.length === 0) return null;
+
+  const requestedTeamCount = parseRequestedTeamCount(commandText);
+  const playersPerTeam = parseTeamSize(commandText);
+  let teamCount = requestedTeamCount;
+  if (!teamCount && playersPerTeam && rosterPlayers.length % playersPerTeam === 0 && rosterPlayers.length >= playersPerTeam * 2) {
+    teamCount = rosterPlayers.length / playersPerTeam;
+  }
+
+  const selectAction = createEmptyAction("select_players");
+  selectAction.capabilityId = "today.select_players";
+  selectAction.distribution = teamCount ? "replace_today_selection_then_generate" : "replace_today_selection";
+  selectAction.teamCount = teamCount || null;
+  selectAction.playersPerTeam = playersPerTeam;
+  selectAction.reason = teamCount
+    ? `Clear Today, select all ${rosterPlayers.length} roster players, then generate ${teamCount} teams.`
+    : `Clear Today and select all ${rosterPlayers.length} players in this roster.`;
+  selectAction.playerRefs = rosterPlayers.map((player) => ({
+    playerId: player.id,
+    rosterName: player.name,
+    spokenName: player.name,
+    confidence: 1,
+  }));
+
+  return localResponse({
+    normalizedIntent: teamCount ? `Select all roster players and generate ${teamCount} teams` : "Select all roster players for Today",
+    assistantSummary: teamCount
+      ? `I can select all ${rosterPlayers.length} players from this roster for Today, then generate ${teamCount} fair teams.`
+      : `I can replace Today with all ${rosterPlayers.length} players from this roster.`,
+    confidence: 0.98,
+    actions: [selectAction],
+    confirmations: [],
+    unresolved: [],
+    debugWarnings: ["Handled by local select-all roster parser."],
+  });
+}
+
+function parseAppKnowledgeQuestion(commandText: string): AiSmartCommandResponse | null {
+  const normalized = normalizeText(commandText);
+  const looksLikeQuestion = /\?|\b(what|why|how|where|when|which|explain|tell me|what does|what is|difference|different)\b/.test(normalized);
+  if (!looksLikeQuestion) return null;
+  if (/\b(make|create|generate|select|add|remove|replace|clear|shuffle|mark)\b/.test(normalized) && !/\b(what|why|how|explain|difference|different)\b/.test(normalized)) return null;
+
+  let summary = "";
+  let topic = "Fair Teams help";
+
+  if (/\b(fair teams assistant|ai assistant|assistant|what can you do|what do you do)\b/.test(normalized)) {
+    topic = "Fair Teams Assistant";
+    summary = "Fair Teams Assistant is the shortcut helper inside the app. You can ask how Fair Teams works, ask roster questions, select who is here today, add or remove players from Today, mark someone late, prepare teams, reshuffle teams, and open the right area without hunting through menus. It should always show a safe action card before changing the app.";
+  } else if (/\b(voice select|voice selection|voice command).{0,40}\b(ai|assistant)\b|\b(ai|assistant).{0,40}\b(voice select|voice selection)\b/.test(normalized)) {
+    topic = "Voice Select vs AI Assistant";
+    summary = "Voice Select is the simple quick tool for selecting players by voice. Fair Teams Assistant is broader: it can understand follow-up corrections, explain the app, prepare teams, mark players late, and show safe action cards. Voice Select can stay as the fast free workflow; AI is the smarter organizer helper.";
+  } else if (/\b(voice select|voice selection)\b/.test(normalized)) {
+    topic = "Voice Select";
+    summary = "Voice Select is for quickly saying player names and selecting them for Today. It is meant to be simple and fast. The AI assistant is for more flexible instructions like adding, removing, marking late, or preparing teams.";
+  } else if (/\b(screenshot import|smart import|ocr|crop|lost and found|meetup import|better scan)\b/.test(normalized)) {
+    topic = "Smart Import";
+    summary = "Smart Import helps you turn a screenshot into Today attendance. You crop the name list, Fair Teams reads names with offline OCR by default, then Review Names lets you confirm matches, add missing names, and rescue names in Lost & Found. Meetup mode is tuned for Meetup-style screenshots; Other mode is for more general screenshots. Better Scan can later be an optional cloud/AI scan, but the offline import should remain the safe default.";
+  } else if (/\b(roster tab|roster|player list)\b/.test(normalized)) {
+    topic = "Roster";
+    summary = "Roster is your player list. It is where you add and edit players, ratings, aliases/AKA names, photos, categories, and player details. Today uses this roster to decide who is playing now, and Teams uses the selected Today players to make balanced teams.";
+  } else if (/\b(today tab|today|attendance|present players)\b/.test(normalized)) {
+    topic = "Today";
+    summary = "Today is where you mark who is playing now. You can select players manually, import a screenshot, use voice, or ask the assistant. Team generation uses the players selected in Today, so this tab is the bridge between your roster and the final teams.";
+  } else if (/\b(teams tab|team generation|generate teams|5v5|6v6|fair teams)\b/.test(normalized)) {
+    topic = "Teams";
+    summary = "Teams is where Fair Teams generates balanced teams from the players selected in Today. “5v5” means five players per team, so it normally needs 10 selected players. “Make 2 teams” means two total teams. You can reshuffle to get a different mix while keeping the same selected players.";
+  } else if (/\b(club tab|club|shared roster|organizer|organizers|equipment|notes)\b/.test(normalized)) {
+    topic = "Club";
+    summary = "Club is the organizer space. It can hold shared-roster tools, Club ratings, organizer notes, and equipment tracking. Local/private roster features stay focused on your own device; shared/Club features are for co-organizers working together.";
+  } else if (/\b(special abilities|special ability|traits|trait|playmaker|speedster|goalkeeper|gk)\b/.test(normalized)) {
+    topic = "Special abilities";
+    summary = "Special abilities are private/local player traits used by the local roster team generator. They nudge how a player contributes, for example playmaker-style passing or goalkeeper role handling. Shared/Club rosters use simpler Club average ratings instead, so private special abilities should not be treated as shared organizer ratings.";
+  }
+
+  if (!summary) return null;
+  return localResponse({
+    normalizedIntent: `Answer app question: ${topic}`,
+    assistantSummary: summary,
+    confidence: 0.96,
+    actions: [],
+    confirmations: [],
+    unresolved: [],
+    debugWarnings: ["Answered by local Fair Teams app knowledge layer before server AI."],
+  });
 }
 
 function parseTeamSize(commandText: string) {
@@ -851,6 +1018,10 @@ function parsePresentPlayerSelectionCommand(
     confidence: Math.min(1, Math.max(0.72, score)),
   }));
 
+  const lateSegment = removeMode ? "" : extractLateNameSegment(commandText);
+  const lateMatched = lateSegment ? findPlayersMentioned(lateSegment, players).matched : [];
+  const latePlayerIds = new Set(lateMatched.map((item) => item.player.id));
+
   const actions: AiSmartCommandAction[] = [];
   if (removeMode) {
     const removeAction = createEmptyAction("unselect_players");
@@ -886,6 +1057,15 @@ function parsePresentPlayerSelectionCommand(
       replaceAction.reason = "Alternative: clear the current Today selection and use only these matched players.";
       actions.push(replaceAction);
     }
+  }
+
+  if (!removeMode && lateMatched.length > 0) {
+    actions.push(createMarkLateAction(lateMatched.map(({ player, spokenName, score }) => ({
+      playerId: player.id,
+      rosterName: player.name,
+      spokenName,
+      confidence: Math.min(1, Math.max(0.72, score)),
+    }))));
   }
 
   const playersPerTeam = parseTeamSize(commandText);
@@ -951,6 +1131,9 @@ function parsePresentPlayerSelectionCommand(
     : !removeMode && wantsBalancedTeams(commandText) && matched.length >= 4
       ? " I also prepared a 2-team setup."
       : "";
+  const lateText = !removeMode && lateMatched.length > 0
+    ? ` I also found late player${lateMatched.length === 1 ? "" : "s"}: ${lateMatched.map((item) => item.player.name).join(", ")}.`
+    : "";
   const ambiguityText = exactListMode && replaceMode && existingSelectionCount > 0
     ? ` You already have ${existingSelectionCount} player${existingSelectionCount === 1 ? "" : "s"} selected, so I treated this as today’s new list. Use the add option if you only meant to add them.`
     : ambiguousWithExistingSelection && !addMode
@@ -959,7 +1142,7 @@ function parsePresentPlayerSelectionCommand(
 
   return localResponse({
     normalizedIntent: removeMode ? "Remove matched players from Today" : replaceMode ? "Replace Today selection with matched players" : "Update Today selection with matched players",
-    assistantSummary: `I matched ${matched.length} player${matched.length === 1 ? "" : "s"} to ${modeText}: ${names.join(", ")}.${teamText}${ambiguityText}${missedText}`,
+    assistantSummary: `I matched ${matched.length} player${matched.length === 1 ? "" : "s"} to ${modeText}: ${names.join(", ")}.${lateText}${teamText}${ambiguityText}${missedText}`,
     confidence: unresolved.length > 0 ? 0.88 : 0.98,
     actions,
     confirmations: [],
@@ -1115,6 +1298,9 @@ export function parseFairTeamsLocalSmartCommand(
   const explicitNewPlayer = parseExplicitNewPlayerCommand(commandText, players);
   if (explicitNewPlayer) return explicitNewPlayer;
 
+  const selectAllRoster = parseSelectAllRosterCommand(commandText, players);
+  if (selectAllRoster) return selectAllRoster;
+
   // Mixed attendance + team commands are common: “Today we have Joon, Jorge…
   // can you make teams?” In that case, parse and confirm the named Today list
   // before using any previously selected players. Plain team setup commands like
@@ -1142,6 +1328,12 @@ export function parseFairTeamsLocalSmartCommand(
 
   const rosterQuestion = parseRosterQuestion(commandText, players);
   if (rosterQuestion) return rosterQuestion;
+
+  const openArea = parseOpenAreaCommand(commandText);
+  if (openArea) return openArea;
+
+  const appKnowledge = parseAppKnowledgeQuestion(commandText);
+  if (appKnowledge) return appKnowledge;
 
   return null;
 }

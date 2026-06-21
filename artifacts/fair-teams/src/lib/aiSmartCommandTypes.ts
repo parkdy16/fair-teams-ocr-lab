@@ -3,6 +3,7 @@ export type AiSmartCommandLanguage = string;
 export type AiSmartCommandActionType =
   | "select_players"
   | "unselect_players"
+  | "mark_players_late"
   | "add_new_player_suggestion"
   | "set_new_player_skill"
   | "set_team_size"

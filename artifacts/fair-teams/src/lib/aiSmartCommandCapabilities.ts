@@ -27,6 +27,14 @@ export const AI_SMART_COMMAND_CAPABILITIES: AiSmartCommandCapability[] = [
     examples: ["remove George from today", "Joon is not coming", "take Brijesh out"],
   },
   {
+    id: "today.mark_late",
+    actionType: "mark_players_late",
+    label: "Mark late",
+    supportStatus: "executable",
+    description: "Mark matched roster players as late in Today while keeping them selected.",
+    examples: ["Tanja is late", "Joon, Jorge and Tanja are here, but Tanja is late"],
+  },
+  {
     id: "teams.set_team_size",
     actionType: "set_team_size",
     label: "Set team size",
@@ -107,6 +115,14 @@ export const AI_SMART_COMMAND_CAPABILITIES: AiSmartCommandCapability[] = [
     examples: ["rename this roster Lazy Lousy Saturday"],
   },
   {
+    id: "navigation.open_area",
+    actionType: "open_app_area",
+    label: "Open app area",
+    supportStatus: "executable",
+    description: "Open a main Fair Teams area such as Roster, Today, Teams, or Club.",
+    examples: ["open Today", "show me the Teams tab", "go to Roster"],
+  },
+  {
     id: "equipment.add_item",
     actionType: "equipment_add_item",
     label: "Add equipment item",
@@ -142,7 +158,8 @@ export function aiCommandActionCanApply(action: AiSmartCommandAction) {
   if (!executable) return false;
 
   if (action.type === "club_add_note") return Boolean(action.noteText?.trim());
-  if (action.type === "select_players" || action.type === "unselect_players") return action.playerRefs.some((player) => Boolean(player.playerId));
+  if (action.type === "select_players" || action.type === "unselect_players" || action.type === "mark_players_late") return action.playerRefs.some((player) => Boolean(player.playerId));
+  if (action.type === "open_app_area") return Boolean(action.targetArea?.trim());
   if (action.type === "set_team_count") return typeof action.teamCount === "number";
   if (action.type === "set_team_size") return typeof action.playersPerTeam === "number";
   if (action.type === "generate_teams") return typeof action.teamCount === "number" || typeof action.playersPerTeam === "number";

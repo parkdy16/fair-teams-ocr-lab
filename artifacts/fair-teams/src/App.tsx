@@ -1254,6 +1254,27 @@ function App() {
         : `Added/selected ${playerIds.size} player${playerIds.size === 1 ? "" : "s"} for Today without clearing the current selection.`;
     }
 
+    if (action.type === "mark_players_late") {
+      const playerIds = new Set(
+        action.playerRefs
+          .map((playerRef) => playerRef.playerId)
+          .filter((playerId): playerId is string => Boolean(playerId)),
+      );
+      if (playerIds.size === 0) {
+        throw new Error("I understood a late-player request, but could not match any roster players.");
+      }
+
+      replacePlayers(
+        players.map((player) =>
+          playerIds.has(player.id)
+            ? { ...player, attending: true, todayStatus: "late" }
+            : player,
+        ),
+      );
+      setTodayRosterChosen(true);
+      return `Marked ${playerIds.size} player${playerIds.size === 1 ? "" : "s"} as late in Today.`;
+    }
+
     if (action.type === "unselect_players") {
       const playerIds = new Set(
         action.playerRefs
@@ -1424,6 +1445,24 @@ function App() {
       };
       replacePairingRules([...pairingRules, nextRule]);
       return kind === "together" ? "Added a Keep Together rule." : "Added a Keep Separate rule.";
+    }
+
+    if (action.type === "open_app_area") {
+      const rawArea = String(action.targetArea || "").trim().toLowerCase();
+      const targetTab = rawArea.includes("roster") || rawArea.includes("player")
+        ? "players"
+        : rawArea.includes("today") || rawArea.includes("attendance")
+          ? "today"
+          : rawArea.includes("team")
+            ? "teams"
+            : rawArea.includes("club") || rawArea.includes("organizer") || rawArea.includes("equipment") || rawArea.includes("note")
+              ? "club"
+              : null;
+      if (!targetTab || !isAppTab(targetTab)) {
+        throw new Error("I understood an open-area request, but I could not tell which Fair Teams tab to open.");
+      }
+      setActiveTab(targetTab);
+      return `Opened ${targetTab === "players" ? "Roster" : targetTab.charAt(0).toUpperCase() + targetTab.slice(1)}.`;
     }
 
     throw new Error("Fair Teams understands this, but it is not wired to apply yet.");

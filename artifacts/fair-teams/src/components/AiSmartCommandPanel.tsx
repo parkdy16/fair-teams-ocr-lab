@@ -293,6 +293,261 @@ function bulkRosterSelectionExcludedText(action: AiSmartCommandAction) {
   return match?.[1]?.trim() || "";
 }
 
+
+const BULK_TEAM_WORDS: Record<string, number> = {
+  one: 1,
+  two: 2,
+  three: 3,
+  four: 4,
+  five: 5,
+  six: 6,
+  seven: 7,
+  eight: 8,
+  nine: 9,
+  ten: 10,
+  eleven: 11,
+  twelve: 12,
+};
+
+function localBulkPhoneticKey(value?: string | null) {
+  return compactNameForCompare(value)
+    .replace(/oo/g, "u")
+    .replace(/ou/g, "u")
+    .replace(/ph/g, "f")
+    .replace(/ck/g, "k")
+    .replace(/e$/g, "");
+}
+
+function localBulkVisibleNames(player: AiSmartCommandRosterPlayer) {
+  const names = [player.name || ""];
+  if (player.aka) {
+    player.aka
+      .split(/[,/;|·•]+|\baka\b/i)
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .forEach((part) => names.push(part));
+  }
+  return names.filter(Boolean);
+}
+
+function looksLikeLocalBulkRosterCommand(commandText: string) {
+  const text = String(commandText || "").trim();
+  if (!text) return false;
+  if (/^\s*(how|what|why|where|when|who|which)\b/i.test(text)) return false;
+  const hasAction = /\b(select|choose|pick|mark|add|use|take|make|create|generate|split|divide)\b/i.test(text);
+  const hasAllRoster = /\b(select|choose|pick|mark|add|use|take)\b.{0,35}\b(all|everyone|everybody)\b/i.test(text)
+    || /\b(all|everyone|everybody|entire|whole)\b.{0,35}\b(roster|players|player list|team list)\b/i.test(text)
+    || /\b(roster|player list|team list)\b.{0,35}\b(all|everyone|everybody|entire|whole)\b/i.test(text);
+  return hasAction && hasAllRoster;
+}
+
+function localBulkTeamCount(commandText: string) {
+  const text = String(commandText || "");
+  const numeric = text.match(/\b(?:make|create|generate|split|divide(?:\s+into)?)\s+(\d{1,2})\s+teams?\b/i)
+    || text.match(/\b(\d{1,2})\s+teams?\b/i);
+  const numericValue = Number(numeric?.[1]);
+  if (Number.isFinite(numericValue) && numericValue >= 2 && numericValue <= 12) return numericValue;
+  const wordPattern = Object.keys(BULK_TEAM_WORDS).join("|");
+  const word = text.match(new RegExp(`\\b(?:make|create|generate|split|divide(?:\\s+into)?)\\s+(${wordPattern})\\s+teams?\\b`, "i"))
+    || text.match(new RegExp(`\\b(${wordPattern})\\s+teams?\\b`, "i"));
+  const value = word?.[1] ? BULK_TEAM_WORDS[word[1].toLowerCase()] : null;
+  return value && value >= 2 && value <= 12 ? value : null;
+}
+
+function localBulkShouldGenerate(commandText: string) {
+  return /\b(make|create|generate|split|divide)\b.*\bteams?\b/i.test(commandText) || Boolean(localBulkTeamCount(commandText));
+}
+
+function localBulkExcludedNames(commandText: string) {
+  const match = String(commandText || "").match(/\b(?:except|excluding|without|but\s+not|other\s+than|minus)\s+(.+?)(?:\b(?:and\s+then|then|make|generate|split|divide|with|from|on\s+my\s+roster)\b|$)/i);
+  if (!match?.[1]) return [];
+  return match[1]
+    .split(/[,;\n]+|\s+and\s+|\s+und\s+|\s+그리고\s+|\s*랑\s*|\s*와\s*|\s*과\s*/i)
+    .map((part) => part
+      .replace(/^(?:the\s+)?(?:player|person)\s+/i, "")
+      .replace(/^(?:except|excluding|without|but\s+not|not|minus)\s+/i, "")
+      .replace(/\b(?:please|thanks|then|make|generate|teams?|players?|roster)\b/gi, " ")
+      .replace(/[.!?。！？,;]+$/g, "")
+      .replace(/\s+/g, " ")
+      .trim())
+    .filter((part) => part.length >= 2 && part.length <= 80);
+}
+
+function localBulkCandidateMatches(rawName: string, players: AiSmartCommandRosterPlayer[]) {
+  const targetKey = localBulkPhoneticKey(rawName);
+  const phoneticMatches = players.filter((player) => {
+    if (!player?.id) return false;
+    return localBulkVisibleNames(player).some((name) => localBulkPhoneticKey(name) === targetKey);
+  });
+  if (phoneticMatches.length > 0) return phoneticMatches.slice(0, 4);
+
+  return rankedOcrStyleRosterMatches(rawName, players, 4)
+    .filter((match) => match.score >= 78)
+    .map((match) => match.player)
+    .filter((player, index, rows) => player?.id && rows.findIndex((row) => row.id === player.id) === index)
+    .slice(0, 4);
+}
+
+function localBulkPlayerRef(player: AiSmartCommandRosterPlayer, spokenName?: string) {
+  return {
+    playerId: player.id || null,
+    rosterName: player.name || null,
+    spokenName: spokenName || player.name || "",
+    confidence: player.id ? 1 : 0,
+  };
+}
+
+function makeLocalBulkSelectAction(
+  players: AiSmartCommandRosterPlayer[],
+  excludedPlayers: AiSmartCommandRosterPlayer[],
+  commandText: string,
+  candidateLabel?: string,
+): AiSmartCommandAction {
+  const excludedIds = new Set(excludedPlayers.map((player) => player.id).filter(Boolean));
+  const selectedRefs = players
+    .filter((player) => player?.id && !excludedIds.has(player.id))
+    .map((player) => localBulkPlayerRef(player));
+  const excludedNames = excludedPlayers.map((player) => player.name).filter(Boolean).join(", ");
+  const teamCount = localBulkTeamCount(commandText);
+  const thenGenerate = localBulkShouldGenerate(commandText);
+  return {
+    type: "select_players",
+    playerRefs: selectedRefs,
+    newPlayerName: null,
+    suggestedSkill: null,
+    playersPerTeam: null,
+    teamCount,
+    pairingKind: null,
+    teamLabel: null,
+    role: null,
+    attribute: null,
+    distribution: `replace_today_selection:${excludedPlayers.length > 0 ? "bulk_all_except" : "bulk_all_roster"}:local_fast${thenGenerate ? ":then_generate" : ""}`,
+    noteText: null,
+    colorName: null,
+    targetName: null,
+    targetArea: null,
+    capabilityId: "today.select_players",
+    supportStatus: "executable",
+    requiresConfirmation: false,
+    reason: excludedPlayers.length > 0
+      ? `Select ${selectedRefs.length} of ${players.length} roster players, excluding ${candidateLabel || excludedNames}.`
+      : `Select every player in the current roster (${players.length} players).`,
+  };
+}
+
+function buildLocalBulkRosterSelectionAnswer(commandText: string, players: AiSmartCommandRosterPlayer[]): AiSmartCommandResponse | null {
+  if (!looksLikeLocalBulkRosterCommand(commandText) || !Array.isArray(players) || players.length === 0) return null;
+  const excludedNames = localBulkExcludedNames(commandText);
+
+  if (excludedNames.length === 0) {
+    const action = makeLocalBulkSelectAction(players, [], commandText);
+    return {
+      schemaVersion: 1,
+      ok: true,
+      detectedLanguage: "unknown",
+      normalizedIntent: commandText.slice(0, 300),
+      assistantSummary: localBulkShouldGenerate(commandText)
+        ? `I’ll select all ${players.length} roster players locally, then set up the requested teams.`
+        : `I’ll select all ${players.length} roster players locally.`,
+      confidence: 0.94,
+      actions: [action],
+      confirmations: [],
+      unresolved: [],
+      parseMode: "local_fallback" as any,
+      debugWarnings: ["Handled select-all roster command locally before OpenAI to avoid slow 60-name review."],
+    } as any;
+  }
+
+  if (excludedNames.length === 1) {
+    const heardName = excludedNames[0];
+    const matches = localBulkCandidateMatches(heardName, players);
+    if (matches.length === 1) {
+      const action = makeLocalBulkSelectAction(players, [matches[0]], commandText, matches[0].name || heardName);
+      return {
+        schemaVersion: 1,
+        ok: true,
+        detectedLanguage: "unknown",
+        normalizedIntent: commandText.slice(0, 300),
+        assistantSummary: `I heard “${heardName}” as the player to leave out. I found ${matches[0].name}. Tap below and I’ll select everyone else locally — no long name review.`,
+        confidence: 0.92,
+        actions: [action],
+        confirmations: [],
+        unresolved: [],
+        parseMode: "local_fallback" as any,
+        debugWarnings: ["Handled all-except roster command locally before OpenAI."],
+      } as any;
+    }
+    if (matches.length > 1) {
+      const actions = matches.map((player) => makeLocalBulkSelectAction(players, [player], commandText, player.name || heardName));
+      return {
+        schemaVersion: 1,
+        ok: true,
+        detectedLanguage: "unknown",
+        normalizedIntent: commandText.slice(0, 300),
+        assistantSummary: `I heard “${heardName}” as the player to leave out. Choose the right player below; then I’ll select everyone else locally.`,
+        confidence: 0.86,
+        actions,
+        confirmations: [],
+        unresolved: [],
+        parseMode: "local_fallback" as any,
+        debugWarnings: ["Handled ambiguous all-except roster command locally before OpenAI."],
+      } as any;
+    }
+    return {
+      schemaVersion: 1,
+      ok: true,
+      detectedLanguage: "unknown",
+      normalizedIntent: commandText.slice(0, 300),
+      assistantSummary: `I heard “${heardName}” as the player to leave out, but I couldn’t match that to this roster. I didn’t change anything.`,
+      confidence: 0.7,
+      actions: [],
+      confirmations: [],
+      unresolved: [{ text: heardName, issue: "unknown_player", message: `Choose which roster player to leave out for “${heardName}”.` }],
+      parseMode: "local_fallback" as any,
+      debugWarnings: ["All-except roster command stopped locally because the excluded player was unknown."],
+    } as any;
+  }
+
+  const resolved: AiSmartCommandRosterPlayer[] = [];
+  const unresolved: string[] = [];
+  for (const heardName of excludedNames) {
+    const matches = localBulkCandidateMatches(heardName, players);
+    if (matches.length === 1) resolved.push(matches[0]);
+    else unresolved.push(heardName);
+  }
+  if (unresolved.length > 0) {
+    return {
+      schemaVersion: 1,
+      ok: true,
+      detectedLanguage: "unknown",
+      normalizedIntent: commandText.slice(0, 300),
+      assistantSummary: `I understood this as a select-all-except command, but I need clearer matches for: ${unresolved.join(", ")}. I didn’t change anything.`,
+      confidence: 0.72,
+      actions: [],
+      confirmations: [],
+      unresolved: unresolved.map((name) => ({ text: name, issue: "unknown_player", message: `Choose which roster player to leave out for “${name}”.` })),
+      parseMode: "local_fallback" as any,
+      debugWarnings: ["All-except roster command stopped locally because one or more excluded players were unclear."],
+    } as any;
+  }
+
+  const uniqueResolved = resolved.filter((player, index, rows) => player?.id && rows.findIndex((row) => row.id === player.id) === index);
+  const action = makeLocalBulkSelectAction(players, uniqueResolved, commandText);
+  return {
+    schemaVersion: 1,
+    ok: true,
+    detectedLanguage: "unknown",
+    normalizedIntent: commandText.slice(0, 300),
+    assistantSummary: `I’ll select everyone except ${uniqueResolved.map((player) => player.name).join(", ")} locally — no long name review.`,
+    confidence: 0.9,
+    actions: [action],
+    confirmations: [],
+    unresolved: [],
+    parseMode: "local_fallback" as any,
+    debugWarnings: ["Handled multi-exclusion roster command locally before OpenAI."],
+  } as any;
+}
+
 function parseModeLabel(mode?: AiSmartCommandResponse["parseMode"]) {
   if (mode === "local_fallback") return "Local reply / safety fallback";
   if (mode === "ai_with_local_hints") return "AI + app rules";
@@ -348,7 +603,7 @@ function actionPrimaryVerb(action: AiSmartCommandAction) {
   return "Apply";
 }
 
-const AI_ASSISTANT_VERSION_LABEL = "AI beta · v1.27 exclude chooser";
+const AI_ASSISTANT_VERSION_LABEL = "AI beta · v1.28 fast bulk select";
 
 type AiRosterMatch = {
   player: AiSmartCommandRosterPlayer;
@@ -1389,6 +1644,13 @@ export function AiSmartCommandPanel({
       if (directBasicHelp) {
         setResult(directBasicHelp);
         onParsed?.(directBasicHelp);
+        return;
+      }
+
+      const directBulkRosterSelection = buildLocalBulkRosterSelectionAnswer(trimmedCommand, players);
+      if (directBulkRosterSelection) {
+        setResult(directBulkRosterSelection);
+        onParsed?.(directBulkRosterSelection);
         return;
       }
 

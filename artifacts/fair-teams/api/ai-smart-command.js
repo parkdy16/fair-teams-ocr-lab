@@ -639,16 +639,21 @@ function matchExcludedRosterName(candidate, rosterIndex) {
   const candidateConsonants = consonantRosterNameKey(candidate);
   if (!candidateKey && !candidateConsonants) return { status: "unknown", spokenName: candidate, matches: [] };
 
-  const close = [];
+  const soundMatches = [];
+  const softerMatches = [];
   for (const entry of rosterIndex || []) {
     const entryKey = compactRosterNameKey(entry.label || entry.rosterName || entry.normalized);
     const entryConsonants = consonantRosterNameKey(entry.label || entry.rosterName || entry.normalized);
     const soundMatch = candidateKey && entryKey && candidateKey === entryKey;
-    const consonantMatch = candidateConsonants && entryConsonants && candidateConsonants === entryConsonants && candidateConsonants.length >= 2;
-    const startsClose = candidateKey.length >= 3 && entryKey.length >= 3 && (candidateKey.startsWith(entryKey) || entryKey.startsWith(candidateKey));
-    if (soundMatch || consonantMatch || startsClose) close.push(entry);
+    const consonantMatch = candidateConsonants && entryConsonants && candidateConsonants === entryConsonants && candidateConsonants.length >= 3;
+    const startsClose = candidateKey.length >= 4 && entryKey.length >= 4 && (candidateKey.startsWith(entryKey) || entryKey.startsWith(candidateKey));
+    if (soundMatch) soundMatches.push(entry);
+    else if (consonantMatch || startsClose) softerMatches.push(entry);
   }
 
+  // UX/safety rule for bulk exclusions: prioritize strong sound matches before
+  // broad consonant matches. This prevents “June” from offering both Joon and Jan.
+  const close = soundMatches.length > 0 ? soundMatches : softerMatches;
   const unique = [];
   for (const entry of close) {
     if (!unique.some((item) => item.playerId === entry.playerId)) unique.push(entry);

@@ -1,4 +1,4 @@
-export const FAIR_TEAMS_KNOWLEDGE_VERSION = "2026-06-20.roster-copy-v1";
+export const FAIR_TEAMS_KNOWLEDGE_VERSION = "2026-06-21.answer-mode-v1";
 
 function clean(value, max = 4000) {
   return typeof value === "string" ? value.replace(/\s+/g, " ").trim().slice(0, max) : "";
@@ -15,7 +15,7 @@ const KNOWLEDGE_SECTIONS = {
   core: {
     title: "Fair Teams core model",
     keywords: ["fair teams", "app", "what can you do", "how does this work", "help"],
-    text: `Fair Teams is a casual football organizer app. The core workflow is: keep a roster of known players, mark who is playing today, then generate balanced teams. The assistant should sound like a helpful organizer, not a developer changelog. For product questions, explain what the feature is for and how users should think about it. Only mention whether an AI action is available when the user is explicitly asking the assistant to perform that action or asks about AI capability.`,
+    text: `Fair Teams is a casual football organizer app. The core workflow is: keep a roster of known players, mark who is playing today, then generate balanced teams. The assistant should sound like a helpful organizer, not a developer changelog. For product questions, answer from the user's perspective: what the feature is for, when to use it, and what to expect. Keep answers friendly, plain, and practical. Avoid technical implementation wording, beta/wiring comments, schemas, APIs, and internal project language unless the user explicitly asks about development.`,
   },
   localSharedRosters: {
     title: "Local/private rosters vs shared rosters",
@@ -58,9 +58,9 @@ const KNOWLEDGE_SECTIONS = {
     text: `The Equipment Board is a simple 'who has what?' board for a football group. It tracks bags/items such as balls, bibs, cones, pumps, jerseys, or any group gear that someone might take home after a match. It helps organizers quickly see who currently has each item before the next game, instead of checking old chats or asking everyone again. Commands like "move the bibs bag to Sarah" or "George has the cones now" mean move/change the holder of an equipment item. For normal product questions, explain the user benefit and do not mention beta branches, wiring, implementation status, or technical limitations. Only mention that Equipment Board changes cannot be applied from chat yet when the user specifically asks the assistant to move/change equipment.`,
   },
   backupSync: {
-    title: "Backup, sync, and collaboration",
-    keywords: ["backup", "cloud backup", "restore", "google drive", "sync", "collaboration", "collaborator", "organizer", "invite", "firebase", "save online", "get latest"],
-    text: `Cloud Backup is private manual all-rosters backup/restore. It should not be described as collaboration. Shared rosters/collaboration are separate and online. Shared roster data is intended to autosync shared-safe fields, while private/local data such as photos and private preferences should not be casually shared. Invite/collaborator features belong to shared rosters/Club mode.`,
+    title: "Cloud Backup vs Shared Roster",
+    keywords: ["backup", "cloud backup", "restore", "google drive", "sync", "collaboration", "collaborator", "organizer", "invite", "firebase", "save online", "get latest", "shared roster backup"],
+    text: `Cloud Backup and Shared Roster sound similar, but they solve different user problems. Cloud Backup is your private safety copy: use it when you want to save your rosters and restore them later on your own device/account. It is not for collaboration and should not be presented as a way for friends or co-organizers to edit the same roster. Shared Roster is the collaboration mode: use it when multiple organizers need access to the same online roster, shared player identity fields, Club ratings, Club Notes, Equipment, and organizer tools. Shared rosters sync shared-safe data; private things such as local photos and device preferences should stay private. User-facing comparison: use Cloud Backup when you want insurance; use Shared Roster when another organizer needs to work with you.`,
   },
   voiceAi: {
     title: "AI assistant and voice design",
@@ -162,7 +162,11 @@ If the roster is a shared roster and you want your own local version, use Make p
   pairingLocks: `Pairing rules guide the team generator. “Keep Sarah and Tommy together” means try to place them on the same team. “Sarah and Tommy do not like each other” or “do not put them together” means keep them separate. Team locks are different: “George red” or “put George in red” means lock that player to a specific team/color when teams are generated.`,
   clubNotes: `Club Notes are friendly organizer notes in the Club area, like a shared post-it board. They are meant for quick community/organizer notes such as “Puma ball died today — Joon.” Adding a note is relatively safe; deleting notes should require confirmation.`,
   equipment: `Equipment is like a small “who has what?” board for your football group. Use it for balls, bibs, cones, pumps, jerseys, or any bag/item someone might take home after a match. Before the next game, organizers can quickly see who has each item instead of searching Signal/WhatsApp or asking everyone again. If the roster is shared, it works especially well as a shared organizer board for group gear.`,
-  backupSync: `Cloud Backup is private manual backup/restore. It is not the same as collaboration. Shared roster collaboration is online/shared roster data for multiple organizers. Backup protects your own roster data; shared rosters are for co-organizers working on the same Club roster.`,
+  backupSync: `Cloud Backup is your private safety copy. Use it when you want to save your rosters and restore them later on your own device/account. It is not meant for collaboration.
+
+Shared Roster is for working with other organizers. It keeps a shared online roster so co-organizers can use the same player list, shared player info, Club ratings, notes, and equipment tools.
+
+So the simple rule is: use Cloud Backup for personal backup/restore; use Shared Roster when another organizer needs access to the same roster.`,
   voiceAi: `The intended voice design is push-to-talk or tap-to-record first: record speech, transcribe it, show the transcript, then send it to the same Fair Teams assistant/action system. Realtime always-listening voice can come later. The assistant should be conversational, but app changes still go through safe capability handlers and confirmations.`,
   privacySafety: `Fair Teams AI should be helpful but cautious. Simple setup actions can be previewed or applied with one tap. Risky changes need confirmation. Destructive actions like deleting players, rosters, backups, notes, or collaborator access should never happen automatically from one casual sentence.`,
   core: `Fair Teams helps a casual football organizer keep a roster, select who is playing today, and generate balanced teams. The assistant can answer app questions and help turn messy instructions into safe app actions. It should explain features in plain organizer language, not technical implementation language.`
@@ -215,6 +219,7 @@ export function getFairTeamsKnowledgeForCommand(commandText, context = {}) {
   return {
     version: FAIR_TEAMS_KNOWLEDGE_VERSION,
     selectionRule: "Use these Fair Teams knowledge sections as source of truth for app-specific Q&A. For feature-explanation questions, answer like a helpful organizer and do not mention beta branches, wiring, implementation status, JSON, APIs, schemas, or developer details unless the user explicitly asks about implementation. If the user asks the assistant to perform an action that is not available from chat yet, say plainly that you understand but cannot change that from chat yet. If the user asks a Fair Teams question and the answer is not covered here, say you do not have that Fair Teams detail yet instead of guessing.",
+    answerStyle: "Answer from the user's perspective. Be warm, short, and practical. Explain when to use a feature, what problem it solves, and how it differs from similar features. Prefer examples like 'Use this when...' and avoid technical/developer language.",
     topics: selected.slice(0, 6).map((section) => ({ id: section.id, title: section.title, text: section.text })),
   };
 }

@@ -1169,6 +1169,41 @@ function looksLikeCasualConversation(text) {
   return false;
 }
 
+function looksLikeFairTeamsAnswerQuestion(text) {
+  const raw = cleanString(text, MAX_COMMAND_CHARS);
+  const normalized = normalizeForMatching(raw);
+  if (!normalized) return false;
+
+  const questionFrame = /(^|\b)(what|what\s|whats|how|why|where|when|which|who|can i|should i|do i|does|is|are|will|would|explain|tell me|show me how|difference|different|compare|versus|vs|meaning|mean|help me understand)\b/i.test(raw)
+    || /[?？]$/.test(raw.trim())
+    || /\b(unterschied|was ist|wie funktioniert|warum|wo ist|kann ich|erklär|erklaer|차이|무엇|뭐야|어떻게|왜|설명)\b/i.test(raw);
+  if (!questionFrame) return false;
+
+  const appTopic = /\b(fair teams|app|roster|shared roster|local roster|private roster|cloud backup|backup|restore|sync|collaboration|organizer|club|club rating|rating|skill|today|teams|team generation|smart import|ocr|screenshot|review names|lost.?found|voice|assistant|equipment|bag|notes|pairing|lock|copy|duplicate|import|export)\b/i.test(raw)
+    || /(로스터|공유|백업|클럽|평점|오늘|팀|선수|장비|스크린샷|음성)/i.test(raw);
+  if (!appTopic) return false;
+
+  // Mixed requests such as "what is shared roster and create one" should still be allowed
+  // to create action cards. Pure explanation questions should not.
+  const explicitFollowUpAction = /\b(and|then|also)\s+(select|choose|pick|mark|add|remove|move|give|assign|set|make|create|generate|split|divide|keep|separate|pair|lock|put|rename|change|open|show|go to|back up|backup)\b/i.test(raw);
+  return !explicitFollowUpAction;
+}
+
+function normalizeKnowledgeAnswerResponse(parsed, commandText, fallbackAnswer = null) {
+  const normalized = normalizeParsedResponse(parsed, commandText);
+  const fallbackSummary = fallbackAnswer?.assistantSummary || "I can explain that, but I do not have enough Fair Teams detail yet.";
+  return {
+    ...normalized,
+    ok: true,
+    assistantSummary: cleanString(normalized.assistantSummary, 900) || fallbackSummary,
+    confidence: Math.max(0.7, normalized.confidence || fallbackAnswer?.confidence || 0.7),
+    actions: [],
+    confirmations: [],
+    unresolved: [],
+    parseMode: "ai_knowledge_answer",
+  };
+}
+
 function hasStrongAppCommandIntent(commandText, commandHints) {
   const text = cleanString(commandText, MAX_COMMAND_CHARS);
   const hints = commandHints && typeof commandHints === "object" ? commandHints : {};
@@ -1249,6 +1284,7 @@ Conversation behavior:
 - The user should be able to talk to you naturally. You are not only a command parser.
 - If the user sends a greeting, thanks, small talk, or asks what you can do, answer warmly in assistantSummary with actions=[], confirmations=[], unresolved=[], ok=true.
 - If the user asks a Fair Teams product question, answer from the provided fairTeamsKnowledge sections and the operating manual with concrete app-specific details. This includes questions about local/private rosters, shared rosters, Club ratings, normal ratings, Today, Teams, pairing rules, Equipment Board, Club Notes, backup, Smart Import, screenshots, voice, and AI assistant limits. For feature-explanation questions, sound user-facing and helpful; do not mention beta branches, wiring status, schemas, JSON, API routes, or implementation details unless the user explicitly asks about implementation.
+- Product answers should feel like a friendly organizer explaining the app to another organizer. Start with the practical difference or next useful idea. Prefer short paragraphs, plain words, and examples like "Use Cloud Backup when..." / "Use Shared Roster when...". Do not sound like a command router, developer note, or release log.
 - For Fair Teams product Q&A, do not invent features that are not in fairTeamsKnowledge or the operating manual. If a detail is not specified, say "I don't have that Fair Teams detail yet" and then explain the nearest known behavior.
 - Never answer Fair Teams product questions with generic sports-app or generic AI guesses. If the user says "in this app", "Fair Teams", "roster rating", "Club", "Smart Import", "Lost & Found", "Equipment Board", or names a tab/feature, treat it as an app-specific question.
 - If the user asks a simple general question, answer briefly when it does not require live/current data and does not distract from Fair Teams.
@@ -1315,41 +1351,46 @@ export default async function handler(req, res) {
   }
 
   const strongAppCommandIntent = hasStrongAppCommandIntent(commandText, commandHints);
+  const answerQuestionMode = !strongAppCommandIntent && looksLikeFairTeamsAnswerQuestion(commandText);
   const directFairTeamsAnswer = strongAppCommandIntent ? null : getDirectFairTeamsAnswerForCommand(commandText, context);
-  if (directFairTeamsAnswer) {
-    return res.status(200).json({
-      schemaVersion: 1,
-      ok: true,
-      detectedLanguage: "unknown",
-      normalizedIntent: cleanString(commandText, 300),
-      assistantSummary: directFairTeamsAnswer.assistantSummary,
-      confidence: directFairTeamsAnswer.confidence,
-      actions: [],
-      confirmations: [],
-      unresolved: [],
-      parseMode: "fair_teams_knowledge_base",
-      debugWarnings: [`Answered from Fair Teams knowledge topic: ${directFairTeamsAnswer.topic}`],
-    });
-  }
 
   if (!process.env.OPENAI_API_KEY) {
+    if (directFairTeamsAnswer) {
+      return res.status(200).json({
+        schemaVersion: 1,
+        ok: true,
+        detectedLanguage: "unknown",
+        normalizedIntent: cleanString(commandText, 300),
+        assistantSummary: directFairTeamsAnswer.assistantSummary,
+        confidence: directFairTeamsAnswer.confidence,
+        actions: [],
+        confirmations: [],
+        unresolved: [],
+        parseMode: "fair_teams_knowledge_base",
+        debugWarnings: [`Answered from Fair Teams knowledge topic: ${directFairTeamsAnswer.topic} because API key is not configured.`],
+      });
+    }
     return res.status(500).json({ error: "OPENAI_API_KEY is not configured." });
   }
 
+  const task = answerQuestionMode
+    ? "AI ASSISTANT V1.13 KNOWLEDGE ANSWER MODE. The user is asking a Fair Teams product question, not asking you to perform an app action. Answer naturally from fairTeamsKnowledge and the operating manual. Return actions=[], confirmations=[], unresolved=[]. Do not create backup/import/team/action cards just because the question mentions those features. Answer from the user's perspective, in friendly plain language. For comparisons, explain when to use each feature. If the answer is not in fairTeamsKnowledge, say you do not have that Fair Teams detail yet and explain the nearest known behavior."
+    : "AI PLANNER V1.12 STRICT NAME EXTRACTOR. Reply as the Fair Teams Assistant. If this is conversation or a simple question, answer naturally in assistantSummary with no actions. If this is a Fair Teams product question, answer from fairTeamsKnowledge and the operating manual, not from generic sports-app assumptions. If this is a Fair Teams app request, read commandText yourself and build a safe action plan. Use commandHints only as helper clues, not as the source of truth. Action requests always beat product Q&A. For attendance commands, first do a strict name-extraction pass over commandText: identify the continuous spoken/typed attendance list, preserve order, and output ONLY real person-name candidates from that list. Do not copy noisy commandHints candidate names. Never output instruction/filler words such as have, has, had, new, four, like, to, from, in, on, with, here, today, only, make, team, teams, players, people, okay, or let's as player names unless that exact word is an existing roster.name or roster.aka. If the user says a count such as 'four new players' without saying their names, do not create names from the count; add unresolved missing_context saying the new player names were not provided. After the strict name list is built, match each name against roster.name and roster.aka. Prefer plausible existing roster IDs over add_new_player_suggestion for speech errors such as June/Joon, Yan/Jan, Anya/Tanja, Briesh/Presh/Brijesh, Ayesha/Ayashini, Unursha/Onursha, Sari Savage/Ceri Savage. For mixed commands like 'Arthur is here, Ayashini, Anna... let's make a team', return select_players first, then set_team_count/set_team_size if stated, then generate_teams. Do not generate from current Today selection when names are present. Completeness still matters: if 21 real people are named, account for 21 people, but uncertainty should become unresolved/add_new_player_suggestion for plausible human names only, never app words or sentence fragments.";
+
   const payload = {
     model: DEFAULT_MODEL,
-    temperature: 0.1,
-    max_output_tokens: 3600,
+    temperature: answerQuestionMode ? 0.35 : 0.1,
+    max_output_tokens: answerQuestionMode ? 1200 : 3600,
     input: [
       { role: "system", content: systemPrompt() },
       {
         role: "user",
         content: JSON.stringify({
-          task: "AI PLANNER V1.12 STRICT NAME EXTRACTOR. Reply as the Fair Teams Assistant. If this is conversation or a simple question, answer naturally in assistantSummary with no actions. If this is a Fair Teams product question, answer from fairTeamsKnowledge and the operating manual, not from generic sports-app assumptions. If this is a Fair Teams app request, read commandText yourself and build a safe action plan. Use commandHints only as helper clues, not as the source of truth. Action requests always beat product Q&A. For attendance commands, first do a strict name-extraction pass over commandText: identify the continuous spoken/typed attendance list, preserve order, and output ONLY real person-name candidates from that list. Do not copy noisy commandHints candidate names. Never output instruction/filler words such as have, has, had, new, four, like, to, from, in, on, with, here, today, only, make, team, teams, players, people, okay, or let's as player names unless that exact word is an existing roster.name or roster.aka. If the user says a count such as 'four new players' without saying their names, do not create names from the count; add unresolved missing_context saying the new player names were not provided. After the strict name list is built, match each name against roster.name and roster.aka. Prefer plausible existing roster IDs over add_new_player_suggestion for speech errors such as June/Joon, Yan/Jan, Anya/Tanja, Briesh/Presh/Brijesh, Ayesha/Ayashini, Unursha/Onursha, Sari Savage/Ceri Savage. For mixed commands like 'Arthur is here, Ayashini, Anna... let's make a team', return select_players first, then set_team_count/set_team_size if stated, then generate_teams. Do not generate from current Today selection when names are present. Completeness still matters: if 21 real people are named, account for 21 people, but uncertainty should become unresolved/add_new_player_suggestion for plausible human names only, never app words or sentence fragments.",
+          task,
           commandText,
           context,
-          roster,
-          commandHints,
+          roster: answerQuestionMode ? roster.slice(0, 20).map((player) => ({ id: player.id, name: player.name, attending: player.attending })) : roster,
+          commandHints: answerQuestionMode ? { appKnowledgeVersion: commandHints.appKnowledgeVersion, answerQuestionMode: true } : commandHints,
           fairTeamsKnowledge,
         }),
       },
@@ -1373,12 +1414,42 @@ export default async function handler(req, res) {
       body: JSON.stringify(payload),
     });
   } catch {
+    if (answerQuestionMode && directFairTeamsAnswer) {
+      return res.status(200).json({
+        schemaVersion: 1,
+        ok: true,
+        detectedLanguage: "unknown",
+        normalizedIntent: cleanString(commandText, 300),
+        assistantSummary: directFairTeamsAnswer.assistantSummary,
+        confidence: directFairTeamsAnswer.confidence,
+        actions: [],
+        confirmations: [],
+        unresolved: [],
+        parseMode: "fair_teams_knowledge_base",
+        debugWarnings: [`AI request failed; used Fair Teams knowledge topic: ${directFairTeamsAnswer.topic}`],
+      });
+    }
     return res.status(200).json(deterministicFallbackResponse(commandText, commandHints, roster, "OpenAI request failed before completion."));
   }
 
   const aiPayload = await aiResponse.json().catch(() => null);
   if (!aiResponse.ok) {
     const message = aiPayload?.error?.message || "OpenAI request failed.";
+    if (answerQuestionMode && directFairTeamsAnswer) {
+      return res.status(200).json({
+        schemaVersion: 1,
+        ok: true,
+        detectedLanguage: "unknown",
+        normalizedIntent: cleanString(commandText, 300),
+        assistantSummary: directFairTeamsAnswer.assistantSummary,
+        confidence: directFairTeamsAnswer.confidence,
+        actions: [],
+        confirmations: [],
+        unresolved: [],
+        parseMode: "fair_teams_knowledge_base",
+        debugWarnings: [`AI request failed; used Fair Teams knowledge topic: ${directFairTeamsAnswer.topic}`],
+      });
+    }
     return res.status(200).json(deterministicFallbackResponse(commandText, commandHints, roster, message));
   }
 
@@ -1392,14 +1463,47 @@ export default async function handler(req, res) {
       : "";
 
   if (!outputText) {
+    if (answerQuestionMode && directFairTeamsAnswer) {
+      return res.status(200).json({
+        schemaVersion: 1,
+        ok: true,
+        detectedLanguage: "unknown",
+        normalizedIntent: cleanString(commandText, 300),
+        assistantSummary: directFairTeamsAnswer.assistantSummary,
+        confidence: directFairTeamsAnswer.confidence,
+        actions: [],
+        confirmations: [],
+        unresolved: [],
+        parseMode: "fair_teams_knowledge_base",
+        debugWarnings: [`AI returned no output; used Fair Teams knowledge topic: ${directFairTeamsAnswer.topic}`],
+      });
+    }
     return res.status(200).json(deterministicFallbackResponse(commandText, commandHints, roster, "AI returned no structured output."));
   }
 
   try {
     const jsonText = extractJsonObject(outputText) || outputText;
     const parsed = JSON.parse(jsonText);
+    if (answerQuestionMode) {
+      return res.status(200).json(normalizeKnowledgeAnswerResponse(parsed, commandText, directFairTeamsAnswer));
+    }
     return res.status(200).json(mergeDeterministicActions(parsed, commandHints, roster));
   } catch {
+    if (answerQuestionMode && directFairTeamsAnswer) {
+      return res.status(200).json({
+        schemaVersion: 1,
+        ok: true,
+        detectedLanguage: "unknown",
+        normalizedIntent: cleanString(commandText, 300),
+        assistantSummary: directFairTeamsAnswer.assistantSummary,
+        confidence: directFairTeamsAnswer.confidence,
+        actions: [],
+        confirmations: [],
+        unresolved: [],
+        parseMode: "fair_teams_knowledge_base",
+        debugWarnings: [`AI answer failed; used Fair Teams knowledge topic: ${directFairTeamsAnswer.topic}`],
+      });
+    }
     return res.status(200).json(deterministicFallbackResponse(commandText, commandHints, roster, "AI returned malformed JSON."));
   }
 }

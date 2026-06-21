@@ -276,13 +276,36 @@ function wantsExplicitNewPlayer(commandText: string) {
 }
 
 function bestRosterNameMatch(name: string, players: AiSmartCommandRosterPlayer[]) {
-  const best = bestPlayerNameMatch(name, players, { includeDisplayName: true });
+  const externalBest = bestPlayerNameMatch(name, players, { includeDisplayName: true });
+  let best: { player: AiSmartCommandRosterPlayer; candidate: string; score: number } | null = externalBest
+    ? { player: externalBest.player, candidate: externalBest.candidate, score: externalBest.score / 100 }
+    : null;
+  let secondBestScore = externalBest ? externalBest.secondBestScore / 100 : 0;
+
+  // The shared playerNameMatching helper is intentionally conservative. For voice
+  // commands we also need roster-relative phonetic recovery: June -> Joon,
+  // Yan -> Jan, Anya -> Tanja, Briesh -> Brijesh. This does not add a player by
+  // itself; it only chooses an existing roster player when the match is clearly
+  // stronger than alternatives.
+  players.forEach((player) => {
+    candidateNamesForRosterPlayer(player, { includeDisplayName: true }).forEach((candidate) => {
+      const score = fuzzyNameMatchScore(name, candidate);
+      if (score <= 0) return;
+      if (!best || score > best.score) {
+        if (!best || best.player.id !== player.id) secondBestScore = best?.score ?? secondBestScore;
+        best = { player, candidate, score };
+      } else if (best.player.id !== player.id && score > secondBestScore) {
+        secondBestScore = score;
+      }
+    });
+  });
+
   if (!best) return null;
   return {
     player: best.player,
     candidate: best.candidate,
-    score: best.score / 100,
-    secondBestScore: best.secondBestScore / 100,
+    score: best.score,
+    secondBestScore,
   };
 }
 
@@ -581,23 +604,19 @@ function findPlayersMentioned(commandText: string, players: AiSmartCommandRoster
       : [];
     const shouldAlsoTryLooseWords = looseWords.length >= 2 && (!best || best.score < 0.99);
 
-    if (best && best.score >= 0.84 && best.score - best.secondBestScore >= 0.04) {
-      const existing = matched.get(best.player.id);
-      if (!existing || best.score > existing.score) {
-        matched.set(best.player.id, { player: best.player, spokenName: chunk, score: best.score });
-      }
-    }
+    let matchedLooseWord = false;
+    const canUseFullChunk = looseWords.length <= 1;
 
-    if (!best || best.score < 0.84 || shouldAlsoTryLooseWords) {
-      // Voice transcripts sometimes arrive without commas: “June Ian Tanya Briesh”.
-      // Try each word too, but only when the full chunk was not an exact/confident full-name match.
-      let matchedLooseWord = false;
+    if (!canUseFullChunk || !best || best.score < 0.99 || shouldAlsoTryLooseWords) {
+      // Voice transcripts sometimes arrive without commas after normalization:
+      // “Yan June Anya Briesh”. Try each word first so a long merged phrase never
+      // becomes “yan june anya briesh -> Brijesh”.
       looseWords.forEach((looseWord) => {
         const looseBest = bestRosterNameMatch(looseWord, players);
 
         if (looseBest && looseBest.score >= 0.84 && looseBest.score - looseBest.secondBestScore >= 0.04) {
           const existing = matched.get(looseBest.player.id);
-          if (!existing || looseBest.score > existing.score) {
+          if (!existing || looseBest.score > existing.score || existing.spokenName.split(/\s+/).length > 1) {
             matched.set(looseBest.player.id, { player: looseBest.player, spokenName: looseWord, score: looseBest.score });
           }
           matchedLooseWord = true;
@@ -605,8 +624,16 @@ function findPlayersMentioned(commandText: string, players: AiSmartCommandRoster
           unresolved.push(looseWord);
         }
       });
-      if (!matchedLooseWord && looseWords.length === 0 && (!best || best.score < 0.84)) unresolved.push(chunk);
     }
+
+    if (best && best.score >= 0.84 && best.score - best.secondBestScore >= 0.04 && (!matchedLooseWord || canUseFullChunk)) {
+      const existing = matched.get(best.player.id);
+      if (!existing || best.score > existing.score) {
+        matched.set(best.player.id, { player: best.player, spokenName: chunk, score: best.score });
+      }
+    }
+
+    if (!matchedLooseWord && looseWords.length === 0 && (!best || best.score < 0.84)) unresolved.push(chunk);
   });
 
   const orderedMatched = [...matched.values()].sort((a, b) => {

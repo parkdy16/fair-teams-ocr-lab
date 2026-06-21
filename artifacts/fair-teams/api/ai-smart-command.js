@@ -1209,7 +1209,12 @@ Output contract:
 - The user may speak or type in any language, including mixed-language commands.
 - detectedLanguage may be any BCP-47-like language string such as en, de, ko, es, mixed, or unknown.
 - Preserve player names exactly as user says them when uncertain. Do not translate names.
-- Use the provided commandHints. Every candidateName from commandHints must appear in select_players, add_new_player_suggestion, confirmations, or unresolved.
+- You are the primary planner. Read commandText yourself first, then use commandHints as helpful clues only. Do not rely only on commandHints.
+- If commandHints misses, merges, or pollutes a name list, correct it from commandText. Example: "Arthur is here, Ayashini, Anna... let's make a team" is an attendance list plus generate-teams request.
+- Attendance/list patterns include "X is here, Y, Z", "today we have X, Y", "make a team with X, Y", "X, Y and Z are playing", and similar natural speech. Extract all person names before deciding to generate teams.
+- When a command contains both player names and "make/generate teams", return select_players first, then set_team_count/set_team_size if stated, then generate_teams. Do not fall back to current Today selection when names are present.
+- Use roster names and aliases to match likely speech/transcription errors. Prefer existing roster players over adding new players when there is a plausible phonetic/near spelling match, e.g. June→Joon, Yan→Jan, Anya→Tanja, Briesh→Brijesh, Onursa→Onursah.
+- Every real person name you identify from commandText or commandHints must appear in select_players, add_new_player_suggestion, confirmations, or unresolved. Ignore instruction words like here, today, players, only, make, team, with, so, let's.
 - If commandHints.selectAllRosterPlayers is true, create select_players containing every roster player.
 - When commandHints detects playersPerTeam, create set_team_size unless the user clearly meant something else.
 - When commandHints detects teamCount, create set_team_count. "make 6 teams" means teamCount=6, not 6v6.
@@ -1281,7 +1286,7 @@ export default async function handler(req, res) {
       {
         role: "user",
         content: JSON.stringify({
-          task: "Reply as the Fair Teams Assistant. If this is conversation or a simple question, answer naturally in assistantSummary with no actions. If this is a Fair Teams product question, answer from fairTeamsKnowledge and the operating manual, not from generic sports-app assumptions. If this is a Fair Teams app request, parse it into safe actions using commandHints. Action requests always beat product Q&A. Do not explain the Today tab when the user gives a player list for today; select those players. Do not drop any listed player names. If a person is named as playing today, they must appear either as a matched playerRef in select_players, add_new_player_suggestion, missing/ambiguous confirmation, or unresolved item.",
+          task: "AI PLANNER V1. Reply as the Fair Teams Assistant. If this is conversation or a simple question, answer naturally in assistantSummary with no actions. If this is a Fair Teams product question, answer from fairTeamsKnowledge and the operating manual, not from generic sports-app assumptions. If this is a Fair Teams app request, read commandText yourself and build a safe action plan. Use commandHints only as helper clues, not as the source of truth. Action requests always beat product Q&A. For mixed commands like 'Arthur is here, Ayashini, Anna... let's make a team', extract the attendance list first, match names against roster/aka, then return select_players followed by generate_teams. Do not explain the Today tab and do not generate from current Today selection when names are present. Do not drop any listed player names. If a person is named as playing today, they must appear either as a matched playerRef in select_players, add_new_player_suggestion, missing/ambiguous confirmation, or unresolved item. Prefer plausible existing roster matches over adding new players for speech errors such as June/Joon, Yan/Jan, Anya/Tanja, Briesh/Brijesh.",
           commandText,
           context,
           roster,

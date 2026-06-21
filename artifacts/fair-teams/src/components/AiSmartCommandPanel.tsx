@@ -380,21 +380,31 @@ export function AiSmartCommandPanel({
         return;
       }
 
-      const localSmartCommand = parseFairTeamsLocalSmartCommand(trimmedCommand, players, commandContext);
-      if (localSmartCommand) {
-        setResult(localSmartCommand);
-        onParsed?.(localSmartCommand);
+      try {
+        const parsedRaw = await parseFairTeamsSmartCommand({
+          commandText: trimmedCommand,
+          roster: players,
+          context: commandContext,
+        });
+        const parsed = applyFairTeamsAiTruthGuard(trimmedCommand, parsedRaw);
+        setResult(parsed);
+        onParsed?.(parsed);
         return;
+      } catch (aiErr) {
+        const localSmartCommand = parseFairTeamsLocalSmartCommand(trimmedCommand, players, commandContext);
+        if (localSmartCommand) {
+          setResult({
+            ...localSmartCommand,
+            debugWarnings: [
+              ...((localSmartCommand as any).debugWarnings || []),
+              `AI planner unavailable; used local fallback: ${aiErr instanceof Error ? aiErr.message : String(aiErr || "unknown error")}`,
+            ],
+          });
+          onParsed?.(localSmartCommand);
+          return;
+        }
+        throw aiErr;
       }
-
-      const parsedRaw = await parseFairTeamsSmartCommand({
-        commandText: trimmedCommand,
-        roster: players,
-        context: commandContext,
-      });
-      const parsed = applyFairTeamsAiTruthGuard(trimmedCommand, parsedRaw);
-      setResult(parsed);
-      onParsed?.(parsed);
     } catch (err) {
       setError(friendlyAiError(err));
     } finally {
@@ -506,7 +516,7 @@ export function AiSmartCommandPanel({
           </p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
-          <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-violet-700 shadow-sm">AI beta · v0.2.4 split</span>
+          <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-violet-700 shadow-sm">AI beta · v1.0 planner</span>
           {(commandText.trim() || result || applyMessage || error || voiceTranscript) && (
             <button
               type="button"

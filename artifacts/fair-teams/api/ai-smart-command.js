@@ -1479,6 +1479,106 @@ function extractJsonObject(text) {
 }
 
 
+
+function makeAssistantAnswerResponse(commandText, assistantSummary, options = {}) {
+  return {
+    schemaVersion: 1,
+    ok: true,
+    detectedLanguage: cleanString(options.detectedLanguage, 40) || "unknown",
+    normalizedIntent: cleanString(commandText, 300),
+    assistantSummary: cleanString(assistantSummary, 1200) || "I can help with that, but I could not form a clean answer.",
+    confidence: Number.isFinite(Number(options.confidence)) ? Math.max(0, Math.min(1, Number(options.confidence))) : 0.82,
+    actions: [],
+    confirmations: [],
+    unresolved: [],
+    parseMode: cleanString(options.parseMode, 80) || "openai_question_answer",
+    debugWarnings: Array.isArray(options.debugWarnings) ? options.debugWarnings : [],
+  };
+}
+
+function extractOpenAiText(aiPayload) {
+  if (typeof aiPayload?.output_text === "string") return aiPayload.output_text.trim();
+  if (Array.isArray(aiPayload?.output)) {
+    return aiPayload.output.flatMap((item) => Array.isArray(item?.content) ? item.content : [])
+      .map((content) => content?.text || "")
+      .join("\n")
+      .trim();
+  }
+  return "";
+}
+
+function buildQuestionRosterPayload(roster) {
+  return roster.slice(0, MAX_ROSTER_PLAYERS).map((player) => ({
+    id: player.id,
+    name: player.name,
+    aka: player.aka,
+    skill: player.skill,
+    attack: player.attack,
+    defense: player.defense,
+    speed: player.speed,
+    passing: player.passing,
+    stamina: player.stamina,
+    endurance: player.endurance,
+    fitness: player.fitness,
+    physical: player.physical,
+    isGoalkeeper: player.isGoalkeeper,
+    isPlaymaker: player.isPlaymaker,
+    isFinisher: player.isFinisher,
+    isDribbler: player.isDribbler,
+    isSentinel: player.isSentinel,
+    isEngine: player.isEngine,
+    isVersatile: player.isVersatile,
+    isSpaceFinder: player.isSpaceFinder,
+    isOrganizer: player.isOrganizer,
+    gender: player.gender,
+    funBadge: player.funBadge,
+    attending: player.attending,
+  }));
+}
+
+async function callOpenAiQuestionAnswer({ commandText, context, roster, fairTeamsKnowledge, directFairTeamsAnswer }) {
+  const fallbackSummary = directFairTeamsAnswer?.assistantSummary || "I can help with Fair Teams, but I do not have that exact detail yet. Ask it another way, or try a basic app question like adding players, editing players, ratings, Today, Teams, backup, or shared rosters.";
+  const payload = {
+    model: DEFAULT_MODEL,
+    temperature: 0.45,
+    max_output_tokens: 900,
+    input: [
+      {
+        role: "system",
+        content: `You are Fair Teams Assistant. Answer user questions about the Fair Teams app in warm, plain, user-facing language. This is QUESTION MODE, not command mode. Do not output JSON. Do not create action cards. Do not mention schemas, APIs, code, branches, wiring, or implementation details. Use the provided Fair Teams knowledge and visible roster/context. If the user asks how to do something, give practical steps. If exact details are missing, say so gently and answer from the nearest known behavior. Keep the answer concise but helpful.`,
+      },
+      {
+        role: "user",
+        content: JSON.stringify({
+          commandText,
+          context,
+          fairTeamsKnowledge,
+          visibleRosterData: buildQuestionRosterPayload(roster),
+          fallbackKnowledgeAnswer: fallbackSummary,
+        }),
+      },
+    ],
+  };
+
+  const aiResponse = await fetch(OPENAI_RESPONSES_URL, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+  const aiPayload = await aiResponse.json().catch(() => null);
+  if (!aiResponse.ok) throw new Error(aiPayload?.error?.message || "OpenAI question answer failed.");
+  const answer = cleanString(extractOpenAiText(aiPayload), 1200);
+  if (!answer) throw new Error("OpenAI returned no question answer.");
+  return makeAssistantAnswerResponse(commandText, answer, {
+    confidence: 0.86,
+    parseMode: "openai_question_answer",
+    debugWarnings: directFairTeamsAnswer?.topic ? [`Question answered by OpenAI with Fair Teams knowledge topic: ${directFairTeamsAnswer.topic}`] : ["Question answered by OpenAI with Fair Teams knowledge context."],
+  });
+}
+
 function looksLikeCasualConversation(text) {
   const normalized = normalizeForMatching(text);
   if (!normalized) return false;
@@ -1516,7 +1616,7 @@ function looksLikeFairTeamsAnswerQuestion(text) {
     || /\b(unterschied|was ist|wie funktioniert|warum|wo ist|kann ich|erklär|erklaer|차이|무엇|뭐야|어떻게|왜|설명)\b/i.test(raw);
   if (!questionFrame) return false;
 
-  const appTopic = /\b(fair teams|app|roster|shared roster|local roster|private roster|cloud backup|backup|restore|sync|collaboration|organizer|club|club rating|rating|skill|today|teams|team generation|smart import|ocr|screenshot|review names|lost.?found|voice|assistant|equipment|bag|notes|pairing|lock|copy|duplicate|import|export)\b/i.test(raw)
+  const appTopic = /\b(fair teams|app|roster|player|players|player card|add player|edit player|rate player|rating|ratings|rate|shared roster|local roster|private roster|cloud backup|backup|restore|sync|collaboration|organizer|club|club rating|skill|today|teams|team generation|smart import|ocr|screenshot|review names|lost.?found|voice|assistant|equipment|bag|notes|pairing|lock|copy|duplicate|import|export|roster tools|photo|alias|aka|invite|collaborator)\b/i.test(raw)
     || /(로스터|공유|백업|클럽|평점|오늘|팀|선수|장비|스크린샷|음성)/i.test(raw);
   if (!appTopic) return false;
 
@@ -1712,22 +1812,26 @@ export default async function handler(req, res) {
   }
 
   if (!process.env.OPENAI_API_KEY) {
-    if (directFairTeamsAnswer) {
-      return res.status(200).json({
-        schemaVersion: 1,
-        ok: true,
-        detectedLanguage: "unknown",
-        normalizedIntent: cleanString(commandText, 300),
-        assistantSummary: directFairTeamsAnswer.assistantSummary,
-        confidence: directFairTeamsAnswer.confidence,
-        actions: [],
-        confirmations: [],
-        unresolved: [],
+    if (answerQuestionMode) {
+      return res.status(200).json(makeAssistantAnswerResponse(commandText, directFairTeamsAnswer?.assistantSummary || "I can help with that Fair Teams question, but the AI answer engine is not configured on this deployment yet.", {
+        confidence: directFairTeamsAnswer?.confidence || 0.7,
         parseMode: "fair_teams_knowledge_base",
-        debugWarnings: [`Answered from Fair Teams knowledge topic: ${directFairTeamsAnswer.topic} because API key is not configured.`],
-      });
+        debugWarnings: directFairTeamsAnswer?.topic ? [`Answered from Fair Teams knowledge topic: ${directFairTeamsAnswer.topic} because API key is not configured.`] : ["API key is not configured; used generic Fair Teams question fallback."],
+      }));
     }
     return res.status(500).json({ error: "OPENAI_API_KEY is not configured." });
+  }
+
+  if (answerQuestionMode) {
+    try {
+      return res.status(200).json(await callOpenAiQuestionAnswer({ commandText, context, roster, fairTeamsKnowledge, directFairTeamsAnswer }));
+    } catch (questionErr) {
+      return res.status(200).json(makeAssistantAnswerResponse(commandText, directFairTeamsAnswer?.assistantSummary || "I could not answer that cleanly from the AI engine just now, but it sounds like a Fair Teams help question. Try asking it again in a shorter way, for example: “How do I add a player?” or “How do I edit a player?”", {
+        confidence: directFairTeamsAnswer?.confidence || 0.62,
+        parseMode: directFairTeamsAnswer ? "fair_teams_knowledge_base" : "question_answer_fallback",
+        debugWarnings: [`OpenAI question answer failed; ${questionErr instanceof Error ? questionErr.message : String(questionErr || "unknown error")}`],
+      }));
+    }
   }
 
   const task = answerQuestionMode

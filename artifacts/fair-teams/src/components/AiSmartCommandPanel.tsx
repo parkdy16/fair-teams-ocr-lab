@@ -60,7 +60,7 @@ function friendlyAiError(error: unknown) {
   if (/openai|request failed|502|network|fetch/i.test(message)) {
     return "Fair Teams AI could not connect cleanly. Try again in a moment.";
   }
-  return message || "Fair Teams AI command failed.";
+  return message || "I could not answer that cleanly. Try asking again in a shorter way.";
 }
 
 
@@ -123,6 +123,76 @@ function detectRosterStatQuestionForFallback(commandText: string) {
             : "OVR";
 
   return { field, direction: wantsLowest ? "lowest" : "highest" } as const;
+}
+
+
+
+function looksLikePlayerRatingHowToHelpRequest(commandText: string) {
+  const text = String(commandText || "").trim();
+  if (!text) return false;
+  const isQuestion = /\?|\b(how|where|what|can i|can you|help|explain|show me|start|begin)\b/i.test(text);
+  const mentionsRating = /\b(rate|rating|ratings|skill|ovr|score|level)\b/i.test(text);
+  const mentionsPlayer = /\b(player|players|someone|a player|roster)\b/i.test(text) || /\brate\s+\w+/i.test(text);
+  const looksLikeAction = /^\s*(rate|set|change|make)\s+[A-Za-zÀ-ÖØ-öø-ÿ0-9 ._-]+\s+(?:to|as)\s+\d+/i.test(text);
+  return isQuestion && mentionsRating && mentionsPlayer && !looksLikeAction;
+}
+
+function buildPlayerRatingHowToHelpAnswer(
+  commandText: string,
+  rosterMode: "local" | "shared",
+): AiSmartCommandResponse | null {
+  if (!looksLikePlayerRatingHowToHelpRequest(commandText)) return null;
+
+  const assistantSummary = rosterMode === "shared"
+    ? "To rate a player in a shared roster, open the shared roster’s Club area and use the player rating/review section. Your rating is private: other organizers should not see your individual score. Fair Teams combines submitted ratings into the Club average for shared team generation. If you do not know a player yet, you can skip them and rate them later."
+    : "To rate a player in a local roster, open the Roster tab, tap the player card, then edit their rating/player details. Local roster ratings are your own private ratings and are used directly when Fair Teams generates balanced teams. In a local roster, you can use the normal player profile; shared/Club ratings only appear after you create, join, or open a shared roster.";
+
+  return {
+    schemaVersion: 1,
+    ok: true,
+    detectedLanguage: "unknown",
+    normalizedIntent: commandText.slice(0, 300),
+    assistantSummary,
+    confidence: 0.8,
+    actions: [],
+    confirmations: [],
+    unresolved: [],
+    parseMode: "local_fallback" as any,
+    debugWarnings: ["Answered player-rating how-to request locally after AI route failed."],
+  } as any;
+}
+
+function looksLikeSharedRosterRatingHelpRequest(commandText: string) {
+  const text = String(commandText || "").trim();
+  if (!text) return false;
+  return /\b(shared|club)\b/i.test(text)
+    && /\b(rate|rating|ratings|skill|ovr)\b/i.test(text)
+    && /\b(i want|want to|how|can i|where|start|begin|open|rate for|rating for)\b/i.test(text);
+}
+
+function buildSharedRosterRatingHelpAnswer(
+  commandText: string,
+  rosterMode: "local" | "shared",
+): AiSmartCommandResponse | null {
+  if (!looksLikeSharedRosterRatingHelpRequest(commandText)) return null;
+
+  const assistantSummary = rosterMode === "shared"
+    ? "You are already in a shared roster. To rate players for this shared roster, open the Club area and use the rating/review section there. Your rating is private: other organizers should not see your individual score, and Fair Teams uses the Club average for shared team generation."
+    : "You are on a local/private roster right now, so shared roster ratings are not available here. Local rosters use your own normal ratings directly. To rate for a shared roster, first create or open a shared roster from the Club/shared roster area, then use the shared rating flow there. Your original local roster stays private.";
+
+  return {
+    schemaVersion: 1,
+    ok: true,
+    detectedLanguage: "unknown",
+    normalizedIntent: commandText.slice(0, 300),
+    assistantSummary,
+    confidence: 0.78,
+    actions: [],
+    confirmations: [],
+    unresolved: [],
+    parseMode: "local_fallback" as any,
+    debugWarnings: ["Answered shared-rating help request locally after AI route failed."],
+  } as any;
 }
 
 function buildLocalRosterStatFallbackAnswer(
@@ -233,7 +303,7 @@ function actionPrimaryVerb(action: AiSmartCommandAction) {
   return "Apply";
 }
 
-const AI_ASSISTANT_VERSION_LABEL = "AI beta · v1.20 graceful stat fallback";
+const AI_ASSISTANT_VERSION_LABEL = "AI beta · v1.23 OpenAI answers";
 
 type AiRosterMatch = {
   player: AiSmartCommandRosterPlayer;
@@ -1298,12 +1368,36 @@ export function AiSmartCommandPanel({
         throw aiErr;
       }
     } catch (err) {
-      const localStatAnswer = buildLocalRosterStatFallbackAnswer(trimmedCommand, players);
-      if (localStatAnswer) {
-        setResult(localStatAnswer);
-        onParsed?.(localStatAnswer);
+      const ratingHowToHelp = buildPlayerRatingHowToHelpAnswer(trimmedCommand, rosterMode);
+      if (ratingHowToHelp) {
+        setResult(ratingHowToHelp);
+        onParsed?.(ratingHowToHelp);
       } else {
-        setError(friendlyAiError(err));
+        const sharedRatingHelp = buildSharedRosterRatingHelpAnswer(trimmedCommand, rosterMode);
+        if (sharedRatingHelp) {
+          setResult(sharedRatingHelp);
+          onParsed?.(sharedRatingHelp);
+        } else {
+          const localStatAnswer = buildLocalRosterStatFallbackAnswer(trimmedCommand, players);
+          if (localStatAnswer) {
+            setResult(localStatAnswer);
+            onParsed?.(localStatAnswer);
+          } else if (/Fair Teams AI command failed|AI command failed/i.test(friendlyAiError(err)) && /(rate|rating|ratings|skill|ovr)/i.test(trimmedCommand)) {
+            const safeRatingHelp = buildPlayerRatingHowToHelpAnswer("How do I rate a player?", rosterMode);
+            if (safeRatingHelp) {
+              setResult({
+                ...safeRatingHelp,
+                normalizedIntent: trimmedCommand.slice(0, 300),
+                debugWarnings: ["Used safe rating help instead of showing a generic AI failure."],
+              });
+              onParsed?.(safeRatingHelp);
+            } else {
+              setError("I can explain ratings, but I could not handle that exact wording. In a local roster, open Roster, tap a player card, and edit the player rating/details there.");
+            }
+          } else {
+            setError(friendlyAiError(err));
+          }
+        }
       }
     } finally {
       setBusy(false);

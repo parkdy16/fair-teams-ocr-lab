@@ -113,7 +113,7 @@ function actionPrimaryVerb(action: AiSmartCommandAction) {
   return "Apply";
 }
 
-const AI_ASSISTANT_VERSION_LABEL = "AI beta · v1.10 complete list";
+const AI_ASSISTANT_VERSION_LABEL = "AI beta · v1.12 strict names";
 
 type AiRosterMatch = {
   player: AiSmartCommandRosterPlayer;
@@ -143,13 +143,27 @@ type AiTranscriptNameCandidate = {
 };
 
 function cleanAiSpokenName(value?: string | null) {
-  return String(value || "")
+  const raw = String(value || "")
     .replace(/[“”"']/g, " ")
-    .replace(/\b(?:is|are|was|were|here|today|playing|coming|players?|people|person|with|and|or|so|let'?s|make|team|teams|only|like|to|from|in|on|at|the|a|an|please|okay|ok|then|also|just|now|fair|teams?)\b/gi, " ")
     .replace(/[^A-Za-zÀ-ÖØ-öø-ÿ0-9 ._-]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+  if (!raw) return "";
+
+  // Do not permanently erase a single-word value here. A rare player/nickname could
+  // genuinely be "New" or "Four". Source-specific stop-word filtering happens later,
+  // where roster matches and AI-vs-transcript origin are known.
+  const tokens = raw.split(/\s+/).filter(Boolean);
+  if (tokens.length === 1) return raw;
+
+  return raw
+    .replace(/\b(?:is|are|was|were|be|been|being|am|have|has|had|having|here|today|playing|coming|players?|people|person|with|and|or|so|let'?s|lets|make|create|generate|build|split|divide|team|teams|only|like|to|from|in|on|at|the|a|an|please|okay|ok|then|also|just|now|old|next|last|first|second|third|fourth|fair|teams?)\b/gi, " ")
+    .replace(/\b(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)\b/gi, " ")
+    .replace(/\b(?:new)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
+
 
 function aiNameKey(value?: string | null) {
   return normalizePlayerNameForMatch(cleanAiSpokenName(value)).replace(/\s+/g, "");
@@ -216,7 +230,41 @@ function splitAiHeardNameForReview(rawName: string | null | undefined, players: 
 function isAiReviewStopName(value?: string | null) {
   const key = aiNameKey(value);
   if (!key) return true;
-  return /^(like|to|from|in|on|at|the|a|an|with|and|or|so|ok|okay|please|team|teams|player|players|today|here|only|make|lets|let|fair|now|then|also|just)$/.test(key);
+  return /^(like|to|from|in|on|at|the|a|an|with|and|or|so|ok|okay|please|team|teams|player|players|people|person|today|here|only|make|create|generate|build|split|divide|lets|let|fair|now|then|also|just|have|has|had|having|new|old|next|last|first|second|third|fourth|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|v|vs)$/.test(key);
+}
+
+
+function hasStrongRosterFallbackMatch(value?: string | null, players: AiSmartCommandRosterPlayer[] = []) {
+  const best = rankedOcrStyleRosterMatches(value, players, 1)[0];
+  return Boolean(best && best.score >= 78);
+}
+
+function looksLikeSafeMultiWordNewName(value?: string | null) {
+  const cleaned = cleanAiSpokenName(value);
+  const words = cleaned.split(/\s+/).filter(Boolean);
+  if (words.length < 2 || words.length > 3) return false;
+  return words.every((word) => word.length >= 3 && !isAiReviewStopName(word));
+}
+
+function isWeakTranscriptFallbackName(value?: string | null, players: AiSmartCommandRosterPlayer[] = []) {
+  const cleaned = cleanAiSpokenName(value);
+  const key = aiNameKey(cleaned);
+  if (!key || isAiReviewStopName(cleaned)) return true;
+  if (/^\d+$/.test(key)) return true;
+  if (hasStrongRosterFallbackMatch(cleaned, players)) return false;
+  if (looksLikeSafeMultiWordNewName(cleaned)) return false;
+  return true;
+}
+
+function isWeakAiExtractedName(value?: string | null, players: AiSmartCommandRosterPlayer[] = []) {
+  const cleaned = cleanAiSpokenName(value);
+  const key = aiNameKey(cleaned);
+  if (!key) return true;
+  if (/^\d+$/.test(key)) return true;
+  // AI-extracted names are trusted more than transcript fallback, but app/instruction
+  // words still should not become review rows unless they match this roster.
+  if (isAiReviewStopName(cleaned) && !hasStrongRosterFallbackMatch(cleaned, players)) return true;
+  return false;
 }
 
 function findApproxSourcePosition(sourceText: string, heardName: string, fallbackPosition: number) {
@@ -241,7 +289,7 @@ function cleanTranscriptListSegment(text: string) {
     .replace(/\b(?:let'?s|lets)\s+(?:make|create|generate|build|split|divide)\b.*$/i, " ")
     .replace(/\b(?:make|create|generate|build|split|divide)\s+(?:a\s+)?(?:team|teams)\b.*$/i, " ")
     .replace(/\b(?:is|are|was|were)\s+(?:here|playing|coming|available|in)\b/gi, ",")
-    .replace(/\b(?:here|today|playing|coming|available|players?|people|person|these|those|only)\b/gi, " ")
+    .replace(/\b(?:here|today|playing|coming|available|players?|people|person|these|those|only|have|has|had|new|old|make|create|generate|build|split|divide|team|teams?)\b/gi, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -285,7 +333,7 @@ function extractTranscriptNameCandidates(sourceText: string, players: AiSmartCom
   for (const piece of pieces) {
     const names = splitAiHeardNameForReview(piece, players);
     for (const name of names) {
-      if (isAiReviewStopName(name)) continue;
+      if (isWeakTranscriptFallbackName(name, players)) continue;
       const normalizedWords = normalizePlayerNameForMatch(name).split(/\s+/).filter(Boolean);
       if (normalizedWords.length > 3 && !isLikelyFullRosterName(name, players)) continue;
       candidates.push({ name, position: findApproxSourcePosition(raw, name, candidates.length * 1000) });
@@ -533,7 +581,10 @@ function buildAiReviewItems(result: AiSmartCommandResponse | null, players: AiSm
     const added: AiReviewItem[] = [];
     for (const heardName of heardNames) {
       const key = aiNameKey(heardName);
-      if (!key || heardName.length < 2 || isAiReviewStopName(heardName)) continue;
+      const weak = source === "transcript"
+        ? isWeakTranscriptFallbackName(heardName, players)
+        : isWeakAiExtractedName(heardName, players);
+      if (!key || heardName.length < 2 || weak) continue;
       const position = typeof explicitPosition === "number"
         ? explicitPosition
         : findApproxSourcePosition(sourceText, heardName, fallbackPosition++);
@@ -549,9 +600,7 @@ function buildAiReviewItems(result: AiSmartCommandResponse | null, players: AiSm
     return added[0] || null;
   };
 
-  for (const candidate of extractTranscriptNameCandidates(sourceText, players)) {
-    addHeardName(candidate.name, "transcript", candidate.position);
-  }
+  const transcriptCandidates = extractTranscriptNameCandidates(sourceText, players);
 
   for (const action of result.actions || []) {
     if (action.type === "add_new_player_suggestion" && action.newPlayerName) {
@@ -567,12 +616,28 @@ function buildAiReviewItems(result: AiSmartCommandResponse | null, players: AiSm
     if (item.issue === "unknown_player" || item.issue === "ambiguous_player") addHeardName(item.text, "ai");
   }
 
+  // Fallback transcript recovery is a safety net, not the main name source.
+  // Use it only when the AI returned no names, or when a long transcript appears to
+  // have clearly more roster-like names than the AI extracted. This avoids random
+  // command words such as "have", "new", or "four" entering the review modal.
+  const aiNameCount = byKey.size;
+  const safeTranscriptCandidates = transcriptCandidates.filter((candidate) => !isWeakTranscriptFallbackName(candidate.name, players));
+  const shouldUseTranscriptFallback = aiNameCount === 0
+    || (safeTranscriptCandidates.length >= 8 && safeTranscriptCandidates.length > aiNameCount + 2);
+  if (shouldUseTranscriptFallback) {
+    for (const candidate of safeTranscriptCandidates) {
+      addHeardName(candidate.name, "transcript", candidate.position);
+    }
+  }
+
   const items = Array.from(byKey.values()).map((item) => ({
     ...item,
     options: buildAiReviewOptions(item.heardName, players),
   }));
 
   return items
+    .filter((item) => item.source !== "transcript" || !isWeakTranscriptFallbackName(item.heardName, players))
+    .filter((item) => item.source !== "ai" || !isWeakAiExtractedName(item.heardName, players))
     .filter((item) => item.options.some((option) => option.kind === "existing") || item.heardName.length >= 2)
     .sort((a, b) => a.sourcePosition - b.sourcePosition || a.heardName.localeCompare(b.heardName));
 }

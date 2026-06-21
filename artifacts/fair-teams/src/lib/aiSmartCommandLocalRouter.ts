@@ -594,6 +594,21 @@ function parseRequestedTeamCount(commandText: string) {
   return null;
 }
 
+function parseExplicitTeamLayout(commandText: string) {
+  const normalized = normalizeText(commandText).replace(/[×x]/g, "v");
+  const numberPattern = "(\\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten)";
+  const layoutMatch = normalized.match(new RegExp(`\\b${numberPattern}\\s+teams?\\s+(?:of|with|with\\s+about|with\\s+roughly)\\s+${numberPattern}\\b`));
+  if (!layoutMatch) return null;
+
+  const teamCountRaw = layoutMatch[1];
+  const playersPerTeamRaw = layoutMatch[2];
+  const teamCount = /^\\d+$/.test(teamCountRaw) ? Number(teamCountRaw) : wordNumberToInt(teamCountRaw);
+  const playersPerTeam = /^\\d+$/.test(playersPerTeamRaw) ? Number(playersPerTeamRaw) : wordNumberToInt(playersPerTeamRaw);
+  if (!teamCount || !playersPerTeam) return null;
+  if (teamCount < 2 || teamCount > 8 || playersPerTeam < 1 || playersPerTeam > 20) return null;
+  return { teamCount, playersPerTeam };
+}
+
 function hasRequestedTeamSetupLanguage(commandText: string) {
   const normalized = normalizeText(commandText).replace(/[×x]/g, "v");
   return Boolean(
@@ -639,8 +654,9 @@ function parseGenerateTeamsFromSelectionCommand(
 
   const selectedPlayers = players.filter((player) => Boolean(player.attending));
   const selectedCount = selectedPlayers.length;
-  const requestedTeamCount = parseRequestedTeamCount(commandText);
-  const requestedPlayersPerTeam = parseTeamSize(commandText);
+  const explicitTeamLayout = parseExplicitTeamLayout(commandText);
+  const requestedTeamCount = explicitTeamLayout?.teamCount || parseRequestedTeamCount(commandText);
+  const requestedPlayersPerTeam = explicitTeamLayout?.playersPerTeam || parseTeamSize(commandText);
   const wantsShuffle = wantsDifferentTeamMix(commandText);
   const existingTeamCount = typeof context?.currentTeamCount === "number" && context.currentTeamCount >= 2
     ? Math.round(context.currentTeamCount)
@@ -924,9 +940,12 @@ function parseRankedRosterSelectionCommand(
   const countMatch = normalized.match(/\b(?:weakest|worst|lowest|strongest|best|highest|top)\s+(\d{1,2})\b/) ||
     normalized.match(/\b(\d{1,2})\s+(?:weakest|worst|lowest|strongest|best|highest|top)\b/);
   const requestedCount = countMatch ? Number(countMatch[1]) : null;
-  const playersPerTeam = parseTeamSize(normalized);
+  const explicitTeamLayout = parseExplicitTeamLayout(commandText);
+  const requestedTeamCount = explicitTeamLayout?.teamCount || parseRequestedTeamCount(commandText);
+  const playersPerTeam = explicitTeamLayout?.playersPerTeam || parseTeamSize(normalized);
+  const neededForExplicitLayout = explicitTeamLayout ? explicitTeamLayout.teamCount * explicitTeamLayout.playersPerTeam : null;
   const neededForTeamSize = playersPerTeam ? playersPerTeam * 2 : null;
-  const targetCount = requestedCount || neededForTeamSize;
+  const targetCount = requestedCount || neededForExplicitLayout || neededForTeamSize;
   if (!targetCount || targetCount < 2) return null;
 
   const rankedPlayers = [...players]
@@ -941,10 +960,17 @@ function parseRankedRosterSelectionCommand(
 
   if (rankedPlayers.length === 0) return null;
 
+  const finalTeamCount = requestedTeamCount || (playersPerTeam && rankedPlayers.length % playersPerTeam === 0 ? rankedPlayers.length / playersPerTeam : null);
+  const canGenerateAfterSelection = Boolean(finalTeamCount && finalTeamCount >= 2 && rankedPlayers.length >= finalTeamCount);
+
   const selectAction = createEmptyAction("select_players");
   selectAction.capabilityId = "today.select_players";
-  selectAction.distribution = "replace_today_selection";
-  selectAction.reason = `${wantsWeakest ? "Weakest" : "Strongest"} ${rankedPlayers.length} players by roster skill. This replaces today's current selection.`;
+  selectAction.distribution = canGenerateAfterSelection ? "replace_today_selection_then_generate" : "replace_today_selection";
+  selectAction.playersPerTeam = playersPerTeam;
+  selectAction.teamCount = canGenerateAfterSelection ? finalTeamCount : null;
+  selectAction.reason = canGenerateAfterSelection
+    ? `${wantsWeakest ? "Weakest" : "Strongest"} ${rankedPlayers.length} players by roster skill. This will clear Today, select those players, then generate ${finalTeamCount} fair teams.`
+    : `${wantsWeakest ? "Weakest" : "Strongest"} ${rankedPlayers.length} players by roster skill. This replaces today's current selection.`;
   selectAction.playerRefs = rankedPlayers.map((player) => ({
     playerId: player.id,
     rosterName: player.name,
@@ -953,22 +979,17 @@ function parseRankedRosterSelectionCommand(
   }));
 
   const actions: AiSmartCommandAction[] = [selectAction];
-  if (playersPerTeam) {
-    const sizeAction = createEmptyAction("set_team_size");
-    sizeAction.capabilityId = "teams.set_team_size";
-    sizeAction.playersPerTeam = playersPerTeam;
-    sizeAction.reason = `${playersPerTeam}v${playersPerTeam} using the selected ${rankedPlayers.length} players.`;
-    actions.push(sizeAction);
-  }
 
   return localResponse({
-    normalizedIntent: `${wantsWeakest ? "Select weakest" : "Select strongest"} ${rankedPlayers.length} roster players${playersPerTeam ? ` for ${playersPerTeam}v${playersPerTeam}` : ""}`,
-    assistantSummary: `I found the ${wantsWeakest ? "weakest" : "strongest"} ${rankedPlayers.length} players in this roster by skill and prepared an exact Today selection.${playersPerTeam ? ` Then set up ${playersPerTeam}v${playersPerTeam}.` : ""}`,
+    normalizedIntent: `${wantsWeakest ? "Select weakest" : "Select strongest"} ${rankedPlayers.length} roster players${canGenerateAfterSelection ? ` and generate ${finalTeamCount} teams` : playersPerTeam ? ` for ${playersPerTeam}v${playersPerTeam}` : ""}`,
+    assistantSummary: canGenerateAfterSelection
+      ? `I found the ${wantsWeakest ? "weakest" : "strongest"} ${rankedPlayers.length} players in this roster by skill. Because you asked for teams too, I will first clear Today and select those ${rankedPlayers.length} players, then generate ${finalTeamCount} fair teams.`
+      : `I found the ${wantsWeakest ? "weakest" : "strongest"} ${rankedPlayers.length} players in this roster by skill and prepared an exact Today selection.${playersPerTeam ? ` Then set up ${playersPerTeam}v${playersPerTeam}.` : ""}`,
     confidence: 0.98,
     actions,
     confirmations: [],
     unresolved: [],
-    debugWarnings: ["Handled by Fair Teams local ranked-selection parser."],
+    debugWarnings: ["Handled by Fair Teams local ranked-selection parser before current-Today team generation."],
   });
 }
 
@@ -1053,6 +1074,13 @@ export function parseFairTeamsLocalSmartCommand(
     if (presentSelectionFirst) return presentSelectionFirst;
   }
 
+  // Ranked roster requests such as “best 10 from the roster” or
+  // “two teams of five with the best players” must be handled before the
+  // current-Today team orchestrator. Otherwise the assistant may incorrectly
+  // use whoever is already selected in Today.
+  const rankedSelection = parseRankedRosterSelectionCommand(commandText, players);
+  if (rankedSelection) return rankedSelection;
+
   // Team-generation and shuffle commands must be handled before generic name-list parsing.
   // Otherwise natural phrases like “shuffle the teams” or “make teams of 2” can be
   // misread as fake player names.
@@ -1061,9 +1089,6 @@ export function parseFairTeamsLocalSmartCommand(
 
   const presentSelection = parsePresentPlayerSelectionCommand(commandText, players);
   if (presentSelection) return presentSelection;
-
-  const rankedSelection = parseRankedRosterSelectionCommand(commandText, players);
-  if (rankedSelection) return rankedSelection;
 
   const rosterQuestion = parseRosterQuestion(commandText, players);
   if (rosterQuestion) return rosterQuestion;

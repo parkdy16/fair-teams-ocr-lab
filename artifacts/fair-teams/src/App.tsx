@@ -1234,6 +1234,21 @@ function App() {
         }),
       );
       setTodayRosterChosen(true);
+
+      const shouldGenerateAfterSelection = shouldReplaceTodaySelection && /then_generate/i.test(String(action.distribution || ""));
+      if (shouldGenerateAfterSelection) {
+        let teamCount = typeof action.teamCount === "number" ? Math.round(action.teamCount) : null;
+        const playersPerTeam = typeof action.playersPerTeam === "number" ? Math.round(action.playersPerTeam) : null;
+        if (!teamCount && playersPerTeam && playersPerTeam > 0 && playerIds.size % playersPerTeam === 0) {
+          teamCount = playerIds.size / playersPerTeam;
+        }
+        if (!teamCount || teamCount < 2 || playerIds.size < teamCount) {
+          return `Replaced Today with ${playerIds.size} player${playerIds.size === 1 ? "" : "s"}. I still need a valid team count before generating teams.`;
+        }
+        const safeTeamCount = prepareTeamsFromAi(teamCount, { autoGenerate: true });
+        return `Replaced Today with ${playerIds.size} player${playerIds.size === 1 ? "" : "s"} and generated ${safeTeamCount} fair team${safeTeamCount === 1 ? "" : "s"}.`;
+      }
+
       return shouldReplaceTodaySelection
         ? `Replaced Today with ${playerIds.size} player${playerIds.size === 1 ? "" : "s"}.`
         : `Added/selected ${playerIds.size} player${playerIds.size === 1 ? "" : "s"} for Today without clearing the current selection.`;

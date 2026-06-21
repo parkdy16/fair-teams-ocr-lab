@@ -170,6 +170,7 @@ function parseModeLabel(mode?: AiSmartCommandResponse["parseMode"]) {
 function actionCardTitle(action: AiSmartCommandAction) {
   if (action.type === "select_players") {
     if (/possible existing match/i.test(String(action.reason || ""))) return "Use existing player";
+    if (/then_generate/i.test(String(action.distribution || "")) || action.teamCount) return "Replace Today + generate";
     if (/replace|exact|only/i.test(String(action.distribution || ""))) return "Replace Today selection";
     return "Add to Today";
   }
@@ -196,6 +197,7 @@ function actionPrimaryVerb(action: AiSmartCommandAction) {
   if (action.type === "club_add_note") return "Add note";
   if (action.type === "add_new_player_suggestion") return "Add player";
   if (action.type === "select_players") {
+    if (/then_generate/i.test(String(action.distribution || "")) || action.teamCount) return "Replace + Generate";
     return /replace|exact|only/i.test(String(action.distribution || "")) ? "Replace Today" : "Add to Today";
   }
   if (action.type === "unselect_players") return "Remove";
@@ -239,6 +241,14 @@ function actionImpactLine(action: AiSmartCommandAction) {
   const playerWord = count === 1 ? "player" : "players";
 
   if (action.type === "select_players") {
+    if (/then_generate/i.test(String(action.distribution || "")) || action.teamCount) {
+      const teamText = action.teamCount
+        ? `${action.teamCount} team${action.teamCount === 1 ? "" : "s"}`
+        : action.playersPerTeam
+          ? `${action.playersPerTeam}v${action.playersPerTeam} teams`
+          : "fair teams";
+      return `Will clear Today, select ${count} ${playerWord}, then generate ${teamText}.`;
+    }
     if (/replace|exact|only/i.test(String(action.distribution || ""))) {
       return `Will clear Today and select ${count} ${playerWord}.`;
     }

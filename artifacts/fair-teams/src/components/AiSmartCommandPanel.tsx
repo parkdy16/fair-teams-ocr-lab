@@ -113,7 +113,7 @@ function actionPrimaryVerb(action: AiSmartCommandAction) {
   return "Apply";
 }
 
-const AI_ASSISTANT_VERSION_LABEL = "AI beta · v1.9 review add";
+const AI_ASSISTANT_VERSION_LABEL = "AI beta · v1.10 complete list";
 
 type AiRosterMatch = {
   player: AiSmartCommandRosterPlayer;
@@ -133,6 +133,13 @@ type AiReviewItem = {
   key: string;
   heardName: string;
   options: AiReviewOption[];
+  sourcePosition: number;
+  source: "ai" | "transcript" | "merged";
+};
+
+type AiTranscriptNameCandidate = {
+  name: string;
+  position: number;
 };
 
 function cleanAiSpokenName(value?: string | null) {
@@ -204,6 +211,96 @@ function splitAiHeardNameForReview(rawName: string | null | undefined, players: 
     seen.add(key);
     return true;
   });
+}
+
+function isAiReviewStopName(value?: string | null) {
+  const key = aiNameKey(value);
+  if (!key) return true;
+  return /^(like|to|from|in|on|at|the|a|an|with|and|or|so|ok|okay|please|team|teams|player|players|today|here|only|make|lets|let|fair|now|then|also|just)$/.test(key);
+}
+
+function findApproxSourcePosition(sourceText: string, heardName: string, fallbackPosition: number) {
+  const source = String(sourceText || "");
+  const cleaned = cleanAiSpokenName(heardName);
+  if (!source || !cleaned) return fallbackPosition;
+  const lowerSource = source.toLowerCase();
+  const direct = lowerSource.indexOf(cleaned.toLowerCase());
+  if (direct >= 0) return direct;
+
+  const words = cleaned.toLowerCase().split(/\s+/).filter((word) => word.length >= 2);
+  const positions = words
+    .map((word) => lowerSource.indexOf(word))
+    .filter((position) => position >= 0);
+  return positions.length > 0 ? Math.min(...positions) : fallbackPosition;
+}
+
+function cleanTranscriptListSegment(text: string) {
+  return String(text || "")
+    .replace(/[“”"']/g, " ")
+    .replace(/\b(?:okay|ok|please|so|then|also|just|now)\b/gi, " ")
+    .replace(/\b(?:let'?s|lets)\s+(?:make|create|generate|build|split|divide)\b.*$/i, " ")
+    .replace(/\b(?:make|create|generate|build|split|divide)\s+(?:a\s+)?(?:team|teams)\b.*$/i, " ")
+    .replace(/\b(?:is|are|was|were)\s+(?:here|playing|coming|available|in)\b/gi, ",")
+    .replace(/\b(?:here|today|playing|coming|available|players?|people|person|these|those|only)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extractTranscriptNameCandidates(sourceText: string, players: AiSmartCommandRosterPlayer[]): AiTranscriptNameCandidate[] {
+  const raw = String(sourceText || "").trim();
+  if (!raw) return [];
+  const hasAttendanceShape = /[,;\n]/.test(raw)
+    || /\b(today\s+we\s+have|we\s+have|with|is\s+here|are\s+here|playing\s+today|coming\s+today|are\s+playing)\b/i.test(raw)
+    || /\b(make|create|generate|build|split)\b.*\bwith\b/i.test(raw);
+  if (!hasAttendanceShape) return [];
+
+  let segment = raw;
+  const withMatch = segment.match(/\b(?:make|create|generate|build|split|divide)\b.*?\bwith\b/i);
+  if (withMatch && typeof withMatch.index === "number") {
+    segment = segment.slice(withMatch.index + withMatch[0].length);
+  } else {
+    const starters = [
+      /\btoday\s+we\s+have\b/i,
+      /\bwe\s+have\b/i,
+      /\bfor\s+today\b/i,
+      /\btoday\b/i,
+    ];
+    for (const starter of starters) {
+      const match = segment.match(starter);
+      if (match && typeof match.index === "number" && match.index < Math.max(24, segment.length / 3)) {
+        segment = segment.slice(match.index + match[0].length);
+        break;
+      }
+    }
+  }
+
+  const cleanedSegment = cleanTranscriptListSegment(segment);
+  if (!cleanedSegment) return [];
+  const pieces = cleanedSegment
+    .split(/[,;\n]+|\s+&\s+|\s+\+\s+|\s+and\s+|\s+und\s+|\s+그리고\s+/i)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  const candidates: AiTranscriptNameCandidate[] = [];
+  for (const piece of pieces) {
+    const names = splitAiHeardNameForReview(piece, players);
+    for (const name of names) {
+      if (isAiReviewStopName(name)) continue;
+      const normalizedWords = normalizePlayerNameForMatch(name).split(/\s+/).filter(Boolean);
+      if (normalizedWords.length > 3 && !isLikelyFullRosterName(name, players)) continue;
+      candidates.push({ name, position: findApproxSourcePosition(raw, name, candidates.length * 1000) });
+    }
+  }
+
+  const seen = new Set<string>();
+  return candidates
+    .filter((candidate) => {
+      const key = aiNameKey(candidate.name);
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((a, b) => a.position - b.position);
 }
 
 function displayAiHeardName(value?: string | null) {
@@ -427,34 +524,47 @@ function applyAiReviewNameEdits(items: AiReviewItem[], edits: Record<string, str
   return items.map((item) => rebuildAiReviewItemWithEditedName(item, edits[item.key], players));
 }
 
-function buildAiReviewItems(result: AiSmartCommandResponse | null, players: AiSmartCommandRosterPlayer[]): AiReviewItem[] {
+function buildAiReviewItems(result: AiSmartCommandResponse | null, players: AiSmartCommandRosterPlayer[], sourceText = ""): AiReviewItem[] {
   if (!result || !players.length) return [];
   const byKey = new Map<string, AiReviewItem>();
-  const addHeardName = (rawName?: string | null) => {
+  let fallbackPosition = 100000;
+  const addHeardName = (rawName?: string | null, source: "ai" | "transcript" = "ai", explicitPosition?: number) => {
     const heardNames = splitAiHeardNameForReview(rawName, players);
     const added: AiReviewItem[] = [];
     for (const heardName of heardNames) {
       const key = aiNameKey(heardName);
-      if (!key || heardName.length < 2) continue;
-      if (/^(like|to|from|in|on|at|the|a|an|with|and|or|so|ok|okay|please|team|teams|player|players)$/i.test(heardName.trim())) continue;
-      if (!byKey.has(key)) byKey.set(key, { key, heardName, options: [] });
+      if (!key || heardName.length < 2 || isAiReviewStopName(heardName)) continue;
+      const position = typeof explicitPosition === "number"
+        ? explicitPosition
+        : findApproxSourcePosition(sourceText, heardName, fallbackPosition++);
+      const existing = byKey.get(key);
+      if (existing) {
+        existing.sourcePosition = Math.min(existing.sourcePosition, position);
+        existing.source = existing.source === source ? existing.source : "merged";
+      } else {
+        byKey.set(key, { key, heardName, options: [], sourcePosition: position, source });
+      }
       added.push(byKey.get(key)!);
     }
     return added[0] || null;
   };
 
+  for (const candidate of extractTranscriptNameCandidates(sourceText, players)) {
+    addHeardName(candidate.name, "transcript", candidate.position);
+  }
+
   for (const action of result.actions || []) {
     if (action.type === "add_new_player_suggestion" && action.newPlayerName) {
-      addHeardName(action.newPlayerName);
+      addHeardName(action.newPlayerName, "ai");
     }
     if (["select_players", "unselect_players", "mark_players_late", "add_pairing_rule", "lock_player_to_team"].includes(action.type)) {
       for (const ref of action.playerRefs || []) {
-        addHeardName(ref.spokenName || ref.rosterName);
+        addHeardName(ref.spokenName || ref.rosterName, "ai");
       }
     }
   }
   for (const item of result.unresolved || []) {
-    if (item.issue === "unknown_player" || item.issue === "ambiguous_player") addHeardName(item.text);
+    if (item.issue === "unknown_player" || item.issue === "ambiguous_player") addHeardName(item.text, "ai");
   }
 
   const items = Array.from(byKey.values()).map((item) => ({
@@ -462,7 +572,15 @@ function buildAiReviewItems(result: AiSmartCommandResponse | null, players: AiSm
     options: buildAiReviewOptions(item.heardName, players),
   }));
 
-  return items.filter((item) => item.options.some((option) => option.kind === "existing") || item.heardName.length >= 2);
+  return items
+    .filter((item) => item.options.some((option) => option.kind === "existing") || item.heardName.length >= 2)
+    .sort((a, b) => a.sourcePosition - b.sourcePosition || a.heardName.localeCompare(b.heardName));
+}
+
+function getAiReviewSourceStats(items: AiReviewItem[]) {
+  const transcript = items.filter((item) => item.source === "transcript" || item.source === "merged").length;
+  const ai = items.filter((item) => item.source === "ai" || item.source === "merged").length;
+  return { transcript, ai };
 }
 
 function getAiReviewDefaultSelections(items: AiReviewItem[]) {
@@ -544,14 +662,14 @@ function makeReviewAddNewPlayerAction(item: AiReviewItem): AiSmartCommandAction 
   };
 }
 
-function makeReviewGenerateTeamsAction(teamAction?: AiSmartCommandAction | null, fallbackTeamCount?: number | null): AiSmartCommandAction {
+function makeReviewGenerateTeamsAction(teamAction?: AiSmartCommandAction | null): AiSmartCommandAction {
   return {
     type: "generate_teams",
     playerRefs: [],
     newPlayerName: null,
     suggestedSkill: null,
     playersPerTeam: teamAction?.playersPerTeam ?? null,
-    teamCount: teamAction?.teamCount ?? fallbackTeamCount ?? null,
+    teamCount: teamAction?.teamCount ?? null,
     pairingKind: null,
     teamLabel: null,
     role: null,
@@ -572,7 +690,6 @@ function buildActionsFromReviewSelections(
   result: AiSmartCommandResponse,
   items: AiReviewItem[],
   selections: Record<string, string>,
-  fallbackTeamCount?: number | null,
 ): AiSmartCommandAction[] {
   const seenPlayerIds = new Set<string>();
   const playerRefs = items.flatMap((item) => {
@@ -591,7 +708,6 @@ function buildActionsFromReviewSelections(
   const actions: AiSmartCommandAction[] = [];
   const teamAction = result.actions.find(actionHasTeamFollowup);
   const shouldGenerate = Boolean(teamAction) || /generate|make|team/i.test(result.normalizedIntent || "");
-  const hasNewSelections = items.some((item) => selections[item.key] === "new");
 
   if (playerRefs.length > 0) {
     actions.push({
@@ -599,13 +715,13 @@ function buildActionsFromReviewSelections(
       playerRefs,
       newPlayerName: null,
       suggestedSkill: null,
-      playersPerTeam: !hasNewSelections && shouldGenerate ? teamAction?.playersPerTeam ?? null : null,
-      teamCount: !hasNewSelections && shouldGenerate ? teamAction?.teamCount ?? fallbackTeamCount ?? null : null,
+      playersPerTeam: null,
+      teamCount: null,
       pairingKind: null,
       teamLabel: null,
       role: null,
       attribute: null,
-      distribution: shouldGenerate && !hasNewSelections ? "replace_today_selection_then_generate" : "replace_today_selection",
+      distribution: shouldGenerate ? "replace_today_selection" : "replace_today_selection",
       noteText: null,
       colorName: null,
       targetName: null,
@@ -627,8 +743,8 @@ function buildActionsFromReviewSelections(
     if (addAction) actions.push(addAction);
   }
 
-  if (shouldGenerate && hasNewSelections && actions.length > 0 && (teamAction?.teamCount || teamAction?.playersPerTeam || fallbackTeamCount)) {
-    actions.push(makeReviewGenerateTeamsAction(teamAction, fallbackTeamCount));
+  if (shouldGenerate && actions.length > 0) {
+    actions.push(makeReviewGenerateTeamsAction(teamAction));
   }
 
   return actions;
@@ -872,10 +988,12 @@ export function AiSmartCommandPanel({
     });
   }, [enabled, storageKey, commandText, voiceTranscript, error, result, applyMessage, showTodayShortcut, busy, voiceBusy, recording]);
 
-  const baseAiReviewItems = useMemo(() => buildAiReviewItems(result, players), [result, players]);
+  const aiReviewSourceText = voiceTranscript || commandText;
+  const baseAiReviewItems = useMemo(() => buildAiReviewItems(result, players, aiReviewSourceText), [result, players, aiReviewSourceText]);
   const aiReviewItems = useMemo(() => applyAiReviewNameEdits(baseAiReviewItems, reviewNameEdits, players), [baseAiReviewItems, reviewNameEdits, players]);
   const hasAiReviewItems = aiReviewItems.length > 0;
   const aiReviewStats = useMemo(() => getAiReviewStats(aiReviewItems, reviewSelections), [aiReviewItems, reviewSelections]);
+  const aiReviewSourceStats = useMemo(() => getAiReviewSourceStats(aiReviewItems), [aiReviewItems]);
   const selectedPlayerIdCounts = useMemo(() => getSelectedPlayerIdCounts(aiReviewItems, reviewSelections), [aiReviewItems, reviewSelections]);
 
   useEffect(() => {
@@ -911,7 +1029,7 @@ export function AiSmartCommandPanel({
 
   const applyReviewedAiNames = async () => {
     if (!result || !onApplyAction) return;
-    const actions = buildActionsFromReviewSelections(result, aiReviewItems, reviewSelections, currentTeamCount);
+    const actions = buildActionsFromReviewSelections(result, aiReviewItems, reviewSelections);
     if (actions.length === 0) {
       setError("Choose at least one roster player or add a new player before applying.");
       return;
@@ -1185,6 +1303,11 @@ export function AiSmartCommandPanel({
                   <div className="mt-1 text-[11px] font-semibold leading-snug opacity-80">
                     {aiReviewStats.heard} names heard · {aiReviewStats.matched} matched · {aiReviewStats.needsReview} need review
                   </div>
+                  {aiReviewSourceStats.transcript > aiReviewSourceStats.ai && (
+                    <div className="mt-1 text-[10px] font-bold leading-snug opacity-70">
+                      Checking transcript order: {aiReviewSourceStats.transcript} possible names · AI returned {aiReviewSourceStats.ai}.
+                    </div>
+                  )}
                 </div>
                 <button
                   type="button"
@@ -1303,6 +1426,11 @@ export function AiSmartCommandPanel({
               <div className="mt-1 text-xs font-semibold leading-snug text-slate-500">
                 {aiReviewStats.heard} names heard · {aiReviewStats.matched} matched · {aiReviewStats.needsReview} need review
               </div>
+              {aiReviewSourceStats.transcript > aiReviewSourceStats.ai && (
+                <div className="mt-1 text-[10px] font-bold leading-snug text-amber-600">
+                  I added possible missed transcript names in the original spoken order.
+                </div>
+              )}
               {aiReviewStats.duplicateSelected > 0 && (
                 <div className="mt-2 rounded-2xl bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-800">
                   {aiReviewStats.duplicateSelected} duplicate selection{aiReviewStats.duplicateSelected === 1 ? "" : "s"} found. Duplicates will only be applied once.
@@ -1311,11 +1439,14 @@ export function AiSmartCommandPanel({
             </div>
             <div className="max-h-[58vh] overflow-y-auto px-4 py-3">
               <div className="grid gap-2">
-                {aiReviewItems.map((item) => (
+                {aiReviewItems.map((item, itemIndex) => (
                   <div key={item.key} className="rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2.5">
                     <div className="flex items-start justify-between gap-2">
                       <div>
-                        <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Heard · tap to correct</div>
+                        <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wide text-slate-400">
+                          <span className="rounded-full bg-white px-1.5 py-0.5 text-slate-500 shadow-sm">{itemIndex + 1}</span>
+                          <span>Heard · tap to correct</span>
+                        </div>
                         <input
                           type="text"
                           value={reviewNameEdits[item.key] ?? item.heardName}

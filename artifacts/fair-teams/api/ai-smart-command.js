@@ -505,10 +505,11 @@ function buildCommandHints(commandText, roster) {
     detectedEquipmentAction: equipmentAction,
     expectedPlayerCountForRequestedGame: playersPerTeam ? playersPerTeam * 2 : null,
     listedPlayerCount: candidateNames.length || null,
+    strictAttendanceExtraction: candidateNames.length >= 8 ? "long_list_do_not_drop_names" : "normal",
     selectedAllPlayerCount: selectAllRosterPlayers ? roster.length : null,
     matchedListedPlayerCount: matchedCount || null,
     unknownListedPlayerCount: unknownCount || null,
-    instruction: "These are deterministic hints from Fair Teams before calling AI. Use them unless the user text clearly contradicts them. Every candidate name must be represented in actions, confirmations, or unresolved items. If selectAllRosterPlayers is true, select every roster player. If detectedTeamCount is set, set that many teams; do not confuse it with players per team. If detectedClubNoteText, roster color, roster rename, target area, generate teams, spread role, or detectedEquipmentAction is set, return the matching app action even if not executable yet. Equipment move requests should mention the bag/item in targetName and the destination holder in playerRefs when known.",
+    instruction: "These are deterministic hints from Fair Teams before calling AI. Use them unless the user text clearly contradicts them. Every candidate name must be represented in actions, confirmations, or unresolved items. For long attendance lists, do not summarize, truncate, or silently drop uncertain names; include low-confidence person-name candidates instead. If selectAllRosterPlayers is true, select every roster player. If detectedTeamCount is set, set that many teams; do not confuse it with players per team. If detectedClubNoteText, roster color, roster rename, target area, generate teams, spread role, or detectedEquipmentAction is set, return the matching app action even if not executable yet. Equipment move requests should mention the bag/item in targetName and the destination holder in playerRefs when known.",
   };
 }
 
@@ -546,7 +547,7 @@ Important roster rules:
 - If the user names an existing player, return that player in playerRefs.
 - If the user names someone not in the roster, return add_new_player_suggestion and a missing_player confirmation.
 - If a name could be several players, return ambiguous_player confirmation.
-- Do not silently ignore names in a player list.
+- Do not silently ignore names in a player list. For long lists, preserve the spoken order and include every possible person-name candidate, even if confidence is low.
 
 Today/player-list rules:
 - "Joon, Jorge, Jan are playing today" = select Joon, Jorge, Jan.
@@ -1263,13 +1264,14 @@ Output contract:
 - You are the primary planner. Read commandText yourself first, then use commandHints as helpful clues only. Do not rely only on commandHints.
 - If commandHints misses, merges, or pollutes a name list, correct it from commandText. Example: "Arthur is here, Ayashini, Anna... let's make a team" is an attendance list plus generate-teams request.
 - Attendance/list patterns include "X is here, Y, Z", "today we have X, Y", "make a team with X, Y", "X, Y and Z are playing", and similar natural speech. Extract all person names before deciding to generate teams.
-- When a command contains both player names and "make/generate teams", return select_players first, then set_team_count/set_team_size if stated, then generate_teams. Do not fall back to current Today selection when names are present.
+- When a command contains both player names and "make/generate teams", return select_players first, then set_team_count/set_team_size if stated, then generate_teams. Do not fall back to current Today selection when names are present. Do not omit names just because the list is long.
 - Use roster names and aliases to match likely speech/transcription errors. Prefer existing roster players over adding new players when there is a plausible phonetic/near spelling match, e.g. June→Joon, Yan→Jan, Anya→Tanja, Briesh/Presh→Brijesh, Ayesha/Ayeshni→Ayashini, Unursha→Onursha/Onursah, Onursa→Onursah.
 - For each heard person name, compare it against every roster.name and roster.aka before using add_new_player_suggestion. If one or more roster names are plausible, return select_players playerRefs for the plausible existing roster IDs and put the heard value in spokenName. Let the app review modal handle ambiguity. Only use add_new_player_suggestion when no existing roster/aka is plausible.
 - You are the source of truth for the initial spoken/typed person list. Use commandText first and hand-pick only real person names from the transcript; commandHints.candidateNames may be noisy and must not be copied blindly.
-- Every real person name you identify from commandText must appear in select_players, add_new_player_suggestion, confirmations, or unresolved. Ignore instruction/filler words such as here, today, players, only, make, team, teams, with, so, let's, like, to, from, in, on, the, a, an, please, okay, ok, and similar non-name words.
+- Every real person name you identify from commandText must appear in select_players, add_new_player_suggestion, confirmations, or unresolved, in the same order it was spoken/typed. If 21 people are mentioned, the structured output must account for 21 people, not a shorter summary. Ignore instruction/filler words such as here, today, players, only, make, team, teams, with, so, let's, like, to, from, in, on, the, a, an, please, okay, ok, and similar non-name words.
 - If a token could be either a filler/instruction word or a name, omit it unless it clearly appears in the roster/aka list or is clearly introduced as a person.
 - For attendance commands, use add_new_player_suggestion only for plausible human names. Never create new-player suggestions for app words, sentence fragments, or multi-word blobs that include filler words.
+- If commandHints.strictAttendanceExtraction is long_list_do_not_drop_names, treat the command as an attendance register: be exhaustive, preserve order, and include uncertain names as unresolved/add_new_player_suggestion rather than dropping them.
 - If commandHints.selectAllRosterPlayers is true, create select_players containing every roster player.
 - When commandHints detects playersPerTeam, create set_team_size unless the user clearly meant something else.
 - When commandHints detects teamCount, create set_team_count. "make 6 teams" means teamCount=6, not 6v6.
@@ -1335,13 +1337,13 @@ export default async function handler(req, res) {
   const payload = {
     model: DEFAULT_MODEL,
     temperature: 0.1,
-    max_output_tokens: 1800,
+    max_output_tokens: 3200,
     input: [
       { role: "system", content: systemPrompt() },
       {
         role: "user",
         content: JSON.stringify({
-          task: "AI PLANNER V1.8. Reply as the Fair Teams Assistant. If this is conversation or a simple question, answer naturally in assistantSummary with no actions. If this is a Fair Teams product question, answer from fairTeamsKnowledge and the operating manual, not from generic sports-app assumptions. If this is a Fair Teams app request, read commandText yourself and build a safe action plan. Use commandHints only as helper clues, not as the source of truth. Action requests always beat product Q&A. For mixed commands like 'Arthur is here, Ayashini, Anna... let's make a team', extract the attendance list first, hand-pick only actual person names, match names against roster/aka, then return select_players followed by generate_teams. Do not explain the Today tab and do not generate from current Today selection when names are present. Do not copy noisy commandHints names blindly. Ignore filler words such as like, to, from, in, on, the, a, an, with, here, today, only, make, and team. Do not create new-player suggestions for filler words or sentence fragments. Prefer plausible existing roster matches over adding new players for speech errors such as June/Joon, Yan/Jan, Anya/Tanja, Briesh/Presh/Brijesh, Ayesha/Ayashini, Unursha/Onursha. Return existing player IDs when plausible; the app review modal will let the user confirm or change.",
+          task: "AI PLANNER V1.10. Reply as the Fair Teams Assistant. If this is conversation or a simple question, answer naturally in assistantSummary with no actions. If this is a Fair Teams product question, answer from fairTeamsKnowledge and the operating manual, not from generic sports-app assumptions. If this is a Fair Teams app request, read commandText yourself and build a safe action plan. Use commandHints only as helper clues, not as the source of truth. Action requests always beat product Q&A. For mixed commands like 'Arthur is here, Ayashini, Anna... let's make a team', extract the attendance list first, hand-pick every possible person name in spoken order, match names against roster/aka, then return select_players followed by generate_teams. Do not explain the Today tab and do not generate from current Today selection when names are present. Do not copy noisy commandHints names blindly, but if commandHints/list shape suggests more names than your extracted list, review commandText again and include the possible missed person-name fragments as low-confidence unresolved/add_new_player_suggestion entries rather than dropping them. Ignore filler words such as like, to, from, in, on, the, a, an, with, here, today, only, make, and team. Do not create new-player suggestions for filler words or sentence fragments. Prefer plausible existing roster matches over adding new players for speech errors such as June/Joon, Yan/Jan, Anya/Tanja, Briesh/Presh/Brijesh, Ayesha/Ayashini, Unursha/Onursha. Return existing player IDs when plausible; the app review modal will let the user confirm or change. For long lists, the most important requirement is completeness: do not silently omit names.",
           commandText,
           context,
           roster,

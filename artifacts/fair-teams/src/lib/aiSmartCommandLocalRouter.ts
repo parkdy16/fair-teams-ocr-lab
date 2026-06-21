@@ -549,12 +549,31 @@ function parseRequestedTeamCount(commandText: string) {
   return null;
 }
 
+function hasRequestedTeamSetupLanguage(commandText: string) {
+  const normalized = normalizeText(commandText).replace(/[×x]/g, "v");
+  return Boolean(
+    parseRequestedTeamCount(commandText) ||
+      parseTeamSize(commandText) ||
+      /\b(?:one|two|three|four|five|six|seven|eight)\s+teams?\b/.test(normalized) ||
+      /\b\d{1,2}\s+teams?\b/.test(normalized) ||
+      /\bteams?\s+of\s+(?:one|two|three|four|five|six|seven|eight|\d{1,2})\b/.test(normalized),
+  );
+}
+
 function wantsTeamGenerationFromCurrentSelection(commandText: string) {
   const normalized = normalizeText(commandText);
+  const normalizedV = normalized.replace(/[×x]/g, "v");
   const hasGenerateVerb = /\b(make|create|generate|prepare|build|split|divide|draw|mix|shuffle)\b/.test(normalized);
-  const hasTeamWord = /\b(fair|balanced|team|teams|5v5|4v4|3v3|2v2)\b/.test(normalized.replace(/[×x]/g, "v"));
+  const hasTeamWord = /\b(fair|balanced|team|teams|5v5|4v4|3v3|2v2)\b/.test(normalizedV);
   const refersToCurrentSelection = /\b(selected|selection|currently selected|today|today tab|present|here|playing|current players|these players|them)\b/.test(normalized);
-  return hasGenerateVerb && hasTeamWord && (refersToCurrentSelection || !/,|\band\b|\bplus\b|&/.test(commandText));
+  const hasTeamSetupLanguage = hasRequestedTeamSetupLanguage(commandText);
+
+  // Older routing treated any comma/"and" in a team-generation sentence as a player list.
+  // That made normal speech like “make teams of 2, so basically two teams” fall through to
+  // the server AI, which could invent fake player names from command words. Team setup
+  // language should be handled by the deterministic local team orchestrator first.
+  const hasListSignal = /,|\band\b|\bplus\b|&/.test(commandText);
+  return hasGenerateVerb && hasTeamWord && (refersToCurrentSelection || hasTeamSetupLanguage || !hasListSignal);
 }
 
 function wantsDifferentTeamMix(commandText: string) {

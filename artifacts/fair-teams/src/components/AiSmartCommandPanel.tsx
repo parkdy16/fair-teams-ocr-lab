@@ -167,10 +167,12 @@ function parseModeLabel(mode?: AiSmartCommandResponse["parseMode"]) {
 
 function actionCardTitle(action: AiSmartCommandAction) {
   if (action.type === "select_players") {
+    if (/possible existing match/i.test(String(action.reason || ""))) return "Use existing player";
     if (/replace|exact|only/i.test(String(action.distribution || ""))) return "Replace Today selection";
-    return "Add/select for Today";
+    return "Add to Today";
   }
   if (action.type === "unselect_players") return "Remove from Today";
+  if (action.type === "add_new_player_suggestion") return "Add new player";
   const capability = getAiCommandCapability(action);
   if (capability?.label) return capability.label;
   if (action.type === "no_action") return "No app action needed";
@@ -197,6 +199,88 @@ function actionPrimaryVerb(action: AiSmartCommandAction) {
   if (action.type === "set_team_size" || action.type === "set_team_count") return "Set";
   if (action.type === "generate_teams") return "Generate";
   return "Apply";
+}
+
+
+function compactNameForCompare(value?: string | null) {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "")
+    .trim();
+}
+
+function playerRefLabel(ref: AiSmartCommandAction["playerRefs"][number]) {
+  const rosterName = ref.rosterName || ref.spokenName || "Player";
+  const spokenName = ref.spokenName || rosterName;
+  const heard = compactNameForCompare(spokenName);
+  const roster = compactNameForCompare(rosterName);
+  if (heard && roster && heard !== roster && ref.confidence < 0.99) {
+    return `${spokenName} → ${rosterName}`;
+  }
+  return rosterName;
+}
+
+function actionPlayerSummary(action: AiSmartCommandAction) {
+  if (action.type === "add_new_player_suggestion" && action.newPlayerName) {
+    return [`${action.newPlayerName}`];
+  }
+  return action.playerRefs.map(playerRefLabel).filter(Boolean);
+}
+
+function actionImpactLine(action: AiSmartCommandAction) {
+  const count = action.type === "add_new_player_suggestion" && action.newPlayerName
+    ? 1
+    : action.playerRefs.length;
+  const playerWord = count === 1 ? "player" : "players";
+
+  if (action.type === "select_players") {
+    if (/replace|exact|only/i.test(String(action.distribution || ""))) {
+      return `Will clear Today and select ${count} ${playerWord}.`;
+    }
+    if (/possible existing match/i.test(String(action.reason || ""))) {
+      return `Will use this existing roster player and mark them present Today.`;
+    }
+    return `Will add/select ${count} ${playerWord} for Today without clearing anyone else.`;
+  }
+  if (action.type === "unselect_players") {
+    return `Will remove ${count} ${playerWord} from Today without changing anyone else.`;
+  }
+  if (action.type === "add_new_player_suggestion") {
+    return `Will add this as a new roster player and mark them present Today.`;
+  }
+  if (action.type === "set_team_size" && action.playersPerTeam) {
+    return `Will set team size to ${action.playersPerTeam}v${action.playersPerTeam}.`;
+  }
+  if (action.type === "set_team_count" && action.teamCount) {
+    return `Will set up ${action.teamCount} teams.`;
+  }
+  if (action.type === "club_add_note") {
+    return "Will add this as a Club note.";
+  }
+  if (action.type === "unsupported_action") {
+    return action.targetArea ? `Manual path: ${action.targetArea}` : "I understood this, but it is not wired as an app action yet.";
+  }
+  return action.reason || "Ready to apply.";
+}
+
+function secondaryActionDetails(action: AiSmartCommandAction) {
+  const details: string[] = [];
+  if (action.newPlayerName && action.type !== "add_new_player_suggestion") details.push(`new player: ${action.newPlayerName}`);
+  if (action.suggestedSkill && action.type === "add_new_player_suggestion") details.push(`starting skill ${action.suggestedSkill}`);
+  if (action.teamLabel) details.push(`team: ${action.teamLabel}`);
+  if (action.pairingKind) details.push(action.pairingKind.replace(/_/g, " "));
+  if (action.role) details.push(`role: ${action.role.replace(/_/g, " ")}`);
+  if (action.noteText) details.push(`note: “${action.noteText}”`);
+  if (action.colorName) details.push(`color: ${action.colorName}`);
+  return details.join(" · ");
+}
+
+function unresolvedTitle(result: AiSmartCommandResponse) {
+  const hasUnknownPlayers = result.unresolved.some((item) => item.issue === "unknown_player" || item.issue === "ambiguous_player");
+  if (hasUnknownPlayers) return "Could not match";
+  return "Follow-up needed";
 }
 
 type PersistedAiAssistantState = {
@@ -562,28 +646,31 @@ export function AiSmartCommandPanel({
             {result.assistantSummary || "I’m listening."}
           </div>
           {(result.actions.length > 0 || result.confirmations.length > 0 || result.unresolved.length > 0) && (
-            <div className="mt-2 text-[10px] font-black uppercase tracking-wide text-slate-400" title={`${result.detectedLanguage} · ${Math.round(result.confidence * 100)}% · ${parseModeLabel(result.parseMode)}`}>
-              Action cards
+            <div className="mt-2 flex items-center justify-between gap-2 text-[10px] font-black uppercase tracking-wide text-slate-400" title={`${result.detectedLanguage} · ${Math.round(result.confidence * 100)}% · ${parseModeLabel(result.parseMode)}`}>
+              <span>Review before applying</span>
+              <span className="normal-case tracking-normal text-slate-300">{parseModeLabel(result.parseMode)}</span>
             </div>
           )}
           {result.actions.length > 0 && (
-            <div className="mt-2 grid gap-1.5">
+            <div className="mt-2 grid gap-2">
               {result.actions.map((action, index) => {
               const canApply = Boolean(onApplyAction && aiCommandActionCanApply(action));
               const key = `${action.type}-${index}`;
+              const playerLabels = actionPlayerSummary(action);
+              const secondaryDetails = secondaryActionDetails(action);
               return (
                 <div key={key} className={`rounded-2xl border px-3 py-2.5 font-bold shadow-sm ${actionCardTone(action)}`}>
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <div>{actionCardTitle(action)}</div>
-                      <div className="mt-0.5 text-[10px] font-black uppercase tracking-wide opacity-70">
-                        {aiCommandSupportLabel(action)}
+                      <div className="text-[13px] leading-tight">{actionCardTitle(action)}</div>
+                      <div className="mt-1 text-[11px] font-semibold leading-snug opacity-80">
+                        {actionImpactLine(action)}
                       </div>
                     </div>
                     {canApply && (
                       <button
                         type="button"
-                        className="shrink-0 rounded-full bg-violet-600 px-3 py-1 text-[10px] font-black uppercase tracking-wide text-white disabled:opacity-50"
+                        className="shrink-0 rounded-full bg-violet-600 px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-white disabled:opacity-50"
                         disabled={applyingKey === key}
                         onClick={() => applyAction(action, index)}
                       >
@@ -591,13 +678,30 @@ export function AiSmartCommandPanel({
                       </button>
                     )}
                   </div>
-                  {actionDetails(action) && (
-                    <div className="mt-1.5 text-[11px] font-semibold leading-snug opacity-80">
-                      {actionDetails(action)}
+                  {playerLabels.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {playerLabels.slice(0, 12).map((label, labelIndex) => (
+                        <span key={`${key}-player-${labelIndex}`} className="rounded-full bg-white/70 px-2 py-1 text-[10px] font-black leading-none shadow-sm">
+                          {label}
+                        </span>
+                      ))}
+                      {playerLabels.length > 12 && (
+                        <span className="rounded-full bg-white/70 px-2 py-1 text-[10px] font-black leading-none shadow-sm">
+                          +{playerLabels.length - 12} more
+                        </span>
+                      )}
                     </div>
                   )}
-                  {action.reason && (
-                    <div className="mt-1 text-[11px] font-semibold leading-snug opacity-70">
+                  {secondaryDetails && (
+                    <div className="mt-1.5 text-[11px] font-semibold leading-snug opacity-75">
+                      {secondaryDetails}
+                    </div>
+                  )}
+                  <div className="mt-1.5 text-[10px] font-black uppercase tracking-wide opacity-60">
+                    {aiCommandSupportLabel(action)}
+                  </div>
+                  {action.reason && action.reason !== actionImpactLine(action) && (
+                    <div className="mt-1 text-[10px] font-semibold leading-snug opacity-55">
                       {action.reason}
                     </div>
                   )}
@@ -608,7 +712,7 @@ export function AiSmartCommandPanel({
           )}
           {result.confirmations.length > 0 && (
             <div className="mt-3 grid gap-1.5">
-              <div className="text-[10px] font-black uppercase tracking-wide text-amber-600">I need you to check</div>
+              <div className="text-[10px] font-black uppercase tracking-wide text-amber-600">Check before choosing</div>
               {result.confirmations.map((confirmation) => (
                 <div key={confirmation.id} className="rounded-xl bg-amber-50 px-3 py-2 font-bold text-amber-800">
                   {confirmation.message}
@@ -618,7 +722,7 @@ export function AiSmartCommandPanel({
           )}
           {result.unresolved.length > 0 && (
             <div className="mt-3 grid gap-1.5">
-              <div className="text-[10px] font-black uppercase tracking-wide text-slate-500">Follow-up needed</div>
+              <div className="text-[10px] font-black uppercase tracking-wide text-slate-500">{unresolvedTitle(result)}</div>
               {result.unresolved.map((item, index) => (
                 <div key={`${item.issue}-${index}`} className="rounded-xl bg-slate-100 px-3 py-2 font-bold text-slate-700">
                   {item.message || item.text}

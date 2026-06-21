@@ -336,8 +336,8 @@ function looksLikeLocalBulkRosterCommand(commandText: string) {
   if (/^\s*(how|what|why|where|when|who|which)\b/i.test(text)) return false;
   const hasAction = /\b(select|choose|pick|mark|add|use|take|make|create|generate|split|divide)\b/i.test(text);
   const hasAllRoster = /\b(select|choose|pick|mark|add|use|take)\b.{0,35}\b(all|everyone|everybody)\b/i.test(text)
-    || /\b(all|everyone|everybody|entire|whole)\b.{0,35}\b(roster|players|player list|team list)\b/i.test(text)
-    || /\b(roster|player list|team list)\b.{0,35}\b(all|everyone|everybody|entire|whole)\b/i.test(text);
+    || /\b(all|everyone|everybody|entire|whole)\b.{0,35}\b(roster|players?|player list|team list)\b/i.test(text)
+    || /\b(roster|players?|player list|team list)\b.{0,35}\b(all|everyone|everybody|entire|whole)\b/i.test(text);
   return hasAction && hasAllRoster;
 }
 
@@ -359,14 +359,17 @@ function localBulkShouldGenerate(commandText: string) {
 }
 
 function localBulkExcludedNames(commandText: string) {
-  const match = String(commandText || "").match(/\b(?:except|excluding|without|but\s+not|other\s+than|minus)\s+(.+?)(?:\b(?:and\s+then|then|make|generate|split|divide|with|from|on\s+my\s+roster)\b|$)/i);
+  const text = String(commandText || "");
+  const exclusionPhrase = "except(?:\\s+for)?|excluding|exclude|without|but\\s+(?:exclude|excluding|not|leave\\s+out)|other\\s+than|minus|leave\\s+out|leaving\\s+out|apart\\s+from";
+  const stopper = "and\\s+then|then|make|create|generate|split|divide|with|from|on\\s+my\\s+roster|in\\s+my\\s+roster|on\\s+the\\s+roster|in\\s+the\\s+roster";
+  const match = text.match(new RegExp(`\\b(?:${exclusionPhrase})\\s+(.+?)(?=\\b(?:${stopper})\\b|$)`, "i"));
   if (!match?.[1]) return [];
   return match[1]
     .split(/[,;\n]+|\s+and\s+|\s+und\s+|\s+그리고\s+|\s*랑\s*|\s*와\s*|\s*과\s*/i)
     .map((part) => part
       .replace(/^(?:the\s+)?(?:player|person)\s+/i, "")
-      .replace(/^(?:except|excluding|without|but\s+not|not|minus)\s+/i, "")
-      .replace(/\b(?:please|thanks|then|make|generate|teams?|players?|roster)\b/gi, " ")
+      .replace(new RegExp(`^(?:${exclusionPhrase}|not)\\s+`, "i"), "")
+      .replace(/\b(?:please|thanks|then|make|create|generate|teams?|players?|roster)\b/gi, " ")
       .replace(/[.!?。！？,;]+$/g, "")
       .replace(/\s+/g, " ")
       .trim())
@@ -603,7 +606,7 @@ function actionPrimaryVerb(action: AiSmartCommandAction) {
   return "Apply";
 }
 
-const AI_ASSISTANT_VERSION_LABEL = "AI beta · v1.28 fast bulk select";
+const AI_ASSISTANT_VERSION_LABEL = "AI beta · v1.29 bulk exclude phrases";
 
 type AiRosterMatch = {
   player: AiSmartCommandRosterPlayer;

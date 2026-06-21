@@ -1,6 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import Tesseract from "tesseract.js";
 import type { RoomPlayer, RoomRoster } from "@/lib/localRoster";
+import {
+  candidateNamesForRosterPlayer as sharedCandidateNamesForRosterPlayer,
+  scorePlayerNameMatch as sharedScorePlayerNameMatch,
+  voiceNameAlternates as sharedVoiceNameAlternates,
+} from "@/lib/playerNameMatching";
 import type { Gender } from "@/lib/types";
 import { listenToSharedRosterUser, type SharedRosterUser } from "@/lib/sharedRosterService";
 import { Button } from "@/components/ui/button";
@@ -1248,110 +1253,15 @@ function speechSoundSimilarity(a: string, b: string) {
 }
 
 function voiceNameAlternates(name: string) {
-  const normalized = normalizeForMatch(name);
-  const alternatesByName: Record<string, string[]> = {
-    george: ["Jorge"],
-    jorge: ["George"],
-    yan: ["Jan"],
-    jan: ["Yan"],
-    yann: ["Jan"],
-    jaan: ["Jan"],
-    andrew: ["Andrea"],
-    andrea: ["Andrew"],
-    june: ["Joon"],
-    joon: ["June"],
-    philip: ["Phillip", "Filip", "Fillip"],
-    phillip: ["Philip", "Filip", "Fillip"],
-    filip: ["Philip", "Phillip", "Fillip"],
-    fillip: ["Philip", "Phillip", "Filip"],
-  };
-
-  return alternatesByName[normalized] ?? [];
+  return sharedVoiceNameAlternates(name);
 }
 
 function playerSearchNames(player: RoomPlayer) {
-  const values = [player.name, player.aka, displayName(player)];
-  const aka = player.aka?.trim();
-  if (aka) {
-    values.push(`${player.name} ${aka}`);
-    values.push(`${aka} ${player.name}`);
-  }
-
-  return Array.from(
-    new Set(
-      values
-        .filter(Boolean)
-        .map((value) => normalizeForMatch(String(value)))
-        .filter(Boolean),
-    ),
-  );
+  return sharedCandidateNamesForRosterPlayer(player, { includeDisplayName: true });
 }
 
 function scorePlayerMatch(ocrName: string, player: RoomPlayer) {
-  const normalizedOcr = normalizeForMatch(ocrName);
-  const ocrFirst = normalizedOcr[0];
-  if (!ocrFirst) return 0;
-  return Math.max(
-    ...playerSearchNames(player).map((candidate) => {
-      if (!candidate) return 0;
-      const ocrWords = normalizedOcr.split(" ").filter(Boolean);
-      const candidateWords = candidate.split(" ").filter(Boolean);
-      const ocrFirstName = ocrWords[0] ?? "";
-      const candidateFirstName = candidateWords[0] ?? "";
-
-      // If OCR adds a short junk prefix before a saved one-word roster name
-      // (example: "ir Danill"), still match/suggest the real roster player.
-      if (candidateWords.length === 1 && candidateFirstName.length >= 4) {
-        const bestTokenScore = Math.max(
-          0,
-          ...ocrWords
-            .filter((word) => word.length >= 3)
-            .map((word) => similarity(word, candidateFirstName)),
-        );
-        if (bestTokenScore === 100) return 96;
-        if (bestTokenScore >= 90) return 94;
-        if (bestTokenScore >= 84) return 88;
-      }
-
-      // Meetup screenshots often show full public names while the Fair Teams
-      // roster may store nicknames/first names such as "Abou", "Luca", or
-      // "Andrew (Daniel)". If the first name is an exact match, treat it as a
-      // strong safe match even when the OCR name has extra surname words.
-      if (ocrFirstName && ocrFirstName === candidateFirstName) {
-        if (normalizedOcr === candidate) return 100;
-        return candidateWords.length === 1 ? 96 : 94;
-      }
-
-      // Also support last-name / nickname matches. Example: OCR reads
-      // "ray Brijesh" but the roster player is saved simply as "Brijesh".
-      // Keep this exact-token only, so fuzzy matching does not become too loose.
-      if (
-        candidateWords.length === 1 &&
-        candidateWords[0].length >= 3 &&
-        ocrWords.includes(candidateWords[0])
-      ) {
-        return 95;
-      }
-
-      const speechScore = speechSoundSimilarity(normalizedOcr, candidate);
-      const firstWordSoundScore = speechSoundSimilarity(
-        ocrFirstName,
-        candidateFirstName,
-      );
-      if (speechScore >= 88 || firstWordSoundScore >= 88) {
-        return Math.max(speechScore, firstWordSoundScore, 84);
-      }
-
-      // For normal fuzzy matching, keep the original first-letter guard so
-      // unrelated names cannot jump to high scores.
-      if (candidate[0] !== ocrFirst) return 0;
-
-      const rawScore = similarity(normalizedOcr, candidate);
-      const firstWordScore = similarity(ocrFirstName, candidateFirstName);
-      if (firstWordScore < 70) return 0;
-      return Math.max(rawScore, speechScore);
-    }),
-  );
+  return sharedScorePlayerNameMatch(ocrName, player, { includeDisplayName: true });
 }
 
 function extractOcrNames(

@@ -1,3 +1,9 @@
+import {
+  bestPlayerNameMatch,
+  candidateNamesForRosterPlayer,
+  compactPlayerNameKey,
+  displayNameFromSpokenInput,
+} from "./playerNameMatching";
 import type {
   AiSmartCommandAction,
   AiSmartCommandResponse,
@@ -182,11 +188,7 @@ function fuzzyNameMatchScore(spoken: string, candidate: string) {
 }
 
 function displaySpokenName(spokenName: string) {
-  return normalizeText(spokenName)
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
+  return displayNameFromSpokenInput(spokenName);
 }
 
 function createAddPlayerAction(name: string): AiSmartCommandAction {
@@ -272,23 +274,14 @@ function wantsExplicitNewPlayer(commandText: string) {
 }
 
 function bestRosterNameMatch(name: string, players: AiSmartCommandRosterPlayer[]) {
-  const candidateRows = players.flatMap((player) =>
-    candidateNamesForPlayer(player).map((candidate) => ({ player, candidate })),
-  );
-
-  let best: { player: AiSmartCommandRosterPlayer; candidate: string; score: number } | null = null;
-  let secondBestScore = 0;
-  candidateRows.forEach(({ player, candidate }) => {
-    const score = fuzzyNameMatchScore(name, candidate);
-    if (score > (best?.score || 0)) {
-      secondBestScore = best?.score || 0;
-      best = { player, candidate, score };
-    } else if (score > secondBestScore) {
-      secondBestScore = score;
-    }
-  });
-
-  return best ? { ...best, secondBestScore } : null;
+  const best = bestPlayerNameMatch(name, players, { includeDisplayName: true });
+  if (!best) return null;
+  return {
+    player: best.player,
+    candidate: best.candidate,
+    score: best.score / 100,
+    secondBestScore: best.secondBestScore / 100,
+  };
 }
 
 function extractExplicitNewPlayerNames(commandText: string) {
@@ -342,7 +335,7 @@ function parseExplicitNewPlayerCommand(
 
     const similar = bestRosterNameMatch(name, players);
     if (similar && similar.score >= 0.84) {
-      const exactSame = compactKey(similar.player.name) === compactKey(name) || candidateNamesForPlayer(similar.player).some((candidate) => compactKey(candidate) === compactKey(name));
+      const exactSame = compactPlayerNameKey(similar.player.name) === compactPlayerNameKey(name) || candidateNamesForRosterPlayer(similar.player, { includeDisplayName: true }).some((candidate) => compactPlayerNameKey(candidate) === compactPlayerNameKey(name));
       if (exactSame) {
         actions.push(createUseExistingPlayerAction(similar.player, name, `${similar.player.name} is already in this roster. Use this if you meant the existing player instead of creating a duplicate.`));
         possibleMatches.push(`${name} is already close to ${similar.player.name}`);
@@ -451,7 +444,7 @@ function findPlayersMentioned(commandText: string, players: AiSmartCommandRoster
   const matched = new Map<string, { player: AiSmartCommandRosterPlayer; spokenName: string; score: number }>();
 
   const candidateRows = players.flatMap((player) =>
-    candidateNamesForPlayer(player).map((candidate) => ({ player, candidate })),
+    candidateNamesForRosterPlayer(player, { includeDisplayName: true }).map((candidate) => ({ player, candidate })),
   ).sort((a, b) => b.candidate.length - a.candidate.length);
 
   candidateRows.forEach(({ player, candidate }) => {
@@ -468,7 +461,7 @@ function findPlayersMentioned(commandText: string, players: AiSmartCommandRoster
   chunks.forEach((originalChunk) => {
     let chunk = originalChunk;
     [...matched.values()].forEach((item) => {
-      candidateNamesForPlayer(item.player).forEach((candidate) => {
+      candidateNamesForRosterPlayer(item.player, { includeDisplayName: true }).forEach((candidate) => {
         chunk = chunk.replace(new RegExp(`(?:^|\\s)${candidate.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?=\\s|$)`, "g"), " ");
       });
     });
@@ -476,19 +469,9 @@ function findPlayersMentioned(commandText: string, players: AiSmartCommandRoster
     if (!chunk) return;
     if ([...matched.values()].some((item) => fuzzyNameMatchScore(chunk, item.spokenName) >= 0.92)) return;
 
-    let best: { player: AiSmartCommandRosterPlayer; candidate: string; score: number } | null = null;
-    let secondBestScore = 0;
-    candidateRows.forEach(({ player, candidate }) => {
-      const score = fuzzyNameMatchScore(chunk, candidate);
-      if (score > (best?.score || 0)) {
-        secondBestScore = best?.score || 0;
-        best = { player, candidate, score };
-      } else if (score > secondBestScore) {
-        secondBestScore = score;
-      }
-    });
+    const best = bestRosterNameMatch(chunk, players);
 
-    if (best && best.score >= 0.84 && best.score - secondBestScore >= 0.04) {
+    if (best && best.score >= 0.84 && best.score - best.secondBestScore >= 0.04) {
       const existing = matched.get(best.player.id);
       if (!existing || best.score > existing.score) {
         matched.set(best.player.id, { player: best.player, spokenName: chunk, score: best.score });
@@ -499,19 +482,9 @@ function findPlayersMentioned(commandText: string, players: AiSmartCommandRoster
       const looseWords = chunk.split(/\s+/).map(cleanNameChunkForMatching).filter((part) => part.length >= 2);
       let matchedLooseWord = false;
       looseWords.forEach((looseWord) => {
-        let looseBest: { player: AiSmartCommandRosterPlayer; candidate: string; score: number } | null = null;
-        let looseSecondBestScore = 0;
-        candidateRows.forEach(({ player, candidate }) => {
-          const score = fuzzyNameMatchScore(looseWord, candidate);
-          if (score > (looseBest?.score || 0)) {
-            looseSecondBestScore = looseBest?.score || 0;
-            looseBest = { player, candidate, score };
-          } else if (score > looseSecondBestScore) {
-            looseSecondBestScore = score;
-          }
-        });
+        const looseBest = bestRosterNameMatch(looseWord, players);
 
-        if (looseBest && looseBest.score >= 0.84 && looseBest.score - looseSecondBestScore >= 0.04) {
+        if (looseBest && looseBest.score >= 0.84 && looseBest.score - looseBest.secondBestScore >= 0.04) {
           const existing = matched.get(looseBest.player.id);
           if (!existing || looseBest.score > existing.score) {
             matched.set(looseBest.player.id, { player: looseBest.player, spokenName: looseWord, score: looseBest.score });

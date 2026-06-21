@@ -1215,16 +1215,23 @@ function App() {
         throw new Error("I understood a player-selection request, but could not match any roster players.");
       }
 
+      const shouldReplaceTodaySelection = /replace|exact|only/i.test(String(action.distribution || ""));
       replacePlayers(
-        players.map((player) =>
-          playerIds.has(player.id)
-            ? { ...player, attending: true, todayStatus: "here" }
-            : player,
-        ),
+        players.map((player) => {
+          if (playerIds.has(player.id)) {
+            return { ...player, attending: true, todayStatus: "here" };
+          }
+          if (shouldReplaceTodaySelection) {
+            return { ...player, attending: false, todayStatus: "" };
+          }
+          return player;
+        }),
       );
       setTodayRosterChosen(true);
       setActiveTab("today");
-      return `Selected ${playerIds.size} player${playerIds.size === 1 ? "" : "s"} for Today.`;
+      return shouldReplaceTodaySelection
+        ? `Selected exactly ${playerIds.size} player${playerIds.size === 1 ? "" : "s"} for Today.`
+        : `Selected ${playerIds.size} player${playerIds.size === 1 ? "" : "s"} for Today.`;
     }
 
     if (action.type === "add_new_player_suggestion") {

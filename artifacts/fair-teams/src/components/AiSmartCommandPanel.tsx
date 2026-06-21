@@ -21,6 +21,105 @@ type AiSmartCommandPanelProps = {
   onApplyAction?: (action: AiSmartCommandAction) => Promise<string | void> | string | void;
 };
 
+
+function createEmptyAction(type: AiSmartCommandAction["type"]): AiSmartCommandAction {
+  return {
+    type,
+    playerRefs: [],
+    newPlayerName: null,
+    suggestedSkill: null,
+    playersPerTeam: null,
+    teamCount: null,
+    pairingKind: null,
+    teamLabel: null,
+    role: null,
+    attribute: null,
+    distribution: null,
+    noteText: null,
+    colorName: null,
+    targetName: null,
+    targetArea: null,
+    capabilityId: null,
+    supportStatus: "executable",
+    requiresConfirmation: false,
+    reason: null,
+  };
+}
+
+function parseRankedRosterSelectionCommand(
+  commandText: string,
+  players: AiSmartCommandRosterPlayer[],
+): AiSmartCommandResponse | null {
+  const normalized = commandText
+    .toLowerCase()
+    .replace(/[×x]/g, "v")
+    .replace(/versus|against|gegen/g, "v")
+    .replace(/[^a-z0-9.\s-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const wantsWeakest = /\b(weakest|worst|lowest|least skilled|beginners?)\b/.test(normalized);
+  const wantsStrongest = /\b(strongest|best|highest|top)\b/.test(normalized);
+  if (!wantsWeakest && !wantsStrongest) return null;
+  if (!/\b(roster|players?|squad)\b/.test(normalized)) return null;
+
+  const countMatch = normalized.match(/\b(?:weakest|worst|lowest|strongest|best|highest|top)\s+(\d{1,2})\b/) ||
+    normalized.match(/\b(\d{1,2})\s+(?:weakest|worst|lowest|strongest|best|highest|top)\b/);
+  const requestedCount = countMatch ? Number(countMatch[1]) : null;
+
+  const teamSizeMatch = normalized.match(/\b(\d{1,2})\s*v\s*\1\b/) || normalized.match(/\b(\d{1,2})\s+v\s+\1\b/);
+  const playersPerTeam = teamSizeMatch ? Number(teamSizeMatch[1]) : null;
+  const neededForTeamSize = playersPerTeam ? playersPerTeam * 2 : null;
+  const targetCount = requestedCount || neededForTeamSize;
+  if (!targetCount || targetCount < 2) return null;
+
+  const rankedPlayers = [...players]
+    .filter((player) => player.id && player.name)
+    .sort((a, b) => {
+      const aSkill = typeof a.skill === "number" ? a.skill : 5;
+      const bSkill = typeof b.skill === "number" ? b.skill : 5;
+      if (aSkill !== bSkill) return wantsWeakest ? aSkill - bSkill : bSkill - aSkill;
+      return String(a.name || "").localeCompare(String(b.name || ""));
+    })
+    .slice(0, targetCount);
+
+  if (rankedPlayers.length === 0) return null;
+
+  const selectAction = createEmptyAction("select_players");
+  selectAction.capabilityId = "today.select_players";
+  selectAction.distribution = "replace_today_selection";
+  selectAction.reason = `${wantsWeakest ? "Weakest" : "Strongest"} ${rankedPlayers.length} players by roster skill. This replaces today's current selection.`;
+  selectAction.playerRefs = rankedPlayers.map((player) => ({
+    playerId: player.id,
+    rosterName: player.name,
+    spokenName: player.name,
+    confidence: 1,
+  }));
+
+  const actions: AiSmartCommandAction[] = [selectAction];
+  if (playersPerTeam) {
+    const sizeAction = createEmptyAction("set_team_size");
+    sizeAction.capabilityId = "teams.set_team_size";
+    sizeAction.playersPerTeam = playersPerTeam;
+    sizeAction.reason = `${playersPerTeam}v${playersPerTeam} using the selected ${rankedPlayers.length} players.`;
+    actions.push(sizeAction);
+  }
+
+  return {
+    schemaVersion: 1,
+    ok: true,
+    detectedLanguage: "en",
+    normalizedIntent: `${wantsWeakest ? "Select weakest" : "Select strongest"} ${rankedPlayers.length} roster players${playersPerTeam ? ` for ${playersPerTeam}v${playersPerTeam}` : ""}`,
+    assistantSummary: `I found the ${wantsWeakest ? "weakest" : "strongest"} ${rankedPlayers.length} players in this roster by skill and prepared an exact Today selection.${playersPerTeam ? ` Then set up ${playersPerTeam}v${playersPerTeam}.` : ""}`,
+    confidence: 0.98,
+    actions,
+    confirmations: [],
+    unresolved: [],
+    parseMode: "local_fallback",
+    debugWarnings: ["Handled by Fair Teams local ranked-selection parser."],
+  };
+}
+
 function actionLabel(actionType: string) {
   return actionType.replace(/_/g, " ");
 }
@@ -126,6 +225,13 @@ export function AiSmartCommandPanel({
     setApplyMessage("");
     setBusy(true);
     try {
+      const localRankedSelection = parseRankedRosterSelectionCommand(trimmedCommand, players);
+      if (localRankedSelection) {
+        setResult(localRankedSelection);
+        onParsed?.(localRankedSelection);
+        return;
+      }
+
       const parsed = await parseFairTeamsSmartCommand({
         commandText: trimmedCommand,
         roster: players,

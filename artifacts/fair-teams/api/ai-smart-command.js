@@ -1189,6 +1189,28 @@ function looksLikeFairTeamsAnswerQuestion(text) {
   return !explicitFollowUpAction;
 }
 
+function looksLikeDirectAppActionRequest(text) {
+  const raw = cleanString(text, MAX_COMMAND_CHARS);
+  const normalized = normalizeForMatching(raw);
+  if (!normalized) return false;
+
+  // "Can you select Joon?" is a command. "Can I restore later?" is a product question.
+  const assistantActionQuestion = /^(?:please\s+)?(?:can|could|would)\s+you\s+(?:please\s+)?(?:select|choose|pick|mark|add|remove|move|give|assign|set|make|create|generate|split|divide|keep|separate|pair|lock|put|rename|change|open|show|go to|back up|backup)\b/i.test(raw);
+
+  // "What is Cloud Backup, and back up my roster" should still become an action request.
+  const mixedQuestionThenAction = /\b(?:and|then|also)\s+(?:select|choose|pick|mark|add|remove|move|give|assign|set|make|create|generate|split|divide|keep|separate|pair|lock|put|rename|change|open|show|go to|back up|backup)\b/i.test(raw);
+
+  // Plain imperatives should not be treated as Q&A just because they mention a feature.
+  const imperativeStart = /^(?:please\s+)?(?:select|choose|pick|mark|add|remove|move|give|assign|set|make|create|generate|split|divide|keep|separate|pair|lock|put|rename|change|open|show|go to|back up|backup)\b/i.test(normalized);
+
+  return assistantActionQuestion || mixedQuestionThenAction || imperativeStart;
+}
+
+function wantsFairTeamsAnswerBeforeActions(text) {
+  if (looksLikeDirectAppActionRequest(text)) return false;
+  return looksLikeFairTeamsAnswerQuestion(text) || Boolean(getDirectFairTeamsAnswerForCommand(text));
+}
+
 function normalizeKnowledgeAnswerResponse(parsed, commandText, fallbackAnswer = null) {
   const normalized = normalizeParsedResponse(parsed, commandText);
   const fallbackSummary = fallbackAnswer?.assistantSummary || "I can explain that, but I do not have enough Fair Teams detail yet.";
@@ -1350,9 +1372,12 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "Missing commandText." });
   }
 
-  const strongAppCommandIntent = hasStrongAppCommandIntent(commandText, commandHints);
-  const answerQuestionMode = !strongAppCommandIntent && looksLikeFairTeamsAnswerQuestion(commandText);
-  const directFairTeamsAnswer = strongAppCommandIntent ? null : getDirectFairTeamsAnswerForCommand(commandText, context);
+  // Question mode must be decided before action routing. Otherwise feature words like
+  // "backup", "shared roster", or "teams" can be stolen by action hints before the
+  // assistant gets a chance to answer the user's product question.
+  const answerQuestionMode = wantsFairTeamsAnswerBeforeActions(commandText);
+  const strongAppCommandIntent = answerQuestionMode ? false : hasStrongAppCommandIntent(commandText, commandHints);
+  const directFairTeamsAnswer = answerQuestionMode ? getDirectFairTeamsAnswerForCommand(commandText, context) : null;
 
   if (!process.env.OPENAI_API_KEY) {
     if (directFairTeamsAnswer) {

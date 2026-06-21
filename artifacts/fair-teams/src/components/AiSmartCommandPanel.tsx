@@ -63,6 +63,16 @@ function friendlyAiError(error: unknown) {
   return message || "Fair Teams AI command failed.";
 }
 
+
+function isAiAnswerOnlyResult(response: AiSmartCommandResponse | null | undefined) {
+  if (!response) return false;
+  const mode = String(response.parseMode || "");
+  const hasActions = Array.isArray(response.actions) && response.actions.some((action) => action.type !== "no_action");
+  const hasConfirmations = Array.isArray(response.confirmations) && response.confirmations.length > 0;
+  const hasUnresolved = Array.isArray(response.unresolved) && response.unresolved.length > 0;
+  return !hasActions && !hasConfirmations && !hasUnresolved && /knowledge|answer|conversation|chat/i.test(mode);
+}
+
 function parseModeLabel(mode?: AiSmartCommandResponse["parseMode"]) {
   if (mode === "local_fallback") return "Local reply / safety fallback";
   if (mode === "ai_with_local_hints") return "AI + app rules";
@@ -113,7 +123,7 @@ function actionPrimaryVerb(action: AiSmartCommandAction) {
   return "Apply";
 }
 
-const AI_ASSISTANT_VERSION_LABEL = "AI beta · v1.15 question-first";
+const AI_ASSISTANT_VERSION_LABEL = "AI beta · v1.16 OpenAI first";
 
 type AiRosterMatch = {
   player: AiSmartCommandRosterPlayer;
@@ -978,41 +988,13 @@ function writePersistedAiAssistantState(storageKey: string, state: PersistedAiAs
   }
 }
 
-function looksLikeFairTeamsProductQuestionForPanel(text: string) {
-  const raw = String(text || "").trim();
-  if (!raw) return false;
-  const lower = raw.toLowerCase();
-  const hasQuestionShape = /[?？]$/.test(raw)
-    || /^(what|what's|whats|what is|how|why|where|when|which|who|can i|should i|do i|does|is|are|will|would|explain|tell me|difference|different|compare|versus|vs|help me understand)\b/i.test(raw)
-    || /\b(difference|different|compare|versus|vs|meaning|mean)\b/i.test(raw);
-  if (!hasQuestionShape) return false;
-
-  const appTopic = /\b(fair teams|app|roster|shared roster|local roster|private roster|cloud backup|backup|restore|sync|collaboration|organizer|club|club rating|rating|skill|today|teams|team generation|smart import|ocr|screenshot|review names|lost.?found|voice|assistant|equipment|bag|notes|pairing|lock|copy|duplicate|import|export)\b/i.test(raw)
-    || /(로스터|공유|백업|클럽|평점|오늘|팀|선수|장비|스크린샷|음성)/i.test(raw);
-  if (!appTopic) return false;
-
-  const actionVerb = "select|choose|pick|mark|add|remove|move|give|assign|set|make|create|generate|split|divide|keep|separate|pair|lock|put|rename|change|open|show|go to|back up|backup|restore|import|export|delete|clear|save";
-  if (new RegExp(`^(please\\s+)?(${actionVerb})\\b`, "iu").test(raw)) return false;
-  if (new RegExp(`^can\\s+you\\s+(${actionVerb})\\b`, "iu").test(raw)) return false;
-  if (new RegExp(`^could\\s+you\\s+(${actionVerb})\\b`, "iu").test(raw)) return false;
-  if (new RegExp(`\\b(and\\s+then|then|also)\\s+(${actionVerb})\\b`, "iu").test(raw)) return false;
-
-  // These are commands even though they mention Today/Teams.
-  if (/\b(playing today|are playing|is playing|coming today|is here|are here)\b/i.test(lower)) return false;
-  if (/\b(make|create|generate|shuffle|reroll)\b.*\bteams?\b/i.test(lower)) return false;
-
-  return true;
-}
-
-function forceQuestionOnlyResult(result: AiSmartCommandResponse): AiSmartCommandResponse {
-  return {
-    ...result,
-    ok: true,
-    actions: [],
-    confirmations: [],
-    unresolved: [],
-    parseMode: result.parseMode || "ai_knowledge_answer",
-  };
+function clearPersistedAiAssistantState(storageKey: string) {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.removeItem(storageKey);
+  } catch {
+    // Ignore storage errors.
+  }
 }
 
 export function AiSmartCommandPanel({
@@ -1160,29 +1142,31 @@ export function AiSmartCommandPanel({
         currentTeamCount: typeof currentTeamCount === "number" ? currentTeamCount : undefined,
         currentTeamsGenerated,
       });
-      const productQuestionMode = looksLikeFairTeamsProductQuestionForPanel(trimmedCommand);
-      const localTrustGuard = productQuestionMode ? null : guardFairTeamsSmartCommandBeforeAi(trimmedCommand, commandContext);
-      if (localTrustGuard) {
-        const enhanced = enhanceAiResultWithOcrStyleRosterMatching(localTrustGuard, players);
-        setResult(enhanced);
-        onParsed?.(enhanced);
-        return;
-      }
-
       try {
+        // OpenAI/server route makes the first meaning decision. The local guard is
+        // now only a fallback when the server cannot answer, so product questions
+        // like "What is Cloud Backup?" cannot be hijacked by local action keywords.
         const parsedRaw = await parseFairTeamsSmartCommand({
           commandText: trimmedCommand,
           roster: players,
           context: commandContext,
         });
-        const parsed = productQuestionMode
-          ? forceQuestionOnlyResult(parsedRaw)
-          : enhanceAiResultWithOcrStyleRosterMatching(applyFairTeamsAiTruthGuard(trimmedCommand, parsedRaw), players);
+        const guardedRaw = isAiAnswerOnlyResult(parsedRaw)
+          ? parsedRaw
+          : applyFairTeamsAiTruthGuard(trimmedCommand, parsedRaw);
+        const parsed = enhanceAiResultWithOcrStyleRosterMatching(guardedRaw, players);
         setResult(parsed);
         onParsed?.(parsed);
         return;
       } catch (aiErr) {
-        if (productQuestionMode) throw aiErr;
+        const localTrustGuard = guardFairTeamsSmartCommandBeforeAi(trimmedCommand, commandContext);
+        if (localTrustGuard) {
+          const enhanced = enhanceAiResultWithOcrStyleRosterMatching(localTrustGuard, players);
+          setResult(enhanced);
+          onParsed?.(enhanced);
+          return;
+        }
+
         const localSmartCommand = parseFairTeamsLocalSmartCommand(trimmedCommand, players, commandContext);
         if (localSmartCommand) {
           const enhancedLocal = enhanceAiResultWithOcrStyleRosterMatching({

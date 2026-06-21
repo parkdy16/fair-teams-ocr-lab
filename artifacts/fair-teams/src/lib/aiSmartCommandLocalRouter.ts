@@ -286,6 +286,16 @@ function bestRosterNameMatch(name: string, players: AiSmartCommandRosterPlayer[]
   };
 }
 
+function possibleRosterNameMatch(name: string, players: AiSmartCommandRosterPlayer[]) {
+  const best = bestRosterNameMatch(name, players);
+  if (!best) return null;
+  // This is intentionally lower than the automatch threshold. It is for a safe
+  // “maybe you meant…” action card, not silent selection. This prevents voice
+  // slips like “Anya” or “Rish” from immediately becoming new-player suggestions.
+  if (best.score >= 0.72 && best.score - best.secondBestScore >= 0.03) return best;
+  return null;
+}
+
 function extractExplicitNewPlayerNames(commandText: string) {
   let text = cleanupSpellingHints(commandText);
   text = text
@@ -798,17 +808,38 @@ function parsePresentPlayerSelectionCommand(
 
   if (matched.length === 0) {
     const uniqueUnresolved = [...new Set(unresolved)].slice(0, 8);
+    const possibleMatchActions = removeMode
+      ? []
+      : uniqueUnresolved
+        .map((name) => ({ name, possible: possibleRosterNameMatch(name, players) }))
+        .filter((row): row is { name: string; possible: NonNullable<ReturnType<typeof possibleRosterNameMatch>> } => Boolean(row.possible))
+        .slice(0, 3)
+        .map(({ name, possible }) => createUseExistingPlayerAction(possible.player, name, `Voice heard “${displaySpokenName(name)}”. Use this if you meant ${possible.player.name}.`));
+    const possibleKeys = new Set(possibleMatchActions.flatMap((action) => action.playerRefs.map((ref) => compactKey(ref.spokenName))));
+    const addActions = removeMode
+      ? []
+      : uniqueUnresolved
+        .filter((name) => !possibleKeys.has(compactKey(displaySpokenName(name))))
+        .slice(0, Math.max(0, 3 - possibleMatchActions.length))
+        .map(createAddPlayerAction);
     return localResponse({
       normalizedIntent: "Update Today, but no roster names matched",
-      assistantSummary: "I understood that you want to update Today, but I could not match those names to this roster.",
-      confidence: 0.84,
-      actions: removeMode ? [] : uniqueUnresolved.slice(0, 3).map(createAddPlayerAction),
+      assistantSummary: possibleMatchActions.length > 0
+        ? "I could not safely auto-match those names, but I found possible roster matches to review."
+        : "I understood that you want to update Today, but I could not match those names to this roster.",
+      confidence: possibleMatchActions.length > 0 ? 0.86 : 0.84,
+      actions: [...possibleMatchActions, ...addActions],
       confirmations: [],
-      unresolved: uniqueUnresolved.map((name) => ({
-        text: name,
-        issue: "unknown_player",
-        message: `I could not find “${displaySpokenName(name)}” in this roster.`,
-      })),
+      unresolved: uniqueUnresolved.map((name) => {
+        const possible = possibleRosterNameMatch(name, players);
+        return {
+          text: name,
+          issue: possible ? "ambiguous_player" : "unknown_player",
+          message: possible
+            ? `I heard “${displaySpokenName(name)}”. Did you mean ${possible.player.name}?`
+            : `I could not find “${displaySpokenName(name)}” in this roster.`,
+        };
+      }),
       debugWarnings: ["Handled by local present-player parser with no roster matches."],
     });
   }
@@ -882,7 +913,21 @@ function parsePresentPlayerSelectionCommand(
 
   const uniqueUnresolved = [...new Set(unresolved)].slice(0, 8);
   if (uniqueUnresolved.length > 0 && !removeMode) {
-    actions.push(...uniqueUnresolved.slice(0, 3).map(createAddPlayerAction));
+    const possibleRows = uniqueUnresolved
+      .map((name) => ({ name, possible: possibleRosterNameMatch(name, players) }))
+      .filter((row): row is { name: string; possible: NonNullable<ReturnType<typeof possibleRosterNameMatch>> } => Boolean(row.possible));
+    const possibleKeys = new Set<string>();
+    possibleRows.slice(0, 3).forEach(({ name, possible }) => {
+      possibleKeys.add(compactKey(displaySpokenName(name)));
+      actions.push(createUseExistingPlayerAction(possible.player, name, `Voice heard “${displaySpokenName(name)}”. Use this if you meant ${possible.player.name}.`));
+    });
+    const remainingSlots = Math.max(0, 3 - possibleRows.length);
+    if (remainingSlots > 0) {
+      actions.push(...uniqueUnresolved
+        .filter((name) => !possibleKeys.has(compactKey(displaySpokenName(name))))
+        .slice(0, remainingSlots)
+        .map(createAddPlayerAction));
+    }
   }
 
   const names = matched.map(({ player, spokenName, score }) => {
@@ -918,11 +963,16 @@ function parsePresentPlayerSelectionCommand(
     confidence: unresolved.length > 0 ? 0.88 : 0.98,
     actions,
     confirmations: [],
-    unresolved: uniqueUnresolved.map((name) => ({
-      text: name,
-      issue: "unknown_player",
-      message: `I could not confidently match “${displaySpokenName(name)}” to this roster.`,
-    })),
+    unresolved: uniqueUnresolved.map((name) => {
+      const possible = possibleRosterNameMatch(name, players);
+      return {
+        text: name,
+        issue: possible ? "ambiguous_player" : "unknown_player",
+        message: possible
+          ? `I heard “${displaySpokenName(name)}”. Did you mean ${possible.player.name}?`
+          : `I could not confidently match “${displaySpokenName(name)}” to this roster.`,
+      };
+    }),
     debugWarnings: ["Handled by Fair Teams local present-player parser with fuzzy roster matching and safe Today selection mode."],
   });
 }

@@ -124,19 +124,28 @@ export function voiceNameAlternates(name: string | null | undefined) {
   const alternatesByName: Record<string, string[]> = {
     george: ["Jorge"],
     jorge: ["George"],
-    june: ["Joon"],
-    joon: ["June"],
+    june: ["Joon", "Jun"],
+    jun: ["Joon", "June"],
+    joon: ["June", "Jun"],
     yan: ["Jan"],
     jan: ["Yan", "Yann", "Jaan"],
     yann: ["Jan"],
     jaan: ["Jan"],
     andrew: ["Andrea"],
     andrea: ["Andrew"],
+    anya: ["Tanja", "Tanya", "Anja"],
+    anja: ["Tanja", "Tanya", "Anya"],
+    tanja: ["Tanya", "Anya", "Anja"],
+    tanya: ["Tanja", "Anya", "Anja"],
+    tania: ["Tanja", "Tanya", "Anya"],
     brioche: ["Brijesh"],
     brioch: ["Brijesh"],
     briesh: ["Brijesh"],
+    brish: ["Brijesh"],
+    briish: ["Brijesh"],
+    rish: ["Brijesh"],
     brijes: ["Brijesh"],
-    brijesh: ["Briesh", "Brioche"],
+    brijesh: ["Briesh", "Brioche", "Rish", "Brish"],
     philip: ["Phillip", "Filip", "Fillip"],
     phillip: ["Philip", "Filip", "Fillip"],
     filip: ["Philip", "Phillip", "Fillip"],
@@ -155,8 +164,17 @@ export function voiceNameSoundKey(value: string | null | undefined) {
   key = key
     .replace(/george/g, "jorj")
     .replace(/jorge/g, "jorj")
+    .replace(/^jun$/g, "joon")
+    .replace(/^june$/g, "joon")
+    .replace(/^anya/g, "tanja")
+    .replace(/^anja/g, "tanja")
+    .replace(/^tanya/g, "tanja")
+    .replace(/^tania/g, "tanja")
     .replace(/brijesh/g, "briesh")
     .replace(/brijes/g, "briesh")
+    .replace(/^rish/g, "briesh")
+    .replace(/^brish/g, "briesh")
+    .replace(/^briish/g, "briesh")
     .replace(/brioche/g, "briesh")
     .replace(/brioch/g, "briesh")
     .replace(/briesh/g, "briesh")
@@ -241,6 +259,17 @@ function scoreCandidateName(inputName: string, candidate: string) {
   const firstWordSpeechScore = speechSoundSimilarityScore(inputFirstName, candidateFirstName);
   if (speechScore >= 88 || firstWordSpeechScore >= 88) {
     return Math.max(speechScore, firstWordSpeechScore, 86);
+  }
+
+  const inputSoundKey = voiceNameSoundKey(inputFirstName || input);
+  const candidateSoundKey = voiceNameSoundKey(candidateFirstName || normalizedCandidate);
+  // Android voice often drops the first syllable or consonant of unfamiliar names:
+  // “Tanja” → “Anya”, “Brijesh” → “Rish”. Treat this as a possible match only
+  // when the remaining sound key is long enough to be useful.
+  if (inputSoundKey.length >= 3 && candidateSoundKey.length >= 4) {
+    if (candidateSoundKey.endsWith(inputSoundKey) || inputSoundKey.endsWith(candidateSoundKey)) {
+      return 86;
+    }
   }
 
   const rawScore = nameSimilarityScore(input, normalizedCandidate);

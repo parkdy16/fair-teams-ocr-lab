@@ -1,5 +1,6 @@
 import React, { useMemo, useRef, useState } from "react";
 import { parseFairTeamsSmartCommand, createAiSmartCommandContext, transcribeFairTeamsVoiceCommand } from "@/lib/aiSmartCommandClient";
+import { applyFairTeamsAiTruthGuard, guardFairTeamsSmartCommandBeforeAi } from "@/lib/aiSmartCommandTrustGuard";
 import {
   isAiSmartCommandEnabled,
   type AiSmartCommandAction,
@@ -140,7 +141,7 @@ function actionDetails(action: AiSmartCommandAction) {
   if (action.noteText) details.push(`note: “${action.noteText}”`);
   if (action.colorName) details.push(`color: ${action.colorName}`);
   if (action.targetName) details.push(`target: ${action.targetName}`);
-  if (action.targetArea) details.push(`area: ${action.targetArea}`);
+  if (action.targetArea) details.push(`manual path: ${action.targetArea}`);
   return details.join(" · ");
 }
 
@@ -167,7 +168,7 @@ function actionCardTitle(action: AiSmartCommandAction) {
   const capability = getAiCommandCapability(action);
   if (capability?.label) return capability.label;
   if (action.type === "no_action") return "No app action needed";
-  if (action.type === "unsupported_action") return "Not a Fair Teams action";
+  if (action.type === "unsupported_action") return action.targetName || "Not available yet";
   return actionLabel(action.type);
 }
 
@@ -229,6 +230,14 @@ export function AiSmartCommandPanel({
     setShowTodayShortcut(false);
     setBusy(true);
     try {
+      const commandContext = createAiSmartCommandContext({ rosterName, rosterMode, activeTab });
+      const localTrustGuard = guardFairTeamsSmartCommandBeforeAi(trimmedCommand, commandContext);
+      if (localTrustGuard) {
+        setResult(localTrustGuard);
+        onParsed?.(localTrustGuard);
+        return;
+      }
+
       const localRankedSelection = parseRankedRosterSelectionCommand(trimmedCommand, players);
       if (localRankedSelection) {
         setResult(localRankedSelection);
@@ -236,11 +245,12 @@ export function AiSmartCommandPanel({
         return;
       }
 
-      const parsed = await parseFairTeamsSmartCommand({
+      const parsedRaw = await parseFairTeamsSmartCommand({
         commandText: trimmedCommand,
         roster: players,
-        context: createAiSmartCommandContext({ rosterName, rosterMode, activeTab }),
+        context: commandContext,
       });
+      const parsed = applyFairTeamsAiTruthGuard(trimmedCommand, parsedRaw);
       setResult(parsed);
       onParsed?.(parsed);
     } catch (err) {

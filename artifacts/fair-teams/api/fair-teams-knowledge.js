@@ -1,4 +1,4 @@
-export const FAIR_TEAMS_KNOWLEDGE_VERSION = "2026-06-21.player-query-v1";
+export const FAIR_TEAMS_KNOWLEDGE_VERSION = "2026-06-21.roster-stat-answer-v1";
 
 function clean(value, max = 4000) {
   return typeof value === "string" ? value.replace(/\s+/g, " ").trim().slice(0, max) : "";
@@ -26,6 +26,11 @@ const KNOWLEDGE_SECTIONS = {
     title: "Copying or duplicating rosters",
     keywords: ["copy roster", "copy one roster", "copy a roster", "duplicate roster", "duplicate a roster", "new roster from", "copy to new roster", "clone roster", "same roster", "make private copy", "private copy", "export this roster", "import one roster", "import as new roster", "add as new roster"],
     text: `There are two common roster-copy cases in Fair Teams. For a local/private roster, the safe current workflow is to use Roster Tools > Local Backup > Export this roster, then use Import one roster and choose that exported file. Fair Teams imports it as a separate new roster with a unique name, so the original stays unchanged; the user can rename the copied roster afterward. For a shared roster, use Make private copy. That creates a clean local roster from the shared roster while the shared roster stays online and unchanged. A private copy of a shared roster copies shared names and uses Club averages as starting skill, but photos, special abilities, and private advanced traits are reset so it starts clean. If the user asks for a one-tap duplicate command, explain the safest available path instead of pretending there is a direct duplicate button unless the current UI has one.`,
+  },
+  visiblePlayerData: {
+    title: "Visible player data and roster-stat questions",
+    keywords: ["who has", "lowest stamina", "highest stamina", "best defender", "fastest", "strongest", "weakest", "player stats", "visible stats", "attack", "defense", "speed", "passing", "stamina", "engine"],
+    text: `When the user asks a roster-data question such as "who has the lowest stamina in my roster?" the assistant should inspect the visible player data it receives and answer with player names and values, not create an action card. In local/private rosters, visible individual player details matter. Use visible values such as skill/OVR, attack, defense, speed, passing, stamina/endurance/fitness if available, and visible special traits such as Engine, Goalkeeper, Playmaker, Finisher, Dribbler, Sentinel, Versatile, Space Finder, or Organizer. If a stat is not actually available to the assistant, say that clearly instead of guessing. For stamina specifically, a numeric stamina/endurance/fitness value is better than the Engine trait; Engine only means high-stamina style, not a complete lowest-stamina ranking.`,
   },
   ratings: {
     title: "Ratings, normal rating, private rating, Club rating",
@@ -147,6 +152,7 @@ function detectKnowledgeTopic(commandText = "") {
   if (/(copy|duplicate|clone|export|import|new roster|private copy|make private copy|add as new roster).{0,40}roster|roster.{0,40}(copy|duplicate|clone|export|import|new roster|private copy|make private copy|add as new roster)/i.test(commandText)) return "rosterCopy";
   if (/(lost.?found|lost and found|ocr|smart import|screenshot|crop|scan|review names|meetup)/i.test(commandText)) return "smartImport";
   if (/(cloud backup|backup|restore|shared roster collaboration|collaboration|sync|google drive)/i.test(commandText)) return "backupSync";
+  if (/(who has|lowest|highest|best|worst|fastest|slowest|stamina|endurance|fitness|attack|defense|defence|speed|passing|player stats)/i.test(commandText)) return "visiblePlayerData";
   if (/(equipment|bag|bags|bibs|cones|ball|holder|gear)/i.test(commandText)) return "equipment";
   if (/(club notes|post.?it|organizer note|club tab|club)/i.test(commandText)) return "clubNotes";
   if (/(top players|strongest|weakest|fastest|best defenders|best attackers|best passers|highest rated|lowest rated)/i.test(commandText)) return "playerQueries";
@@ -177,6 +183,7 @@ Shared Roster is for working with other organizers. It keeps a shared online ros
 So the simple rule is: use Cloud Backup for personal backup/restore; use Shared Roster when another organizer needs access to the same roster.`,
   voiceAi: `The intended voice design is push-to-talk or tap-to-record first: record speech, transcribe it, show the transcript, then send it to the same Fair Teams assistant/action system. Realtime always-listening voice can come later. The assistant should be conversational, but app changes still go through safe capability handlers and confirmations.`,
   privacySafety: `Fair Teams AI should be helpful but cautious. Simple setup actions can be previewed or applied with one tap. Risky changes need confirmation. Destructive actions like deleting players, rosters, backups, notes, or collaborator access should never happen automatically from one casual sentence.`,
+  visiblePlayerData: `I can answer roster-stat questions using the player data Fair Teams gives me, such as skill/OVR, attack, defense, speed, passing, stamina/endurance/fitness if available, and visible special traits. If you ask “who has the lowest stamina?”, I should rank the visible stamina/endurance value if the roster provides one. If I only see the Engine trait and not a separate stamina score, I should say that clearly instead of pretending to know the exact lowest-stamina player.`,
   core: `Fair Teams helps a casual football organizer keep a roster, select who is playing today, and generate balanced teams. The assistant can answer app questions and help turn messy instructions into safe app actions. It should explain features in plain organizer language, not technical implementation language.`
 };
 

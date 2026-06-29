@@ -1655,7 +1655,6 @@ function App() {
               passing: summary.averagePassing ?? undefined,
               stamina: summary.averageStamina ?? undefined,
               physical: summary.averagePhysical ?? undefined,
-              teamPlay: summary.averageTeamPlay ?? undefined,
             })
           : {
               attack: player.attack,
@@ -1680,7 +1679,7 @@ function App() {
           passing: copiedProfile.passing,
           stamina: copiedProfile.stamina,
           physical: copiedProfile.physical,
-          teamPlay: copiedProfile.teamPlay,
+          teamPlay: summary ? 2 : copiedProfile.teamPlay,
           profilePhoto: undefined,
           isGoalkeeper: Boolean((summary?.gkYesCount || 0) > 0 || (!summary && player.isGoalkeeper)),
           isPlaymaker: false,

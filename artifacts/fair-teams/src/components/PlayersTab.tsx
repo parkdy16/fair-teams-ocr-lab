@@ -5,6 +5,7 @@ import {
   BALANCED_PLAYER_STYLE,
   generateStyledPlayerAttributes,
   getPlayerStyleDefinition,
+  inferPlayerStyleFromAttributes,
   profileFromAveragedAttributes,
   type PlayerStyleValue,
 } from "@/lib/playerStyleProfile";
@@ -17,7 +18,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { UserMinus, Plus, Star, Zap, Search, X, Camera, Image as ImageIcon, Trash2, Pencil, Shield, Activity, Dumbbell, Target, Share2, ArrowDownAZ, Clock3, Mic, Info, Eye, EyeOff } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart, ResponsiveContainer } from "recharts";
-import { listenToClubRatingSummaries, type ClubRatingSummary } from "@/lib/clubCollaborationService";
+import {
+  listenToClubRatingSummaries,
+  listenToMyClubRatings,
+  saveMyClubPlayerRating,
+  type ClubMyRating,
+  type ClubRatingProfile,
+  type ClubRatingSummary,
+} from "@/lib/clubCollaborationService";
 import { listenToSharedRosterUser } from "@/lib/sharedRosterService";
 
 
@@ -737,6 +745,8 @@ function StatControl({ label, value, max = 10, onChange }: { label: string; valu
         min={1}
         max={max}
         value={value}
+        onPointerDown={dismissActiveInput}
+        onTouchStart={dismissActiveInput}
         onChange={e => onChange(Number(e.target.value))}
         className="fairteams-slider fairteams-slider-compact w-full"
         style={{ "--slider-fill": `${((value - 1) / Math.max(1, max - 1)) * 100}%` } as React.CSSProperties}
@@ -846,6 +856,92 @@ function blurOnDoneKey(event: React.KeyboardEvent<HTMLInputElement>) {
   event.currentTarget.blur();
 }
 
+function dismissActiveInput() {
+  if (typeof document === "undefined") return;
+  const activeElement = document.activeElement;
+  if (activeElement instanceof HTMLElement) activeElement.blur();
+}
+
+function hasCompleteClubMyRating(rating?: ClubMyRating | null) {
+  return Boolean(
+    rating &&
+      !rating.skipped &&
+      typeof rating.skill === "number" &&
+      [rating.attack, rating.defense, rating.speed, rating.passing, rating.stamina, rating.physical].every((value) => typeof value === "number"),
+  );
+}
+
+function sharedDraftFromPlayerAndRating(player: RoomPlayer, rating?: ClubMyRating | null) {
+  const base = normalizePlayer(player);
+  if (!hasCompleteClubMyRating(rating)) return { ...base, teamPlay: 2 };
+  return normalizePlayer({
+    ...base,
+    skill: Number(rating?.skill),
+    attack: Number(rating?.attack),
+    defense: Number(rating?.defense),
+    speed: Number(rating?.speed),
+    passing: Number(rating?.passing),
+    stamina: Number(rating?.stamina),
+    physical: Number(rating?.physical),
+    teamPlay: 2,
+    isGoalkeeper: Boolean(rating?.isGoalkeeper),
+  });
+}
+
+function sharedOverallFromDraft(player: Partial<RoomPlayer>) {
+  return calculateOverall({
+    attack: player.attack,
+    defense: player.defense,
+    speed: player.speed,
+    passing: player.passing,
+    stamina: player.stamina,
+    physical: player.physical,
+    teamPlay: 2,
+    isGoalkeeper: false,
+    isPlaymaker: false,
+    isFinisher: false,
+    isDribbler: false,
+    isSentinel: false,
+    isEngine: false,
+    isVersatile: false,
+    isSpaceFinder: false,
+    isLongPass: false,
+    isTikiTaka: false,
+    isCrossing: false,
+    isAerial: false,
+    isPowerShot: false,
+    isBulldog: false,
+  });
+}
+
+function sharedRatingProfileFromDraft(draft: RoomPlayer, playerStyle: PlayerStyleValue): ClubRatingProfile {
+  const skill = roundSkillStep(sharedOverallFromDraft(draft));
+  return {
+    skill,
+    attack: draft.attack,
+    defense: draft.defense,
+    speed: draft.speed,
+    passing: draft.passing,
+    stamina: draft.stamina,
+    physical: draft.physical,
+    teamPlay: 2,
+    playerStyle,
+    isGoalkeeper: Boolean(draft.isGoalkeeper),
+  };
+}
+
+function sharedIdentityUpdateFromDraft(draft: RoomPlayer): Partial<RoomPlayer> {
+  return {
+    name: draft.name,
+    aka: draft.aka,
+    gender: draft.gender,
+    isNew: draft.isNew,
+    funBadge: draft.funBadge,
+    profilePhoto: draft.profilePhoto,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
 function ProfileDialog({
   player,
   onUpdate,
@@ -857,6 +953,8 @@ function ProfileDialog({
   onReviewNext,
   onReviewDone,
   isSharedRoster = false,
+  sharedRosterId,
+  clubMyRating,
 }: {
   player: RoomPlayer;
   onUpdate: (data: Partial<RoomPlayer>) => void;
@@ -868,14 +966,21 @@ function ProfileDialog({
   onReviewNext?: () => void;
   onReviewDone?: () => void;
   isSharedRoster?: boolean;
+  sharedRosterId?: string;
+  clubMyRating?: ClubMyRating;
 }) {
-  const [draft, setDraft] = useState<RoomPlayer>(() => normalizePlayer(player));
+  const [draft, setDraft] = useState<RoomPlayer>(() => isSharedRoster ? sharedDraftFromPlayerAndRating(player, clubMyRating) : normalizePlayer(player));
   const [open, setOpen] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const photoCameraInput = useRef<HTMLInputElement | null>(null);
   const photoGalleryInput = useRef<HTMLInputElement | null>(null);
   const [photoActionsOpen, setPhotoActionsOpen] = useState(false);
   const [traitHelp, setTraitHelp] = useState<(typeof SPECIAL_ABILITIES)[number] | null>(null);
+  const [sharedPlayerStyle, setSharedPlayerStyle] = useState<PlayerStyleValue>(
+    typeof clubMyRating?.playerStyle === "number" ? clubMyRating.playerStyle : inferPlayerStyleFromAttributes(player),
+  );
+  const [sharedProfileSaving, setSharedProfileSaving] = useState(false);
+  const [sharedProfileError, setSharedProfileError] = useState("");
   const overall = calculateOverall(draft);
   const quickSkill = quickSkillFromPlayer(draft);
   const quickSkillExplanation = skillLevelExplanation(quickSkill);
@@ -885,13 +990,24 @@ function ProfileDialog({
     setDraft(prev => normalizePlayer({ ...prev, ...data }));
   };
 
+  const resetSharedDraft = () => {
+    const nextDraft = isSharedRoster ? sharedDraftFromPlayerAndRating(player, clubMyRating) : normalizePlayer(player);
+    setDraft(nextDraft);
+    setSharedPlayerStyle(
+      typeof clubMyRating?.playerStyle === "number"
+        ? clubMyRating.playerStyle
+        : inferPlayerStyleFromAttributes(nextDraft),
+    );
+    setSharedProfileError("");
+  };
+
   const applyQuickSkill = (skillLevel: number) => {
     setDraft(prev => applyQuickSkillToPlayer(prev, skillLevel));
   };
 
   useEffect(() => {
     if (!autoOpen) return;
-    setDraft(normalizePlayer(player));
+    resetSharedDraft();
     setAdvancedOpen(false);
     setPhotoActionsOpen(false);
     setOpen(true);
@@ -907,13 +1023,43 @@ function ProfileDialog({
     }
   };
 
-  const save = () => {
-    onUpdate({ ...draft, skill: overall, updatedAt: new Date().toISOString() });
+  const saveSharedProfile = async () => {
+    if (!isSharedRoster) return true;
+    onUpdate(sharedIdentityUpdateFromDraft(draft));
+    if (!sharedRosterId) {
+      setSharedProfileError("Shared roster is still connecting. Try again in a moment.");
+      return false;
+    }
+    try {
+      setSharedProfileSaving(true);
+      setSharedProfileError("");
+      await saveMyClubPlayerRating(sharedRosterId, player.id, sharedRatingProfileFromDraft(draft, sharedPlayerStyle));
+      return true;
+    } catch (error) {
+      setSharedProfileError(error instanceof Error ? error.message : "Could not save shared rating profile.");
+      return false;
+    } finally {
+      setSharedProfileSaving(false);
+    }
+  };
+
+  const save = async () => {
+    if (isSharedRoster) {
+      const saved = await saveSharedProfile();
+      if (!saved) return;
+    } else {
+      onUpdate({ ...draft, skill: overall, updatedAt: new Date().toISOString() });
+    }
     setOpen(false);
   };
 
-  const saveReviewAndContinue = () => {
-    onUpdate({ ...draft, skill: overall, updatedAt: new Date().toISOString() });
+  const saveReviewAndContinue = async () => {
+    if (isSharedRoster) {
+      const saved = await saveSharedProfile();
+      if (!saved) return;
+    } else {
+      onUpdate({ ...draft, skill: overall, updatedAt: new Date().toISOString() });
+    }
     setOpen(false);
     if (reviewIsLast) {
       onReviewDone?.();
@@ -958,7 +1104,7 @@ function ProfileDialog({
         setOpen(next);
         setPhotoActionsOpen(false);
         if (next) {
-          setDraft(normalizePlayer(player));
+          resetSharedDraft();
           setAdvancedOpen(false);
         } else if (reviewMode) {
           onReviewDone?.();
@@ -978,7 +1124,7 @@ function ProfileDialog({
           <DialogTitle>{isSharedRoster ? "Shared Player Info" : "Player Setup"}</DialogTitle>
           <div className="text-xs font-semibold text-muted-foreground">
             {isSharedRoster
-              ? "This shared roster keeps identity fields in sync. Club ratings live in the Club tab."
+              ? "This shared roster uses the same shared profile as Club ratings."
               : "Quick edit first. Open Advanced only when you need detailed stats or photos."}
           </div>
         </DialogHeader>
@@ -1035,30 +1181,98 @@ function ProfileDialog({
                 <Label className="text-[10px] uppercase font-bold text-violet-700/80 tracking-wider">Player Vibe</Label>
                 <VibePicker value={draft.funBadge} onChange={funBadge => updateDraft({ funBadge })} />
               </div>
-              <div className="rounded-2xl border border-violet-100 bg-white/85 p-3 space-y-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <Label className="text-[10px] uppercase font-black tracking-wide text-violet-700">Shared balance profile</Label>
-                    <div className="mt-0.5 text-[10px] font-semibold leading-snug text-violet-700/75">
-                      Full shared edit, without local-only special abilities. Club ratings can still override this in team generation.
+              {(() => {
+                const sharedOverall = sharedOverallFromDraft(draft);
+                const selectedStyle = getPlayerStyleDefinition(sharedPlayerStyle);
+                return (
+                  <div className="rounded-2xl border border-violet-100 bg-white/85 p-3 space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <Label className="text-[10px] uppercase font-black tracking-wide text-violet-700">Shared balance profile</Label>
+                        <div className="mt-0.5 text-[10px] font-semibold leading-snug text-violet-700/75">
+                          Same profile used by Club ratings. No local-only traits or Team Play here.
+                        </div>
+                      </div>
+                      <div className="rounded-xl bg-violet-700 px-3 py-1.5 text-center text-white shadow-sm">
+                        <div className="text-[8px] uppercase font-black opacity-75 leading-none">OVR</div>
+                        <div className="text-xl font-black leading-none">{sharedOverall.toFixed(1)}</div>
+                      </div>
                     </div>
+
+                    <div className="rounded-2xl border border-violet-100 bg-violet-50/80 px-3 py-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <div>
+                          <Label className="text-[10px] uppercase font-black tracking-wide text-violet-700">Overall skill</Label>
+                          <div className="mt-0.5 text-[10px] font-semibold text-violet-700/75">Moving this reshapes stats from the selected style.</div>
+                        </div>
+                        <span className="text-sm font-black tabular-nums text-violet-900">{roundSkillStep(sharedOverall).toFixed(1)}</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={1}
+                        max={10}
+                        step={0.5}
+                        value={roundSkillStep(sharedOverall)}
+                        onPointerDown={dismissActiveInput}
+                        onTouchStart={dismissActiveInput}
+                        onChange={e => {
+                          const nextSkill = roundSkillStep(Number(e.target.value));
+                          const generated = generateStyledPlayerAttributes(nextSkill, sharedPlayerStyle);
+                          updateDraft({ ...generated, teamPlay: 2 });
+                        }}
+                        className="fairteams-slider w-full"
+                        style={{ "--slider-fill": `${((roundSkillStep(sharedOverall) - 1) / 9) * 100}%` } as React.CSSProperties}
+                      />
+                    </div>
+
+                    <div className="space-y-2 rounded-2xl border border-violet-100 bg-violet-50/80 px-3 py-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <Label className="text-[10px] uppercase font-black tracking-wide text-violet-700">Player Style</Label>
+                        <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-black text-violet-800 shadow-sm">{selectedStyle.label}</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={0}
+                        max={6}
+                        step={1}
+                        value={sharedPlayerStyle}
+                        onPointerDown={dismissActiveInput}
+                        onTouchStart={dismissActiveInput}
+                        onChange={e => {
+                          const nextStyle = Number(e.target.value) as PlayerStyleValue;
+                          setSharedPlayerStyle(nextStyle);
+                          const generated = generateStyledPlayerAttributes(roundSkillStep(sharedOverall), nextStyle);
+                          updateDraft({ ...generated, teamPlay: 2 });
+                        }}
+                        className="w-full accent-violet-700"
+                      />
+                      <div className="grid grid-cols-3 text-[10px] font-black text-violet-500/80">
+                        <span>Defense</span><span className="text-center">Midfield</span><span className="text-right">Attack</span>
+                      </div>
+                      <div className="rounded-xl border border-violet-100 bg-white/80 px-3 py-2 text-[11px] font-semibold leading-snug text-violet-900">
+                        {selectedStyle.description}
+                      </div>
+                    </div>
+
+                    <PlayerRadar player={{ ...draft, skill: sharedOverall, teamPlay: 2 }} />
+
+                    <div className="grid grid-cols-2 gap-2">
+                      {STAT_FIELDS.map(({ key, label }) => (
+                        <StatControl key={key} label={label} value={draft[key]} onChange={value => updateDraft({ [key]: value, teamPlay: 2 } as Partial<RoomPlayer>)} />
+                      ))}
+                      <TogglePill active={!!draft.isGoalkeeper} onClick={() => updateDraft({ isGoalkeeper: !draft.isGoalkeeper, teamPlay: 2 })} activeClassName="border-amber-300 bg-amber-100 text-amber-900 shadow-sm">
+                        GK
+                      </TogglePill>
+                    </div>
+
+                    {sharedProfileError && (
+                      <div className="rounded-2xl border border-rose-100 bg-rose-50 px-3 py-2 text-[11px] font-bold leading-snug text-rose-700">
+                        {sharedProfileError}
+                      </div>
+                    )}
                   </div>
-                  <div className="rounded-xl bg-violet-700 px-3 py-1.5 text-center text-white shadow-sm">
-                    <div className="text-[8px] uppercase font-black opacity-75 leading-none">OVR</div>
-                    <div className="text-xl font-black leading-none">{overall}</div>
-                  </div>
-                </div>
-                <PlayerRadar player={{ ...draft, skill: overall }} />
-                <div className="grid grid-cols-2 gap-2">
-                  {STAT_FIELDS.map(({ key, label }) => (
-                    <StatControl key={key} label={label} value={draft[key]} onChange={value => updateDraft({ [key]: value } as Partial<RoomPlayer>)} />
-                  ))}
-                  <StatControl label="Team Play" value={draft.teamPlay} max={3} onChange={value => updateDraft({ teamPlay: value })} />
-                  <TogglePill active={!!draft.isGoalkeeper} onClick={() => updateDraft({ isGoalkeeper: !draft.isGoalkeeper })} activeClassName="border-amber-300 bg-amber-100 text-amber-900 shadow-sm">
-                    GK
-                  </TogglePill>
-                </div>
-              </div>
+                );
+              })()}
             </div>
           )}
 
@@ -1260,13 +1474,14 @@ function ProfileDialog({
               <Button
                 type="button"
                 onClick={saveReviewAndContinue}
+                disabled={sharedProfileSaving}
                 className="h-11 rounded-xl font-black"
               >
-                {reviewIsLast ? "Save & Done" : "Save & Next"}
+                {sharedProfileSaving ? "Saving…" : reviewIsLast ? "Save & Done" : "Save & Next"}
               </Button>
             </div>
           ) : (
-            <Button onClick={save} className="h-11 rounded-xl font-black uppercase tracking-wide">{isSharedRoster ? "Save Shared Info" : "Save Profile"}</Button>
+            <Button onClick={save} disabled={sharedProfileSaving} className="h-11 rounded-xl font-black uppercase tracking-wide">{sharedProfileSaving ? "Saving…" : isSharedRoster ? "Save Shared Profile" : "Save Profile"}</Button>
           )}
         </div>
       </DialogContent>
@@ -1326,7 +1541,6 @@ function playerWithClubAverage(player: RoomPlayer, summary?: ClubRatingSummary):
     passing: summary?.averagePassing ?? undefined,
     stamina: summary?.averageStamina ?? undefined,
     physical: summary?.averagePhysical ?? undefined,
-    teamPlay: summary?.averageTeamPlay ?? undefined,
   });
   return {
     ...player,
@@ -1337,7 +1551,7 @@ function playerWithClubAverage(player: RoomPlayer, summary?: ClubRatingSummary):
     passing: profile.passing,
     stamina: profile.stamina,
     physical: profile.physical,
-    teamPlay: profile.teamPlay,
+    teamPlay: 2,
     isGoalkeeper: Boolean((summary?.gkYesCount || 0) > 0 || player.isGoalkeeper),
   };
 }
@@ -1459,6 +1673,7 @@ export function PlayersTab({
   const [sortMode, setSortMode] = useState<"recent" | "alpha" | "skill">(() => rosterSortModeSession);
   const [clubRatingLegendOpen, setClubRatingLegendOpen] = useState(false);
   const [clubRatingSummaries, setClubRatingSummaries] = useState<ClubRatingSummary[]>([]);
+  const [myClubRatings, setMyClubRatings] = useState<ClubMyRating[]>([]);
   const [sharedRosterAuthReady, setSharedRosterAuthReady] = useState(false);
   const [sharedRosterUserUid, setSharedRosterUserUid] = useState<string | null>(null);
   const lastOpenPairingRulesTokenRef = useRef(0);
@@ -1481,22 +1696,34 @@ export function PlayersTab({
   useEffect(() => {
     if (!isSharedRoster || !sharedRosterId) {
       setClubRatingSummaries([]);
+      setMyClubRatings([]);
       return;
     }
     if (!sharedRosterAuthReady) return;
     if (!sharedRosterUserUid) {
       setClubRatingSummaries([]);
+      setMyClubRatings([]);
       return;
     }
 
     try {
-      return listenToClubRatingSummaries(
+      const unsubscribeSummaries = listenToClubRatingSummaries(
         sharedRosterId,
         setClubRatingSummaries,
         () => setClubRatingSummaries([]),
       );
+      const unsubscribeMyRatings = listenToMyClubRatings(
+        sharedRosterId,
+        setMyClubRatings,
+        () => setMyClubRatings([]),
+      );
+      return () => {
+        unsubscribeSummaries();
+        unsubscribeMyRatings();
+      };
     } catch {
       setClubRatingSummaries([]);
+      setMyClubRatings([]);
       return;
     }
   }, [isSharedRoster, sharedRosterId, sharedRosterAuthReady, sharedRosterUserUid]);
@@ -1778,6 +2005,7 @@ export function PlayersTab({
   const effectiveSortMode = sortMode;
 
   const clubRatingSummaryByPlayerId = useMemo(() => new Map(clubRatingSummaries.map((summary) => [summary.playerId, summary])), [clubRatingSummaries]);
+  const myClubRatingByPlayerId = useMemo(() => new Map(myClubRatings.map((rating) => [rating.playerId, rating])), [myClubRatings]);
 
   const sortedPlayers = [...players].sort((a, b) => {
     if (effectiveSortMode === "alpha") {
@@ -2158,6 +2386,7 @@ export function PlayersTab({
                       placeholder="Nickname or alternate spelling"
                       value={aka}
                       onChange={e => setAka(e.target.value)}
+                      onKeyDown={blurOnDoneKey}
                       className="h-10 border-violet-100 bg-white text-sm font-semibold"
                       enterKeyHint="done"
                       data-testid="input-player-aka"
@@ -2184,6 +2413,8 @@ export function PlayersTab({
                       max={10}
                       step={0.5}
                       value={skillLevel}
+                      onPointerDown={dismissActiveInput}
+                      onTouchStart={dismissActiveInput}
                       onChange={e => {
                         const next = roundSkillStep(Number(e.target.value));
                         setSkillLevel(next);
@@ -2203,6 +2434,8 @@ export function PlayersTab({
                         max={6}
                         step={1}
                         value={addPlayerStyle}
+                        onPointerDown={dismissActiveInput}
+                        onTouchStart={dismissActiveInput}
                         onChange={e => {
                           const nextStyle = Number(e.target.value) as PlayerStyleValue;
                           setAddPlayerStyle(nextStyle);
@@ -2288,6 +2521,8 @@ export function PlayersTab({
                   max={10}
                   step={0.5}
                   value={skillLevel}
+                  onPointerDown={dismissActiveInput}
+                  onTouchStart={dismissActiveInput}
                   onChange={e => {
                     const next = roundSkillStep(Number(e.target.value));
                     setSkillLevel(next);
@@ -2311,6 +2546,8 @@ export function PlayersTab({
                     max={6}
                     step={1}
                     value={addPlayerStyle}
+                    onPointerDown={dismissActiveInput}
+                    onTouchStart={dismissActiveInput}
                     onChange={e => {
                       const nextStyle = Number(e.target.value) as PlayerStyleValue;
                       setAddPlayerStyle(nextStyle);
@@ -2393,6 +2630,7 @@ export function PlayersTab({
                           placeholder="Nickname"
                           value={aka}
                           onChange={e => setAka(e.target.value)}
+                          onKeyDown={blurOnDoneKey}
                           className="h-10 text-sm font-semibold"
                           enterKeyHint="done"
                           data-testid="input-player-aka"
@@ -2797,6 +3035,8 @@ export function PlayersTab({
                         onReviewNext={onReviewNext}
                         onReviewDone={onReviewDone}
                         isSharedRoster={isSharedRoster}
+                        sharedRosterId={sharedRosterId}
+                        clubMyRating={myClubRatingByPlayerId.get(player.id)}
                       />
                       <AlertDialog>
                         <AlertDialogTrigger asChild>

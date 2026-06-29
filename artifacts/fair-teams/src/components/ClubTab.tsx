@@ -974,7 +974,7 @@ export function ClubTab({
           passing: Number(existing?.passing),
           stamina: Number(existing?.stamina),
           physical: Number(existing?.physical),
-          teamPlay: Math.min(3, Math.max(1, Math.round(Number(existing?.teamPlay) || 2))),
+          teamPlay: 2,
         }
       : generateStyledPlayerAttributes(baseSkill, style);
     setRatingDialogError("");
@@ -1021,7 +1021,7 @@ export function ClubTab({
           passing: player.passing,
           stamina: player.stamina,
           physical: player.physical,
-          teamPlay: player.teamPlay,
+          teamPlay: 2,
           playerStyle: inferPlayerStyleFromAttributes({ ...player, skill }),
           isGoalkeeper: Boolean(player.isGoalkeeper),
         });

@@ -606,7 +606,7 @@ function actionPrimaryVerb(action: AiSmartCommandAction) {
   return "Apply";
 }
 
-const AI_ASSISTANT_VERSION_LABEL = "AI beta · v1.30 shared profile ratings";
+const AI_ASSISTANT_VERSION_LABEL = "AI beta · v1.31 shared edit sync";
 
 type AiRosterMatch = {
   player: AiSmartCommandRosterPlayer;

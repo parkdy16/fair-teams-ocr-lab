@@ -162,7 +162,6 @@ function toClubBalancePlayer(p: RoomPlayer, summary?: ClubRatingSummary): Player
     passing: summary?.averagePassing ?? undefined,
     stamina: summary?.averageStamina ?? undefined,
     physical: summary?.averagePhysical ?? undefined,
-    teamPlay: summary?.averageTeamPlay ?? undefined,
   });
   return {
     id: p.id,
@@ -176,7 +175,7 @@ function toClubBalancePlayer(p: RoomPlayer, summary?: ClubRatingSummary): Player
     passing: profile.passing,
     stamina: profile.stamina,
     physical: profile.physical,
-    teamPlay: profile.teamPlay,
+    teamPlay: 2,
     profilePhoto: p.profilePhoto,
     isGoalkeeper: Boolean((summary?.gkYesCount || 0) > 0 || p.isGoalkeeper),
     isOrganizer: p.isOrganizer,

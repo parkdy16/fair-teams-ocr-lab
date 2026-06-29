@@ -24,7 +24,8 @@ import {
   type DocumentData,
   type Timestamp,
 } from "firebase/firestore";
-import { normalizeRoster, type RoomPlayer, type RoomRoster } from "@/lib/localRoster";
+import { calculateOverall, normalizeRoster, type RoomPlayer, type RoomRoster } from "@/lib/localRoster";
+import { inferPlayerStyleFromAttributes } from "@/lib/playerStyleProfile";
 import { getFirebaseProjectId, getFairTeamsAuth, getFairTeamsFirestore } from "@/lib/firebaseClient";
 
 export type SharedRosterUser = {
@@ -92,6 +93,10 @@ function toSharedRosterUser(user: User | null): SharedRosterUser | null {
 
 function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
+}
+
+function safeDocId(value: string) {
+  return value.replace(/\//g, "_");
 }
 
 function cleanOrganizerDisplayName(value?: string | null) {
@@ -261,19 +266,31 @@ async function seedOwnerClubRatingsFromRoster(rosterId: string, players: RoomPla
 
   for (const player of players) {
     if (!player.id) continue;
-    const skill = clampSharedSkill(player.skill);
+    const skill = clampSharedSkill(calculateOverall(player));
+    const playerStyle = inferPlayerStyleFromAttributes({ ...player, skill });
+    const teamPlay = Math.min(3, Math.max(1, Math.round(Number(player.teamPlay) || 2)));
+    const gkYesCount = player.isGoalkeeper ? 1 : 0;
     const submissionRef = doc(firestore, "sharedRosters", rosterId, "clubRatingSubmissions", `${safeDocId(user.uid)}_${safeDocId(player.id)}`);
     const summaryRef = doc(firestore, "sharedRosters", rosterId, "clubRatingSummaries", safeDocId(player.id));
 
     batch.set(submissionRef, {
       app: "Fair Teams",
-      schemaVersion: 1,
+      schemaVersion: 2,
       rosterId,
       playerId: player.id,
       userUid: user.uid,
       userEmail: user.email,
       userName: nameFromUser(user),
       skill,
+      attack: player.attack,
+      defense: player.defense,
+      speed: player.speed,
+      passing: player.passing,
+      stamina: player.stamina,
+      physical: player.physical,
+      teamPlay,
+      playerStyle,
+      isGoalkeeper: Boolean(player.isGoalkeeper),
       skipped: false,
       updatedAt: serverTimestamp(),
       updatedAtIso: now,
@@ -282,12 +299,29 @@ async function seedOwnerClubRatingsFromRoster(rosterId: string, players: RoomPla
 
     batch.set(summaryRef, {
       app: "Fair Teams",
-      schemaVersion: 1,
+      schemaVersion: 2,
       rosterId,
       playerId: player.id,
       ratingCount: 1,
       ratingSum: skill,
+      attackSum: player.attack,
+      defenseSum: player.defense,
+      speedSum: player.speed,
+      passingSum: player.passing,
+      staminaSum: player.stamina,
+      physicalSum: player.physical,
+      teamPlaySum: teamPlay,
+      playerStyleSum: playerStyle,
       averageSkill: skill,
+      averageAttack: player.attack,
+      averageDefense: player.defense,
+      averageSpeed: player.speed,
+      averagePassing: player.passing,
+      averageStamina: player.stamina,
+      averagePhysical: player.physical,
+      averageTeamPlay: teamPlay,
+      averagePlayerStyle: playerStyle,
+      gkYesCount,
       updatedAt: serverTimestamp(),
       updatedAtIso: now,
     }, { merge: true });
@@ -660,7 +694,7 @@ export async function leaveFirebaseSharedRosterAccess(rosterId: string): Promise
     if (groupData.ownerUid === user.uid || normalizeEmail(groupData.ownerEmail || "") === email) {
       throw new Error("The owner cannot leave their own shared group. Delete it online or transfer ownership later.");
     }
-    const rosterIds = Array.isArray(groupData.rosterIds) ? groupData.rosterIds.filter((id): id is string => typeof id === "string" && id.trim()) : [rosterId];
+    const rosterIds = Array.isArray(groupData.rosterIds) ? groupData.rosterIds.filter((id): id is string => typeof id === "string" && Boolean(id.trim())) : [rosterId];
     batch.update(groupRef, removeCurrentUserFields(groupData));
     for (const id of rosterIds) {
       const linkedRosterRef = doc(getFairTeamsFirestore(), "sharedRosters", id);

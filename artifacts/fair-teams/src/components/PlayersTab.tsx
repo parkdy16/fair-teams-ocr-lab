@@ -1,6 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { RoomPlayer } from "@/lib/localRoster";
 import { calculateOverall, normalizePlayer } from "@/lib/localRoster";
+import {
+  BALANCED_PLAYER_STYLE,
+  generateStyledPlayerAttributes,
+  getPlayerStyleDefinition,
+  profileFromAveragedAttributes,
+  type PlayerStyleValue,
+} from "@/lib/playerStyleProfile";
 import { FunBadge, Gender, PairingRule, PairingRuleKind } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -488,6 +495,14 @@ function createDefaultAddPlayerDetails(skillLevel = 5): AddPlayerDetails {
   };
 }
 
+function createStyledAddPlayerDetails(skillLevel = 5, playerStyle: PlayerStyleValue = BALANCED_PLAYER_STYLE): AddPlayerDetails {
+  const generated = generateStyledPlayerAttributes(skillLevel, playerStyle);
+  return {
+    ...createDefaultAddPlayerDetails(skillLevel),
+    ...generated,
+  };
+}
+
 function applySkillLevelToDetails(details: AddPlayerDetails, skillLevel: number): AddPlayerDetails {
   return {
     ...details,
@@ -497,6 +512,14 @@ function applySkillLevelToDetails(details: AddPlayerDetails, skillLevel: number)
     passing: skillLevel,
     stamina: skillLevel,
     physical: skillLevel,
+  };
+}
+
+function applyStyledSkillToDetails(details: AddPlayerDetails, skillLevel: number, playerStyle: PlayerStyleValue): AddPlayerDetails {
+  const generated = generateStyledPlayerAttributes(skillLevel, playerStyle);
+  return {
+    ...details,
+    ...generated,
   };
 }
 
@@ -723,18 +746,13 @@ function StatControl({ label, value, max = 10, onChange }: { label: string; valu
 }
 
 function PlayerRadar({ player, compact = false }: { player: RoomPlayer; compact?: boolean }) {
-  const radarValue = (value: unknown) => {
-    const numeric = Number(value);
-    if (!Number.isFinite(numeric)) return 0;
-    return Math.max(0, Math.min(10, Math.round(numeric * 10) / 10));
-  };
   const data = useMemo(() => [
-    { stat: "Attack", value: radarValue(player.attack) },
-    { stat: "Passing", value: radarValue(player.passing) },
-    { stat: "Stamina", value: radarValue(player.stamina) },
-    { stat: "Defense", value: radarValue(player.defense) },
-    { stat: "Strength", value: radarValue(player.physical) },
-    { stat: "Speed", value: radarValue(player.speed) },
+    { stat: "Attack", value: player.attack },
+    { stat: "Passing", value: player.passing },
+    { stat: "Stamina", value: player.stamina },
+    { stat: "Defense", value: player.defense },
+    { stat: "Strength", value: player.physical },
+    { stat: "Speed", value: player.speed },
   ], [player]);
 
   return (
@@ -743,8 +761,8 @@ function PlayerRadar({ player, compact = false }: { player: RoomPlayer; compact?
         <RadarChart data={data} outerRadius="72%">
           <PolarGrid />
           <PolarAngleAxis dataKey="stat" tick={{ fontSize: compact ? 8 : 10, fontWeight: 700 }} />
-          <PolarRadiusAxis dataKey="value" domain={[0, 10]} tick={false} axisLine={false} tickCount={11} allowDataOverflow />
-          <Radar dataKey="value" stroke="hsl(var(--primary))" fill="hsl(var(--primary))" fillOpacity={0.35} strokeWidth={2} isAnimationActive={false} />
+          <PolarRadiusAxis domain={[0, 10]} tick={false} axisLine={false} />
+          <Radar dataKey="value" stroke="hsl(var(--primary))" fill="hsl(var(--primary))" fillOpacity={0.35} strokeWidth={2} />
         </RadarChart>
       </ResponsiveContainer>
     </div>
@@ -1006,7 +1024,7 @@ function ProfileDialog({
               <div>
                 <Label className="text-[11px] uppercase font-black tracking-wide text-violet-700">Shared player info</Label>
                 <div className="mt-0.5 text-[10px] font-semibold leading-snug text-violet-700/75">
-                  These fields are shared with organizers. Team balancing uses Club ratings, not this edit window.
+                  These fields are shared with organizers. Club ratings override this profile when ratings exist.
                 </div>
               </div>
               <div className="space-y-1.5">
@@ -1016,6 +1034,30 @@ function ProfileDialog({
               <div className="space-y-1.5">
                 <Label className="text-[10px] uppercase font-bold text-violet-700/80 tracking-wider">Player Vibe</Label>
                 <VibePicker value={draft.funBadge} onChange={funBadge => updateDraft({ funBadge })} />
+              </div>
+              <div className="rounded-2xl border border-violet-100 bg-white/85 p-3 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <Label className="text-[10px] uppercase font-black tracking-wide text-violet-700">Shared balance profile</Label>
+                    <div className="mt-0.5 text-[10px] font-semibold leading-snug text-violet-700/75">
+                      Full shared edit, without local-only special abilities. Club ratings can still override this in team generation.
+                    </div>
+                  </div>
+                  <div className="rounded-xl bg-violet-700 px-3 py-1.5 text-center text-white shadow-sm">
+                    <div className="text-[8px] uppercase font-black opacity-75 leading-none">OVR</div>
+                    <div className="text-xl font-black leading-none">{overall}</div>
+                  </div>
+                </div>
+                <PlayerRadar player={{ ...draft, skill: overall }} />
+                <div className="grid grid-cols-2 gap-2">
+                  {STAT_FIELDS.map(({ key, label }) => (
+                    <StatControl key={key} label={label} value={draft[key]} onChange={value => updateDraft({ [key]: value } as Partial<RoomPlayer>)} />
+                  ))}
+                  <StatControl label="Team Play" value={draft.teamPlay} max={3} onChange={value => updateDraft({ teamPlay: value })} />
+                  <TogglePill active={!!draft.isGoalkeeper} onClick={() => updateDraft({ isGoalkeeper: !draft.isGoalkeeper })} activeClassName="border-amber-300 bg-amber-100 text-amber-900 shadow-sm">
+                    GK
+                  </TogglePill>
+                </div>
               </div>
             </div>
           )}
@@ -1277,15 +1319,26 @@ function playerWithClubAverage(player: RoomPlayer, summary?: ClubRatingSummary):
   const average = Number(summary?.averageSkill);
   if (!Number.isFinite(average) || average < 1 || average > 10) return player;
   const skill = Math.round(average * 10) / 10;
+  const profile = profileFromAveragedAttributes(skill, {
+    attack: summary?.averageAttack ?? undefined,
+    defense: summary?.averageDefense ?? undefined,
+    speed: summary?.averageSpeed ?? undefined,
+    passing: summary?.averagePassing ?? undefined,
+    stamina: summary?.averageStamina ?? undefined,
+    physical: summary?.averagePhysical ?? undefined,
+    teamPlay: summary?.averageTeamPlay ?? undefined,
+  });
   return {
     ...player,
     skill,
-    attack: skill,
-    defense: skill,
-    speed: skill,
-    passing: skill,
-    stamina: skill,
-    physical: skill,
+    attack: profile.attack,
+    defense: profile.defense,
+    speed: profile.speed,
+    passing: profile.passing,
+    stamina: profile.stamina,
+    physical: profile.physical,
+    teamPlay: profile.teamPlay,
+    isGoalkeeper: Boolean((summary?.gkYesCount || 0) > 0 || player.isGoalkeeper),
   };
 }
 
@@ -1372,15 +1425,17 @@ export function PlayersTab({
   const [gender, setGender] = useState<Gender>("male");
   const [isNew, setIsNew] = useState(true);
   const [skillLevel, setSkillLevel] = useState(5);
+  const [addPlayerStyle, setAddPlayerStyle] = useState<PlayerStyleValue>(BALANCED_PLAYER_STYLE);
   const [addAdvancedOpen, setAddAdvancedOpen] = useState(false);
   const [isOrganizer, setIsOrganizer] = useState(false);
   const [addProfilePhoto, setAddProfilePhoto] = useState<string | undefined>(undefined);
   const [addPhotoActionsOpen, setAddPhotoActionsOpen] = useState(false);
   const addPhotoCameraInput = useRef<HTMLInputElement | null>(null);
   const addPhotoGalleryInput = useRef<HTMLInputElement | null>(null);
-  const [addDetails, setAddDetails] = useState<AddPlayerDetails>(() => createDefaultAddPlayerDetails());
+  const [addDetails, setAddDetails] = useState<AddPlayerDetails>(() => createStyledAddPlayerDetails(5, BALANCED_PLAYER_STYLE));
   const addOverall = calculateOverall(addDetails);
   const addSkillExplanation = skillLevelExplanation(skillLevel);
+  const addSelectedStyle = getPlayerStyleDefinition(addPlayerStyle);
   const updateAddDetails = (data: Partial<AddPlayerDetails>) => setAddDetails(prev => ({ ...prev, ...data }));
   const [autoEditPlayerId, setAutoEditPlayerId] = useState<string | null>(null);
   const [flippedPlayerIds, setFlippedPlayerIds] = useState<Record<string, boolean>>({});
@@ -1508,7 +1563,8 @@ export function PlayersTab({
     setGender("male");
     setIsNew(true);
     setSkillLevel(5);
-    setAddDetails(createDefaultAddPlayerDetails(5));
+    setAddPlayerStyle(BALANCED_PLAYER_STYLE);
+    setAddDetails(createStyledAddPlayerDetails(5, BALANCED_PLAYER_STYLE));
     setAddProfilePhoto(undefined);
     setAddPhotoActionsOpen(false);
     setAddAdvancedOpen(false);
@@ -1678,14 +1734,14 @@ export function PlayersTab({
     }
 
     const now = new Date().toISOString();
-    const profileDetails = isSharedRoster ? createDefaultAddPlayerDetails(5) : addDetails;
+    const profileDetails = addDetails;
     const newPlayer = normalizePlayer({
       id: createPlayerId(),
       roomId: 1,
       name: name.trim(),
       aka: aka.trim() || undefined,
       gender,
-      skill: isSharedRoster ? 5 : calculateOverall(profileDetails),
+      skill: calculateOverall(profileDetails),
       ...profileDetails,
       profilePhoto: !isSharedRoster && addAdvancedOpen ? addProfilePhoto : undefined,
       isOrganizer: isSharedRoster ? false : isOrganizer,
@@ -1699,7 +1755,8 @@ export function PlayersTab({
     setAka("");
     setIsNew(true);
     setSkillLevel(5);
-    setAddDetails(createDefaultAddPlayerDetails(5));
+    setAddPlayerStyle(BALANCED_PLAYER_STYLE);
+    setAddDetails(createStyledAddPlayerDetails(5, BALANCED_PLAYER_STYLE));
     setAddProfilePhoto(undefined);
     setAddPhotoActionsOpen(false);
     setAddAdvancedOpen(false);
@@ -2073,7 +2130,8 @@ export function PlayersTab({
                       const next = !prev;
                       if (next) {
                         setSkillLevel(5);
-                        setAddDetails(current => applySkillLevelToDetails(current, 5));
+                        setAddPlayerStyle(BALANCED_PLAYER_STYLE);
+                        setAddDetails(current => applyStyledSkillToDetails(current, 5, BALANCED_PLAYER_STYLE));
                       }
                       return next;
                     });
@@ -2108,6 +2166,57 @@ export function PlayersTab({
                   <div className="space-y-1.5">
                     <Label className="text-[10px] uppercase font-bold text-violet-700/80 tracking-wider">Player Vibe</Label>
                     <VibePicker value={addDetails.funBadge} onChange={funBadge => updateAddDetails({ funBadge })} />
+                  </div>
+                  <div className="rounded-2xl border border-violet-100 bg-white/85 p-3 space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <Label className="text-[11px] uppercase font-black tracking-wide text-violet-700">Initial Skill</Label>
+                        <div className="mt-0.5 text-[10px] font-semibold text-violet-700/75">Creates the first shared balance profile.</div>
+                      </div>
+                      <div className="rounded-xl bg-violet-700 px-3 py-1.5 text-center text-white shadow-sm">
+                        <div className="text-[8px] uppercase font-black opacity-75 leading-none">Skill</div>
+                        <div className="text-xl font-black leading-none">{addOverall}</div>
+                      </div>
+                    </div>
+                    <input
+                      type="range"
+                      min={1}
+                      max={10}
+                      step={0.5}
+                      value={skillLevel}
+                      onChange={e => {
+                        const next = roundSkillStep(Number(e.target.value));
+                        setSkillLevel(next);
+                        setAddDetails(prev => applyStyledSkillToDetails(prev, next, addPlayerStyle));
+                      }}
+                      className="fairteams-slider w-full"
+                      style={{ "--slider-fill": `${((skillLevel - 1) / 9) * 100}%` } as React.CSSProperties}
+                    />
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <Label className="text-[10px] uppercase font-black tracking-wide text-violet-700">Player Style</Label>
+                        <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-black text-violet-800">{addSelectedStyle.label}</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={0}
+                        max={6}
+                        step={1}
+                        value={addPlayerStyle}
+                        onChange={e => {
+                          const nextStyle = Number(e.target.value) as PlayerStyleValue;
+                          setAddPlayerStyle(nextStyle);
+                          setAddDetails(prev => applyStyledSkillToDetails(prev, skillLevel, nextStyle));
+                        }}
+                        className="w-full accent-violet-700"
+                      />
+                      <div className="grid grid-cols-3 text-[10px] font-black text-violet-500/80">
+                        <span>Defense</span><span className="text-center">Midfield</span><span className="text-right">Attack</span>
+                      </div>
+                      <div className="rounded-xl border border-violet-100 bg-violet-50 px-3 py-2 text-[11px] font-semibold leading-snug text-violet-900">
+                        {addSelectedStyle.description}
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
@@ -2182,7 +2291,7 @@ export function PlayersTab({
                   onChange={e => {
                     const next = roundSkillStep(Number(e.target.value));
                     setSkillLevel(next);
-                    setAddDetails(prev => applySkillLevelToDetails(prev, next));
+                    setAddDetails(prev => applyStyledSkillToDetails(prev, next, addPlayerStyle));
                   }}
                   className="fairteams-slider w-full"
                   style={{ "--slider-fill": `${((skillLevel - 1) / 9) * 100}%` } as React.CSSProperties}
@@ -2190,6 +2299,31 @@ export function PlayersTab({
                 />
                 <div className="rounded-xl border border-primary/10 bg-background/70 px-3 py-2 text-[11px] font-semibold leading-snug text-muted-foreground">
                   {addSkillExplanation}
+                </div>
+                <div className="space-y-2 rounded-2xl border border-primary/10 bg-background/70 px-3 py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <Label className="text-[10px] uppercase font-black tracking-wide text-primary">Player Style</Label>
+                    <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-black text-primary">{addSelectedStyle.label}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={6}
+                    step={1}
+                    value={addPlayerStyle}
+                    onChange={e => {
+                      const nextStyle = Number(e.target.value) as PlayerStyleValue;
+                      setAddPlayerStyle(nextStyle);
+                      setAddDetails(prev => applyStyledSkillToDetails(prev, skillLevel, nextStyle));
+                    }}
+                    className="w-full accent-primary"
+                  />
+                  <div className="grid grid-cols-3 text-[10px] font-black text-muted-foreground">
+                    <span>Defense</span><span className="text-center">Midfield</span><span className="text-right">Attack</span>
+                  </div>
+                  <div className="rounded-xl border border-primary/10 bg-primary/5 px-3 py-2 text-[11px] font-semibold leading-snug text-muted-foreground">
+                    {addSelectedStyle.description}
+                  </div>
                 </div>
               </div>
 

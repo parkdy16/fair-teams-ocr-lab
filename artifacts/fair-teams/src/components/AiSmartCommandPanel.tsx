@@ -606,7 +606,7 @@ function actionPrimaryVerb(action: AiSmartCommandAction) {
   return "Apply";
 }
 
-const AI_ASSISTANT_VERSION_LABEL = "AI beta · v1.29 bulk exclude phrases";
+const AI_ASSISTANT_VERSION_LABEL = "AI beta · v1.30 shared profile ratings";
 
 type AiRosterMatch = {
   player: AiSmartCommandRosterPlayer;

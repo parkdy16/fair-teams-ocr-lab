@@ -81,7 +81,8 @@ import {
 } from "@/lib/googleSheetsFiles";
 import { pickGoogleSheetRosterFile, warmUpGoogleDrivePicker } from "@/lib/googleDrivePicker";
 import { leaveFirebaseSharedRosterAccess, listFirebaseSharedRosters, readFirebaseSharedRoster, type FirebaseSharedRosterSummary } from "@/lib/sharedRosterService";
-import { fetchClubRatingSummaries } from "@/lib/clubCollaborationService";
+import { fetchClubRatingSummaries, type ClubRatingSummary } from "@/lib/clubCollaborationService";
+import { profileFromAveragedAttributes } from "@/lib/playerStyleProfile";
 
 const GROUP_NAME_STORAGE_KEY = "fair-teams-group-name";
 const HEADER_COLOR_STORAGE_KEY = "fair-teams-header-color-v2";
@@ -1629,13 +1630,13 @@ function App() {
     const sharedRosterId = activeRoster.cloudSource?.firebaseRosterId;
     setPrivateCopyCreating(true);
     try {
-      const clubSummaryByPlayerId = new Map<string, number>();
+      const clubSummaryByPlayerId = new Map<string, ClubRatingSummary>();
       if (sharedRosterId) {
         try {
           const summaries = await fetchClubRatingSummaries(sharedRosterId);
           summaries.forEach((summary) => {
             if (summary.ratingCount > 0 && typeof summary.averageSkill === "number") {
-              clubSummaryByPlayerId.set(summary.playerId, summary.averageSkill);
+              clubSummaryByPlayerId.set(summary.playerId, summary);
             }
           });
         } catch (error) {
@@ -1644,7 +1645,27 @@ function App() {
       }
 
       const copiedPlayers = activeRoster.players.map((player, index) => {
-        const startingSkill = clubSummaryByPlayerId.get(player.id) ?? 5;
+        const summary = clubSummaryByPlayerId.get(player.id);
+        const startingSkill = summary?.averageSkill ?? player.skill ?? 5;
+        const copiedProfile = summary
+          ? profileFromAveragedAttributes(startingSkill, {
+              attack: summary.averageAttack ?? undefined,
+              defense: summary.averageDefense ?? undefined,
+              speed: summary.averageSpeed ?? undefined,
+              passing: summary.averagePassing ?? undefined,
+              stamina: summary.averageStamina ?? undefined,
+              physical: summary.averagePhysical ?? undefined,
+              teamPlay: summary.averageTeamPlay ?? undefined,
+            })
+          : {
+              attack: player.attack,
+              defense: player.defense,
+              speed: player.speed,
+              passing: player.passing,
+              stamina: player.stamina,
+              physical: player.physical,
+              teamPlay: player.teamPlay,
+            };
         return normalizePlayer({
           id: player.id,
           name: player.name,
@@ -1653,15 +1674,15 @@ function App() {
           isNew: player.isNew,
           funBadge: player.funBadge,
           skill: startingSkill,
-          attack: startingSkill,
-          defense: startingSkill,
-          speed: startingSkill,
-          passing: startingSkill,
-          stamina: startingSkill,
-          physical: startingSkill,
-          teamPlay: 2,
+          attack: copiedProfile.attack,
+          defense: copiedProfile.defense,
+          speed: copiedProfile.speed,
+          passing: copiedProfile.passing,
+          stamina: copiedProfile.stamina,
+          physical: copiedProfile.physical,
+          teamPlay: copiedProfile.teamPlay,
           profilePhoto: undefined,
-          isGoalkeeper: false,
+          isGoalkeeper: Boolean((summary?.gkYesCount || 0) > 0 || (!summary && player.isGoalkeeper)),
           isPlaymaker: false,
           isFinisher: false,
           isDribbler: false,
@@ -1704,7 +1725,7 @@ function App() {
       const seededCount = copiedPlayers.filter((player) => clubSummaryByPlayerId.has(player.id)).length;
       showRosterToolsNotice(
         "Private copy created",
-        `“${localCopy.name}” is a clean local roster. It copied shared names and used Club averages for ${seededCount} player${seededCount === 1 ? "" : "s"}; photos and special abilities were reset.`,
+        `“${localCopy.name}” is a clean local roster. It copied shared names, Club stat averages, and GK flags for ${seededCount} player${seededCount === 1 ? "" : "s"}; photos and special abilities were reset.`,
         "success",
       );
     } finally {
@@ -5727,7 +5748,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device�
                 Private copy
               </div>
               <p className="mt-1 text-[11px] font-semibold leading-snug text-violet-800/80">
-                The copy uses shared names and Club averages as starting skill. Photos, special abilities, and advanced private traits are reset so the roster starts clean.
+                The copy uses shared names, Club stat averages, and GK flags as the starting local profile. Photos and advanced private traits are reset so the roster starts clean.
               </p>
             </div>
 

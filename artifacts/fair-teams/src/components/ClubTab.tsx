@@ -33,7 +33,7 @@ import {
   type FirebaseEquipmentBag,
 } from "@/lib/equipmentService";
 import type { PairingRule } from "@/lib/types";
-import type { RoomPlayer } from "@/lib/localRoster";
+import { calculateOverall, type RoomPlayer } from "@/lib/localRoster";
 import {
   addClubNote,
   deleteOwnClubNote,
@@ -46,6 +46,14 @@ import {
   type ClubNote,
   type ClubRatingSummary,
 } from "@/lib/clubCollaborationService";
+import {
+  BALANCED_PLAYER_STYLE,
+  generateStyledPlayerAttributes,
+  getPlayerStyleDefinition,
+  inferPlayerStyleFromAttributes,
+  type PlayerStyleAttributes,
+  type PlayerStyleValue,
+} from "@/lib/playerStyleProfile";
 
 type ClubTabProps = {
   isActive?: boolean;
@@ -143,6 +151,58 @@ const DEFAULT_EQUIPMENT_KITS: ClubEquipmentKit[] = [
     updatedByName: "Preview",
   },
 ];
+
+type RatingProfileDraft = PlayerStyleAttributes;
+
+const RATING_STAT_FIELDS: Array<{ key: keyof Omit<PlayerStyleAttributes, "teamPlay">; label: string; short: string }> = [
+  { key: "attack", label: "Attack", short: "ATK" },
+  { key: "defense", label: "Defense", short: "DEF" },
+  { key: "passing", label: "Passing", short: "PASS" },
+  { key: "speed", label: "Speed", short: "SPD" },
+  { key: "stamina", label: "Stamina", short: "STA" },
+  { key: "physical", label: "Physical", short: "PHY" },
+];
+
+function roundRatingStep(value: number) {
+  return Math.max(1, Math.min(10, Math.round(value * 2) / 2));
+}
+
+function hasCompleteClubRatingAttributes(rating?: ClubMyRating | null) {
+  return Boolean(rating && [rating.attack, rating.defense, rating.speed, rating.passing, rating.stamina, rating.physical].every((value) => typeof value === "number"));
+}
+
+function ClubRatingStatControl({
+  label,
+  short,
+  value,
+  onChange,
+}: {
+  label: string;
+  short: string;
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2">
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <div className="text-[9px] font-black uppercase tracking-wide text-slate-400">{short}</div>
+          <div className="text-[11px] font-black text-[#102A43]">{label}</div>
+        </div>
+        <div className="text-sm font-black tabular-nums text-[#102A43]">{Number(value).toFixed(1)}</div>
+      </div>
+      <input
+        type="range"
+        min="1"
+        max="10"
+        step="0.5"
+        value={value}
+        onChange={(event) => onChange(roundRatingStep(Number(event.target.value)))}
+        className="mt-2 w-full accent-[#102A43]"
+      />
+    </div>
+  );
+}
 
 function normalizeEquipmentHolderId(holderId: string) {
   return holderId === "unknown" || !holderId ? "storage" : holderId;
@@ -513,6 +573,9 @@ export function ClubTab({
   const [clubRatingLoading, setClubRatingLoading] = useState(false);
   const [ratingPlayerId, setRatingPlayerId] = useState<string | null>(null);
   const [ratingDraft, setRatingDraft] = useState(5);
+  const [ratingPlayerStyle, setRatingPlayerStyle] = useState<PlayerStyleValue>(BALANCED_PLAYER_STYLE);
+  const [ratingProfile, setRatingProfile] = useState<RatingProfileDraft>(() => generateStyledPlayerAttributes(5, BALANCED_PLAYER_STYLE));
+  const [ratingGoalkeeper, setRatingGoalkeeper] = useState(false);
   const [ratingSaving, setRatingSaving] = useState(false);
   const [ratingDialogError, setRatingDialogError] = useState("");
   const [ratingFlowNotice, setRatingFlowNotice] = useState("");
@@ -899,10 +962,28 @@ export function ClubTab({
   const openRatingForPlayer = (player: RoomPlayer | null) => {
     if (!player) return;
     const existing = myRatingByPlayerId.get(player.id);
+    const baseSkill = roundRatingStep(typeof existing?.skill === "number" ? existing.skill : Number(player.skill) || 5);
+    const style = typeof existing?.playerStyle === "number"
+      ? existing.playerStyle
+      : inferPlayerStyleFromAttributes({ ...player, skill: baseSkill });
+    const nextProfile = hasCompleteClubRatingAttributes(existing)
+      ? {
+          attack: Number(existing?.attack),
+          defense: Number(existing?.defense),
+          speed: Number(existing?.speed),
+          passing: Number(existing?.passing),
+          stamina: Number(existing?.stamina),
+          physical: Number(existing?.physical),
+          teamPlay: Math.min(3, Math.max(1, Math.round(Number(existing?.teamPlay) || 2))),
+        }
+      : generateStyledPlayerAttributes(baseSkill, style);
     setRatingDialogError("");
     setRatingFlowNotice("");
     setRatingBoardOpen(false);
-    setRatingDraft(typeof existing?.skill === "number" ? existing.skill : 5);
+    setRatingDraft(baseSkill);
+    setRatingPlayerStyle(style);
+    setRatingProfile(nextProfile);
+    setRatingGoalkeeper(Boolean(existing?.isGoalkeeper || player.isGoalkeeper));
     setRatingPlayerId(player.id);
   };
 
@@ -931,7 +1012,19 @@ export function ClubTab({
     try {
       let savedCount = 0;
       for (const player of legacySkillSeedPlayers) {
-        await saveMyClubPlayerRating(sharedRosterId, player.id, player.skill);
+        const skill = calculateOverall(player);
+        await saveMyClubPlayerRating(sharedRosterId, player.id, {
+          skill,
+          attack: player.attack,
+          defense: player.defense,
+          speed: player.speed,
+          passing: player.passing,
+          stamina: player.stamina,
+          physical: player.physical,
+          teamPlay: player.teamPlay,
+          playerStyle: inferPlayerStyleFromAttributes({ ...player, skill }),
+          isGoalkeeper: Boolean(player.isGoalkeeper),
+        });
         savedCount += 1;
       }
       setRatingSeedMessage(
@@ -956,7 +1049,13 @@ export function ClubTab({
     try {
       const savedPlayerId = ratingDialogPlayer.id;
       const savedPlayerName = ratingDialogPlayer.name;
-      await saveMyClubPlayerRating(sharedRosterId, savedPlayerId, ratingDraft);
+      const finalSkill = calculateOverall(ratingProfile);
+      await saveMyClubPlayerRating(sharedRosterId, savedPlayerId, {
+        skill: finalSkill,
+        ...ratingProfile,
+        playerStyle: ratingPlayerStyle,
+        isGoalkeeper: ratingGoalkeeper,
+      });
       const nextPlayer = findNextRatingPlayerAfter(savedPlayerId);
       if (nextPlayer) {
         openRatingForPlayer(nextPlayer);
@@ -2156,7 +2255,7 @@ export function ClubTab({
           }
         }}
       >
-        <DialogContent className="max-w-sm rounded-3xl p-0">
+        <DialogContent className="max-w-md max-h-[92dvh] overflow-y-auto rounded-3xl p-0">
           <DialogHeader className="border-b border-slate-100 px-4 py-3 text-left">
             <DialogTitle className="flex items-center gap-2 text-base font-black text-[#102A43]">
               <Star className="h-5 w-5 text-violet-600" />
@@ -2226,49 +2325,124 @@ export function ClubTab({
                     )}
                   </div>
 
-                  <div className="grid gap-2">
-                    <div className="flex items-end justify-between gap-3">
-                      <Label className="text-xs font-black uppercase tracking-wide text-slate-500">
-                        Your rating
-                      </Label>
-                      <div className="text-3xl font-black tabular-nums text-[#102A43]">
-                        {ratingDraft.toFixed(1)}
-                      </div>
-                    </div>
-                    <input
-                      type="range"
-                      min="1"
-                      max="10"
-                      step="0.5"
-                      value={ratingDraft}
-                      onChange={(event) =>
-                        setRatingDraft(Number(event.target.value))
-                      }
-                      className="w-full accent-[#102A43]"
-                    />
-                    <div className="grid grid-cols-3 text-[10px] font-black text-slate-400">
-                      <span>2 weak regular</span>
-                      <span className="text-center">5 average</span>
-                      <span className="text-right">9 strongest</span>
-                    </div>
-                  </div>
+                  {(() => {
+                    const selectedStyle = getPlayerStyleDefinition(ratingPlayerStyle);
+                    const computedOverall = calculateOverall(ratingProfile);
+                    return (
+                      <>
+                        <div className="grid gap-2 rounded-2xl border border-primary/10 bg-primary/5 p-3">
+                          <div className="flex items-end justify-between gap-3">
+                            <div>
+                              <Label className="text-xs font-black uppercase tracking-wide text-primary">
+                                Overall skill
+                              </Label>
+                              <div className="mt-0.5 text-[10px] font-semibold text-slate-500">
+                                Moving this reshapes the profile from the selected style.
+                              </div>
+                            </div>
+                            <div className="text-3xl font-black tabular-nums text-[#102A43]">
+                              {computedOverall.toFixed(1)}
+                            </div>
+                          </div>
+                          <input
+                            type="range"
+                            min="1"
+                            max="10"
+                            step="0.5"
+                            value={ratingDraft}
+                            onChange={(event) => {
+                              const nextSkill = roundRatingStep(Number(event.target.value));
+                              setRatingDraft(nextSkill);
+                              setRatingProfile(generateStyledPlayerAttributes(nextSkill, ratingPlayerStyle));
+                            }}
+                            className="w-full accent-[#102A43]"
+                          />
+                          <div className="grid grid-cols-3 text-[10px] font-black text-slate-400">
+                            <span>2 weak regular</span>
+                            <span className="text-center">5 average</span>
+                            <span className="text-right">9 strongest</span>
+                          </div>
+                        </div>
 
-                  <div className="rounded-2xl border border-violet-100 bg-violet-50 px-3 py-2 text-[11px] font-semibold leading-snug text-violet-800">
-                    Rate compared to this group. Think of the weakest regular
-                    player as around 2, an average regular as 5, and the
-                    strongest regular as around 9.
-                  </div>
+                        <div className="grid gap-2 rounded-2xl border border-violet-100 bg-violet-50 p-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <div>
+                              <Label className="text-xs font-black uppercase tracking-wide text-violet-700">
+                                Player style
+                              </Label>
+                              <div className="mt-0.5 text-[10px] font-semibold text-violet-700/75">
+                                Defense → midfield → attack. Used only to create the stat shape.
+                              </div>
+                            </div>
+                            <div className="rounded-xl bg-white px-2.5 py-1 text-xs font-black text-violet-800 shadow-sm">
+                              {selectedStyle.label}
+                            </div>
+                          </div>
+                          <input
+                            type="range"
+                            min="0"
+                            max="6"
+                            step="1"
+                            value={ratingPlayerStyle}
+                            onChange={(event) => {
+                              const nextStyle = Number(event.target.value) as PlayerStyleValue;
+                              setRatingPlayerStyle(nextStyle);
+                              setRatingProfile(generateStyledPlayerAttributes(ratingDraft, nextStyle));
+                            }}
+                            className="w-full accent-violet-700"
+                          />
+                          <div className="grid grid-cols-3 text-[10px] font-black text-violet-500/80">
+                            <span>Defense</span>
+                            <span className="text-center">Midfield</span>
+                            <span className="text-right">Attack</span>
+                          </div>
+                          <div className="rounded-xl border border-violet-100 bg-white/80 px-3 py-2 text-[11px] font-semibold leading-snug text-violet-900">
+                            {selectedStyle.description}
+                          </div>
+                        </div>
 
-                  <div className="rounded-2xl bg-slate-50 px-3 py-2">
-                    <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-                      Club average
-                    </div>
-                    <div className="mt-1 text-sm font-black text-[#102A43]">
-                      {canRevealAverage && summary?.averageSkill
-                        ? `${summary.averageSkill.toFixed(1)} · ${summary.ratingCount} organizer${summary.ratingCount === 1 ? "" : "s"}`
-                        : "Hidden until you rate this player"}
-                    </div>
-                  </div>
+                        <button
+                          type="button"
+                          onClick={() => setRatingGoalkeeper((current) => !current)}
+                          className={`flex h-10 items-center justify-between rounded-2xl border px-3 text-left text-xs font-black transition-colors ${ratingGoalkeeper ? "border-amber-300 bg-amber-50 text-amber-900" : "border-slate-200 bg-white text-slate-600"}`}
+                        >
+                          <span>GK</span>
+                          <span className="text-[10px] font-bold">{ratingGoalkeeper ? "Can play goalkeeper" : "Optional role flag"}</span>
+                        </button>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          {RATING_STAT_FIELDS.map(({ key, label, short }) => (
+                            <ClubRatingStatControl
+                              key={key}
+                              label={label}
+                              short={short}
+                              value={ratingProfile[key]}
+                              onChange={(value) => {
+                                const next = { ...ratingProfile, [key]: value };
+                                setRatingProfile(next);
+                                setRatingDraft(calculateOverall(next));
+                              }}
+                            />
+                          ))}
+                        </div>
+
+                        <div className="rounded-2xl border border-violet-100 bg-violet-50 px-3 py-2 text-[11px] font-semibold leading-snug text-violet-800">
+                          The style slider creates realistic ATK/DEF/PASS/SPEED values, then Fair Teams keeps using the existing weighted OVR formula. Manual stat tweaks here become your real shared rating.
+                        </div>
+
+                        <div className="rounded-2xl bg-slate-50 px-3 py-2">
+                          <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+                            Club average
+                          </div>
+                          <div className="mt-1 text-sm font-black text-[#102A43]">
+                            {canRevealAverage && summary?.averageSkill
+                              ? `${summary.averageSkill.toFixed(1)} · ${summary.ratingCount} organizer${summary.ratingCount === 1 ? "" : "s"}${summary.gkYesCount ? ` · GK ${summary.gkYesCount}` : ""}`
+                              : "Hidden until you rate this player"}
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()}
 
                   {ratingDialogError && (
                     <div className="rounded-2xl border border-rose-100 bg-rose-50 px-3 py-2 text-[11px] font-bold leading-snug text-rose-700">

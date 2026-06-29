@@ -5,6 +5,7 @@ import { FieldSize, PairingRule, Player, Team, TeamColor } from "@/lib/types";
 import { getSpecialSkillStatBoosts } from "@/lib/playerAbilityEffects";
 import { generateTeams, recomputeStats } from "@/lib/teamGenerator";
 import { listenToClubRatingSummaries, listenToMyClubRatings, type ClubMyRating, type ClubRatingSummary } from "@/lib/clubCollaborationService";
+import { profileFromAveragedAttributes } from "@/lib/playerStyleProfile";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
@@ -151,23 +152,33 @@ function toLocalPlayer(p: RoomPlayer): Player {
   };
 }
 
-function toClubBalancePlayer(p: RoomPlayer, clubSkill: number): Player {
-  const safeSkill = Math.min(10, Math.max(1, Math.round(clubSkill * 2) / 2));
+function toClubBalancePlayer(p: RoomPlayer, summary?: ClubRatingSummary): Player {
+  if (!summary || summary.ratingCount <= 0 || typeof summary.averageSkill !== "number") return toLocalPlayer(p);
+  const safeSkill = Math.min(10, Math.max(1, Math.round(Number(summary.averageSkill || 5) * 2) / 2));
+  const profile = profileFromAveragedAttributes(safeSkill, {
+    attack: summary?.averageAttack ?? undefined,
+    defense: summary?.averageDefense ?? undefined,
+    speed: summary?.averageSpeed ?? undefined,
+    passing: summary?.averagePassing ?? undefined,
+    stamina: summary?.averageStamina ?? undefined,
+    physical: summary?.averagePhysical ?? undefined,
+    teamPlay: summary?.averageTeamPlay ?? undefined,
+  });
   return {
     id: p.id,
     name: p.name,
     aka: p.aka,
     gender: p.gender as Player["gender"],
     skill: safeSkill,
-    attack: safeSkill,
-    defense: safeSkill,
-    speed: safeSkill,
-    passing: safeSkill,
-    stamina: safeSkill,
-    physical: safeSkill,
-    teamPlay: 2,
+    attack: profile.attack,
+    defense: profile.defense,
+    speed: profile.speed,
+    passing: profile.passing,
+    stamina: profile.stamina,
+    physical: profile.physical,
+    teamPlay: profile.teamPlay,
     profilePhoto: p.profilePhoto,
-    isGoalkeeper: p.isGoalkeeper,
+    isGoalkeeper: Boolean((summary?.gkYesCount || 0) > 0 || p.isGoalkeeper),
     isOrganizer: p.isOrganizer,
     isNew: p.isNew,
     todayStatus: p.todayStatus,
@@ -537,8 +548,8 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
   const attendingPlayers = useMemo(() => {
     return players.filter((player) => player.attending).map((player) => {
       if (!usingClubRatings) return toLocalPlayer(player);
-      const clubAverage = getUsableClubAverage(player.id);
-      return toClubBalancePlayer(player, typeof clubAverage === "number" ? clubAverage : 5);
+      const summary = clubRatingByPlayerId.get(player.id);
+      return toClubBalancePlayer(player, summary && getUsableClubAverage(player.id) !== null ? summary : undefined);
     });
   }, [clubRatingByPlayerId, players, usingClubRatings]);
   const hereNowCount = attendingPlayers.filter(p => !isNotHereYet(p)).length;

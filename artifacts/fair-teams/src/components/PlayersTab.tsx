@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { UserMinus, Plus, Star, Zap, Search, X, Camera, Image as ImageIcon, Trash2, Pencil, Shield, Activity, Dumbbell, Target, Share2, ArrowDownAZ, Clock3, Mic, Info, Eye, EyeOff } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart, ResponsiveContainer } from "recharts";
-import { fetchClubRatingSummaries, listenToClubRatingSummaries, type ClubRatingSummary } from "@/lib/clubCollaborationService";
+import { listenToClubRatingSummaries, type ClubRatingSummary } from "@/lib/clubCollaborationService";
 import { listenToSharedRosterUser } from "@/lib/sharedRosterService";
 
 
@@ -723,13 +723,18 @@ function StatControl({ label, value, max = 10, onChange }: { label: string; valu
 }
 
 function PlayerRadar({ player, compact = false }: { player: RoomPlayer; compact?: boolean }) {
+  const radarValue = (value: unknown) => {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return 0;
+    return Math.max(0, Math.min(10, Math.round(numeric * 10) / 10));
+  };
   const data = useMemo(() => [
-    { stat: "Attack", value: player.attack },
-    { stat: "Passing", value: player.passing },
-    { stat: "Stamina", value: player.stamina },
-    { stat: "Defense", value: player.defense },
-    { stat: "Strength", value: player.physical },
-    { stat: "Speed", value: player.speed },
+    { stat: "Attack", value: radarValue(player.attack) },
+    { stat: "Passing", value: radarValue(player.passing) },
+    { stat: "Stamina", value: radarValue(player.stamina) },
+    { stat: "Defense", value: radarValue(player.defense) },
+    { stat: "Strength", value: radarValue(player.physical) },
+    { stat: "Speed", value: radarValue(player.speed) },
   ], [player]);
 
   return (
@@ -738,8 +743,8 @@ function PlayerRadar({ player, compact = false }: { player: RoomPlayer; compact?
         <RadarChart data={data} outerRadius="72%">
           <PolarGrid />
           <PolarAngleAxis dataKey="stat" tick={{ fontSize: compact ? 8 : 10, fontWeight: 700 }} />
-          <PolarRadiusAxis domain={[0, 10]} tick={false} axisLine={false} />
-          <Radar dataKey="value" stroke="hsl(var(--primary))" fill="hsl(var(--primary))" fillOpacity={0.35} strokeWidth={2} />
+          <PolarRadiusAxis dataKey="value" domain={[0, 10]} tick={false} axisLine={false} tickCount={11} allowDataOverflow />
+          <Radar dataKey="value" stroke="hsl(var(--primary))" fill="hsl(var(--primary))" fillOpacity={0.35} strokeWidth={2} isAnimationActive={false} />
         </RadarChart>
       </ResponsiveContainer>
     </div>
@@ -1429,58 +1434,16 @@ export function PlayersTab({
       return;
     }
 
-    let disposed = false;
-    const mergeSummary = (summary: ClubRatingSummary) => {
-      setClubRatingSummaries((current) => {
-        const next = current.filter((item) => item.playerId !== summary.playerId);
-        return [...next, summary];
-      });
-    };
-    const refreshSummaries = async () => {
-      try {
-        const summaries = await fetchClubRatingSummaries(sharedRosterId);
-        if (!disposed) setClubRatingSummaries(summaries);
-      } catch {
-        if (!disposed) setClubRatingSummaries([]);
-      }
-    };
-
-    void refreshSummaries();
-
-    const handleLocalRatingSummary = (event: Event) => {
-      const detail = (event as CustomEvent<{ rosterId?: string; summary?: ClubRatingSummary }>).detail;
-      if (detail?.rosterId !== sharedRosterId || !detail.summary) return;
-      mergeSummary(detail.summary);
-      window.setTimeout(() => void refreshSummaries(), 250);
-    };
-    const handleVisibilityRefresh = () => {
-      if (document.visibilityState === "visible") void refreshSummaries();
-    };
-
-    window.addEventListener("fairteams:club-rating-summary", handleLocalRatingSummary);
-    document.addEventListener("visibilitychange", handleVisibilityRefresh);
-
-    let unsubscribe: (() => void) | undefined;
     try {
-      unsubscribe = listenToClubRatingSummaries(
+      return listenToClubRatingSummaries(
         sharedRosterId,
-        (summaries) => {
-          if (!disposed) setClubRatingSummaries(summaries);
-        },
-        () => {
-          if (!disposed) void refreshSummaries();
-        },
+        setClubRatingSummaries,
+        () => setClubRatingSummaries([]),
       );
     } catch {
-      void refreshSummaries();
+      setClubRatingSummaries([]);
+      return;
     }
-
-    return () => {
-      disposed = true;
-      unsubscribe?.();
-      window.removeEventListener("fairteams:club-rating-summary", handleLocalRatingSummary);
-      document.removeEventListener("visibilitychange", handleVisibilityRefresh);
-    };
   }, [isSharedRoster, sharedRosterId, sharedRosterAuthReady, sharedRosterUserUid]);
 
   useEffect(() => {

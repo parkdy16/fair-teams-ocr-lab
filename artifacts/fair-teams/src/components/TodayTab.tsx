@@ -291,18 +291,6 @@ const OCR_JUNK_WORDS = new Set([
   "members",
   "event host",
   "host",
-  "teilnehmer",
-  "teilnehmerdetails",
-  "teilnehmerdetails relevanz",
-  "relevanz",
-  "abgesagt",
-  "teilnehmer abgesagt",
-  "bekanntes gesicht",
-  "kostenlos ausprobieren",
-  "erfahre mehr uber die an",
-  "erfahre mehr iber die an",
-  "erfahre mehr liber die an",
-  "vodafone cz",
   "detailed list",
   "event question",
   "search attendees",
@@ -391,7 +379,12 @@ function cleanOcrLine(value: string) {
 }
 
 const MEETUP_MARKER_PATTERN = /\b(?:member|event host|bekanntes gesicht)\b/i;
-const MEETUP_SPLIT_PATTERN = /\b(?:member|event host|bekanntes gesicht)\b/gi;
+// Inline collapsed-text extraction is tuned for English Meetup role markers.
+// German/dark-mode screenshots are handled by adjacent-line and loose review
+// fallback rules below; using "Bekanntes Gesicht" as an inline split marker can
+// merge UI copy with nearby names.
+const MEETUP_INLINE_MARKER_PATTERN = /\b(?:member|event host)\b/i;
+const MEETUP_INLINE_SPLIT_PATTERN = /\b(?:member|event host)\b/gi;
 
 const MEETUP_STOP_WORDS = new Set([
   "checked",
@@ -406,6 +399,28 @@ const MEETUP_STOP_WORDS = new Set([
   "event",
   "question",
   "detailed",
+  "teilnehmer",
+  "teilnehmerdetails",
+  "teilneh",
+  "relevanz",
+  "abgesagt",
+  "bekanntes",
+  "gesicht",
+  "bekanntes gesicht",
+  "kostenlos",
+  "ausprobieren",
+  "erfahre",
+  "mehr",
+  "uber",
+  "iber",
+  "iiber",
+  "liber",
+  "die",
+  "an",
+  "vodafone",
+  "telekom",
+  "telefonica",
+  "wifi",
   "yes",
   "no",
   "maybe",
@@ -650,6 +665,45 @@ function shouldUseMeetupAdjacentName(value: string) {
   return isProbablyName(clean) || isProbablySingleUsername(clean);
 }
 
+function isLooseOcrReviewName(value: string) {
+  const clean = cleanDetectedNameCandidate(stripOtherScreenshotListPrefix(value));
+  const normalized = normalizeForMatch(clean);
+  if (!clean || !normalized) return false;
+  if (OCR_JUNK_WORDS.has(normalized) || OTHER_SCREENSHOT_JUNK_WORDS.has(normalized)) return false;
+  if (isMeetupCommentLine(clean)) return false;
+  if (/\d/.test(clean)) return false;
+  if (clean.length < 3 || clean.length > 36) return false;
+  const words = normalized.split(" ").filter(Boolean);
+  if (words.length < 1 || words.length > 4) return false;
+  if (words.some((word) => word.length === 1 && words.length > 1)) return false;
+  if (words.some((word) => MEETUP_STOP_WORDS.has(word) || OTHER_SCREENSHOT_JUNK_WORDS.has(word))) return false;
+  if (/\b(?:vodafone|telekom|telefonica|wifi|teilnehmer|relevanz|kostenlos|ausprobieren|erfahre|abgesagt)\b/i.test(normalized)) return false;
+  return isProbablyName(clean) || isProbablySingleUsername(clean);
+}
+
+function extractLooseOcrReviewNames(lines: string[]) {
+  const byKey = new Map<string, { name: string; count: number; nearMarker: boolean }>();
+  lines.forEach((line, index) => {
+    if (!isLooseOcrReviewName(line)) return;
+    const clean = cleanDetectedNameCandidate(stripOtherScreenshotListPrefix(line));
+    const key = normalizeForMatch(clean);
+    if (!key) return;
+    const previous = normalizeForMatch(lines[index - 1] || "");
+    const next = normalizeForMatch(lines[index + 1] || "");
+    const nearMarker = MEETUP_MARKER_PATTERN.test(previous) || MEETUP_MARKER_PATTERN.test(next);
+    const current = byKey.get(key);
+    byKey.set(key, {
+      name: current?.name || clean,
+      count: (current?.count || 0) + 1,
+      nearMarker: Boolean(current?.nearMarker || nearMarker),
+    });
+  });
+
+  return Array.from(byKey.values())
+    .filter(({ count, nearMarker }) => count >= 2 || nearMarker)
+    .map(({ name }) => name);
+}
+
 function isProbablySingleUsername(value: string) {
   const clean = cleanOcrLine(value);
   return /^[A-Za-z][A-Za-z._'-]{2,24}$/.test(clean) && !clean.includes(" ");
@@ -715,9 +769,9 @@ function extractInlineMeetupNames(text: string) {
     .replace(/---.*?\.(jpg|jpeg|png).*?---/gi, " ")
     .replace(/\r?\n/g, " ");
   const cleaned = cleanOcrLine(oneLineText);
-  if (!MEETUP_MARKER_PATTERN.test(cleaned)) return [];
+  if (!MEETUP_INLINE_MARKER_PATTERN.test(cleaned)) return [];
 
-  const parts = cleaned.split(MEETUP_SPLIT_PATTERN);
+  const parts = cleaned.split(MEETUP_INLINE_SPLIT_PATTERN);
   const names: string[] = [];
 
   // Every part except the final tail is the text immediately before a
@@ -1294,61 +1348,68 @@ function extractOcrNames(
   if (mode === "meetup") {
     for (let index = 0; index < lines.length; index += 1) {
       const current = normalizeForMatch(lines[index]);
-    const isMeetupRoleLine =
-      current === "member" ||
-      current === "event host" ||
-      /^member\b/.test(current) ||
-      /^event host\b/.test(current);
+      const isMeetupRoleLine =
+        current === "member" ||
+        current === "event host" ||
+        current === "bekanntes gesicht" ||
+        /^member\b/.test(current) ||
+        /^event host\b/.test(current) ||
+        /^bekanntes gesicht\b/.test(current);
 
-    if (isMeetupRoleLine) {
-      // Meetup attendee blocks are normally:
-      //   Name
-      //   Member/Event host
-      //   optional RSVP comment
-      // So the line before the role marker is the safest source. Keep this
-      // local to Meetup-style screenshots so generic OCR remains conservative.
-      for (let back = index - 1; back >= Math.max(0, index - 2); back -= 1) {
-        const previous = lines[back];
-        const previousNormalized = normalizeForMatch(previous);
-        if (MEETUP_MARKER_PATTERN.test(previousNormalized)) break;
-        if (shouldUseMeetupAdjacentName(previous)) {
-          const cleanedPrevious = cleanDetectedNameCandidate(previous);
-          if (cleanedPrevious) names.push(cleanedPrevious);
-          break;
+      if (isMeetupRoleLine) {
+        // Meetup attendee blocks are normally:
+        //   Name
+        //   Member/Event host
+        //   optional RSVP comment
+        // So the line before the role marker is the safest source. German
+        // dark-mode screenshots can place two clean names before the first
+        // "Bekanntes Gesicht" marker, so collect a short clean run there instead
+        // of merging the whole run into one fake name.
+        const isGermanFamiliarFaceMarker = /\bbekanntes gesicht\b/i.test(current);
+        if (isGermanFamiliarFaceMarker) {
+          const previousNames: string[] = [];
+          for (let back = index - 1; back >= Math.max(0, index - 4); back -= 1) {
+            const previous = lines[back];
+            const previousNormalized = normalizeForMatch(previous);
+            if (!previousNormalized) continue;
+            if (MEETUP_MARKER_PATTERN.test(previousNormalized)) break;
+            if (OCR_JUNK_WORDS.has(previousNormalized)) break;
+            if (shouldUseMeetupAdjacentName(previous)) {
+              const cleanedPrevious = cleanDetectedNameCandidate(previous);
+              if (cleanedPrevious) previousNames.push(cleanedPrevious);
+            }
+          }
+          names.push(...previousNames.reverse());
+        } else {
+          for (let back = index - 1; back >= Math.max(0, index - 2); back -= 1) {
+            const previous = lines[back];
+            const previousNormalized = normalizeForMatch(previous);
+            if (MEETUP_MARKER_PATTERN.test(previousNormalized)) break;
+            if (shouldUseMeetupAdjacentName(previous)) {
+              const cleanedPrevious = cleanDetectedNameCandidate(previous);
+              if (cleanedPrevious) names.push(cleanedPrevious);
+              break;
+            }
+          }
+        }
+
+        // Some mobile OCR reads the grey role line before the bold name, e.g.
+        // "Member ee" then "Tany". Rescue only very clean next lines, and keep
+        // common RSVP comments such as "Understood" blocked.
+        const next = lines[index + 1];
+        if (next && shouldUseMeetupAdjacentName(next)) {
+          const cleanedNext = cleanDetectedNameCandidate(next);
+          if (cleanedNext) names.push(cleanedNext);
         }
       }
-
-      // Some mobile OCR reads the grey role line before the bold name, e.g.
-      // "Member ee" then "Tany". Rescue only very clean next lines, and keep
-      // common RSVP comments such as "Understood" blocked.
-      const next = lines[index + 1];
-      if (next && shouldUseMeetupAdjacentName(next)) {
-        const cleanedNext = cleanDetectedNameCandidate(next);
-        if (cleanedNext) names.push(cleanedNext);
-      }
     }
-  }
 
-
-    // German/dark-mode Meetup sometimes exposes names as clean standalone
-    // lines followed by "Bekanntes Gesicht" instead of the English Member/Event
-    // Host marker. When importing into an empty roster there is no roster signal
-    // to match against, so promote only clean lines that are adjacent to a Meetup
-    // role/familiar-face marker. This keeps the old light-mode path intact and
-    // avoids broad UI-junk promotion.
-    for (let index = 0; index < lines.length; index += 1) {
-      const line = lines[index];
-      const normalizedLine = normalizeForMatch(line);
-      if (!normalizedLine || MEETUP_MARKER_PATTERN.test(normalizedLine)) continue;
-      const previous = normalizeForMatch(lines[index - 1] || "");
-      const next = normalizeForMatch(lines[index + 1] || "");
-      const nearMeetupMarker =
-        MEETUP_MARKER_PATTERN.test(previous) ||
-        MEETUP_MARKER_PATTERN.test(next);
-      if (nearMeetupMarker && shouldUseMeetupAdjacentName(line)) {
-        const cleaned = cleanDetectedNameCandidate(line);
-        if (cleaned) names.push(cleaned);
-      }
+    // Review-only fallback: if the strict Meetup parser found almost nothing,
+    // promote clean standalone OCR name lines into Review Names. This does not
+    // auto-select or auto-add new players, so old successful scans keep their
+    // existing path and uncertain names stay user-confirmed.
+    if (names.length < 2) {
+      names.push(...extractLooseOcrReviewNames(lines));
     }
   }
 

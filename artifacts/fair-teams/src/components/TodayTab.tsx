@@ -3265,42 +3265,14 @@ export function TodayTab({
           extractOcrNames(imageTexts.filter(Boolean).join("\n"), players, "meetup")
             .length === 0
         ) {
-          // Safety fallback for dark-mode or German Meetup screenshots. Keep the
-          // existing light-mode path first; only run these heavier variants when
-          // the normal pass found no reviewable names.
+          // Do not automatically run multiple expensive fallback OCR passes here.
+          // They made dark Meetup scans very slow and still did not help Stefan's
+          // German screenshots. Keep the fast original OCR result plus the raw
+          // debug/report output so we can fix the parser with evidence instead of
+          // making every import slower.
           setOcrStatus(
-            `No names found yet. Trying safer dark-mode OCR (${index + 1}/${selectedScreenshots.length})…`,
+            `No names found in the fast OCR pass (${index + 1}/${selectedScreenshots.length}). Open/copy the OCR report for debugging.`,
           );
-          const fullImageCrop: CropBox = { x: 0, y: 0, w: 100, h: 100 };
-          const fallbackSources = await Promise.all([
-            cropScreenshotForOcr(file, fullImageCrop, { variant: "raw" }),
-            cropScreenshotForOcr(file, fullImageCrop, { variant: "gray" }),
-            cropScreenshotForOcr(file, fullImageCrop, { variant: "invert" }),
-          ]);
-
-          for (
-            let fallbackIndex = 0;
-            fallbackIndex < fallbackSources.length;
-            fallbackIndex += 1
-          ) {
-            const fallbackText = await recognizeSource(
-              fallbackSources[fallbackIndex],
-              fallbackIndex,
-              fallbackSources.length,
-              "fallback OCR",
-            );
-            if (fallbackText) imageTexts.push(fallbackText);
-
-            if (
-              extractOcrNames(
-                imageTexts.filter(Boolean).join("\n"),
-                players,
-                "meetup",
-              ).length > 0
-            ) {
-              break;
-            }
-          }
         }
 
         chunks.push(

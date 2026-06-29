@@ -3154,7 +3154,7 @@ export function TodayTab({
                   `area-${areaIndex + 1}-crop-threshold`,
                 ])
               : ["crop-raw", "crop-gray", "crop-threshold"]
-            : ["original"];
+            : ["original", "fallback-if-empty: enlarged/inverted"];
         screenshotReports.push(
           await buildScreenshotReport(
             file,
@@ -3185,11 +3185,13 @@ export function TodayTab({
             : [file];
 
         const imageTexts: string[] = [];
-        for (
-          let sourceIndex = 0;
-          sourceIndex < sources.length;
-          sourceIndex += 1
-        ) {
+
+        const recognizeSource = async (
+          source: File,
+          sourceIndex: number,
+          sourceCount: number,
+          label?: string,
+        ) => {
           const recognizeOptions =
             screenshotImportMode === "other"
               ? ({
@@ -3202,9 +3204,9 @@ export function TodayTab({
                       );
                     if (typeof message.progress === "number") {
                       const totalPasses =
-                        selectedScreenshots.length * sources.length;
+                        selectedScreenshots.length * sourceCount;
                       const completedPasses =
-                        index * sources.length + sourceIndex;
+                        index * sourceCount + sourceIndex;
                       setOcrProgress(
                         Math.round(
                           ((completedPasses + message.progress) / totalPasses) *
@@ -3216,10 +3218,13 @@ export function TodayTab({
                 } as any)
               : {
                   logger: (message) => {
-                    if (message.status)
+                    if (message.status) {
                       setOcrStatus(
-                        `${message.status} (${index + 1}/${selectedScreenshots.length})`,
+                        label
+                          ? `${label}: ${message.status} (${index + 1}/${selectedScreenshots.length})`
+                          : `${message.status} (${index + 1}/${selectedScreenshots.length})`,
                       );
+                    }
                     if (typeof message.progress === "number") {
                       const imageShare = 1 / selectedScreenshots.length;
                       const completedShare = index / selectedScreenshots.length;
@@ -3234,11 +3239,68 @@ export function TodayTab({
                 };
 
           const result = await Tesseract.recognize(
-            sources[sourceIndex],
+            source,
             "eng",
             recognizeOptions,
           );
-          imageTexts.push(result.data.text.trim());
+          return result.data.text.trim();
+        };
+
+        for (
+          let sourceIndex = 0;
+          sourceIndex < sources.length;
+          sourceIndex += 1
+        ) {
+          imageTexts.push(
+            await recognizeSource(
+              sources[sourceIndex],
+              sourceIndex,
+              sources.length,
+            ),
+          );
+        }
+
+        if (
+          screenshotImportMode === "meetup" &&
+          extractOcrNames(imageTexts.filter(Boolean).join("\n"), players, "meetup")
+            .length === 0
+        ) {
+          // Safety fallback for dark-mode or German Meetup screenshots. Keep the
+          // existing light-mode path first; only run these heavier variants when
+          // the normal pass found no reviewable names.
+          setOcrStatus(
+            `No names found yet. Trying safer dark-mode OCR (${index + 1}/${selectedScreenshots.length})…`,
+          );
+          const fullImageCrop: CropBox = { x: 0, y: 0, w: 100, h: 100 };
+          const fallbackSources = await Promise.all([
+            cropScreenshotForOcr(file, fullImageCrop, { variant: "raw" }),
+            cropScreenshotForOcr(file, fullImageCrop, { variant: "gray" }),
+            cropScreenshotForOcr(file, fullImageCrop, { variant: "invert" }),
+          ]);
+
+          for (
+            let fallbackIndex = 0;
+            fallbackIndex < fallbackSources.length;
+            fallbackIndex += 1
+          ) {
+            const fallbackText = await recognizeSource(
+              fallbackSources[fallbackIndex],
+              fallbackIndex,
+              fallbackSources.length,
+              "fallback OCR",
+            );
+            if (fallbackText) imageTexts.push(fallbackText);
+
+            if (
+              extractOcrNames(
+                imageTexts.filter(Boolean).join("\n"),
+                players,
+                "meetup",
+              ).length > 0
+            ) {
+              break;
+            }
+          }
         }
 
         chunks.push(

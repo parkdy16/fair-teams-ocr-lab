@@ -1268,37 +1268,14 @@ function OverallBadge({ player }: { player: RoomPlayer }) {
   );
 }
 
-function playerWithClubAverage(player: RoomPlayer, summary?: ClubRatingSummary): RoomPlayer {
-  const average = Number(summary?.averageSkill);
-  if (!Number.isFinite(average) || average < 1 || average > 10) return player;
-  const skill = Math.round(average * 10) / 10;
-  return {
-    ...player,
-    skill,
-    attack: skill,
-    defense: skill,
-    speed: skill,
-    passing: skill,
-    stamina: skill,
-    physical: skill,
-  };
-}
-
-function PlayerCardBack({ player, clubRatingSummary }: { player: RoomPlayer; clubRatingSummary?: ClubRatingSummary }) {
-  const graphPlayer = playerWithClubAverage(player, clubRatingSummary);
-  const hasClubAverage = Number(clubRatingSummary?.ratingCount || 0) > 0 && Number.isFinite(Number(clubRatingSummary?.averageSkill));
+function PlayerCardBack({ player }: { player: RoomPlayer }) {
   const abilities = SPECIAL_ABILITIES.filter(a => Boolean(player[a.key]));
   const [selectedAbilityKey, setSelectedAbilityKey] = useState<AbilityKey | null>(abilities[0]?.key ?? null);
   const selectedAbility = abilities.find(a => a.key === selectedAbilityKey) ?? abilities[0];
   return (
     <div className="mt-3 border-t border-border/70 pt-3 space-y-3">
       <div className="rounded-2xl bg-muted/25 border border-border/70 p-2 shadow-inner">
-        <PlayerRadar player={graphPlayer} compact />
-        {hasClubAverage ? (
-          <div className="mt-1 text-center text-[10px] font-black uppercase tracking-wide text-primary">
-            Club avg {graphPlayer.skill} · {clubRatingSummary?.ratingCount} rating{clubRatingSummary?.ratingCount === 1 ? "" : "s"}
-          </div>
-        ) : null}
+        <PlayerRadar player={player} compact />
       </div>
 
       {abilities.length > 0 && (
@@ -1715,19 +1692,13 @@ export function PlayersTab({
 
   const effectiveSortMode = sortMode;
 
-  const clubRatingSummaryByPlayerId = useMemo(() => new Map(clubRatingSummaries.map((summary) => [summary.playerId, summary])), [clubRatingSummaries]);
-
   const sortedPlayers = [...players].sort((a, b) => {
     if (effectiveSortMode === "alpha") {
       return displayName(a).localeCompare(displayName(b));
     }
 
     if (effectiveSortMode === "skill") {
-      const aSummary = isSharedRoster ? clubRatingSummaryByPlayerId.get(a.id) : undefined;
-      const bSummary = isSharedRoster ? clubRatingSummaryByPlayerId.get(b.id) : undefined;
-      const aSkill = Number.isFinite(Number(aSummary?.averageSkill)) ? Number(aSummary?.averageSkill) : (a.skill ?? 0);
-      const bSkill = Number.isFinite(Number(bSummary?.averageSkill)) ? Number(bSummary?.averageSkill) : (b.skill ?? 0);
-      const skillDiff = bSkill - aSkill;
+      const skillDiff = (b.skill ?? 0) - (a.skill ?? 0);
       if (skillDiff !== 0) return skillDiff;
       return displayName(a).localeCompare(displayName(b));
     }
@@ -1737,6 +1708,8 @@ export function PlayersTab({
     if (bTime !== aTime) return bTime - aTime;
     return displayName(a).localeCompare(displayName(b));
   });
+
+  const clubRatingSummaryByPlayerId = useMemo(() => new Map(clubRatingSummaries.map((summary) => [summary.playerId, summary])), [clubRatingSummaries]);
 
   const filtered = search.trim()
     ? sortedPlayers.filter(p => displayName(p).toLowerCase().includes(search.toLowerCase()))
@@ -2691,7 +2664,7 @@ export function PlayersTab({
                     </div>
                   </div>
 
-                  {isFlipped ? <PlayerCardBack player={player} clubRatingSummary={clubRatingSummaryByPlayerId.get(player.id)} /> : null}
+                  {isFlipped ? <PlayerCardBack player={player} /> : null}
                 </div>
               );
             })}

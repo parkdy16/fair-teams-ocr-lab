@@ -291,6 +291,18 @@ const OCR_JUNK_WORDS = new Set([
   "members",
   "event host",
   "host",
+  "teilnehmer",
+  "teilnehmerdetails",
+  "teilnehmerdetails relevanz",
+  "relevanz",
+  "abgesagt",
+  "teilnehmer abgesagt",
+  "bekanntes gesicht",
+  "kostenlos ausprobieren",
+  "erfahre mehr uber die an",
+  "erfahre mehr iber die an",
+  "erfahre mehr liber die an",
+  "vodafone cz",
   "detailed list",
   "event question",
   "search attendees",
@@ -378,8 +390,8 @@ function cleanOcrLine(value: string) {
     .trim();
 }
 
-const MEETUP_MARKER_PATTERN = /\b(?:member|event host)\b/i;
-const MEETUP_SPLIT_PATTERN = /\b(?:member|event host)\b/gi;
+const MEETUP_MARKER_PATTERN = /\b(?:member|event host|bekanntes gesicht)\b/i;
+const MEETUP_SPLIT_PATTERN = /\b(?:member|event host|bekanntes gesicht)\b/gi;
 
 const MEETUP_STOP_WORDS = new Set([
   "checked",
@@ -1317,6 +1329,27 @@ function extractOcrNames(
     }
   }
 
+
+    // German/dark-mode Meetup sometimes exposes names as clean standalone
+    // lines followed by "Bekanntes Gesicht" instead of the English Member/Event
+    // Host marker. When importing into an empty roster there is no roster signal
+    // to match against, so promote only clean lines that are adjacent to a Meetup
+    // role/familiar-face marker. This keeps the old light-mode path intact and
+    // avoids broad UI-junk promotion.
+    for (let index = 0; index < lines.length; index += 1) {
+      const line = lines[index];
+      const normalizedLine = normalizeForMatch(line);
+      if (!normalizedLine || MEETUP_MARKER_PATTERN.test(normalizedLine)) continue;
+      const previous = normalizeForMatch(lines[index - 1] || "");
+      const next = normalizeForMatch(lines[index + 1] || "");
+      const nearMeetupMarker =
+        MEETUP_MARKER_PATTERN.test(previous) ||
+        MEETUP_MARKER_PATTERN.test(next);
+      if (nearMeetupMarker && shouldUseMeetupAdjacentName(line)) {
+        const cleaned = cleanDetectedNameCandidate(line);
+        if (cleaned) names.push(cleaned);
+      }
+    }
   }
 
   // Conservative fallback: only keep standalone lines when they strongly match

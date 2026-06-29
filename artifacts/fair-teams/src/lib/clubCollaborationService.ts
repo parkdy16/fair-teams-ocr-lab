@@ -104,6 +104,13 @@ function userDisplayName() {
   return user.displayName?.trim() || user.email || "Organizer";
 }
 
+function notifyClubRatingSummaryChanged(rosterId: string, summary: ClubRatingSummary) {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent("fairteams:club-rating-summary", {
+    detail: { rosterId: cleanRosterId(rosterId), summary },
+  }));
+}
+
 function toRatingSummary(id: string, data: DocumentData): ClubRatingSummary {
   const ratingCount = Math.max(0, Number(data.ratingCount || 0));
   const averageSkill = clampSkill(data.averageSkill);
@@ -189,6 +196,7 @@ export async function saveMyClubPlayerRating(rosterId: string, playerId: string,
   const now = new Date();
   const submissionRef = clubRatingSubmissionDoc(rosterId, user.uid, playerId);
   const summaryRef = clubRatingSummaryDoc(rosterId, playerId);
+  let savedSummary: ClubRatingSummary | null = null;
 
   await runTransaction(getFairTeamsFirestore(), async (transaction) => {
     const submissionSnap = await transaction.get(submissionRef);
@@ -203,6 +211,7 @@ export async function saveMyClubPlayerRating(rosterId: string, playerId: string,
     const nextCount = previousSkill === null ? currentCount + 1 : currentCount;
     const nextSum = currentSum - (previousSkill ?? 0) + skill;
     const nextAverage = nextCount > 0 ? Math.round((nextSum / nextCount) * 10) / 10 : null;
+    savedSummary = { playerId, averageSkill: nextAverage, ratingCount: nextCount, updatedAt: now.getTime() };
 
     transaction.set(submissionRef, {
       app: "Fair Teams",
@@ -230,6 +239,8 @@ export async function saveMyClubPlayerRating(rosterId: string, playerId: string,
       updatedAtIso: now.toISOString(),
     }, { merge: true });
   });
+
+  if (savedSummary) notifyClubRatingSummaryChanged(rosterId, savedSummary);
 }
 
 export async function skipMyClubPlayerRating(rosterId: string, playerId: string): Promise<void> {
@@ -237,6 +248,7 @@ export async function skipMyClubPlayerRating(rosterId: string, playerId: string)
   const now = new Date();
   const submissionRef = clubRatingSubmissionDoc(rosterId, user.uid, playerId);
   const summaryRef = clubRatingSummaryDoc(rosterId, playerId);
+  let savedSummary: ClubRatingSummary | null = null;
 
   await runTransaction(getFairTeamsFirestore(), async (transaction) => {
     const submissionSnap = await transaction.get(submissionRef);
@@ -251,6 +263,7 @@ export async function skipMyClubPlayerRating(rosterId: string, playerId: string)
     const nextCount = previousSkill === null ? currentCount : Math.max(0, currentCount - 1);
     const nextSum = Math.max(0, currentSum - (previousSkill ?? 0));
     const nextAverage = nextCount > 0 ? Math.round((nextSum / nextCount) * 10) / 10 : null;
+    savedSummary = { playerId, averageSkill: nextAverage, ratingCount: nextCount, updatedAt: now.getTime() };
 
     transaction.set(submissionRef, {
       app: "Fair Teams",
@@ -278,6 +291,8 @@ export async function skipMyClubPlayerRating(rosterId: string, playerId: string)
       updatedAtIso: now.toISOString(),
     }, { merge: true });
   });
+
+  if (savedSummary) notifyClubRatingSummaryChanged(rosterId, savedSummary);
 }
 
 export function listenToClubNotes(

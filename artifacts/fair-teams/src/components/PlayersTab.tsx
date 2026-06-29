@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { UserMinus, Plus, Star, Zap, Search, X, Camera, Image as ImageIcon, Trash2, Pencil, Shield, Activity, Dumbbell, Target, Share2, ArrowDownAZ, Clock3, Mic, Info, Eye, EyeOff } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart, ResponsiveContainer } from "recharts";
-import { listenToClubRatingSummaries, type ClubRatingSummary } from "@/lib/clubCollaborationService";
+import { fetchClubRatingSummaries, listenToClubRatingSummaries, type ClubRatingSummary } from "@/lib/clubCollaborationService";
 import { listenToSharedRosterUser } from "@/lib/sharedRosterService";
 
 
@@ -1429,16 +1429,58 @@ export function PlayersTab({
       return;
     }
 
+    let disposed = false;
+    const mergeSummary = (summary: ClubRatingSummary) => {
+      setClubRatingSummaries((current) => {
+        const next = current.filter((item) => item.playerId !== summary.playerId);
+        return [...next, summary];
+      });
+    };
+    const refreshSummaries = async () => {
+      try {
+        const summaries = await fetchClubRatingSummaries(sharedRosterId);
+        if (!disposed) setClubRatingSummaries(summaries);
+      } catch {
+        if (!disposed) setClubRatingSummaries([]);
+      }
+    };
+
+    void refreshSummaries();
+
+    const handleLocalRatingSummary = (event: Event) => {
+      const detail = (event as CustomEvent<{ rosterId?: string; summary?: ClubRatingSummary }>).detail;
+      if (detail?.rosterId !== sharedRosterId || !detail.summary) return;
+      mergeSummary(detail.summary);
+      window.setTimeout(() => void refreshSummaries(), 250);
+    };
+    const handleVisibilityRefresh = () => {
+      if (document.visibilityState === "visible") void refreshSummaries();
+    };
+
+    window.addEventListener("fairteams:club-rating-summary", handleLocalRatingSummary);
+    document.addEventListener("visibilitychange", handleVisibilityRefresh);
+
+    let unsubscribe: (() => void) | undefined;
     try {
-      return listenToClubRatingSummaries(
+      unsubscribe = listenToClubRatingSummaries(
         sharedRosterId,
-        setClubRatingSummaries,
-        () => setClubRatingSummaries([]),
+        (summaries) => {
+          if (!disposed) setClubRatingSummaries(summaries);
+        },
+        () => {
+          if (!disposed) void refreshSummaries();
+        },
       );
     } catch {
-      setClubRatingSummaries([]);
-      return;
+      void refreshSummaries();
     }
+
+    return () => {
+      disposed = true;
+      unsubscribe?.();
+      window.removeEventListener("fairteams:club-rating-summary", handleLocalRatingSummary);
+      document.removeEventListener("visibilitychange", handleVisibilityRefresh);
+    };
   }, [isSharedRoster, sharedRosterId, sharedRosterAuthReady, sharedRosterUserUid]);
 
   useEffect(() => {

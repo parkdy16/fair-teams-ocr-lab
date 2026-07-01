@@ -719,6 +719,127 @@ function extractInlineMeetupNames(text: string) {
   return names;
 }
 
+
+const OCR_GLOBAL_FALLBACK_SHORT_NOISE = new Set([
+  "ui",
+  "ux",
+  "xx",
+  "xl",
+  "aj",
+  "pm",
+  "am",
+  "www",
+  "com",
+  "app",
+  "ios",
+]);
+
+function rawOcrLineHasGlobalUiShape(value: string) {
+  const raw = value.trim();
+  if (!raw) return true;
+  if (/^---.*\.(jpg|jpeg|png).*---$/i.test(raw)) return true;
+  if (/\d/.test(raw)) return true;
+  if (/%|[@=<>\[\]{}]|\.\.\./.test(raw)) return true;
+  if (/https?:\/\/|www\.|\.com\b|\.de\b|\.net\b/i.test(raw)) return true;
+  return false;
+}
+
+function countLooseOcrCandidateOccurrences(lines: string[]) {
+  const counts = new Map<string, number>();
+  for (const rawLine of lines) {
+    const cleaned = cleanDetectedNameCandidate(
+      stripOtherScreenshotListPrefix(rawLine),
+    );
+    const key = normalizeForMatch(cleaned);
+    if (!key) continue;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return counts;
+}
+
+function isLanguageAgnosticLooseReviewName(
+  rawLine: string,
+  candidateOccurrences: Map<string, number>,
+) {
+  if (rawOcrLineHasGlobalUiShape(rawLine)) return false;
+
+  const cleaned = cleanDetectedNameCandidate(
+    stripOtherScreenshotListPrefix(rawLine),
+  );
+  const normalized = normalizeForMatch(cleaned);
+  if (!cleaned || !normalized) return false;
+  if (OCR_JUNK_WORDS.has(normalized)) return false;
+  if (OTHER_SCREENSHOT_JUNK_WORDS.has(normalized)) return false;
+  if (!isProbablyName(cleaned) && !isProbablySingleUsername(cleaned)) {
+    return false;
+  }
+
+  const words = normalized.split(" ").filter(Boolean);
+  if (words.length < 1 || words.length > 4) return false;
+  if (words.some((word) => word.length === 1 && words.length > 1)) return false;
+
+  const rawWords = rawLine
+    .replace(/---.*?\.(jpg|jpeg|png).*?---/gi, " ")
+    .split(/\s+/)
+    .map((word) => word.replace(/[^A-Za-zÀ-ÖØ-öø-ÿ'-]/g, ""))
+    .filter(Boolean);
+
+  // Status bars and UI labels often contain short all-caps acronyms such as
+  // carrier/country codes. Names like "Zhan Yi Choo" stay valid because "Yi"
+  // is title case, not an all-caps acronym.
+  if (rawWords.some((word) => /^[A-Z]{2,4}$/.test(word))) return false;
+
+  if (words.length === 1) {
+    const word = words[0];
+    if (word.length < 3) return false;
+    if (OCR_GLOBAL_FALLBACK_SHORT_NOISE.has(word)) return false;
+    if (/^[A-ZÀ-ÖØ-Þ]{2,}$/.test(cleaned)) return false;
+  }
+
+  // Repeated two-word lines are usually row labels or action buttons in the app
+  // language. Keep this only in the loose fallback path; the normal strict
+  // parser and roster rescue still handle real matched names first.
+  const occurrenceCount = candidateOccurrences.get(normalized) ?? 0;
+  if (words.length === 2 && occurrenceCount >= 2) return false;
+
+  return true;
+}
+
+function extractLanguageAgnosticLooseReviewNames(text: string) {
+  const rawLines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const candidateOccurrences = countLooseOcrCandidateOccurrences(rawLines);
+  const seen = new Set<string>();
+  const names: string[] = [];
+
+  const addCandidate = (rawValue: string) => {
+    const cleaned = cleanDetectedNameCandidate(
+      stripOtherScreenshotListPrefix(rawValue),
+    );
+    const key = normalizeForMatch(cleaned);
+    if (!key || seen.has(key)) return;
+    if (!isLanguageAgnosticLooseReviewName(rawValue, candidateOccurrences)) {
+      return;
+    }
+    seen.add(key);
+    names.push(cleaned);
+  };
+
+  for (const rawLine of rawLines) {
+    addCandidate(rawLine);
+
+    // If a screenshot line contains comma/list separators, reuse the general
+    // screenshot splitter. Plain space-separated lines stay intact so full names
+    // are not broken apart.
+    if (/[;,/|]/.test(rawLine)) {
+      for (const segment of splitOtherScreenshotNameSegments(rawLine)) {
+        addCandidate(segment);
+      }
+    }
+  }
+
+  return names;
+}
+
 function findRosterAliasesInTokens(tokens: string[], roster: RoomPlayer[]) {
   const normalizedTokens = tokens.map((token) => normalizeForMatch(token));
   const used = new Array(tokens.length).fill(false);
@@ -1345,6 +1466,15 @@ function extractOcrNames(
         break;
       }
     }
+  }
+
+  // Language-agnostic empty-roster fallback: if the strict Meetup parser and
+  // roster rescue found nothing, promote clean standalone OCR lines into Review
+  // Names as NEW candidates. This intentionally does not depend on UI words like
+  // "Member" or translated role labels, so it can rescue dark-mode/non-English
+  // Meetup screens while keeping the normal successful path unchanged.
+  if (mode === "meetup" && names.length === 0) {
+    names.push(...extractLanguageAgnosticLooseReviewNames(text));
   }
 
   const cleanedNames = names

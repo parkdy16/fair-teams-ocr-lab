@@ -606,7 +606,7 @@ function actionPrimaryVerb(action: AiSmartCommandAction) {
   return "Apply";
 }
 
-const AI_ASSISTANT_VERSION_LABEL = "AI beta · v1.31 shared edit sync";
+const AI_ASSISTANT_VERSION_LABEL = "AI beta · v1.32 global OCR fallback";
 
 type AiRosterMatch = {
   player: AiSmartCommandRosterPlayer;

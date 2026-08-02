@@ -93,24 +93,6 @@ const EMPTY_ROSTER_NAME = "New roster";
 const ROSTERS_STORAGE_KEY = "fair-teams-rosters-v1";
 const DRIVE_RECIPIENTS_STORAGE_KEY = "fair-teams-drive-backup-recipients-v1";
 const DRIVE_ACTIVE_BACKUP_STORAGE_KEY = "fair-teams-drive-active-backup-v1";
-const ONBOARDING_COMPLETED_STORAGE_KEY = "fair-teams-onboarding-v4-completed";
-
-
-function readOnboardingCompleted() {
-  try {
-    return window.localStorage.getItem(ONBOARDING_COMPLETED_STORAGE_KEY) === "true";
-  } catch {
-    return false;
-  }
-}
-
-function saveOnboardingCompleted() {
-  try {
-    window.localStorage.setItem(ONBOARDING_COMPLETED_STORAGE_KEY, "true");
-  } catch {
-    // The app still works when storage is unavailable.
-  }
-}
 
 function hasSavedRosterState() {
   try {
@@ -420,6 +402,27 @@ function App() {
   }, []);
 
   const [activeTab, setActiveTab] = useState<AppTab>("today");
+  const [tutorialStep, setTutorialStep] = useState<string | null>(null);
+  const [tutorialPlayerId, setTutorialPlayerId] = useState<string | null>(null);
+  const tutorialActive = Boolean(tutorialStep);
+
+  const tutorialCopy: Record<string, { title: string; body: string }> = {
+    "open-add": { title: "Build the squad", body: "Tap the glowing Add Player button." },
+    "add-manual": { title: "Add one player", body: "Choose Add manually. We filled the practice name for you." },
+    "submit-player": { title: "Welcome Sunny", body: "Tap Add Player to put Sunny Sprint in the practice roster." },
+    "open-edit": { title: "Players change", body: "Open Sunny Sprint’s edit button." },
+    "save-edit": { title: "Tune the rating", body: "The rating is ready. Save the player profile." },
+    "flip-card": { title: "There’s more", body: "Tap Sunny Sprint’s card to flip it." },
+    "today-tab": { title: "Match day", body: "Open Today to choose who is playing." },
+    "select-today": { title: "Complete the lineup", body: "Select Sunny Sprint on the real attendance screen." },
+    "teams-tab": { title: "Make teams", body: "Open the Teams tab." },
+    "field-size": { title: "Fit the pitch", body: "Choose a field size. It changes how teams are balanced." },
+    "generate": { title: "Moment of truth", body: "Tap Generate and let FairTeams balance the lineup." },
+    "present": { title: "Ready to play", body: "Open Present Teams for the match-day view." },
+    "club-tab": { title: "Run the group", body: "Open Club to find sharing and organizer tools." },
+    "create-roster": { title: "Now make it yours", body: "Name your real roster and tap New." },
+  };
+
   const [aiTeamSetup, setAiTeamSetup] = useState<{ token: number; teamCount: number | null; autoGenerate?: boolean; shuffleEquals?: boolean }>({ token: 0, teamCount: null, autoGenerate: false, shuffleEquals: false });
   const [aiTeamsState, setAiTeamsState] = useState<{ hasTeams: boolean; teamCount: number; selectedCount: number }>({ hasTeams: false, teamCount: 2, selectedCount: 0 });
   const [clubBackTargetOpen, setClubBackTargetOpen] = useState(false);
@@ -429,15 +432,6 @@ function App() {
   const restoringTabFromBackRef = useRef(false);
   const fairTeamsBackTrapArmedRef = useRef(false);
   const [todayRosterChosen, setTodayRosterChosen] = useState(false);
-  const [onboardingCompleted, setOnboardingCompleted] = useState(readOnboardingCompleted);
-  const [onboardingStep, setOnboardingStep] = useState<"welcome" | "roster-add" | "roster-edit" | "roster-flip" | "today" | "teams-field" | "teams-result" | "club" | "name" | "add">("welcome");
-  const [onboardingRosterName, setOnboardingRosterName] = useState("Saturday Football");
-  const [tutorialSunnySelected, setTutorialSunnySelected] = useState(false);
-  const [tutorialPlayerAdded, setTutorialPlayerAdded] = useState(false);
-  const [tutorialRating, setTutorialRating] = useState(6);
-  const [tutorialCardFlipped, setTutorialCardFlipped] = useState(false);
-  const [tutorialFieldSize, setTutorialFieldSize] = useState<"small" | "medium" | "large" | null>(null);
-  const [openPlayerAddMode, setOpenPlayerAddMode] = useState<{ token: number; mode: "options" | "manual" | "voice" }>({ token: 0, mode: "options" });
   const [reviewPlayerQueue, setReviewPlayerQueue] = useState<string[]>([]);
   const [reviewPlayerIndex, setReviewPlayerIndex] = useState(0);
   const [reviewAutoOpenPlayerId, setReviewAutoOpenPlayerId] = useState<string | null>(null);
@@ -499,45 +493,7 @@ function App() {
   const headerColor = rosterThemeColor(activeRoster);
   const groupLogo = rosterLogo(activeRoster);
   const isEmptyStarterRoster =
-    rosters.length === 1 &&
-    players.length === 0 &&
-    !isRosterCloudShared(activeRoster);
-  const showFirstRunOnboarding = isEmptyStarterRoster && !onboardingCompleted;
-
-  const finishOnboarding = () => {
-    saveOnboardingCompleted();
-    setOnboardingCompleted(true);
-    setTodayRosterChosen(true);
-  };
-
-  const saveFirstRosterName = () => {
-    const name = onboardingRosterName.replace(/\s+/g, " ").trim() || "Saturday Football";
-    setRosterState((current) => ({
-      ...current,
-      rosters: current.rosters.map((roster) =>
-        roster.id === current.activeRosterId
-          ? { ...roster, name, updatedAt: new Date().toISOString() }
-          : roster,
-      ),
-    }));
-    setOnboardingRosterName(name);
-    setOnboardingStep("add");
-  };
-
-  const startOnboardingAdd = (mode: "screenshot" | "manual" | "voice") => {
-    finishOnboarding();
-    if (mode === "screenshot") {
-      setOcrImportContext("roster");
-      setActiveTab("today");
-      setTodayOcrOpenToken((token) => token + 1);
-      return;
-    }
-    setActiveTab("players");
-    setOpenPlayerAddMode((current) => ({
-      token: current.token + 1,
-      mode,
-    }));
-  };
+    rosters.length === 1 && players.length === 0 && activeRosterName === EMPTY_ROSTER_NAME;
   const privateBackupRosters = privateLocalRosters(rosters);
   const hasPrivateBackupRosters = privateBackupRosters.some((roster) => roster.players.length > 0 || roster.name !== EMPTY_ROSTER_NAME);
   const privateBackupSummary = hasPrivateBackupRosters ? countBackupRosters(privateBackupRosters) : { rosterCount: 0, playerCount: 0 };
@@ -3406,6 +3362,55 @@ They will no longer be able to open or edit this shared roster unless it is shar
     rosterToolsActivePanel,
   ]);
 
+  useEffect(() => {
+    if (showSplash || tutorialStep || players.length > 0) return;
+    if (localStorage.getItem("fairteams-onboarding-v137-complete") === "1") return;
+    const now = new Date().toISOString();
+    const practiceNames = [
+      ["Leo Magic", 9], ["Cristiano Air", 9], ["Marta Magic", 9],
+      ["Zizou Touch", 8], ["Roni Smile", 8], ["Luka Engine", 8],
+      ["Andres Vision", 7], ["Didier Power", 7], ["Manu Wall", 8],
+    ] as const;
+    const practicePlayers: RoomPlayer[] = practiceNames.map(([name, skill], index) => normalizePlayer({
+      id: `tutorial-${index + 1}`,
+      roomId: 1,
+      name,
+      gender: index === 2 ? "female" : "male",
+      skill,
+      attack: skill,
+      defense: Math.max(1, skill - (index % 3)),
+      speed: Math.max(1, skill - (index % 2)),
+      passing: skill,
+      stamina: Math.max(1, skill - 1),
+      physical: Math.max(1, skill - 1),
+      teamPlay: 2,
+      isGoalkeeper: name === "Manu Wall",
+      isNew: false,
+      attending: index < 9,
+      todayStatus: "here",
+      createdAt: now,
+      updatedAt: now,
+    }, index));
+    replacePlayers(practicePlayers);
+    setTodayRosterChosen(true);
+    setActiveTab("players");
+    setTutorialStep("open-add");
+  }, [showSplash, tutorialStep, players.length]);
+
+  const handleTutorialAction = (action: string, playerId?: string) => {
+    if (!tutorialStep) return;
+    if (action === "add-options-opened" && tutorialStep === "open-add") setTutorialStep("add-manual");
+    else if (action === "manual-opened" && tutorialStep === "add-manual") setTutorialStep("submit-player");
+    else if (action === "player-added" && tutorialStep === "submit-player") { setTutorialPlayerId(playerId || null); setTutorialStep("open-edit"); }
+    else if (action === "edit-opened" && tutorialStep === "open-edit") setTutorialStep("save-edit");
+    else if (action === "edit-saved" && tutorialStep === "save-edit") setTutorialStep("flip-card");
+    else if (action === "card-flipped" && tutorialStep === "flip-card") setTutorialStep("today-tab");
+    else if (action === "today-selected" && tutorialStep === "select-today") setTutorialStep("teams-tab");
+    else if (action === "field-size-changed" && tutorialStep === "field-size") setTutorialStep("generate");
+    else if (action === "generated" && tutorialStep === "generate") window.setTimeout(() => setTutorialStep("present"), 650);
+    else if (action === "presented" && tutorialStep === "present") setTutorialStep("club-tab");
+  };
+
   if (showSplash) {
     return (
       <div className="min-h-[100dvh] flex flex-col items-center justify-center bg-white text-[#102A43] fairteams-splash-fade">
@@ -3426,160 +3431,9 @@ They will no longer be able to open or edit this shared roster unless it is shar
     );
   }
 
-  if (showFirstRunOnboarding) {
-    const baseTutorialPlayers = [
-      { name: "Leo Magic", rating: 9 },
-      { name: "Cristiano Air", rating: 9 },
-      { name: "Marta Magic", rating: 9 },
-      { name: "Zizou Touch", rating: 8 },
-      { name: "Roni Smile", rating: 8 },
-      { name: "Luka Engine", rating: 8 },
-      { name: "Didier Power", rating: 7 },
-      { name: "Andrés Vision", rating: 6 },
-      { name: "Manu Wall", rating: 8, goalkeeper: true },
-    ];
-    const tutorialPlayers = tutorialPlayerAdded
-      ? [...baseTutorialPlayers, { name: "Sunny Sprint", rating: tutorialRating }]
-      : baseTutorialPlayers;
-    const selectedTutorialPlayers = tutorialPlayers.filter((_, index) => index < 9 || tutorialSunnySelected);
-    const tutorialTeams = [
-      [tutorialPlayers[0], tutorialPlayers[3], tutorialPlayers[5], tutorialPlayers[7], tutorialPlayers[8]],
-      [tutorialPlayers[1], tutorialPlayers[2], tutorialPlayers[4], tutorialPlayers[6], tutorialPlayers[9] || { name: "Sunny Sprint", rating: tutorialRating }],
-    ];
-    const tutorialTeamTotal = (team: Array<{ rating: number }>) => team.reduce((sum, player) => sum + player.rating, 0);
-    const tutorialTabs = [
-      { id: "roster", label: "Roster" },
-      { id: "today", label: "Today" },
-      { id: "teams", label: "Teams" },
-      { id: "club", label: "Club" },
-    ];
-    const currentTourTab = onboardingStep.startsWith("roster") ? "roster" : onboardingStep === "today" ? "today" : onboardingStep.startsWith("teams") ? "teams" : onboardingStep === "club" ? "club" : null;
-    const Guide = ({ title, text }: { title: string; text: string }) => (
-      <div className="rounded-2xl border border-green-200 bg-green-50 p-4 shadow-sm">
-        <p className="text-xs font-black uppercase tracking-[0.16em] text-green-700">Your turn</p>
-        <p className="mt-1 text-base font-black text-[#102A43]">{title}</p>
-        <p className="mt-1 text-sm font-semibold leading-relaxed text-slate-600">{text}</p>
-      </div>
-    );
-
-    return (
-      <div className="fairteams-visual-refresh min-h-[100dvh] bg-[#F7FAFC] text-[#102A43]">
-        <div className="mx-auto flex min-h-[100dvh] w-full max-w-md flex-col bg-white shadow-xl">
-          <div className="flex items-center gap-2 border-b border-slate-100 px-5 py-4">
-            <img src={fairTeamsLogoFloating} alt="" className="h-8 w-8 object-contain" />
-            <span className="text-sm font-black tracking-tight">FAIR <span className="text-[#16A34A]">TEAMS</span></span>
-            <span className="ml-auto rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-slate-500">Practice</span>
-          </div>
-
-          {onboardingStep === "welcome" ? (
-            <div className="flex flex-1 flex-col justify-center px-5 py-8">
-              <div className="relative overflow-hidden rounded-[2rem] bg-[#102A43] px-6 py-9 text-white shadow-xl">
-                <div className="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-[#22C55E]/20" />
-                <p className="relative text-xs font-black uppercase tracking-[0.22em] text-green-300">60-second kick-off</p>
-                <h1 className="relative mt-3 text-4xl font-black leading-[0.96] tracking-tight">Run your first match.</h1>
-                <p className="relative mt-4 max-w-[17rem] text-sm font-semibold leading-relaxed text-slate-300">Try every tab with a practice squad. Nothing is saved.</p>
-              </div>
-              <Button type="button" onClick={() => setOnboardingStep("roster-add")} className="mt-8 h-14 w-full rounded-2xl bg-[#16A34A] text-base font-black hover:bg-[#15803D]">Kick off</Button>
-            </div>
-          ) : onboardingStep === "name" || onboardingStep === "add" ? (
-            <div className="flex flex-1 flex-col justify-center px-5 py-8">
-              {onboardingStep === "name" ? (
-                <div className="space-y-7">
-                  <div className="text-center">
-                    <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-green-100 text-2xl">✓</div>
-                    <h1 className="mt-4 text-3xl font-black tracking-tight">Now make it yours.</h1>
-                    <p className="mt-2 text-sm font-semibold text-slate-500">Create your first real roster.</p>
-                  </div>
-                  <input autoFocus value={onboardingRosterName} onChange={(event) => setOnboardingRosterName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") saveFirstRosterName(); }} className="h-14 w-full rounded-2xl border border-slate-200 bg-white px-4 text-lg font-black outline-none focus:border-[#16A34A] focus:ring-4 focus:ring-green-100" aria-label="Roster name" />
-                  <Button type="button" onClick={saveFirstRosterName} className="h-14 w-full rounded-2xl bg-[#16A34A] text-base font-black hover:bg-[#15803D]">Create roster</Button>
-                </div>
-              ) : (
-                <div className="space-y-6">
-                  <div><h1 className="text-3xl font-black tracking-tight">Add your players</h1><p className="mt-2 text-sm font-semibold text-slate-500">Start simple. You can import later.</p></div>
-                  <button type="button" onClick={() => startOnboardingAdd("manual")} className="w-full rounded-2xl border-2 border-[#16A34A] bg-green-50 p-5 text-left shadow-sm"><span className="block text-base font-black">Enter names</span><span className="mt-1 block text-xs font-bold text-green-700">Recommended for your first roster</span></button>
-                  <button type="button" onClick={() => startOnboardingAdd("screenshot")} className="w-full rounded-2xl border border-slate-200 bg-white p-4 text-left text-base font-black shadow-sm">Import screenshot</button>
-                  <button type="button" onClick={() => startOnboardingAdd("voice")} className="w-full rounded-2xl border border-slate-200 bg-white p-4 text-left text-base font-black shadow-sm">Use voice</button>
-                </div>
-              )}
-            </div>
-          ) : (
-            <>
-              <div className="flex-1 overflow-y-auto px-4 pb-28 pt-4">
-                {onboardingStep === "roster-add" && (
-                  <div className="space-y-4">
-                    <Guide title="Add one player" text="Roster is your full player list. Open Add Player to bring Sunny Sprint into the squad." />
-                    <div className="flex items-center justify-between"><div><h1 className="text-2xl font-black">Practice Squad</h1><p className="text-sm font-semibold text-slate-500">{tutorialPlayers.length} players</p></div><button type="button" onClick={() => setTutorialPlayerAdded(true)} className={`rounded-xl px-4 py-3 text-sm font-black ${tutorialPlayerAdded ? "bg-green-100 text-green-700" : "animate-pulse bg-[#16A34A] text-white ring-4 ring-green-100"}`}>{tutorialPlayerAdded ? "Added ✓" : "+ Add Player"}</button></div>
-                    <div className="grid grid-cols-2 gap-2">{tutorialPlayers.map((player) => <div key={player.name} className="rounded-2xl border border-slate-200 bg-white p-3"><p className="text-sm font-black">{player.name}</p><p className="mt-1 text-xs font-bold text-slate-400">Skill {player.rating}</p></div>)}</div>
-                    {tutorialPlayerAdded && <Button type="button" onClick={() => setOnboardingStep("roster-edit")} className="h-13 w-full rounded-2xl bg-[#102A43] font-black">Open Sunny Sprint</Button>}
-                  </div>
-                )}
-
-                {onboardingStep === "roster-edit" && (
-                  <div className="space-y-4">
-                    <Guide title="Edit the rating" text="Open a player whenever your opinion changes. Move Sunny from 6 to 7." />
-                    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-center justify-between"><div><p className="text-xl font-black">Sunny Sprint</p><p className="text-sm font-semibold text-slate-500">Overall skill</p></div><span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#102A43] text-2xl font-black text-white">{tutorialRating}</span></div><input aria-label="Sunny Sprint rating" type="range" min="1" max="10" value={tutorialRating} onChange={(e) => setTutorialRating(Number(e.target.value))} className="mt-7 w-full accent-green-600" /><div className="mt-2 flex justify-between text-xs font-bold text-slate-400"><span>Beginner</span><span>Elite</span></div></div>
-                    <Button type="button" disabled={tutorialRating !== 7} onClick={() => setOnboardingStep("roster-flip")} className="h-13 w-full rounded-2xl bg-[#16A34A] font-black disabled:bg-slate-200">Save rating</Button>
-                  </div>
-                )}
-
-                {onboardingStep === "roster-flip" && (
-                  <div className="space-y-4">
-                    <Guide title="Flip the card" text="The back keeps extra player details out of the way until you need them." />
-                    <button type="button" onClick={() => setTutorialCardFlipped(true)} className={`min-h-[230px] w-full rounded-3xl border p-6 text-left shadow-lg transition ${tutorialCardFlipped ? "border-green-300 bg-[#102A43] text-white" : "border-slate-200 bg-white ring-4 ring-green-100"}`}>
-                      {!tutorialCardFlipped ? <><p className="text-xs font-black uppercase tracking-widest text-green-600">Tap to flip</p><p className="mt-4 text-3xl font-black">Sunny Sprint</p><p className="mt-2 text-sm font-bold text-slate-500">Skill 7</p></> : <><p className="text-xs font-black uppercase tracking-widest text-green-300">Player details</p><p className="mt-4 text-2xl font-black">Fast runner</p><p className="mt-3 text-sm font-semibold text-slate-300">Use the card back for style, notes and advanced ratings.</p></>}
-                    </button>
-                    {tutorialCardFlipped && <Button type="button" onClick={() => setOnboardingStep("today")} className="h-13 w-full rounded-2xl bg-[#16A34A] font-black">Next: Today</Button>}
-                  </div>
-                )}
-
-                {onboardingStep === "today" && (
-                  <div className="space-y-4">
-                    <Guide title="Pick today’s players" text="Roster holds everyone. Today is only the people playing this match. Select Sunny Sprint." />
-                    <div><h1 className="text-2xl font-black">Who’s playing?</h1><p className="text-sm font-semibold text-slate-500">{selectedTutorialPlayers.length} selected</p></div>
-                    <div className="grid grid-cols-2 gap-2">{tutorialPlayers.map((player) => { const sunny=player.name==="Sunny Sprint"; const selected=!sunny || tutorialSunnySelected; return <button key={player.name} type="button" onClick={() => sunny && setTutorialSunnySelected(true)} className={`rounded-2xl border p-3 text-left ${selected ? "border-green-200 bg-green-50" : "animate-pulse border-dashed border-green-500 bg-white ring-4 ring-green-100"}`}><div className="flex items-center justify-between"><span className="text-sm font-black">{player.name}</span><span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-black ${selected ? "bg-[#16A34A] text-white" : "bg-green-100 text-green-700"}`}>{selected ? "✓" : "+"}</span></div></button>})}</div>
-                    <Button type="button" disabled={!tutorialSunnySelected} onClick={() => setOnboardingStep("teams-field")} className="h-13 w-full rounded-2xl bg-[#102A43] font-black disabled:bg-slate-200">Next: Teams · {selectedTutorialPlayers.length}</Button>
-                  </div>
-                )}
-
-                {onboardingStep === "teams-field" && (
-                  <div className="space-y-4">
-                    <Guide title="Choose the field size" text="Field size helps FairTeams shape the game setup. Pick Medium, then generate." />
-                    <div><h1 className="text-2xl font-black">Match setup</h1><p className="text-sm font-semibold text-slate-500">10 players · 2 teams</p></div>
-                    <div className="grid grid-cols-3 gap-2">{(["small","medium","large"] as const).map(size => <button key={size} type="button" onClick={() => setTutorialFieldSize(size)} className={`rounded-2xl border p-4 text-center text-sm font-black capitalize ${tutorialFieldSize===size ? "border-green-500 bg-green-50 ring-4 ring-green-100" : "border-slate-200 bg-white"}`}>{size}</button>)}</div>
-                    <Button type="button" disabled={tutorialFieldSize !== "medium"} onClick={() => setOnboardingStep("teams-result")} className="h-14 w-full rounded-2xl bg-[#16A34A] text-base font-black disabled:bg-slate-200">Generate teams</Button>
-                  </div>
-                )}
-
-                {onboardingStep === "teams-result" && (
-                  <div className="space-y-4">
-                    <Guide title="Teams are ready" text="Present shares the clean lineup. Shuffle and manual swaps stay available when you need them." />
-                    <div className="grid grid-cols-2 gap-3">{tutorialTeams.map((team, i) => <div key={i} className="overflow-hidden rounded-3xl border border-slate-200 bg-white"><div className={`${i ? "bg-[#16A34A]" : "bg-[#102A43]"} px-4 py-3 text-white`}><p className="text-xs font-black uppercase tracking-widest">Team {i+1}</p><p className="text-xs font-bold opacity-75">Total {tutorialTeamTotal(team)}</p></div><div className="space-y-1 p-3">{team.map(player => <div key={player.name} className="flex justify-between rounded-xl px-2 py-2"><span className="text-xs font-black">{player.name}</span><span className="text-xs font-black text-slate-400">{player.rating}</span></div>)}</div></div>)}</div>
-                    <div className="rounded-2xl bg-green-50 p-3 text-center text-sm font-black text-green-800">39 — 40. That’s close.</div>
-                    <Button type="button" onClick={() => setOnboardingStep("club")} className="h-14 w-full rounded-2xl bg-[#102A43] text-base font-black">Present teams</Button>
-                  </div>
-                )}
-
-                {onboardingStep === "club" && (
-                  <div className="space-y-4">
-                    <Guide title="This is your control room" text="Create rosters, share them and manage organizers from Club." />
-                    <div><h1 className="text-2xl font-black">Club</h1><p className="text-sm font-semibold text-slate-500">Roster tools and sharing</p></div>
-                    <div className="space-y-3"><div className="rounded-2xl border border-slate-200 bg-white p-4"><p className="font-black">Rosters</p><p className="mt-1 text-sm font-semibold text-slate-500">Create, switch and organize groups.</p></div><div className="rounded-2xl border border-slate-200 bg-white p-4"><p className="font-black">Share roster</p><p className="mt-1 text-sm font-semibold text-slate-500">Invite other organizers when you are ready.</p></div></div>
-                    <Button type="button" onClick={() => setOnboardingStep("name")} className="h-14 w-full rounded-2xl bg-[#16A34A] text-base font-black">Create my roster</Button>
-                  </div>
-                )}
-              </div>
-              <div className="fixed bottom-0 left-1/2 z-20 flex w-full max-w-md -translate-x-1/2 border-t border-slate-200 bg-white px-2 pb-[max(0.6rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-8px_24px_rgba(15,23,42,0.08)]">
-                {tutorialTabs.map(tab => <div key={tab.id} className={`flex-1 rounded-xl py-2 text-center text-xs font-black ${currentTourTab===tab.id ? "bg-green-50 text-green-700" : "text-slate-400"}`}>{tab.label}</div>)}
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div
+      data-tutorial-active={tutorialActive ? "true" : undefined}
       className="fairteams-visual-refresh flex flex-col min-h-[100dvh] bg-background w-full max-w-md md:max-w-3xl lg:max-w-5xl mx-auto relative overflow-hidden"
       style={{ "--roster-accent": identityAccentColor } as React.CSSProperties}
     >
@@ -3587,9 +3441,16 @@ They will no longer be able to open or edit this shared roster unless it is shar
         value={activeTab}
         onValueChange={(value) => {
           if (!isAppTab(value)) return;
-          if (value === "players" && activeTab !== "players") {
-            setOpenPairingRulesToken(0);
+          if (tutorialStep === "today-tab" && value === "today") { setActiveTab("today"); setTutorialStep("select-today"); return; }
+          if (tutorialStep === "teams-tab" && value === "teams") { setActiveTab("teams"); setTutorialStep("field-size"); return; }
+          if (tutorialStep === "club-tab" && value === "club") {
+            setActiveTab("club");
+            replacePlayers([]);
+            window.setTimeout(() => { setRosterFilesOpen(true); setTutorialStep("create-roster"); }, 350);
+            return;
           }
+          if (tutorialActive) return;
+          if (value === "players" && activeTab !== "players") setOpenPairingRulesToken(0);
           setActiveTab(value);
         }}
         className="flex-1 flex flex-col min-h-0"
@@ -3775,11 +3636,11 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 onReviewNext={openNextReviewPlayer}
                 onReviewDone={finishReviewPlayerQueue}
                 openPairingRulesToken={openPairingRulesToken}
-                openAddModeToken={openPlayerAddMode.token}
-                openAddMode={openPlayerAddMode.mode}
                 isSharedRoster={activeRosterIsFirebaseShared}
                 sharedRosterId={activeFirebaseSource?.firebaseRosterId}
                 sharedOrganizerCount={rosterFirebaseSharedPeopleCount(activeRoster)}
+                tutorialStep={tutorialStep}
+                onTutorialAction={handleTutorialAction}
               />
             </TabsContent>
             <TabsContent
@@ -3797,6 +3658,8 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 onTodayRosterChosen={() => setTodayRosterChosen(true)}
                 onChooseEmptyRoster={() => setActiveTab("players")}
                 onOpenRosterPicker={() => setRosterPickerOpen(true)}
+                tutorialTargetPlayerId={tutorialStep === "select-today" ? tutorialPlayerId : null}
+                onTutorialSelected={(playerId) => handleTutorialAction("today-selected", playerId)}
                 openOcrToken={todayOcrOpenToken}
                 ocrImportContext={ocrImportContext}
                 onOcrImportContextChange={setOcrImportContext}
@@ -3824,6 +3687,8 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 aiAutoGenerate={Boolean(aiTeamSetup.autoGenerate)}
                 aiShuffleEquals={Boolean(aiTeamSetup.shuffleEquals)}
                 onAiTeamStateChange={setAiTeamsState}
+                tutorialStep={tutorialStep}
+                onTutorialAction={handleTutorialAction}
               />
             </TabsContent>
             <TabsContent
@@ -3890,19 +3755,19 @@ They will no longer be able to open or edit this shared roster unless it is shar
               </TabsTrigger>
               <TabsTrigger
                 value="today"
-                className="fairteams-tab-trigger fairteams-footer-text-tab flex h-full items-center justify-center rounded-xl text-slate-500 transition-all"
+                className={`fairteams-tab-trigger ${tutorialStep === "today-tab" ? "fairteams-tutorial-pulse relative z-[82]" : ""} fairteams-footer-text-tab flex h-full items-center justify-center rounded-xl text-slate-500 transition-all`}
               >
                 <span className="text-[12px] font-semibold leading-none tracking-tight">Today</span>
               </TabsTrigger>
               <TabsTrigger
                 value="teams"
-                className="fairteams-tab-trigger fairteams-footer-text-tab flex h-full items-center justify-center rounded-xl text-slate-500 transition-all"
+                className={`fairteams-tab-trigger ${tutorialStep === "teams-tab" ? "fairteams-tutorial-pulse relative z-[82]" : ""} fairteams-footer-text-tab flex h-full items-center justify-center rounded-xl text-slate-500 transition-all`}
               >
                 <span className="text-[12px] font-semibold leading-none tracking-tight">Teams</span>
               </TabsTrigger>
               <TabsTrigger
                 value="club"
-                className="fairteams-tab-trigger fairteams-footer-text-tab flex h-full items-center justify-center rounded-xl text-slate-500 transition-all"
+                className={`fairteams-tab-trigger ${tutorialStep === "club-tab" ? "fairteams-tutorial-pulse relative z-[82]" : ""} fairteams-footer-text-tab flex h-full items-center justify-center rounded-xl text-slate-500 transition-all`}
               >
                 <span className="text-[12px] font-semibold leading-none tracking-tight">Club</span>
               </TabsTrigger>
@@ -3910,6 +3775,18 @@ They will no longer be able to open or edit this shared roster unless it is shar
           </div>
         )}
       </Tabs>
+
+      {tutorialStep && tutorialCopy[tutorialStep] && (
+        <>
+          <div className="pointer-events-none fixed inset-0 z-[35] bg-slate-950/38 backdrop-blur-[1px]" aria-hidden="true" />
+          <div className="pointer-events-none fixed inset-x-3 bottom-[calc(5.4rem+env(safe-area-inset-bottom))] z-[85] mx-auto max-w-sm rounded-3xl border border-white/70 bg-white/96 p-4 shadow-[0_22px_70px_rgba(15,23,42,.28)]">
+            <div className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600">Guided kick-off</div>
+            <div className="mt-1 text-xl font-black tracking-tight text-[#102A43]">{tutorialCopy[tutorialStep].title}</div>
+            <div className="mt-1 text-sm font-semibold leading-snug text-slate-500">{tutorialCopy[tutorialStep].body}</div>
+            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${Math.min(100, (["open-add","add-manual","submit-player","open-edit","save-edit","flip-card","today-tab","select-today","teams-tab","field-size","generate","present","club-tab","create-roster"].indexOf(tutorialStep)+1)/14*100)}%` }} /></div>
+          </div>
+        </>
+      )}
 
       {groupSettingsOpen && (
         <div
@@ -4166,14 +4043,14 @@ They will no longer be able to open or edit this shared roster unless it is shar
                         createNewRoster();
                       }
                     }}
-                    className="h-10 min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-bold text-[#102A43] outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
+                    className={`h-10 min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-bold text-[#102A43] outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100 ${tutorialStep === "create-roster" ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
                     placeholder="New roster name"
                     maxLength={36}
                   />
                   <Button
                     type="button"
-                    className="h-10 rounded-2xl bg-[#102A43] px-3 text-xs font-black text-white"
-                    onClick={createNewRoster}
+                    className={`h-10 rounded-2xl bg-[#102A43] px-3 text-xs font-black text-white ${tutorialStep === "create-roster" ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
+                    onClick={() => { createNewRoster(); if (tutorialStep === "create-roster") { localStorage.setItem("fairteams-onboarding-v137-complete", "1"); setTutorialStep(null); } }}
                   >
                     <Plus className="mr-1.5 h-3.5 w-3.5" />
                     New

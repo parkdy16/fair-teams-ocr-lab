@@ -955,6 +955,10 @@ function ProfileDialog({
   isSharedRoster = false,
   sharedRosterId,
   clubMyRating,
+  tutorialHighlightEdit = false,
+  tutorialHighlightSave = false,
+  onTutorialOpened,
+  onTutorialSaved,
 }: {
   player: RoomPlayer;
   onUpdate: (data: Partial<RoomPlayer>) => void;
@@ -968,6 +972,10 @@ function ProfileDialog({
   isSharedRoster?: boolean;
   sharedRosterId?: string;
   clubMyRating?: ClubMyRating;
+  tutorialHighlightEdit?: boolean;
+  tutorialHighlightSave?: boolean;
+  onTutorialOpened?: () => void;
+  onTutorialSaved?: () => void;
 }) {
   const [draft, setDraft] = useState<RoomPlayer>(() => isSharedRoster ? sharedDraftFromPlayerAndRating(player, clubMyRating) : normalizePlayer(player));
   const [open, setOpen] = useState(false);
@@ -1051,6 +1059,7 @@ function ProfileDialog({
       onUpdate({ ...draft, skill: overall, updatedAt: new Date().toISOString() });
     }
     setOpen(false);
+    onTutorialSaved?.();
   };
 
   const saveReviewAndContinue = async () => {
@@ -1112,7 +1121,7 @@ function ProfileDialog({
       }}
     >
       <DialogTrigger asChild>
-        <Button variant="outline" size="icon" className="w-8 h-8 rounded-full" title="Edit player" data-testid={`profile-${player.id}`} onClick={e => e.stopPropagation()}>
+        <Button variant="outline" size="icon" className={`w-8 h-8 rounded-full ${tutorialHighlightEdit ? "fairteams-tutorial-pulse relative z-[82]" : ""}`} title="Edit player" data-testid={`profile-${player.id}`} onClick={e => { e.stopPropagation(); onTutorialOpened?.(); }}>
           <Pencil className="w-4 h-4" />
         </Button>
       </DialogTrigger>
@@ -1481,7 +1490,7 @@ function ProfileDialog({
               </Button>
             </div>
           ) : (
-            <Button onClick={save} disabled={sharedProfileSaving} className="h-11 rounded-xl font-black uppercase tracking-wide">{sharedProfileSaving ? "Saving…" : isSharedRoster ? "Save Shared Profile" : "Save Profile"}</Button>
+            <Button onClick={save} disabled={sharedProfileSaving} className={`h-11 rounded-xl font-black uppercase tracking-wide ${tutorialHighlightSave ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}>{sharedProfileSaving ? "Saving…" : isSharedRoster ? "Save Shared Profile" : "Save Profile"}</Button>
           )}
         </div>
       </DialogContent>
@@ -1613,11 +1622,11 @@ export function PlayersTab({
   onReviewNext,
   onReviewDone,
   openPairingRulesToken = 0,
-  openAddModeToken = 0,
-  openAddMode = "options",
   isSharedRoster = false,
   sharedRosterId,
   sharedOrganizerCount = 1,
+  tutorialStep,
+  onTutorialAction,
 }: {
   players: RoomPlayer[];
   setPlayers: (players: RoomPlayer[]) => void;
@@ -1632,11 +1641,11 @@ export function PlayersTab({
   onReviewNext?: () => void;
   onReviewDone?: () => void;
   openPairingRulesToken?: number;
-  openAddModeToken?: number;
-  openAddMode?: "options" | "manual" | "voice";
   isSharedRoster?: boolean;
   sharedRosterId?: string;
   sharedOrganizerCount?: number;
+  tutorialStep?: string | null;
+  onTutorialAction?: (action: string, playerId?: string) => void;
 }) {
   const [name, setName] = useState("");
   const [aka, setAka] = useState("");
@@ -1681,21 +1690,6 @@ export function PlayersTab({
   const [sharedRosterAuthReady, setSharedRosterAuthReady] = useState(false);
   const [sharedRosterUserUid, setSharedRosterUserUid] = useState<string | null>(null);
   const lastOpenPairingRulesTokenRef = useRef(0);
-  const lastOpenAddModeTokenRef = useRef(0);
-
-  useEffect(() => {
-    if (!openAddModeToken || openAddModeToken === lastOpenAddModeTokenRef.current) return;
-    lastOpenAddModeTokenRef.current = openAddModeToken;
-    if (openAddMode === "manual") {
-      setAddPlayerOpen(true);
-      return;
-    }
-    if (openAddMode === "voice") {
-      setVoiceAddOpen(true);
-      return;
-    }
-    setAddOptionsOpen(true);
-  }, [openAddMode, openAddModeToken]);
 
   useEffect(() => {
     if (!openPairingRulesToken || openPairingRulesToken === lastOpenPairingRulesTokenRef.current) return;
@@ -1821,6 +1815,12 @@ export function PlayersTab({
 
   const openManualAddPlayer = () => {
     resetAddPlayerForm();
+    if (tutorialStep === "add-manual") {
+      setName("Sunny Sprint");
+      setSkillLevel(7);
+      setAddDetails(createStyledAddPlayerDetails(7, BALANCED_PLAYER_STYLE));
+    }
+    onTutorialAction?.("manual-opened");
     setAddOptionsOpen(false);
     setSharedDuplicateOverride(false);
     setSharedDuplicateNotice("");
@@ -2010,6 +2010,7 @@ export function PlayersTab({
     setSharedDuplicateOverride(false);
     setSharedDuplicateNotice("");
     setAddPlayerOpen(false);
+    onTutorialAction?.("player-added", newPlayer.id);
   };
 
   const preventKeyboardSubmit = (event: React.KeyboardEvent<HTMLFormElement>) => {
@@ -2184,8 +2185,8 @@ export function PlayersTab({
           <Button
             type="button"
             variant="outline"
-            onClick={() => setAddOptionsOpen(true)}
-            className={`h-9 rounded-xl border-primary/20 bg-primary/5 px-3 text-[11px] font-black uppercase tracking-wide text-primary shadow-none hover:bg-primary/10 hover:text-primary ${players.length === 0 ? "fairteams-empty-add-pulse" : ""}`}
+            onClick={() => { setAddOptionsOpen(true); onTutorialAction?.("add-options-opened"); }}
+            className={`h-9 rounded-xl border-primary/20 bg-primary/5 px-3 text-[11px] font-black uppercase tracking-wide text-primary shadow-none hover:bg-primary/10 hover:text-primary ${players.length === 0 ? "fairteams-empty-add-pulse" : ""} ${tutorialStep === "open-add" ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
             data-testid="button-open-add-options"
           >
             <Plus className="mr-1.5 h-3.5 w-3.5" /> Add Player
@@ -2216,7 +2217,7 @@ export function PlayersTab({
               <button
                 type="button"
                 onClick={openManualAddPlayer}
-                className="flex items-center gap-3 rounded-2xl border border-border bg-background p-3 text-left transition-colors hover:bg-muted/50"
+                className={`flex items-center gap-3 rounded-2xl border border-border bg-background p-3 text-left transition-colors hover:bg-muted/50 ${tutorialStep === "add-manual" ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
                 data-testid="button-add-manually-option"
               >
                 <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-muted text-primary">
@@ -2766,7 +2767,7 @@ export function PlayersTab({
 
               <Button
                 type="submit"
-                className="h-10 rounded-xl font-black uppercase tracking-wide"
+                className={`h-10 rounded-xl font-black uppercase tracking-wide ${tutorialStep === "submit-player" ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
                 data-testid="button-add-player"
               >
                 <Plus className="w-3.5 h-3.5 mr-1.5" /> {isSharedRoster ? "Add for everyone" : "Add Player"}
@@ -3011,14 +3012,14 @@ export function PlayersTab({
                   key={player.id}
                   role="button"
                   tabIndex={0}
-                  onClick={() => setFlippedPlayerIds(prev => ({ ...prev, [player.id]: !prev[player.id] }))}
+                  onClick={() => { setFlippedPlayerIds(prev => ({ ...prev, [player.id]: !prev[player.id] })); if (tutorialStep === "flip-card" && player.name === "Sunny Sprint") onTutorialAction?.("card-flipped", player.id); }}
                   onKeyDown={e => {
                     if (e.key === "Enter" || e.key === " ") {
                       e.preventDefault();
                       setFlippedPlayerIds(prev => ({ ...prev, [player.id]: !prev[player.id] }));
                     }
                   }}
-                  className="w-full md:w-[calc(50%-0.25rem)] xl:w-[calc(33.333%-0.34rem)] p-2.5 bg-card border border-border/80 rounded-xl shadow-[0_1px_4px_rgba(15,23,42,0.055)] active:scale-[0.99] transition-transform cursor-pointer"
+                  className={`w-full md:w-[calc(50%-0.25rem)] xl:w-[calc(33.333%-0.34rem)] p-2.5 bg-card border border-border/80 rounded-xl shadow-[0_1px_4px_rgba(15,23,42,0.055)] active:scale-[0.99] transition-transform cursor-pointer ${tutorialStep === "flip-card" && player.name === "Sunny Sprint" ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
                   data-testid={`player-row-${player.id}`}
                 >
                   <div className="flex items-center gap-2">
@@ -3056,6 +3057,10 @@ export function PlayersTab({
                         isSharedRoster={isSharedRoster}
                         sharedRosterId={sharedRosterId}
                         clubMyRating={myClubRatingByPlayerId.get(player.id)}
+                        tutorialHighlightEdit={tutorialStep === "open-edit" && player.name === "Sunny Sprint"}
+                        tutorialHighlightSave={tutorialStep === "save-edit" && player.name === "Sunny Sprint"}
+                        onTutorialOpened={() => onTutorialAction?.("edit-opened", player.id)}
+                        onTutorialSaved={() => onTutorialAction?.("edit-saved", player.id)}
                       />
                       <AlertDialog>
                         <AlertDialogTrigger asChild>

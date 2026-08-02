@@ -1863,6 +1863,8 @@ export function TodayTab({
   onTodayRosterChosen,
   onChooseEmptyRoster,
   onOpenRosterPicker,
+  tutorialTargetPlayerId,
+  onTutorialSelected,
 }: {
   players: RoomPlayer[];
   setPlayers: (players: RoomPlayer[]) => void;
@@ -1880,6 +1882,8 @@ export function TodayTab({
   onTodayRosterChosen?: () => void;
   onChooseEmptyRoster?: () => void;
   onOpenRosterPicker?: () => void;
+  tutorialTargetPlayerId?: string | null;
+  onTutorialSelected?: (playerId: string) => void;
 }) {
   const [search, setSearch] = useState("");
   const [ocrOpen, setOcrOpen] = useState(false);
@@ -5734,12 +5738,12 @@ export function TodayTab({
             {filtered.map((player) => (
               <label
                 key={player.id}
-                className={`flex min-h-[46px] items-center gap-2 px-2.5 py-2.5 border rounded-xl cursor-pointer transition-all ${player.attending ? "border-primary/35 bg-primary/[0.035] shadow-[0_1px_4px_rgba(15,23,42,0.05)]" : "border-border/80 bg-card"}`}
+                className={`flex min-h-[46px] items-center gap-2 px-2.5 py-2.5 border rounded-xl cursor-pointer transition-all ${tutorialTargetPlayerId && tutorialTargetPlayerId !== player.id ? "pointer-events-none opacity-45" : ""} ${tutorialTargetPlayerId === player.id ? "fairteams-tutorial-pulse relative z-[82]" : ""} ${player.attending ? "border-primary/35 bg-primary/[0.035] shadow-[0_1px_4px_rgba(15,23,42,0.05)]" : "border-border/80 bg-card"}`}
                 data-testid={`attendance-row-${player.id}`}
               >
                 <Checkbox
                   checked={!!player.attending}
-                  onCheckedChange={() => togglePlayer(player)}
+                  onCheckedChange={() => { togglePlayer(player); if (tutorialTargetPlayerId === player.id) onTutorialSelected?.(player.id); }}
                   className="w-3.5 h-3.5 rounded-full border border-slate-300 shadow-none shrink-0 data-[state=checked]:bg-primary data-[state=checked]:border-primary data-[state=checked]:text-white"
                   data-testid={`attendance-check-${player.id}`}
                 />

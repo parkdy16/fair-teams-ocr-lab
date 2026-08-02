@@ -196,6 +196,8 @@ type TeamsTabProps = {
   aiAutoGenerate?: boolean;
   aiShuffleEquals?: boolean;
   onAiTeamStateChange?: (state: { hasTeams: boolean; teamCount: number; selectedCount: number }) => void;
+  tutorialStep?: string | null;
+  onTutorialAction?: (action: string) => void;
 };
 
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number | [number, number, number, number]) {
@@ -415,7 +417,7 @@ function drawTextBadge(
 }
 
 
-export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, sharedRosterId, onOpenClubRatings, aiTeamSetupToken = 0, aiTeamCount = null, aiAutoGenerate = false, aiShuffleEquals = false, onAiTeamStateChange }: TeamsTabProps) {
+export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, sharedRosterId, onOpenClubRatings, aiTeamSetupToken = 0, aiTeamCount = null, aiAutoGenerate = false, aiShuffleEquals = false, onAiTeamStateChange, tutorialStep, onTutorialAction }: TeamsTabProps) {
   const [numTeams, setNumTeams] = useState<number>(2);
   const [fieldSize, setFieldSize] = useState<FieldSize>(() => loadFieldSize());
   const [showFieldHelp, setShowFieldHelp] = useState(false);
@@ -830,8 +832,8 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
                 <HelpCircle className="w-3.5 h-3.5" />
               </button>
             </div>
-            <Select value={fieldSize} onValueChange={v => setFieldSize(v as FieldSize)}>
-              <SelectTrigger className="h-10 px-2 py-0 font-bold text-[13px] leading-normal [&>span]:leading-normal" data-testid="select-field-size">
+            <Select value={fieldSize} onValueChange={v => { setFieldSize(v as FieldSize); onTutorialAction?.("field-size-changed"); }}>
+              <SelectTrigger className={`h-10 px-2 py-0 font-bold text-[13px] leading-normal [&>span]:leading-normal ${tutorialStep === "field-size" ? "fairteams-tutorial-pulse relative z-[82]" : ""}`} data-testid="select-field-size">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -846,9 +848,9 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
             variant={teams.length > 0 ? "outline" : undefined}
             className={teams.length > 0
               ? `h-10 px-3 rounded-xl border-2 text-[12px] font-black tracking-tight shadow-sm transition-all ${isGenerating ? "ring-4 ring-slate-200/70" : ""}`
-              : `col-span-2 md:col-span-1 h-10 w-full px-4 font-black uppercase tracking-wide text-[13px] shadow-sm bg-[#22C55E] text-white hover:bg-[#16A34A] transition-all ${isGenerating ? "ring-4 ring-emerald-300/45 shadow-lg shadow-emerald-400/25" : ""}`
+              : `col-span-2 md:col-span-1 h-10 w-full px-4 font-black uppercase tracking-wide text-[13px] shadow-sm bg-[#22C55E] text-white hover:bg-[#16A34A] transition-all ${isGenerating ? "ring-4 ring-emerald-300/45 shadow-lg shadow-emerald-400/25" : ""} ${tutorialStep === "generate" ? "fairteams-tutorial-pulse relative z-[82]" : ""}`
             }
-            onClick={() => handleGenerate(teams.length > 0)}
+            onClick={() => { handleGenerate(teams.length > 0); if (teams.length === 0) onTutorialAction?.("generated"); }}
             disabled={isGenerating}
             title={teams.length > 0 ? "Shuffle teams" : "Generate teams"}
             data-testid={teams.length > 0 ? "button-shuffle" : "button-generate"}
@@ -1092,8 +1094,8 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
         <div className="flex justify-end">
           <Button
             size="sm"
-            className="h-9 rounded-xl px-3 text-[12px] font-black tracking-tight bg-primary text-primary-foreground hover:bg-primary/90"
-            onClick={() => setPresentTeamsOpen(true)}
+            className={`h-9 rounded-xl px-3 text-[12px] font-black tracking-tight bg-primary text-primary-foreground hover:bg-primary/90 ${tutorialStep === "present" ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
+            onClick={() => { setPresentTeamsOpen(true); onTutorialAction?.("presented"); }}
             disabled={isGenerating}
             title="Show teams full screen"
             data-testid="button-present-teams"

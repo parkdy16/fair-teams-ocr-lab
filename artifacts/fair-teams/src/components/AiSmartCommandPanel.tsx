@@ -609,7 +609,7 @@ function actionPrimaryVerb(action: AiSmartCommandAction) {
   return "Apply";
 }
 
-const AI_ASSISTANT_VERSION_LABEL = "Help beta · v1.45 tour refinement";
+const AI_ASSISTANT_VERSION_LABEL = "Help beta · v1.46 mobile tour controls";
 
 type AiRosterMatch = {
   player: AiSmartCommandRosterPlayer;

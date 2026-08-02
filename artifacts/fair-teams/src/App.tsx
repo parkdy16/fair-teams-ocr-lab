@@ -401,9 +401,25 @@ function App() {
     };
   }, []);
 
+  useEffect(() => {
+    if (showSplash) return;
+    let secondFrame = 0;
+    const firstFrame = window.requestAnimationFrame(() => {
+      secondFrame = window.requestAnimationFrame(() => setOnboardingReady(true));
+    });
+    return () => {
+      window.cancelAnimationFrame(firstFrame);
+      if (secondFrame) window.cancelAnimationFrame(secondFrame);
+    };
+  }, [showSplash]);
+
   const [activeTab, setActiveTab] = useState<AppTab>("today");
   const [tutorialStep, setTutorialStep] = useState<string | null>(null);
   const [tutorialPlayerId, setTutorialPlayerId] = useState<string | null>(null);
+  const [onboardingReady, setOnboardingReady] = useState(false);
+  const [tutorialReplayMode, setTutorialReplayMode] = useState(false);
+  const tutorialStartedRef = useRef(false);
+  const tutorialSnapshotRef = useRef<{ rosterState: ReturnType<typeof loadRosterState>; activeTab: AppTab; todayRosterChosen: boolean } | null>(null);
   const tutorialActive = Boolean(tutorialStep);
 
   const tutorialCopy: Record<string, { title: string; body: string }> = {
@@ -3369,9 +3385,11 @@ They will no longer be able to open or edit this shared roster unless it is shar
     rosterToolsActivePanel,
   ]);
 
-  useEffect(() => {
-    if (showSplash || tutorialStep || players.length > 0) return;
-    if (localStorage.getItem("fairteams-onboarding-v140-complete") === "1") return;
+  const startGuidedTour = (replay = false) => {
+    if (tutorialStartedRef.current || tutorialStep) return;
+    tutorialStartedRef.current = true;
+    tutorialSnapshotRef.current = { rosterState, activeTab, todayRosterChosen };
+    setTutorialReplayMode(replay);
     const now = new Date().toISOString();
     const practiceNames = [
       ["Leo", 9], ["Cristiano", 9], ["Marta", 9],
@@ -3402,7 +3420,48 @@ They will no longer be able to open or edit this shared roster unless it is shar
     setTodayRosterChosen(true);
     setActiveTab("players");
     setTutorialStep("open-add");
-  }, [showSplash, tutorialStep, players.length]);
+  };
+
+  const finishGuidedTour = () => {
+    localStorage.setItem("fairteams-onboarding-v140-complete", "1");
+    if (tutorialReplayMode && tutorialSnapshotRef.current) {
+      setRosterState(tutorialSnapshotRef.current.rosterState);
+      setActiveTab(tutorialSnapshotRef.current.activeTab);
+      setTodayRosterChosen(tutorialSnapshotRef.current.todayRosterChosen);
+    }
+    tutorialSnapshotRef.current = null;
+    tutorialStartedRef.current = false;
+    setTutorialReplayMode(false);
+    setTutorialPlayerId(null);
+    setTutorialStep(null);
+  };
+
+  useEffect(() => {
+    if (!onboardingReady || tutorialStep || tutorialStartedRef.current) return;
+    const url = new URL(window.location.href);
+    const forceTour = url.searchParams.get("tour") === "1";
+    const unusedApp = rosters.length === 1 && players.length === 0 && !isRosterCloudShared(activeRoster);
+    if (!forceTour && (!unusedApp || localStorage.getItem("fairteams-onboarding-v140-complete") === "1")) return;
+    if (forceTour) {
+      url.searchParams.delete("tour");
+      window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+    }
+    startGuidedTour(forceTour || !unusedApp);
+  }, [onboardingReady, tutorialStep, rosters.length, players.length, activeRosterId]);
+
+
+  const handleTutorialBack = () => {
+    if (!tutorialStep) return;
+    if (tutorialStep === "today-tab") { setActiveTab("players"); setTutorialStep("flip-card"); return; }
+    if (tutorialStep === "teams-tab") { setActiveTab("today"); setTutorialStep("select-today"); return; }
+    if (tutorialStep === "club-tab") { setActiveTab("teams"); setTutorialStep("magic-reveal"); return; }
+    if (tutorialStep === "club-intro") { setTutorialStep("club-tab"); return; }
+    if (tutorialStep === "roster-return") { setActiveTab("club"); setTutorialStep("help-question"); return; }
+    if (tutorialStep === "settings-button") { setActiveTab("players"); setTutorialStep("roster-return"); return; }
+    if (tutorialStep === "create-roster") { setRosterFilesOpen(false); setTutorialStep("settings-button"); return; }
+  };
+
+  const tutorialCanGoBack = ["today-tab", "teams-tab", "club-tab", "club-intro", "roster-return", "settings-button", "create-roster"].includes(tutorialStep || "");
 
   const handleTutorialAction = (action: string, playerId?: string) => {
     if (!tutorialStep) return;
@@ -3577,7 +3636,14 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   onClick={() => {
                     closeRosterToolsPanel();
                     setRosterFilesOpen(true);
-                    if (tutorialStep === "settings-button") setTutorialStep("create-roster");
+                    if (tutorialStep === "settings-button") {
+                      if (tutorialReplayMode) {
+                        setRosterFilesOpen(false);
+                        setTutorialStep("recap");
+                      } else {
+                        setTutorialStep("create-roster");
+                      }
+                    }
                   }}
                   title="Roster tools"
                   aria-label="Roster tools"
@@ -3828,7 +3894,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
             <div
               className={`pointer-events-none fixed inset-x-3 z-[95] mx-auto max-w-sm ${coachPosition}`}
             >
-              <div className="rounded-2xl border border-emerald-100 bg-white/98 px-3.5 py-3 shadow-[0_12px_34px_rgba(15,23,42,.16)] backdrop-blur-sm">
+              <div className="pointer-events-auto rounded-2xl border border-emerald-100 bg-white/98 px-3.5 py-3 shadow-[0_12px_34px_rgba(15,23,42,.16)] backdrop-blur-sm">
                 <div className="flex items-start gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="text-[15px] font-black leading-tight text-[#102A43]">{tutorialCopy[tutorialStep].title}</div>
@@ -3836,6 +3902,9 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   </div>
                   <div className="shrink-0 rounded-full bg-emerald-50 px-2 py-1 text-[9px] font-black text-emerald-700">{currentIndex + 1}/{tutorialSteps.length}</div>
                 </div>
+                {tutorialCanGoBack && (
+                  <button type="button" onClick={handleTutorialBack} className="mt-2 text-[11px] font-black text-slate-500 underline decoration-slate-300 underline-offset-2">Back</button>
+                )}
               </div>
             </div>
           );
@@ -3860,9 +3929,11 @@ They will no longer be able to open or edit this shared roster unless it is shar
             <div className={`mt-2 font-black leading-tight tracking-tight text-[#102A43] ${tutorialStep === "magic-reveal" ? "text-[30px]" : "text-[24px]"}`}>{tutorialCopy[tutorialStep].title}</div>
             <div className="mt-2 text-[15px] font-semibold leading-relaxed text-slate-600">{tutorialCopy[tutorialStep].body}</div>
             {tutorialStep === "club-intro" && (
+              <div className="mt-4 flex gap-2">
+                <button type="button" onClick={handleTutorialBack} className="fairteams-tutorial-action h-12 flex-1 rounded-2xl border border-slate-200 bg-white text-sm font-black text-slate-600">Back</button>
               <button
                 type="button"
-                className="fairteams-tutorial-action mt-4 h-12 w-full rounded-2xl bg-[#102A43] text-sm font-black text-white shadow-sm"
+                className="fairteams-tutorial-action h-12 flex-[1.4] rounded-2xl bg-[#102A43] text-sm font-black text-white shadow-sm"
                 onClick={() => {
                   setTutorialStep("help-question");
                   window.setTimeout(() => {
@@ -3873,6 +3944,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
               >
                 Continue
               </button>
+              </div>
             )}
             {tutorialStep === "recap" && (
               <div className="mt-4 space-y-2.5">
@@ -3890,8 +3962,8 @@ They will no longer be able to open or edit this shared roster unless it is shar
                     <span className={`text-right text-xs font-bold ${label === "Club" ? "text-violet-600" : "text-slate-500"}`}>{detail}</span>
                   </div>
                 ))}
-                <button type="button" className="fairteams-tutorial-action mt-2 h-12 w-full rounded-2xl bg-emerald-600 text-sm font-black text-white shadow-sm" onClick={() => { localStorage.setItem("fairteams-onboarding-v140-complete", "1"); setTutorialStep(null); }}>
-                  Start using FairTeams
+                <button type="button" className="fairteams-tutorial-action mt-2 h-12 w-full rounded-2xl bg-emerald-600 text-sm font-black text-white shadow-sm" onClick={finishGuidedTour}>
+                  {tutorialReplayMode ? "Return to my app" : "Start using FairTeams"}
                 </button>
               </div>
             )}
@@ -4172,6 +4244,19 @@ They will no longer be able to open or edit this shared roster unless it is shar
                     New
                   </Button>
                 </div>
+              </div>
+
+              <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-3">
+                <div className="text-[10px] font-black uppercase tracking-wide text-emerald-700">Beta help</div>
+                <div className="mt-1 text-xs font-semibold text-slate-600">Replay the guided kick-off without deleting your rosters.</div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="mt-2 h-10 w-full rounded-2xl border-emerald-200 bg-white text-xs font-black text-emerald-700"
+                  onClick={() => { setRosterFilesOpen(false); window.setTimeout(() => startGuidedTour(true), 80); }}
+                >
+                  Replay guided tour
+                </Button>
               </div>
 
               <div className={`overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm ${rosterToolsActivePanel && rosterToolsActivePanel !== "local" ? "hidden" : ""}`}>

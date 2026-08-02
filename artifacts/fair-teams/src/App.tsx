@@ -422,7 +422,7 @@ function App() {
     "magic-wait": { title: "Wait for it…", body: "Reading the lineup and balancing every strength." },
     "magic-reveal": { title: "That’s the magic", body: "Balanced teams, ready in seconds." },
     "club-tab": { title: "Shared team tools", body: "Open Club to see how groups can work on one roster together." },
-    "club-intro": { title: "Club is for shared rosters", body: "Use this tab when organizers want to manage one roster together in real time. Local-roster users can leave it alone." },
+    "club-intro": { title: "Club is for shared rosters", body: "Use Club when several organizers work on one roster together. If you use local rosters, you can skip this tab." },
     "help-question": { title: "Ask FairTeams Help", body: "The question is ready. Tap Ask to see how in-app help works." },
     "roster-return": { title: "Back to your roster", body: "Return to Roster for the final setup step." },
     "settings-button": { title: "Roster controls", body: "Tap Settings to switch rosters, create new ones, and manage the app." },
@@ -3803,12 +3803,31 @@ They will no longer be able to open or edit this shared roster unless it is shar
         const tutorialSteps = ["open-add","add-manual","submit-player","open-edit","advanced-edit","save-edit","flip-card","today-tab","select-today","teams-tab","field-size","generate","magic-wait","magic-reveal","club-tab","club-intro","help-question","roster-return","settings-button","settings-intro","recap","create-roster"];
         const currentIndex = Math.max(0, tutorialSteps.indexOf(tutorialStep));
         const largeStep = ["magic-wait", "magic-reveal", "club-intro", "settings-intro", "recap"].includes(tutorialStep);
-        const placeAtBottom = ["open-add", "open-edit", "settings-button"].includes(tutorialStep);
+        const coachPlacement: Record<string, string> = {
+          "open-add": "bottom-[calc(5.6rem+env(safe-area-inset-bottom))]",
+          "add-manual": "top-[0.75rem]",
+          "submit-player": "bottom-[calc(5.6rem+env(safe-area-inset-bottom))]",
+          "open-edit": "bottom-[calc(5.6rem+env(safe-area-inset-bottom))]",
+          "advanced-edit": "top-[0.75rem]",
+          "save-edit": "top-[0.75rem]",
+          "flip-card": "top-[5.25rem]",
+          "today-tab": "top-[5.25rem]",
+          "select-today": "top-[5.25rem]",
+          "teams-tab": "top-[5.25rem]",
+          "field-size": "bottom-[calc(5.6rem+env(safe-area-inset-bottom))]",
+          "generate": "bottom-[calc(5.6rem+env(safe-area-inset-bottom))]",
+          "club-tab": "bottom-[calc(5.6rem+env(safe-area-inset-bottom))]",
+          "help-question": "top-[0.75rem]",
+          "roster-return": "top-[5.25rem]",
+          "settings-button": "bottom-[calc(5.6rem+env(safe-area-inset-bottom))]",
+          "create-roster": "top-[0.75rem]",
+        };
+        const coachPosition = coachPlacement[tutorialStep] ?? "top-[5.25rem]";
 
         if (!largeStep) {
           return (
             <div
-              className={`pointer-events-none fixed inset-x-3 z-[95] mx-auto max-w-sm ${placeAtBottom ? "bottom-[calc(5.25rem+env(safe-area-inset-bottom))]" : "top-[5.25rem]"}`}
+              className={`pointer-events-none fixed inset-x-3 z-[95] mx-auto max-w-sm ${coachPosition}`}
             >
               <div className="rounded-2xl border border-emerald-100 bg-white/98 px-3.5 py-3 shadow-[0_12px_34px_rgba(15,23,42,.16)] backdrop-blur-sm">
                 <div className="flex items-start gap-3">
@@ -3824,7 +3843,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
         }
 
         return (
-          <div className="fixed inset-x-3 bottom-[calc(5.4rem+env(safe-area-inset-bottom))] z-[95] mx-auto max-w-md rounded-[28px] border border-white/90 bg-white p-5 shadow-[0_24px_70px_rgba(15,23,42,.30)] pointer-events-auto">
+          <div className={`fixed inset-x-3 z-[95] mx-auto max-w-md rounded-[26px] border border-white/90 bg-white p-5 shadow-[0_24px_70px_rgba(15,23,42,.24)] pointer-events-auto ${tutorialStep === "club-intro" ? "bottom-[calc(5.4rem+env(safe-area-inset-bottom))]" : "bottom-[calc(5.4rem+env(safe-area-inset-bottom))]"}`}>
             <div className="flex items-center justify-between gap-3">
               <div className="text-[11px] font-black uppercase tracking-[0.2em] text-emerald-600">Guided kick-off</div>
               <div className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-black text-emerald-700">{currentIndex + 1} / {tutorialSteps.length}</div>
@@ -3839,11 +3858,12 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 onClick={() => {
                   setTutorialStep("help-question");
                   window.setTimeout(() => {
-                    document.getElementById("fairteams-help-panel")?.scrollIntoView({ behavior: "smooth", block: "center" });
-                  }, 80);
+                    document.getElementById("fairteams-help-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                    window.setTimeout(() => document.getElementById("fairteams-help-question")?.focus(), 350);
+                  }, 60);
                 }}
               >
-                Show me FairTeams Help
+                Continue
               </button>
             )}
             {tutorialStep === "settings-intro" && (

@@ -609,7 +609,7 @@ function actionPrimaryVerb(action: AiSmartCommandAction) {
   return "Apply";
 }
 
-const AI_ASSISTANT_VERSION_LABEL = "Help beta · v1.41 compact guide";
+const AI_ASSISTANT_VERSION_LABEL = "Help beta · v1.42 placed guide";
 
 type AiRosterMatch = {
   player: AiSmartCommandRosterPlayer;
@@ -1866,6 +1866,7 @@ export function AiSmartCommandPanel({
       </div>
 
       <textarea
+        id="fairteams-help-question"
         value={commandText}
         onChange={(event) => setCommandText(event.target.value)}
         rows={4}

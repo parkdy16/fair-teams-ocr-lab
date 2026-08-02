@@ -3465,14 +3465,14 @@ They will no longer be able to open or edit this shared roster unless it is shar
     const hasSharedRoster = rosters.some((roster) => isRosterCloudShared(roster));
     const unusedApp = !hasAnyPlayers && !hasSharedRoster;
 
-    if (!forceTour && (onboardingComplete || !unusedApp)) return;
-
     if (forceTour) {
       url.searchParams.delete("tour");
       window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+      if (!unusedApp) return;
     }
 
-    startGuidedTour(forceTour);
+    if (onboardingComplete || !unusedApp) return;
+    startGuidedTour(false);
   }, [onboardingReady, onboardingProbe, tutorialStep, rosters, activeRosterId]);
 
 
@@ -4293,19 +4293,6 @@ They will no longer be able to open or edit this shared roster unless it is shar
                     New
                   </Button>
                 </div>
-              </div>
-
-              <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-3">
-                <div className="text-[10px] font-black uppercase tracking-wide text-emerald-700">Beta help</div>
-                <div className="mt-1 text-xs font-semibold text-slate-600">Replay the guided kick-off without deleting your rosters.</div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="mt-2 h-10 w-full rounded-2xl border-emerald-200 bg-white text-xs font-black text-emerald-700"
-                  onClick={() => { setRosterFilesOpen(false); window.setTimeout(() => startGuidedTour(true), 80); }}
-                >
-                  Replay guided tour
-                </Button>
               </div>
 
               <div className={`overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm ${rosterToolsActivePanel && rosterToolsActivePanel !== "local" ? "hidden" : ""}`}>

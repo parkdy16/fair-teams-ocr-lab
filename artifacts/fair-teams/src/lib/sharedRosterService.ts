@@ -38,6 +38,15 @@ export type FirebaseSharedRosterSnapshot = FirebaseSharedRosterSummary & {
   roster: RoomRoster;
 };
 
+export type FirebaseSharedRosterBackup = {
+  id: string;
+  version: number;
+  savedAtIso: string;
+  savedByEmail?: string;
+  playerCount: number;
+  rosterData: Partial<RoomRoster>;
+};
+
 export type FirebaseSharedGroupSummary = {
   id: string;
   name: string;
@@ -248,6 +257,66 @@ function makeSharedRosterUpdateSnapshot(existingRosterData: unknown, roster: Roo
 
 function cleanForFirestore<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
+}
+
+const MAX_SHARED_ROSTER_BACKUPS = 10;
+const MAX_SHARED_ROSTER_BACKUP_BYTES = 650_000;
+
+function normalizeSharedRosterBackups(value: unknown): FirebaseSharedRosterBackup[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const raw = item as Record<string, unknown>;
+    if (!raw.rosterData || typeof raw.rosterData !== "object") return [];
+    const version = typeof raw.version === "number" ? raw.version : 0;
+    const savedAtIso = typeof raw.savedAtIso === "string" ? raw.savedAtIso : "";
+    const playerCount = typeof raw.playerCount === "number"
+      ? raw.playerCount
+      : Array.isArray((raw.rosterData as { players?: unknown }).players)
+        ? ((raw.rosterData as { players: unknown[] }).players.length)
+        : 0;
+    return [{
+      id: typeof raw.id === "string" && raw.id ? raw.id : `v${version}-${savedAtIso || "backup"}`,
+      version,
+      savedAtIso,
+      savedByEmail: typeof raw.savedByEmail === "string" ? raw.savedByEmail : undefined,
+      playerCount,
+      rosterData: cleanForFirestore(raw.rosterData as Partial<RoomRoster>),
+    }];
+  });
+}
+
+function makeSharedRosterBackup(data: DocumentData, fallbackVersion: number, fallbackTime: string): FirebaseSharedRosterBackup | null {
+  const rosterData = data.rosterData && typeof data.rosterData === "object"
+    ? cleanForFirestore(data.rosterData as Partial<RoomRoster>)
+    : null;
+  if (!rosterData || !Array.isArray(rosterData.players)) return null;
+  const version = typeof data.version === "number" ? data.version : fallbackVersion;
+  const savedAtIso = typeof data.updatedAtIso === "string" && data.updatedAtIso ? data.updatedAtIso : fallbackTime;
+  return {
+    id: `v${version}-${Date.now()}`,
+    version,
+    savedAtIso,
+    savedByEmail: typeof data.lastSavedByEmail === "string" ? data.lastSavedByEmail : typeof data.ownerEmail === "string" ? data.ownerEmail : undefined,
+    playerCount: rosterData.players.length,
+    rosterData,
+  };
+}
+
+function pruneSharedRosterBackups(backups: FirebaseSharedRosterBackup[]): FirebaseSharedRosterBackup[] {
+  const unique: FirebaseSharedRosterBackup[] = [];
+  const seen = new Set<string>();
+  for (const backup of backups) {
+    const key = backup.id || `${backup.version}-${backup.savedAtIso}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(cleanForFirestore(backup));
+    if (unique.length >= MAX_SHARED_ROSTER_BACKUPS) break;
+  }
+  while (unique.length > 1 && new Blob([JSON.stringify(unique)]).size > MAX_SHARED_ROSTER_BACKUP_BYTES) {
+    unique.pop();
+  }
+  return unique;
 }
 
 async function seedOwnerClubRatingsFromRoster(rosterId: string, players: RoomPlayer[]) {
@@ -570,6 +639,7 @@ export async function createFirebaseSharedRoster(roster: RoomRoster, groupId?: s
     lastSavedByEmail: user.email,
     lastSavedAt: serverTimestamp(),
     lastSavedAtIso: now,
+    backupHistory: [],
   };
 
   const docRef = await addDoc(collection(getFairTeamsFirestore(), "sharedRosters"), payload);
@@ -985,6 +1055,11 @@ export async function saveFirebaseSharedRoster(roster: RoomRoster): Promise<Fire
     const memberNamesByUid = { ...cleanNameMap(data.memberNamesByUid), [user.uid]: organizerName };
     const memberNamesByEmail = { ...cleanNameMap(data.memberNamesByEmail), [normalizeEmail(user.email)]: organizerName };
     const memberUidByEmail = { ...cleanStringMap(data.memberUidByEmail), [normalizeEmail(user.email)]: user.uid };
+    const previousBackup = makeSharedRosterBackup(data, remoteVersion, now);
+    const backupHistory = pruneSharedRosterBackups([
+      ...(previousBackup ? [previousBackup] : []),
+      ...normalizeSharedRosterBackups(data.backupHistory),
+    ]);
     const payload = {
       name: remoteName,
       groupId,
@@ -1001,6 +1076,7 @@ export async function saveFirebaseSharedRoster(roster: RoomRoster): Promise<Fire
       lastSavedByEmail: user.email,
       lastSavedAt: serverTimestamp(),
       lastSavedAtIso: now,
+      backupHistory,
     };
 
     transaction.update(docRef, payload);
@@ -1039,6 +1115,90 @@ export async function saveFirebaseSharedRoster(roster: RoomRoster): Promise<Fire
   });
 
   return saved;
+}
+
+export async function listFirebaseSharedRosterBackups(rosterId: string): Promise<FirebaseSharedRosterBackup[]> {
+  const user = getCurrentSharedRosterUser();
+  const docRef = doc(getFairTeamsFirestore(), "sharedRosters", rosterId);
+  const snapshot = await getDoc(docRef);
+  if (!snapshot.exists()) throw new Error("Shared roster was not found.");
+  const data = snapshot.data();
+  const memberUids = Array.isArray(data.memberUids) ? data.memberUids : [];
+  if (!memberUids.includes(user.uid)) throw new Error("You are not a member of this shared roster.");
+  return normalizeSharedRosterBackups(data.backupHistory)
+    .sort((a, b) => new Date(b.savedAtIso || 0).getTime() - new Date(a.savedAtIso || 0).getTime())
+    .slice(0, MAX_SHARED_ROSTER_BACKUPS);
+}
+
+export async function restoreFirebaseSharedRosterBackup(rosterId: string, backupId: string): Promise<FirebaseSharedRosterSnapshot> {
+  const user = getCurrentSharedRosterUser();
+  const now = new Date().toISOString();
+  const docRef = doc(getFairTeamsFirestore(), "sharedRosters", rosterId);
+
+  const restored = await runTransaction(getFairTeamsFirestore(), async (transaction) => {
+    const snapshot = await transaction.get(docRef);
+    if (!snapshot.exists()) throw new Error("Shared roster was not found.");
+    const data = snapshot.data();
+    const memberUids = Array.isArray(data.memberUids) ? data.memberUids : [];
+    if (!memberUids.includes(user.uid)) throw new Error("You are not a member of this shared roster.");
+    const roleByUid = data.roleByUid && typeof data.roleByUid === "object" ? data.roleByUid as Record<string, unknown> : {};
+    const role = roleByUid[user.uid];
+    if (role !== "owner" && role !== "editor") throw new Error("Only owners and editors can restore shared-roster backups.");
+
+    const backups = normalizeSharedRosterBackups(data.backupHistory);
+    const target = backups.find((backup) => backup.id === backupId);
+    if (!target) throw new Error("That backup is no longer available.");
+    const remoteVersion = typeof data.version === "number" ? data.version : 1;
+    const currentBackup = makeSharedRosterBackup(data, remoteVersion, now);
+    const backupHistory = pruneSharedRosterBackups([
+      ...(currentBackup ? [currentBackup] : []),
+      ...backups,
+    ]);
+    const nextVersion = remoteVersion + 1;
+    const rosterData = cleanForFirestore(target.rosterData);
+    const playerCount = Array.isArray(rosterData.players) ? rosterData.players.length : 0;
+    const organizerName = nameFromUser(user);
+    const memberNamesByUid = { ...cleanNameMap(data.memberNamesByUid), [user.uid]: organizerName };
+    const memberNamesByEmail = { ...cleanNameMap(data.memberNamesByEmail), [normalizeEmail(user.email)]: organizerName };
+    const memberUidByEmail = { ...cleanStringMap(data.memberUidByEmail), [normalizeEmail(user.email)]: user.uid };
+
+    transaction.update(docRef, {
+      version: nextVersion,
+      playerCount,
+      rosterData,
+      backupHistory,
+      memberNamesByUid,
+      memberNamesByEmail,
+      memberUidByEmail,
+      updatedAt: serverTimestamp(),
+      updatedAtIso: now,
+      lastSavedByUid: user.uid,
+      lastSavedByEmail: user.email,
+      lastSavedAt: serverTimestamp(),
+      lastSavedAtIso: now,
+    });
+
+    const summary: FirebaseSharedRosterSummary = {
+      id: snapshot.id,
+      groupId: typeof data.groupId === "string" ? data.groupId : undefined,
+      groupName: typeof data.groupName === "string" ? data.groupName : undefined,
+      name: typeof data.name === "string" && data.name.trim() ? data.name : "Shared roster",
+      ownerUid: typeof data.ownerUid === "string" ? data.ownerUid : "",
+      ownerEmail: typeof data.ownerEmail === "string" ? data.ownerEmail : "",
+      version: nextVersion,
+      playerCount,
+      createdAt: timestampToIso(data.createdAt),
+      updatedAt: now,
+      currentUserRole: role === "owner" || role === "editor" || role === "viewer" ? role : "member",
+      memberNamesByEmail,
+      memberNamesByUid,
+      lastSavedByEmail: user.email,
+    };
+    const roster = normalizeRoster({ ...rosterData, name: summary.name }, 0);
+    return { ...summary, roster };
+  });
+
+  return restored;
 }
 
 export function getSharedRosterBackendLabel() {

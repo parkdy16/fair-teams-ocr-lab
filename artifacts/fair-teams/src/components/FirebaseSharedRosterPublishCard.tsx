@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { CheckCircle2, FolderOpen, Loader2, Share2, Trash2, UserPlus, Users, X } from "lucide-react";
+import { CheckCircle2, FolderOpen, History, Loader2, RotateCcw, Share2, Trash2, UserPlus, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { RoomRoster } from "@/lib/localRoster";
@@ -15,9 +15,12 @@ import {
   listFirebaseGroupInvites,
   listFirebaseSharedGroups,
   listFirebaseSharedRosters,
+  listFirebaseSharedRosterBackups,
   readFirebaseSharedRoster,
+  restoreFirebaseSharedRosterBackup,
   saveFirebaseSharedRoster,
   type FirebaseGroupInvite,
+  type FirebaseSharedRosterBackup,
   type FirebaseSharedGroupSummary,
   type FirebaseSharedRosterSummary,
   type SharedRosterUser,
@@ -102,6 +105,8 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
   const [inviteEmail, setInviteEmail] = useState("");
   const [collaboratorRosterId, setCollaboratorRosterId] = useState("");
   const [sharedRosterLibraryOpen, setSharedRosterLibraryOpen] = useState(false);
+  const [backupRosterId, setBackupRosterId] = useState("");
+  const [sharedRosterBackups, setSharedRosterBackups] = useState<FirebaseSharedRosterBackup[]>([]);
   const [notice, setNotice] = useState<{ tone: "success" | "error" | "info"; text: string } | null>(null);
   const [autoSyncStatus, setAutoSyncStatus] = useState<"idle" | "saving" | "saved" | "syncing" | "error">("idle");
   const lastLiveRosterVersionRef = useRef(0);
@@ -367,6 +372,44 @@ Your local roster will stay local. Fair Teams will copy shared identity fields o
     }
   };
 
+  const openBackupHistory = async (rosterId: string) => {
+    if (!user || busy) return;
+    setBusy(`backups:${rosterId}`);
+    setNotice(null);
+    try {
+      const backups = await listFirebaseSharedRosterBackups(rosterId);
+      setSharedRosterBackups(backups);
+      setBackupRosterId(rosterId);
+    } catch (error) {
+      setNotice({ tone: "error", text: friendlyFirestoreError(error) });
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const handleRestoreBackup = async (backup: FirebaseSharedRosterBackup) => {
+    if (!backupRosterId || busy) return;
+    const label = backup.savedAtIso ? new Date(backup.savedAtIso).toLocaleString() : `Version ${backup.version}`;
+    const confirmed = window.confirm(`Restore the shared roster backup from ${label}?\n\nThe current live roster will be saved as another backup first.`);
+    if (!confirmed) return;
+    setBusy(`restore:${backup.id}`);
+    setNotice(null);
+    try {
+      const restored = await restoreFirebaseSharedRosterBackup(backupRosterId, backup.id);
+      if (activeRoster?.cloudSource?.provider === "firebase" && activeRoster.cloudSource.firebaseRosterId === backupRosterId) {
+        onRefreshActiveRoster?.(restored.roster, restored.name, restored, activeRoster.id);
+      }
+      await refreshSharedData();
+      setBackupRosterId("");
+      setSharedRosterBackups([]);
+      setNotice({ tone: "success", text: `Backup restored · ${restored.playerCount} players.` });
+    } catch (error) {
+      setNotice({ tone: "error", text: friendlyFirestoreError(error) });
+    } finally {
+      setBusy("");
+    }
+  };
+
   const handleRemoveSharedRoster = async (rosterId: string, rosterName = "this shared roster") => {
     const typed = window.prompt(
       `Delete “${rosterName}” online for everyone?\n\nThis is different from removing a local copy from this device. The shared roster will disappear for all organizers.\n\nType DELETE to confirm.`,
@@ -499,6 +542,43 @@ Your local roster will stay local. Fair Teams will copy shared identity fields o
   )) : null;
 
 
+  const backupHistoryModal = backupRosterId ? modalShell(
+    "Restore backup",
+    () => { setBackupRosterId(""); setSharedRosterBackups([]); },
+    <div className="grid gap-2">
+      <div className="rounded-2xl border border-violet-100 bg-violet-50/70 px-3 py-2 text-[11px] font-bold leading-snug text-violet-800">
+        FairTeams keeps up to 10 automatic backups. Restoring also saves the current live roster first.
+      </div>
+      {sharedRosterBackups.length === 0 ? (
+        <div className="rounded-2xl bg-slate-50 px-3 py-3 text-xs font-bold text-slate-500">
+          No backups yet. The first backup is created before the next shared-roster change.
+        </div>
+      ) : (
+        <div className="grid max-h-[56svh] gap-1.5 overflow-y-auto pr-1">
+          {sharedRosterBackups.map((backup) => (
+            <button
+              key={backup.id}
+              type="button"
+              disabled={Boolean(busy)}
+              onClick={() => void handleRestoreBackup(backup)}
+              className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white px-3 py-2.5 text-left shadow-sm transition active:scale-[0.99] disabled:opacity-60"
+            >
+              <span className="min-w-0">
+                <span className="block truncate text-xs font-black text-[#102A43]">
+                  {backup.savedAtIso ? new Date(backup.savedAtIso).toLocaleString([], { dateStyle: "short", timeStyle: "short" }) : `Version ${backup.version}`}
+                </span>
+                <span className="mt-0.5 block truncate text-[10px] font-semibold text-slate-500">
+                  {backup.playerCount} player{backup.playerCount === 1 ? "" : "s"}{backup.savedByEmail ? ` · ${displayNameForEmail(backup.savedByEmail, activeSharedRoster?.memberNamesByEmail, user?.email)}` : ""}
+                </span>
+              </span>
+              <RotateCcw className="h-4 w-4 shrink-0 text-violet-600" />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>,
+  ) : null;
+
   const sharedRosterLibraryModal = sharedRosterLibraryOpen ? modalShell(
     "Shared rosters",
     () => setSharedRosterLibraryOpen(false),
@@ -625,11 +705,18 @@ No shared roster is open on this device. Choose one below to open it on this dev
               <Users className="mr-1 h-4 w-4" />
               Organizers
             </Button>
+            {activeCanSave && (
+              <Button type="button" variant="outline" className="col-span-2 h-10 justify-start rounded-2xl border-violet-100 bg-white/70 px-3 text-left text-[11px] font-black text-violet-700 shadow-sm hover:bg-white" onClick={() => void openBackupHistory(activeSharedRosterId)} disabled={!user || Boolean(busy)}>
+                <History className="mr-1.5 h-4 w-4" />
+                Restore backup
+              </Button>
+            )}
           </div>
         )}
 
         {notice?.tone === "error" && <div className="rounded-2xl bg-rose-50 px-3 py-2 text-[11px] font-bold text-rose-700">{notice.text}</div>}
         {sharedRosterLibraryModal}
+        {backupHistoryModal}
         {collaboratorsModal}
       </div>
     );
@@ -656,9 +743,17 @@ No shared roster is open on this device. Choose one below to open it on this dev
           {busy === "publish" ? "Creating…" : "Create shared copy"}
         </Button>
       ) : (
-        <div className={`flex h-11 items-center justify-between rounded-2xl border px-3 text-xs font-black ${autoSyncStatus === "error" ? "border-rose-100 bg-rose-50 text-rose-700" : "border-violet-100 bg-violet-50 text-violet-700"}`}>
-          <span>{autoStatusText}</span>
-          <AutoStatusIcon className={`h-4 w-4 ${(autoSyncStatus === "saving" || autoSyncStatus === "syncing" || activeHasLocalChanges) ? "animate-spin" : ""}`} />
+        <div className="grid gap-2">
+          <div className={`flex h-11 items-center justify-between rounded-2xl border px-3 text-xs font-black ${autoSyncStatus === "error" ? "border-rose-100 bg-rose-50 text-rose-700" : "border-violet-100 bg-violet-50 text-violet-700"}`}>
+            <span>{autoStatusText}</span>
+            <AutoStatusIcon className={`h-4 w-4 ${(autoSyncStatus === "saving" || autoSyncStatus === "syncing" || activeHasLocalChanges) ? "animate-spin" : ""}`} />
+          </div>
+          {activeCanSave && (
+            <Button type="button" variant="outline" className="h-10 justify-start rounded-2xl border-violet-100 bg-white px-3 text-xs font-black text-violet-700" onClick={() => void openBackupHistory(activeSharedRosterId)} disabled={Boolean(busy)}>
+              <History className="mr-1.5 h-4 w-4" />
+              Restore backup
+            </Button>
+          )}
         </div>
       )}
 
@@ -716,6 +811,7 @@ No shared roster is open on this device. Choose an online shared roster below to
 
       {notice && <div className={`rounded-2xl px-3 py-2 text-[11px] font-bold ${notice.tone === "error" ? "bg-rose-50 text-rose-700" : "bg-violet-50 text-violet-700"}`}>{notice.text}</div>}
 
+{backupHistoryModal}
 {collaboratorsModal}
     </div>
   );

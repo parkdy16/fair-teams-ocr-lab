@@ -378,7 +378,16 @@
   0%,100% { box-shadow: 0 0 0 0 rgba(34,197,94,.65), 0 8px 26px rgba(34,197,94,.28); transform: scale(1); }
   50% { box-shadow: 0 0 0 10px rgba(34,197,94,0), 0 10px 34px rgba(34,197,94,.38); transform: scale(1.025); }
 }
-.fairteams-tutorial-pulse { animation: fairteams-tutorial-glow 1.15s ease-in-out infinite; outline: 3px solid rgba(34,197,94,.55); outline-offset: 3px; }
+.fairteams-tutorial-pulse {
+  position: relative !important;
+  z-index: 90 !important;
+  isolation: isolate;
+  filter: none !important;
+  opacity: 1 !important;
+  animation: fairteams-tutorial-glow 1.15s ease-in-out infinite;
+  outline: 3px solid rgba(34,197,94,.72);
+  outline-offset: 4px;
+}
 
 [data-tutorial-active="true"] button,
 [data-tutorial-active="true"] [role="button"],
@@ -386,3 +395,33 @@
 [data-tutorial-active="true"] label { pointer-events: none; }
 [data-tutorial-active="true"] .fairteams-tutorial-pulse,
 [data-tutorial-active="true"] .fairteams-tutorial-pulse * { pointer-events: auto !important; }
+
+/* v1.40: keep the real app fully visible. Only the required control pulses. */
+.fairteams-tutorial-pulse {
+  box-shadow:
+    0 0 0 4px rgba(255,255,255,.98),
+    0 0 0 8px rgba(34,197,94,.72),
+    0 14px 38px rgba(34,197,94,.42) !important;
+  filter: none !important;
+  opacity: 1 !important;
+}
+
+@keyframes fairteams-magic-pop {
+  0% { transform: translateY(14px) scale(.94); opacity: 0; }
+  55% { transform: translateY(-3px) scale(1.025); opacity: 1; }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+@keyframes fairteams-magic-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.fairteams-magic-card {
+  animation: fairteams-magic-pop .55s cubic-bezier(.2,.8,.2,1) both;
+  background-image: linear-gradient(110deg, #ffffff 25%, #ecfdf5 42%, #ffffff 58%, #ffffff 75%);
+  background-size: 220% 100%;
+  animation-name: fairteams-magic-pop, fairteams-magic-shimmer;
+  animation-duration: .55s, 1.25s;
+  animation-timing-function: cubic-bezier(.2,.8,.2,1), linear;
+  animation-fill-mode: both;
+  animation-iteration-count: 1, infinite;
+}

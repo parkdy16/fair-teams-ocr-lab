@@ -832,14 +832,14 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
                 <HelpCircle className="w-3.5 h-3.5" />
               </button>
             </div>
-            <Select value={fieldSize} onValueChange={v => { setFieldSize(v as FieldSize); onTutorialAction?.("field-size-changed"); }}>
+            <Select value={fieldSize} onValueChange={v => setFieldSize(v as FieldSize)}>
               <SelectTrigger className={`h-10 px-2 py-0 font-bold text-[13px] leading-normal [&>span]:leading-normal ${tutorialStep === "field-size" ? "fairteams-tutorial-pulse relative z-[82]" : ""}`} data-testid="select-field-size">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="small">Small</SelectItem>
-                <SelectItem value="medium">Medium</SelectItem>
-                <SelectItem value="large">Large</SelectItem>
+                <SelectItem value="small" onClick={() => onTutorialAction?.("field-size-changed")}>Small</SelectItem>
+                <SelectItem value="medium" onClick={() => onTutorialAction?.("field-size-changed")}>Medium</SelectItem>
+                <SelectItem value="large" onClick={() => onTutorialAction?.("field-size-changed")}>Large</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -1116,15 +1116,16 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
           style={{ height: "100dvh", minHeight: "100svh", maxHeight: "100dvh" }}
         >
           <div className="flex min-h-0 h-full w-full flex-col overflow-hidden">
-            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-slate-950/95 px-3 py-2 pt-[max(0.5rem,env(safe-area-inset-top))]">
+            {tutorialStep === "close-presentation" && <div className="pointer-events-none fixed inset-0 z-[91] bg-slate-950/50" aria-hidden="true" />}
+            <div className="relative z-[92] flex shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-slate-950/95 px-3 py-2 pt-[max(0.5rem,env(safe-area-inset-top))]">
               <div className="min-w-0">
                 <p className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-300">Fair Teams</p>
                 <h2 className="truncate text-lg font-black tracking-tight">Today's Teams</h2>
               </div>
               <button
                 type="button"
-                onClick={() => setPresentTeamsOpen(false)}
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-white/15 bg-white/10 text-white active:scale-[0.98]"
+                onClick={() => { setPresentTeamsOpen(false); onTutorialAction?.("presentation-closed"); }}
+                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-white/15 bg-white/10 text-white active:scale-[0.98] ${tutorialStep === "close-presentation" ? "fairteams-tutorial-pulse fairteams-presentation-close-target" : ""}`}
                 aria-label="Close full screen teams"
                 data-testid="button-close-present-teams"
               >

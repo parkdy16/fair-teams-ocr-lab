@@ -25,6 +25,7 @@ type AiSmartCommandPanelProps = {
   onParsed?: (result: AiSmartCommandResponse) => void;
   onApplyAction?: (action: AiSmartCommandAction) => Promise<string | void> | string | void;
   onOpenToday?: () => void;
+  onQuestionSubmitted?: () => void;
 };
 
 
@@ -606,7 +607,7 @@ function actionPrimaryVerb(action: AiSmartCommandAction) {
   return "Apply";
 }
 
-const AI_ASSISTANT_VERSION_LABEL = "AI beta · v1.37 real-app guided tour";
+const AI_ASSISTANT_VERSION_LABEL = "Help beta · v1.40 magic tour";
 
 type AiRosterMatch = {
   player: AiSmartCommandRosterPlayer;
@@ -1504,6 +1505,7 @@ export function AiSmartCommandPanel({
   onParsed,
   onApplyAction,
   onOpenToday,
+  onQuestionSubmitted,
 }: AiSmartCommandPanelProps) {
   const enabled = isAiSmartCommandEnabled();
   const storageKey = useMemo(() => safeStorageKey(rosterMode, rosterName), [rosterMode, rosterName]);
@@ -1525,7 +1527,7 @@ export function AiSmartCommandPanel({
   const [reviewNameEdits, setReviewNameEdits] = useState<Record<string, string>>({});
 
   const placeholder = useMemo(() => {
-    return "Talk to Fair Teams… try: hey there · how does this work? · George red · make 5v5 teams";
+    return "Ask a question… e.g. How do ratings work?";
   }, []);
 
   useEffect(() => {
@@ -1627,6 +1629,7 @@ export function AiSmartCommandPanel({
     const trimmedCommand = rawCommand.trim();
     if (!trimmedCommand) return;
 
+    onQuestionSubmitted?.();
     setError("");
     setApplyMessage("");
     setShowTodayShortcut(false);
@@ -1833,10 +1836,10 @@ export function AiSmartCommandPanel({
     <section className="rounded-3xl border border-violet-100 bg-violet-50/70 p-3 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="text-[10px] font-black uppercase tracking-wide text-violet-600">Experimental</div>
-          <h3 className="mt-0.5 text-base font-black text-[#102A43]">Fair Teams Assistant</h3>
+          <div className="text-[10px] font-black uppercase tracking-wide text-violet-600">Help</div>
+          <h3 className="mt-0.5 text-base font-black text-[#102A43]">FairTeams Help</h3>
           <p className="mt-0.5 text-[11px] font-semibold leading-snug text-violet-800/75">
-            Talk naturally. I can explain Fair Teams, then show safe action cards when something can be done.
+            Ask how anything works. I’ll guide you to the right screen and keep answers practical.
           </p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
@@ -1868,7 +1871,7 @@ export function AiSmartCommandPanel({
           disabled={busy || voiceBusy || !commandText.trim()}
           className="h-10 rounded-2xl bg-[#102A43] px-4 text-xs font-black uppercase tracking-wide text-white disabled:opacity-45"
         >
-          {busy ? "Thinking…" : "Send"}
+          {busy ? "Thinking…" : "Ask"}
         </button>
         <button
           type="button"

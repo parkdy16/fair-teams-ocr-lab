@@ -408,18 +408,27 @@ function App() {
 
   const tutorialCopy: Record<string, { title: string; body: string }> = {
     "open-add": { title: "Build the squad", body: "Tap the glowing Add Player button." },
-    "add-manual": { title: "Add one player", body: "Choose Add manually. We filled the practice name for you." },
-    "submit-player": { title: "Welcome Sunny", body: "Tap Add Player to put Sunny Sprint in the practice roster." },
-    "open-edit": { title: "Players change", body: "Open Sunny Sprint’s edit button." },
-    "save-edit": { title: "Tune the rating", body: "The rating is ready. Save the player profile." },
-    "flip-card": { title: "There’s more", body: "Tap Sunny Sprint’s card to flip it." },
+    "add-manual": { title: "Add the player", body: "Choose Add manually. We filled in the practice player for you." },
+    "submit-player": { title: "Welcome, Heung-min", body: "Tap Add Player to add Heung-min to the practice roster." },
+    "open-edit": { title: "Edit the player", body: "Open Heung-min’s edit button." },
+    "advanced-edit": { title: "Advanced details", body: "Open Advanced Edit. This is optional in normal use, but useful when you know a player well." },
+    "save-edit": { title: "Save the profile", body: "You have seen the detailed controls. Save the player profile." },
+    "flip-card": { title: "See the other side", body: "Tap Heung-min’s card to flip it and see more player information." },
     "today-tab": { title: "Match day", body: "Open Today to choose who is playing." },
-    "select-today": { title: "Complete the lineup", body: "Select Sunny Sprint on the real attendance screen." },
+    "select-today": { title: "Complete the lineup", body: "Select Heung-min on the attendance screen." },
     "teams-tab": { title: "Make teams", body: "Open the Teams tab." },
-    "field-size": { title: "Fit the pitch", body: "Choose a field size. It changes how teams are balanced." },
-    "generate": { title: "Moment of truth", body: "Tap Generate and let FairTeams balance the lineup." },
-    "present": { title: "Ready to play", body: "Open Present Teams for the match-day view." },
-    "club-tab": { title: "Run the group", body: "Open Club to find sharing and organizer tools." },
+    "field-size": { title: "Choose the pitch", body: "Open Field Size and choose any size." },
+    "generate": { title: "The magic moment", body: "Tap Generate. FairTeams will build the teams." },
+    "magic-wait": { title: "Wait for it…", body: "Reading the lineup and balancing every strength." },
+    "magic-reveal": { title: "That’s the magic", body: "Balanced teams, ready in seconds." },
+    "club-tab": { title: "Shared team tools", body: "Open Club to see how groups can work on one roster together." },
+    "club-intro": { title: "Club is for shared rosters", body: "Use this tab when organizers want to manage one roster together in real time. Local-roster users can leave it alone." },
+    "help-target": { title: "Ask FairTeams Help", body: "Open Help and ask one app-related question." },
+    "help-question": { title: "Try a question", body: "Type a question and tap Ask. For example: How do shared rosters work?" },
+    "roster-return": { title: "Back to your roster", body: "Return to Roster for the final setup step." },
+    "settings-button": { title: "Roster controls", body: "Tap Settings to switch rosters, create new ones, and manage the app." },
+    "settings-intro": { title: "Rosters and app settings", body: "This is where local and shared rosters are switched, created, imported, exported, and backed up." },
+    "recap": { title: "You’re ready", body: "Here is the whole app at a glance." },
     "create-roster": { title: "Now make it yours", body: "Name your real roster and tap New." },
   };
 
@@ -3364,12 +3373,12 @@ They will no longer be able to open or edit this shared roster unless it is shar
 
   useEffect(() => {
     if (showSplash || tutorialStep || players.length > 0) return;
-    if (localStorage.getItem("fairteams-onboarding-v137-complete") === "1") return;
+    if (localStorage.getItem("fairteams-onboarding-v140-complete") === "1") return;
     const now = new Date().toISOString();
     const practiceNames = [
-      ["Leo Magic", 9], ["Cristiano Air", 9], ["Marta Magic", 9],
-      ["Zizou Touch", 8], ["Roni Smile", 8], ["Luka Engine", 8],
-      ["Andres Vision", 7], ["Didier Power", 7], ["Manu Wall", 8],
+      ["Leo", 9], ["Cristiano", 9], ["Marta", 9],
+      ["Zinedine", 8], ["Ronaldinho", 8], ["Luka", 8],
+      ["Andrés", 7], ["Didier", 7], ["Manuel", 8],
     ] as const;
     const practicePlayers: RoomPlayer[] = practiceNames.map(([name, skill], index) => normalizePlayer({
       id: `tutorial-${index + 1}`,
@@ -3384,7 +3393,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
       stamina: Math.max(1, skill - 1),
       physical: Math.max(1, skill - 1),
       teamPlay: 2,
-      isGoalkeeper: name === "Manu Wall",
+      isGoalkeeper: name === "Manuel",
       isNew: false,
       attending: index < 9,
       todayStatus: "here",
@@ -3402,13 +3411,21 @@ They will no longer be able to open or edit this shared roster unless it is shar
     if (action === "add-options-opened" && tutorialStep === "open-add") setTutorialStep("add-manual");
     else if (action === "manual-opened" && tutorialStep === "add-manual") setTutorialStep("submit-player");
     else if (action === "player-added" && tutorialStep === "submit-player") { setTutorialPlayerId(playerId || null); setTutorialStep("open-edit"); }
-    else if (action === "edit-opened" && tutorialStep === "open-edit") setTutorialStep("save-edit");
+    else if (action === "edit-opened" && tutorialStep === "open-edit") setTutorialStep("advanced-edit");
+    else if (action === "advanced-opened" && tutorialStep === "advanced-edit") setTutorialStep("save-edit");
     else if (action === "edit-saved" && tutorialStep === "save-edit") setTutorialStep("flip-card");
     else if (action === "card-flipped" && tutorialStep === "flip-card") setTutorialStep("today-tab");
     else if (action === "today-selected" && tutorialStep === "select-today") setTutorialStep("teams-tab");
     else if (action === "field-size-changed" && tutorialStep === "field-size") setTutorialStep("generate");
-    else if (action === "generated" && tutorialStep === "generate") window.setTimeout(() => setTutorialStep("present"), 650);
-    else if (action === "presented" && tutorialStep === "present") setTutorialStep("club-tab");
+    else if (action === "generated" && tutorialStep === "generate") {
+      setTutorialStep("magic-wait");
+      window.setTimeout(() => setTutorialStep("magic-reveal"), 1450);
+      window.setTimeout(() => setTutorialStep("club-tab"), 3300);
+    }
+    else if (action === "help-opened" && tutorialStep === "help-target") setTutorialStep("help-question");
+    else if (action === "help-question-submitted" && tutorialStep === "help-question") {
+      window.setTimeout(() => setTutorialStep("roster-return"), 180);
+    }
   };
 
   if (showSplash) {
@@ -3446,7 +3463,12 @@ They will no longer be able to open or edit this shared roster unless it is shar
           if (tutorialStep === "club-tab" && value === "club") {
             setActiveTab("club");
             replacePlayers([]);
-            window.setTimeout(() => { setRosterFilesOpen(true); setTutorialStep("create-roster"); }, 350);
+            window.setTimeout(() => setTutorialStep("club-intro"), 350);
+            return;
+          }
+          if (tutorialStep === "roster-return" && value === "players") {
+            setActiveTab("players");
+            setTutorialStep("settings-button");
             return;
           }
           if (tutorialActive) return;
@@ -3554,10 +3576,11 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   type="button"
                   variant="secondary"
                   size="icon"
-                  className="h-9 w-9 rounded-xl border border-slate-200 bg-white/85 text-[#102A43] shadow-none"
+                  className={`h-9 w-9 rounded-xl border border-slate-200 bg-white/85 text-[#102A43] shadow-none ${tutorialStep === "settings-button" ? "fairteams-tutorial-pulse" : ""}`}
                   onClick={() => {
                     closeRosterToolsPanel();
                     setRosterFilesOpen(true);
+                    if (tutorialStep === "settings-button") setTutorialStep("settings-intro");
                   }}
                   title="Roster tools"
                   aria-label="Roster tools"
@@ -3719,6 +3742,8 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   setTodayRosterChosen(true);
                   setActiveTab("today");
                 }}
+                tutorialStep={tutorialStep}
+                onTutorialAction={handleTutorialAction}
                 sharedToolsNode={(
                   <FirebaseSharedRosterPublishCard
                     variant="compact"
@@ -3749,7 +3774,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
             <TabsList className="mx-auto grid h-[50px] w-full max-w-md grid-cols-4 gap-1 rounded-2xl border border-slate-200/70 bg-white p-1.5 shadow-sm">
               <TabsTrigger
                 value="players"
-                className="fairteams-tab-trigger fairteams-footer-text-tab flex h-full items-center justify-center rounded-xl text-slate-500 transition-all"
+                className={`fairteams-tab-trigger ${tutorialStep === "roster-return" ? "fairteams-tutorial-pulse relative z-[82]" : ""} fairteams-footer-text-tab flex h-full items-center justify-center rounded-xl text-slate-500 transition-all`}
               >
                 <span className="text-[12px] font-semibold leading-none tracking-tight">Roster</span>
               </TabsTrigger>
@@ -3778,12 +3803,44 @@ They will no longer be able to open or edit this shared roster unless it is shar
 
       {tutorialStep && tutorialCopy[tutorialStep] && (
         <>
-          <div className="pointer-events-none fixed inset-0 z-[35] bg-slate-950/38 backdrop-blur-[1px]" aria-hidden="true" />
-          <div className="pointer-events-none fixed inset-x-3 bottom-[calc(5.4rem+env(safe-area-inset-bottom))] z-[85] mx-auto max-w-sm rounded-3xl border border-white/70 bg-white/96 p-4 shadow-[0_22px_70px_rgba(15,23,42,.28)]">
-            <div className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600">Guided kick-off</div>
-            <div className="mt-1 text-xl font-black tracking-tight text-[#102A43]">{tutorialCopy[tutorialStep].title}</div>
-            <div className="mt-1 text-sm font-semibold leading-snug text-slate-500">{tutorialCopy[tutorialStep].body}</div>
-            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${Math.min(100, (["open-add","add-manual","submit-player","open-edit","save-edit","flip-card","today-tab","select-today","teams-tab","field-size","generate","present","club-tab","create-roster"].indexOf(tutorialStep)+1)/14*100)}%` }} /></div>
+          <div className={`fixed inset-x-3 bottom-[calc(5.4rem+env(safe-area-inset-bottom))] z-[95] mx-auto max-w-md rounded-[30px] border border-white/90 bg-white p-5 shadow-[0_28px_90px_rgba(15,23,42,.38)] ${["magic-wait","magic-reveal"].includes(tutorialStep) ? "fairteams-magic-card" : ""} ${["club-intro","settings-intro","recap"].includes(tutorialStep) ? "pointer-events-auto" : "pointer-events-none"}`}>
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-[11px] font-black uppercase tracking-[0.2em] text-emerald-600">Guided kick-off</div>
+              <div className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-black text-emerald-700">{Math.max(1, ["open-add","add-manual","submit-player","open-edit","advanced-edit","save-edit","flip-card","today-tab","select-today","teams-tab","field-size","generate","magic-wait","magic-reveal","club-tab","club-intro","help-target","help-question","roster-return","settings-button","settings-intro","recap","create-roster"].indexOf(tutorialStep)+1)} / 23</div>
+            </div>
+            {tutorialStep === "magic-reveal" && <div className="mb-1 text-3xl">✨⚽✨</div>}
+            <div className={`mt-2 font-black leading-tight tracking-tight text-[#102A43] ${tutorialStep === "magic-reveal" ? "text-[30px]" : "text-[24px]"}`}>{tutorialCopy[tutorialStep].title}</div>
+            <div className="mt-2 text-[15px] font-semibold leading-relaxed text-slate-600">{tutorialCopy[tutorialStep].body}</div>
+            {tutorialStep === "club-intro" && (
+              <button type="button" className="mt-4 h-12 w-full rounded-2xl bg-[#102A43] text-sm font-black text-white shadow-sm" onClick={() => setTutorialStep("help-target")}>
+                Show me FairTeams Help
+              </button>
+            )}
+            {tutorialStep === "settings-intro" && (
+              <button type="button" className="mt-4 h-12 w-full rounded-2xl bg-[#102A43] text-sm font-black text-white shadow-sm" onClick={() => { setRosterFilesOpen(false); setTutorialStep("recap"); }}>
+                Finish the tour
+              </button>
+            )}
+            {tutorialStep === "recap" && (
+              <div className="mt-4 space-y-2.5">
+                {[
+                  ["Roster", "Your full player list"],
+                  ["Today", "Who is playing now"],
+                  ["Teams", "Build and present teams"],
+                  ["Club", "Shared-roster tools"],
+                  ["Settings", "Switch rosters and manage the app"],
+                ].map(([label, detail]) => (
+                  <div key={label} className="flex items-center justify-between gap-3 rounded-2xl bg-slate-50 px-3.5 py-3">
+                    <span className="text-sm font-black text-[#102A43]">{label}</span>
+                    <span className="text-right text-xs font-bold text-slate-500">{detail}</span>
+                  </div>
+                ))}
+                <button type="button" className="mt-2 h-12 w-full rounded-2xl bg-emerald-600 text-sm font-black text-white shadow-sm" onClick={() => { setActiveTab("players"); setRosterFilesOpen(true); setTutorialStep("create-roster"); }}>
+                  Create my roster
+                </button>
+              </div>
+            )}
+            <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${Math.min(100, (Math.max(0, ["open-add","add-manual","submit-player","open-edit","advanced-edit","save-edit","flip-card","today-tab","select-today","teams-tab","field-size","generate","magic-wait","magic-reveal","club-tab","club-intro","help-target","help-question","roster-return","settings-button","settings-intro","recap","create-roster"].indexOf(tutorialStep))+1)/23*100)}%` }} /></div>
           </div>
         </>
       )}
@@ -4050,7 +4107,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   <Button
                     type="button"
                     className={`h-10 rounded-2xl bg-[#102A43] px-3 text-xs font-black text-white ${tutorialStep === "create-roster" ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
-                    onClick={() => { createNewRoster(); if (tutorialStep === "create-roster") { localStorage.setItem("fairteams-onboarding-v137-complete", "1"); setTutorialStep(null); } }}
+                    onClick={() => { createNewRoster(); if (tutorialStep === "create-roster") { localStorage.setItem("fairteams-onboarding-v140-complete", "1"); setTutorialStep(null); } }}
                   >
                     <Plus className="mr-1.5 h-3.5 w-3.5" />
                     New

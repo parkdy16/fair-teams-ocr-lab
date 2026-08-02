@@ -77,6 +77,8 @@ type ClubTabProps = {
   currentTeamsGenerated?: boolean;
   onApplyAiSmartCommandAction?: (action: AiSmartCommandAction) => Promise<string | void> | string | void;
   onOpenTodayFromAi?: () => void;
+  tutorialStep?: string | null;
+  onTutorialAction?: (action: string, playerId?: string) => void;
 };
 
 type EquipmentHolder = {
@@ -564,6 +566,8 @@ export function ClubTab({
   currentTeamsGenerated = false,
   onApplyAiSmartCommandAction,
   onOpenTodayFromAi,
+  tutorialStep,
+  onTutorialAction,
 }: ClubTabProps) {
   const [clubRatingSummaries, setClubRatingSummaries] = useState<
     ClubRatingSummary[]
@@ -1626,6 +1630,12 @@ export function ClubTab({
         </DialogContent>
       </Dialog>
 
+      <div
+        className={["help-target", "help-question"].includes(tutorialStep || "") ? "fairteams-tutorial-pulse rounded-3xl" : ""}
+        onClickCapture={() => {
+          if (tutorialStep === "help-target") onTutorialAction?.("help-opened");
+        }}
+      >
       <AiSmartCommandPanel
         players={players}
         rosterName={activeRosterName}
@@ -1635,7 +1645,9 @@ export function ClubTab({
         currentTeamsGenerated={currentTeamsGenerated}
         onApplyAction={applyAiSmartCommandAction}
         onOpenToday={onOpenTodayFromAi}
+        onQuestionSubmitted={() => onTutorialAction?.("help-question-submitted")}
       />
+      </div>
 
       <section className="overflow-hidden rounded-[1.7rem] border border-violet-100 bg-[#f8f3ff] p-3 shadow-sm ring-1 ring-violet-50">
         <div className="flex items-center justify-between gap-3">

@@ -956,8 +956,10 @@ function ProfileDialog({
   sharedRosterId,
   clubMyRating,
   tutorialHighlightEdit = false,
+  tutorialHighlightAdvanced = false,
   tutorialHighlightSave = false,
   onTutorialOpened,
+  onTutorialAdvancedOpened,
   onTutorialSaved,
 }: {
   player: RoomPlayer;
@@ -973,8 +975,10 @@ function ProfileDialog({
   sharedRosterId?: string;
   clubMyRating?: ClubMyRating;
   tutorialHighlightEdit?: boolean;
+  tutorialHighlightAdvanced?: boolean;
   tutorialHighlightSave?: boolean;
   onTutorialOpened?: () => void;
+  onTutorialAdvancedOpened?: () => void;
   onTutorialSaved?: () => void;
 }) {
   const [draft, setDraft] = useState<RoomPlayer>(() => isSharedRoster ? sharedDraftFromPlayerAndRating(player, clubMyRating) : normalizePlayer(player));
@@ -1316,8 +1320,11 @@ function ProfileDialog({
 
           <button
             type="button"
-            onClick={() => setAdvancedOpen(prev => !prev)}
-            className="flex h-10 items-center justify-between rounded-2xl border border-border bg-background px-3 text-left text-xs font-black tracking-wide text-foreground"
+            onClick={() => {
+              setAdvancedOpen(prev => !prev);
+              if (!advancedOpen) onTutorialAdvancedOpened?.();
+            }}
+            className={`flex h-10 items-center justify-between rounded-2xl border border-border bg-background px-3 text-left text-xs font-black tracking-wide text-foreground ${tutorialHighlightAdvanced ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
             data-testid={`button-toggle-edit-advanced-${player.id}`}
           >
             <span>Advanced Edit</span>
@@ -1816,7 +1823,7 @@ export function PlayersTab({
   const openManualAddPlayer = () => {
     resetAddPlayerForm();
     if (tutorialStep === "add-manual") {
-      setName("Sunny Sprint");
+      setName("Heung-min");
       setSkillLevel(7);
       setAddDetails(createStyledAddPlayerDetails(7, BALANCED_PLAYER_STYLE));
     }
@@ -3012,14 +3019,14 @@ export function PlayersTab({
                   key={player.id}
                   role="button"
                   tabIndex={0}
-                  onClick={() => { setFlippedPlayerIds(prev => ({ ...prev, [player.id]: !prev[player.id] })); if (tutorialStep === "flip-card" && player.name === "Sunny Sprint") onTutorialAction?.("card-flipped", player.id); }}
+                  onClick={() => { setFlippedPlayerIds(prev => ({ ...prev, [player.id]: !prev[player.id] })); if (tutorialStep === "flip-card" && player.name === "Heung-min") onTutorialAction?.("card-flipped", player.id); }}
                   onKeyDown={e => {
                     if (e.key === "Enter" || e.key === " ") {
                       e.preventDefault();
                       setFlippedPlayerIds(prev => ({ ...prev, [player.id]: !prev[player.id] }));
                     }
                   }}
-                  className={`w-full md:w-[calc(50%-0.25rem)] xl:w-[calc(33.333%-0.34rem)] p-2.5 bg-card border border-border/80 rounded-xl shadow-[0_1px_4px_rgba(15,23,42,0.055)] active:scale-[0.99] transition-transform cursor-pointer ${tutorialStep === "flip-card" && player.name === "Sunny Sprint" ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
+                  className={`w-full md:w-[calc(50%-0.25rem)] xl:w-[calc(33.333%-0.34rem)] p-2.5 bg-card border border-border/80 rounded-xl shadow-[0_1px_4px_rgba(15,23,42,0.055)] active:scale-[0.99] transition-transform cursor-pointer ${tutorialStep === "flip-card" && player.name === "Heung-min" ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
                   data-testid={`player-row-${player.id}`}
                 >
                   <div className="flex items-center gap-2">
@@ -3057,9 +3064,11 @@ export function PlayersTab({
                         isSharedRoster={isSharedRoster}
                         sharedRosterId={sharedRosterId}
                         clubMyRating={myClubRatingByPlayerId.get(player.id)}
-                        tutorialHighlightEdit={tutorialStep === "open-edit" && player.name === "Sunny Sprint"}
-                        tutorialHighlightSave={tutorialStep === "save-edit" && player.name === "Sunny Sprint"}
+                        tutorialHighlightEdit={tutorialStep === "open-edit" && player.name === "Heung-min"}
+                        tutorialHighlightAdvanced={tutorialStep === "advanced-edit" && player.name === "Heung-min"}
+                        tutorialHighlightSave={tutorialStep === "save-edit" && player.name === "Heung-min"}
                         onTutorialOpened={() => onTutorialAction?.("edit-opened", player.id)}
+                        onTutorialAdvancedOpened={() => onTutorialAction?.("advanced-opened", player.id)}
                         onTutorialSaved={() => onTutorialAction?.("edit-saved", player.id)}
                       />
                       <AlertDialog>

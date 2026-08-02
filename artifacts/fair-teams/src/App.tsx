@@ -93,7 +93,7 @@ const EMPTY_ROSTER_NAME = "New roster";
 const ROSTERS_STORAGE_KEY = "fair-teams-rosters-v1";
 const DRIVE_RECIPIENTS_STORAGE_KEY = "fair-teams-drive-backup-recipients-v1";
 const DRIVE_ACTIVE_BACKUP_STORAGE_KEY = "fair-teams-drive-active-backup-v1";
-const ONBOARDING_COMPLETED_STORAGE_KEY = "fair-teams-onboarding-v1-completed";
+const ONBOARDING_COMPLETED_STORAGE_KEY = "fair-teams-onboarding-v2-completed";
 
 
 function readOnboardingCompleted() {
@@ -494,7 +494,9 @@ function App() {
   const headerColor = rosterThemeColor(activeRoster);
   const groupLogo = rosterLogo(activeRoster);
   const isEmptyStarterRoster =
-    rosters.length === 1 && players.length === 0 && activeRosterName === EMPTY_ROSTER_NAME;
+    rosters.length === 1 &&
+    players.length === 0 &&
+    !isRosterCloudShared(activeRoster);
   const showFirstRunOnboarding = isEmptyStarterRoster && !onboardingCompleted;
 
   const finishOnboarding = () => {

@@ -3477,7 +3477,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
     else if (action === "generated" && tutorialStep === "generate") {
       setTutorialStep("magic-wait");
       window.setTimeout(() => setTutorialStep("magic-reveal"), 1450);
-      window.setTimeout(() => setTutorialStep("club-tab"), 6300);
+      window.setTimeout(() => setTutorialStep("club-tab"), 4300);
     }
     else if (action === "help-question-submitted" && tutorialStep === "help-question") {
       window.setTimeout(() => setTutorialStep("roster-return"), 3200);
@@ -3641,7 +3641,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                         setRosterFilesOpen(false);
                         setTutorialStep("recap");
                       } else {
-                        setTutorialStep("create-roster");
+                        window.requestAnimationFrame(() => setTutorialStep("create-roster"));
                       }
                     }
                   }}
@@ -3865,8 +3865,31 @@ They will no longer be able to open or edit this shared roster unless it is shar
       </Tabs>
 
       {tutorialStep && tutorialCopy[tutorialStep] && (() => {
-        const tutorialSteps = ["open-add","add-manual","submit-player","open-edit","advanced-edit","save-edit","flip-card","today-tab","select-today","teams-tab","field-size","generate","magic-wait","magic-reveal","club-tab","club-intro","help-question","roster-return","settings-button","create-roster","recap"];
-        const currentIndex = Math.max(0, tutorialSteps.indexOf(tutorialStep));
+        const tutorialProgress: Record<string, number> = {
+          "open-add": 1,
+          "add-manual": 2,
+          "submit-player": 3,
+          "open-edit": 4,
+          "advanced-edit": 5,
+          "save-edit": 6,
+          "flip-card": 7,
+          "today-tab": 8,
+          "select-today": 9,
+          "teams-tab": 10,
+          "field-size": 11,
+          "generate": 12,
+          "magic-wait": 13,
+          "magic-reveal": 13,
+          "club-tab": 14,
+          "club-intro": 15,
+          "help-question": 16,
+          "roster-return": 17,
+          "settings-button": 18,
+          "create-roster": 19,
+          "recap": 19,
+        };
+        const tutorialTotal = 19;
+        const currentNumber = tutorialProgress[tutorialStep] ?? 1;
         const largeStep = ["magic-wait", "magic-reveal", "club-intro", "recap"].includes(tutorialStep);
         const coachPlacement: Record<string, string> = {
           "open-add": "bottom-[calc(5.6rem+env(safe-area-inset-bottom))]",
@@ -3900,7 +3923,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                     <div className="text-[15px] font-black leading-tight text-[#102A43]">{tutorialCopy[tutorialStep].title}</div>
                     <div className="mt-1 text-[12px] font-semibold leading-snug text-slate-600">{tutorialCopy[tutorialStep].body}</div>
                   </div>
-                  <div className="shrink-0 rounded-full bg-emerald-50 px-2 py-1 text-[9px] font-black text-emerald-700">{currentIndex + 1}/{tutorialSteps.length}</div>
+                  <div className="shrink-0 rounded-full bg-emerald-50 px-2 py-1 text-[9px] font-black text-emerald-700">{currentNumber}/{tutorialTotal}</div>
                 </div>
                 {tutorialCanGoBack && (
                   <button type="button" onClick={handleTutorialBack} className="mt-2 text-[11px] font-black text-slate-500 underline decoration-slate-300 underline-offset-2">Back</button>
@@ -3923,7 +3946,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 : "contents"}>
             <div className="flex items-center justify-between gap-3">
               <div className="text-[11px] font-black uppercase tracking-[0.2em] text-emerald-600">Guided kick-off</div>
-              <div className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-black text-emerald-700">{currentIndex + 1} / {tutorialSteps.length}</div>
+              <div className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-black text-emerald-700">{currentNumber} / {tutorialTotal}</div>
             </div>
             {tutorialStep === "magic-reveal" && <div className="mb-1 text-3xl">✨⚽✨</div>}
             <div className={`mt-2 font-black leading-tight tracking-tight text-[#102A43] ${tutorialStep === "magic-reveal" ? "text-[30px]" : "text-[24px]"}`}>{tutorialCopy[tutorialStep].title}</div>

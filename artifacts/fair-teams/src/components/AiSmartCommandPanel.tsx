@@ -26,6 +26,8 @@ type AiSmartCommandPanelProps = {
   onApplyAction?: (action: AiSmartCommandAction) => Promise<string | void> | string | void;
   onOpenToday?: () => void;
   onQuestionSubmitted?: () => void;
+  tutorialActive?: boolean;
+  tutorialQuestion?: string;
 };
 
 
@@ -607,7 +609,7 @@ function actionPrimaryVerb(action: AiSmartCommandAction) {
   return "Apply";
 }
 
-const AI_ASSISTANT_VERSION_LABEL = "Help beta · v1.40 magic tour";
+const AI_ASSISTANT_VERSION_LABEL = "Help beta · v1.41 compact guide";
 
 type AiRosterMatch = {
   player: AiSmartCommandRosterPlayer;
@@ -1506,6 +1508,8 @@ export function AiSmartCommandPanel({
   onApplyAction,
   onOpenToday,
   onQuestionSubmitted,
+  tutorialActive = false,
+  tutorialQuestion = "How do shared rosters work?",
 }: AiSmartCommandPanelProps) {
   const enabled = isAiSmartCommandEnabled();
   const storageKey = useMemo(() => safeStorageKey(rosterMode, rosterName), [rosterMode, rosterName]);
@@ -1529,6 +1533,11 @@ export function AiSmartCommandPanel({
   const placeholder = useMemo(() => {
     return "Ask a question… e.g. How do ratings work?";
   }, []);
+
+  useEffect(() => {
+    if (!tutorialActive) return;
+    setCommandText((current) => current.trim() ? current : tutorialQuestion);
+  }, [tutorialActive, tutorialQuestion]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -1860,7 +1869,7 @@ export function AiSmartCommandPanel({
         value={commandText}
         onChange={(event) => setCommandText(event.target.value)}
         rows={4}
-        className="mt-3 w-full resize-none rounded-2xl border border-violet-100 bg-white px-3 py-2 text-sm font-semibold text-[#102A43] outline-none focus:border-violet-300"
+        className={`mt-3 w-full resize-none rounded-2xl border border-violet-100 bg-white px-3 py-2 text-sm font-semibold text-[#102A43] outline-none focus:border-violet-300 ${tutorialActive ? "fairteams-tutorial-pulse" : ""}`}
         placeholder={placeholder}
       />
 
@@ -1869,7 +1878,7 @@ export function AiSmartCommandPanel({
           type="button"
           onClick={submit}
           disabled={busy || voiceBusy || !commandText.trim()}
-          className="h-10 rounded-2xl bg-[#102A43] px-4 text-xs font-black uppercase tracking-wide text-white disabled:opacity-45"
+          className={`h-10 rounded-2xl bg-[#102A43] px-4 text-xs font-black uppercase tracking-wide text-white disabled:opacity-45 ${tutorialActive ? "fairteams-tutorial-pulse" : ""}`}
         >
           {busy ? "Thinking…" : "Ask"}
         </button>

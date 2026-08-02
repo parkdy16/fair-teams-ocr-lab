@@ -423,8 +423,7 @@ function App() {
     "magic-reveal": { title: "That’s the magic", body: "Balanced teams, ready in seconds." },
     "club-tab": { title: "Shared team tools", body: "Open Club to see how groups can work on one roster together." },
     "club-intro": { title: "Club is for shared rosters", body: "Use this tab when organizers want to manage one roster together in real time. Local-roster users can leave it alone." },
-    "help-target": { title: "Ask FairTeams Help", body: "Open Help and ask one app-related question." },
-    "help-question": { title: "Try a question", body: "Type a question and tap Ask. For example: How do shared rosters work?" },
+    "help-question": { title: "Ask FairTeams Help", body: "The question is ready. Tap Ask to see how in-app help works." },
     "roster-return": { title: "Back to your roster", body: "Return to Roster for the final setup step." },
     "settings-button": { title: "Roster controls", body: "Tap Settings to switch rosters, create new ones, and manage the app." },
     "settings-intro": { title: "Rosters and app settings", body: "This is where local and shared rosters are switched, created, imported, exported, and backed up." },
@@ -3422,7 +3421,6 @@ They will no longer be able to open or edit this shared roster unless it is shar
       window.setTimeout(() => setTutorialStep("magic-reveal"), 1450);
       window.setTimeout(() => setTutorialStep("club-tab"), 3300);
     }
-    else if (action === "help-opened" && tutorialStep === "help-target") setTutorialStep("help-question");
     else if (action === "help-question-submitted" && tutorialStep === "help-question") {
       window.setTimeout(() => setTutorialStep("roster-return"), 180);
     }
@@ -3801,18 +3799,50 @@ They will no longer be able to open or edit this shared roster unless it is shar
         )}
       </Tabs>
 
-      {tutorialStep && tutorialCopy[tutorialStep] && (
-        <>
-          <div className={`fixed inset-x-3 bottom-[calc(5.4rem+env(safe-area-inset-bottom))] z-[95] mx-auto max-w-md rounded-[30px] border border-white/90 bg-white p-5 shadow-[0_28px_90px_rgba(15,23,42,.38)] ${["magic-wait","magic-reveal"].includes(tutorialStep) ? "fairteams-magic-card" : ""} ${["club-intro","settings-intro","recap"].includes(tutorialStep) ? "pointer-events-auto" : "pointer-events-none"}`}>
+      {tutorialStep && tutorialCopy[tutorialStep] && (() => {
+        const tutorialSteps = ["open-add","add-manual","submit-player","open-edit","advanced-edit","save-edit","flip-card","today-tab","select-today","teams-tab","field-size","generate","magic-wait","magic-reveal","club-tab","club-intro","help-question","roster-return","settings-button","settings-intro","recap","create-roster"];
+        const currentIndex = Math.max(0, tutorialSteps.indexOf(tutorialStep));
+        const largeStep = ["magic-wait", "magic-reveal", "club-intro", "settings-intro", "recap"].includes(tutorialStep);
+        const placeAtBottom = ["open-add", "open-edit", "settings-button"].includes(tutorialStep);
+
+        if (!largeStep) {
+          return (
+            <div
+              className={`pointer-events-none fixed inset-x-3 z-[95] mx-auto max-w-sm ${placeAtBottom ? "bottom-[calc(5.25rem+env(safe-area-inset-bottom))]" : "top-[5.25rem]"}`}
+            >
+              <div className="rounded-2xl border border-emerald-100 bg-white/98 px-3.5 py-3 shadow-[0_12px_34px_rgba(15,23,42,.16)] backdrop-blur-sm">
+                <div className="flex items-start gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[15px] font-black leading-tight text-[#102A43]">{tutorialCopy[tutorialStep].title}</div>
+                    <div className="mt-1 text-[12px] font-semibold leading-snug text-slate-600">{tutorialCopy[tutorialStep].body}</div>
+                  </div>
+                  <div className="shrink-0 rounded-full bg-emerald-50 px-2 py-1 text-[9px] font-black text-emerald-700">{currentIndex + 1}/{tutorialSteps.length}</div>
+                </div>
+              </div>
+            </div>
+          );
+        }
+
+        return (
+          <div className="fixed inset-x-3 bottom-[calc(5.4rem+env(safe-area-inset-bottom))] z-[95] mx-auto max-w-md rounded-[28px] border border-white/90 bg-white p-5 shadow-[0_24px_70px_rgba(15,23,42,.30)] pointer-events-auto">
             <div className="flex items-center justify-between gap-3">
               <div className="text-[11px] font-black uppercase tracking-[0.2em] text-emerald-600">Guided kick-off</div>
-              <div className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-black text-emerald-700">{Math.max(1, ["open-add","add-manual","submit-player","open-edit","advanced-edit","save-edit","flip-card","today-tab","select-today","teams-tab","field-size","generate","magic-wait","magic-reveal","club-tab","club-intro","help-target","help-question","roster-return","settings-button","settings-intro","recap","create-roster"].indexOf(tutorialStep)+1)} / 23</div>
+              <div className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-black text-emerald-700">{currentIndex + 1} / {tutorialSteps.length}</div>
             </div>
             {tutorialStep === "magic-reveal" && <div className="mb-1 text-3xl">✨⚽✨</div>}
             <div className={`mt-2 font-black leading-tight tracking-tight text-[#102A43] ${tutorialStep === "magic-reveal" ? "text-[30px]" : "text-[24px]"}`}>{tutorialCopy[tutorialStep].title}</div>
             <div className="mt-2 text-[15px] font-semibold leading-relaxed text-slate-600">{tutorialCopy[tutorialStep].body}</div>
             {tutorialStep === "club-intro" && (
-              <button type="button" className="mt-4 h-12 w-full rounded-2xl bg-[#102A43] text-sm font-black text-white shadow-sm" onClick={() => setTutorialStep("help-target")}>
+              <button
+                type="button"
+                className="mt-4 h-12 w-full rounded-2xl bg-[#102A43] text-sm font-black text-white shadow-sm"
+                onClick={() => {
+                  setTutorialStep("help-question");
+                  window.setTimeout(() => {
+                    document.getElementById("fairteams-help-panel")?.scrollIntoView({ behavior: "smooth", block: "center" });
+                  }, 80);
+                }}
+              >
                 Show me FairTeams Help
               </button>
             )}
@@ -3840,10 +3870,9 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 </button>
               </div>
             )}
-            <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${Math.min(100, (Math.max(0, ["open-add","add-manual","submit-player","open-edit","advanced-edit","save-edit","flip-card","today-tab","select-today","teams-tab","field-size","generate","magic-wait","magic-reveal","club-tab","club-intro","help-target","help-question","roster-return","settings-button","settings-intro","recap","create-roster"].indexOf(tutorialStep))+1)/23*100)}%` }} /></div>
           </div>
-        </>
-      )}
+        );
+      })()}
 
       {groupSettingsOpen && (
         <div

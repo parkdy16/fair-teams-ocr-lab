@@ -1630,12 +1630,7 @@ export function ClubTab({
         </DialogContent>
       </Dialog>
 
-      <div
-        className={["help-target", "help-question"].includes(tutorialStep || "") ? "fairteams-tutorial-pulse rounded-3xl" : ""}
-        onClickCapture={() => {
-          if (tutorialStep === "help-target") onTutorialAction?.("help-opened");
-        }}
-      >
+      <div id="fairteams-help-panel">
       <AiSmartCommandPanel
         players={players}
         rosterName={activeRosterName}
@@ -1646,6 +1641,8 @@ export function ClubTab({
         onApplyAction={applyAiSmartCommandAction}
         onOpenToday={onOpenTodayFromAi}
         onQuestionSubmitted={() => onTutorialAction?.("help-question-submitted")}
+        tutorialActive={tutorialStep === "help-question"}
+        tutorialQuestion="How do shared rosters work?"
       />
       </div>
 

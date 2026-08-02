@@ -93,7 +93,7 @@ const EMPTY_ROSTER_NAME = "New roster";
 const ROSTERS_STORAGE_KEY = "fair-teams-rosters-v1";
 const DRIVE_RECIPIENTS_STORAGE_KEY = "fair-teams-drive-backup-recipients-v1";
 const DRIVE_ACTIVE_BACKUP_STORAGE_KEY = "fair-teams-drive-active-backup-v1";
-const ONBOARDING_COMPLETED_STORAGE_KEY = "fair-teams-onboarding-v3-completed";
+const ONBOARDING_COMPLETED_STORAGE_KEY = "fair-teams-onboarding-v4-completed";
 
 
 function readOnboardingCompleted() {
@@ -430,9 +430,13 @@ function App() {
   const fairTeamsBackTrapArmedRef = useRef(false);
   const [todayRosterChosen, setTodayRosterChosen] = useState(false);
   const [onboardingCompleted, setOnboardingCompleted] = useState(readOnboardingCompleted);
-  const [onboardingStep, setOnboardingStep] = useState<"welcome" | "pick" | "teams" | "name" | "add">("welcome");
+  const [onboardingStep, setOnboardingStep] = useState<"welcome" | "roster-add" | "roster-edit" | "roster-flip" | "today" | "teams-field" | "teams-result" | "club" | "name" | "add">("welcome");
   const [onboardingRosterName, setOnboardingRosterName] = useState("Saturday Football");
   const [tutorialSunnySelected, setTutorialSunnySelected] = useState(false);
+  const [tutorialPlayerAdded, setTutorialPlayerAdded] = useState(false);
+  const [tutorialRating, setTutorialRating] = useState(6);
+  const [tutorialCardFlipped, setTutorialCardFlipped] = useState(false);
+  const [tutorialFieldSize, setTutorialFieldSize] = useState<"small" | "medium" | "large" | null>(null);
   const [openPlayerAddMode, setOpenPlayerAddMode] = useState<{ token: number; mode: "options" | "manual" | "voice" }>({ token: 0, mode: "options" });
   const [reviewPlayerQueue, setReviewPlayerQueue] = useState<string[]>([]);
   const [reviewPlayerIndex, setReviewPlayerIndex] = useState(0);
@@ -3423,151 +3427,152 @@ They will no longer be able to open or edit this shared roster unless it is shar
   }
 
   if (showFirstRunOnboarding) {
-    const tutorialPlayers = [
-      { name: "Leo Magic", rating: 9, selected: true },
-      { name: "Cristiano Air", rating: 9, selected: true },
-      { name: "Marta Magic", rating: 9, selected: true },
-      { name: "Zizou Touch", rating: 8, selected: true },
-      { name: "Roni Smile", rating: 8, selected: true },
-      { name: "Luka Engine", rating: 8, selected: true },
-      { name: "Didier Power", rating: 7, selected: true },
-      { name: "Andrés Vision", rating: 6, selected: true },
-      { name: "Manu Wall", rating: 8, selected: true, goalkeeper: true },
-      { name: "Sunny Sprint", rating: 7, selected: tutorialSunnySelected },
+    const baseTutorialPlayers = [
+      { name: "Leo Magic", rating: 9 },
+      { name: "Cristiano Air", rating: 9 },
+      { name: "Marta Magic", rating: 9 },
+      { name: "Zizou Touch", rating: 8 },
+      { name: "Roni Smile", rating: 8 },
+      { name: "Luka Engine", rating: 8 },
+      { name: "Didier Power", rating: 7 },
+      { name: "Andrés Vision", rating: 6 },
+      { name: "Manu Wall", rating: 8, goalkeeper: true },
     ];
-    const selectedTutorialPlayers = tutorialPlayers.filter((player) => player.selected);
+    const tutorialPlayers = tutorialPlayerAdded
+      ? [...baseTutorialPlayers, { name: "Sunny Sprint", rating: tutorialRating }]
+      : baseTutorialPlayers;
+    const selectedTutorialPlayers = tutorialPlayers.filter((_, index) => index < 9 || tutorialSunnySelected);
     const tutorialTeams = [
       [tutorialPlayers[0], tutorialPlayers[3], tutorialPlayers[5], tutorialPlayers[7], tutorialPlayers[8]],
-      [tutorialPlayers[1], tutorialPlayers[2], tutorialPlayers[4], tutorialPlayers[6], tutorialPlayers[9]],
+      [tutorialPlayers[1], tutorialPlayers[2], tutorialPlayers[4], tutorialPlayers[6], tutorialPlayers[9] || { name: "Sunny Sprint", rating: tutorialRating }],
     ];
-    const tutorialTeamTotal = (team: typeof tutorialPlayers) => team.reduce((sum, player) => sum + player.rating, 0);
+    const tutorialTeamTotal = (team: Array<{ rating: number }>) => team.reduce((sum, player) => sum + player.rating, 0);
+    const tutorialTabs = [
+      { id: "roster", label: "Roster" },
+      { id: "today", label: "Today" },
+      { id: "teams", label: "Teams" },
+      { id: "club", label: "Club" },
+    ];
+    const currentTourTab = onboardingStep.startsWith("roster") ? "roster" : onboardingStep === "today" ? "today" : onboardingStep.startsWith("teams") ? "teams" : onboardingStep === "club" ? "club" : null;
+    const Guide = ({ title, text }: { title: string; text: string }) => (
+      <div className="rounded-2xl border border-green-200 bg-green-50 p-4 shadow-sm">
+        <p className="text-xs font-black uppercase tracking-[0.16em] text-green-700">Your turn</p>
+        <p className="mt-1 text-base font-black text-[#102A43]">{title}</p>
+        <p className="mt-1 text-sm font-semibold leading-relaxed text-slate-600">{text}</p>
+      </div>
+    );
 
     return (
-      <div className="fairteams-visual-refresh min-h-[100dvh] bg-[#F7FAFC] px-5 py-6 text-[#102A43]">
-        <div className="mx-auto flex min-h-[calc(100dvh-3rem)] w-full max-w-md flex-col">
-          <div className="flex items-center gap-2">
+      <div className="fairteams-visual-refresh min-h-[100dvh] bg-[#F7FAFC] text-[#102A43]">
+        <div className="mx-auto flex min-h-[100dvh] w-full max-w-md flex-col bg-white shadow-xl">
+          <div className="flex items-center gap-2 border-b border-slate-100 px-5 py-4">
             <img src={fairTeamsLogoFloating} alt="" className="h-8 w-8 object-contain" />
             <span className="text-sm font-black tracking-tight">FAIR <span className="text-[#16A34A]">TEAMS</span></span>
+            <span className="ml-auto rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-slate-500">Practice</span>
           </div>
 
-          <div className="flex flex-1 flex-col justify-center py-7">
-            {onboardingStep === "welcome" && (
-              <div className="space-y-8">
-                <div className="relative overflow-hidden rounded-[2rem] bg-[#102A43] px-6 py-8 text-white shadow-xl">
-                  <div className="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-[#22C55E]/20" />
-                  <div className="absolute -bottom-10 -left-8 h-28 w-28 rounded-full bg-white/5" />
-                  <div className="relative">
-                    <p className="text-xs font-black uppercase tracking-[0.22em] text-green-300">Kick-off</p>
-                    <h1 className="mt-3 max-w-xs text-4xl font-black leading-[0.95] tracking-tight">Meet your dream squad.</h1>
-                    <p className="mt-4 max-w-[16rem] text-sm font-semibold leading-relaxed text-slate-300">One tap. Two fair teams. See how it works.</p>
+          {onboardingStep === "welcome" ? (
+            <div className="flex flex-1 flex-col justify-center px-5 py-8">
+              <div className="relative overflow-hidden rounded-[2rem] bg-[#102A43] px-6 py-9 text-white shadow-xl">
+                <div className="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-[#22C55E]/20" />
+                <p className="relative text-xs font-black uppercase tracking-[0.22em] text-green-300">60-second kick-off</p>
+                <h1 className="relative mt-3 text-4xl font-black leading-[0.96] tracking-tight">Run your first match.</h1>
+                <p className="relative mt-4 max-w-[17rem] text-sm font-semibold leading-relaxed text-slate-300">Try every tab with a practice squad. Nothing is saved.</p>
+              </div>
+              <Button type="button" onClick={() => setOnboardingStep("roster-add")} className="mt-8 h-14 w-full rounded-2xl bg-[#16A34A] text-base font-black hover:bg-[#15803D]">Kick off</Button>
+            </div>
+          ) : onboardingStep === "name" || onboardingStep === "add" ? (
+            <div className="flex flex-1 flex-col justify-center px-5 py-8">
+              {onboardingStep === "name" ? (
+                <div className="space-y-7">
+                  <div className="text-center">
+                    <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-green-100 text-2xl">✓</div>
+                    <h1 className="mt-4 text-3xl font-black tracking-tight">Now make it yours.</h1>
+                    <p className="mt-2 text-sm font-semibold text-slate-500">Create your first real roster.</p>
                   </div>
+                  <input autoFocus value={onboardingRosterName} onChange={(event) => setOnboardingRosterName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") saveFirstRosterName(); }} className="h-14 w-full rounded-2xl border border-slate-200 bg-white px-4 text-lg font-black outline-none focus:border-[#16A34A] focus:ring-4 focus:ring-green-100" aria-label="Roster name" />
+                  <Button type="button" onClick={saveFirstRosterName} className="h-14 w-full rounded-2xl bg-[#16A34A] text-base font-black hover:bg-[#15803D]">Create roster</Button>
                 </div>
-                <Button type="button" onClick={() => setOnboardingStep("pick")} className="h-14 w-full rounded-2xl bg-[#16A34A] text-base font-black shadow-lg shadow-green-200 hover:bg-[#15803D]">Let’s play</Button>
-              </div>
-            )}
+              ) : (
+                <div className="space-y-6">
+                  <div><h1 className="text-3xl font-black tracking-tight">Add your players</h1><p className="mt-2 text-sm font-semibold text-slate-500">Start simple. You can import later.</p></div>
+                  <button type="button" onClick={() => startOnboardingAdd("manual")} className="w-full rounded-2xl border-2 border-[#16A34A] bg-green-50 p-5 text-left shadow-sm"><span className="block text-base font-black">Enter names</span><span className="mt-1 block text-xs font-bold text-green-700">Recommended for your first roster</span></button>
+                  <button type="button" onClick={() => startOnboardingAdd("screenshot")} className="w-full rounded-2xl border border-slate-200 bg-white p-4 text-left text-base font-black shadow-sm">Import screenshot</button>
+                  <button type="button" onClick={() => startOnboardingAdd("voice")} className="w-full rounded-2xl border border-slate-200 bg-white p-4 text-left text-base font-black shadow-sm">Use voice</button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <>
+              <div className="flex-1 overflow-y-auto px-4 pb-28 pt-4">
+                {onboardingStep === "roster-add" && (
+                  <div className="space-y-4">
+                    <Guide title="Add one player" text="Roster is your full player list. Open Add Player to bring Sunny Sprint into the squad." />
+                    <div className="flex items-center justify-between"><div><h1 className="text-2xl font-black">Practice Squad</h1><p className="text-sm font-semibold text-slate-500">{tutorialPlayers.length} players</p></div><button type="button" onClick={() => setTutorialPlayerAdded(true)} className={`rounded-xl px-4 py-3 text-sm font-black ${tutorialPlayerAdded ? "bg-green-100 text-green-700" : "animate-pulse bg-[#16A34A] text-white ring-4 ring-green-100"}`}>{tutorialPlayerAdded ? "Added ✓" : "+ Add Player"}</button></div>
+                    <div className="grid grid-cols-2 gap-2">{tutorialPlayers.map((player) => <div key={player.name} className="rounded-2xl border border-slate-200 bg-white p-3"><p className="text-sm font-black">{player.name}</p><p className="mt-1 text-xs font-bold text-slate-400">Skill {player.rating}</p></div>)}</div>
+                    {tutorialPlayerAdded && <Button type="button" onClick={() => setOnboardingStep("roster-edit")} className="h-13 w-full rounded-2xl bg-[#102A43] font-black">Open Sunny Sprint</Button>}
+                  </div>
+                )}
 
-            {onboardingStep === "pick" && (
-              <div className="space-y-5">
-                <div>
-                  <p className="text-xs font-black uppercase tracking-[0.18em] text-[#16A34A]">Match day</p>
-                  <h1 className="mt-2 text-3xl font-black tracking-tight">One player is missing.</h1>
-                  <p className="mt-2 text-sm font-semibold text-slate-500">Complete the lineup.</p>
-                </div>
-                <div className="grid grid-cols-2 gap-2.5">
-                  {tutorialPlayers.map((player) => {
-                    const isSunny = player.name === "Sunny Sprint";
-                    const selected = player.selected;
-                    return (
-                      <button
-                        key={player.name}
-                        type="button"
-                        onClick={() => { if (isSunny) setTutorialSunnySelected(true); }}
-                        className={`flex min-h-[70px] items-center justify-between rounded-2xl border p-3 text-left transition ${selected ? "border-green-200 bg-white shadow-sm" : "border-dashed border-[#16A34A] bg-green-50 ring-4 ring-green-100 active:scale-[0.98]"}`}
-                      >
-                        <span>
-                          <span className="block text-sm font-black leading-tight">{player.name}</span>
-                          <span className="mt-1 block text-[11px] font-bold text-slate-400">{player.goalkeeper ? "Goalkeeper" : `Skill ${player.rating}`}</span>
-                        </span>
-                        <span className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-black ${selected ? "bg-[#16A34A] text-white" : "bg-white text-[#16A34A]"}`}>{selected ? "✓" : "+"}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-                <Button type="button" disabled={!tutorialSunnySelected} onClick={() => setOnboardingStep("teams")} className="h-14 w-full rounded-2xl bg-[#16A34A] text-base font-black disabled:bg-slate-200 disabled:text-slate-400">Make teams · {selectedTutorialPlayers.length}</Button>
-              </div>
-            )}
+                {onboardingStep === "roster-edit" && (
+                  <div className="space-y-4">
+                    <Guide title="Edit the rating" text="Open a player whenever your opinion changes. Move Sunny from 6 to 7." />
+                    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-center justify-between"><div><p className="text-xl font-black">Sunny Sprint</p><p className="text-sm font-semibold text-slate-500">Overall skill</p></div><span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#102A43] text-2xl font-black text-white">{tutorialRating}</span></div><input aria-label="Sunny Sprint rating" type="range" min="1" max="10" value={tutorialRating} onChange={(e) => setTutorialRating(Number(e.target.value))} className="mt-7 w-full accent-green-600" /><div className="mt-2 flex justify-between text-xs font-bold text-slate-400"><span>Beginner</span><span>Elite</span></div></div>
+                    <Button type="button" disabled={tutorialRating !== 7} onClick={() => setOnboardingStep("roster-flip")} className="h-13 w-full rounded-2xl bg-[#16A34A] font-black disabled:bg-slate-200">Save rating</Button>
+                  </div>
+                )}
 
-            {onboardingStep === "teams" && (
-              <div className="space-y-5">
-                <div className="text-center">
-                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-green-100 text-2xl">⚡</div>
-                  <h1 className="mt-4 text-3xl font-black tracking-tight">Game on.</h1>
-                  <p className="mt-2 text-sm font-semibold text-slate-500">Balanced in seconds.</p>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  {tutorialTeams.map((team, teamIndex) => (
-                    <div key={teamIndex} className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-                      <div className={`px-4 py-3 ${teamIndex === 0 ? "bg-[#102A43]" : "bg-[#16A34A]"} text-white`}>
-                        <p className="text-xs font-black uppercase tracking-widest">Team {teamIndex + 1}</p>
-                        <p className="mt-1 text-xs font-bold opacity-75">Total {tutorialTeamTotal(team)}</p>
-                      </div>
-                      <div className="space-y-1 p-3">
-                        {team.map((player) => (
-                          <div key={player.name} className="flex items-center justify-between rounded-xl px-2 py-2">
-                            <span className="text-xs font-black">{player.name}</span>
-                            <span className="text-xs font-black text-slate-400">{player.rating}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div className="rounded-2xl bg-green-50 px-4 py-3 text-center text-sm font-black text-green-800">39 — 40. That’s close.</div>
-                <Button type="button" onClick={() => setOnboardingStep("name")} className="h-14 w-full rounded-2xl bg-[#102A43] text-base font-black hover:bg-[#183B56]">Build my roster</Button>
-              </div>
-            )}
+                {onboardingStep === "roster-flip" && (
+                  <div className="space-y-4">
+                    <Guide title="Flip the card" text="The back keeps extra player details out of the way until you need them." />
+                    <button type="button" onClick={() => setTutorialCardFlipped(true)} className={`min-h-[230px] w-full rounded-3xl border p-6 text-left shadow-lg transition ${tutorialCardFlipped ? "border-green-300 bg-[#102A43] text-white" : "border-slate-200 bg-white ring-4 ring-green-100"}`}>
+                      {!tutorialCardFlipped ? <><p className="text-xs font-black uppercase tracking-widest text-green-600">Tap to flip</p><p className="mt-4 text-3xl font-black">Sunny Sprint</p><p className="mt-2 text-sm font-bold text-slate-500">Skill 7</p></> : <><p className="text-xs font-black uppercase tracking-widest text-green-300">Player details</p><p className="mt-4 text-2xl font-black">Fast runner</p><p className="mt-3 text-sm font-semibold text-slate-300">Use the card back for style, notes and advanced ratings.</p></>}
+                    </button>
+                    {tutorialCardFlipped && <Button type="button" onClick={() => setOnboardingStep("today")} className="h-13 w-full rounded-2xl bg-[#16A34A] font-black">Next: Today</Button>}
+                  </div>
+                )}
 
-            {onboardingStep === "name" && (
-              <div className="space-y-7">
-                <div>
-                  <h1 className="text-3xl font-black tracking-tight">Name your roster</h1>
-                  <p className="mt-2 text-sm font-semibold text-slate-500">Your players live here.</p>
-                </div>
-                <input
-                  autoFocus
-                  value={onboardingRosterName}
-                  onChange={(event) => setOnboardingRosterName(event.target.value)}
-                  onKeyDown={(event) => { if (event.key === "Enter") saveFirstRosterName(); }}
-                  className="h-14 w-full rounded-2xl border border-slate-200 bg-white px-4 text-lg font-black outline-none transition focus:border-[#16A34A] focus:ring-4 focus:ring-green-100"
-                  aria-label="Roster name"
-                />
-                <Button type="button" onClick={saveFirstRosterName} className="h-14 w-full rounded-2xl bg-[#16A34A] text-base font-black hover:bg-[#15803D]">Continue</Button>
-              </div>
-            )}
+                {onboardingStep === "today" && (
+                  <div className="space-y-4">
+                    <Guide title="Pick today’s players" text="Roster holds everyone. Today is only the people playing this match. Select Sunny Sprint." />
+                    <div><h1 className="text-2xl font-black">Who’s playing?</h1><p className="text-sm font-semibold text-slate-500">{selectedTutorialPlayers.length} selected</p></div>
+                    <div className="grid grid-cols-2 gap-2">{tutorialPlayers.map((player) => { const sunny=player.name==="Sunny Sprint"; const selected=!sunny || tutorialSunnySelected; return <button key={player.name} type="button" onClick={() => sunny && setTutorialSunnySelected(true)} className={`rounded-2xl border p-3 text-left ${selected ? "border-green-200 bg-green-50" : "animate-pulse border-dashed border-green-500 bg-white ring-4 ring-green-100"}`}><div className="flex items-center justify-between"><span className="text-sm font-black">{player.name}</span><span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-black ${selected ? "bg-[#16A34A] text-white" : "bg-green-100 text-green-700"}`}>{selected ? "✓" : "+"}</span></div></button>})}</div>
+                    <Button type="button" disabled={!tutorialSunnySelected} onClick={() => setOnboardingStep("teams-field")} className="h-13 w-full rounded-2xl bg-[#102A43] font-black disabled:bg-slate-200">Next: Teams · {selectedTutorialPlayers.length}</Button>
+                  </div>
+                )}
 
-            {onboardingStep === "add" && (
-              <div className="space-y-6">
-                <div>
-                  <h1 className="text-3xl font-black tracking-tight">Add your players</h1>
-                  <p className="mt-2 text-sm font-semibold text-slate-500">Choose the quickest way for you.</p>
-                </div>
-                <div className="space-y-3">
-                  <button type="button" onClick={() => startOnboardingAdd("screenshot")} className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm active:scale-[0.99]">
-                    <span className="text-base font-black">Import screenshot</span>
-                    <span className="rounded-full bg-green-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-green-700">Fastest</span>
-                  </button>
-                  <button type="button" onClick={() => startOnboardingAdd("manual")} className="w-full rounded-2xl border border-slate-200 bg-white p-4 text-left text-base font-black shadow-sm active:scale-[0.99]">Enter names</button>
-                  <button type="button" onClick={() => startOnboardingAdd("voice")} className="w-full rounded-2xl border border-slate-200 bg-white p-4 text-left text-base font-black shadow-sm active:scale-[0.99]">Use voice</button>
-                </div>
-              </div>
-            )}
-          </div>
+                {onboardingStep === "teams-field" && (
+                  <div className="space-y-4">
+                    <Guide title="Choose the field size" text="Field size helps FairTeams shape the game setup. Pick Medium, then generate." />
+                    <div><h1 className="text-2xl font-black">Match setup</h1><p className="text-sm font-semibold text-slate-500">10 players · 2 teams</p></div>
+                    <div className="grid grid-cols-3 gap-2">{(["small","medium","large"] as const).map(size => <button key={size} type="button" onClick={() => setTutorialFieldSize(size)} className={`rounded-2xl border p-4 text-center text-sm font-black capitalize ${tutorialFieldSize===size ? "border-green-500 bg-green-50 ring-4 ring-green-100" : "border-slate-200 bg-white"}`}>{size}</button>)}</div>
+                    <Button type="button" disabled={tutorialFieldSize !== "medium"} onClick={() => setOnboardingStep("teams-result")} className="h-14 w-full rounded-2xl bg-[#16A34A] text-base font-black disabled:bg-slate-200">Generate teams</Button>
+                  </div>
+                )}
 
-          <div className="flex items-center justify-center gap-2 pb-2" aria-label="Onboarding progress">
-            {["welcome", "pick", "teams", "name", "add"].map((step) => (
-              <span key={step} className={`h-1.5 rounded-full transition-all ${onboardingStep === step ? "w-7 bg-[#16A34A]" : "w-1.5 bg-slate-200"}`} />
-            ))}
-          </div>
+                {onboardingStep === "teams-result" && (
+                  <div className="space-y-4">
+                    <Guide title="Teams are ready" text="Present shares the clean lineup. Shuffle and manual swaps stay available when you need them." />
+                    <div className="grid grid-cols-2 gap-3">{tutorialTeams.map((team, i) => <div key={i} className="overflow-hidden rounded-3xl border border-slate-200 bg-white"><div className={`${i ? "bg-[#16A34A]" : "bg-[#102A43]"} px-4 py-3 text-white`}><p className="text-xs font-black uppercase tracking-widest">Team {i+1}</p><p className="text-xs font-bold opacity-75">Total {tutorialTeamTotal(team)}</p></div><div className="space-y-1 p-3">{team.map(player => <div key={player.name} className="flex justify-between rounded-xl px-2 py-2"><span className="text-xs font-black">{player.name}</span><span className="text-xs font-black text-slate-400">{player.rating}</span></div>)}</div></div>)}</div>
+                    <div className="rounded-2xl bg-green-50 p-3 text-center text-sm font-black text-green-800">39 — 40. That’s close.</div>
+                    <Button type="button" onClick={() => setOnboardingStep("club")} className="h-14 w-full rounded-2xl bg-[#102A43] text-base font-black">Present teams</Button>
+                  </div>
+                )}
+
+                {onboardingStep === "club" && (
+                  <div className="space-y-4">
+                    <Guide title="This is your control room" text="Create rosters, share them and manage organizers from Club." />
+                    <div><h1 className="text-2xl font-black">Club</h1><p className="text-sm font-semibold text-slate-500">Roster tools and sharing</p></div>
+                    <div className="space-y-3"><div className="rounded-2xl border border-slate-200 bg-white p-4"><p className="font-black">Rosters</p><p className="mt-1 text-sm font-semibold text-slate-500">Create, switch and organize groups.</p></div><div className="rounded-2xl border border-slate-200 bg-white p-4"><p className="font-black">Share roster</p><p className="mt-1 text-sm font-semibold text-slate-500">Invite other organizers when you are ready.</p></div></div>
+                    <Button type="button" onClick={() => setOnboardingStep("name")} className="h-14 w-full rounded-2xl bg-[#16A34A] text-base font-black">Create my roster</Button>
+                  </div>
+                )}
+              </div>
+              <div className="fixed bottom-0 left-1/2 z-20 flex w-full max-w-md -translate-x-1/2 border-t border-slate-200 bg-white px-2 pb-[max(0.6rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-8px_24px_rgba(15,23,42,0.08)]">
+                {tutorialTabs.map(tab => <div key={tab.id} className={`flex-1 rounded-xl py-2 text-center text-xs font-black ${currentTourTab===tab.id ? "bg-green-50 text-green-700" : "text-slate-400"}`}>{tab.label}</div>)}
+              </div>
+            </>
+          )}
         </div>
       </div>
     );

@@ -419,7 +419,8 @@ function App() {
     "field-size": { title: "Fit the pitch", body: "Choose a field size. It changes how teams are balanced." },
     "generate": { title: "Moment of truth", body: "Tap Generate and let FairTeams balance the lineup." },
     "present": { title: "Ready to play", body: "Open Present Teams for the match-day view." },
-    "club-tab": { title: "Run the group", body: "Open Club to find sharing and organizer tools." },
+    "club-tab": { title: "One last stop", body: "Open Club to see where rosters and optional group tools live." },
+    "club-intro": { title: "Club is your control room", body: "Create and switch rosters here. Sharing and organizer tools are optional — use them when your group grows." },
     "create-roster": { title: "Now make it yours", body: "Name your real roster and tap New." },
   };
 
@@ -3446,7 +3447,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
           if (tutorialStep === "club-tab" && value === "club") {
             setActiveTab("club");
             replacePlayers([]);
-            window.setTimeout(() => { setRosterFilesOpen(true); setTutorialStep("create-roster"); }, 350);
+            window.setTimeout(() => setTutorialStep("club-intro"), 350);
             return;
           }
           if (tutorialActive) return;
@@ -3778,12 +3779,20 @@ They will no longer be able to open or edit this shared roster unless it is shar
 
       {tutorialStep && tutorialCopy[tutorialStep] && (
         <>
-          <div className="pointer-events-none fixed inset-0 z-[35] bg-slate-950/38 backdrop-blur-[1px]" aria-hidden="true" />
-          <div className="pointer-events-none fixed inset-x-3 bottom-[calc(5.4rem+env(safe-area-inset-bottom))] z-[85] mx-auto max-w-sm rounded-3xl border border-white/70 bg-white/96 p-4 shadow-[0_22px_70px_rgba(15,23,42,.28)]">
-            <div className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600">Guided kick-off</div>
-            <div className="mt-1 text-xl font-black tracking-tight text-[#102A43]">{tutorialCopy[tutorialStep].title}</div>
-            <div className="mt-1 text-sm font-semibold leading-snug text-slate-500">{tutorialCopy[tutorialStep].body}</div>
-            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${Math.min(100, (["open-add","add-manual","submit-player","open-edit","save-edit","flip-card","today-tab","select-today","teams-tab","field-size","generate","present","club-tab","create-roster"].indexOf(tutorialStep)+1)/14*100)}%` }} /></div>
+          <div className="pointer-events-none fixed inset-0 z-[35] bg-slate-950/42 backdrop-blur-[0.5px]" aria-hidden="true" />
+          <div className={`fixed inset-x-3 bottom-[calc(5.4rem+env(safe-area-inset-bottom))] z-[95] mx-auto max-w-md rounded-[28px] border border-white/80 bg-white/98 p-5 shadow-[0_26px_80px_rgba(15,23,42,.34)] ${tutorialStep === "club-intro" ? "pointer-events-auto" : "pointer-events-none"}`}>
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-[11px] font-black uppercase tracking-[0.2em] text-emerald-600">Guided kick-off</div>
+              <div className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-black text-emerald-700">{Math.max(1, ["open-add","add-manual","submit-player","open-edit","save-edit","flip-card","today-tab","select-today","teams-tab","field-size","generate","present","club-tab","club-intro","create-roster"].indexOf(tutorialStep)+1)} / 15</div>
+            </div>
+            <div className="mt-2 text-[23px] font-black leading-tight tracking-tight text-[#102A43]">{tutorialCopy[tutorialStep].title}</div>
+            <div className="mt-2 text-[15px] font-semibold leading-relaxed text-slate-600">{tutorialCopy[tutorialStep].body}</div>
+            {tutorialStep === "club-intro" && (
+              <button type="button" className="mt-4 h-11 w-full rounded-2xl bg-[#102A43] text-sm font-black text-white shadow-sm" onClick={() => { setRosterFilesOpen(true); setTutorialStep("create-roster"); }}>
+                Create my roster
+              </button>
+            )}
+            <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${Math.min(100, (Math.max(0, ["open-add","add-manual","submit-player","open-edit","save-edit","flip-card","today-tab","select-today","teams-tab","field-size","generate","present","club-tab","club-intro","create-roster"].indexOf(tutorialStep))+1)/15*100)}%` }} /></div>
           </div>
         </>
       )}

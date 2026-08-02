@@ -606,7 +606,7 @@ function actionPrimaryVerb(action: AiSmartCommandAction) {
   return "Apply";
 }
 
-const AI_ASSISTANT_VERSION_LABEL = "AI beta · v1.34 onboarding gate fix";
+const AI_ASSISTANT_VERSION_LABEL = "AI beta · v1.35 guided kick-off";
 
 type AiRosterMatch = {
   player: AiSmartCommandRosterPlayer;

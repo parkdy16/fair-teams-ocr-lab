@@ -93,7 +93,7 @@ const EMPTY_ROSTER_NAME = "New roster";
 const ROSTERS_STORAGE_KEY = "fair-teams-rosters-v1";
 const DRIVE_RECIPIENTS_STORAGE_KEY = "fair-teams-drive-backup-recipients-v1";
 const DRIVE_ACTIVE_BACKUP_STORAGE_KEY = "fair-teams-drive-active-backup-v1";
-const ONBOARDING_COMPLETED_STORAGE_KEY = "fair-teams-onboarding-v2-completed";
+const ONBOARDING_COMPLETED_STORAGE_KEY = "fair-teams-onboarding-v3-completed";
 
 
 function readOnboardingCompleted() {
@@ -430,8 +430,9 @@ function App() {
   const fairTeamsBackTrapArmedRef = useRef(false);
   const [todayRosterChosen, setTodayRosterChosen] = useState(false);
   const [onboardingCompleted, setOnboardingCompleted] = useState(readOnboardingCompleted);
-  const [onboardingStep, setOnboardingStep] = useState<"welcome" | "name" | "add">("welcome");
+  const [onboardingStep, setOnboardingStep] = useState<"welcome" | "pick" | "teams" | "name" | "add">("welcome");
   const [onboardingRosterName, setOnboardingRosterName] = useState("Saturday Football");
+  const [tutorialSunnySelected, setTutorialSunnySelected] = useState(false);
   const [openPlayerAddMode, setOpenPlayerAddMode] = useState<{ token: number; mode: "options" | "manual" | "voice" }>({ token: 0, mode: "options" });
   const [reviewPlayerQueue, setReviewPlayerQueue] = useState<string[]>([]);
   const [reviewPlayerIndex, setReviewPlayerIndex] = useState(0);
@@ -3422,40 +3423,122 @@ They will no longer be able to open or edit this shared roster unless it is shar
   }
 
   if (showFirstRunOnboarding) {
+    const tutorialPlayers = [
+      { name: "Leo Magic", rating: 9, selected: true },
+      { name: "Cristiano Air", rating: 9, selected: true },
+      { name: "Marta Magic", rating: 9, selected: true },
+      { name: "Zizou Touch", rating: 8, selected: true },
+      { name: "Roni Smile", rating: 8, selected: true },
+      { name: "Luka Engine", rating: 8, selected: true },
+      { name: "Didier Power", rating: 7, selected: true },
+      { name: "Andrés Vision", rating: 6, selected: true },
+      { name: "Manu Wall", rating: 8, selected: true, goalkeeper: true },
+      { name: "Sunny Sprint", rating: 7, selected: tutorialSunnySelected },
+    ];
+    const selectedTutorialPlayers = tutorialPlayers.filter((player) => player.selected);
+    const tutorialTeams = [
+      [tutorialPlayers[0], tutorialPlayers[3], tutorialPlayers[5], tutorialPlayers[7], tutorialPlayers[8]],
+      [tutorialPlayers[1], tutorialPlayers[2], tutorialPlayers[4], tutorialPlayers[6], tutorialPlayers[9]],
+    ];
+    const tutorialTeamTotal = (team: typeof tutorialPlayers) => team.reduce((sum, player) => sum + player.rating, 0);
+
     return (
-      <div className="fairteams-visual-refresh min-h-[100dvh] bg-white px-5 py-6 text-[#102A43]">
+      <div className="fairteams-visual-refresh min-h-[100dvh] bg-[#F7FAFC] px-5 py-6 text-[#102A43]">
         <div className="mx-auto flex min-h-[calc(100dvh-3rem)] w-full max-w-md flex-col">
           <div className="flex items-center gap-2">
             <img src={fairTeamsLogoFloating} alt="" className="h-8 w-8 object-contain" />
             <span className="text-sm font-black tracking-tight">FAIR <span className="text-[#16A34A]">TEAMS</span></span>
           </div>
 
-          <div className="flex flex-1 flex-col justify-center py-8">
+          <div className="flex flex-1 flex-col justify-center py-7">
             {onboardingStep === "welcome" && (
               <div className="space-y-8">
+                <div className="relative overflow-hidden rounded-[2rem] bg-[#102A43] px-6 py-8 text-white shadow-xl">
+                  <div className="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-[#22C55E]/20" />
+                  <div className="absolute -bottom-10 -left-8 h-28 w-28 rounded-full bg-white/5" />
+                  <div className="relative">
+                    <p className="text-xs font-black uppercase tracking-[0.22em] text-green-300">Kick-off</p>
+                    <h1 className="mt-3 max-w-xs text-4xl font-black leading-[0.95] tracking-tight">Meet your dream squad.</h1>
+                    <p className="mt-4 max-w-[16rem] text-sm font-semibold leading-relaxed text-slate-300">One tap. Two fair teams. See how it works.</p>
+                  </div>
+                </div>
+                <Button type="button" onClick={() => setOnboardingStep("pick")} className="h-14 w-full rounded-2xl bg-[#16A34A] text-base font-black shadow-lg shadow-green-200 hover:bg-[#15803D]">Let’s play</Button>
+              </div>
+            )}
+
+            {onboardingStep === "pick" && (
+              <div className="space-y-5">
                 <div>
-                  <h1 className="max-w-xs text-4xl font-black leading-[0.98] tracking-tight">Fair teams. Fast.</h1>
-                  <p className="mt-4 max-w-xs text-base font-semibold leading-relaxed text-slate-500">Add players. Pick who’s playing. Make teams.</p>
+                  <p className="text-xs font-black uppercase tracking-[0.18em] text-[#16A34A]">Match day</p>
+                  <h1 className="mt-2 text-3xl font-black tracking-tight">One player is missing.</h1>
+                  <p className="mt-2 text-sm font-semibold text-slate-500">Complete the lineup.</p>
                 </div>
-                <div className="space-y-3">
-                  <Button type="button" onClick={() => setOnboardingStep("name")} className="h-14 w-full rounded-2xl bg-[#16A34A] text-base font-black hover:bg-[#15803D]">Get started</Button>
-                  <Button type="button" variant="outline" onClick={() => { finishOnboarding(); setActiveTab("club"); }} className="h-12 w-full rounded-2xl border-slate-200 text-sm font-black">Join shared roster</Button>
+                <div className="grid grid-cols-2 gap-2.5">
+                  {tutorialPlayers.map((player) => {
+                    const isSunny = player.name === "Sunny Sprint";
+                    const selected = player.selected;
+                    return (
+                      <button
+                        key={player.name}
+                        type="button"
+                        onClick={() => { if (isSunny) setTutorialSunnySelected(true); }}
+                        className={`flex min-h-[70px] items-center justify-between rounded-2xl border p-3 text-left transition ${selected ? "border-green-200 bg-white shadow-sm" : "border-dashed border-[#16A34A] bg-green-50 ring-4 ring-green-100 active:scale-[0.98]"}`}
+                      >
+                        <span>
+                          <span className="block text-sm font-black leading-tight">{player.name}</span>
+                          <span className="mt-1 block text-[11px] font-bold text-slate-400">{player.goalkeeper ? "Goalkeeper" : `Skill ${player.rating}`}</span>
+                        </span>
+                        <span className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-black ${selected ? "bg-[#16A34A] text-white" : "bg-white text-[#16A34A]"}`}>{selected ? "✓" : "+"}</span>
+                      </button>
+                    );
+                  })}
                 </div>
+                <Button type="button" disabled={!tutorialSunnySelected} onClick={() => setOnboardingStep("teams")} className="h-14 w-full rounded-2xl bg-[#16A34A] text-base font-black disabled:bg-slate-200 disabled:text-slate-400">Make teams · {selectedTutorialPlayers.length}</Button>
+              </div>
+            )}
+
+            {onboardingStep === "teams" && (
+              <div className="space-y-5">
+                <div className="text-center">
+                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-green-100 text-2xl">⚡</div>
+                  <h1 className="mt-4 text-3xl font-black tracking-tight">Game on.</h1>
+                  <p className="mt-2 text-sm font-semibold text-slate-500">Balanced in seconds.</p>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  {tutorialTeams.map((team, teamIndex) => (
+                    <div key={teamIndex} className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+                      <div className={`px-4 py-3 ${teamIndex === 0 ? "bg-[#102A43]" : "bg-[#16A34A]"} text-white`}>
+                        <p className="text-xs font-black uppercase tracking-widest">Team {teamIndex + 1}</p>
+                        <p className="mt-1 text-xs font-bold opacity-75">Total {tutorialTeamTotal(team)}</p>
+                      </div>
+                      <div className="space-y-1 p-3">
+                        {team.map((player) => (
+                          <div key={player.name} className="flex items-center justify-between rounded-xl px-2 py-2">
+                            <span className="text-xs font-black">{player.name}</span>
+                            <span className="text-xs font-black text-slate-400">{player.rating}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="rounded-2xl bg-green-50 px-4 py-3 text-center text-sm font-black text-green-800">39 — 40. That’s close.</div>
+                <Button type="button" onClick={() => setOnboardingStep("name")} className="h-14 w-full rounded-2xl bg-[#102A43] text-base font-black hover:bg-[#183B56]">Build my roster</Button>
               </div>
             )}
 
             {onboardingStep === "name" && (
               <div className="space-y-7">
                 <div>
-                  <button type="button" onClick={() => setOnboardingStep("welcome")} className="mb-6 text-sm font-black text-slate-400">Back</button>
                   <h1 className="text-3xl font-black tracking-tight">Name your roster</h1>
+                  <p className="mt-2 text-sm font-semibold text-slate-500">Your players live here.</p>
                 </div>
                 <input
                   autoFocus
                   value={onboardingRosterName}
                   onChange={(event) => setOnboardingRosterName(event.target.value)}
                   onKeyDown={(event) => { if (event.key === "Enter") saveFirstRosterName(); }}
-                  className="h-14 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-lg font-black outline-none transition focus:border-[#16A34A] focus:bg-white focus:ring-4 focus:ring-green-100"
+                  className="h-14 w-full rounded-2xl border border-slate-200 bg-white px-4 text-lg font-black outline-none transition focus:border-[#16A34A] focus:ring-4 focus:ring-green-100"
                   aria-label="Roster name"
                 />
                 <Button type="button" onClick={saveFirstRosterName} className="h-14 w-full rounded-2xl bg-[#16A34A] text-base font-black hover:bg-[#15803D]">Continue</Button>
@@ -3465,8 +3548,8 @@ They will no longer be able to open or edit this shared roster unless it is shar
             {onboardingStep === "add" && (
               <div className="space-y-6">
                 <div>
-                  <button type="button" onClick={() => setOnboardingStep("name")} className="mb-6 text-sm font-black text-slate-400">Back</button>
                   <h1 className="text-3xl font-black tracking-tight">Add your players</h1>
+                  <p className="mt-2 text-sm font-semibold text-slate-500">Choose the quickest way for you.</p>
                 </div>
                 <div className="space-y-3">
                   <button type="button" onClick={() => startOnboardingAdd("screenshot")} className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm active:scale-[0.99]">
@@ -3480,8 +3563,8 @@ They will no longer be able to open or edit this shared roster unless it is shar
             )}
           </div>
 
-          <div className="flex items-center justify-center gap-2 pb-2" aria-label={`Step ${onboardingStep === "welcome" ? 1 : onboardingStep === "name" ? 2 : 3} of 3`}>
-            {["welcome", "name", "add"].map((step) => (
+          <div className="flex items-center justify-center gap-2 pb-2" aria-label="Onboarding progress">
+            {["welcome", "pick", "teams", "name", "add"].map((step) => (
               <span key={step} className={`h-1.5 rounded-full transition-all ${onboardingStep === step ? "w-7 bg-[#16A34A]" : "w-1.5 bg-slate-200"}`} />
             ))}
           </div>

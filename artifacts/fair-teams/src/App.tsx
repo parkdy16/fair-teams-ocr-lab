@@ -404,12 +404,30 @@ function App() {
   useEffect(() => {
     if (showSplash) return;
     let secondFrame = 0;
+    const timers: number[] = [];
     const firstFrame = window.requestAnimationFrame(() => {
-      secondFrame = window.requestAnimationFrame(() => setOnboardingReady(true));
+      secondFrame = window.requestAnimationFrame(() => {
+        setOnboardingReady(true);
+        setOnboardingProbe((value) => value + 1);
+      });
     });
+
+    // Mobile browsers and installed PWAs can restore local state over several frames.
+    // Probe a few times after startup so first-run detection does not depend on one render.
+    [250, 750, 1500, 3000].forEach((delay) => {
+      timers.push(window.setTimeout(() => setOnboardingProbe((value) => value + 1), delay));
+    });
+
+    const reprobe = () => setOnboardingProbe((value) => value + 1);
+    window.addEventListener("pageshow", reprobe);
+    document.addEventListener("visibilitychange", reprobe);
+
     return () => {
       window.cancelAnimationFrame(firstFrame);
       if (secondFrame) window.cancelAnimationFrame(secondFrame);
+      timers.forEach((timer) => window.clearTimeout(timer));
+      window.removeEventListener("pageshow", reprobe);
+      document.removeEventListener("visibilitychange", reprobe);
     };
   }, [showSplash]);
 
@@ -417,6 +435,7 @@ function App() {
   const [tutorialStep, setTutorialStep] = useState<string | null>(null);
   const [tutorialPlayerId, setTutorialPlayerId] = useState<string | null>(null);
   const [onboardingReady, setOnboardingReady] = useState(false);
+  const [onboardingProbe, setOnboardingProbe] = useState(0);
   const [tutorialReplayMode, setTutorialReplayMode] = useState(false);
   const tutorialStartedRef = useRef(false);
   const tutorialSnapshotRef = useRef<{ rosterState: ReturnType<typeof loadRosterState>; activeTab: AppTab; todayRosterChosen: boolean } | null>(null);
@@ -3438,16 +3457,23 @@ They will no longer be able to open or edit this shared roster unless it is shar
 
   useEffect(() => {
     if (!onboardingReady || tutorialStep || tutorialStartedRef.current) return;
+
     const url = new URL(window.location.href);
     const forceTour = url.searchParams.get("tour") === "1";
-    const unusedApp = rosters.length === 1 && players.length === 0 && !isRosterCloudShared(activeRoster);
-    if (!forceTour && (!unusedApp || localStorage.getItem("fairteams-onboarding-v140-complete") === "1")) return;
+    const onboardingComplete = localStorage.getItem("fairteams-onboarding-v140-complete") === "1";
+    const hasAnyPlayers = rosters.some((roster) => roster.players.length > 0);
+    const hasSharedRoster = rosters.some((roster) => isRosterCloudShared(roster));
+    const unusedApp = !hasAnyPlayers && !hasSharedRoster;
+
+    if (!forceTour && (onboardingComplete || !unusedApp)) return;
+
     if (forceTour) {
       url.searchParams.delete("tour");
       window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
     }
-    startGuidedTour(forceTour || !unusedApp);
-  }, [onboardingReady, tutorialStep, rosters.length, players.length, activeRosterId]);
+
+    startGuidedTour(forceTour);
+  }, [onboardingReady, onboardingProbe, tutorialStep, rosters, activeRosterId]);
 
 
   const handleTutorialBack = () => {

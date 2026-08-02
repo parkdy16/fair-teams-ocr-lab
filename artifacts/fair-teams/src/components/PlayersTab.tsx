@@ -1613,6 +1613,8 @@ export function PlayersTab({
   onReviewNext,
   onReviewDone,
   openPairingRulesToken = 0,
+  openAddModeToken = 0,
+  openAddMode = "options",
   isSharedRoster = false,
   sharedRosterId,
   sharedOrganizerCount = 1,
@@ -1630,6 +1632,8 @@ export function PlayersTab({
   onReviewNext?: () => void;
   onReviewDone?: () => void;
   openPairingRulesToken?: number;
+  openAddModeToken?: number;
+  openAddMode?: "options" | "manual" | "voice";
   isSharedRoster?: boolean;
   sharedRosterId?: string;
   sharedOrganizerCount?: number;
@@ -1677,6 +1681,21 @@ export function PlayersTab({
   const [sharedRosterAuthReady, setSharedRosterAuthReady] = useState(false);
   const [sharedRosterUserUid, setSharedRosterUserUid] = useState<string | null>(null);
   const lastOpenPairingRulesTokenRef = useRef(0);
+  const lastOpenAddModeTokenRef = useRef(0);
+
+  useEffect(() => {
+    if (!openAddModeToken || openAddModeToken === lastOpenAddModeTokenRef.current) return;
+    lastOpenAddModeTokenRef.current = openAddModeToken;
+    if (openAddMode === "manual") {
+      setAddPlayerOpen(true);
+      return;
+    }
+    if (openAddMode === "voice") {
+      setVoiceAddOpen(true);
+      return;
+    }
+    setAddOptionsOpen(true);
+  }, [openAddMode, openAddModeToken]);
 
   useEffect(() => {
     if (!openPairingRulesToken || openPairingRulesToken === lastOpenPairingRulesTokenRef.current) return;

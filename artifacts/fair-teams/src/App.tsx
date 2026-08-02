@@ -93,6 +93,24 @@ const EMPTY_ROSTER_NAME = "New roster";
 const ROSTERS_STORAGE_KEY = "fair-teams-rosters-v1";
 const DRIVE_RECIPIENTS_STORAGE_KEY = "fair-teams-drive-backup-recipients-v1";
 const DRIVE_ACTIVE_BACKUP_STORAGE_KEY = "fair-teams-drive-active-backup-v1";
+const ONBOARDING_COMPLETED_STORAGE_KEY = "fair-teams-onboarding-v1-completed";
+
+
+function readOnboardingCompleted() {
+  try {
+    return window.localStorage.getItem(ONBOARDING_COMPLETED_STORAGE_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+function saveOnboardingCompleted() {
+  try {
+    window.localStorage.setItem(ONBOARDING_COMPLETED_STORAGE_KEY, "true");
+  } catch {
+    // The app still works when storage is unavailable.
+  }
+}
 
 function hasSavedRosterState() {
   try {
@@ -411,6 +429,10 @@ function App() {
   const restoringTabFromBackRef = useRef(false);
   const fairTeamsBackTrapArmedRef = useRef(false);
   const [todayRosterChosen, setTodayRosterChosen] = useState(false);
+  const [onboardingCompleted, setOnboardingCompleted] = useState(readOnboardingCompleted);
+  const [onboardingStep, setOnboardingStep] = useState<"welcome" | "name" | "add">("welcome");
+  const [onboardingRosterName, setOnboardingRosterName] = useState("Saturday Football");
+  const [openPlayerAddMode, setOpenPlayerAddMode] = useState<{ token: number; mode: "options" | "manual" | "voice" }>({ token: 0, mode: "options" });
   const [reviewPlayerQueue, setReviewPlayerQueue] = useState<string[]>([]);
   const [reviewPlayerIndex, setReviewPlayerIndex] = useState(0);
   const [reviewAutoOpenPlayerId, setReviewAutoOpenPlayerId] = useState<string | null>(null);
@@ -473,6 +495,42 @@ function App() {
   const groupLogo = rosterLogo(activeRoster);
   const isEmptyStarterRoster =
     rosters.length === 1 && players.length === 0 && activeRosterName === EMPTY_ROSTER_NAME;
+  const showFirstRunOnboarding = isEmptyStarterRoster && !onboardingCompleted;
+
+  const finishOnboarding = () => {
+    saveOnboardingCompleted();
+    setOnboardingCompleted(true);
+    setTodayRosterChosen(true);
+  };
+
+  const saveFirstRosterName = () => {
+    const name = onboardingRosterName.replace(/\s+/g, " ").trim() || "Saturday Football";
+    setRosterState((current) => ({
+      ...current,
+      rosters: current.rosters.map((roster) =>
+        roster.id === current.activeRosterId
+          ? { ...roster, name, updatedAt: new Date().toISOString() }
+          : roster,
+      ),
+    }));
+    setOnboardingRosterName(name);
+    setOnboardingStep("add");
+  };
+
+  const startOnboardingAdd = (mode: "screenshot" | "manual" | "voice") => {
+    finishOnboarding();
+    if (mode === "screenshot") {
+      setOcrImportContext("roster");
+      setActiveTab("today");
+      setTodayOcrOpenToken((token) => token + 1);
+      return;
+    }
+    setActiveTab("players");
+    setOpenPlayerAddMode((current) => ({
+      token: current.token + 1,
+      mode,
+    }));
+  };
   const privateBackupRosters = privateLocalRosters(rosters);
   const hasPrivateBackupRosters = privateBackupRosters.some((roster) => roster.players.length > 0 || roster.name !== EMPTY_ROSTER_NAME);
   const privateBackupSummary = hasPrivateBackupRosters ? countBackupRosters(privateBackupRosters) : { rosterCount: 0, playerCount: 0 };
@@ -3361,6 +3419,75 @@ They will no longer be able to open or edit this shared roster unless it is shar
     );
   }
 
+  if (showFirstRunOnboarding) {
+    return (
+      <div className="fairteams-visual-refresh min-h-[100dvh] bg-white px-5 py-6 text-[#102A43]">
+        <div className="mx-auto flex min-h-[calc(100dvh-3rem)] w-full max-w-md flex-col">
+          <div className="flex items-center gap-2">
+            <img src={fairTeamsLogoFloating} alt="" className="h-8 w-8 object-contain" />
+            <span className="text-sm font-black tracking-tight">FAIR <span className="text-[#16A34A]">TEAMS</span></span>
+          </div>
+
+          <div className="flex flex-1 flex-col justify-center py-8">
+            {onboardingStep === "welcome" && (
+              <div className="space-y-8">
+                <div>
+                  <h1 className="max-w-xs text-4xl font-black leading-[0.98] tracking-tight">Fair teams. Fast.</h1>
+                  <p className="mt-4 max-w-xs text-base font-semibold leading-relaxed text-slate-500">Add players. Pick who’s playing. Make teams.</p>
+                </div>
+                <div className="space-y-3">
+                  <Button type="button" onClick={() => setOnboardingStep("name")} className="h-14 w-full rounded-2xl bg-[#16A34A] text-base font-black hover:bg-[#15803D]">Get started</Button>
+                  <Button type="button" variant="outline" onClick={() => { finishOnboarding(); setActiveTab("club"); }} className="h-12 w-full rounded-2xl border-slate-200 text-sm font-black">Join shared roster</Button>
+                </div>
+              </div>
+            )}
+
+            {onboardingStep === "name" && (
+              <div className="space-y-7">
+                <div>
+                  <button type="button" onClick={() => setOnboardingStep("welcome")} className="mb-6 text-sm font-black text-slate-400">Back</button>
+                  <h1 className="text-3xl font-black tracking-tight">Name your roster</h1>
+                </div>
+                <input
+                  autoFocus
+                  value={onboardingRosterName}
+                  onChange={(event) => setOnboardingRosterName(event.target.value)}
+                  onKeyDown={(event) => { if (event.key === "Enter") saveFirstRosterName(); }}
+                  className="h-14 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-lg font-black outline-none transition focus:border-[#16A34A] focus:bg-white focus:ring-4 focus:ring-green-100"
+                  aria-label="Roster name"
+                />
+                <Button type="button" onClick={saveFirstRosterName} className="h-14 w-full rounded-2xl bg-[#16A34A] text-base font-black hover:bg-[#15803D]">Continue</Button>
+              </div>
+            )}
+
+            {onboardingStep === "add" && (
+              <div className="space-y-6">
+                <div>
+                  <button type="button" onClick={() => setOnboardingStep("name")} className="mb-6 text-sm font-black text-slate-400">Back</button>
+                  <h1 className="text-3xl font-black tracking-tight">Add your players</h1>
+                </div>
+                <div className="space-y-3">
+                  <button type="button" onClick={() => startOnboardingAdd("screenshot")} className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm active:scale-[0.99]">
+                    <span className="text-base font-black">Import screenshot</span>
+                    <span className="rounded-full bg-green-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-green-700">Fastest</span>
+                  </button>
+                  <button type="button" onClick={() => startOnboardingAdd("manual")} className="w-full rounded-2xl border border-slate-200 bg-white p-4 text-left text-base font-black shadow-sm active:scale-[0.99]">Enter names</button>
+                  <button type="button" onClick={() => startOnboardingAdd("voice")} className="w-full rounded-2xl border border-slate-200 bg-white p-4 text-left text-base font-black shadow-sm active:scale-[0.99]">Use voice</button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center justify-center gap-2 pb-2" aria-label={`Step ${onboardingStep === "welcome" ? 1 : onboardingStep === "name" ? 2 : 3} of 3`}>
+            {["welcome", "name", "add"].map((step) => (
+              <span key={step} className={`h-1.5 rounded-full transition-all ${onboardingStep === step ? "w-7 bg-[#16A34A]" : "w-1.5 bg-slate-200"}`} />
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       className="fairteams-visual-refresh flex flex-col min-h-[100dvh] bg-background w-full max-w-md md:max-w-3xl lg:max-w-5xl mx-auto relative overflow-hidden"
@@ -3558,6 +3685,8 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 onReviewNext={openNextReviewPlayer}
                 onReviewDone={finishReviewPlayerQueue}
                 openPairingRulesToken={openPairingRulesToken}
+                openAddModeToken={openPlayerAddMode.token}
+                openAddMode={openPlayerAddMode.mode}
                 isSharedRoster={activeRosterIsFirebaseShared}
                 sharedRosterId={activeFirebaseSource?.firebaseRosterId}
                 sharedOrganizerCount={rosterFirebaseSharedPeopleCount(activeRoster)}

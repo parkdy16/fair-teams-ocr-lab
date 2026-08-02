@@ -411,7 +411,7 @@ function App() {
     "add-manual": { title: "Add the player", body: "Choose Add manually. We filled in the practice player for you." },
     "submit-player": { title: "Welcome, Heung-min", body: "Tap Add Player to add Heung-min to the practice roster." },
     "open-edit": { title: "Edit the player", body: "Open Heung-min’s edit button." },
-    "advanced-edit": { title: "Advanced details", body: "Open Advanced Edit. This is optional in normal use, but useful when you know a player well." },
+    "advanced-edit": { title: "Advanced Edit", body: "Open Advanced Edit. It is optional, but useful when you know a player well." },
     "save-edit": { title: "Save the profile", body: "You have seen the detailed controls. Save the player profile." },
     "flip-card": { title: "See the other side", body: "Tap Heung-min’s card to flip it and see more player information." },
     "today-tab": { title: "Match day", body: "Open Today to choose who is playing." },
@@ -3419,7 +3419,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
     else if (action === "generated" && tutorialStep === "generate") {
       setTutorialStep("magic-wait");
       window.setTimeout(() => setTutorialStep("magic-reveal"), 1450);
-      window.setTimeout(() => setTutorialStep("club-tab"), 3300);
+      window.setTimeout(() => setTutorialStep("club-tab"), 6300);
     }
     else if (action === "help-question-submitted" && tutorialStep === "help-question") {
       window.setTimeout(() => setTutorialStep("roster-return"), 180);
@@ -3806,16 +3806,16 @@ They will no longer be able to open or edit this shared roster unless it is shar
         const coachPlacement: Record<string, string> = {
           "open-add": "bottom-[calc(5.6rem+env(safe-area-inset-bottom))]",
           "add-manual": "top-[0.75rem]",
-          "submit-player": "bottom-[calc(5.6rem+env(safe-area-inset-bottom))]",
-          "open-edit": "bottom-[calc(5.6rem+env(safe-area-inset-bottom))]",
-          "advanced-edit": "top-[0.75rem]",
-          "save-edit": "top-[0.75rem]",
-          "flip-card": "top-[5.25rem]",
-          "today-tab": "top-[5.25rem]",
-          "select-today": "top-[5.25rem]",
-          "teams-tab": "top-[5.25rem]",
-          "field-size": "bottom-[calc(5.6rem+env(safe-area-inset-bottom))]",
-          "generate": "bottom-[calc(5.6rem+env(safe-area-inset-bottom))]",
+          "submit-player": "top-[0.5rem]",
+          "open-edit": "bottom-[calc(5.8rem+env(safe-area-inset-bottom))]",
+          "advanced-edit": "top-[0.5rem]",
+          "save-edit": "top-[0.5rem]",
+          "flip-card": "top-[16rem]",
+          "today-tab": "bottom-[calc(6.4rem+env(safe-area-inset-bottom))]",
+          "select-today": "bottom-[calc(6.4rem+env(safe-area-inset-bottom))]",
+          "teams-tab": "bottom-[calc(6.4rem+env(safe-area-inset-bottom))]",
+          "field-size": "top-[32rem]",
+          "generate": "bottom-[calc(6.4rem+env(safe-area-inset-bottom))]",
           "club-tab": "bottom-[calc(5.6rem+env(safe-area-inset-bottom))]",
           "help-question": "top-[0.75rem]",
           "roster-return": "top-[5.25rem]",
@@ -3854,7 +3854,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
             {tutorialStep === "club-intro" && (
               <button
                 type="button"
-                className="mt-4 h-12 w-full rounded-2xl bg-[#102A43] text-sm font-black text-white shadow-sm"
+                className="fairteams-tutorial-action mt-4 h-12 w-full rounded-2xl bg-[#102A43] text-sm font-black text-white shadow-sm"
                 onClick={() => {
                   setTutorialStep("help-question");
                   window.setTimeout(() => {
@@ -3867,7 +3867,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
               </button>
             )}
             {tutorialStep === "settings-intro" && (
-              <button type="button" className="mt-4 h-12 w-full rounded-2xl bg-[#102A43] text-sm font-black text-white shadow-sm" onClick={() => { setRosterFilesOpen(false); setTutorialStep("recap"); }}>
+              <button type="button" className="fairteams-tutorial-action mt-4 h-12 w-full rounded-2xl bg-[#102A43] text-sm font-black text-white shadow-sm" onClick={() => { setRosterFilesOpen(false); setTutorialStep("recap"); }}>
                 Finish the tour
               </button>
             )}
@@ -3885,7 +3885,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                     <span className="text-right text-xs font-bold text-slate-500">{detail}</span>
                   </div>
                 ))}
-                <button type="button" className="mt-2 h-12 w-full rounded-2xl bg-emerald-600 text-sm font-black text-white shadow-sm" onClick={() => { setActiveTab("players"); setRosterFilesOpen(true); setTutorialStep("create-roster"); }}>
+                <button type="button" className="fairteams-tutorial-action mt-2 h-12 w-full rounded-2xl bg-emerald-600 text-sm font-black text-white shadow-sm" onClick={() => { setActiveTab("players"); setRosterFilesOpen(true); setTutorialStep("create-roster"); }}>
                   Create my roster
                 </button>
               </div>

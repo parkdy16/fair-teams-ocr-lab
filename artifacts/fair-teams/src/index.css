@@ -394,7 +394,9 @@
 [data-tutorial-active="true"] input,
 [data-tutorial-active="true"] label { pointer-events: none; }
 [data-tutorial-active="true"] .fairteams-tutorial-pulse,
-[data-tutorial-active="true"] .fairteams-tutorial-pulse * { pointer-events: auto !important; }
+[data-tutorial-active="true"] .fairteams-tutorial-pulse *,
+[data-tutorial-active="true"] .fairteams-tutorial-action,
+[data-tutorial-active="true"] .fairteams-tutorial-action * { pointer-events: auto !important; }
 
 /* v1.40: keep the real app fully visible. Only the required control pulses. */
 .fairteams-tutorial-pulse {

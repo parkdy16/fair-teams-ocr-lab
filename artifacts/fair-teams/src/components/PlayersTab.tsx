@@ -1131,7 +1131,7 @@ function ProfileDialog({
       </DialogTrigger>
       <DialogContent
         onOpenAutoFocus={(event) => event.preventDefault()}
-        className="max-w-sm md:max-w-xl max-h-[90dvh] overflow-y-auto rounded-3xl"
+        className={`max-w-sm md:max-w-xl overflow-y-auto rounded-3xl ${tutorialHighlightSave ? "!top-[59%] !max-h-[70dvh]" : "max-h-[90dvh]"}`}
       >
         <DialogHeader>
           <DialogTitle>{isSharedRoster ? "Shared Player Info" : "Player Setup"}</DialogTitle>
@@ -2340,7 +2340,7 @@ export function PlayersTab({
         }}>
           <DialogContent
             onOpenAutoFocus={(event) => event.preventDefault()}
-            className="max-w-sm md:max-w-xl rounded-3xl !top-[10dvh] !translate-y-0 max-h-[82dvh] overflow-y-auto sm:!top-[50%] sm:!-translate-y-1/2"
+            className={`max-w-sm md:max-w-xl rounded-3xl !translate-y-0 overflow-y-auto sm:!top-[50%] sm:!-translate-y-1/2 ${tutorialStep === "submit-player" ? "!top-[18dvh] max-h-[76dvh]" : "!top-[10dvh] max-h-[82dvh]"}`}
           >
             <DialogHeader>
               <DialogTitle>{isSharedRoster ? "Add shared player" : "Add player"}</DialogTitle>

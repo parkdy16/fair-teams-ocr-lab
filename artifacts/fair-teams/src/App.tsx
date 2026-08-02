@@ -426,8 +426,8 @@ function App() {
     "help-question": { title: "Ask FairTeams Help", body: "The question is ready. Tap Ask to see how in-app help works." },
     "roster-return": { title: "Back to your roster", body: "Return to Roster for the final setup step." },
     "settings-button": { title: "Roster controls", body: "Tap Settings to switch rosters, create new ones, and manage the app." },
-    "settings-intro": { title: "Rosters and app settings", body: "This is where local and shared rosters are switched, created, imported, exported, and backed up." },
-    "recap": { title: "You’re ready", body: "Here is the whole app at a glance." },
+    "settings-intro": { title: "Create your roster", body: "Use Settings to switch rosters, create a new one, and manage backups or imports." },
+    "recap": { title: "Your roster is ready", body: "One last look at the four main areas." },
     "create-roster": { title: "Now make it yours", body: "Name your real roster and tap New." },
   };
 
@@ -3422,7 +3422,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
       window.setTimeout(() => setTutorialStep("club-tab"), 6300);
     }
     else if (action === "help-question-submitted" && tutorialStep === "help-question") {
-      window.setTimeout(() => setTutorialStep("roster-return"), 180);
+      window.setTimeout(() => setTutorialStep("roster-return"), 3200);
     }
   };
 
@@ -3800,7 +3800,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
       </Tabs>
 
       {tutorialStep && tutorialCopy[tutorialStep] && (() => {
-        const tutorialSteps = ["open-add","add-manual","submit-player","open-edit","advanced-edit","save-edit","flip-card","today-tab","select-today","teams-tab","field-size","generate","magic-wait","magic-reveal","club-tab","club-intro","help-question","roster-return","settings-button","settings-intro","recap","create-roster"];
+        const tutorialSteps = ["open-add","add-manual","submit-player","open-edit","advanced-edit","save-edit","flip-card","today-tab","select-today","teams-tab","field-size","generate","magic-wait","magic-reveal","club-tab","club-intro","help-question","roster-return","settings-button","settings-intro","create-roster","recap"];
         const currentIndex = Math.max(0, tutorialSteps.indexOf(tutorialStep));
         const largeStep = ["magic-wait", "magic-reveal", "club-intro", "settings-intro", "recap"].includes(tutorialStep);
         const coachPlacement: Record<string, string> = {
@@ -3814,11 +3814,11 @@ They will no longer be able to open or edit this shared roster unless it is shar
           "today-tab": "bottom-[calc(6.4rem+env(safe-area-inset-bottom))]",
           "select-today": "bottom-[calc(6.4rem+env(safe-area-inset-bottom))]",
           "teams-tab": "bottom-[calc(6.4rem+env(safe-area-inset-bottom))]",
-          "field-size": "top-[32rem]",
-          "generate": "bottom-[calc(6.4rem+env(safe-area-inset-bottom))]",
+          "field-size": "top-[48dvh]",
+          "generate": "top-[48dvh]",
           "club-tab": "bottom-[calc(5.6rem+env(safe-area-inset-bottom))]",
           "help-question": "top-[0.75rem]",
-          "roster-return": "top-[5.25rem]",
+          "roster-return": "bottom-[calc(6.4rem+env(safe-area-inset-bottom))]",
           "settings-button": "bottom-[calc(5.6rem+env(safe-area-inset-bottom))]",
           "create-roster": "top-[0.75rem]",
         };
@@ -3843,7 +3843,10 @@ They will no longer be able to open or edit this shared roster unless it is shar
         }
 
         return (
-          <div className={`fixed inset-x-3 z-[95] mx-auto max-w-md rounded-[26px] border border-white/90 bg-white p-5 shadow-[0_24px_70px_rgba(15,23,42,.24)] pointer-events-auto ${tutorialStep === "club-intro" ? "bottom-[calc(5.4rem+env(safe-area-inset-bottom))]" : "bottom-[calc(5.4rem+env(safe-area-inset-bottom))]"}`}>
+          <div className={tutorialStep === "recap"
+            ? "fixed inset-0 z-[95] flex items-center justify-center bg-black/55 p-5 pointer-events-auto"
+            : "fixed inset-x-3 z-[95] mx-auto max-w-md rounded-[26px] border border-white/90 bg-white p-5 shadow-[0_24px_70px_rgba(15,23,42,.24)] pointer-events-auto bottom-[calc(5.4rem+env(safe-area-inset-bottom))]"}>
+            <div className={tutorialStep === "recap" ? "w-full max-w-md rounded-[28px] border border-white/90 bg-white p-6 shadow-[0_28px_90px_rgba(0,0,0,.38)]" : "contents"}>
             <div className="flex items-center justify-between gap-3">
               <div className="text-[11px] font-black uppercase tracking-[0.2em] text-emerald-600">Guided kick-off</div>
               <div className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-black text-emerald-700">{currentIndex + 1} / {tutorialSteps.length}</div>
@@ -3867,8 +3870,8 @@ They will no longer be able to open or edit this shared roster unless it is shar
               </button>
             )}
             {tutorialStep === "settings-intro" && (
-              <button type="button" className="fairteams-tutorial-action mt-4 h-12 w-full rounded-2xl bg-[#102A43] text-sm font-black text-white shadow-sm" onClick={() => { setRosterFilesOpen(false); setTutorialStep("recap"); }}>
-                Finish the tour
+              <button type="button" className="fairteams-tutorial-action mt-4 h-12 w-full rounded-2xl bg-[#102A43] text-sm font-black text-white shadow-sm" onClick={() => { setTutorialStep("create-roster"); }}>
+                Create my roster
               </button>
             )}
             {tutorialStep === "recap" && (
@@ -3878,18 +3881,18 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   ["Today", "Who is playing now"],
                   ["Teams", "Build and present teams"],
                   ["Club", "Shared-roster tools"],
-                  ["Settings", "Switch rosters and manage the app"],
                 ].map(([label, detail]) => (
                   <div key={label} className="flex items-center justify-between gap-3 rounded-2xl bg-slate-50 px-3.5 py-3">
                     <span className="text-sm font-black text-[#102A43]">{label}</span>
                     <span className="text-right text-xs font-bold text-slate-500">{detail}</span>
                   </div>
                 ))}
-                <button type="button" className="fairteams-tutorial-action mt-2 h-12 w-full rounded-2xl bg-emerald-600 text-sm font-black text-white shadow-sm" onClick={() => { setActiveTab("players"); setRosterFilesOpen(true); setTutorialStep("create-roster"); }}>
-                  Create my roster
+                <button type="button" className="fairteams-tutorial-action mt-2 h-12 w-full rounded-2xl bg-emerald-600 text-sm font-black text-white shadow-sm" onClick={() => { localStorage.setItem("fairteams-onboarding-v140-complete", "1"); setTutorialStep(null); }}>
+                  Start using FairTeams
                 </button>
               </div>
             )}
+            </div>
           </div>
         );
       })()}
@@ -4147,6 +4150,10 @@ They will no longer be able to open or edit this shared roster unless it is shar
                       if (e.key === "Enter") {
                         e.preventDefault();
                         createNewRoster();
+                        if (tutorialStep === "create-roster") {
+                          setRosterFilesOpen(false);
+                          setTutorialStep("recap");
+                        }
                       }
                     }}
                     className={`h-10 min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-bold text-[#102A43] outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100 ${tutorialStep === "create-roster" ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
@@ -4156,7 +4163,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   <Button
                     type="button"
                     className={`h-10 rounded-2xl bg-[#102A43] px-3 text-xs font-black text-white ${tutorialStep === "create-roster" ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
-                    onClick={() => { createNewRoster(); if (tutorialStep === "create-roster") { localStorage.setItem("fairteams-onboarding-v140-complete", "1"); setTutorialStep(null); } }}
+                    onClick={() => { createNewRoster(); if (tutorialStep === "create-roster") { setRosterFilesOpen(false); setTutorialStep("recap"); } }}
                   >
                     <Plus className="mr-1.5 h-3.5 w-3.5" />
                     New

@@ -609,7 +609,7 @@ function actionPrimaryVerb(action: AiSmartCommandAction) {
   return "Apply";
 }
 
-const AI_ASSISTANT_VERSION_LABEL = "Help beta · v1.43 guided tour polish";
+const AI_ASSISTANT_VERSION_LABEL = "Help beta · v1.44 tutorial polish";
 
 type AiRosterMatch = {
   player: AiSmartCommandRosterPlayer;
@@ -1637,6 +1637,29 @@ export function AiSmartCommandPanel({
     if (busy) return;
     const trimmedCommand = rawCommand.trim();
     if (!trimmedCommand) return;
+
+    if (tutorialActive && /shared\s+rosters?/i.test(trimmedCommand)) {
+      const tutorialAnswer = {
+        schemaVersion: 1,
+        ok: true,
+        detectedLanguage: "en",
+        normalizedIntent: trimmedCommand.slice(0, 300),
+        assistantSummary: "A shared roster lets several organizers work on the same player list in real time. Organizers can collaborate on attendance and shared ratings, while each person’s private local rating stays separate. If you manage teams alone, a local roster is usually enough.",
+        confidence: 1,
+        actions: [],
+        confirmations: [],
+        unresolved: [],
+        parseMode: "local_tutorial_answer",
+        debugWarnings: ["Answered the guided-tour question locally without an AI request."],
+      } as any;
+      setError("");
+      setApplyMessage("");
+      setShowTodayShortcut(false);
+      setResult(tutorialAnswer);
+      onParsed?.(tutorialAnswer);
+      onQuestionSubmitted?.();
+      return;
+    }
 
     onQuestionSubmitted?.();
     setError("");

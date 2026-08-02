@@ -1131,7 +1131,7 @@ function ProfileDialog({
       </DialogTrigger>
       <DialogContent
         onOpenAutoFocus={(event) => event.preventDefault()}
-        className={`max-w-sm md:max-w-xl overflow-y-auto rounded-3xl ${tutorialHighlightSave ? "!top-[59%] !max-h-[70dvh]" : "max-h-[90dvh]"}`}
+        className={`max-w-sm md:max-w-xl overflow-y-auto rounded-3xl ${tutorialHighlightSave ? "!top-[58%] !max-h-[76dvh]" : "max-h-[90dvh]"}`}
       >
         <DialogHeader>
           <DialogTitle>{isSharedRoster ? "Shared Player Info" : "Player Setup"}</DialogTitle>

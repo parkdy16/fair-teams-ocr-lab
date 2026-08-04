@@ -609,7 +609,7 @@ function actionPrimaryVerb(action: AiSmartCommandAction) {
   return "Apply";
 }
 
-const AI_ASSISTANT_VERSION_LABEL = "Help beta · v1.50.2 Board save fix";
+const AI_ASSISTANT_VERSION_LABEL = "Help beta · v1.50.3 Compact help";
 
 type AiRosterMatch = {
   player: AiSmartCommandRosterPlayer;
@@ -1530,6 +1530,7 @@ export function AiSmartCommandPanel({
   const [reviewOpen, setReviewOpen] = useState(false);
   const [reviewSelections, setReviewSelections] = useState<Record<string, string>>({});
   const [reviewNameEdits, setReviewNameEdits] = useState<Record<string, string>>({});
+  const [helpExpanded, setHelpExpanded] = useState(Boolean(tutorialActive));
 
   const placeholder = useMemo(() => {
     return "Ask a question… e.g. How do ratings work?";
@@ -1541,6 +1542,7 @@ export function AiSmartCommandPanel({
       return;
     }
     setTutorialAnswerReady(false);
+    setHelpExpanded(true);
     setCommandText((current) => current.trim() ? current : tutorialQuestion);
   }, [tutorialActive, tutorialQuestion]);
 
@@ -1576,6 +1578,9 @@ export function AiSmartCommandPanel({
     });
   }, [enabled, storageKey, commandText, voiceTranscript, error, result, applyMessage, showTodayShortcut, busy, voiceBusy, recording]);
 
+  const hasAssistantContent = Boolean(commandText.trim() || result || applyMessage || error || voiceTranscript);
+  const isHelpExpanded = tutorialActive || helpExpanded || Boolean(result || applyMessage || error || voiceTranscript);
+
   const aiReviewSourceText = voiceTranscript || commandText;
   const baseAiReviewItems = useMemo(() => buildAiReviewItems(result, players, aiReviewSourceText), [result, players, aiReviewSourceText]);
   const aiReviewItems = useMemo(() => applyAiReviewNameEdits(baseAiReviewItems, reviewNameEdits, players), [baseAiReviewItems, reviewNameEdits, players]);
@@ -1606,6 +1611,7 @@ export function AiSmartCommandPanel({
     setReviewOpen(false);
     setReviewSelections({});
     setReviewNameEdits({});
+    setHelpExpanded(Boolean(tutorialActive));
   };
 
   const updateReviewHeardName = (item: AiReviewItem, value: string) => {
@@ -1873,42 +1879,42 @@ export function AiSmartCommandPanel({
   return (
     <section className="rounded-3xl border border-violet-100 bg-violet-50/70 p-3 shadow-sm">
       <div className="flex items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <div className="text-[10px] font-black uppercase tracking-wide text-violet-600">Help</div>
-          <h3 className="mt-0.5 text-base font-black text-[#102A43]">FairTeams Help</h3>
+          <div className="mt-0.5 flex flex-wrap items-center gap-2">
+            <h3 className="text-base font-black text-[#102A43]">FairTeams Help</h3>
+            <span className="rounded-full bg-white/85 px-2 py-0.5 text-[9px] font-black text-violet-700 shadow-sm">{AI_ASSISTANT_VERSION_LABEL}</span>
+          </div>
           <p className="mt-0.5 text-[11px] font-semibold leading-snug text-violet-800/75">
-            Ask how anything works. I’ll guide you to the right screen and keep answers practical.
+            Ask how anything works. I’ll guide you quickly.
           </p>
         </div>
-        <div className="flex shrink-0 flex-col items-end gap-1">
-          <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-violet-700 shadow-sm">{AI_ASSISTANT_VERSION_LABEL}</span>
-          {(commandText.trim() || result || applyMessage || error || voiceTranscript) && (
-            <button
-              type="button"
-              onClick={clearAssistantSession}
-              className="rounded-full px-2 py-1 text-[10px] font-black uppercase tracking-wide text-violet-600 active:scale-[0.98]"
-            >
-              Clear
-            </button>
-          )}
-        </div>
+        {hasAssistantContent && (
+          <button
+            type="button"
+            onClick={clearAssistantSession}
+            className="shrink-0 rounded-full px-2 py-1 text-[10px] font-black uppercase tracking-wide text-violet-600 active:scale-[0.98]"
+          >
+            Clear
+          </button>
+        )}
       </div>
 
-      <textarea
-        id="fairteams-help-question"
-        value={commandText}
-        onChange={(event) => setCommandText(event.target.value)}
-        rows={4}
-        className={`mt-3 w-full resize-none rounded-2xl border border-violet-100 bg-white px-3 py-2 text-sm font-semibold text-[#102A43] outline-none focus:border-violet-300 ${tutorialActive ? "fairteams-tutorial-pulse" : ""}`}
-        placeholder={placeholder}
-      />
-
-      <div className="mt-2 grid grid-cols-[1fr_auto] gap-2">
+      <div className="mt-2 grid grid-cols-[1fr_auto_auto] items-center gap-2">
+        <textarea
+          id="fairteams-help-question"
+          value={commandText}
+          onChange={(event) => setCommandText(event.target.value)}
+          onFocus={() => setHelpExpanded(true)}
+          rows={isHelpExpanded ? 3 : 1}
+          className={`w-full resize-none rounded-2xl border border-violet-100 bg-white px-3 text-sm font-semibold text-[#102A43] outline-none focus:border-violet-300 ${isHelpExpanded ? "min-h-[84px] py-2" : "h-10 py-2.5"} ${tutorialActive ? "fairteams-tutorial-pulse" : ""}`}
+          placeholder={placeholder}
+        />
         <button
           type="button"
           onClick={submit}
           disabled={busy || voiceBusy || !commandText.trim()}
-          className={`h-10 rounded-2xl bg-[#102A43] px-4 text-xs font-black uppercase tracking-wide text-white disabled:opacity-45 ${tutorialActive ? "fairteams-tutorial-pulse" : ""}`}
+          className={`h-10 rounded-2xl bg-[#102A43] px-3 text-[11px] font-black uppercase tracking-wide text-white disabled:opacity-45 ${tutorialActive ? "fairteams-tutorial-pulse" : ""}`}
         >
           {busy ? "Thinking…" : "Ask"}
         </button>
@@ -1916,7 +1922,7 @@ export function AiSmartCommandPanel({
           type="button"
           onClick={recording ? stopVoiceRecording : startVoiceRecording}
           disabled={busy || voiceBusy}
-          className={`h-10 rounded-2xl px-4 text-xs font-black uppercase tracking-wide text-white disabled:opacity-45 ${recording ? "bg-rose-600" : "bg-violet-600"}`}
+          className={`h-10 rounded-2xl px-3 text-[11px] font-black uppercase tracking-wide text-white disabled:opacity-45 ${recording ? "bg-rose-600" : "bg-violet-600"}`}
         >
           {voiceBusy ? "Hearing…" : recording ? "Done" : "Voice"}
         </button>

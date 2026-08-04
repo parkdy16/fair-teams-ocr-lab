@@ -466,9 +466,10 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
                             const latestMoveActivity = [...card.activities]
                               .filter((activity) => activity.action === "moved")
                               .sort((a, b) => b.at - a.at)[0];
+                            const flippedHeightClass = card.note?.trim() ? "min-h-[190px]" : "min-h-[126px]";
                             return (
-                              <div key={card.id} className={`relative [perspective:900px] ${flipped ? "min-h-[126px]" : "min-h-[64px]"}`}>
-                                <div className={`relative w-full transition-all duration-300 [transform-style:preserve-3d] ${flipped ? "min-h-[126px] [transform:rotateY(180deg)]" : "min-h-[64px]"}`}>
+                              <div key={card.id} className={`relative [perspective:900px] ${flipped ? flippedHeightClass : "min-h-[64px]"}`}>
+                                <div className={`relative w-full transition-all duration-300 [transform-style:preserve-3d] ${flipped ? `${flippedHeightClass} [transform:rotateY(180deg)]` : "min-h-[64px]"}`}>
                                   <button type="button" className="absolute inset-0 w-full rounded-xl border border-slate-200 bg-white p-3 text-left shadow-sm [backface-visibility:hidden] active:scale-[0.99]" onPointerDown={() => startPress(card.id)} onPointerUp={() => shortTap(card.id)} onPointerCancel={cancelPress} onPointerLeave={cancelPress} onContextMenu={(event) => { event.preventDefault(); setMoveCardId(card.id); }}>
                                     <div className="text-[13px] font-black leading-snug text-[#102A43]">{card.title}</div>
                                     <div className="mt-2 flex flex-wrap items-center gap-1.5">
@@ -487,18 +488,30 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
                                     onContextMenu={(event) => { event.preventDefault(); setMoveCardId(card.id); }}
                                     aria-label={`Show ${card.title} card front`}
                                   >
-                                    <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Activity</div>
-                                    <div className="mt-1.5 flex-1 space-y-2 overflow-hidden">
-                                      <div className="text-[10px] font-bold leading-snug text-slate-600">
-                                        <span className="text-[#102A43]">{createdActivity ? `${createdActivity.actorName} created this card` : `Created by ${card.createdByName}`}</span>
-                                        <span className="ml-1 text-slate-400">{formatTime(createdActivity?.at || card.createdAt)}</span>
-                                      </div>
-                                      {latestMoveActivity && (
-                                        <div className="text-[10px] font-bold leading-snug text-slate-600">
-                                          <span className="text-[#102A43]">{activityText(latestMoveActivity)}</span>
-                                          <span className="ml-1 text-slate-400">{formatTime(latestMoveActivity.at)}</span>
+                                    <div className="flex-1 overflow-hidden">
+                                      {card.note?.trim() && (
+                                        <div>
+                                          <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Note</div>
+                                          <div className="mt-1 max-h-[86px] overflow-y-auto whitespace-pre-wrap pr-1 text-[11px] font-semibold leading-relaxed text-[#102A43]">
+                                            {card.note.trim()}
+                                          </div>
                                         </div>
                                       )}
+                                      <div className={card.note?.trim() ? "mt-3 border-t border-slate-100 pt-2" : ""}>
+                                        <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Activity</div>
+                                        <div className="mt-1.5 space-y-1.5">
+                                          <div className="text-[10px] font-bold leading-snug text-slate-600">
+                                            <span className="text-[#102A43]">{createdActivity ? `${createdActivity.actorName} created this card` : `Created by ${card.createdByName}`}</span>
+                                            <span className="ml-1 text-slate-400">{formatTime(createdActivity?.at || card.createdAt)}</span>
+                                          </div>
+                                          {latestMoveActivity && (
+                                            <div className="text-[10px] font-bold leading-snug text-slate-600">
+                                              <span className="text-[#102A43]">{activityText(latestMoveActivity)}</span>
+                                              <span className="ml-1 text-slate-400">{formatTime(latestMoveActivity.at)}</span>
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
                                     </div>
                                     <div className="mt-2 text-[9px] font-bold text-slate-400">Tap to flip back · Hold to move</div>
                                   </button>

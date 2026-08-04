@@ -460,7 +460,12 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
                         <div className="space-y-2">
                           {cards.map((card) => {
                             const flipped = flippedIds.has(card.id);
-                            const recent = [...card.activities].sort((a, b) => b.at - a.at).slice(0, 3);
+                            const createdActivity = [...card.activities]
+                              .filter((activity) => activity.action === "created")
+                              .sort((a, b) => a.at - b.at)[0];
+                            const latestMoveActivity = [...card.activities]
+                              .filter((activity) => activity.action === "moved")
+                              .sort((a, b) => b.at - a.at)[0];
                             return (
                               <div key={card.id} className={`relative [perspective:900px] ${flipped ? "min-h-[126px]" : "min-h-[64px]"}`}>
                                 <div className={`relative w-full transition-all duration-300 [transform-style:preserve-3d] ${flipped ? "min-h-[126px] [transform:rotateY(180deg)]" : "min-h-[64px]"}`}>
@@ -483,8 +488,17 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
                                     aria-label={`Show ${card.title} card front`}
                                   >
                                     <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Activity</div>
-                                    <div className="mt-1.5 flex-1 space-y-1.5 overflow-hidden">
-                                      {recent.length ? recent.map((activity) => <div key={activity.id} className="text-[10px] font-bold leading-snug text-slate-600"><span className="text-[#102A43]">{activityText(activity)}</span><span className="ml-1 text-slate-400">{formatTime(activity.at)}</span></div>) : <div className="text-[10px] font-bold text-slate-500">Created by {card.createdByName}</div>}
+                                    <div className="mt-1.5 flex-1 space-y-2 overflow-hidden">
+                                      <div className="text-[10px] font-bold leading-snug text-slate-600">
+                                        <span className="text-[#102A43]">{createdActivity ? `${createdActivity.actorName} created this card` : `Created by ${card.createdByName}`}</span>
+                                        <span className="ml-1 text-slate-400">{formatTime(createdActivity?.at || card.createdAt)}</span>
+                                      </div>
+                                      {latestMoveActivity && (
+                                        <div className="text-[10px] font-bold leading-snug text-slate-600">
+                                          <span className="text-[#102A43]">{activityText(latestMoveActivity)}</span>
+                                          <span className="ml-1 text-slate-400">{formatTime(latestMoveActivity.at)}</span>
+                                        </div>
+                                      )}
                                     </div>
                                     <div className="mt-2 text-[9px] font-bold text-slate-400">Tap to flip back · Hold to move</div>
                                   </button>
@@ -533,7 +547,7 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
 
       <Dialog open={Boolean(currentMoveCard)} onOpenChange={(open) => { if (!open) setMoveCardId(null); }}>
         <DialogContent className="fixed bottom-2 left-2 right-2 top-auto w-auto max-w-none translate-x-0 translate-y-0 rounded-[2rem] p-4 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-sm sm:-translate-x-1/2">
-          <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43]">Move “{currentMoveCard?.title}”</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43]">Move card</DialogTitle></DialogHeader>
           <div className="grid gap-2">{activeColumns.map((column) => <button key={column.id} type="button" className={`flex items-center justify-between rounded-2xl border px-3 py-3 text-left text-sm font-black ${currentMoveCard?.columnId === column.id ? "border-slate-300 bg-slate-100 text-slate-400" : "border-slate-200 bg-white text-[#102A43]"}`} disabled={currentMoveCard?.columnId === column.id || saving} onClick={() => currentMoveCard && moveCard(currentMoveCard, column.id)}><span>{column.name}</span>{currentMoveCard?.columnId === column.id ? <span className="text-[10px]">Current</span> : <ArrowRight className="h-4 w-4" />}</button>)}</div>
         </DialogContent>
       </Dialog>

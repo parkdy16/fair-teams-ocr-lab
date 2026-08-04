@@ -472,19 +472,22 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
                                       {card.dueDate && <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-black ${isOverdue(card.dueDate) ? "bg-red-50 text-red-700" : "bg-slate-100 text-slate-600"}`}><CalendarDays className="h-3 w-3" />{dueText(card.dueDate)}</span>}
                                     </div>
                                   </button>
-                                  <div className="absolute inset-0 flex w-full flex-col rounded-xl border border-slate-200 bg-white p-3 text-left shadow-sm [backface-visibility:hidden] [transform:rotateY(180deg)]">
-                                    <div className="flex items-center justify-between gap-2">
-                                      <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Activity</div>
-                                      <button type="button" className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-[9px] font-black text-slate-600" onClick={(event) => { event.stopPropagation(); shortTap(card.id); }}><RotateCcw className="h-3 w-3" />Back</button>
-                                    </div>
+                                  <button
+                                    type="button"
+                                    className="absolute inset-0 flex w-full flex-col rounded-xl border border-slate-200 bg-white p-3 pr-10 text-left shadow-sm [backface-visibility:hidden] [transform:rotateY(180deg)] active:scale-[0.99]"
+                                    onPointerDown={() => startPress(card.id)}
+                                    onPointerUp={() => shortTap(card.id)}
+                                    onPointerCancel={cancelPress}
+                                    onPointerLeave={cancelPress}
+                                    onContextMenu={(event) => { event.preventDefault(); setMoveCardId(card.id); }}
+                                    aria-label={`Show ${card.title} card front`}
+                                  >
+                                    <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Activity</div>
                                     <div className="mt-1.5 flex-1 space-y-1.5 overflow-hidden">
                                       {recent.length ? recent.map((activity) => <div key={activity.id} className="text-[10px] font-bold leading-snug text-slate-600"><span className="text-[#102A43]">{activityText(activity)}</span><span className="ml-1 text-slate-400">{formatTime(activity.at)}</span></div>) : <div className="text-[10px] font-bold text-slate-500">Created by {card.createdByName}</div>}
                                     </div>
-                                    <div className="mt-2 flex gap-2 border-t border-slate-100 pt-2">
-                                      <button type="button" className="flex-1 rounded-lg bg-slate-100 px-2 py-1.5 text-[9px] font-black text-slate-600" onClick={(event) => { event.stopPropagation(); setMoveCardId(card.id); }}>Move</button>
-                                      <button type="button" className="flex-1 rounded-lg bg-slate-100 px-2 py-1.5 text-[9px] font-black text-slate-600" onClick={(event) => { event.stopPropagation(); openEditCard(card); }}>Edit</button>
-                                    </div>
-                                  </div>
+                                    <div className="mt-2 text-[9px] font-bold text-slate-400">Tap to flip back · Hold to move</div>
+                                  </button>
                                 </div>
                                 <button type="button" className="absolute right-1.5 top-1.5 z-10 rounded-full bg-white/90 p-1 text-slate-400 shadow-sm" onClick={(event) => { event.stopPropagation(); openEditCard(card); }} aria-label={`Edit ${card.title}`}><Pencil className="h-3 w-3" /></button>
                               </div>

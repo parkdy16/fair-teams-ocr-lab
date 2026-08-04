@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { FirebaseSharedRosterAuthCard } from "@/components/FirebaseSharedRosterAuthCard";
 import { AiSmartCommandPanel } from "@/components/AiSmartCommandPanel";
+import { TaskBoard } from "@/components/TaskBoard";
 import type { AiSmartCommandAction } from "@/lib/aiSmartCommandTypes";
 import { getFairTeamsAuth } from "@/lib/firebaseClient";
 import {
@@ -58,6 +59,8 @@ import {
 type ClubTabProps = {
   isActive?: boolean;
   activeRosterName: string;
+  workspaceKey: string;
+  themeColor?: string;
   playerCount: number;
   players: RoomPlayer[];
   isSharedRoster: boolean;
@@ -547,6 +550,8 @@ function getClubGreetingName(user: SharedRosterUser | null) {
 export function ClubTab({
   isActive = true,
   activeRosterName,
+  workspaceKey,
+  themeColor,
   playerCount,
   players,
   isSharedRoster,
@@ -1802,6 +1807,15 @@ export function ClubTab({
           </div>
         )}
       </section>
+
+      <TaskBoard
+        rosterName={activeRosterName}
+        workspaceKey={workspaceKey}
+        themeColor={themeColor}
+        scopeId={equipmentGroupId}
+        isSharedRoster={isSharedRoster}
+        user={clubUser}
+      />
 
       <section className="overflow-visible rounded-[1.7rem] border border-amber-100 bg-[#fffaf0] p-3 shadow-sm ring-1 ring-amber-50">
         <div className="flex items-center justify-between gap-3">

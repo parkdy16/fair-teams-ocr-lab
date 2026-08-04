@@ -25,6 +25,9 @@ type AiSmartCommandPanelProps = {
   onParsed?: (result: AiSmartCommandResponse) => void;
   onApplyAction?: (action: AiSmartCommandAction) => Promise<string | void> | string | void;
   onOpenToday?: () => void;
+  onQuestionSubmitted?: () => void;
+  tutorialActive?: boolean;
+  tutorialQuestion?: string;
 };
 
 
@@ -606,7 +609,7 @@ function actionPrimaryVerb(action: AiSmartCommandAction) {
   return "Apply";
 }
 
-const AI_ASSISTANT_VERSION_LABEL = "AI beta · v1.30 shared profile ratings";
+const AI_ASSISTANT_VERSION_LABEL = "Help beta · v1.50 Tasks Board";
 
 type AiRosterMatch = {
   player: AiSmartCommandRosterPlayer;
@@ -1504,10 +1507,14 @@ export function AiSmartCommandPanel({
   onParsed,
   onApplyAction,
   onOpenToday,
+  onQuestionSubmitted,
+  tutorialActive = false,
+  tutorialQuestion = "How do shared rosters work?",
 }: AiSmartCommandPanelProps) {
   const enabled = isAiSmartCommandEnabled();
   const storageKey = useMemo(() => safeStorageKey(rosterMode, rosterName), [rosterMode, rosterName]);
   const [commandText, setCommandText] = useState("");
+  const [tutorialAnswerReady, setTutorialAnswerReady] = useState(false);
   const [busy, setBusy] = useState(false);
   const [recording, setRecording] = useState(false);
   const [voiceBusy, setVoiceBusy] = useState(false);
@@ -1525,8 +1532,17 @@ export function AiSmartCommandPanel({
   const [reviewNameEdits, setReviewNameEdits] = useState<Record<string, string>>({});
 
   const placeholder = useMemo(() => {
-    return "Talk to Fair Teams… try: hey there · how does this work? · George red · make 5v5 teams";
+    return "Ask a question… e.g. How do ratings work?";
   }, []);
+
+  useEffect(() => {
+    if (!tutorialActive) {
+      setTutorialAnswerReady(false);
+      return;
+    }
+    setTutorialAnswerReady(false);
+    setCommandText((current) => current.trim() ? current : tutorialQuestion);
+  }, [tutorialActive, tutorialQuestion]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -1627,6 +1643,31 @@ export function AiSmartCommandPanel({
     const trimmedCommand = rawCommand.trim();
     if (!trimmedCommand) return;
 
+    if (tutorialActive && /shared\s+rosters?/i.test(trimmedCommand)) {
+      const tutorialAnswer = {
+        schemaVersion: 1,
+        ok: true,
+        detectedLanguage: "en",
+        normalizedIntent: trimmedCommand.slice(0, 300),
+        assistantSummary: "A shared roster lets several organizers work on the same player list in real time. Organizers can collaborate on attendance and shared ratings, while each person’s private local rating stays separate. If you manage teams alone, a local roster is usually enough.",
+        confidence: 1,
+        actions: [],
+        confirmations: [],
+        unresolved: [],
+        parseMode: "local_tutorial_answer",
+        debugWarnings: ["Answered the guided-tour question locally without an AI request."],
+      } as any;
+      setError("");
+      setApplyMessage("");
+      setShowTodayShortcut(false);
+      setResult(tutorialAnswer);
+      setTutorialAnswerReady(true);
+      onParsed?.(tutorialAnswer);
+      onQuestionSubmitted?.();
+      return;
+    }
+
+    onQuestionSubmitted?.();
     setError("");
     setApplyMessage("");
     setShowTodayShortcut(false);
@@ -1833,10 +1874,10 @@ export function AiSmartCommandPanel({
     <section className="rounded-3xl border border-violet-100 bg-violet-50/70 p-3 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="text-[10px] font-black uppercase tracking-wide text-violet-600">Experimental</div>
-          <h3 className="mt-0.5 text-base font-black text-[#102A43]">Fair Teams Assistant</h3>
+          <div className="text-[10px] font-black uppercase tracking-wide text-violet-600">Help</div>
+          <h3 className="mt-0.5 text-base font-black text-[#102A43]">FairTeams Help</h3>
           <p className="mt-0.5 text-[11px] font-semibold leading-snug text-violet-800/75">
-            Talk naturally. I can explain Fair Teams, then show safe action cards when something can be done.
+            Ask how anything works. I’ll guide you to the right screen and keep answers practical.
           </p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
@@ -1854,10 +1895,11 @@ export function AiSmartCommandPanel({
       </div>
 
       <textarea
+        id="fairteams-help-question"
         value={commandText}
         onChange={(event) => setCommandText(event.target.value)}
         rows={4}
-        className="mt-3 w-full resize-none rounded-2xl border border-violet-100 bg-white px-3 py-2 text-sm font-semibold text-[#102A43] outline-none focus:border-violet-300"
+        className={`mt-3 w-full resize-none rounded-2xl border border-violet-100 bg-white px-3 py-2 text-sm font-semibold text-[#102A43] outline-none focus:border-violet-300 ${tutorialActive ? "fairteams-tutorial-pulse" : ""}`}
         placeholder={placeholder}
       />
 
@@ -1866,9 +1908,9 @@ export function AiSmartCommandPanel({
           type="button"
           onClick={submit}
           disabled={busy || voiceBusy || !commandText.trim()}
-          className="h-10 rounded-2xl bg-[#102A43] px-4 text-xs font-black uppercase tracking-wide text-white disabled:opacity-45"
+          className={`h-10 rounded-2xl bg-[#102A43] px-4 text-xs font-black uppercase tracking-wide text-white disabled:opacity-45 ${tutorialActive ? "fairteams-tutorial-pulse" : ""}`}
         >
-          {busy ? "Thinking…" : "Send"}
+          {busy ? "Thinking…" : "Ask"}
         </button>
         <button
           type="button"
@@ -1911,7 +1953,15 @@ export function AiSmartCommandPanel({
       )}
 
       {result && (
-        <div className="mt-3 rounded-2xl bg-white p-3 text-xs text-[#102A43] shadow-sm">
+        <div
+          id="fairteams-help-answer"
+          className={`mt-3 rounded-2xl bg-white p-3 text-xs text-[#102A43] shadow-sm ${tutorialAnswerReady ? "fairteams-tutorial-pulse ring-2 ring-violet-300" : ""}`}
+        >
+          {tutorialAnswerReady && (
+            <div className="mb-2 inline-flex rounded-full bg-violet-100 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-violet-700">
+              Answer ready
+            </div>
+          )}
           <div className="rounded-2xl bg-violet-50 px-3 py-2 text-sm font-bold leading-snug text-[#102A43]">
             {result.assistantSummary || "I’m listening."}
           </div>

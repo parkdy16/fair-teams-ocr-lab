@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { FirebaseSharedRosterAuthCard } from "@/components/FirebaseSharedRosterAuthCard";
 import { AiSmartCommandPanel } from "@/components/AiSmartCommandPanel";
+import { TaskBoard } from "@/components/TaskBoard";
 import type { AiSmartCommandAction } from "@/lib/aiSmartCommandTypes";
 import { getFairTeamsAuth } from "@/lib/firebaseClient";
 import {
@@ -58,6 +59,8 @@ import {
 type ClubTabProps = {
   isActive?: boolean;
   activeRosterName: string;
+  workspaceKey: string;
+  themeColor?: string;
   playerCount: number;
   players: RoomPlayer[];
   isSharedRoster: boolean;
@@ -77,6 +80,8 @@ type ClubTabProps = {
   currentTeamsGenerated?: boolean;
   onApplyAiSmartCommandAction?: (action: AiSmartCommandAction) => Promise<string | void> | string | void;
   onOpenTodayFromAi?: () => void;
+  tutorialStep?: string | null;
+  onTutorialAction?: (action: string, playerId?: string) => void;
 };
 
 type EquipmentHolder = {
@@ -545,6 +550,8 @@ function getClubGreetingName(user: SharedRosterUser | null) {
 export function ClubTab({
   isActive = true,
   activeRosterName,
+  workspaceKey,
+  themeColor,
   playerCount,
   players,
   isSharedRoster,
@@ -564,6 +571,8 @@ export function ClubTab({
   currentTeamsGenerated = false,
   onApplyAiSmartCommandAction,
   onOpenTodayFromAi,
+  tutorialStep,
+  onTutorialAction,
 }: ClubTabProps) {
   const [clubRatingSummaries, setClubRatingSummaries] = useState<
     ClubRatingSummary[]
@@ -974,7 +983,7 @@ export function ClubTab({
           passing: Number(existing?.passing),
           stamina: Number(existing?.stamina),
           physical: Number(existing?.physical),
-          teamPlay: Math.min(3, Math.max(1, Math.round(Number(existing?.teamPlay) || 2))),
+          teamPlay: 2,
         }
       : generateStyledPlayerAttributes(baseSkill, style);
     setRatingDialogError("");
@@ -1021,7 +1030,7 @@ export function ClubTab({
           passing: player.passing,
           stamina: player.stamina,
           physical: player.physical,
-          teamPlay: player.teamPlay,
+          teamPlay: 2,
           playerStyle: inferPlayerStyleFromAttributes({ ...player, skill }),
           isGoalkeeper: Boolean(player.isGoalkeeper),
         });
@@ -1626,6 +1635,7 @@ export function ClubTab({
         </DialogContent>
       </Dialog>
 
+      <div id="fairteams-help-panel">
       <AiSmartCommandPanel
         players={players}
         rosterName={activeRosterName}
@@ -1635,7 +1645,11 @@ export function ClubTab({
         currentTeamsGenerated={currentTeamsGenerated}
         onApplyAction={applyAiSmartCommandAction}
         onOpenToday={onOpenTodayFromAi}
+        onQuestionSubmitted={() => onTutorialAction?.("help-question-submitted")}
+        tutorialActive={tutorialStep === "help-question"}
+        tutorialQuestion="How do shared rosters work?"
       />
+      </div>
 
       <section className="overflow-hidden rounded-[1.7rem] border border-violet-100 bg-[#f8f3ff] p-3 shadow-sm ring-1 ring-violet-50">
         <div className="flex items-center justify-between gap-3">
@@ -1793,6 +1807,15 @@ export function ClubTab({
           </div>
         )}
       </section>
+
+      <TaskBoard
+        rosterName={activeRosterName}
+        workspaceKey={workspaceKey}
+        themeColor={themeColor}
+        scopeId={equipmentGroupId}
+        isSharedRoster={isSharedRoster}
+        user={clubUser}
+      />
 
       <section className="overflow-visible rounded-[1.7rem] border border-amber-100 bg-[#fffaf0] p-3 shadow-sm ring-1 ring-amber-50">
         <div className="flex items-center justify-between gap-3">

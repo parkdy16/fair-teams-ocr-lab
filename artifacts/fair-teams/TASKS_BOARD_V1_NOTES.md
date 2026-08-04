@@ -1,4 +1,4 @@
-# Fair Teams v1.50 · Tasks Board
+# Fair Teams v1.50.1 · Keyboard polish
 
 Implemented against the v1.49 shared-recovery source checkpoint.
 
@@ -26,3 +26,8 @@ The same group path pattern is supported when a group-scoped ID is provided.
 
 ## Validation status
 The changed TypeScript/TSX files pass syntax transpilation. Full typecheck/build could not run in the sandbox because the uploaded dependency folder does not contain the actual Node/Vite type packages. Run the normal local install/typecheck/build before production deployment.
+
+## v1.50.1 keyboard polish
+- Task-board text fields no longer autofocus when dialogs open.
+- Mobile keyboards use the Done action for single-line task, assignee, board, and column fields.
+- Pressing Done dismisses the keyboard without submitting or moving focus.

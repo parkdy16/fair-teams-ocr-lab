@@ -45,9 +45,16 @@ type Props = {
 
 type LocalBoard = TaskBoardSnapshot;
 
-const DEFAULT_COLUMNS = ["Inbox", "Agenda", "In progress", "Waiting", "Done"];
+const DEFAULT_COLUMNS = ["Agenda", "To-do", "In progress", "Done"];
+const LEGACY_DEFAULT_COLUMNS = ["Inbox", "Agenda", "In progress", "Waiting", "Done"];
 const CATEGORIES = ["Administration", "Sports", "Equipment", "Event", "Finance", "Membership", "Other"];
 const LONG_PRESS_MS = 560;
+
+function blurOnDoneKey(event: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) {
+  if (event.key !== "Enter" || event.shiftKey) return;
+  event.preventDefault();
+  event.currentTarget.blur();
+}
 
 function id(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -76,6 +83,27 @@ function localKey(workspaceKey: string) {
   return `fairteams.taskBoard.v2.${workspaceKey.trim().replace(/[^a-z0-9_-]+/gi, "-") || "roster"}`;
 }
 
+function isUntouchedLegacyBoard(board: LocalBoard) {
+  if (board.cards.length > 0 || board.columns.length !== LEGACY_DEFAULT_COLUMNS.length) return false;
+  const names = [...board.columns].sort((a, b) => a.position - b.position).map((column) => column.name);
+  return names.every((name, index) => name === LEGACY_DEFAULT_COLUMNS[index]);
+}
+
+function migrateUntouchedLegacyBoard(board: LocalBoard): LocalBoard {
+  if (!isUntouchedLegacyBoard(board)) return board;
+  const ordered = [...board.columns].sort((a, b) => a.position - b.position);
+  const now = Date.now();
+  return {
+    ...board,
+    columns: DEFAULT_COLUMNS.map((name, index) => ({
+      ...ordered[index],
+      name,
+      position: (index + 1) * 1000,
+      updatedAt: now,
+    })),
+  };
+}
+
 function createDefaultBoard(rosterName: string): LocalBoard {
   const now = Date.now();
   return {
@@ -89,7 +117,7 @@ function readLocalBoard(workspaceKey: string, rosterName: string): LocalBoard {
   if (typeof window === "undefined") return createDefaultBoard(rosterName);
   try {
     const parsed = JSON.parse(window.localStorage.getItem(localKey(workspaceKey)) || "null") as LocalBoard | null;
-    if (parsed?.meta && Array.isArray(parsed.columns) && Array.isArray(parsed.cards)) return parsed;
+    if (parsed?.meta && Array.isArray(parsed.columns) && Array.isArray(parsed.cards)) return migrateUntouchedLegacyBoard(parsed);
   } catch {
     // Use clean board.
   }
@@ -180,7 +208,17 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
           ...fresh.columns.map((column) => saveTaskBoardColumn(scopeId!, column)),
         ]).catch((nextError) => setError(nextError instanceof Error ? nextError.message : "Could not create task board."));
       } else {
-        setBoard({ meta: snapshot.meta || { name: rosterName }, columns: snapshot.columns, cards: snapshot.cards });
+        const received = { meta: snapshot.meta || { name: rosterName }, columns: snapshot.columns, cards: snapshot.cards };
+        const migrated = migrateUntouchedLegacyBoard(received);
+        setBoard(migrated);
+        if (migrated !== received && onlineInitializationRef.current !== `migration:${scopeId}`) {
+          onlineInitializationRef.current = `migration:${scopeId}`;
+          const keptIds = new Set(migrated.columns.map((column) => column.id));
+          Promise.all([
+            ...migrated.columns.map((column) => saveTaskBoardColumn(scopeId!, column)),
+            ...snapshot.columns.filter((column) => !keptIds.has(column.id)).map((column) => deleteTaskBoardColumn(scopeId!, column.id)),
+          ]).catch((nextError) => setError(nextError instanceof Error ? nextError.message : "Could not update default board columns."));
+        }
       }
       setLoading(false);
     }, (nextError) => {
@@ -467,13 +505,13 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
       </Dialog>
 
       <Dialog open={cardEditorOpen} onOpenChange={setCardEditorOpen}>
-        <DialogContent className="max-w-md rounded-3xl">
+        <DialogContent className="max-w-md rounded-3xl" onOpenAutoFocus={(event) => event.preventDefault()}>
           <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43]">{editingCardId ? "Edit card" : "New card"}</DialogTitle></DialogHeader>
           <div className="grid gap-3">
-            <div><Label htmlFor="task-title">Title</Label><Input id="task-title" value={cardTitle} onChange={(event) => setCardTitle(event.target.value)} maxLength={120} autoFocus /></div>
-            <div><Label htmlFor="task-note">Notes</Label><Textarea id="task-note" value={cardNote} onChange={(event) => setCardNote(event.target.value)} maxLength={1200} rows={4} /></div>
+            <div><Label htmlFor="task-title">Title</Label><Input id="task-title" value={cardTitle} onChange={(event) => setCardTitle(event.target.value)} onKeyDown={blurOnDoneKey} enterKeyHint="done" maxLength={120} /></div>
+            <div><Label htmlFor="task-note">Notes</Label><Textarea id="task-note" value={cardNote} onChange={(event) => setCardNote(event.target.value)} onKeyDown={blurOnDoneKey} enterKeyHint="done" maxLength={1200} rows={4} /></div>
             <div className="grid grid-cols-2 gap-3">
-              <div><Label htmlFor="task-assignee">Assignee</Label><Input id="task-assignee" value={cardAssignee} onChange={(event) => setCardAssignee(event.target.value)} maxLength={80} placeholder="Optional" /></div>
+              <div><Label htmlFor="task-assignee">Assignee</Label><Input id="task-assignee" value={cardAssignee} onChange={(event) => setCardAssignee(event.target.value)} onKeyDown={blurOnDoneKey} enterKeyHint="done" maxLength={80} placeholder="Optional" /></div>
               <div><Label htmlFor="task-due">Due date</Label><div className="mt-1 flex w-full min-w-0 rounded-md border border-input bg-background px-3 py-2"><input id="task-due" type="date" className="block w-full min-w-0 border-0 bg-transparent p-0 text-sm" value={cardDueDate} onChange={(event) => setCardDueDate(event.target.value)} /></div></div>
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -493,10 +531,10 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
       </Dialog>
 
       <Dialog open={boardSettingsOpen} onOpenChange={setBoardSettingsOpen}>
-        <DialogContent className="max-w-sm rounded-3xl">
+        <DialogContent className="max-w-sm rounded-3xl" onOpenAutoFocus={(event) => event.preventDefault()}>
           <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43]">Board settings</DialogTitle></DialogHeader>
           <div className="grid gap-3">
-            <div><Label htmlFor="board-name">Board name</Label><Input id="board-name" value={boardNameDraft} onChange={(event) => setBoardNameDraft(event.target.value)} maxLength={80} autoFocus /></div>
+            <div><Label htmlFor="board-name">Board name</Label><Input id="board-name" value={boardNameDraft} onChange={(event) => setBoardNameDraft(event.target.value)} onKeyDown={blurOnDoneKey} enterKeyHint="done" maxLength={80} /></div>
             <Button type="button" className="h-11 rounded-2xl text-white" style={{ backgroundColor: accent }} disabled={!boardNameDraft.trim() || saving} onClick={saveBoardName}>Save name</Button>
             {board.columns.some((column) => column.archived) && <div className="border-t border-slate-100 pt-3">
               <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Archived columns</div>
@@ -507,7 +545,7 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
       </Dialog>
 
       <Dialog open={columnEditorOpen} onOpenChange={setColumnEditorOpen}>
-        <DialogContent className="max-w-sm rounded-3xl"><DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43]">{editingColumn ? "Column settings" : "Add column"}</DialogTitle></DialogHeader><div className="grid gap-3"><div><Label htmlFor="column-name">Column name</Label><Input id="column-name" value={columnNameDraft} onChange={(event) => setColumnNameDraft(event.target.value)} maxLength={50} autoFocus /></div><div className="flex gap-2">{editingColumn && <Button type="button" variant="outline" className="h-11 rounded-2xl" onClick={archiveColumn}><Archive className="mr-1 h-4 w-4" />Archive</Button>}<Button type="button" className="h-11 flex-1 rounded-2xl text-white" style={{ backgroundColor: accent }} disabled={!columnNameDraft.trim() || saving} onClick={saveColumn}>Save column</Button></div>{editingColumn?.archived && <Button type="button" variant="outline" className="h-10 rounded-2xl text-red-700" onClick={permanentDeleteColumn}><Trash2 className="mr-1 h-4 w-4" />Delete empty column</Button>}</div></DialogContent>
+        <DialogContent className="max-w-sm rounded-3xl" onOpenAutoFocus={(event) => event.preventDefault()}><DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43]">{editingColumn ? "Column settings" : "Add column"}</DialogTitle></DialogHeader><div className="grid gap-3"><div><Label htmlFor="column-name">Column name</Label><Input id="column-name" value={columnNameDraft} onChange={(event) => setColumnNameDraft(event.target.value)} onKeyDown={blurOnDoneKey} enterKeyHint="done" maxLength={50} /></div><div className="flex gap-2">{editingColumn && <Button type="button" variant="outline" className="h-11 rounded-2xl" onClick={archiveColumn}><Archive className="mr-1 h-4 w-4" />Archive</Button>}<Button type="button" className="h-11 flex-1 rounded-2xl text-white" style={{ backgroundColor: accent }} disabled={!columnNameDraft.trim() || saving} onClick={saveColumn}>Save column</Button></div>{editingColumn?.archived && <Button type="button" variant="outline" className="h-10 rounded-2xl text-red-700" onClick={permanentDeleteColumn}><Trash2 className="mr-1 h-4 w-4" />Delete empty column</Button>}</div></DialogContent>
       </Dialog>
     </>
   );

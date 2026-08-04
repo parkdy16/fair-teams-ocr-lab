@@ -609,7 +609,7 @@ function actionPrimaryVerb(action: AiSmartCommandAction) {
   return "Apply";
 }
 
-const AI_ASSISTANT_VERSION_LABEL = "Help beta · v1.50.3 Compact help";
+const AI_ASSISTANT_VERSION_LABEL = "Help beta · v1.50.4 Club layout polish";
 
 type AiRosterMatch = {
   player: AiSmartCommandRosterPlayer;
@@ -1900,32 +1900,34 @@ export function AiSmartCommandPanel({
         )}
       </div>
 
-      <div className="mt-2 grid grid-cols-[1fr_auto_auto] items-center gap-2">
+      <div className="mt-2">
         <textarea
           id="fairteams-help-question"
           value={commandText}
           onChange={(event) => setCommandText(event.target.value)}
           onFocus={() => setHelpExpanded(true)}
-          rows={isHelpExpanded ? 3 : 1}
-          className={`w-full resize-none rounded-2xl border border-violet-100 bg-white px-3 text-sm font-semibold text-[#102A43] outline-none focus:border-violet-300 ${isHelpExpanded ? "min-h-[84px] py-2" : "h-10 py-2.5"} ${tutorialActive ? "fairteams-tutorial-pulse" : ""}`}
+          rows={isHelpExpanded ? 3 : 2}
+          className={`w-full resize-none rounded-2xl border border-violet-100 bg-white px-3 py-2 text-sm font-semibold text-[#102A43] outline-none focus:border-violet-300 ${isHelpExpanded ? "min-h-[84px]" : "min-h-[58px]"} ${tutorialActive ? "fairteams-tutorial-pulse" : ""}`}
           placeholder={placeholder}
         />
-        <button
-          type="button"
-          onClick={submit}
-          disabled={busy || voiceBusy || !commandText.trim()}
-          className={`h-10 rounded-2xl bg-[#102A43] px-3 text-[11px] font-black uppercase tracking-wide text-white disabled:opacity-45 ${tutorialActive ? "fairteams-tutorial-pulse" : ""}`}
-        >
-          {busy ? "Thinking…" : "Ask"}
-        </button>
-        <button
-          type="button"
-          onClick={recording ? stopVoiceRecording : startVoiceRecording}
-          disabled={busy || voiceBusy}
-          className={`h-10 rounded-2xl px-3 text-[11px] font-black uppercase tracking-wide text-white disabled:opacity-45 ${recording ? "bg-rose-600" : "bg-violet-600"}`}
-        >
-          {voiceBusy ? "Hearing…" : recording ? "Done" : "Voice"}
-        </button>
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={submit}
+            disabled={busy || voiceBusy || !commandText.trim()}
+            className={`h-10 rounded-2xl bg-[#102A43] px-3 text-[11px] font-black uppercase tracking-wide text-white disabled:opacity-45 ${tutorialActive ? "fairteams-tutorial-pulse" : ""}`}
+          >
+            {busy ? "Thinking…" : "Ask"}
+          </button>
+          <button
+            type="button"
+            onClick={recording ? stopVoiceRecording : startVoiceRecording}
+            disabled={busy || voiceBusy}
+            className={`h-10 rounded-2xl px-3 text-[11px] font-black uppercase tracking-wide text-white disabled:opacity-45 ${recording ? "bg-rose-600" : "bg-violet-600"}`}
+          >
+            {voiceBusy ? "Hearing…" : recording ? "Done" : "Voice"}
+          </button>
+        </div>
       </div>
       {recording && (
         <div className="mt-2 rounded-2xl border border-rose-100 bg-rose-50 px-3 py-2 text-xs font-black text-rose-700">

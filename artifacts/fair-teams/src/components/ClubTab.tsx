@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ChevronDown,
+  ChevronUp,
   ClipboardList,
   Pencil,
   Plus,
@@ -92,6 +94,7 @@ type EquipmentHolder = {
 type ClubEquipmentKit = FirebaseEquipmentBag;
 
 const EQUIPMENT_PREVIEW_STORAGE_KEY = "fairteams.clubEquipment.preview.v1";
+const CLUB_DESK_COLLAPSED_STORAGE_KEY = "fairteams.clubDesk.collapsed.v1";
 
 const EQUIPMENT_COLORS = [
   "#111827",
@@ -645,6 +648,14 @@ export function ClubTab({
   const [clubUser, setClubUser] = useState<SharedRosterUser | null>(null);
   const [collaboratorsOpen, setCollaboratorsOpen] = useState(false);
   const [accountDialogOpen, setAccountDialogOpen] = useState(false);
+  const [clubDeskCollapsed, setClubDeskCollapsed] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return window.localStorage.getItem(CLUB_DESK_COLLAPSED_STORAGE_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
 
   useEffect(
     () =>
@@ -1619,6 +1630,30 @@ export function ClubTab({
 
   const canSaveEquipmentKit = kitName.trim().length > 0;
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(CLUB_DESK_COLLAPSED_STORAGE_KEY, clubDeskCollapsed ? "1" : "0");
+    } catch {
+      // ignore local storage errors
+    }
+  }, [clubDeskCollapsed]);
+
+  const clubDeskSummary = useMemo(() => {
+    if (!clubUser) return "Sign in for shared tools";
+    const parts: string[] = [];
+    if (isSharedRoster) {
+      parts.push(`${sharedPeopleCount} organizer${sharedPeopleCount === 1 ? "" : "s"}`);
+      parts.push("Shared roster");
+    } else {
+      parts.push("Private setup");
+    }
+    if (players.length > 0 && clubRatingsEnabled) {
+      parts.push(`${clubRatedCount}/${players.length} rated`);
+    }
+    return parts.join(" · ");
+  }, [clubUser, isSharedRoster, sharedPeopleCount, players.length, clubRatingsEnabled, clubRatedCount]);
+
   return (
     <div className="mx-auto flex w-full max-w-xl flex-col gap-3 px-1 pb-2">
       <Dialog
@@ -1652,7 +1687,7 @@ export function ClubTab({
       </div>
 
       <section className="overflow-hidden rounded-[1.7rem] border border-violet-100 bg-[#f8f3ff] p-3 shadow-sm ring-1 ring-violet-50">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex items-start justify-between gap-3">
           <button
             type="button"
             className="flex min-w-0 items-center gap-2 text-left active:scale-[0.99]"
@@ -1664,147 +1699,160 @@ export function ClubTab({
                 {clubUser ? `Hey, ${clubGreetingName}` : "Organizer tools"}
               </span>
               <span className="block truncate text-[11px] font-bold text-violet-700/80">
-                {clubUser
-                  ? isSharedRoster
-                    ? "Shared club workspace"
-                    : "Private organizer corner"
-                  : "Sign in for shared tools"}
+                Club Desk
+              </span>
+              <span className="mt-0.5 block truncate text-[10px] font-semibold text-violet-700/70">
+                {clubDeskSummary}
               </span>
             </span>
           </button>
-          {!clubUser && (
-            <Button
+          <div className="flex shrink-0 items-center gap-2">
+            {!clubUser && (
+              <Button
+                type="button"
+                className="h-9 shrink-0 rounded-full bg-violet-600 px-3 text-[11px] font-black text-white hover:bg-violet-700"
+                onClick={() => setAccountDialogOpen(true)}
+              >
+                Sign in
+              </Button>
+            )}
+            <button
               type="button"
-              className="h-9 shrink-0 rounded-full bg-violet-600 px-3 text-[11px] font-black text-white hover:bg-violet-700"
-              onClick={() => setAccountDialogOpen(true)}
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-white/80 text-violet-700 shadow-sm ring-1 ring-violet-100 active:scale-[0.98]"
+              onClick={() => setClubDeskCollapsed((current) => !current)}
+              aria-label={clubDeskCollapsed ? "Expand Club Desk" : "Collapse Club Desk"}
             >
-              Sign in
-            </Button>
-          )}
-        </div>
-
-        <div className="mt-3 grid gap-2">
-          <div className="min-w-0">{sharedToolsNode}</div>
-          <div className="grid grid-cols-2 gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              className="h-12 justify-start rounded-2xl border-violet-100 bg-white/70 px-3 text-left text-violet-700 shadow-sm hover:bg-white hover:text-violet-800"
-              disabled={!clubRatingsEnabled || players.length === 0}
-              onClick={() => setRatingBoardOpen(true)}
-            >
-              <Star className="mr-2 h-4 w-4 shrink-0" />
-              <span className="min-w-0">
-                <span className="block truncate text-[11px] font-black">Ratings</span>
-                <span className="block truncate text-[10px] font-black text-violet-600/75">
-                  {clubRatingsEnabled
-                    ? `${clubRatedCount}/${players.length}`
-                    : isSharedRoster
-                      ? "Sign in"
-                      : "Shared only"}
-                </span>
-              </span>
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="h-12 justify-start rounded-2xl border-violet-100 bg-white/70 px-3 text-left text-violet-700 shadow-sm hover:bg-white hover:text-violet-800"
-              disabled={!onOpenPairingRules || playerCount < 2}
-              onClick={onOpenPairingRules}
-            >
-              <ClipboardList className="mr-2 h-4 w-4 shrink-0" />
-              <span className="min-w-0">
-                <span className="block truncate text-[11px] font-black">Pairing</span>
-                <span className="block truncate text-[10px] font-black text-violet-600/75">
-                  {cleanPairingRuleCount > 0
-                    ? `${cleanPairingRuleCount} rule${cleanPairingRuleCount === 1 ? "" : "s"}`
-                    : "None"}
-                </span>
-              </span>
-            </Button>
+              {clubDeskCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+            </button>
           </div>
         </div>
 
-        {(isSharedRoster && legacySkillSeedPlayers.length > 0) && (
-          <div className="mt-2 rounded-2xl border border-violet-100 bg-white/70 px-3 py-2">
-            <div className="text-[11px] font-bold leading-snug text-violet-900">
-              Use current roster ratings as your first Club ratings.
+        {!clubDeskCollapsed && (
+          <>
+            <div className="mt-3 grid gap-2">
+              <div className="min-w-0">{sharedToolsNode}</div>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-12 justify-start rounded-2xl border-violet-100 bg-white/70 px-3 text-left text-violet-700 shadow-sm hover:bg-white hover:text-violet-800"
+                  disabled={!clubRatingsEnabled || players.length === 0}
+                  onClick={() => setRatingBoardOpen(true)}
+                >
+                  <Star className="mr-2 h-4 w-4 shrink-0" />
+                  <span className="min-w-0">
+                    <span className="block truncate text-[11px] font-black">Ratings</span>
+                    <span className="block truncate text-[10px] font-black text-violet-600/75">
+                      {clubRatingsEnabled
+                        ? `${clubRatedCount}/${players.length}`
+                        : isSharedRoster
+                          ? "Sign in"
+                          : "Shared only"}
+                    </span>
+                  </span>
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-12 justify-start rounded-2xl border-violet-100 bg-white/70 px-3 text-left text-violet-700 shadow-sm hover:bg-white hover:text-violet-800"
+                  disabled={!onOpenPairingRules || playerCount < 2}
+                  onClick={onOpenPairingRules}
+                >
+                  <ClipboardList className="mr-2 h-4 w-4 shrink-0" />
+                  <span className="min-w-0">
+                    <span className="block truncate text-[11px] font-black">Pairing</span>
+                    <span className="block truncate text-[10px] font-black text-violet-600/75">
+                      {cleanPairingRuleCount > 0
+                        ? `${cleanPairingRuleCount} rule${cleanPairingRuleCount === 1 ? "" : "s"}`
+                        : "None"}
+                    </span>
+                  </span>
+                </Button>
+              </div>
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              className="mt-2 h-8 w-full rounded-xl border-violet-200 bg-white text-[11px] font-black text-violet-700 hover:bg-violet-50"
-              disabled={!clubRatingsEnabled || ratingSeedSaving}
-              onClick={seedClubRatingsFromRosterSkills}
-            >
-              {ratingSeedSaving
-                ? "Importing…"
-                : `Use ratings for ${legacySkillSeedPlayers.length} player${legacySkillSeedPlayers.length === 1 ? "" : "s"}`}
-            </Button>
-          </div>
-        )}
 
-        {ratingSeedMessage && (
-          <div className="mt-2 rounded-2xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-[11px] font-bold leading-snug text-emerald-800">
-            {ratingSeedMessage}
-          </div>
-        )}
-
-        {clubRatingError && (
-          <div className="mt-2 rounded-2xl border border-amber-100 bg-amber-50 px-3 py-2 text-[11px] font-bold leading-snug text-amber-800">
-            {clubRatingError}
-          </div>
-        )}
-
-        {isSharedRoster && (clubNeedRatingCount > 0 || clubSkippedCount > 0) && (
-          <div className="mt-2 grid gap-2">
-            {clubNeedRatingCount > 0 && (
-              <button
-                type="button"
-                className="flex items-center justify-between rounded-2xl border border-violet-100 bg-white/70 px-3 py-2 text-left active:scale-[0.99] disabled:opacity-50"
-                disabled={!clubRatingsEnabled}
-                onClick={() => setRatingBoardOpen(true)}
-              >
-                <span className="min-w-0">
-                  <span className="block text-xs font-black text-[#102A43]">
-                    Needs your rating
-                  </span>
-                  <span className="block truncate text-[11px] font-semibold text-violet-700">
-                    {orderedNeedRatingPlayers
-                      .slice(0, 3)
-                      .map((player) => player.name)
-                      .join(", ")}
-                  </span>
-                </span>
-                <span className="rounded-full bg-violet-50 px-2 py-1 text-[10px] font-black text-violet-700">
-                  {clubNeedRatingCount}
-                </span>
-              </button>
+            {(isSharedRoster && legacySkillSeedPlayers.length > 0) && (
+              <div className="mt-2 rounded-2xl border border-violet-100 bg-white/70 px-3 py-2">
+                <div className="text-[11px] font-bold leading-snug text-violet-900">
+                  Use current roster ratings as your first Club ratings.
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="mt-2 h-8 w-full rounded-xl border-violet-200 bg-white text-[11px] font-black text-violet-700 hover:bg-violet-50"
+                  disabled={!clubRatingsEnabled || ratingSeedSaving}
+                  onClick={seedClubRatingsFromRosterSkills}
+                >
+                  {ratingSeedSaving
+                    ? "Importing…"
+                    : `Use ratings for ${legacySkillSeedPlayers.length} player${legacySkillSeedPlayers.length === 1 ? "" : "s"}`}
+                </Button>
+              </div>
             )}
-            {clubSkippedCount > 0 && (
-              <button
-                type="button"
-                className="flex items-center justify-between rounded-2xl border border-amber-100 bg-amber-50/80 px-3 py-2 text-left active:scale-[0.99] disabled:opacity-50"
-                disabled={!clubRatingsEnabled}
-                onClick={() => setRatingBoardOpen(true)}
-              >
-                <span className="min-w-0">
-                  <span className="block text-xs font-black text-[#102A43]">
-                    Skipped for later
-                  </span>
-                  <span className="block truncate text-[11px] font-semibold text-amber-700">
-                    {skippedPlayers
-                      .slice(0, 3)
-                      .map((player) => player.name)
-                      .join(", ")}
-                  </span>
-                </span>
-                <span className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-amber-700">
-                  {clubSkippedCount}
-                </span>
-              </button>
+
+            {ratingSeedMessage && (
+              <div className="mt-2 rounded-2xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-[11px] font-bold leading-snug text-emerald-800">
+                {ratingSeedMessage}
+              </div>
             )}
-          </div>
+
+            {clubRatingError && (
+              <div className="mt-2 rounded-2xl border border-amber-100 bg-amber-50 px-3 py-2 text-[11px] font-bold leading-snug text-amber-800">
+                {clubRatingError}
+              </div>
+            )}
+
+            {isSharedRoster && (clubNeedRatingCount > 0 || clubSkippedCount > 0) && (
+              <div className="mt-2 grid gap-2">
+                {clubNeedRatingCount > 0 && (
+                  <button
+                    type="button"
+                    className="flex items-center justify-between rounded-2xl border border-violet-100 bg-white/70 px-3 py-2 text-left active:scale-[0.99] disabled:opacity-50"
+                    disabled={!clubRatingsEnabled}
+                    onClick={() => setRatingBoardOpen(true)}
+                  >
+                    <span className="min-w-0">
+                      <span className="block text-xs font-black text-[#102A43]">
+                        Needs your rating
+                      </span>
+                      <span className="block truncate text-[11px] font-semibold text-violet-700">
+                        {orderedNeedRatingPlayers
+                          .slice(0, 3)
+                          .map((player) => player.name)
+                          .join(", ")}
+                      </span>
+                    </span>
+                    <span className="rounded-full bg-violet-50 px-2 py-1 text-[10px] font-black text-violet-700">
+                      {clubNeedRatingCount}
+                    </span>
+                  </button>
+                )}
+                {clubSkippedCount > 0 && (
+                  <button
+                    type="button"
+                    className="flex items-center justify-between rounded-2xl border border-amber-100 bg-amber-50/80 px-3 py-2 text-left active:scale-[0.99] disabled:opacity-50"
+                    disabled={!clubRatingsEnabled}
+                    onClick={() => setRatingBoardOpen(true)}
+                  >
+                    <span className="min-w-0">
+                      <span className="block text-xs font-black text-[#102A43]">
+                        Skipped for later
+                      </span>
+                      <span className="block truncate text-[11px] font-semibold text-amber-700">
+                        {skippedPlayers
+                          .slice(0, 3)
+                          .map((player) => player.name)
+                          .join(", ")}
+                      </span>
+                    </span>
+                    <span className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-amber-700">
+                      {clubSkippedCount}
+                    </span>
+                  </button>
+                )}
+              </div>
+            )}
+          </>
         )}
       </section>
 

@@ -786,27 +786,11 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
     <div className="flex flex-col gap-3">
       {/* Controls */}
       <div className="bg-card border border-border px-3 py-2.5 rounded-xl shadow-sm flex flex-col gap-2">
-        {isSharedRoster && (
+        {isSharedRoster && (clubNoAverageAttendingCount > 0 || clubRatingError) && (
           <div className="rounded-xl border border-slate-100 bg-slate-50/70 px-3 py-2 shadow-sm">
-            <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0 truncate text-[11px] font-black text-[#102A43]">
-                Using Club average ratings
-              </div>
-              {clubNeedsMyRatingAttendingCount > 0 && (
-                <button
-                  type="button"
-                  className="shrink-0 rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-slate-700 shadow-sm ring-1 ring-slate-100 active:scale-[0.98]"
-                  onClick={onOpenClubRatings}
-                >
-                  Rate in Club
-                </button>
-              )}
+            <div className="min-w-0 text-[10px] font-semibold leading-snug text-slate-500">
+              {clubRatingError || `${clubNoAverageAttendingCount} selected player${clubNoAverageAttendingCount === 1 ? " has" : "s have"} no Club rating yet, so temporary 5.0 is used.`}
             </div>
-            {(clubNoAverageAttendingCount > 0 || clubRatingError) && (
-              <div className="mt-1.5 text-[10px] font-semibold leading-snug text-slate-500">
-                {clubRatingError || `${clubNoAverageAttendingCount} selected player${clubNoAverageAttendingCount === 1 ? " has" : "s have"} no Club rating yet, so temporary 5.0 is used.`}
-              </div>
-            )}
           </div>
         )}
 

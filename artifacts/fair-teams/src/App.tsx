@@ -34,7 +34,6 @@ import { FirebaseSharedRosterAuthCard } from "@/components/FirebaseSharedRosterA
 import { FirebaseSharedRosterPublishCard } from "@/components/FirebaseSharedRosterPublishCard";
 import { Button } from "@/components/ui/button";
 import fairTeamsLogo from "@/assets/fairteams-logo.png";
-import fairTeamsLogoFloating from "@/assets/fairteams-logo-floating.png";
 import {
   RoomPlayer,
   RoomRoster,
@@ -200,23 +199,6 @@ function hexToRgba(hex: string, alpha: number) {
   const g = Number.parseInt(normalized.slice(3, 5), 16);
   const b = Number.parseInt(normalized.slice(5, 7), 16);
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
-
-function PoweredByFairTeams() {
-  return (
-    <div className="mt-auto pt-7 pb-2 flex items-center justify-center gap-1.5 text-[11px] font-bold text-slate-400 select-none">
-      <span>Powered by</span>
-      <img
-        src={fairTeamsLogoFloating}
-        alt=""
-        className="h-5 w-5 object-contain opacity-85"
-      />
-      <span className="font-black tracking-tight leading-none">
-        <span className="text-[#102A43]/80">FAIR</span>
-        <span className="text-[#16A34A]"> TEAMS</span>
-      </span>
-    </div>
-  );
 }
 
 type DriveImportPreview = {
@@ -3856,7 +3838,6 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 equipmentHolderNamesByEmail={activeFirebaseEquipmentHolderNamesByEmail}
               />
             </TabsContent>
-            <PoweredByFairTeams />
           </div>
         </div>
 

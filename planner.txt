@@ -1,0 +1,260 @@
+import { getFairTeamsKnowledgeForCommand, getDirectFairTeamsAnswerForCommand, FAIR_TEAMS_KNOWLEDGE_VERSION } from "./fair-teams-knowledge.js";
+const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
+const DEFAULT_MODEL = process.env.OPENAI_SMART_COMMAND_MODEL || "gpt-4o-mini";
+const MAX_COMMAND_CHARS = 4000;
+const MAX_ROSTER_PLAYERS = 80;
+
+function serverEnabled() {
+  return String(process.env.AI_SMART_COMMAND_SERVER_ENABLED || "").toLowerCase() === "true";
+}
+
+function getAllowedBranch() {
+  return process.env.AI_SMART_COMMAND_ALLOWED_BRANCH || "";
+}
+
+function runningBranch() {
+  return process.env.VERCEL_GIT_COMMIT_REF || process.env.VERCEL_BRANCH_URL || "";
+}
+
+function branchAllowed() {
+  const allowed = getAllowedBranch().trim();
+  if (!allowed) return true;
+  const branch = runningBranch();
+  return branch === allowed || branch.includes(allowed);
+}
+
+function cleanString(value, max = 300) {
+  return typeof value === "string" ? value.replace(/\s+/g, " ").trim().slice(0, max) : "";
+}
+
+function cleanNumber(value) {
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) ? numberValue : undefined;
+}
+
+function cleanRoster(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw.slice(0, MAX_ROSTER_PLAYERS).map((player) => {
+    const item = player && typeof player === "object" ? player : {};
+    return {
+      id: cleanString(item.id, 120),
+      name: cleanString(item.name, 120),
+      aka: cleanString(item.aka, 180),
+      skill: cleanNumber(item.skill),
+      attack: cleanNumber(item.attack),
+      defense: cleanNumber(item.defense),
+      speed: cleanNumber(item.speed),
+      passing: cleanNumber(item.passing),
+      isGoalkeeper: Boolean(item.isGoalkeeper),
+      isPlaymaker: Boolean(item.isPlaymaker),
+      isFinisher: Boolean(item.isFinisher),
+      isDribbler: Boolean(item.isDribbler),
+      isSentinel: Boolean(item.isSentinel),
+      isEngine: Boolean(item.isEngine),
+      isVersatile: Boolean(item.isVersatile),
+      isSpaceFinder: Boolean(item.isSpaceFinder),
+      isOrganizer: Boolean(item.isOrganizer),
+      gender: cleanString(item.gender, 30),
+      funBadge: cleanString(item.funBadge, 60),
+      attending: Boolean(item.attending),
+    };
+  }).filter((player) => player.id && player.name);
+}
+
+function cleanContext(raw) {
+  const item = raw && typeof raw === "object" ? raw : {};
+  return {
+    rosterName: cleanString(item.rosterName, 120),
+    rosterMode: cleanString(item.rosterMode, 30),
+    activeTab: cleanString(item.activeTab, 40),
+    currentTeamCount: cleanNumber(item.currentTeamCount),
+    currentPlayersPerTeam: cleanNumber(item.currentPlayersPerTeam),
+    uiLanguage: cleanString(item.uiLanguage, 40),
+  };
+}
+
+function normalizeForMatching(value) {
+  return cleanString(value, 180)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function playerNameVariants(player) {
+  const variants = [player.name];
+  if (player.aka) {
+    player.aka
+      .split(/[,/;|·•]+|\baka\b|\bAKA\b/)
+      .map((part) => cleanString(part, 80))
+      .filter(Boolean)
+      .forEach((part) => variants.push(part));
+  }
+  return Array.from(new Set(variants.map((name) => cleanString(name, 80)).filter(Boolean)));
+}
+
+function buildRosterNameIndex(roster) {
+  const index = [];
+  for (const player of roster) {
+    for (const variant of playerNameVariants(player)) {
+      const normalized = normalizeForMatching(variant);
+      if (normalized) {
+        index.push({ normalized, label: variant, playerId: player.id, rosterName: player.name });
+      }
+    }
+  }
+  return index;
+}
+
+function splitLikelyNameList(text) {
+  const command = cleanString(text, MAX_COMMAND_CHARS);
+  if (!command) return [];
+
+  const firstSentence = command.split(/[.!?。！？]/)[0] || command;
+  let segment = firstSentence;
+
+  const listMarkers = [
+    /\bare playing today\b/i,
+    /\bplaying today\b/i,
+    /\bare coming today\b/i,
+    /\bcoming today\b/i,
+    /\bspielen heute\b/i,
+    /\bkommen heute\b/i,
+    /\bheute dabei\b/i,
+    /\bfor today\b/i,
+    /\bselect\b/i,
+    /\badd to today\b/i,
+    /오늘\s*(와|와요|옴|뛰어|뜀|참석|참가)/,
+  ];
+
+  for (const marker of listMarkers) {
+    const match = segment.match(marker);
+    if (match && typeof match.index === "number") {
+      segment = segment.slice(0, match.index);
+      break;
+    }
+  }
+
+  const hasListShape = /[,\n]/.test(segment) || /\b(and|und|그리고|랑|와|과)\b/.test(segment);
+  if (!hasListShape) return [];
+
+  return segment
+    .replace(/\b(players?|people|spieler|today|heute|playing|coming|make|teams?)\b/gi, " ")
+    .split(/[,\n]+|\s+and\s+|\s+und\s+|\s+그리고\s+|\s*랑\s*|\s*와\s*|\s*과\s*/i)
+    .map((part) => cleanString(part, 80))
+    .map((part) => part.replace(/^(and|und|그리고)\s+/i, "").trim())
+    .filter((part) => part.length >= 2 && part.length <= 50)
+    .filter((part) => !/\b(\d+\s*(v|vs|gegen|대)\s*\d*|make|team|teams|spieler|players?)\b/i.test(part));
+}
+
+function matchNameCandidate(candidate, rosterIndex) {
+  const normalizedCandidate = normalizeForMatching(candidate);
+  if (!normalizedCandidate) return { status: "unknown", spokenName: candidate, matches: [] };
+
+  const exact = rosterIndex.filter((entry) => entry.normalized === normalizedCandidate);
+  if (exact.length === 1) {
+    return { status: "matched", spokenName: candidate, playerId: exact[0].playerId, rosterName: exact[0].rosterName, matchedAlias: exact[0].label, confidence: 0.98 };
+  }
+  if (exact.length > 1) {
+    return { status: "ambiguous", spokenName: candidate, matches: exact.slice(0, 5).map((entry) => ({ playerId: entry.playerId, rosterName: entry.rosterName, matchedAlias: entry.label })) };
+  }
+
+  const loose = rosterIndex.filter((entry) => entry.normalized.includes(normalizedCandidate) || normalizedCandidate.includes(entry.normalized));
+  const uniqueLoose = [];
+  for (const entry of loose) {
+    if (!uniqueLoose.some((item) => item.playerId === entry.playerId)) uniqueLoose.push(entry);
+  }
+  if (uniqueLoose.length === 1 && normalizedCandidate.length >= 3) {
+    return { status: "possible_match", spokenName: candidate, playerId: uniqueLoose[0].playerId, rosterName: uniqueLoose[0].rosterName, matchedAlias: uniqueLoose[0].label, confidence: 0.72 };
+  }
+  if (uniqueLoose.length > 1) {
+    return { status: "ambiguous", spokenName: candidate, matches: uniqueLoose.slice(0, 5).map((entry) => ({ playerId: entry.playerId, rosterName: entry.rosterName, matchedAlias: entry.label })) };
+  }
+  return { status: "unknown", spokenName: candidate, matches: [] };
+}
+
+function detectPlayersPerTeam(text) {
+  const command = cleanString(text, MAX_COMMAND_CHARS);
+  const patterns = [
+    /\b(\d{1,2})\s*(?:v|vs|versus|gegen|대)\s*(\d{1,2})?\b/i,
+    /\b(\d{1,2})\s*(?:a\s*side|per\s*team)\b/i,
+    /(\d{1,2})\s*명씩/,
+  ];
+  for (const pattern of patterns) {
+    const match = command.match(pattern);
+    if (match) {
+      const left = Number(match[1]);
+      const right = match[2] ? Number(match[2]) : left;
+      if (Number.isFinite(left) && left > 0 && left <= 20 && (!right || right === left)) return left;
+    }
+  }
+  return null;
+}
+
+function detectTeamCount(text) {
+  const command = cleanString(text, MAX_COMMAND_CHARS);
+  if (!command) return null;
+
+  const patterns = [
+    /\b(?:make|create|generate|build|split(?:\s+into)?|divide(?:\s+into)?)\s+(\d{1,2})\s+teams?\b/i,
+    /\b(\d{1,2})\s+teams?\b/i,
+    /\b(\d{1,2})\s+mannschaften\b/i,
+    /\b(\d{1,2})\s+teams?\s*(?:machen|erstellen|bilden)\b/i,
+    /(\d{1,2})\s*개\s*팀/,
+    /(\d{1,2})\s*팀(?:으로|으로 나눠|으로 나누| 만들어| 만들)/,
+  ];
+
+  for (const pattern of patterns) {
+    const match = command.match(pattern);
+    if (!match) continue;
+    const value = Number(match[1]);
+    if (Number.isFinite(value) && value >= 2 && value <= 12) return value;
+  }
+  return null;
+}
+
+function detectSelectAllRosterPlayers(text) {
+  const command = normalizeForMatching(text);
+  if (!command) return false;
+
+  const patterns = [
+    /\b(select|choose|pick|mark|add)\b.*\b(all|everyone|everybody)\b.*\b(roster|players|people)?\b/i,
+    /\b(all|everyone|everybody)\b.*\b(playing|today|roster|players|selected)\b/i,
+    /\b(entire|whole)\b.*\b(roster|team list|player list)\b/i,
+    /\balle\b.*\b(spieler|leute|kader)\b/i,
+    /\balle\b.*\b(heute|auswahlen|markieren)\b/i,
+    /모든\s*(선수|사람|멤버)/,
+    /(전체|전부|다)\s*(선택|참석|오늘|로스터)/,
+    /(로스터|명단)\s*(전체|전부|다)/,
+  ];
+  return patterns.some((pattern) => pattern.test(command));
+}
+
+function extractQuotedText(text) {
+  const command = cleanString(text, MAX_COMMAND_CHARS);
+  const quotePatterns = [
+    /["“”']([^"“”']{1,240})["“”']/,
+    /[„‚]([^„‚]{1,240})[“‘]/,
+  ];
+  for (const pattern of quotePatterns) {
+    const match = command.match(pattern);
+    if (match?.[1]) return cleanString(match[1], 240);
+  }
+  return "";
+}
+
+function detectClubNoteText(text) {
+  const command = cleanString(text, MAX_COMMAND_CHARS);
+  if (!command || !/(note|notes|post.?it|club notes|notiz|notizen|memo|메모|노트|공지)/i.test(command)) return null;
+
+  const quoted = extractQuotedText(command);
+  if (quoted) return quoted;
+
+  const patterns = [
+    /(?:add|create|write|put|leave)\s+(?:a\s+)?(?:club\s+)?note\s+(?:saying|that says|with text)?\s*(.+)$/i,
+    /(?:add|create|write|put|leave)\s+(.+?)\s+(?:to|in|on)\s+(?:club\s+)?notes?$/i,
+    /(?:notiz|notizen)\s+(?:hinzufugen|erstellen|schreiben)\s*:?\s*(.+)$/i,
+    /(?:메모|노트)\s*(?:추가|남겨|적어|써)\s*:?\s*(.+)$/i,
+    /(.+?)\s*(?:라고|이라고)?\s*(?:메모|노트)\s*(?:추가|남겨|적어|써)/i,

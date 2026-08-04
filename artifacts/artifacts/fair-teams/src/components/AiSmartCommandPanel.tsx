@@ -609,7 +609,7 @@ function actionPrimaryVerb(action: AiSmartCommandAction) {
   return "Apply";
 }
 
-const AI_ASSISTANT_VERSION_LABEL = "Help beta · v1.50 Tasks Board";
+const AI_ASSISTANT_VERSION_LABEL = "Help beta · v1.45 tour refinement";
 
 type AiRosterMatch = {
   player: AiSmartCommandRosterPlayer;
@@ -1514,7 +1514,6 @@ export function AiSmartCommandPanel({
   const enabled = isAiSmartCommandEnabled();
   const storageKey = useMemo(() => safeStorageKey(rosterMode, rosterName), [rosterMode, rosterName]);
   const [commandText, setCommandText] = useState("");
-  const [tutorialAnswerReady, setTutorialAnswerReady] = useState(false);
   const [busy, setBusy] = useState(false);
   const [recording, setRecording] = useState(false);
   const [voiceBusy, setVoiceBusy] = useState(false);
@@ -1536,11 +1535,7 @@ export function AiSmartCommandPanel({
   }, []);
 
   useEffect(() => {
-    if (!tutorialActive) {
-      setTutorialAnswerReady(false);
-      return;
-    }
-    setTutorialAnswerReady(false);
+    if (!tutorialActive) return;
     setCommandText((current) => current.trim() ? current : tutorialQuestion);
   }, [tutorialActive, tutorialQuestion]);
 
@@ -1661,7 +1656,6 @@ export function AiSmartCommandPanel({
       setApplyMessage("");
       setShowTodayShortcut(false);
       setResult(tutorialAnswer);
-      setTutorialAnswerReady(true);
       onParsed?.(tutorialAnswer);
       onQuestionSubmitted?.();
       return;
@@ -1953,15 +1947,7 @@ export function AiSmartCommandPanel({
       )}
 
       {result && (
-        <div
-          id="fairteams-help-answer"
-          className={`mt-3 rounded-2xl bg-white p-3 text-xs text-[#102A43] shadow-sm ${tutorialAnswerReady ? "fairteams-tutorial-pulse ring-2 ring-violet-300" : ""}`}
-        >
-          {tutorialAnswerReady && (
-            <div className="mb-2 inline-flex rounded-full bg-violet-100 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-violet-700">
-              Answer ready
-            </div>
-          )}
+        <div className="mt-3 rounded-2xl bg-white p-3 text-xs text-[#102A43] shadow-sm">
           <div className="rounded-2xl bg-violet-50 px-3 py-2 text-sm font-bold leading-snug text-[#102A43]">
             {result.assistantSummary || "I’m listening."}
           </div>

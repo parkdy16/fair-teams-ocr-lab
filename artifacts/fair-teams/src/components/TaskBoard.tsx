@@ -415,7 +415,6 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
               <ClipboardList className="h-[18px] w-[18px]" /> Tasks
             </div>
             <h2 className="mt-1 truncate text-[17px] font-black leading-tight text-[#102A43]">{board.meta?.name || rosterName}</h2>
-            <p className="mt-1 text-[11px] font-semibold leading-snug text-slate-500">Plan tasks, agendas and organizer work—alone or with collaborators.</p>
           </div>
           <Button type="button" className="h-9 shrink-0 rounded-2xl px-3 text-xs font-black text-white" style={{ backgroundColor: accent }} onClick={() => setBoardOpen(true)}>
             Open board
@@ -425,9 +424,9 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
           <span className="rounded-full bg-white/75 px-2.5 py-1">{openCards.length} open</span>
           {mineCount > 0 && <span className="rounded-full bg-white/75 px-2.5 py-1">{mineCount} yours</span>}
           {overdueCount > 0 && <span className="rounded-full bg-red-50 px-2.5 py-1 text-red-700">{overdueCount} overdue</span>}
-          <span className="rounded-full bg-white/75 px-2.5 py-1">{online ? "Shared live" : isSharedRoster ? "Sign in to collaborate" : "Organizer board"}</span>
+          <span className="rounded-full bg-white/75 px-2.5 py-1">{online ? "Shared" : isSharedRoster ? "Sign in" : "Private"}</span>
         </div>
-        {latestActivity && <div className="mt-2 truncate text-[10px] font-bold text-slate-500">Last activity: “{latestActivity.card.title}” · {activityText(latestActivity.activity)} · {formatTime(latestActivity.activity.at)}</div>}
+        {latestActivity && <div className="mt-2 truncate text-[10px] font-bold text-slate-500">Last: “{latestActivity.card.title}” · {activityText(latestActivity.activity)}</div>}
       </section>
 
       <Dialog open={boardOpen} onOpenChange={setBoardOpen}>

@@ -94,7 +94,7 @@ type EquipmentHolder = {
 type ClubEquipmentKit = FirebaseEquipmentBag;
 
 const EQUIPMENT_PREVIEW_STORAGE_KEY = "fairteams.clubEquipment.preview.v1";
-const CLUB_DESK_COLLAPSED_STORAGE_KEY = "fairteams.clubDesk.collapsed.v1";
+const CLUB_DESK_COLLAPSED_STORAGE_KEY = "fairteams.clubDesk.collapsed.v2";
 
 const EQUIPMENT_COLORS = [
   "#111827",
@@ -649,11 +649,12 @@ export function ClubTab({
   const [collaboratorsOpen, setCollaboratorsOpen] = useState(false);
   const [accountDialogOpen, setAccountDialogOpen] = useState(false);
   const [clubDeskCollapsed, setClubDeskCollapsed] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
+    if (typeof window === "undefined") return true;
     try {
-      return window.localStorage.getItem(CLUB_DESK_COLLAPSED_STORAGE_KEY) === "1";
+      const saved = window.localStorage.getItem(CLUB_DESK_COLLAPSED_STORAGE_KEY);
+      return saved == null ? true : saved === "1";
     } catch {
-      return false;
+      return true;
     }
   });
 
@@ -1894,12 +1895,12 @@ export function ClubTab({
           </div>
         </div>
 
-        <div className="mt-3 grid grid-cols-3 gap-2.5 overflow-visible px-0.5 py-2.5">
+        <div className={`mt-3 gap-2.5 overflow-visible px-0.5 ${previewClubNotes.length <= 1 ? "flex py-1.5" : "grid grid-cols-3 py-2.5"}`}>
           {previewClubNotes.length > 0 ? (
             previewClubNotes.map((note, index) => (
               <div
                 key={note.id}
-                className="relative min-h-[6.45rem] rounded-[0.8rem] border border-black/5 px-2.5 py-2.5 shadow-[0_4px_8px_rgba(130,85,35,0.22)] ring-1 ring-white/25"
+                className={`relative rounded-[0.8rem] border border-black/5 px-2.5 py-2.5 shadow-[0_4px_8px_rgba(130,85,35,0.22)] ring-1 ring-white/25 ${previewClubNotes.length === 1 ? "min-h-[5.75rem] w-[9.75rem]" : "min-h-[6.45rem]"}`}
                 style={clubNoteStyle(index)}
               >
                 <div className="flex h-full flex-col">

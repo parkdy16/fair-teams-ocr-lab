@@ -463,8 +463,8 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
                             const flipped = flippedIds.has(card.id);
                             const recent = [...card.activities].sort((a, b) => b.at - a.at).slice(0, 3);
                             return (
-                              <div key={card.id} className="relative min-h-[64px] [perspective:900px]">
-                                <div className={`relative min-h-[64px] w-full transition-transform duration-300 [transform-style:preserve-3d] ${flipped ? "[transform:rotateY(180deg)]" : ""}`}>
+                              <div key={card.id} className={`relative [perspective:900px] ${flipped ? "min-h-[126px]" : "min-h-[64px]"}`}>
+                                <div className={`relative w-full transition-all duration-300 [transform-style:preserve-3d] ${flipped ? "min-h-[126px] [transform:rotateY(180deg)]" : "min-h-[64px]"}`}>
                                   <button type="button" className="absolute inset-0 w-full rounded-xl border border-slate-200 bg-white p-3 text-left shadow-sm [backface-visibility:hidden] active:scale-[0.99]" onPointerDown={() => startPress(card.id)} onPointerUp={() => shortTap(card.id)} onPointerCancel={cancelPress} onPointerLeave={cancelPress} onContextMenu={(event) => { event.preventDefault(); setMoveCardId(card.id); }}>
                                     <div className="text-[13px] font-black leading-snug text-[#102A43]">{card.title}</div>
                                     <div className="mt-2 flex flex-wrap items-center gap-1.5">
@@ -473,13 +473,19 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
                                       {card.dueDate && <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-black ${isOverdue(card.dueDate) ? "bg-red-50 text-red-700" : "bg-slate-100 text-slate-600"}`}><CalendarDays className="h-3 w-3" />{dueText(card.dueDate)}</span>}
                                     </div>
                                   </button>
-                                  <button type="button" className="absolute inset-0 w-full rounded-xl border border-slate-200 bg-white p-3 text-left shadow-sm [backface-visibility:hidden] [transform:rotateY(180deg)]" onClick={() => shortTap(card.id)}>
-                                    <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Activity</div>
-                                    <div className="mt-1.5 space-y-1.5">
+                                  <div className="absolute inset-0 flex w-full flex-col rounded-xl border border-slate-200 bg-white p-3 text-left shadow-sm [backface-visibility:hidden] [transform:rotateY(180deg)]">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Activity</div>
+                                      <button type="button" className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-[9px] font-black text-slate-600" onClick={(event) => { event.stopPropagation(); shortTap(card.id); }}><RotateCcw className="h-3 w-3" />Back</button>
+                                    </div>
+                                    <div className="mt-1.5 flex-1 space-y-1.5 overflow-hidden">
                                       {recent.length ? recent.map((activity) => <div key={activity.id} className="text-[10px] font-bold leading-snug text-slate-600"><span className="text-[#102A43]">{activityText(activity)}</span><span className="ml-1 text-slate-400">{formatTime(activity.at)}</span></div>) : <div className="text-[10px] font-bold text-slate-500">Created by {card.createdByName}</div>}
                                     </div>
-                                    <div className="mt-2 text-[9px] font-black text-slate-400">Tap to return</div>
-                                  </button>
+                                    <div className="mt-2 flex gap-2 border-t border-slate-100 pt-2">
+                                      <button type="button" className="flex-1 rounded-lg bg-slate-100 px-2 py-1.5 text-[9px] font-black text-slate-600" onClick={(event) => { event.stopPropagation(); setMoveCardId(card.id); }}>Move</button>
+                                      <button type="button" className="flex-1 rounded-lg bg-slate-100 px-2 py-1.5 text-[9px] font-black text-slate-600" onClick={(event) => { event.stopPropagation(); openEditCard(card); }}>Edit</button>
+                                    </div>
+                                  </div>
                                 </div>
                                 <button type="button" className="absolute right-1.5 top-1.5 z-10 rounded-full bg-white/90 p-1 text-slate-400 shadow-sm" onClick={(event) => { event.stopPropagation(); openEditCard(card); }} aria-label={`Edit ${card.title}`}><Pencil className="h-3 w-3" /></button>
                               </div>

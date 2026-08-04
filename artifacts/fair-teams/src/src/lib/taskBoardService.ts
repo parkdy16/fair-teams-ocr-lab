@@ -221,6 +221,18 @@ export async function saveTaskBoardColumns(scopeId: string, columns: TaskBoardCo
   await batch.commit();
 }
 
+function activityPayload(activity: TaskBoardActivity) {
+  return {
+    id: activity.id,
+    action: activity.action,
+    actorName: activity.actorName || "Organizer",
+    actorEmail: activity.actorEmail || null,
+    at: activity.at,
+    fromColumnName: activity.fromColumnName || null,
+    toColumnName: activity.toColumnName || null,
+  };
+}
+
 export async function saveTaskBoardCard(scopeId: string, card: TaskBoardCard): Promise<void> {
   const user = actor();
   const now = new Date();
@@ -230,13 +242,13 @@ export async function saveTaskBoardCard(scopeId: string, card: TaskBoardCard): P
     columnId: card.columnId, position: card.position, assignee: card.assignee?.trim() || null,
     dueDate: card.dueDate || null, category: card.category || null,
     createdAt: card.createdAt, createdAtIso: new Date(card.createdAt).toISOString(),
-    createdByName: card.createdByName, createdByEmail: card.createdByEmail || null,
+    createdByName: card.createdByName || "Organizer", createdByEmail: card.createdByEmail || null,
     updatedByUid: user.uid, updatedByEmail: user.email || null, updatedByName: user.name,
     updatedAt: serverTimestamp(), updatedAtIso: now.toISOString(),
     lastMovedAt: card.lastMovedAt || null,
     lastMovedAtIso: card.lastMovedAt ? new Date(card.lastMovedAt).toISOString() : null,
     lastMovedByName: card.lastMovedByName || null,
-    activities: card.activities.slice(-20),
+    activities: card.activities.slice(-20).map(activityPayload),
   }, { merge: true });
 }
 

@@ -199,6 +199,7 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
   const [votingCardId, setVotingCardId] = useState<string | null>(null);
   const [selectedVoteOptionId, setSelectedVoteOptionId] = useState("");
   const [voteSubmitting, setVoteSubmitting] = useState(false);
+  const [closeVoteConfirmOpen, setCloseVoteConfirmOpen] = useState(false);
   const [currentVoterHash, setCurrentVoterHash] = useState("");
   const [moveCardId, setMoveCardId] = useState<string | null>(null);
   const [boardSettingsOpen, setBoardSettingsOpen] = useState(false);
@@ -474,9 +475,13 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
 
   const closeVote = async () => {
     const existing = board.cards.find((card) => card.id === editingCardId);
-    if (!existing?.vote || !window.confirm("Close this vote? Results will become final.")) return;
+    if (!existing?.vote) return;
     setSaving(true);
-    try { await persistCard({ ...existing, updatedAt: Date.now(), vote: { ...existing.vote, status: "closed", closedAt: Date.now() } }); setCardEditorOpen(false); }
+    try {
+      await persistCard({ ...existing, updatedAt: Date.now(), vote: { ...existing.vote, status: "closed", closedAt: Date.now() } });
+      setCloseVoteConfirmOpen(false);
+      setCardEditorOpen(false);
+    }
     catch (nextError) { setError(nextError instanceof Error ? nextError.message : "Could not close vote."); }
     finally { setSaving(false); }
   };
@@ -561,7 +566,7 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
                                   <div
                                     role="button"
                                     tabIndex={0}
-                                    className="absolute inset-0 flex w-full flex-col rounded-xl border border-slate-200 bg-white p-3 pr-10 text-left shadow-sm [backface-visibility:hidden] [transform:rotateY(180deg)] active:scale-[0.99]"
+                                    className="absolute inset-0 flex w-full flex-col rounded-xl border border-slate-200 bg-white p-0 text-left shadow-sm [backface-visibility:hidden] [transform:rotateY(180deg)] active:scale-[0.99]"
                                     onPointerDown={() => startPress(card.id)}
                                     onPointerUp={() => shortTap(card.id)}
                                     onPointerCancel={cancelPress}
@@ -570,7 +575,7 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
                                     aria-label={`Show ${card.title} card front`}
                                     onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") shortTap(card.id); }}
                                   >
-                                    <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain pr-1">
+                                    <div className="flex-1 min-h-0 w-full overflow-y-auto overscroll-contain px-3 pb-3 pt-3">
                                       {card.vote && (() => {
                                         const total = card.vote.options.reduce((sum, option) => sum + option.count, 0);
                                         const canShowResults = card.vote.status === "closed" || card.vote.showResultsWhileOpen;
@@ -640,11 +645,12 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
       </Dialog>
 
       <Dialog open={cardEditorOpen} onOpenChange={setCardEditorOpen}>
-        <DialogContent className="max-w-md rounded-3xl" onOpenAutoFocus={(event) => event.preventDefault()}>
-          <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43]">{editingCardId ? "Edit card" : "New card"}</DialogTitle></DialogHeader>
-          <div className="grid gap-3">
+        <DialogContent className="fixed inset-x-2 bottom-2 top-2 flex w-auto max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-[2rem] p-0 sm:left-1/2 sm:right-auto sm:top-1/2 sm:h-auto sm:max-h-[calc(100dvh-2rem)] sm:w-full sm:max-w-md sm:-translate-x-1/2 sm:-translate-y-1/2" onOpenAutoFocus={(event) => event.preventDefault()}>
+          <DialogHeader className="shrink-0 border-b border-slate-100 px-4 py-3 pr-12"><DialogTitle className="text-left text-base font-black text-[#102A43]">{editingCardId ? "Edit card" : "New card"}</DialogTitle></DialogHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3">
+            <div className="grid gap-3">
             <div><Label htmlFor="task-title">Title</Label><Input id="task-title" value={cardTitle} onChange={(event) => setCardTitle(event.target.value)} onKeyDown={blurOnDoneKey} enterKeyHint="done" maxLength={120} /></div>
-            <div><Label htmlFor="task-note">{voteEnabled ? "Context" : "Notes"}</Label><Textarea id="task-note" value={cardNote} onChange={(event) => setCardNote(event.target.value)} onKeyDown={blurOnDoneKey} enterKeyHint="done" maxLength={1200} rows={4} placeholder={voteEnabled ? "Background, explanation or related information" : "Optional details"} /></div>
+            <div><Label htmlFor="task-note">{voteEnabled ? "Context" : "Notes"}</Label><Textarea id="task-note" value={cardNote} onChange={(event) => setCardNote(event.target.value)} onKeyDown={blurOnDoneKey} enterKeyHint="done" maxLength={1200} rows={voteEnabled ? 2 : 3} placeholder={voteEnabled ? "Background, explanation or related information" : "Optional details"} /></div>
             <div className="grid grid-cols-2 gap-3">
               <div><Label htmlFor="task-assignee">Assignee</Label><Input id="task-assignee" value={cardAssignee} onChange={(event) => setCardAssignee(event.target.value)} onKeyDown={blurOnDoneKey} enterKeyHint="done" maxLength={80} placeholder="Optional" /></div>
               <div><Label htmlFor="task-due">Due date</Label><div className="mt-1 flex w-full min-w-0 rounded-md border border-input bg-background px-3 py-2"><input id="task-due" type="date" className="block w-full min-w-0 border-0 bg-transparent p-0 text-sm" value={cardDueDate} onChange={(event) => setCardDueDate(event.target.value)} /></div></div>
@@ -661,10 +667,28 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
                 <label className="flex items-center gap-2 text-xs font-bold text-slate-700"><input type="checkbox" checked={voteHideParticipation} onChange={(event) => setVoteHideParticipation(event.target.checked)} disabled={editingVoteLocked} /> Hide participation until closed</label>
                 <label className="flex items-center gap-2 text-xs font-bold text-slate-700"><input type="checkbox" checked={voteShowResultsOpen} onChange={(event) => setVoteShowResultsOpen(event.target.checked)} disabled={editingVoteLocked} /> Show results while open</label>
                 <div className="text-[10px] font-semibold leading-snug text-slate-500">No per-person vote notifications or vote timestamps are shown.</div>{editingVoteLocked && <div className="text-[10px] font-black text-amber-700">Question, options and anonymity are locked because voting has started.</div>}
-                {editingCardId && board.cards.find((card) => card.id === editingCardId)?.vote?.status === "open" && <Button type="button" variant="outline" className="h-9 rounded-xl" onClick={closeVote}>Close vote</Button>}
+                {editingCardId && board.cards.find((card) => card.id === editingCardId)?.vote?.status === "open" && <Button type="button" variant="outline" className="h-9 rounded-xl" onClick={() => setCloseVoteConfirmOpen(true)}>Close vote</Button>}
               </div>}
             </div>
             <div className="flex gap-2 pt-1">{editingCardId && <Button type="button" variant="outline" className="h-11 rounded-2xl text-red-700" onClick={removeCard}><Trash2 className="mr-1 h-4 w-4" />Delete</Button>}<Button type="button" className="h-11 flex-1 rounded-2xl text-white" style={{ backgroundColor: accent }} disabled={!cardTitle.trim() || saving || (voteEnabled && (!voteQuestion.trim() || voteOptionsText.split(/\n/).filter((value) => value.trim()).length < 2))} onClick={saveCard}>{saving ? "Saving…" : "Save card"}</Button></div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={closeVoteConfirmOpen} onOpenChange={setCloseVoteConfirmOpen}>
+        <DialogContent className="fixed bottom-2 left-2 right-2 top-auto w-auto max-w-none translate-x-0 translate-y-0 rounded-[2rem] border border-violet-100 bg-white p-4 shadow-xl sm:left-1/2 sm:right-auto sm:w-full sm:max-w-sm sm:-translate-x-1/2" onOpenAutoFocus={(event) => event.preventDefault()}>
+          <DialogHeader>
+            <DialogTitle className="text-left text-base font-black text-[#102A43]">Close vote?</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-3">
+            <div className="rounded-2xl bg-violet-50 px-3 py-3 text-sm font-bold leading-snug text-violet-900">
+              Results will become final and no more votes can be submitted.
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <Button type="button" variant="outline" className="h-11 rounded-2xl" onClick={() => setCloseVoteConfirmOpen(false)} disabled={saving}>Keep open</Button>
+              <Button type="button" className="h-11 rounded-2xl bg-violet-600 text-white hover:bg-violet-700" onClick={closeVote} disabled={saving}>{saving ? "Closing…" : "Close vote"}</Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

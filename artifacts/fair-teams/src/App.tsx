@@ -3610,9 +3610,9 @@ They will no longer be able to open or edit this shared roster unless it is shar
 
         {!shouldShowTodayStartHeader && (
           <aside className="absolute inset-y-0 left-0 z-40 hidden w-[196px] flex-col border-r border-slate-200 bg-white/96 p-4 backdrop-blur lg:flex">
-            <div className="flex items-center px-2 py-2">
-              <span className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-                <img src={fairTeamsLogo} alt="Fair Teams" className="h-full w-full object-contain" />
+            <div className="flex items-center px-1.5 py-2">
+              <span className="flex h-16 w-full items-center justify-center overflow-hidden rounded-[1.35rem] border border-slate-200/90 bg-gradient-to-br from-white to-slate-50 shadow-[0_8px_22px_rgba(15,23,42,0.07)]">
+                <img src={fairTeamsLogo} alt="Fair Teams" className="h-[3.65rem] w-[3.65rem] object-contain" />
               </span>
             </div>
             <TabsList className="mt-6 flex h-auto w-full flex-col gap-1.5 rounded-none border-0 bg-transparent p-0 shadow-none">
@@ -3632,9 +3632,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 </TabsTrigger>
               ))}
             </TabsList>
-            <div className="mt-auto border-t border-slate-100 px-2 pt-4 text-[10px] font-semibold leading-relaxed text-slate-500">
-              The same live roster, tasks, equipment and votes on every device.
-            </div>
+            <div className="mt-auto" aria-hidden="true" />
           </aside>
         )}
 

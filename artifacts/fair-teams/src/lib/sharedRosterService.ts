@@ -250,6 +250,10 @@ function makeSharedRosterUpdateSnapshot(existingRosterData: unknown, roster: Roo
     : {};
   return cleanForFirestore({
     ...existing,
+    // Shared roster identity changes must travel with the same live save as players.
+    // Logos stay device-local because image data is intentionally excluded from Firestore.
+    name: roster.name || existing.name || "Shared roster",
+    themeColor: roster.themeColor || existing.themeColor,
     players: roster.players.map(makeSharedPlayerSnapshot) as RoomPlayer[],
     pairingRules: roster.pairingRules || [],
   });
@@ -1050,7 +1054,9 @@ export async function saveFirebaseSharedRoster(roster: RoomRoster): Promise<Fire
     const groupName = typeof data.groupName === "string" ? data.groupName : source.firebaseGroupName;
     const rosterData = makeSharedRosterUpdateSnapshot(data.rosterData, roster);
     const playerCount = Array.isArray(rosterData.players) ? rosterData.players.length : 0;
-    const remoteName = typeof data.name === "string" && data.name.trim() ? data.name : roster.name || "Shared roster";
+    const remoteName = typeof data.name === "string" && data.name.trim() ? data.name.trim() : "";
+    const localName = typeof roster.name === "string" && roster.name.trim() ? roster.name.trim() : "";
+    const syncedName = localName || remoteName || "Shared roster";
     const organizerName = nameFromUser(user);
     const memberNamesByUid = { ...cleanNameMap(data.memberNamesByUid), [user.uid]: organizerName };
     const memberNamesByEmail = { ...cleanNameMap(data.memberNamesByEmail), [normalizeEmail(user.email)]: organizerName };
@@ -1061,7 +1067,7 @@ export async function saveFirebaseSharedRoster(roster: RoomRoster): Promise<Fire
       ...normalizeSharedRosterBackups(data.backupHistory),
     ]);
     const payload = {
-      name: remoteName,
+      name: syncedName,
       groupId,
       groupName,
       version: nextVersion,

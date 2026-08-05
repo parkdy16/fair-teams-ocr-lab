@@ -600,9 +600,17 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
                               .filter((activity) => activity.action === "moved")
                               .sort((a, b) => b.at - a.at)[0];
                             const flippedHeightClass = card.vote ? "min-h-[300px]" : card.note?.trim() ? "min-h-[190px]" : "min-h-[126px]";
+                            const titleLength = card.title.trim().length;
+                            const frontHeightClass = titleLength > 92
+                              ? "min-h-[118px]"
+                              : titleLength > 62
+                                ? "min-h-[100px]"
+                                : titleLength > 34
+                                  ? "min-h-[82px]"
+                                  : "min-h-[64px]";
                             return (
-                              <div key={card.id} className={`relative [perspective:900px] ${flipped ? flippedHeightClass : "min-h-[64px]"}`}>
-                                <div className={`relative w-full transition-all duration-300 [transform-style:preserve-3d] ${flipped ? `${flippedHeightClass} [transform:rotateY(180deg)]` : "min-h-[64px]"}`}>
+                              <div key={card.id} className={`relative [perspective:900px] ${flipped ? flippedHeightClass : frontHeightClass}`}>
+                                <div className={`relative w-full transition-all duration-300 [transform-style:preserve-3d] ${flipped ? `${flippedHeightClass} [transform:rotateY(180deg)]` : frontHeightClass}`}>
                                   <button type="button" draggable={desktopDragEnabled} className={`absolute inset-0 w-full rounded-xl border border-slate-200 bg-white p-3 text-left shadow-sm [backface-visibility:hidden] active:scale-[0.99] lg:cursor-grab lg:active:cursor-grabbing ${desktopDragCardId === card.id ? "opacity-45 ring-2 ring-emerald-200" : ""}`} onDragStart={(event) => startDesktopCardDrag(event, card.id)} onDragEnd={finishDesktopCardDrag} onPointerDown={() => { if (!desktopDragEnabled) startPress(card.id); }} onPointerUp={() => shortTap(card.id)} onPointerCancel={cancelPress} onPointerLeave={cancelPress} onContextMenu={(event) => { event.preventDefault(); setMoveCardId(card.id); }}>
                                     <div className="text-[13px] font-black leading-snug text-[#102A43]">{card.title}</div>
                                     <div className="mt-2 flex flex-wrap items-center gap-1.5">

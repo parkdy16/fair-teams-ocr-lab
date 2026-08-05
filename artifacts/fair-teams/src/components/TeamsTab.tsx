@@ -920,7 +920,7 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
 
       {/* Teams grid — 2 columns */}
       {teams.length > 0 && (
-        <div className={`grid grid-cols-2 md:grid-cols-3 lg:grid-cols-[repeat(auto-fit,minmax(15rem,1fr))] gap-2 lg:gap-3 transition-opacity duration-300 ${isGenerating ? "opacity-50" : "opacity-100"}`}>
+        <div className={`grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 lg:gap-3 transition-opacity duration-300 ${isGenerating ? "opacity-50" : "opacity-100"}`}>
           {teams.map((team, index) => {
             const col = colorFor(team.color);
             const accentColor = team.color === "white" ? "hsl(var(--border))" : col.hex;

@@ -18,6 +18,7 @@ import type { AiSmartCommandAction } from "@/lib/aiSmartCommandTypes";
 import { getFairTeamsAuth } from "@/lib/firebaseClient";
 import {
   listenToSharedRosterUser,
+  signOutOfSharedRosters,
   type SharedRosterUser,
 } from "@/lib/sharedRosterService";
 import {
@@ -666,6 +667,10 @@ export function ClubTab({
       }),
     [],
   );
+
+  useEffect(() => {
+    if (clubUser) setAccountDialogOpen(false);
+  }, [clubUser]);
 
 
   const equipmentRealtimeEnabled = Boolean(equipmentGroupId);
@@ -1716,6 +1721,18 @@ export function ClubTab({
                 onClick={() => setAccountDialogOpen(true)}
               >
                 Sign in
+              </Button>
+            )}
+            {clubUser && (
+              <Button
+                type="button"
+                className="hidden h-9 shrink-0 rounded-full bg-violet-600 px-3 text-xs font-black text-white hover:bg-violet-700 lg:inline-flex"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  void signOutOfSharedRosters();
+                }}
+              >
+                Sign out
               </Button>
             )}
             <button

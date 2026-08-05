@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { CircleHelp } from "lucide-react";
 import { parseFairTeamsSmartCommand, createAiSmartCommandContext, transcribeFairTeamsVoiceCommand } from "@/lib/aiSmartCommandClient";
 import { applyFairTeamsAiTruthGuard, guardFairTeamsSmartCommandBeforeAi } from "@/lib/aiSmartCommandTrustGuard";
 import { parseFairTeamsLocalSmartCommand } from "@/lib/aiSmartCommandLocalRouter";
@@ -609,7 +610,7 @@ function actionPrimaryVerb(action: AiSmartCommandAction) {
   return "Apply";
 }
 
-const AI_ASSISTANT_VERSION_LABEL = "Help beta · v1.53 Club desktop reshuffle";
+const AI_ASSISTANT_VERSION_LABEL = "Help beta · v1.53.1 Desktop typography polish";
 
 type AiRosterMatch = {
   player: AiSmartCommandRosterPlayer;
@@ -1883,10 +1884,10 @@ export function AiSmartCommandPanel({
           <div className="min-w-0">
             <div className="text-[10px] font-black uppercase tracking-wide text-violet-600">Help</div>
             <div className="mt-0.5 flex flex-wrap items-center gap-2">
-              <h3 className="text-base font-black text-[#102A43] lg:text-[17px]">FairTeams Help</h3>
+              <h3 className="flex items-center gap-2 text-base font-black text-[#102A43] lg:text-[20px]"><CircleHelp className="hidden h-6 w-6 text-violet-600 lg:block" />FairTeams Help</h3>
               <span className="rounded-full bg-white/85 px-2 py-0.5 text-[9px] font-black text-violet-700 shadow-sm">{AI_ASSISTANT_VERSION_LABEL}</span>
             </div>
-            <p className="mt-0.5 text-[11px] font-semibold leading-snug text-violet-800/75 lg:text-xs">
+            <p className="mt-0.5 text-[11px] font-semibold leading-snug text-violet-800/75 lg:text-[14px]">
               Ask how anything works. I’ll guide you quickly.
             </p>
           </div>
@@ -1908,7 +1909,7 @@ export function AiSmartCommandPanel({
             onChange={(event) => setCommandText(event.target.value)}
             onFocus={() => setHelpExpanded(true)}
             rows={isHelpExpanded ? 3 : 2}
-            className={`w-full resize-none rounded-2xl border border-violet-100 bg-white px-3 py-2 text-sm font-semibold text-[#102A43] outline-none focus:border-violet-300 ${isHelpExpanded ? "min-h-[84px]" : "min-h-[58px] lg:min-h-[52px]"} ${tutorialActive ? "fairteams-tutorial-pulse" : ""}`}
+            className={`w-full resize-none rounded-2xl border border-violet-100 bg-white px-3 py-2 text-sm font-semibold lg:text-[15px] text-[#102A43] outline-none focus:border-violet-300 ${isHelpExpanded ? "min-h-[84px]" : "min-h-[58px] lg:min-h-[52px]"} ${tutorialActive ? "fairteams-tutorial-pulse" : ""}`}
             placeholder={placeholder}
           />
           <div className="mt-2 grid grid-cols-2 gap-2">

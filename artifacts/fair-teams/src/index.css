@@ -446,3 +446,21 @@
   animation-fill-mode: both;
   animation-iteration-count: 1, infinite;
 }
+
+
+/* v1.54: restrained desktop typography and control sizing. Mobile/tablet remain unchanged. */
+@media (min-width: 1024px) {
+  .fairteams-desktop-workspace .text-\[8px\] { font-size: 10px !important; line-height: 1.2 !important; }
+  .fairteams-desktop-workspace .text-\[9px\] { font-size: 11px !important; line-height: 1.25 !important; }
+  .fairteams-desktop-workspace .text-\[10px\] { font-size: 12px !important; line-height: 1.3 !important; }
+  .fairteams-desktop-workspace .text-\[11px\] { font-size: 13px !important; line-height: 1.35 !important; }
+  .fairteams-desktop-workspace .text-\[12px\] { font-size: 14px !important; line-height: 1.4 !important; }
+  .fairteams-desktop-workspace .text-xs { font-size: 14px !important; line-height: 1.4 !important; }
+  .fairteams-desktop-workspace .text-sm { font-size: 15px !important; line-height: 1.45 !important; }
+  .fairteams-desktop-workspace input:not([type="range"]):not([type="checkbox"]):not([type="radio"]),
+  .fairteams-desktop-workspace textarea,
+  .fairteams-desktop-workspace select { font-size: 15px; }
+  .fairteams-desktop-workspace button { min-height: 2.35rem; }
+  .fairteams-desktop-workspace [role="dialog"] button { min-height: 2.4rem; }
+  .fairteams-desktop-workspace [data-testid^="player-row-"] { min-height: 2.9rem; }
+}

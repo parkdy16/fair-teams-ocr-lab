@@ -172,7 +172,7 @@ function RosterKindBadge({ roster }: { roster: RoomRoster }) {
   const shared = isRosterCloudShared(roster);
   return (
     <span
-      className={`inline-flex h-5 shrink-0 items-center rounded-full px-1.5 text-[9px] font-black uppercase tracking-wide ${shared ? "bg-violet-50 text-violet-700 ring-1 ring-violet-100" : "bg-slate-100 text-slate-500"}`}
+      className={`inline-flex h-5 shrink-0 items-center rounded-full px-1.5 text-[11px] font-black uppercase tracking-wide ${shared ? "bg-violet-50 text-violet-700 ring-1 ring-violet-100" : "bg-slate-100 text-slate-500"}`}
       title={shared ? "Shared roster" : "Local roster"}
     >
       {shared ? "Shared" : "Local"}
@@ -3592,7 +3592,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
           if (value === "players" && activeTab !== "players") setOpenPairingRulesToken(0);
           setActiveTab(value);
         }}
-        className={`relative flex min-h-0 flex-1 flex-col ${shouldShowTodayStartHeader ? "" : "lg:pl-[196px]"}`}
+        className={`fairteams-desktop-workspace relative flex min-h-0 flex-1 flex-col ${shouldShowTodayStartHeader ? "" : "lg:pl-[204px]"}`}
       >
         <FirebaseSharedRosterPublishCard
           headless
@@ -3609,7 +3609,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
         />
 
         {!shouldShowTodayStartHeader && (
-          <aside className="absolute inset-y-0 left-0 z-40 hidden w-[196px] flex-col border-r border-slate-200 bg-white/96 p-4 backdrop-blur lg:flex">
+          <aside className="absolute inset-y-0 left-0 z-40 hidden w-[204px] flex-col border-r border-slate-200 bg-white/96 p-4 backdrop-blur lg:flex">
             <div className="flex items-center px-1.5 py-2">
               <span className="flex h-16 w-full items-center justify-center overflow-hidden rounded-[1.35rem] border border-slate-200/90 bg-gradient-to-br from-white to-slate-50 shadow-[0_8px_22px_rgba(15,23,42,0.07)]">
                 <img src={fairTeamsLogo} alt="Fair Teams" className="h-[3.65rem] w-[3.65rem] object-contain" />
@@ -3625,9 +3625,9 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 <TabsTrigger
                   key={value}
                   value={value}
-                  className={`fairteams-tab-trigger fairteams-desktop-nav-trigger flex h-12 w-full justify-start gap-3.5 rounded-xl border border-transparent px-3.5 text-[15px] font-black text-slate-500 shadow-none transition-colors hover:bg-slate-50 data-[state=active]:border-slate-200 data-[state=active]:bg-slate-50 data-[state=active]:text-[#102A43] data-[state=active]:shadow-none ${(tutorialStep === "today-tab" && value === "today") || (tutorialStep === "teams-tab" && value === "teams") || (tutorialStep === "club-tab" && value === "club") || (tutorialStep === "roster-return" && value === "players") ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
+                  className={`fairteams-tab-trigger fairteams-desktop-nav-trigger flex h-[3.25rem] w-full justify-start gap-3.5 rounded-xl border border-transparent px-3.5 text-[16px] font-black text-slate-500 shadow-none transition-colors hover:bg-slate-50 data-[state=active]:border-slate-200 data-[state=active]:bg-slate-50 data-[state=active]:text-[#102A43] data-[state=active]:shadow-none ${(tutorialStep === "today-tab" && value === "today") || (tutorialStep === "teams-tab" && value === "teams") || (tutorialStep === "club-tab" && value === "club") || (tutorialStep === "roster-return" && value === "players") ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
                 >
-                  <Icon className="h-[18px] w-[18px] shrink-0" strokeWidth={2.25} />
+                  <Icon className="h-5 w-5 shrink-0" strokeWidth={2.25} />
                   {label}
                 </TabsTrigger>
               ))}
@@ -3641,9 +3641,9 @@ They will no longer be able to open or edit this shared roster unless it is shar
             <div className="flex min-w-0 items-center">
               <div className="min-w-0">
                 <div className="flex min-w-0 items-center gap-2">
-                  <h1 className="truncate text-xl font-black tracking-tight text-[#102A43]" title={activeRosterName}>{activeRosterName}</h1>
+                  <h1 className="truncate text-[23px] font-black tracking-tight text-[#102A43]" title={activeRosterName}>{activeRosterName}</h1>
                   {!isEmptyStarterRoster && (
-                    <span className={`inline-flex h-5 shrink-0 items-center rounded-full px-1.5 text-[9px] font-black uppercase tracking-wide ${activeRosterIsShared ? "bg-violet-50 text-violet-700 ring-1 ring-violet-100" : "bg-slate-100 text-slate-500"}`}>
+                    <span className={`inline-flex h-5 shrink-0 items-center rounded-full px-1.5 text-[11px] font-black uppercase tracking-wide ${activeRosterIsShared ? "bg-violet-50 text-violet-700 ring-1 ring-violet-100" : "bg-slate-100 text-slate-500"}`}>
                       {activeRosterIsShared ? "Shared" : "Local"}
                     </span>
                   )}
@@ -3724,7 +3724,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   </h1>
                   {!shouldShowTodayStartHeader && !isEmptyStarterRoster && (
                     <span
-                      className={`inline-flex h-5 shrink-0 items-center rounded-full px-1.5 text-[9px] font-black uppercase tracking-wide ${activeRosterIsShared ? "bg-violet-50 text-violet-700 ring-1 ring-violet-100" : "bg-slate-100 text-slate-500"}`}
+                      className={`inline-flex h-5 shrink-0 items-center rounded-full px-1.5 text-[11px] font-black uppercase tracking-wide ${activeRosterIsShared ? "bg-violet-50 text-violet-700 ring-1 ring-violet-100" : "bg-slate-100 text-slate-500"}`}
                       title={activeRosterIsShared ? "Shared roster" : "Local roster"}
                     >
                       {activeRosterIsShared ? "Shared" : "Local"}

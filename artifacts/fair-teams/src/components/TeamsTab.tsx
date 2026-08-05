@@ -427,6 +427,9 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
   const [editingTeamName, setEditingTeamName] = useState("");
   const [history, setHistory] = useState<TeamHistoryEntry[]>(() => loadTeamHistory());
   const [swap, setSwap] = useState<SwapSelection | null>(null);
+  const [desktopDrag, setDesktopDrag] = useState<SwapSelection | null>(null);
+  const [desktopDropTarget, setDesktopDropTarget] = useState<{ teamId: string; playerId?: string } | null>(null);
+  const suppressPlayerClickRef = useRef(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [drawStep, setDrawStep] = useState(0);
   const [justGenerated, setJustGenerated] = useState(false);
@@ -743,6 +746,40 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
     });
   };
 
+
+  const desktopDragEnabled = () =>
+    typeof window !== "undefined" && window.matchMedia("(min-width: 1024px) and (pointer: fine)").matches;
+
+  const beginDesktopPlayerDrag = (event: React.DragEvent<HTMLButtonElement>, playerId: string, fromTeamId: string) => {
+    if (!desktopDragEnabled()) { event.preventDefault(); return; }
+    suppressPlayerClickRef.current = true;
+    setDesktopDrag({ playerId, fromTeamId });
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", `${fromTeamId}:${playerId}`);
+  };
+
+  const finishDesktopPlayerDrag = () => {
+    setDesktopDrag(null);
+    setDesktopDropTarget(null);
+    window.setTimeout(() => { suppressPlayerClickRef.current = false; }, 0);
+  };
+
+  const dropDesktopPlayerOnTeam = (event: React.DragEvent, toTeamId: string) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!desktopDrag) return finishDesktopPlayerDrag();
+    movePlayerToTeam(desktopDrag.fromTeamId, desktopDrag.playerId, toTeamId);
+    finishDesktopPlayerDrag();
+  };
+
+  const dropDesktopPlayerOnPlayer = (event: React.DragEvent, toTeamId: string, toPlayerId: string) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!desktopDrag) return finishDesktopPlayerDrag();
+    swapPlayers(desktopDrag.fromTeamId, desktopDrag.playerId, toTeamId, toPlayerId);
+    finishDesktopPlayerDrag();
+  };
+
   const handleSelectPlayer = (playerId: string, fromTeamId: string) => {
     if (!swap) {
       setSwap({ playerId, fromTeamId });
@@ -783,7 +820,7 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-3 lg:gap-4">
       {/* Controls */}
       <div className="bg-card border border-border px-3 py-2.5 rounded-xl shadow-sm flex flex-col gap-2">
         {isSharedRoster && (clubNoAverageAttendingCount > 0 || clubRatingError) && (
@@ -883,7 +920,7 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
 
       {/* Teams grid — 2 columns */}
       {teams.length > 0 && (
-        <div className={`grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 transition-opacity duration-300 ${isGenerating ? "opacity-50" : "opacity-100"}`}>
+        <div className={`grid grid-cols-2 md:grid-cols-3 lg:grid-cols-[repeat(auto-fit,minmax(15rem,1fr))] gap-2 lg:gap-3 transition-opacity duration-300 ${isGenerating ? "opacity-50" : "opacity-100"}`}>
           {teams.map((team, index) => {
             const col = colorFor(team.color);
             const accentColor = team.color === "white" ? "hsl(var(--border))" : col.hex;
@@ -897,13 +934,24 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
             return (
               <div
                 key={team.id}
-                className={`relative rounded-xl overflow-hidden border-2 bg-card shadow-sm transition-all duration-300 ${justGenerated ? "animate-in fade-in zoom-in-95" : ""}`}
+                className={`relative rounded-xl overflow-hidden border-2 bg-card shadow-sm transition-all duration-300 ${justGenerated ? "animate-in fade-in zoom-in-95" : ""} ${desktopDropTarget?.teamId === team.id && !desktopDropTarget.playerId ? "ring-4 ring-primary/25" : ""}`}
                 style={{
                   borderColor: team.color === "white" ? "hsl(var(--border))" : `${col.hex}${isSwapDest ? "cc" : "88"}`,
                   animationDelay: justGenerated ? `${index * 90}ms` : undefined,
                   boxShadow: justGenerated ? `0 0 0 1px ${accentColor}33, 0 10px 24px ${accentColor}18` : undefined,
                 }}
                 data-team-drop-id={team.id}
+                onDragOver={(event) => {
+                  if (!desktopDrag) return;
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = "move";
+                  setDesktopDropTarget({ teamId: team.id });
+                }}
+                onDragLeave={(event) => {
+                  if (event.currentTarget.contains(event.relatedTarget as Node)) return;
+                  setDesktopDropTarget((current) => current?.teamId === team.id ? null : current);
+                }}
+                onDrop={(event) => dropDesktopPlayerOnTeam(event, team.id)}
                 data-testid={`card-team-${team.id}`}
               >
                 {/* Header */}
@@ -927,7 +975,7 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
                         <button
                           type="button"
                           onClick={() => startEditingTeamName(team.id, team.name)}
-                          className="min-w-0 truncate text-left text-sm font-black leading-tight text-foreground hover:text-primary"
+                          className="min-w-0 truncate text-left text-sm font-black lg:text-[17px] leading-tight text-foreground hover:text-primary"
                           title="Tap to rename team"
                           data-testid={`button-team-name-${team.id}`}
                         >
@@ -970,7 +1018,7 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
                       </Select>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1.5 text-[10px] font-semibold leading-tight text-muted-foreground">
+                  <div className="flex items-center gap-1.5 text-[10px] font-semibold lg:text-[13px] leading-tight text-muted-foreground">
                     <span>
                       {showingStats
                         ? `Avg ${avgSkill} · ${team.players.length} player${team.players.length === 1 ? "" : "s"}`
@@ -1032,19 +1080,33 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
                         return (
                           <button
                             key={player.id}
-                            className="relative w-full flex select-none items-center gap-1.5 px-2.5 py-1.5 text-left transition-colors"
+                            className={`relative w-full flex select-none items-center gap-1.5 px-2.5 py-1.5 text-left transition-colors lg:cursor-grab lg:px-3 lg:py-2.5 ${desktopDrag?.playerId === player.id && desktopDrag?.fromTeamId === team.id ? "opacity-45" : ""} ${desktopDropTarget?.teamId === team.id && desktopDropTarget?.playerId === player.id ? "bg-primary/10 ring-2 ring-inset ring-primary/30" : ""}`}
                             style={{
                               backgroundColor: isSelected ? `${accentColor}20` : undefined,
                               borderLeft: isSelected ? `3px solid ${accentColor}` : "3px solid transparent",
                             }}
-                            onClick={() => handleSelectPlayer(player.id, team.id)}
+                            draggable
+                            onDragStart={(event) => beginDesktopPlayerDrag(event, player.id, team.id)}
+                            onDragEnd={finishDesktopPlayerDrag}
+                            onDragOver={(event) => {
+                              if (!desktopDrag) return;
+                              event.preventDefault();
+                              event.stopPropagation();
+                              event.dataTransfer.dropEffect = "move";
+                              setDesktopDropTarget({ teamId: team.id, playerId: player.id });
+                            }}
+                            onDrop={(event) => dropDesktopPlayerOnPlayer(event, team.id, player.id)}
+                            onClick={() => {
+                              if (suppressPlayerClickRef.current) return;
+                              handleSelectPlayer(player.id, team.id);
+                            }}
                             data-testid={`player-row-${player.id}-team-${team.id}`}
                           >
                             {isSelected && (
                               <ArrowLeftRight className="absolute left-1 top-1/2 w-2.5 h-2.5 -translate-y-1/2" style={{ color: accentColor }} />
                             )}
                             <div className={`min-w-0 flex-1 ${isSelected ? "pl-3" : ""}`}>
-                              <div className="font-bold text-xs truncate text-left">{displayName(player)}</div>
+                              <div className="font-bold text-xs truncate text-left lg:text-[15px]">{displayName(player)}</div>
                               {(player.isNew || player.isGoalkeeper || player.isOrganizer || isNotHereYet(player)) && (
                                 <div className="mt-0.5 flex flex-wrap items-center gap-0.5">
                                   {player.isNew && <NewBadge />}

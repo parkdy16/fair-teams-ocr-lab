@@ -545,7 +545,7 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
                             const latestMoveActivity = [...card.activities]
                               .filter((activity) => activity.action === "moved")
                               .sort((a, b) => b.at - a.at)[0];
-                            const flippedHeightClass = card.vote ? "min-h-[250px]" : card.note?.trim() ? "min-h-[190px]" : "min-h-[126px]";
+                            const flippedHeightClass = card.vote ? "min-h-[300px]" : card.note?.trim() ? "min-h-[190px]" : "min-h-[126px]";
                             return (
                               <div key={card.id} className={`relative [perspective:900px] ${flipped ? flippedHeightClass : "min-h-[64px]"}`}>
                                 <div className={`relative w-full transition-all duration-300 [transform-style:preserve-3d] ${flipped ? `${flippedHeightClass} [transform:rotateY(180deg)]` : "min-h-[64px]"}`}>
@@ -570,33 +570,33 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
                                     aria-label={`Show ${card.title} card front`}
                                     onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") shortTap(card.id); }}
                                   >
-                                    <div className="flex-1 overflow-hidden">
-                                      {card.note?.trim() && (
-                                        <div>
-                                          <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Note</div>
-                                          <div className="mt-1 max-h-[86px] overflow-y-auto whitespace-pre-wrap pr-1 text-[11px] font-semibold leading-relaxed text-[#102A43]">
-                                            {card.note.trim()}
-                                          </div>
-                                        </div>
-                                      )}
+                                    <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain pr-1">
                                       {card.vote && (() => {
                                         const total = card.vote.options.reduce((sum, option) => sum + option.count, 0);
                                         const canShowResults = card.vote.status === "closed" || card.vote.showResultsWhileOpen;
                                         return (
-                                          <div className={card.note?.trim() ? "mt-3 border-t border-slate-100 pt-2" : ""}>
+                                          <div>
                                             <div className="text-[10px] font-black uppercase tracking-wide text-violet-500">{card.vote.status === "closed" ? "Result" : "Vote"}</div>
-                                            <div className="mt-1 text-[11px] font-black leading-snug text-[#102A43]">{card.vote.question}</div>
+                                            <div className="mt-1 break-words text-[13px] font-black leading-snug text-[#102A43]">{card.vote.question}</div>
                                             {canShowResults ? (
-                                              <div className="mt-2 space-y-1">{card.vote.options.map((option) => <div key={option.id} className="flex items-center gap-2 text-[10px] font-bold text-slate-600"><span className="min-w-0 flex-1 truncate">{option.label}</span><span>{option.count}</span></div>)}</div>
-                                            ) : <div className="mt-1 text-[10px] font-bold text-slate-500">{card.vote.hideParticipationUntilClosed ? "Voting in progress" : `${total}${card.vote.eligibleCount ? ` of ${card.vote.eligibleCount}` : ""} voted`}</div>}
+                                              <div className="mt-2 space-y-1.5">{card.vote.options.map((option) => <div key={option.id} className="flex items-start gap-2 text-[10px] font-bold text-slate-600"><span className="min-w-0 flex-1 break-words">{option.label}</span><span className="shrink-0 rounded-full bg-slate-100 px-1.5 py-0.5 text-[#102A43]">{option.count}</span></div>)}</div>
+                                            ) : <div className="mt-1.5 text-[10px] font-bold text-slate-500">{card.vote.hideParticipationUntilClosed ? "Voting in progress" : `${total}${card.vote.eligibleCount ? ` of ${card.vote.eligibleCount}` : ""} voted`}</div>}
                                             {card.vote.status === "open" && (currentVoterHash && card.vote.voterHashes.includes(currentVoterHash) ? (
-                                              <div className="mt-2 text-[10px] font-black text-emerald-700">Vote submitted</div>
+                                              <div className="mt-2 rounded-xl bg-emerald-50 px-2.5 py-2 text-center text-[10px] font-black text-emerald-700">Vote submitted</div>
                                             ) : (
-                                              <button type="button" className="mt-2 rounded-full bg-violet-600 px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-white" onPointerDown={(event) => event.stopPropagation()} onPointerUp={(event) => { event.stopPropagation(); setSelectedVoteOptionId(""); setVotingCardId(card.id); }}>Vote now</button>
+                                              <button type="button" className="mt-2 w-full rounded-xl bg-violet-600 px-3 py-2 text-[10px] font-black uppercase tracking-wide text-white" onPointerDown={(event) => event.stopPropagation()} onPointerUp={(event) => { event.stopPropagation(); setSelectedVoteOptionId(""); setVotingCardId(card.id); }}>Vote now</button>
                                             ))}
                                           </div>
                                         );
                                       })()}
+                                      {card.note?.trim() && (
+                                        <div className={card.vote ? "mt-3 border-t border-slate-100 pt-2" : ""}>
+                                          <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">{card.vote ? "Context" : "Note"}</div>
+                                          <div className="mt-1 max-h-[72px] overflow-y-auto whitespace-pre-wrap break-words pr-1 text-[11px] font-semibold leading-relaxed text-[#102A43]">
+                                            {card.note.trim()}
+                                          </div>
+                                        </div>
+                                      )}
                                       <div className={(card.note?.trim() || card.vote) ? "mt-3 border-t border-slate-100 pt-2" : ""}>
                                         <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Activity</div>
                                         <div className="mt-1.5 space-y-1.5">
@@ -644,7 +644,7 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
           <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43]">{editingCardId ? "Edit card" : "New card"}</DialogTitle></DialogHeader>
           <div className="grid gap-3">
             <div><Label htmlFor="task-title">Title</Label><Input id="task-title" value={cardTitle} onChange={(event) => setCardTitle(event.target.value)} onKeyDown={blurOnDoneKey} enterKeyHint="done" maxLength={120} /></div>
-            <div><Label htmlFor="task-note">Notes</Label><Textarea id="task-note" value={cardNote} onChange={(event) => setCardNote(event.target.value)} onKeyDown={blurOnDoneKey} enterKeyHint="done" maxLength={1200} rows={4} /></div>
+            <div><Label htmlFor="task-note">{voteEnabled ? "Context" : "Notes"}</Label><Textarea id="task-note" value={cardNote} onChange={(event) => setCardNote(event.target.value)} onKeyDown={blurOnDoneKey} enterKeyHint="done" maxLength={1200} rows={4} placeholder={voteEnabled ? "Background, explanation or related information" : "Optional details"} /></div>
             <div className="grid grid-cols-2 gap-3">
               <div><Label htmlFor="task-assignee">Assignee</Label><Input id="task-assignee" value={cardAssignee} onChange={(event) => setCardAssignee(event.target.value)} onKeyDown={blurOnDoneKey} enterKeyHint="done" maxLength={80} placeholder="Optional" /></div>
               <div><Label htmlFor="task-due">Due date</Label><div className="mt-1 flex w-full min-w-0 rounded-md border border-input bg-background px-3 py-2"><input id="task-due" type="date" className="block w-full min-w-0 border-0 bg-transparent p-0 text-sm" value={cardDueDate} onChange={(event) => setCardDueDate(event.target.value)} /></div></div>

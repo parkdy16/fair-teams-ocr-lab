@@ -202,6 +202,9 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
   const [closeVoteConfirmOpen, setCloseVoteConfirmOpen] = useState(false);
   const [currentVoterHash, setCurrentVoterHash] = useState("");
   const [moveCardId, setMoveCardId] = useState<string | null>(null);
+  const [desktopDragCardId, setDesktopDragCardId] = useState<string | null>(null);
+  const [desktopDropColumnId, setDesktopDropColumnId] = useState<string | null>(null);
+  const [desktopDragEnabled, setDesktopDragEnabled] = useState(false);
   const [boardSettingsOpen, setBoardSettingsOpen] = useState(false);
   const [boardNameDraft, setBoardNameDraft] = useState("");
   const [columnEditorOpen, setColumnEditorOpen] = useState(false);
@@ -210,9 +213,19 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
   const pressTimerRef = useRef<number | null>(null);
   const onlineInitializationRef = useRef<string | null>(null);
   const longPressTriggeredRef = useRef(false);
+  const desktopDragCompletedRef = useRef(false);
   const background = mixHex(safeColor(themeColor), "#ffffff", 0.84);
   const columnBackground = mixHex(safeColor(themeColor), "#ffffff", 0.94);
   const accent = safeColor(themeColor);
+
+
+  useEffect(() => {
+    const query = window.matchMedia("(min-width: 1024px) and (pointer: fine)");
+    const sync = () => setDesktopDragEnabled(query.matches);
+    sync();
+    query.addEventListener?.("change", sync);
+    return () => query.removeEventListener?.("change", sync);
+  }, []);
 
   useEffect(() => {
     setFlippedIds(new Set());
@@ -449,8 +462,36 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
   const cancelPress = () => { if (pressTimerRef.current) window.clearTimeout(pressTimerRef.current); pressTimerRef.current = null; };
   const shortTap = (cardId: string) => {
     cancelPress();
+    if (desktopDragCompletedRef.current) { desktopDragCompletedRef.current = false; return; }
     if (longPressTriggeredRef.current) { longPressTriggeredRef.current = false; return; }
     setFlippedIds((current) => { const next = new Set(current); next.has(cardId) ? next.delete(cardId) : next.add(cardId); return next; });
+  };
+
+  const startDesktopCardDrag = (event: React.DragEvent<HTMLElement>, cardId: string) => {
+    if (!desktopDragEnabled || saving) { event.preventDefault(); return; }
+    cancelPress();
+    desktopDragCompletedRef.current = false;
+    setDesktopDragCardId(cardId);
+    setDesktopDropColumnId(null);
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", cardId);
+  };
+
+  const finishDesktopCardDrag = () => {
+    setDesktopDragCardId(null);
+    setDesktopDropColumnId(null);
+    window.setTimeout(() => { desktopDragCompletedRef.current = false; }, 0);
+  };
+
+  const dropDesktopCard = async (event: React.DragEvent<HTMLElement>, destinationId: string) => {
+    if (!desktopDragEnabled) return;
+    event.preventDefault();
+    const cardId = desktopDragCardId || event.dataTransfer.getData("text/plain");
+    const card = board.cards.find((item) => item.id === cardId);
+    desktopDragCompletedRef.current = true;
+    setDesktopDragCardId(null);
+    setDesktopDropColumnId(null);
+    if (card && card.columnId !== destinationId) await moveCard(card, destinationId);
   };
 
   const currentVotingCard = board.cards.find((card) => card.id === votingCardId) || null;
@@ -519,7 +560,7 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
             <div className="flex items-center justify-between gap-2">
               <div className="min-w-0">
                 <DialogTitle className="truncate text-base font-black text-[#102A43]">{board.meta?.name || rosterName}</DialogTitle>
-                <p className="mt-0.5 text-[10px] font-bold text-slate-600">{online ? "Live collaborator board" : "Organizer board"} · <span className="lg:hidden">long press to move · </span>tap to flip<span className="hidden lg:inline"> · right-click to move</span></p>
+                <p className="mt-0.5 text-[10px] font-bold text-slate-600">{online ? "Live collaborator board" : "Organizer board"} · <span className="lg:hidden">long press to move · </span>tap to flip<span className="hidden lg:inline"> · drag to move · right-click for menu</span></p>
               </div>
               <div className="flex shrink-0 gap-1.5">
                 <Button type="button" variant="outline" className="h-9 w-9 rounded-2xl bg-white/80 p-0" onClick={() => { setBoardNameDraft(board.meta?.name || rosterName); setBoardSettingsOpen(true); }} aria-label="Board settings"><Pencil className="h-4 w-4" /></Button>
@@ -534,7 +575,15 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
                 {activeColumns.map((column, columnIndex) => {
                   const cards = board.cards.filter((card) => card.columnId === column.id).sort((a, b) => a.position - b.position);
                   return (
-                    <section key={column.id} className="flex h-full w-[84vw] max-w-[320px] shrink-0 snap-start flex-col overflow-hidden rounded-2xl border border-white/60 shadow-sm lg:w-[310px] lg:max-w-none" style={{ backgroundColor: columnBackground }}>
+                    <section
+                      key={column.id}
+                      className={`flex h-full w-[84vw] max-w-[320px] shrink-0 snap-start flex-col overflow-hidden rounded-2xl border shadow-sm transition lg:w-[310px] lg:max-w-none ${desktopDropColumnId === column.id ? "border-emerald-300 ring-2 ring-emerald-200" : "border-white/60"}`}
+                      style={{ backgroundColor: columnBackground }}
+                      onDragOver={(event) => { if (!desktopDragEnabled || !desktopDragCardId) return; event.preventDefault(); event.dataTransfer.dropEffect = "move"; setDesktopDropColumnId(column.id); }}
+                      onDragEnter={(event) => { if (!desktopDragEnabled || !desktopDragCardId) return; event.preventDefault(); setDesktopDropColumnId(column.id); }}
+                      onDragLeave={(event) => { if (event.currentTarget.contains(event.relatedTarget as Node | null)) return; setDesktopDropColumnId((current) => current === column.id ? null : current); }}
+                      onDrop={(event) => void dropDesktopCard(event, column.id)}
+                    >
                       <div className="flex items-center gap-2 border-b border-black/5 px-3 py-2.5">
                         <h3 className="min-w-0 flex-1 truncate text-sm font-black text-[#102A43]">{column.name}</h3>
                         <span className="rounded-full bg-white/75 px-2 py-0.5 text-[10px] font-black text-slate-500">{cards.length}</span>
@@ -554,7 +603,7 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
                             return (
                               <div key={card.id} className={`relative [perspective:900px] ${flipped ? flippedHeightClass : "min-h-[64px]"}`}>
                                 <div className={`relative w-full transition-all duration-300 [transform-style:preserve-3d] ${flipped ? `${flippedHeightClass} [transform:rotateY(180deg)]` : "min-h-[64px]"}`}>
-                                  <button type="button" className="absolute inset-0 w-full rounded-xl border border-slate-200 bg-white p-3 text-left shadow-sm [backface-visibility:hidden] active:scale-[0.99]" onPointerDown={() => startPress(card.id)} onPointerUp={() => shortTap(card.id)} onPointerCancel={cancelPress} onPointerLeave={cancelPress} onContextMenu={(event) => { event.preventDefault(); setMoveCardId(card.id); }}>
+                                  <button type="button" draggable={desktopDragEnabled} className={`absolute inset-0 w-full rounded-xl border border-slate-200 bg-white p-3 text-left shadow-sm [backface-visibility:hidden] active:scale-[0.99] lg:cursor-grab lg:active:cursor-grabbing ${desktopDragCardId === card.id ? "opacity-45 ring-2 ring-emerald-200" : ""}`} onDragStart={(event) => startDesktopCardDrag(event, card.id)} onDragEnd={finishDesktopCardDrag} onPointerDown={() => { if (!desktopDragEnabled) startPress(card.id); }} onPointerUp={() => shortTap(card.id)} onPointerCancel={cancelPress} onPointerLeave={cancelPress} onContextMenu={(event) => { event.preventDefault(); setMoveCardId(card.id); }}>
                                     <div className="text-[13px] font-black leading-snug text-[#102A43]">{card.title}</div>
                                     <div className="mt-2 flex flex-wrap items-center gap-1.5">
                                       {card.category && <span className="rounded-full px-2 py-0.5 text-[9px] font-black" style={{ color: accent, backgroundColor: mixHex(accent, "#ffffff", 0.88) }}>{card.category}</span>}
@@ -566,8 +615,11 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
                                   <div
                                     role="button"
                                     tabIndex={0}
-                                    className="absolute inset-0 flex w-full flex-col rounded-xl border border-slate-200 bg-white p-0 text-left shadow-sm [backface-visibility:hidden] [transform:rotateY(180deg)] active:scale-[0.99]"
-                                    onPointerDown={() => startPress(card.id)}
+                                    draggable={desktopDragEnabled}
+                                    className={`absolute inset-0 flex w-full flex-col rounded-xl border border-slate-200 bg-white p-0 text-left shadow-sm [backface-visibility:hidden] [transform:rotateY(180deg)] active:scale-[0.99] lg:cursor-grab lg:active:cursor-grabbing ${desktopDragCardId === card.id ? "opacity-45 ring-2 ring-emerald-200" : ""}`}
+                                    onDragStart={(event) => startDesktopCardDrag(event, card.id)}
+                                    onDragEnd={finishDesktopCardDrag}
+                                    onPointerDown={() => { if (!desktopDragEnabled) startPress(card.id); }}
                                     onPointerUp={() => shortTap(card.id)}
                                     onPointerCancel={cancelPress}
                                     onPointerLeave={cancelPress}

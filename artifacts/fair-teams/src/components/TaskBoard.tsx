@@ -537,7 +537,7 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-wide lg:text-[20px] lg:normal-case lg:tracking-normal" style={{ color: accent }}>
-              <ClipboardList className="fairteams-desktop-balanced-icon h-[18px] w-[18px] lg:h-6 lg:w-6" /> Tasks
+              <ClipboardList className="fairteams-desktop-balanced-icon h-[18px] w-[18px] lg:h-6 lg:w-6" /> Tasks &amp; Votes
             </div>
             <h2 className="mt-1 truncate text-[17px] font-black leading-tight text-[#102A43] lg:text-[19px]">{board.meta?.name || rosterName}</h2>
           </div>
@@ -606,7 +606,7 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
                                   <button type="button" draggable={desktopDragEnabled} className={`absolute inset-0 w-full rounded-xl border border-slate-200 bg-white p-3 text-left shadow-sm [backface-visibility:hidden] active:scale-[0.99] lg:cursor-grab lg:active:cursor-grabbing ${desktopDragCardId === card.id ? "opacity-45 ring-2 ring-emerald-200" : ""}`} onDragStart={(event) => startDesktopCardDrag(event, card.id)} onDragEnd={finishDesktopCardDrag} onPointerDown={() => { if (!desktopDragEnabled) startPress(card.id); }} onPointerUp={() => shortTap(card.id)} onPointerCancel={cancelPress} onPointerLeave={cancelPress} onContextMenu={(event) => { event.preventDefault(); setMoveCardId(card.id); }}>
                                     <div className="text-[13px] font-black leading-snug text-[#102A43]">{card.title}</div>
                                     <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                                      {card.category && <span className="rounded-full px-2 py-0.5 text-[9px] font-black" style={{ color: accent, backgroundColor: mixHex(accent, "#ffffff", 0.88) }}>{card.category}</span>}
+                                      {card.category && <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[9px] font-black text-slate-700 ring-1 ring-slate-300/70">{card.category}</span>}
                                       {card.assignee && <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-black text-slate-600"><UserRound className="h-3 w-3" />{card.assignee}</span>}
                                       {card.dueDate && <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-black ${isOverdue(card.dueDate) ? "bg-red-50 text-red-700" : "bg-slate-100 text-slate-600"}`}><CalendarDays className="h-3 w-3" />{dueText(card.dueDate)}</span>}
                                       {card.vote && <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5 text-[9px] font-black text-violet-700"><Vote className="h-3 w-3" />{card.vote.status === "closed" ? "Result" : "Vote"}</span>}

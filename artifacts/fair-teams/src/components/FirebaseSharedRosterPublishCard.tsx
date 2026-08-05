@@ -240,7 +240,7 @@ Your local roster will stay local. Fair Teams will copy shared identity fields o
       await refreshSharedData();
       if (refreshed > 0) {
         setAutoSyncStatus("saved");
-        setNotice({ tone: "success", text: refreshed === 1 ? "Shared roster updated automatically." : `${refreshed} shared rosters updated automatically.` });
+        setNotice(null);
       } else {
         setAutoSyncStatus("idle");
       }

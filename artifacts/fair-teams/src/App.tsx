@@ -1607,11 +1607,6 @@ function App() {
         ),
       };
     });
-    setRosterToolsNotice({
-      tone: "success",
-      title: "Shared roster saved",
-      message: `${summary.groupName ? `${summary.groupName} · ` : ""}${summary.name} was saved online as version ${summary.version}.`,
-    });
   };
 
 

@@ -556,15 +556,15 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
 
       <Dialog open={boardOpen} onOpenChange={setBoardOpen}>
         <DialogContent className="fixed inset-0 flex h-[100dvh] max-h-none w-screen max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-0 p-0 sm:inset-2 sm:h-auto sm:w-auto sm:rounded-[2rem] sm:border lg:inset-6 lg:rounded-[2rem]">
-          <DialogHeader className="border-b border-white/45 px-3 py-3 pr-12 text-left" style={{ backgroundColor: mixHex(accent, "#ffffff", 0.7) }}>
+          <DialogHeader className="border-b border-white/45 px-3 py-3 pr-12 text-left lg:px-5 lg:py-4 lg:pr-14" style={{ backgroundColor: mixHex(accent, "#ffffff", 0.7) }}>
             <div className="flex items-center justify-between gap-2">
               <div className="min-w-0">
-                <DialogTitle className="truncate text-base font-black text-[#102A43]">{board.meta?.name || rosterName}</DialogTitle>
-                <p className="mt-0.5 text-[10px] font-bold text-slate-600">{online ? "Live collaborator board" : "Organizer board"} · <span className="lg:hidden">long press to move · </span>tap to flip<span className="hidden lg:inline"> · drag to move · right-click for menu</span></p>
+                <DialogTitle className="truncate text-base font-black text-[#102A43] lg:text-[22px] lg:leading-tight">{board.meta?.name || rosterName}</DialogTitle>
+                <p className="mt-0.5 text-[10px] font-bold text-slate-600 lg:mt-1 lg:text-[13px]">{online ? "Live collaborator board" : "Organizer board"} · <span className="lg:hidden">long press to move · </span>tap to flip<span className="hidden lg:inline"> · drag to move · right-click for menu</span></p>
               </div>
               <div className="flex shrink-0 gap-1.5">
-                <Button type="button" variant="outline" className="h-9 w-9 rounded-2xl bg-white/80 p-0" onClick={() => { setBoardNameDraft(board.meta?.name || rosterName); setBoardSettingsOpen(true); }} aria-label="Board settings"><Pencil className="h-4 w-4" /></Button>
-                <Button type="button" className="h-9 rounded-2xl px-3 text-xs font-black text-white" style={{ backgroundColor: accent }} onClick={() => openNewCard()}><Plus className="mr-1 h-4 w-4" />Card</Button>
+                <Button type="button" variant="outline" className="h-9 w-9 rounded-2xl bg-white/80 p-0 lg:h-11 lg:w-11" onClick={() => { setBoardNameDraft(board.meta?.name || rosterName); setBoardSettingsOpen(true); }} aria-label="Board settings"><Pencil className="h-4 w-4 lg:h-[18px] lg:w-[18px]" /></Button>
+                <Button type="button" className="h-9 rounded-2xl px-3 text-xs font-black text-white lg:h-11 lg:px-4 lg:text-sm" style={{ backgroundColor: accent }} onClick={() => openNewCard()}><Plus className="mr-1 h-4 w-4 lg:h-[18px] lg:w-[18px]" />Card</Button>
               </div>
             </div>
           </DialogHeader>
@@ -577,19 +577,19 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
                   return (
                     <section
                       key={column.id}
-                      className={`flex h-full w-[84vw] max-w-[320px] shrink-0 snap-start flex-col overflow-hidden rounded-2xl border shadow-sm transition lg:w-[310px] lg:max-w-none ${desktopDropColumnId === column.id ? "border-emerald-300 ring-2 ring-emerald-200" : "border-white/60"}`}
+                      className={`flex h-full w-[84vw] max-w-[320px] shrink-0 snap-start flex-col overflow-hidden rounded-2xl border shadow-sm transition lg:w-[330px] lg:max-w-none ${desktopDropColumnId === column.id ? "border-emerald-300 ring-2 ring-emerald-200" : "border-white/60"}`}
                       style={{ backgroundColor: columnBackground }}
                       onDragOver={(event) => { if (!desktopDragEnabled || !desktopDragCardId) return; event.preventDefault(); event.dataTransfer.dropEffect = "move"; setDesktopDropColumnId(column.id); }}
                       onDragEnter={(event) => { if (!desktopDragEnabled || !desktopDragCardId) return; event.preventDefault(); setDesktopDropColumnId(column.id); }}
                       onDragLeave={(event) => { if (event.currentTarget.contains(event.relatedTarget as Node | null)) return; setDesktopDropColumnId((current) => current === column.id ? null : current); }}
                       onDrop={(event) => void dropDesktopCard(event, column.id)}
                     >
-                      <div className="flex items-center gap-2 border-b border-black/5 px-3 py-2.5">
-                        <h3 className="min-w-0 flex-1 truncate text-sm font-black text-[#102A43]">{column.name}</h3>
-                        <span className="rounded-full bg-white/75 px-2 py-0.5 text-[10px] font-black text-slate-500">{cards.length}</span>
-                        <button type="button" className="rounded-xl p-1.5 text-slate-500 hover:bg-white/70" onClick={() => openEditColumn(column)} aria-label={`Edit ${column.name}`}><MoreHorizontal className="h-4 w-4" /></button>
+                      <div className="flex items-center gap-2 border-b border-black/5 px-3 py-2.5 lg:px-4 lg:py-3.5">
+                        <h3 className="min-w-0 flex-1 truncate text-sm font-black text-[#102A43] lg:text-[17px]">{column.name}</h3>
+                        <span className="rounded-full bg-white/75 px-2 py-0.5 text-[10px] font-black text-slate-500 lg:px-2.5 lg:py-1 lg:text-xs">{cards.length}</span>
+                        <button type="button" className="rounded-xl p-1.5 text-slate-500 hover:bg-white/70 lg:p-2" onClick={() => openEditColumn(column)} aria-label={`Edit ${column.name}`}><MoreHorizontal className="h-4 w-4 lg:h-[18px] lg:w-[18px]" /></button>
                       </div>
-                      <div className="flex-1 overflow-y-auto px-2.5 py-2.5">
+                      <div className="flex-1 overflow-y-auto px-2.5 py-2.5 lg:px-3 lg:py-3">
                         <div className="space-y-2">
                           {cards.map((card) => {
                             const flipped = flippedIds.has(card.id);
@@ -611,13 +611,13 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
                             return (
                               <div key={card.id} className={`relative [perspective:900px] ${flipped ? flippedHeightClass : frontHeightClass}`}>
                                 <div className={`relative w-full transition-all duration-300 [transform-style:preserve-3d] ${flipped ? `${flippedHeightClass} [transform:rotateY(180deg)]` : frontHeightClass}`}>
-                                  <button type="button" draggable={desktopDragEnabled} className={`absolute inset-0 w-full rounded-xl border border-slate-200 bg-white p-3 text-left shadow-sm [backface-visibility:hidden] active:scale-[0.99] lg:cursor-grab lg:active:cursor-grabbing ${desktopDragCardId === card.id ? "opacity-45 ring-2 ring-emerald-200" : ""}`} onDragStart={(event) => startDesktopCardDrag(event, card.id)} onDragEnd={finishDesktopCardDrag} onPointerDown={() => { if (!desktopDragEnabled) startPress(card.id); }} onPointerUp={() => shortTap(card.id)} onPointerCancel={cancelPress} onPointerLeave={cancelPress} onContextMenu={(event) => { event.preventDefault(); setMoveCardId(card.id); }}>
-                                    <div className="text-[13px] font-black leading-snug text-[#102A43]">{card.title}</div>
+                                  <button type="button" draggable={desktopDragEnabled} className={`absolute inset-0 w-full rounded-xl border border-slate-200 bg-white p-3 text-left shadow-sm lg:p-4 [backface-visibility:hidden] active:scale-[0.99] lg:cursor-grab lg:active:cursor-grabbing ${desktopDragCardId === card.id ? "opacity-45 ring-2 ring-emerald-200" : ""}`} onDragStart={(event) => startDesktopCardDrag(event, card.id)} onDragEnd={finishDesktopCardDrag} onPointerDown={() => { if (!desktopDragEnabled) startPress(card.id); }} onPointerUp={() => shortTap(card.id)} onPointerCancel={cancelPress} onPointerLeave={cancelPress} onContextMenu={(event) => { event.preventDefault(); setMoveCardId(card.id); }}>
+                                    <div className="text-[13px] font-black leading-snug text-[#102A43] lg:text-[15px] lg:leading-[1.3]">{card.title}</div>
                                     <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                                      {card.category && <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[9px] font-black text-slate-700 ring-1 ring-slate-300/70">{card.category}</span>}
-                                      {card.assignee && <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-black text-slate-600"><UserRound className="h-3 w-3" />{card.assignee}</span>}
-                                      {card.dueDate && <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-black ${isOverdue(card.dueDate) ? "bg-red-50 text-red-700" : "bg-slate-100 text-slate-600"}`}><CalendarDays className="h-3 w-3" />{dueText(card.dueDate)}</span>}
-                                      {card.vote && <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5 text-[9px] font-black text-violet-700"><Vote className="h-3 w-3" />{card.vote.status === "closed" ? "Result" : "Vote"}</span>}
+                                      {card.category && <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[9px] font-black lg:px-2.5 lg:py-1 lg:text-[11px] text-slate-700 ring-1 ring-slate-300/70">{card.category}</span>}
+                                      {card.assignee && <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-black lg:gap-1.5 lg:px-2.5 lg:py-1 lg:text-[11px] text-slate-600"><UserRound className="h-3 w-3 lg:h-3.5 lg:w-3.5" />{card.assignee}</span>}
+                                      {card.dueDate && <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-black lg:gap-1.5 lg:px-2.5 lg:py-1 lg:text-[11px] ${isOverdue(card.dueDate) ? "bg-red-50 text-red-700" : "bg-slate-100 text-slate-600"}`}><CalendarDays className="h-3 w-3 lg:h-3.5 lg:w-3.5" />{dueText(card.dueDate)}</span>}
+                                      {card.vote && <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5 text-[9px] font-black lg:gap-1.5 lg:px-2.5 lg:py-1 lg:text-[11px] text-violet-700"><Vote className="h-3 w-3 lg:h-3.5 lg:w-3.5" />{card.vote.status === "closed" ? "Result" : "Vote"}</span>}
                                     </div>
                                   </button>
                                   <div
@@ -635,69 +635,69 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
                                     aria-label={`Show ${card.title} card front`}
                                     onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") shortTap(card.id); }}
                                   >
-                                    <div className="flex-1 min-h-0 w-full overflow-y-auto overscroll-contain px-3 pb-3 pt-3">
+                                    <div className="flex min-h-full w-full flex-1 flex-col overflow-y-auto overscroll-contain px-3 pb-3 pt-3 lg:px-4 lg:pb-4 lg:pt-4">
                                       {card.vote && (() => {
                                         const total = card.vote.options.reduce((sum, option) => sum + option.count, 0);
                                         const canShowResults = card.vote.status === "closed" || card.vote.showResultsWhileOpen;
                                         return (
                                           <div>
-                                            <div className="text-[10px] font-black uppercase tracking-wide text-violet-500">{card.vote.status === "closed" ? "Result" : "Vote"}</div>
-                                            <div className="mt-1 break-words text-[13px] font-black leading-snug text-[#102A43]">{card.vote.question}</div>
+                                            <div className="text-[10px] font-black uppercase tracking-wide text-violet-500 lg:text-xs">{card.vote.status === "closed" ? "Result" : "Vote"}</div>
+                                            <div className="mt-1 break-words text-[13px] font-black leading-snug text-[#102A43] lg:mt-1.5 lg:text-[16px] lg:leading-[1.35]">{card.vote.question}</div>
                                             {canShowResults ? (
-                                              <div className="mt-2 space-y-1.5">{card.vote.options.map((option) => <div key={option.id} className="flex items-start gap-2 text-[10px] font-bold text-slate-600"><span className="min-w-0 flex-1 break-words">{option.label}</span><span className="shrink-0 rounded-full bg-slate-100 px-1.5 py-0.5 text-[#102A43]">{option.count}</span></div>)}</div>
-                                            ) : <div className="mt-1.5 text-[10px] font-bold text-slate-500">{card.vote.hideParticipationUntilClosed ? "Voting in progress" : `${total}${card.vote.eligibleCount ? ` of ${card.vote.eligibleCount}` : ""} voted`}</div>}
+                                              <div className="mt-2 space-y-1.5">{card.vote.options.map((option) => <div key={option.id} className="flex items-start gap-2 text-[10px] font-bold text-slate-600 lg:text-[12px]"><span className="min-w-0 flex-1 break-words">{option.label}</span><span className="shrink-0 rounded-full bg-slate-100 px-1.5 py-0.5 text-[#102A43]">{option.count}</span></div>)}</div>
+                                            ) : <div className="mt-1.5 text-[10px] font-bold text-slate-500 lg:text-[12px]">{card.vote.hideParticipationUntilClosed ? "Voting in progress" : `${total}${card.vote.eligibleCount ? ` of ${card.vote.eligibleCount}` : ""} voted`}</div>}
                                             {card.vote.status === "open" && (currentVoterHash && card.vote.voterHashes.includes(currentVoterHash) ? (
-                                              <div className="mt-2 rounded-xl bg-emerald-50 px-2.5 py-2 text-center text-[10px] font-black text-emerald-700">Vote submitted</div>
+                                              <div className="mt-2 rounded-xl bg-emerald-50 px-2.5 py-2 text-center text-[10px] font-black text-emerald-700 lg:mt-3 lg:py-2.5 lg:text-[12px]">Vote submitted</div>
                                             ) : (
-                                              <button type="button" className="mt-2 w-full rounded-xl bg-violet-600 px-3 py-2 text-[10px] font-black uppercase tracking-wide text-white" onPointerDown={(event) => event.stopPropagation()} onPointerUp={(event) => { event.stopPropagation(); setSelectedVoteOptionId(""); setVotingCardId(card.id); }}>Vote now</button>
+                                              <button type="button" className="mt-2 w-full rounded-xl bg-violet-600 px-3 py-2 text-[10px] font-black uppercase tracking-wide text-white lg:mt-3 lg:py-2.5 lg:text-[13px]" onPointerDown={(event) => event.stopPropagation()} onPointerUp={(event) => { event.stopPropagation(); setSelectedVoteOptionId(""); setVotingCardId(card.id); }}>Vote now</button>
                                             ))}
                                           </div>
                                         );
                                       })()}
                                       {card.note?.trim() && (
                                         <div className={card.vote ? "mt-3 border-t border-slate-100 pt-2" : ""}>
-                                          <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">{card.vote ? "Context" : "Note"}</div>
-                                          <div className="mt-1 max-h-[72px] overflow-y-auto whitespace-pre-wrap break-words pr-1 text-[11px] font-semibold leading-relaxed text-[#102A43]">
+                                          <div className="text-[10px] font-black uppercase tracking-wide text-slate-400 lg:text-[11px]">{card.vote ? "Context" : "Note"}</div>
+                                          <div className="mt-1 max-h-[72px] overflow-y-auto whitespace-pre-wrap break-words pr-1 text-[11px] font-semibold leading-relaxed text-[#102A43] lg:mt-1.5 lg:max-h-[96px] lg:text-[13px]">
                                             {card.note.trim()}
                                           </div>
                                         </div>
                                       )}
-                                      <div className={(card.note?.trim() || card.vote) ? "mt-3 border-t border-slate-100 pt-2" : ""}>
-                                        <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Activity</div>
-                                        <div className="mt-1.5 space-y-1.5">
-                                          <div className="text-[10px] font-bold leading-snug text-slate-600">
-                                            <span className="text-[#102A43]">{createdActivity ? `${createdActivity.actorName} created this card` : `Created by ${card.createdByName}`}</span>
+                                      <div className={(card.note?.trim() || card.vote) ? "mt-3 border-t border-slate-100 pt-2 lg:mt-auto lg:pt-5" : "lg:mt-auto lg:pt-5"}>
+                                        <div className="text-[10px] font-black uppercase tracking-wide text-slate-400 lg:text-[10px]">Activity</div>
+                                        <div className="mt-1.5 space-y-1.5 lg:mt-2 lg:space-y-1">
+                                          <div className="text-[10px] font-bold leading-snug text-slate-600 lg:text-[10px] lg:text-slate-500">
+                                            <span className="text-[#102A43] lg:text-slate-500">{createdActivity ? `${createdActivity.actorName} created this card` : `Created by ${card.createdByName}`}</span>
                                             <span className="ml-1 text-slate-400">{formatTime(createdActivity?.at || card.createdAt)}</span>
                                           </div>
                                           {latestMoveActivity && (
-                                            <div className="text-[10px] font-bold leading-snug text-slate-600">
-                                              <span className="text-[#102A43]">{activityText(latestMoveActivity)}</span>
+                                            <div className="text-[10px] font-bold leading-snug text-slate-600 lg:text-[10px] lg:text-slate-500">
+                                              <span className="text-[#102A43] lg:text-slate-500">{activityText(latestMoveActivity)}</span>
                                               <span className="ml-1 text-slate-400">{formatTime(latestMoveActivity.at)}</span>
                                             </div>
                                           )}
                                         </div>
                                       </div>
                                     </div>
-                                    <div className="mt-2 text-[9px] font-bold text-slate-400">Tap to flip back · Hold to move</div>
+                                    <div className="px-3 pb-2 text-[9px] font-bold text-slate-400 lg:px-4 lg:pb-3 lg:text-[10px]"><span className="lg:hidden">Tap to flip back · Hold to move</span><span className="hidden lg:inline">Click to flip back · Drag to move</span></div>
                                   </div>
                                 </div>
-                                <button type="button" className="absolute right-1.5 top-1.5 z-10 rounded-full bg-white/90 p-1 text-slate-400 shadow-sm" onClick={(event) => { event.stopPropagation(); openEditCard(card); }} aria-label={`Edit ${card.title}`}><Pencil className="h-3 w-3" /></button>
+                                <button type="button" className="absolute right-1.5 top-1.5 z-10 rounded-full bg-white/90 p-1 text-slate-400 shadow-sm lg:right-2 lg:top-2 lg:p-1.5" onClick={(event) => { event.stopPropagation(); openEditCard(card); }} aria-label={`Edit ${card.title}`}><Pencil className="h-3 w-3 lg:h-3.5 lg:w-3.5" /></button>
                               </div>
                             );
                           })}
-                          {!cards.length && <div className="rounded-xl border border-dashed border-slate-300 bg-white/40 px-3 py-5 text-center text-[11px] font-bold text-slate-400">No cards here</div>}
+                          {!cards.length && <div className="rounded-xl border border-dashed border-slate-300 bg-white/40 px-3 py-5 text-center text-[11px] font-bold text-slate-400 lg:py-4 lg:text-[13px]">No cards here</div>}
                         </div>
-                        <button type="button" className="mt-2 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-[11px] font-black text-slate-500 hover:bg-white/60" onClick={() => openNewCard(column.id)}><Plus className="h-4 w-4" />Add card</button>
+                        <button type="button" className="mt-2 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-[11px] font-black text-slate-500 hover:bg-white/60 lg:mt-3 lg:py-2.5 lg:text-[13px]" onClick={() => openNewCard(column.id)}><Plus className="h-4 w-4 lg:h-[18px] lg:w-[18px]" />Add card</button>
                       </div>
                       <div className="flex items-center justify-between border-t border-black/5 px-2 py-1.5 text-slate-400">
                         <button type="button" className="rounded-lg p-1.5 disabled:opacity-25" disabled={columnIndex === 0} onClick={() => shiftColumn(column.id, -1)} aria-label="Move column left"><ChevronLeft className="h-4 w-4" /></button>
-                        <span className="text-[9px] font-black uppercase tracking-wide">Column {columnIndex + 1}</span>
+                        <span className="text-[9px] font-black uppercase tracking-wide lg:text-[10px]">Column {columnIndex + 1}</span>
                         <button type="button" className="rounded-lg p-1.5 disabled:opacity-25" disabled={columnIndex === activeColumns.length - 1} onClick={() => shiftColumn(column.id, 1)} aria-label="Move column right"><ChevronRight className="h-4 w-4" /></button>
                       </div>
                     </section>
                   );
                 })}
-                <button type="button" className="flex h-12 w-[76vw] max-w-[280px] shrink-0 snap-start items-center justify-center gap-2 rounded-2xl lg:w-[260px] border border-dashed border-white/80 bg-white/40 text-xs font-black text-slate-600" onClick={openNewColumn}><Plus className="h-4 w-4" />Add another column</button>
+                <button type="button" className="flex h-12 w-[76vw] max-w-[280px] shrink-0 snap-start items-center justify-center gap-2 rounded-2xl border border-dashed border-white/80 bg-white/40 text-xs font-black text-slate-600 lg:h-14 lg:w-[280px] lg:text-sm" onClick={openNewColumn}><Plus className="h-4 w-4" />Add another column</button>
               </div>
             )}
           </div>

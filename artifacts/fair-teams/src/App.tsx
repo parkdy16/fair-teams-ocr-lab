@@ -3515,7 +3515,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
   return (
     <div
       data-tutorial-active={tutorialActive ? "true" : undefined}
-      className="fairteams-visual-refresh flex flex-col min-h-[100dvh] bg-background w-full max-w-md md:max-w-3xl lg:max-w-5xl mx-auto relative overflow-hidden"
+      className="fairteams-visual-refresh flex min-h-[100dvh] w-full max-w-md flex-col overflow-hidden bg-background md:max-w-3xl lg:max-w-[1440px] lg:rounded-none xl:my-3 xl:min-h-[calc(100dvh-1.5rem)] xl:rounded-[2rem] xl:border xl:border-slate-200 xl:shadow-xl mx-auto relative"
       style={{ "--roster-accent": identityAccentColor } as React.CSSProperties}
     >
       <Tabs
@@ -3539,9 +3539,42 @@ They will no longer be able to open or edit this shared roster unless it is shar
           if (value === "players" && activeTab !== "players") setOpenPairingRulesToken(0);
           setActiveTab(value);
         }}
-        className="flex-1 flex flex-col min-h-0"
+        className="relative flex min-h-0 flex-1 flex-col lg:pl-[220px]"
       >
-        <header className="sticky top-0 z-30 border-b border-border bg-white/92 px-4 pt-3 pb-2 shadow-sm backdrop-blur">
+        {!shouldShowTodayStartHeader && (
+          <aside className="absolute inset-y-0 left-0 z-40 hidden w-[220px] flex-col border-r border-slate-200 bg-white/96 p-4 backdrop-blur lg:flex">
+            <div className="flex items-center gap-3 px-2 py-2">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <img src={groupLogo || fairTeamsLogo} alt="" className="h-full w-full object-cover" />
+              </span>
+              <div className="min-w-0">
+                <div className="truncate text-sm font-black text-[#102A43]">{activeRosterName}</div>
+                <div className="mt-0.5 text-[10px] font-black uppercase tracking-wide text-slate-400">Fair Teams</div>
+              </div>
+            </div>
+            <TabsList className="mt-5 flex h-auto w-full flex-col gap-1 rounded-2xl border border-slate-200 bg-slate-50/70 p-1.5 shadow-none">
+              {([
+                ["players", "Roster"],
+                ["today", "Today"],
+                ["teams", "Teams"],
+                ["club", "Club"],
+              ] as const).map(([value, label]) => (
+                <TabsTrigger
+                  key={value}
+                  value={value}
+                  className="fairteams-tab-trigger flex h-11 w-full justify-start rounded-xl px-4 text-sm font-black text-slate-500 data-[state=active]:bg-white data-[state=active]:text-[#102A43] data-[state=active]:shadow-sm"
+                >
+                  {label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+            <div className="mt-auto rounded-2xl bg-slate-50 px-3 py-3 text-[10px] font-semibold leading-relaxed text-slate-500">
+              The same live roster, tasks, equipment and votes on every device.
+            </div>
+          </aside>
+        )}
+
+        <header className="sticky top-0 z-30 border-b border-border bg-white/92 px-4 pt-3 pb-2 shadow-sm backdrop-blur lg:px-7">
           <div className="flex items-center justify-between gap-3 px-1 pb-2">
             <div className="min-w-0 flex-1">
               <button
@@ -3706,7 +3739,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
           </div>
         )}
 
-        <div className={`flex-1 overflow-y-auto p-4 md:p-5 ${shouldShowTodayStartHeader ? "pb-6 md:pb-6" : "pb-20 md:pb-20"}`} style={{ WebkitOverflowScrolling: "touch" }}>
+        <div className={`flex-1 overflow-y-auto p-4 md:p-5 lg:px-7 lg:py-6 ${shouldShowTodayStartHeader ? "pb-6 md:pb-6" : "pb-20 md:pb-20 lg:pb-6"}`} style={{ WebkitOverflowScrolling: "touch" }}>
           <div className="flex min-h-[calc(100dvh-116px)] flex-col">
             <TabsContent
               value="players"
@@ -3842,7 +3875,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
         </div>
 
         {!shouldShowTodayStartHeader && (
-          <div className="fixed inset-x-0 bottom-0 z-40 mx-auto w-full max-w-md animate-in fade-in-0 slide-in-from-bottom-2 duration-200 border-t border-slate-200 bg-white/95 px-4 pb-[max(0.65rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-4px_14px_rgba(15,23,42,0.035)] backdrop-blur md:max-w-3xl lg:max-w-5xl">
+          <div className="fixed inset-x-0 bottom-0 z-40 mx-auto w-full max-w-md animate-in fade-in-0 slide-in-from-bottom-2 duration-200 border-t border-slate-200 bg-white/95 px-4 pb-[max(0.65rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-4px_14px_rgba(15,23,42,0.035)] backdrop-blur md:max-w-3xl lg:hidden">
             <TabsList className="mx-auto grid h-[50px] w-full max-w-md grid-cols-4 gap-1 rounded-2xl border border-slate-200/70 bg-white p-1.5 shadow-sm">
               <TabsTrigger
                 value="players"

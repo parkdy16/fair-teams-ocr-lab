@@ -514,12 +514,12 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
       </section>
 
       <Dialog open={boardOpen} onOpenChange={setBoardOpen}>
-        <DialogContent className="fixed inset-0 flex h-[100dvh] max-h-none w-screen max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-0 p-0 sm:inset-2 sm:h-auto sm:w-auto sm:rounded-[2rem] sm:border">
+        <DialogContent className="fixed inset-0 flex h-[100dvh] max-h-none w-screen max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-0 p-0 sm:inset-2 sm:h-auto sm:w-auto sm:rounded-[2rem] sm:border lg:inset-6 lg:rounded-[2rem]">
           <DialogHeader className="border-b border-white/45 px-3 py-3 pr-12 text-left" style={{ backgroundColor: mixHex(accent, "#ffffff", 0.7) }}>
             <div className="flex items-center justify-between gap-2">
               <div className="min-w-0">
                 <DialogTitle className="truncate text-base font-black text-[#102A43]">{board.meta?.name || rosterName}</DialogTitle>
-                <p className="mt-0.5 text-[10px] font-bold text-slate-600">{online ? "Live collaborator board" : "Organizer board"} · long press to move · tap to flip</p>
+                <p className="mt-0.5 text-[10px] font-bold text-slate-600">{online ? "Live collaborator board" : "Organizer board"} · <span className="lg:hidden">long press to move · </span>tap to flip<span className="hidden lg:inline"> · right-click to move</span></p>
               </div>
               <div className="flex shrink-0 gap-1.5">
                 <Button type="button" variant="outline" className="h-9 w-9 rounded-2xl bg-white/80 p-0" onClick={() => { setBoardNameDraft(board.meta?.name || rosterName); setBoardSettingsOpen(true); }} aria-label="Board settings"><Pencil className="h-4 w-4" /></Button>
@@ -530,11 +530,11 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
           {error && <div className="mx-3 mt-2 rounded-xl bg-red-50 px-3 py-2 text-[11px] font-bold text-red-700">{error}</div>}
           <div className="flex-1 min-h-0 overflow-hidden" style={{ backgroundColor: background }}>
             {loading ? <div className="p-6 text-center text-sm font-black text-slate-500">Loading task board…</div> : (
-              <div className="flex h-full snap-x snap-proximity gap-3 overflow-x-auto overflow-y-hidden px-3 pb-4 pt-3" style={{ overscrollBehaviorX: "contain" }}>
+              <div className="flex h-full snap-x snap-proximity gap-3 overflow-x-auto overflow-y-hidden px-3 pb-4 pt-3 lg:px-5 lg:pb-5 lg:pt-5" style={{ overscrollBehaviorX: "contain" }}>
                 {activeColumns.map((column, columnIndex) => {
                   const cards = board.cards.filter((card) => card.columnId === column.id).sort((a, b) => a.position - b.position);
                   return (
-                    <section key={column.id} className="flex h-full w-[84vw] max-w-[320px] shrink-0 snap-start flex-col overflow-hidden rounded-2xl border border-white/60 shadow-sm" style={{ backgroundColor: columnBackground }}>
+                    <section key={column.id} className="flex h-full w-[84vw] max-w-[320px] shrink-0 snap-start flex-col overflow-hidden rounded-2xl border border-white/60 shadow-sm lg:w-[310px] lg:max-w-none" style={{ backgroundColor: columnBackground }}>
                       <div className="flex items-center gap-2 border-b border-black/5 px-3 py-2.5">
                         <h3 className="min-w-0 flex-1 truncate text-sm font-black text-[#102A43]">{column.name}</h3>
                         <span className="rounded-full bg-white/75 px-2 py-0.5 text-[10px] font-black text-slate-500">{cards.length}</span>
@@ -637,7 +637,7 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
                     </section>
                   );
                 })}
-                <button type="button" className="flex h-12 w-[76vw] max-w-[280px] shrink-0 snap-start items-center justify-center gap-2 rounded-2xl border border-dashed border-white/80 bg-white/40 text-xs font-black text-slate-600" onClick={openNewColumn}><Plus className="h-4 w-4" />Add another column</button>
+                <button type="button" className="flex h-12 w-[76vw] max-w-[280px] shrink-0 snap-start items-center justify-center gap-2 rounded-2xl lg:w-[260px] border border-dashed border-white/80 bg-white/40 text-xs font-black text-slate-600" onClick={openNewColumn}><Plus className="h-4 w-4" />Add another column</button>
               </div>
             )}
           </div>

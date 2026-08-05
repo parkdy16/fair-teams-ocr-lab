@@ -609,7 +609,7 @@ function actionPrimaryVerb(action: AiSmartCommandAction) {
   return "Apply";
 }
 
-const AI_ASSISTANT_VERSION_LABEL = "Help beta · v1.51.2 Vote modal polish";
+const AI_ASSISTANT_VERSION_LABEL = "Help beta · v1.52 Desktop shell";
 
 type AiRosterMatch = {
   player: AiSmartCommandRosterPlayer;

@@ -1656,7 +1656,7 @@ export function ClubTab({
   }, [clubUser, isSharedRoster, sharedPeopleCount, players.length, clubRatingsEnabled, clubRatedCount]);
 
   return (
-    <div className="mx-auto flex w-full max-w-xl flex-col gap-3 px-1 pb-2">
+    <div className="mx-auto flex w-full max-w-xl flex-col gap-3 px-1 pb-2 lg:max-w-4xl lg:gap-4">
       <Dialog
         open={accountModalOpen}
         onOpenChange={setAccountDialogOpen}

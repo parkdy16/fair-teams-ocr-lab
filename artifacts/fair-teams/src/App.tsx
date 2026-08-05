@@ -1640,6 +1640,10 @@ function App() {
 
           return normalizeRoster({
             ...roster,
+            // Shared identity must refresh together with players so roster renames
+            // and theme changes appear on every connected device.
+            name: sourceName || remoteRoster.name || roster.name,
+            themeColor: remoteRoster.themeColor || roster.themeColor,
             players: refreshedPlayers,
             pairingRules: remoteRoster.pairingRules || [],
             cloudSource: {
@@ -3557,6 +3561,19 @@ They will no longer be able to open or edit this shared roster unless it is shar
         }}
         className={`relative flex min-h-0 flex-1 flex-col ${shouldShowTodayStartHeader ? "" : "lg:pl-[196px]"}`}
       >
+        <FirebaseSharedRosterPublishCard
+          headless
+          backgroundSync
+          activeRoster={activeRoster}
+          rosters={rosters}
+          isEmptyRoster={isEmptyStarterRoster}
+          onOpenRoster={openFirebaseSharedRosterAsLocalCopy}
+          onRosterSaved={markActiveFirebaseRosterSaved}
+          onRefreshActiveRoster={refreshActiveFirebaseRosterFromRemote}
+          onSharedRosterSummariesUpdated={syncFirebaseRosterBadgesFromSummaries}
+          onSharedInviteOpened={finishSharedInviteOpen}
+        />
+
         {!shouldShowTodayStartHeader && (
           <aside className="absolute inset-y-0 left-0 z-40 hidden w-[196px] flex-col border-r border-slate-200 bg-white/96 p-4 backdrop-blur lg:flex">
             <div className="flex items-center gap-3 px-2 py-2">
@@ -3915,6 +3932,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 sharedToolsNode={(
                   <FirebaseSharedRosterPublishCard
                     variant="compact"
+                    backgroundSync={false}
                     activeRoster={activeRoster}
                     rosters={rosters}
                     isEmptyRoster={isEmptyStarterRoster}
@@ -4625,6 +4643,7 @@ This is a shared roster. Local Backup can only remove/disassociate this deviceâ€
                   <div className="grid gap-3 border-t border-slate-100 p-3">
                     <FirebaseSharedRosterAuthCard />
                     <FirebaseSharedRosterPublishCard
+                      backgroundSync={false}
                       activeRoster={activeRoster}
                       rosters={rosters}
                       isEmptyRoster={isEmptyStarterRoster}

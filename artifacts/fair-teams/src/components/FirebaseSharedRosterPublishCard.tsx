@@ -39,6 +39,8 @@ type Props = {
   openLibraryToken?: number;
   onMakePrivateCopy?: () => void;
   onHideOnDevice?: () => void;
+  backgroundSync?: boolean;
+  headless?: boolean;
 };
 
 function friendlyFirestoreError(error: unknown) {
@@ -96,7 +98,7 @@ function modalShell(title: string, onClose: () => void, body: React.ReactNode) {
   );
 }
 
-export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster, rosters = [], isEmptyRoster, onOpenRoster, onRosterSaved, onRefreshActiveRoster, onSharedRosterSummariesUpdated, onSharedInviteOpened, openLibraryToken = 0, onMakePrivateCopy, onHideOnDevice }: Props) {
+export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster, rosters = [], isEmptyRoster, onOpenRoster, onRosterSaved, onRefreshActiveRoster, onSharedRosterSummariesUpdated, onSharedInviteOpened, openLibraryToken = 0, onMakePrivateCopy, onHideOnDevice, backgroundSync = true, headless = false }: Props) {
   const [user, setUser] = useState<SharedRosterUser | null>(null);
   const [busy, setBusy] = useState<string>("");
   const [sharedGroups, setSharedGroups] = useState<FirebaseSharedGroupSummary[]>([]);
@@ -155,7 +157,7 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
     const syncedTime = Date.parse(activeFirebaseSource.lastSyncedAt || "");
     if (!Number.isFinite(localTime)) return false;
     if (!Number.isFinite(syncedTime)) return true;
-    return localTime > syncedTime + 1000;
+    return localTime > syncedTime;
   })();
   const autoStatusText = activeSharedRoster
     ? autoSyncStatus === "saving"
@@ -250,7 +252,7 @@ Your local roster will stay local. Fair Teams will copy shared identity fields o
   };
 
   useEffect(() => {
-    if (!user || !activeRoster || !activeFirebaseSource || !activeSharedRosterId || !activeCanSave || !activeHasLocalChanges || busy) return;
+    if (!backgroundSync || !user || !activeRoster || !activeFirebaseSource || !activeSharedRosterId || !activeCanSave || !activeHasLocalChanges || busy) return;
     const timeout = window.setTimeout(() => {
       setBusy("autosave");
       setAutoSyncStatus("saving");
@@ -272,10 +274,10 @@ Your local roster will stay local. Fair Teams will copy shared identity fields o
     }, 900);
     return () => window.clearTimeout(timeout);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.uid, activeRoster?.id, activeRoster?.updatedAt, activeFirebaseSource?.firebaseVersion, activeFirebaseSource?.lastSyncedAt, activeCanSave, activeHasLocalChanges, busy]);
+  }, [backgroundSync, user?.uid, activeRoster?.id, activeRoster?.updatedAt, activeFirebaseSource?.firebaseVersion, activeFirebaseSource?.lastSyncedAt, activeCanSave, activeHasLocalChanges, busy]);
 
   useEffect(() => {
-    if (!user || !activeSharedRosterId || !activeRoster || !activeFirebaseSource) return;
+    if (!backgroundSync || !user || !activeSharedRosterId || !activeRoster || !activeFirebaseSource) return;
     lastLiveRosterVersionRef.current = typeof activeFirebaseSource.firebaseVersion === "number" ? activeFirebaseSource.firebaseVersion : 0;
     return listenToFirebaseSharedRoster(activeSharedRosterId, (snapshot) => {
       const localVersion = lastLiveRosterVersionRef.current;
@@ -290,10 +292,10 @@ Your local roster will stay local. Fair Teams will copy shared identity fields o
       setNotice({ tone: "error", text: friendlyFirestoreError(error) });
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.uid, activeSharedRosterId, activeRoster?.id, activeFirebaseSource?.firebaseVersion, activeHasLocalChanges]);
+  }, [backgroundSync, user?.uid, activeSharedRosterId, activeRoster?.id, activeFirebaseSource?.firebaseVersion, activeHasLocalChanges]);
 
   useEffect(() => {
-    if (!user || busy || remoteUpdatedLinkedRosters.length === 0) return;
+    if (!backgroundSync || !user || busy || remoteUpdatedLinkedRosters.length === 0) return;
     const safeTargets = remoteUpdatedLinkedRosters.filter((roster) => !(roster.id === activeRoster?.id && activeHasLocalChanges));
     if (!safeTargets.length) return;
     const timeout = window.setTimeout(() => {
@@ -301,7 +303,7 @@ Your local roster will stay local. Fair Teams will copy shared identity fields o
     }, 1200);
     return () => window.clearTimeout(timeout);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.uid, busy, remoteUpdatedLinkedRosters.length, activeRoster?.id, activeHasLocalChanges]);
+  }, [backgroundSync, user?.uid, busy, remoteUpdatedLinkedRosters.length, activeRoster?.id, activeHasLocalChanges]);
 
   const handleOpenRoster = async (rosterId: string) => {
     if (!user || busy) return;
@@ -721,6 +723,8 @@ No shared roster is open on this device. Choose one below to open it on this dev
       </div>
     );
   }
+
+  if (headless) return null;
 
   return (
     <div className="grid gap-3">

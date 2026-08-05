@@ -681,7 +681,6 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
                                         </div>
                                       </div>
                                     </div>
-                                    <div className="px-3 pb-2 text-[9px] font-bold text-slate-400 lg:px-4 lg:pb-3 lg:text-[10px]"><span className="lg:hidden">Tap to flip back · Hold to move</span><span className="hidden lg:inline">Click to flip back · Drag to move</span></div>
                                   </div>
                                 </div>
                                 <button type="button" className="absolute right-1.5 top-1.5 z-10 rounded-full bg-white/90 p-1 text-slate-400 shadow-sm lg:right-2 lg:top-2 lg:p-1.5" onClick={(event) => { event.stopPropagation(); openEditCard(card); }} aria-label={`Edit ${card.title}`}><Pencil className="h-3 w-3 lg:h-3.5 lg:w-3.5" /></button>

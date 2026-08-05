@@ -610,7 +610,7 @@ function actionPrimaryVerb(action: AiSmartCommandAction) {
   return "Apply";
 }
 
-const AI_ASSISTANT_VERSION_LABEL = "Help beta · v1.54.5 Kanban title expansion";
+const AI_ASSISTANT_VERSION_LABEL = "Help beta · v1.54.6 Card hint cleanup";
 
 type AiRosterMatch = {
   player: AiSmartCommandRosterPlayer;

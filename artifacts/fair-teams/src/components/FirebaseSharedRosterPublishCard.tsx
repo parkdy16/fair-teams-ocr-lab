@@ -34,6 +34,7 @@ type Props = {
   onOpenRoster?: (roster: RoomRoster, sourceName: string, summary: FirebaseSharedRosterSummary) => void;
   onRosterSaved?: (summary: FirebaseSharedRosterSummary, localRosterId?: string) => void;
   onRefreshActiveRoster?: (roster: RoomRoster, sourceName: string, summary: FirebaseSharedRosterSummary, localRosterId?: string) => void;
+  onRefreshRosterIdentity?: (roster: RoomRoster, sourceName: string, summary: FirebaseSharedRosterSummary, localRosterId?: string) => void;
   onSharedRosterSummariesUpdated?: (summaries: FirebaseSharedRosterSummary[]) => void;
   onSharedInviteOpened?: (roster: RoomRoster) => void;
   openLibraryToken?: number;
@@ -98,7 +99,7 @@ function modalShell(title: string, onClose: () => void, body: React.ReactNode) {
   );
 }
 
-export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster, rosters = [], isEmptyRoster, onOpenRoster, onRosterSaved, onRefreshActiveRoster, onSharedRosterSummariesUpdated, onSharedInviteOpened, openLibraryToken = 0, onMakePrivateCopy, onHideOnDevice, backgroundSync = true, headless = false }: Props) {
+export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster, rosters = [], isEmptyRoster, onOpenRoster, onRosterSaved, onRefreshActiveRoster, onRefreshRosterIdentity, onSharedRosterSummariesUpdated, onSharedInviteOpened, openLibraryToken = 0, onMakePrivateCopy, onHideOnDevice, backgroundSync = true, headless = false }: Props) {
   const [user, setUser] = useState<SharedRosterUser | null>(null);
   const [busy, setBusy] = useState<string>("");
   const [sharedGroups, setSharedGroups] = useState<FirebaseSharedGroupSummary[]>([]);
@@ -282,10 +283,16 @@ Your local roster will stay local. Fair Teams will copy shared identity fields o
     return listenToFirebaseSharedRoster(activeSharedRosterId, (snapshot) => {
       const localVersion = lastLiveRosterVersionRef.current;
       if (snapshot.version <= localVersion) return;
-      if (activeHasLocalChanges) return;
       lastLiveRosterVersionRef.current = snapshot.version;
       setAutoSyncStatus("syncing");
-      onRefreshActiveRoster?.(snapshot.roster, snapshot.name, snapshot, activeRoster.id);
+
+      // Roster identity is safe to apply even when this device has unsaved
+      // player/rating edits. This keeps the main header name and theme color
+      // live without replacing local work in progress.
+      onRefreshRosterIdentity?.(snapshot.roster, snapshot.name, snapshot, activeRoster.id);
+      if (!activeHasLocalChanges) {
+        onRefreshActiveRoster?.(snapshot.roster, snapshot.name, snapshot, activeRoster.id);
+      }
       setAutoSyncStatus("saved");
     }, (error) => {
       setAutoSyncStatus("error");

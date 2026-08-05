@@ -1616,6 +1616,39 @@ function App() {
 
 
 
+  const refreshFirebaseRosterIdentityFromRemote = (remoteRoster: RoomRoster, sourceName: string, summary: FirebaseSharedRosterSummary, localRosterId?: string) => {
+    setRosterState((current) => {
+      const targetRosterId = localRosterId || current.activeRosterId;
+      return {
+        ...current,
+        rosters: current.rosters.map((roster) => {
+          if (roster.id !== targetRosterId) return roster;
+          return normalizeRoster({
+            ...roster,
+            name: sourceName || remoteRoster.name || roster.name,
+            themeColor: remoteRoster.themeColor || roster.themeColor,
+            cloudSource: {
+              provider: "firebase",
+              firebaseRosterId: summary.id,
+              firebaseGroupId: summary.groupId,
+              firebaseGroupName: summary.groupName,
+              firebaseVersion: summary.version,
+              firebaseOwnerUid: summary.ownerUid,
+              firebaseOwnerEmail: summary.ownerEmail,
+              firebaseRole: summary.currentUserRole,
+              firebaseLastSavedByEmail: summary.lastSavedByEmail,
+              firebaseMemberNamesByEmail: firebaseMemberNamesFromSummary(summary),
+              accessLabels: firebaseAccessLabelsFromSummary(summary),
+              lastSyncedAt: summary.updatedAt || new Date().toISOString(),
+              lastRemoteModifiedAt: summary.updatedAt,
+              syncMode: "manual",
+            },
+          });
+        }),
+      };
+    });
+  };
+
   const refreshActiveFirebaseRosterFromRemote = (remoteRoster: RoomRoster, sourceName: string, summary: FirebaseSharedRosterSummary, localRosterId?: string) => {
     setRosterState((current) => {
       const targetRosterId = localRosterId || current.activeRosterId;
@@ -3570,20 +3603,17 @@ They will no longer be able to open or edit this shared roster unless it is shar
           onOpenRoster={openFirebaseSharedRosterAsLocalCopy}
           onRosterSaved={markActiveFirebaseRosterSaved}
           onRefreshActiveRoster={refreshActiveFirebaseRosterFromRemote}
+          onRefreshRosterIdentity={refreshFirebaseRosterIdentityFromRemote}
           onSharedRosterSummariesUpdated={syncFirebaseRosterBadgesFromSummaries}
           onSharedInviteOpened={finishSharedInviteOpen}
         />
 
         {!shouldShowTodayStartHeader && (
           <aside className="absolute inset-y-0 left-0 z-40 hidden w-[196px] flex-col border-r border-slate-200 bg-white/96 p-4 backdrop-blur lg:flex">
-            <div className="flex items-center gap-3 px-2 py-2">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="flex items-center px-2 py-2">
+              <span className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                 <img src={fairTeamsLogo} alt="Fair Teams" className="h-full w-full object-contain" />
               </span>
-              <div>
-                <div className="text-sm font-black tracking-tight text-[#102A43]">FAIR <span className="text-emerald-600">TEAMS</span></div>
-                <div className="mt-0.5 text-[9px] font-black uppercase tracking-[0.14em] text-slate-400">Workspace</div>
-              </div>
             </div>
             <TabsList className="mt-6 flex h-auto w-full flex-col gap-1.5 rounded-none border-0 bg-transparent p-0 shadow-none">
               {([
@@ -3610,10 +3640,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
 
         {!shouldShowTodayStartHeader && (
           <header className="sticky top-0 z-30 hidden min-h-[76px] items-center justify-between gap-5 border-b border-slate-200 bg-white/94 px-7 py-3 shadow-sm backdrop-blur lg:flex">
-            <div className="flex min-w-0 items-center gap-3">
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl border-2 bg-white shadow-sm" style={logoRingStyle}>
-                <img src={groupLogo || fairTeamsLogo} alt="" className="h-full w-full object-cover" />
-              </span>
+            <div className="flex min-w-0 items-center">
               <div className="min-w-0">
                 <div className="flex min-w-0 items-center gap-2">
                   <h1 className="truncate text-xl font-black tracking-tight text-[#102A43]" title={activeRosterName}>{activeRosterName}</h1>
@@ -3939,6 +3966,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                     onOpenRoster={openFirebaseSharedRosterAsLocalCopy}
                     onRosterSaved={markActiveFirebaseRosterSaved}
                     onRefreshActiveRoster={refreshActiveFirebaseRosterFromRemote}
+          onRefreshRosterIdentity={refreshFirebaseRosterIdentityFromRemote}
                     onSharedRosterSummariesUpdated={syncFirebaseRosterBadgesFromSummaries}
                     onSharedInviteOpened={finishSharedInviteOpen}
                     openLibraryToken={sharedRosterLibraryOpenToken}
@@ -4650,6 +4678,7 @@ This is a shared roster. Local Backup can only remove/disassociate this deviceâ€
                       onOpenRoster={openFirebaseSharedRosterAsLocalCopy}
                       onRosterSaved={markActiveFirebaseRosterSaved}
                       onRefreshActiveRoster={refreshActiveFirebaseRosterFromRemote}
+          onRefreshRosterIdentity={refreshFirebaseRosterIdentityFromRemote}
                       onSharedRosterSummariesUpdated={syncFirebaseRosterBadgesFromSummaries}
                       onSharedInviteOpened={finishSharedInviteOpen}
                       openLibraryToken={sharedRosterLibraryOpenToken}

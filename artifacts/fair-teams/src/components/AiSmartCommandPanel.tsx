@@ -609,7 +609,7 @@ function actionPrimaryVerb(action: AiSmartCommandAction) {
   return "Apply";
 }
 
-const AI_ASSISTANT_VERSION_LABEL = "Help beta · v1.52.7 Always-on shared sync";
+const AI_ASSISTANT_VERSION_LABEL = "Help beta · v1.52.8 Shared identity sync";
 
 type AiRosterMatch = {
   player: AiSmartCommandRosterPlayer;

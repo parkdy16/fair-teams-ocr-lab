@@ -1864,6 +1864,7 @@ export function ClubTab({
         scopeId={equipmentGroupId}
         isSharedRoster={isSharedRoster}
         user={clubUser}
+        eligibleVoterCount={isSharedRoster ? Math.max(1, sharedPeopleCount) : 1}
       />
 
       <section className="overflow-visible rounded-[1.7rem] border border-amber-100 bg-[#fffaf0] p-3 shadow-sm ring-1 ring-amber-50">

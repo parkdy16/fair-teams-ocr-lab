@@ -12,6 +12,7 @@ import {
   RotateCcw,
   Trash2,
   UserRound,
+  Vote,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -24,6 +25,7 @@ import {
   deleteTaskBoardColumn,
   listenToTaskBoard,
   saveTaskBoardCard,
+  castTaskBoardVote,
   saveTaskBoardColumn,
   saveTaskBoardColumns,
   saveTaskBoardMeta,
@@ -32,6 +34,7 @@ import {
   type TaskBoardColumn,
   type TaskBoardMeta,
   type TaskBoardSnapshot,
+  type TaskBoardVote,
 } from "@/lib/taskBoardService";
 
 type Props = {
@@ -41,6 +44,7 @@ type Props = {
   scopeId?: string;
   isSharedRoster: boolean;
   user: SharedRosterUser | null;
+  eligibleVoterCount?: number;
 };
 
 type LocalBoard = TaskBoardSnapshot;
@@ -158,7 +162,19 @@ function activityText(activity: TaskBoardActivity) {
   return `${activity.actorName} edited this card`;
 }
 
-export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSharedRoster, user }: Props) {
+async function voterHashFor(user: SharedRosterUser | null, workspaceKey: string) {
+  const source = user?.uid || user?.email || `local:${workspaceKey}`;
+  if (typeof crypto !== "undefined" && crypto.subtle) {
+    const bytes = new TextEncoder().encode(`fairteams-vote:${source}`);
+    const digest = await crypto.subtle.digest("SHA-256", bytes);
+    return Array.from(new Uint8Array(digest)).map((value) => value.toString(16).padStart(2, "0")).join("");
+  }
+  let hash = 2166136261;
+  for (const char of source) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619);
+  return `fallback-${(hash >>> 0).toString(16)}`;
+}
+
+export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSharedRoster, user, eligibleVoterCount = 1 }: Props) {
   const online = Boolean(scopeId && user?.email);
   const [board, setBoard] = useState<LocalBoard>(() => readLocalBoard(workspaceKey, rosterName));
   const [boardOpen, setBoardOpen] = useState(false);
@@ -174,6 +190,16 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
   const [cardDueDate, setCardDueDate] = useState("");
   const [cardCategory, setCardCategory] = useState("Administration");
   const [cardColumnId, setCardColumnId] = useState("");
+  const [voteEnabled, setVoteEnabled] = useState(false);
+  const [voteQuestion, setVoteQuestion] = useState("");
+  const [voteOptionsText, setVoteOptionsText] = useState("Yes\nNo\nAbstain");
+  const [voteAnonymous, setVoteAnonymous] = useState(true);
+  const [voteHideParticipation, setVoteHideParticipation] = useState(false);
+  const [voteShowResultsOpen, setVoteShowResultsOpen] = useState(false);
+  const [votingCardId, setVotingCardId] = useState<string | null>(null);
+  const [selectedVoteOptionId, setSelectedVoteOptionId] = useState("");
+  const [voteSubmitting, setVoteSubmitting] = useState(false);
+  const [currentVoterHash, setCurrentVoterHash] = useState("");
   const [moveCardId, setMoveCardId] = useState<string | null>(null);
   const [boardSettingsOpen, setBoardSettingsOpen] = useState(false);
   const [boardNameDraft, setBoardNameDraft] = useState("");
@@ -231,6 +257,12 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
     if (!online) writeLocalBoard(workspaceKey, board);
   }, [board, online, workspaceKey]);
 
+  useEffect(() => {
+    let cancelled = false;
+    voterHashFor(user, workspaceKey).then((value) => { if (!cancelled) setCurrentVoterHash(value); });
+    return () => { cancelled = true; };
+  }, [user, workspaceKey]);
+
   const activeColumns = useMemo(() => board.columns.filter((column) => !column.archived).sort((a, b) => a.position - b.position), [board.columns]);
   const openCards = useMemo(() => {
     const doneIds = new Set(activeColumns.filter((column) => /done|complete|finished/i.test(column.name)).map((column) => column.id));
@@ -262,6 +294,7 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
   const openNewCard = (columnId?: string) => {
     setEditingCardId(null);
     setCardTitle(""); setCardNote(""); setCardAssignee(""); setCardDueDate(""); setCardCategory("Administration");
+    setVoteEnabled(false); setVoteQuestion(""); setVoteOptionsText("Yes\nNo\nAbstain"); setVoteAnonymous(true); setVoteHideParticipation(false); setVoteShowResultsOpen(false);
     setCardColumnId(columnId || activeColumns[0]?.id || "");
     setCardEditorOpen(true);
   };
@@ -269,6 +302,7 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
   const openEditCard = (card: TaskBoardCard) => {
     setEditingCardId(card.id); setCardTitle(card.title); setCardNote(card.note || ""); setCardAssignee(card.assignee || "");
     setCardDueDate(card.dueDate || ""); setCardCategory(card.category || "Administration"); setCardColumnId(card.columnId);
+    setVoteEnabled(Boolean(card.vote)); setVoteQuestion(card.vote?.question || ""); setVoteOptionsText(card.vote?.options.map((option) => option.label).join("\n") || "Yes\nNo\nAbstain"); setVoteAnonymous(card.vote?.anonymous !== false); setVoteHideParticipation(Boolean(card.vote?.hideParticipationUntilClosed)); setVoteShowResultsOpen(Boolean(card.vote?.showResultsWhileOpen));
     setCardEditorOpen(true);
   };
 
@@ -282,6 +316,20 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
     const activity = existing
       ? nowActivity(changedAssignee ? (cardAssignee.trim() ? "assigned" : "unassigned") : "edited", currentActor.name, currentActor.email)
       : nowActivity("created", currentActor.name, currentActor.email);
+    const optionLabels = voteOptionsText.split(/\n/).map((value) => value.trim()).filter(Boolean).slice(0, 8);
+    const previousVote = existing?.vote;
+    const vote: TaskBoardVote | undefined = voteEnabled && voteQuestion.trim() && optionLabels.length >= 2
+      ? {
+          question: voteQuestion.trim(), anonymous: true, hideParticipationUntilClosed: voteHideParticipation,
+          showResultsWhileOpen: voteShowResultsOpen, status: previousVote?.status || "open",
+          eligibleCount: previousVote?.eligibleCount || Math.max(1, eligibleVoterCount), voterHashes: previousVote?.voterHashes || [],
+          namedVotes: previousVote?.namedVotes || [], createdAt: previousVote?.createdAt || now, closedAt: previousVote?.closedAt,
+          options: optionLabels.map((label, index) => {
+            const prior = previousVote?.options[index];
+            return { id: prior?.id || id("vote-option"), label, count: prior?.count || 0 };
+          }),
+        }
+      : undefined;
     const card: TaskBoardCard = {
       id: existing?.id || id("card"), title: cardTitle.trim(), note: cardNote.trim() || undefined,
       columnId: cardColumnId, position: existing?.position || (columnCards.length + 1) * 1000,
@@ -290,6 +338,7 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
       createdByEmail: existing?.createdByEmail || currentActor.email, updatedAt: now, updatedByName: currentActor.name,
       lastMovedAt: existing?.lastMovedAt, lastMovedByName: existing?.lastMovedByName,
       activities: [...(existing?.activities || []), activity].slice(-20),
+      vote,
     };
     setSaving(true); setError("");
     try { await persistCard(card); setCardEditorOpen(false); }
@@ -403,6 +452,36 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
     setFlippedIds((current) => { const next = new Set(current); next.has(cardId) ? next.delete(cardId) : next.add(cardId); return next; });
   };
 
+  const currentVotingCard = board.cards.find((card) => card.id === votingCardId) || null;
+
+  const submitVote = async () => {
+    const card = currentVotingCard;
+    if (!card?.vote || !selectedVoteOptionId) return;
+    setVoteSubmitting(true); setError("");
+    try {
+      const hash = await voterHashFor(user, workspaceKey);
+      if (online) {
+        await castTaskBoardVote(scopeId!, card.id, hash, actor(user).name, selectedVoteOptionId);
+      } else {
+        if (card.vote.voterHashes.includes(hash)) throw new Error("Your vote is already recorded.");
+        const nextCard = { ...card, updatedAt: Date.now(), vote: { ...card.vote, voterHashes: [...card.vote.voterHashes, hash], options: card.vote.options.map((option) => option.id === selectedVoteOptionId ? { ...option, count: option.count + 1 } : option), namedVotes: card.vote.anonymous ? card.vote.namedVotes : [...(card.vote.namedVotes || []), { voterHash: hash, voterName: actor(user).name, optionId: selectedVoteOptionId }] } };
+        await persistCard(nextCard);
+      }
+      setVotingCardId(null); setSelectedVoteOptionId("");
+    } catch (nextError) { setError(nextError instanceof Error ? nextError.message : "Could not record vote."); }
+    finally { setVoteSubmitting(false); }
+  };
+
+  const closeVote = async () => {
+    const existing = board.cards.find((card) => card.id === editingCardId);
+    if (!existing?.vote || !window.confirm("Close this vote? Results will become final.")) return;
+    setSaving(true);
+    try { await persistCard({ ...existing, updatedAt: Date.now(), vote: { ...existing.vote, status: "closed", closedAt: Date.now() } }); setCardEditorOpen(false); }
+    catch (nextError) { setError(nextError instanceof Error ? nextError.message : "Could not close vote."); }
+    finally { setSaving(false); }
+  };
+
+  const editingVoteLocked = Boolean(editingCardId && board.cards.find((card) => card.id === editingCardId)?.vote?.voterHashes.length);
   const currentMoveCard = board.cards.find((card) => card.id === moveCardId) || null;
   const editingColumn = board.columns.find((column) => column.id === editingColumnId) || null;
 
@@ -466,7 +545,7 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
                             const latestMoveActivity = [...card.activities]
                               .filter((activity) => activity.action === "moved")
                               .sort((a, b) => b.at - a.at)[0];
-                            const flippedHeightClass = card.note?.trim() ? "min-h-[190px]" : "min-h-[126px]";
+                            const flippedHeightClass = card.vote ? "min-h-[250px]" : card.note?.trim() ? "min-h-[190px]" : "min-h-[126px]";
                             return (
                               <div key={card.id} className={`relative [perspective:900px] ${flipped ? flippedHeightClass : "min-h-[64px]"}`}>
                                 <div className={`relative w-full transition-all duration-300 [transform-style:preserve-3d] ${flipped ? `${flippedHeightClass} [transform:rotateY(180deg)]` : "min-h-[64px]"}`}>
@@ -476,10 +555,12 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
                                       {card.category && <span className="rounded-full px-2 py-0.5 text-[9px] font-black" style={{ color: accent, backgroundColor: mixHex(accent, "#ffffff", 0.88) }}>{card.category}</span>}
                                       {card.assignee && <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-black text-slate-600"><UserRound className="h-3 w-3" />{card.assignee}</span>}
                                       {card.dueDate && <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-black ${isOverdue(card.dueDate) ? "bg-red-50 text-red-700" : "bg-slate-100 text-slate-600"}`}><CalendarDays className="h-3 w-3" />{dueText(card.dueDate)}</span>}
+                                      {card.vote && <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5 text-[9px] font-black text-violet-700"><Vote className="h-3 w-3" />{card.vote.status === "closed" ? "Result" : "Vote"}</span>}
                                     </div>
                                   </button>
-                                  <button
-                                    type="button"
+                                  <div
+                                    role="button"
+                                    tabIndex={0}
                                     className="absolute inset-0 flex w-full flex-col rounded-xl border border-slate-200 bg-white p-3 pr-10 text-left shadow-sm [backface-visibility:hidden] [transform:rotateY(180deg)] active:scale-[0.99]"
                                     onPointerDown={() => startPress(card.id)}
                                     onPointerUp={() => shortTap(card.id)}
@@ -487,6 +568,7 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
                                     onPointerLeave={cancelPress}
                                     onContextMenu={(event) => { event.preventDefault(); setMoveCardId(card.id); }}
                                     aria-label={`Show ${card.title} card front`}
+                                    onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") shortTap(card.id); }}
                                   >
                                     <div className="flex-1 overflow-hidden">
                                       {card.note?.trim() && (
@@ -497,7 +579,25 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
                                           </div>
                                         </div>
                                       )}
-                                      <div className={card.note?.trim() ? "mt-3 border-t border-slate-100 pt-2" : ""}>
+                                      {card.vote && (() => {
+                                        const total = card.vote.options.reduce((sum, option) => sum + option.count, 0);
+                                        const canShowResults = card.vote.status === "closed" || card.vote.showResultsWhileOpen;
+                                        return (
+                                          <div className={card.note?.trim() ? "mt-3 border-t border-slate-100 pt-2" : ""}>
+                                            <div className="text-[10px] font-black uppercase tracking-wide text-violet-500">{card.vote.status === "closed" ? "Result" : "Vote"}</div>
+                                            <div className="mt-1 text-[11px] font-black leading-snug text-[#102A43]">{card.vote.question}</div>
+                                            {canShowResults ? (
+                                              <div className="mt-2 space-y-1">{card.vote.options.map((option) => <div key={option.id} className="flex items-center gap-2 text-[10px] font-bold text-slate-600"><span className="min-w-0 flex-1 truncate">{option.label}</span><span>{option.count}</span></div>)}</div>
+                                            ) : <div className="mt-1 text-[10px] font-bold text-slate-500">{card.vote.hideParticipationUntilClosed ? "Voting in progress" : `${total}${card.vote.eligibleCount ? ` of ${card.vote.eligibleCount}` : ""} voted`}</div>}
+                                            {card.vote.status === "open" && (currentVoterHash && card.vote.voterHashes.includes(currentVoterHash) ? (
+                                              <div className="mt-2 text-[10px] font-black text-emerald-700">Vote submitted</div>
+                                            ) : (
+                                              <button type="button" className="mt-2 rounded-full bg-violet-600 px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-white" onPointerDown={(event) => event.stopPropagation()} onPointerUp={(event) => { event.stopPropagation(); setSelectedVoteOptionId(""); setVotingCardId(card.id); }}>Vote now</button>
+                                            ))}
+                                          </div>
+                                        );
+                                      })()}
+                                      <div className={(card.note?.trim() || card.vote) ? "mt-3 border-t border-slate-100 pt-2" : ""}>
                                         <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Activity</div>
                                         <div className="mt-1.5 space-y-1.5">
                                           <div className="text-[10px] font-bold leading-snug text-slate-600">
@@ -514,7 +614,7 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
                                       </div>
                                     </div>
                                     <div className="mt-2 text-[9px] font-bold text-slate-400">Tap to flip back · Hold to move</div>
-                                  </button>
+                                  </div>
                                 </div>
                                 <button type="button" className="absolute right-1.5 top-1.5 z-10 rounded-full bg-white/90 p-1 text-slate-400 shadow-sm" onClick={(event) => { event.stopPropagation(); openEditCard(card); }} aria-label={`Edit ${card.title}`}><Pencil className="h-3 w-3" /></button>
                               </div>
@@ -553,8 +653,31 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
               <div><Label htmlFor="task-category">Category</Label><select id="task-category" className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={cardCategory} onChange={(event) => setCardCategory(event.target.value)}>{CATEGORIES.map((item) => <option key={item}>{item}</option>)}</select></div>
               <div><Label htmlFor="task-column">Column</Label><select id="task-column" className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={cardColumnId} onChange={(event) => setCardColumnId(event.target.value)}>{activeColumns.map((column) => <option key={column.id} value={column.id}>{column.name}</option>)}</select></div>
             </div>
-            <div className="flex gap-2 pt-1">{editingCardId && <Button type="button" variant="outline" className="h-11 rounded-2xl text-red-700" onClick={removeCard}><Trash2 className="mr-1 h-4 w-4" />Delete</Button>}<Button type="button" className="h-11 flex-1 rounded-2xl text-white" style={{ backgroundColor: accent }} disabled={!cardTitle.trim() || saving} onClick={saveCard}>{saving ? "Saving…" : "Save card"}</Button></div>
+            <div className="rounded-2xl border border-violet-100 bg-violet-50/60 p-3">
+              <label className="flex items-center gap-2 text-sm font-black text-[#102A43]"><input type="checkbox" checked={voteEnabled} onChange={(event) => setVoteEnabled(event.target.checked)} disabled={editingVoteLocked} /> Add an anonymous vote</label>
+              {voteEnabled && <div className="mt-3 grid gap-3">
+                <div><Label htmlFor="vote-question">Question</Label><Input id="vote-question" value={voteQuestion} onChange={(event) => setVoteQuestion(event.target.value)} maxLength={180} disabled={editingVoteLocked} placeholder="What should members decide?" /></div>
+                <div><Label htmlFor="vote-options">Options — one per line</Label><Textarea id="vote-options" value={voteOptionsText} onChange={(event) => setVoteOptionsText(event.target.value)} rows={3} maxLength={400} disabled={editingVoteLocked} /></div>
+                <label className="flex items-center gap-2 text-xs font-bold text-slate-700"><input type="checkbox" checked={voteHideParticipation} onChange={(event) => setVoteHideParticipation(event.target.checked)} disabled={editingVoteLocked} /> Hide participation until closed</label>
+                <label className="flex items-center gap-2 text-xs font-bold text-slate-700"><input type="checkbox" checked={voteShowResultsOpen} onChange={(event) => setVoteShowResultsOpen(event.target.checked)} disabled={editingVoteLocked} /> Show results while open</label>
+                <div className="text-[10px] font-semibold leading-snug text-slate-500">No per-person vote notifications or vote timestamps are shown.</div>{editingVoteLocked && <div className="text-[10px] font-black text-amber-700">Question, options and anonymity are locked because voting has started.</div>}
+                {editingCardId && board.cards.find((card) => card.id === editingCardId)?.vote?.status === "open" && <Button type="button" variant="outline" className="h-9 rounded-xl" onClick={closeVote}>Close vote</Button>}
+              </div>}
+            </div>
+            <div className="flex gap-2 pt-1">{editingCardId && <Button type="button" variant="outline" className="h-11 rounded-2xl text-red-700" onClick={removeCard}><Trash2 className="mr-1 h-4 w-4" />Delete</Button>}<Button type="button" className="h-11 flex-1 rounded-2xl text-white" style={{ backgroundColor: accent }} disabled={!cardTitle.trim() || saving || (voteEnabled && (!voteQuestion.trim() || voteOptionsText.split(/\n/).filter((value) => value.trim()).length < 2))} onClick={saveCard}>{saving ? "Saving…" : "Save card"}</Button></div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(currentVotingCard)} onOpenChange={(open) => { if (!open) { setVotingCardId(null); setSelectedVoteOptionId(""); } }}>
+        <DialogContent className="fixed bottom-2 left-2 right-2 top-auto w-auto max-w-none translate-x-0 translate-y-0 rounded-[2rem] p-4 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-sm sm:-translate-x-1/2">
+          <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43]">Vote</DialogTitle></DialogHeader>
+          {currentVotingCard?.vote && <div className="grid gap-3">
+            <div className="text-sm font-black leading-snug text-[#102A43]">{currentVotingCard.vote.question}</div>
+            <div className="grid gap-2">{currentVotingCard.vote.options.map((option) => <button key={option.id} type="button" className={`rounded-2xl border px-3 py-3 text-left text-sm font-black ${selectedVoteOptionId === option.id ? "border-violet-500 bg-violet-50 text-violet-800" : "border-slate-200 bg-white text-[#102A43]"}`} onClick={() => setSelectedVoteOptionId(option.id)}>{option.label}</button>)}</div>
+            <div className="text-[10px] font-semibold leading-snug text-slate-500">{currentVotingCard.vote.anonymous ? "Your choice is anonymous. Fair Teams records only a private account hash to prevent duplicate voting." : "This is a named vote."}</div>
+            <Button type="button" className="h-11 rounded-2xl bg-violet-600 text-white" disabled={!selectedVoteOptionId || voteSubmitting} onClick={submitVote}>{voteSubmitting ? "Recording…" : "Submit vote"}</Button>
+          </div>}
         </DialogContent>
       </Dialog>
 

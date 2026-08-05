@@ -3,6 +3,7 @@ import {
   deleteDoc,
   doc,
   onSnapshot,
+  runTransaction,
   serverTimestamp,
   setDoc,
   writeBatch,
@@ -31,6 +32,33 @@ export type TaskBoardActivity = {
   toColumnName?: string;
 };
 
+
+export type TaskBoardVoteOption = {
+  id: string;
+  label: string;
+  count: number;
+};
+
+export type TaskBoardNamedVote = {
+  voterHash: string;
+  voterName: string;
+  optionId: string;
+};
+
+export type TaskBoardVote = {
+  question: string;
+  options: TaskBoardVoteOption[];
+  anonymous: boolean;
+  hideParticipationUntilClosed: boolean;
+  showResultsWhileOpen: boolean;
+  status: "open" | "closed";
+  eligibleCount?: number;
+  voterHashes: string[];
+  namedVotes?: TaskBoardNamedVote[];
+  createdAt: number;
+  closedAt?: number;
+};
+
 export type TaskBoardCard = {
   id: string;
   title: string;
@@ -48,6 +76,7 @@ export type TaskBoardCard = {
   lastMovedAt?: number;
   lastMovedByName?: string;
   activities: TaskBoardActivity[];
+  vote?: TaskBoardVote;
 };
 
 export type TaskBoardMeta = {
@@ -143,6 +172,27 @@ function parseActivities(value: unknown): TaskBoardActivity[] {
   });
 }
 
+function parseVote(value: unknown): TaskBoardVote | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const row = value as Record<string, unknown>;
+  const rawOptions = Array.isArray(row.options) ? row.options : [];
+  const options = rawOptions.map((item, index) => {
+    const option = (item || {}) as Record<string, unknown>;
+    return { id: String(option.id || `option-${index}`), label: String(option.label || `Option ${index + 1}`), count: Number(option.count || 0) };
+  }).filter((option) => option.label.trim());
+  if (!String(row.question || "").trim() || options.length < 2) return undefined;
+  return {
+    question: String(row.question), options, anonymous: row.anonymous !== false,
+    hideParticipationUntilClosed: Boolean(row.hideParticipationUntilClosed),
+    showResultsWhileOpen: Boolean(row.showResultsWhileOpen),
+    status: row.status === "closed" ? "closed" : "open",
+    eligibleCount: Number(row.eligibleCount || 0) || undefined,
+    voterHashes: Array.isArray(row.voterHashes) ? row.voterHashes.map(String) : [],
+    namedVotes: Array.isArray(row.namedVotes) ? row.namedVotes.map((item) => { const vote=(item||{}) as Record<string,unknown>; return { voterHash:String(vote.voterHash||""), voterName:String(vote.voterName||"Member"), optionId:String(vote.optionId||"") }; }).filter((vote)=>vote.voterHash&&vote.optionId) : undefined,
+    createdAt: toMillis(row.createdAt) || Date.now(), closedAt: toMillis(row.closedAt),
+  };
+}
+
 function parseCard(id: string, data: DocumentData): TaskBoardCard {
   const now = Date.now();
   return {
@@ -162,6 +212,7 @@ function parseCard(id: string, data: DocumentData): TaskBoardCard {
     lastMovedAt: toMillis(data.lastMovedAt) || toMillis(data.lastMovedAtIso),
     lastMovedByName: data.lastMovedByName ? String(data.lastMovedByName) : undefined,
     activities: parseActivities(data.activities),
+    vote: parseVote(data.vote),
   };
 }
 
@@ -233,6 +284,18 @@ function activityPayload(activity: TaskBoardActivity) {
   };
 }
 
+function votePayload(vote?: TaskBoardVote) {
+  if (!vote) return null;
+  return {
+    question: vote.question.trim(), anonymous: vote.anonymous,
+    hideParticipationUntilClosed: vote.hideParticipationUntilClosed,
+    showResultsWhileOpen: vote.showResultsWhileOpen, status: vote.status,
+    eligibleCount: vote.eligibleCount || null, voterHashes: vote.voterHashes || [],
+    namedVotes: vote.namedVotes || [], createdAt: vote.createdAt, closedAt: vote.closedAt || null,
+    options: vote.options.map((option) => ({ id: option.id, label: option.label.trim(), count: option.count || 0 })),
+  };
+}
+
 export async function saveTaskBoardCard(scopeId: string, card: TaskBoardCard): Promise<void> {
   const user = actor();
   const now = new Date();
@@ -249,6 +312,7 @@ export async function saveTaskBoardCard(scopeId: string, card: TaskBoardCard): P
     lastMovedAtIso: card.lastMovedAt ? new Date(card.lastMovedAt).toISOString() : null,
     lastMovedByName: card.lastMovedByName || null,
     activities: card.activities.slice(-20).map(activityPayload),
+    vote: votePayload(card.vote),
   }, { merge: true });
 }
 
@@ -260,4 +324,24 @@ export async function deleteTaskBoardCard(scopeId: string, cardId: string): Prom
 export async function deleteTaskBoardColumn(scopeId: string, columnId: string): Promise<void> {
   requireUser();
   await deleteDoc(doc(columnsCollection(scopeId), columnId));
+}
+
+export async function castTaskBoardVote(scopeId: string, cardId: string, voterHash: string, voterName: string, optionId: string): Promise<void> {
+  requireUser();
+  const reference = doc(cardsCollection(scopeId), cardId);
+  await runTransaction(getFairTeamsFirestore(), async (transaction) => {
+    const snapshot = await transaction.get(reference);
+    if (!snapshot.exists()) throw new Error("This card no longer exists.");
+    const card = parseCard(snapshot.id, snapshot.data());
+    const vote = card.vote;
+    if (!vote || vote.status !== "open") throw new Error("This vote is closed.");
+    if (vote.voterHashes.includes(voterHash)) throw new Error("Your vote is already recorded.");
+    if (!vote.options.some((option) => option.id === optionId)) throw new Error("Choose a valid option.");
+    const nextVote: TaskBoardVote = {
+      ...vote, voterHashes: [...vote.voterHashes, voterHash],
+      options: vote.options.map((option) => option.id === optionId ? { ...option, count: option.count + 1 } : option),
+      namedVotes: vote.anonymous ? vote.namedVotes : [...(vote.namedVotes || []), { voterHash, voterName, optionId }],
+    };
+    transaction.update(reference, { vote: votePayload(nextVote), updatedAt: serverTimestamp(), updatedAtIso: new Date().toISOString() });
+  });
 }

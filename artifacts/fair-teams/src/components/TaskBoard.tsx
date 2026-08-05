@@ -492,15 +492,15 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
 
   return (
     <>
-      <section className="rounded-[1.7rem] border p-3 shadow-sm" style={{ borderColor: mixHex(accent, "#ffffff", 0.72), background }}>
+      <section className="rounded-[1.7rem] border p-3 shadow-sm lg:p-4" style={{ borderColor: mixHex(accent, "#ffffff", 0.72), background }}>
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-wide" style={{ color: accent }}>
-              <ClipboardList className="h-[18px] w-[18px]" /> Tasks
+            <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-wide lg:text-[15px] lg:normal-case lg:tracking-normal" style={{ color: accent }}>
+              <ClipboardList className="fairteams-desktop-balanced-icon h-[18px] w-[18px]" /> Tasks
             </div>
             <h2 className="mt-1 truncate text-[17px] font-black leading-tight text-[#102A43]">{board.meta?.name || rosterName}</h2>
           </div>
-          <Button type="button" className="h-9 shrink-0 rounded-2xl px-3 text-xs font-black text-white" style={{ backgroundColor: accent }} onClick={() => setBoardOpen(true)}>
+          <Button type="button" className="h-9 shrink-0 rounded-2xl px-3 text-xs font-black text-white lg:text-sm" style={{ backgroundColor: accent }} onClick={() => setBoardOpen(true)}>
             Open board
           </Button>
         </div>
@@ -510,7 +510,7 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
           {overdueCount > 0 && <span className="rounded-full bg-red-50 px-2.5 py-1 text-red-700">{overdueCount} overdue</span>}
           <span className="rounded-full bg-white/75 px-2.5 py-1">{online ? "Shared" : isSharedRoster ? "Sign in" : "Private"}</span>
         </div>
-        {latestActivity && <div className="mt-2 truncate text-[10px] font-bold text-slate-500">Last: “{latestActivity.card.title}” · {activityText(latestActivity.activity)}</div>}
+        {latestActivity && <div className="mt-2 truncate text-[10px] font-bold text-slate-500 lg:text-xs">Last: “{latestActivity.card.title}” · {activityText(latestActivity.activity)}</div>}
       </section>
 
       <Dialog open={boardOpen} onOpenChange={setBoardOpen}>

@@ -1671,7 +1671,8 @@ export function ClubTab({
         </DialogContent>
       </Dialog>
 
-      <div id="fairteams-help-panel">
+      <div className="contents lg:grid lg:grid-cols-3 lg:items-start lg:gap-5">
+      <div id="fairteams-help-panel" className="lg:col-span-2 lg:h-full lg:[&>section]:h-full">
       <AiSmartCommandPanel
         players={players}
         rosterName={activeRosterName}
@@ -1687,17 +1688,16 @@ export function ClubTab({
       />
       </div>
 
-      <div className="contents lg:grid lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)] lg:items-start lg:gap-5">
-      <section className="overflow-hidden rounded-[1.7rem] border border-violet-100 bg-[#f8f3ff] p-3 shadow-sm ring-1 ring-violet-50 lg:h-full lg:p-4">
+      <section className="overflow-hidden rounded-[1.7rem] border border-violet-100 bg-[#f8f3ff] p-3 shadow-sm ring-1 ring-violet-50 lg:col-span-1 lg:h-full lg:p-4">
         <div className="flex items-start justify-between gap-3">
           <button
             type="button"
             className="flex min-w-0 items-center gap-2 text-left active:scale-[0.99]"
             onClick={() => setAccountDialogOpen(true)}
           >
-            <UserCircle className="h-4 w-4 shrink-0 text-violet-600" />
+            <UserCircle className="fairteams-desktop-balanced-icon h-4 w-4 shrink-0 text-violet-600 lg:h-[18px] lg:w-[18px]" />
             <span className="min-w-0">
-              <span className="block truncate text-sm font-black text-[#102A43]">
+              <span className="block truncate text-sm font-black text-[#102A43] lg:text-[17px] lg:leading-tight">
                 {clubUser ? `Hey, ${clubGreetingName}` : "Organizer tools"}
               </span>
               <span className="block truncate text-[11px] font-bold text-violet-700/80">
@@ -1712,7 +1712,7 @@ export function ClubTab({
             {!clubUser && (
               <Button
                 type="button"
-                className="h-9 shrink-0 rounded-full bg-violet-600 px-3 text-[11px] font-black text-white hover:bg-violet-700"
+                className="h-9 shrink-0 rounded-full bg-violet-600 px-3 text-[11px] font-black text-white hover:bg-violet-700 lg:text-xs"
                 onClick={() => setAccountDialogOpen(true)}
               >
                 Sign in
@@ -1724,7 +1724,7 @@ export function ClubTab({
               onClick={() => setClubDeskCollapsed((current) => !current)}
               aria-label={clubDeskCollapsed ? "Expand Club Desk" : "Collapse Club Desk"}
             >
-              {clubDeskCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+              {clubDeskCollapsed ? <ChevronDown className="fairteams-desktop-balanced-icon h-4 w-4 lg:h-[18px] lg:w-[18px]" /> : <ChevronUp className="fairteams-desktop-balanced-icon h-4 w-4 lg:h-[18px] lg:w-[18px]" />}
             </button>
           </div>
         </div>
@@ -1741,9 +1741,9 @@ export function ClubTab({
                   disabled={!clubRatingsEnabled || players.length === 0}
                   onClick={() => setRatingBoardOpen(true)}
                 >
-                  <Star className="mr-2 h-4 w-4 shrink-0" />
+                  <Star className="fairteams-desktop-balanced-icon mr-2 h-4 w-4 shrink-0 lg:h-[17px] lg:w-[17px]" />
                   <span className="min-w-0">
-                    <span className="block truncate text-[11px] font-black">Ratings</span>
+                    <span className="block truncate text-[11px] font-black lg:text-xs">Ratings</span>
                     <span className="block truncate text-[10px] font-black text-violet-600/75">
                       {clubRatingsEnabled
                         ? `${clubRatedCount}/${players.length}`
@@ -1760,9 +1760,9 @@ export function ClubTab({
                   disabled={!onOpenPairingRules || playerCount < 2}
                   onClick={onOpenPairingRules}
                 >
-                  <ClipboardList className="mr-2 h-4 w-4 shrink-0" />
+                  <ClipboardList className="fairteams-desktop-balanced-icon mr-2 h-4 w-4 shrink-0 lg:h-[17px] lg:w-[17px]" />
                   <span className="min-w-0">
-                    <span className="block truncate text-[11px] font-black">Pairing</span>
+                    <span className="block truncate text-[11px] font-black lg:text-xs">Pairing</span>
                     <span className="block truncate text-[10px] font-black text-violet-600/75">
                       {cleanPairingRuleCount > 0
                         ? `${cleanPairingRuleCount} rule${cleanPairingRuleCount === 1 ? "" : "s"}`
@@ -1858,22 +1858,23 @@ export function ClubTab({
         )}
       </section>
 
-      <TaskBoard
-        rosterName={activeRosterName}
-        workspaceKey={workspaceKey}
-        themeColor={themeColor}
-        scopeId={equipmentGroupId}
-        isSharedRoster={isSharedRoster}
-        user={clubUser}
-        eligibleVoterCount={isSharedRoster ? Math.max(1, sharedPeopleCount) : 1}
-      />
+      <div className="contents lg:col-span-1 lg:block lg:h-full lg:[&>section]:h-full">
+        <TaskBoard
+          rosterName={activeRosterName}
+          workspaceKey={workspaceKey}
+          themeColor={themeColor}
+          scopeId={equipmentGroupId}
+          isSharedRoster={isSharedRoster}
+          user={clubUser}
+          eligibleVoterCount={isSharedRoster ? Math.max(1, sharedPeopleCount) : 1}
+        />
       </div>
 
-      <div className="contents lg:grid lg:grid-cols-[minmax(0,1.35fr)_minmax(340px,0.65fr)] lg:items-start lg:gap-5">
-      <section className="overflow-visible rounded-[1.7rem] border border-amber-100 bg-[#fffaf0] p-3 shadow-sm ring-1 ring-amber-50 lg:h-full lg:p-4">
+      <section className="overflow-visible rounded-[1.7rem] border border-amber-100 bg-[#fffaf0] p-3 shadow-sm ring-1 ring-amber-50 lg:col-span-2 lg:h-full lg:p-4">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <div className="text-[17px] font-black leading-none text-[#a94f0a]">
+            <div className="flex items-center gap-2 text-[17px] font-black leading-none text-[#a94f0a]">
+              <StickyNote className="fairteams-desktop-balanced-icon hidden h-[18px] w-[18px] lg:block" />
               Club notes
             </div>
             <div className="mt-1 h-0.5 w-20 rounded-full bg-[#c46a17]/70" />
@@ -1882,7 +1883,7 @@ export function ClubTab({
             {clubNotes.length > 0 && (
               <button
                 type="button"
-                className="rounded-full bg-transparent px-2.5 py-1 text-[11px] font-black text-[#a94f0a] active:scale-95"
+                className="rounded-full bg-transparent px-2.5 py-1 text-[11px] font-black text-[#a94f0a] active:scale-95 lg:text-xs"
                 onClick={() => setClubNotesOpen(true)}
               >
                 View all
@@ -1890,7 +1891,7 @@ export function ClubTab({
             )}
             <Button
               type="button"
-              className="h-9 rounded-full bg-[#c8772a] px-3 text-[11px] font-black text-white hover:bg-[#af691f]"
+              className="h-9 rounded-full bg-[#c8772a] px-3 text-[11px] font-black text-white hover:bg-[#af691f] lg:text-xs"
               onClick={() => setClubNotesOpen(true)}
               disabled={!clubNotesEnabled}
             >
@@ -1945,15 +1946,15 @@ export function ClubTab({
         )}
       </section>
 
-      <section className="rounded-[1.7rem] border border-sky-100 bg-[#f6fbff] p-3 shadow-sm ring-1 ring-sky-50 lg:h-full lg:p-4">
+      <section className="rounded-[1.7rem] border border-sky-100 bg-[#f6fbff] p-3 shadow-sm ring-1 ring-sky-50 lg:col-span-3 lg:p-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-wide text-blue-600">
+            <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-wide text-blue-600 lg:text-[17px] lg:normal-case lg:tracking-normal">
               <AntiqueBallIcon className="h-[18px] w-[18px]" />
               Equipment
             </div>
-            <div className="hidden">
-              See who has what and move bags quickly.
+            <div className="mt-1 hidden text-xs font-semibold leading-snug text-slate-500 lg:block">
+              Drag bags between people and club storage, or select a bag for details.
             </div>
             <div className="mt-1 flex items-center gap-1.5 text-[10px] font-black text-slate-400">
               <span
@@ -1964,7 +1965,7 @@ export function ClubTab({
           </div>
           <Button
             type="button"
-            className="h-9 shrink-0 rounded-2xl border border-slate-100 bg-white px-3 text-xs font-black text-[#102A43] shadow-sm hover:bg-slate-50"
+            className="h-9 shrink-0 rounded-2xl border border-slate-100 bg-white px-3 text-xs font-black text-[#102A43] shadow-sm hover:bg-slate-50 lg:text-sm"
             onClick={() => setEquipmentBoardOpen(true)}
           >
             Open

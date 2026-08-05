@@ -316,6 +316,25 @@
   transform: translateX(-50%);
 }
 
+.fairteams-desktop-nav-trigger[data-state="active"]::after {
+  left: 0;
+  top: 50%;
+  bottom: auto;
+  width: 3px;
+  height: 24px;
+  transform: translateY(-50%);
+}
+
+.fairteams-desktop-nav-trigger[data-state="active"] svg {
+  transform: none;
+}
+
+@media (min-width: 1024px) {
+  .fairteams-desktop-balanced-icon {
+    stroke-width: 2.25;
+  }
+}
+
 [role="dialog"] .font-black {
   font-weight: 720;
 }

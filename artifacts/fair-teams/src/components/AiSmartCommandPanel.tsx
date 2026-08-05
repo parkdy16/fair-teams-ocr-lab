@@ -609,7 +609,7 @@ function actionPrimaryVerb(action: AiSmartCommandAction) {
   return "Apply";
 }
 
-const AI_ASSISTANT_VERSION_LABEL = "Help beta · v1.52.3 Desktop dashboard polish";
+const AI_ASSISTANT_VERSION_LABEL = "Help beta · v1.52.4 Desktop workspace balance";
 
 type AiRosterMatch = {
   player: AiSmartCommandRosterPlayer;
@@ -1883,10 +1883,10 @@ export function AiSmartCommandPanel({
           <div className="min-w-0">
             <div className="text-[10px] font-black uppercase tracking-wide text-violet-600">Help</div>
             <div className="mt-0.5 flex flex-wrap items-center gap-2">
-              <h3 className="text-base font-black text-[#102A43]">FairTeams Help</h3>
+              <h3 className="text-base font-black text-[#102A43] lg:text-[17px]">FairTeams Help</h3>
               <span className="rounded-full bg-white/85 px-2 py-0.5 text-[9px] font-black text-violet-700 shadow-sm">{AI_ASSISTANT_VERSION_LABEL}</span>
             </div>
-            <p className="mt-0.5 text-[11px] font-semibold leading-snug text-violet-800/75">
+            <p className="mt-0.5 text-[11px] font-semibold leading-snug text-violet-800/75 lg:text-xs">
               Ask how anything works. I’ll guide you quickly.
             </p>
           </div>
@@ -1916,7 +1916,7 @@ export function AiSmartCommandPanel({
               type="button"
               onClick={submit}
               disabled={busy || voiceBusy || !commandText.trim()}
-              className={`h-10 rounded-2xl bg-[#102A43] px-3 text-[11px] font-black uppercase tracking-wide text-white disabled:opacity-45 ${tutorialActive ? "fairteams-tutorial-pulse" : ""}`}
+              className={`h-10 rounded-2xl bg-[#102A43] px-3 text-[11px] font-black uppercase tracking-wide text-white disabled:opacity-45 lg:text-xs ${tutorialActive ? "fairteams-tutorial-pulse" : ""}`}
             >
               {busy ? "Thinking…" : "Ask"}
             </button>
@@ -1924,7 +1924,7 @@ export function AiSmartCommandPanel({
               type="button"
               onClick={recording ? stopVoiceRecording : startVoiceRecording}
               disabled={busy || voiceBusy}
-              className={`h-10 rounded-2xl px-3 text-[11px] font-black uppercase tracking-wide text-white disabled:opacity-45 ${recording ? "bg-rose-600" : "bg-violet-600"}`}
+              className={`h-10 rounded-2xl px-3 text-[11px] font-black uppercase tracking-wide text-white disabled:opacity-45 lg:text-xs ${recording ? "bg-rose-600" : "bg-violet-600"}`}
             >
               {voiceBusy ? "Hearing…" : recording ? "Done" : "Voice"}
             </button>

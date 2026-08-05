@@ -3578,9 +3578,9 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 <TabsTrigger
                   key={value}
                   value={value}
-                  className={`fairteams-tab-trigger flex h-11 w-full justify-start gap-3 rounded-xl border border-transparent px-3 text-sm font-black text-slate-500 shadow-none transition-colors hover:bg-slate-50 data-[state=active]:border-slate-200 data-[state=active]:bg-slate-50 data-[state=active]:text-[#102A43] data-[state=active]:shadow-none ${(tutorialStep === "today-tab" && value === "today") || (tutorialStep === "teams-tab" && value === "teams") || (tutorialStep === "club-tab" && value === "club") || (tutorialStep === "roster-return" && value === "players") ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
+                  className={`fairteams-tab-trigger fairteams-desktop-nav-trigger flex h-12 w-full justify-start gap-3.5 rounded-xl border border-transparent px-3.5 text-[15px] font-black text-slate-500 shadow-none transition-colors hover:bg-slate-50 data-[state=active]:border-slate-200 data-[state=active]:bg-slate-50 data-[state=active]:text-[#102A43] data-[state=active]:shadow-none ${(tutorialStep === "today-tab" && value === "today") || (tutorialStep === "teams-tab" && value === "teams") || (tutorialStep === "club-tab" && value === "club") || (tutorialStep === "roster-return" && value === "players") ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
                 >
-                  <Icon className="h-4 w-4 shrink-0" />
+                  <Icon className="h-[18px] w-[18px] shrink-0" strokeWidth={2.25} />
                   {label}
                 </TabsTrigger>
               ))}
@@ -3611,7 +3611,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <button type="button" onClick={openGroupSettings} className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-black text-[#102A43] shadow-sm hover:bg-slate-50" title="Edit roster">
-                <Pencil className="h-4 w-4" /> Edit
+                <Pencil className="h-[18px] w-[18px]" strokeWidth={2.25} /> Edit
               </button>
               <button
                 type="button"
@@ -3630,7 +3630,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 className={`inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-black text-[#102A43] shadow-sm hover:bg-slate-50 ${tutorialStep === "settings-button" ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
                 title="Roster tools"
               >
-                <Settings className="h-4 w-4" /> Settings
+                <Settings className="h-[18px] w-[18px]" strokeWidth={2.25} /> Settings
               </button>
             </div>
           </header>

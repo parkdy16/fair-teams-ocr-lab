@@ -1671,8 +1671,8 @@ export function ClubTab({
         </DialogContent>
       </Dialog>
 
-      <div className="contents lg:grid lg:grid-cols-3 lg:items-start lg:gap-5">
-      <div id="fairteams-help-panel" className="lg:col-span-2 lg:h-full lg:[&>section]:h-full">
+      <div className="contents lg:grid lg:grid-cols-2 lg:items-start lg:gap-5 xl:grid-cols-3">
+      <div id="fairteams-help-panel" className="lg:order-2 lg:col-span-2 lg:h-full lg:[&>section]:h-full xl:col-span-2">
       <AiSmartCommandPanel
         players={players}
         rosterName={activeRosterName}
@@ -1688,7 +1688,7 @@ export function ClubTab({
       />
       </div>
 
-      <section className="overflow-hidden rounded-[1.7rem] border border-violet-100 bg-[#f8f3ff] p-3 shadow-sm ring-1 ring-violet-50 lg:col-span-1 lg:h-full lg:p-4">
+      <section className="overflow-hidden rounded-[1.7rem] border border-violet-100 bg-[#f8f3ff] p-3 shadow-sm ring-1 ring-violet-50 lg:order-1 lg:col-span-2 lg:h-full lg:p-4 xl:col-span-1">
         <div className="flex items-start justify-between gap-3">
           <button
             type="button"
@@ -1698,10 +1698,10 @@ export function ClubTab({
             <UserCircle className="fairteams-desktop-balanced-icon h-4 w-4 shrink-0 text-violet-600 lg:h-[18px] lg:w-[18px]" />
             <span className="min-w-0">
               <span className="block truncate text-sm font-black text-[#102A43] lg:text-[17px] lg:leading-tight">
-                {clubUser ? `Hey, ${clubGreetingName}` : "Organizer tools"}
+                Club Desk
               </span>
               <span className="block truncate text-[11px] font-bold text-violet-700/80">
-                Club Desk
+                {clubUser ? `Hey, ${clubGreetingName}` : "Shared workspace and organizer access"}
               </span>
               <span className="mt-0.5 block truncate text-[10px] font-semibold text-violet-700/70">
                 {clubDeskSummary}
@@ -1858,7 +1858,7 @@ export function ClubTab({
         )}
       </section>
 
-      <div className="contents lg:col-span-1 lg:block lg:h-full lg:[&>section]:h-full">
+      <div className="contents lg:order-3 lg:col-span-1 lg:block lg:h-full lg:[&>section]:h-full">
         <TaskBoard
           rosterName={activeRosterName}
           workspaceKey={workspaceKey}
@@ -1870,7 +1870,7 @@ export function ClubTab({
         />
       </div>
 
-      <section className="overflow-visible rounded-[1.7rem] border border-amber-100 bg-[#fffaf0] p-3 shadow-sm ring-1 ring-amber-50 lg:col-span-2 lg:h-full lg:p-4">
+      <section className="overflow-visible rounded-[1.7rem] border border-amber-100 bg-[#fffaf0] p-3 shadow-sm ring-1 ring-amber-50 lg:order-4 lg:col-span-1 lg:h-full lg:p-4 xl:col-span-2">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
             <div className="flex items-center gap-2 text-[17px] font-black leading-none text-[#a94f0a]">
@@ -1946,7 +1946,7 @@ export function ClubTab({
         )}
       </section>
 
-      <section className="rounded-[1.7rem] border border-sky-100 bg-[#f6fbff] p-3 shadow-sm ring-1 ring-sky-50 lg:col-span-3 lg:p-4">
+      <section className="rounded-[1.7rem] border border-sky-100 bg-[#f6fbff] p-3 shadow-sm ring-1 ring-sky-50 lg:order-5 lg:col-span-2 lg:p-4 xl:col-span-3">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-wide text-blue-600 lg:text-[17px] lg:normal-case lg:tracking-normal">

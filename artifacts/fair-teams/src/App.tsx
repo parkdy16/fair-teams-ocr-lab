@@ -3554,51 +3554,20 @@ They will no longer be able to open or edit this shared roster unless it is shar
           if (value === "players" && activeTab !== "players") setOpenPairingRulesToken(0);
           setActiveTab(value);
         }}
-        className="relative flex min-h-0 flex-1 flex-col lg:pl-[220px]"
+        className={`relative flex min-h-0 flex-1 flex-col ${shouldShowTodayStartHeader ? "" : "lg:pl-[196px]"}`}
       >
         {!shouldShowTodayStartHeader && (
-          <aside className="absolute inset-y-0 left-0 z-40 hidden w-[220px] flex-col border-r border-slate-200 bg-white/96 p-4 backdrop-blur lg:flex">
+          <aside className="absolute inset-y-0 left-0 z-40 hidden w-[196px] flex-col border-r border-slate-200 bg-white/96 p-4 backdrop-blur lg:flex">
             <div className="flex items-center gap-3 px-2 py-2">
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-                <img src={groupLogo || fairTeamsLogo} alt="" className="h-full w-full object-cover" />
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <img src={fairTeamsLogo} alt="Fair Teams" className="h-full w-full object-contain" />
               </span>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-black text-[#102A43]">{activeRosterName}</div>
-                <div className="mt-0.5 text-[10px] font-black uppercase tracking-wide text-slate-400">Fair Teams</div>
-              </div>
-              <div className="flex shrink-0 items-center gap-1">
-                <button
-                  type="button"
-                  onClick={openGroupSettings}
-                  className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:text-[#102A43]"
-                  title="Edit roster"
-                  aria-label="Edit roster"
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    closeRosterToolsPanel();
-                    setRosterFilesOpen(true);
-                    if (tutorialStep === "settings-button") {
-                      if (tutorialReplayMode) {
-                        setRosterFilesOpen(false);
-                        setTutorialStep("recap");
-                      } else {
-                        window.requestAnimationFrame(() => setTutorialStep("create-roster"));
-                      }
-                    }
-                  }}
-                  className={`flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:text-[#102A43] ${tutorialStep === "settings-button" ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
-                  title="Roster tools"
-                  aria-label="Roster tools"
-                >
-                  <Settings className="h-3.5 w-3.5" />
-                </button>
+              <div>
+                <div className="text-sm font-black tracking-tight text-[#102A43]">FAIR <span className="text-emerald-600">TEAMS</span></div>
+                <div className="mt-0.5 text-[9px] font-black uppercase tracking-[0.14em] text-slate-400">Workspace</div>
               </div>
             </div>
-            <TabsList className="mt-5 flex h-auto w-full flex-col gap-1 rounded-2xl border border-slate-200 bg-slate-50/70 p-1.5 shadow-none">
+            <TabsList className="mt-6 flex h-auto w-full flex-col gap-1 rounded-2xl border border-slate-200 bg-slate-50/70 p-1.5 shadow-none">
               {([
                 ["players", "Roster"],
                 ["today", "Today"],
@@ -3618,6 +3587,51 @@ They will no longer be able to open or edit this shared roster unless it is shar
               The same live roster, tasks, equipment and votes on every device.
             </div>
           </aside>
+        )}
+
+        {!shouldShowTodayStartHeader && (
+          <header className="sticky top-0 z-30 hidden min-h-[76px] items-center justify-between gap-5 border-b border-slate-200 bg-white/94 px-7 py-3 shadow-sm backdrop-blur lg:flex">
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl border-2 bg-white shadow-sm" style={logoRingStyle}>
+                <img src={groupLogo || fairTeamsLogo} alt="" className="h-full w-full object-cover" />
+              </span>
+              <div className="min-w-0">
+                <div className="flex min-w-0 items-center gap-2">
+                  <h1 className="truncate text-xl font-black tracking-tight text-[#102A43]" title={activeRosterName}>{activeRosterName}</h1>
+                  {!isEmptyStarterRoster && (
+                    <span className={`inline-flex h-5 shrink-0 items-center rounded-full px-1.5 text-[9px] font-black uppercase tracking-wide ${activeRosterIsShared ? "bg-violet-50 text-violet-700 ring-1 ring-violet-100" : "bg-slate-100 text-slate-500"}`}>
+                      {activeRosterIsShared ? "Shared" : "Local"}
+                    </span>
+                  )}
+                </div>
+                <div className="mt-0.5 text-xs font-bold text-slate-400">{activeTab === "players" ? "Roster" : activeTab === "today" ? "Today" : activeTab === "teams" ? "Teams" : "Club"}</div>
+              </div>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <button type="button" onClick={openGroupSettings} className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-black text-[#102A43] shadow-sm hover:bg-slate-50" title="Edit roster">
+                <Pencil className="h-4 w-4" /> Edit
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  closeRosterToolsPanel();
+                  setRosterFilesOpen(true);
+                  if (tutorialStep === "settings-button") {
+                    if (tutorialReplayMode) {
+                      setRosterFilesOpen(false);
+                      setTutorialStep("recap");
+                    } else {
+                      window.requestAnimationFrame(() => setTutorialStep("create-roster"));
+                    }
+                  }
+                }}
+                className={`inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-black text-[#102A43] shadow-sm hover:bg-slate-50 ${tutorialStep === "settings-button" ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
+                title="Roster tools"
+              >
+                <Settings className="h-4 w-4" /> Settings
+              </button>
+            </div>
+          </header>
         )}
 
         <header className="sticky top-0 z-30 border-b border-border bg-white/92 px-4 pt-3 pb-2 shadow-sm backdrop-blur lg:hidden">
@@ -3786,7 +3800,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
         )}
 
         <div className={`flex-1 overflow-y-auto p-4 md:p-5 lg:px-7 lg:py-6 ${shouldShowTodayStartHeader ? "pb-6 md:pb-6" : "pb-20 md:pb-20 lg:pb-6"}`} style={{ WebkitOverflowScrolling: "touch" }}>
-          <div className="flex min-h-[calc(100dvh-116px)] flex-col">
+          <div className={`mx-auto flex min-h-[calc(100dvh-116px)] w-full flex-col ${shouldShowTodayStartHeader ? "lg:max-w-6xl lg:justify-center" : activeTab === "players" ? "lg:max-w-5xl" : activeTab === "today" ? "lg:max-w-6xl" : activeTab === "teams" ? "lg:max-w-none" : "lg:max-w-7xl"}`}>
             <TabsContent
               value="players"
               className="fairteams-tab-panel m-0 data-[state=active]:animate-in data-[state=active]:fade-in-50"

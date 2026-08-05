@@ -3867,15 +3867,24 @@ export function TodayTab({
   return (
     <div className="flex flex-col gap-4">
       {rosterChoices.length > 0 && !todayRosterReady ? (
-        <div className="space-y-3">
-          <div className="px-1 pb-1 pt-2">
-            <h2 className="text-2xl font-black tracking-tight text-[#102A43]">
+        <div className="space-y-3 lg:grid lg:grid-cols-[minmax(0,1.05fr)_minmax(360px,0.95fr)] lg:items-center lg:gap-12 lg:space-y-0 lg:rounded-[2rem] lg:border lg:border-slate-200 lg:bg-white lg:p-10 lg:shadow-[0_24px_70px_rgba(15,23,42,0.08)]">
+          <div className="px-1 pb-1 pt-2 lg:px-2 lg:py-6">
+            <div className="hidden lg:inline-flex rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-emerald-700">Fair Teams workspace</div>
+            <h2 className="text-2xl font-black tracking-tight text-[#102A43] lg:mt-5 lg:text-5xl lg:leading-[1.02]">
               {startGreetingName ? `Hey, ${startGreetingName}` : "Hey,"}
             </h2>
-            <p className="mt-1 text-sm font-semibold text-slate-500">
+            <p className="mt-1 text-sm font-semibold text-slate-500 lg:mt-4 lg:max-w-md lg:text-lg lg:leading-relaxed">
               {startGreetingName ? "Choose where to start." : "Choose your roster."}
             </p>
+            <div className="mt-7 hidden grid-cols-2 gap-3 lg:grid">
+              {["Create and rate rosters", "Select today's players", "Generate balanced teams", "Run tasks and votes"].map((item, index) => (
+                <div key={item} className="rounded-2xl bg-slate-50 px-4 py-3 text-sm font-black text-[#102A43]">
+                  <span className="mr-2 text-emerald-600">{index + 1}.</span>{item}
+                </div>
+              ))}
+            </div>
           </div>
+          <div className="space-y-3 lg:rounded-3xl lg:bg-slate-50/80 lg:p-5">
 
           {activeRosterChoice ? (
             <button
@@ -3916,6 +3925,7 @@ export function TodayTab({
               </span>
             </button>
           ) : null}
+          </div>
         </div>
       ) : players.length === 0 ? (
         <div className="animate-in fade-in-0 slide-in-from-bottom-1 duration-200 rounded-3xl border border-dashed border-primary/25 bg-primary/5 p-5 text-center shadow-sm">

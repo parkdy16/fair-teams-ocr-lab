@@ -609,7 +609,7 @@ function actionPrimaryVerb(action: AiSmartCommandAction) {
   return "Apply";
 }
 
-const AI_ASSISTANT_VERSION_LABEL = "Help beta · v1.52 Desktop shell";
+const AI_ASSISTANT_VERSION_LABEL = "Help beta · v1.52.1 Desktop onboarding fix";
 
 type AiRosterMatch = {
   player: AiSmartCommandRosterPlayer;

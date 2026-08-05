@@ -3437,6 +3437,21 @@ They will no longer be able to open or edit this shared roster unless it is shar
     setTutorialStep(null);
   };
 
+  const skipGuidedTour = () => {
+    localStorage.setItem("fairteams-onboarding-v140-complete", "1");
+    if (tutorialSnapshotRef.current) {
+      setRosterState(tutorialSnapshotRef.current.rosterState);
+      setActiveTab(tutorialSnapshotRef.current.activeTab);
+      setTodayRosterChosen(tutorialSnapshotRef.current.todayRosterChosen);
+    }
+    tutorialSnapshotRef.current = null;
+    tutorialStartedRef.current = false;
+    setTutorialReplayMode(false);
+    setTutorialPlayerId(null);
+    setRosterFilesOpen(false);
+    setTutorialStep(null);
+  };
+
   useEffect(() => {
     if (!onboardingReady || tutorialStep || tutorialStartedRef.current) return;
 
@@ -3547,9 +3562,40 @@ They will no longer be able to open or edit this shared roster unless it is shar
               <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                 <img src={groupLogo || fairTeamsLogo} alt="" className="h-full w-full object-cover" />
               </span>
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-black text-[#102A43]">{activeRosterName}</div>
                 <div className="mt-0.5 text-[10px] font-black uppercase tracking-wide text-slate-400">Fair Teams</div>
+              </div>
+              <div className="flex shrink-0 items-center gap-1">
+                <button
+                  type="button"
+                  onClick={openGroupSettings}
+                  className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:text-[#102A43]"
+                  title="Edit roster"
+                  aria-label="Edit roster"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    closeRosterToolsPanel();
+                    setRosterFilesOpen(true);
+                    if (tutorialStep === "settings-button") {
+                      if (tutorialReplayMode) {
+                        setRosterFilesOpen(false);
+                        setTutorialStep("recap");
+                      } else {
+                        window.requestAnimationFrame(() => setTutorialStep("create-roster"));
+                      }
+                    }
+                  }}
+                  className={`flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:text-[#102A43] ${tutorialStep === "settings-button" ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
+                  title="Roster tools"
+                  aria-label="Roster tools"
+                >
+                  <Settings className="h-3.5 w-3.5" />
+                </button>
               </div>
             </div>
             <TabsList className="mt-5 flex h-auto w-full flex-col gap-1 rounded-2xl border border-slate-200 bg-slate-50/70 p-1.5 shadow-none">
@@ -3562,7 +3608,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 <TabsTrigger
                   key={value}
                   value={value}
-                  className="fairteams-tab-trigger flex h-11 w-full justify-start rounded-xl px-4 text-sm font-black text-slate-500 data-[state=active]:bg-white data-[state=active]:text-[#102A43] data-[state=active]:shadow-sm"
+                  className={`fairteams-tab-trigger flex h-11 w-full justify-start rounded-xl px-4 text-sm font-black text-slate-500 data-[state=active]:bg-white data-[state=active]:text-[#102A43] data-[state=active]:shadow-sm ${(tutorialStep === "today-tab" && value === "today") || (tutorialStep === "teams-tab" && value === "teams") || (tutorialStep === "club-tab" && value === "club") || (tutorialStep === "roster-return" && value === "players") ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
                 >
                   {label}
                 </TabsTrigger>
@@ -3574,7 +3620,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
           </aside>
         )}
 
-        <header className="sticky top-0 z-30 border-b border-border bg-white/92 px-4 pt-3 pb-2 shadow-sm backdrop-blur lg:px-7">
+        <header className="sticky top-0 z-30 border-b border-border bg-white/92 px-4 pt-3 pb-2 shadow-sm backdrop-blur lg:hidden">
           <div className="flex items-center justify-between gap-3 px-1 pb-2">
             <div className="min-w-0 flex-1">
               <button
@@ -3957,19 +4003,24 @@ They will no longer be able to open or edit this shared roster unless it is shar
         if (!largeStep) {
           return (
             <div
-              className={`pointer-events-none fixed inset-x-3 z-[95] mx-auto max-w-sm ${coachPosition}`}
+              className={`pointer-events-none fixed inset-x-3 z-[95] mx-auto max-w-sm lg:max-w-lg ${coachPosition}`}
             >
-              <div className="pointer-events-auto rounded-2xl border border-emerald-100 bg-white/98 px-3.5 py-3 shadow-[0_12px_34px_rgba(15,23,42,.16)] backdrop-blur-sm">
-                <div className="flex items-start gap-3">
+              <div className="pointer-events-auto rounded-2xl border border-emerald-100 bg-white/98 px-3.5 py-3 shadow-[0_12px_34px_rgba(15,23,42,.16)] backdrop-blur-sm lg:rounded-3xl lg:px-6 lg:py-5">
+                <div className="flex items-start gap-3 lg:gap-5">
                   <div className="min-w-0 flex-1">
-                    <div className="text-[15px] font-black leading-tight text-[#102A43]">{tutorialCopy[tutorialStep].title}</div>
-                    <div className="mt-1 text-[12px] font-semibold leading-snug text-slate-600">{tutorialCopy[tutorialStep].body}</div>
+                    <div className="text-[15px] font-black leading-tight text-[#102A43] lg:text-[22px]">{tutorialCopy[tutorialStep].title}</div>
+                    <div className="mt-1 text-[12px] font-semibold leading-snug text-slate-600 lg:mt-2 lg:text-[16px] lg:leading-relaxed">{tutorialCopy[tutorialStep].body}</div>
                   </div>
-                  <div className="shrink-0 rounded-full bg-emerald-50 px-2 py-1 text-[9px] font-black text-emerald-700">{currentNumber}/{tutorialTotal}</div>
+                  <div className="shrink-0 rounded-full bg-emerald-50 px-2 py-1 text-[9px] font-black text-emerald-700 lg:px-3 lg:py-1.5 lg:text-[12px]">{currentNumber}/{tutorialTotal}</div>
                 </div>
-                {tutorialCanGoBack && (
-                  <button type="button" onClick={handleTutorialBack} className="mt-2 text-[11px] font-black text-slate-500 underline decoration-slate-300 underline-offset-2">Back</button>
-                )}
+                <div className="mt-2 flex items-center justify-between gap-3 lg:mt-4">
+                  <div>
+                    {tutorialCanGoBack && (
+                      <button type="button" onClick={handleTutorialBack} className="fairteams-tutorial-action text-[11px] font-black text-slate-500 underline decoration-slate-300 underline-offset-2 lg:text-sm">Back</button>
+                    )}
+                  </div>
+                  <button type="button" onClick={skipGuidedTour} className="fairteams-tutorial-action text-[11px] font-black text-slate-500 underline decoration-slate-300 underline-offset-2 lg:text-sm">Skip tutorial</button>
+                </div>
               </div>
             </div>
           );
@@ -3977,25 +4028,25 @@ They will no longer be able to open or edit this shared roster unless it is shar
 
         return (
           <div className={tutorialStep === "recap"
-            ? "fixed inset-0 z-[95] flex items-center justify-center bg-black/55 p-5 pointer-events-auto"
+            ? "fixed inset-0 z-[95] flex items-center justify-center bg-black/55 p-5 pointer-events-auto lg:p-10"
             : tutorialStep === "club-intro"
               ? "fixed inset-0 z-[95] flex items-end justify-center bg-black/20 p-3 pb-[calc(5.4rem+env(safe-area-inset-bottom))] pointer-events-auto"
               : "fixed inset-x-3 z-[95] mx-auto max-w-md rounded-[26px] border border-white/90 bg-white p-5 shadow-[0_24px_70px_rgba(15,23,42,.24)] pointer-events-auto bottom-[calc(5.4rem+env(safe-area-inset-bottom))]"}>
             <div className={tutorialStep === "recap"
-              ? "w-full max-w-md rounded-[28px] border border-white/90 bg-white p-6 shadow-[0_28px_90px_rgba(0,0,0,.38)]"
+              ? "w-full max-w-md rounded-[28px] border border-white/90 bg-white p-6 shadow-[0_28px_90px_rgba(0,0,0,.38)] lg:max-w-2xl lg:p-9"
               : tutorialStep === "club-intro"
-                ? "w-full max-w-md rounded-[26px] border border-white/90 bg-white p-5 shadow-[0_24px_70px_rgba(15,23,42,.24)]"
+                ? "w-full max-w-md rounded-[26px] border border-white/90 bg-white p-5 shadow-[0_24px_70px_rgba(15,23,42,.24)] lg:max-w-xl lg:p-8"
                 : "contents"}>
             <div className="flex items-center justify-between gap-3">
               <div className="text-[11px] font-black uppercase tracking-[0.2em] text-emerald-600">Guided kick-off</div>
               <div className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-black text-emerald-700">{currentNumber} / {tutorialTotal}</div>
             </div>
             {tutorialStep === "magic-reveal" && <div className="mb-1 text-3xl">✨⚽✨</div>}
-            <div className={`mt-2 font-black leading-tight tracking-tight text-[#102A43] ${tutorialStep === "magic-reveal" ? "text-[30px]" : "text-[24px]"}`}>{tutorialCopy[tutorialStep].title}</div>
-            <div className="mt-2 text-[15px] font-semibold leading-relaxed text-slate-600">{tutorialCopy[tutorialStep].body}</div>
+            <div className={`mt-2 font-black leading-tight tracking-tight text-[#102A43] lg:mt-3 ${tutorialStep === "magic-reveal" ? "text-[30px] lg:text-[40px]" : "text-[24px] lg:text-[34px]"}`}>{tutorialCopy[tutorialStep].title}</div>
+            <div className="mt-2 text-[15px] font-semibold leading-relaxed text-slate-600 lg:mt-3 lg:text-[18px]">{tutorialCopy[tutorialStep].body}</div>
             {tutorialStep === "club-intro" && (
-              <div className="mt-4 flex gap-2">
-                <button type="button" onClick={handleTutorialBack} className="fairteams-tutorial-action h-12 flex-1 rounded-2xl border border-slate-200 bg-white text-sm font-black text-slate-600">Back</button>
+              <div className="mt-4 grid grid-cols-[1fr_1.4fr] gap-2">
+                <button type="button" onClick={handleTutorialBack} className="fairteams-tutorial-action h-12 rounded-2xl border border-slate-200 bg-white text-sm font-black text-slate-600">Back</button>
               <button
                 type="button"
                 className="fairteams-tutorial-action h-12 flex-[1.4] rounded-2xl bg-[#102A43] text-sm font-black text-white shadow-sm"
@@ -4009,6 +4060,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
               >
                 Continue
               </button>
+                <button type="button" onClick={skipGuidedTour} className="fairteams-tutorial-action col-span-2 mt-1 text-xs font-black text-slate-500 underline decoration-slate-300 underline-offset-2 lg:text-sm">Skip tutorial</button>
               </div>
             )}
             {tutorialStep === "recap" && (
@@ -4030,6 +4082,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 <button type="button" className="fairteams-tutorial-action mt-2 h-12 w-full rounded-2xl bg-emerald-600 text-sm font-black text-white shadow-sm" onClick={finishGuidedTour}>
                   {tutorialReplayMode ? "Return to my app" : "Start using FairTeams"}
                 </button>
+                <button type="button" onClick={skipGuidedTour} className="fairteams-tutorial-action w-full py-1 text-xs font-black text-slate-500 underline decoration-slate-300 underline-offset-2 lg:text-sm">Skip tutorial</button>
               </div>
             )}
             </div>

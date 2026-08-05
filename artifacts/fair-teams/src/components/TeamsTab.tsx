@@ -794,9 +794,9 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
           </div>
         )}
 
-        <div className={teams.length > 0 ? "grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 items-end" : "grid grid-cols-2 md:grid-cols-[1fr_1fr_auto] gap-2"}>
+        <div className={teams.length > 0 ? "grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 items-end" : "grid grid-cols-2 gap-2 md:grid-cols-[1fr_1fr_auto] lg:items-end"}>
           <div className="flex flex-col gap-1 min-w-0">
-            <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Teams</Label>
+            <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground lg:text-xs">Teams</Label>
             <Select value={numTeams.toString()} onValueChange={v => setNumTeams(parseInt(v))}>
               <SelectTrigger className="h-10 px-2 py-0 font-bold text-[13px] leading-normal [&>span]:leading-normal" data-testid="select-num-teams">
                 <SelectValue />
@@ -811,9 +811,9 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
 
           <div className="flex flex-col gap-1 min-w-0">
             <div className="flex items-center gap-1">
-              <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Field Size</Label>
+              <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground lg:text-xs">Field Size</Label>
               <button type="button" onClick={() => setShowFieldHelp(v => !v)} className="text-muted-foreground hover:text-primary" title="What does Field Size mean?" data-testid="button-field-help">
-                <HelpCircle className="w-3.5 h-3.5" />
+                <HelpCircle className="h-3.5 w-3.5 lg:h-4 lg:w-4" />
               </button>
             </div>
             <Select value={fieldSize} onValueChange={v => setFieldSize(v as FieldSize)}>
@@ -831,16 +831,16 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
           <Button
             variant={teams.length > 0 ? "outline" : undefined}
             className={teams.length > 0
-              ? `h-10 px-3 rounded-xl border-2 text-[12px] font-black tracking-tight shadow-sm transition-all ${isGenerating ? "ring-4 ring-slate-200/70" : ""}`
-              : `col-span-2 md:col-span-1 h-10 w-full px-4 font-black uppercase tracking-wide text-[13px] shadow-sm bg-[#22C55E] text-white hover:bg-[#16A34A] transition-all ${isGenerating ? "ring-4 ring-emerald-300/45 shadow-lg shadow-emerald-400/25" : ""} ${tutorialStep === "generate" ? "fairteams-tutorial-pulse relative z-[82]" : ""}`
+              ? `h-10 px-3 rounded-xl border-2 text-[12px] font-black tracking-tight shadow-sm transition-all lg:h-11 lg:min-w-[9.5rem] lg:px-5 lg:text-sm ${isGenerating ? "ring-4 ring-slate-200/70" : ""}`
+              : `col-span-2 h-10 w-full px-4 font-black uppercase tracking-wide text-[13px] shadow-sm md:col-span-1 lg:h-11 lg:min-w-[10.5rem] lg:px-6 lg:text-sm bg-[#22C55E] text-white hover:bg-[#16A34A] transition-all ${isGenerating ? "ring-4 ring-emerald-300/45 shadow-lg shadow-emerald-400/25" : ""} ${tutorialStep === "generate" ? "fairteams-tutorial-pulse relative z-[82]" : ""}`
             }
             onClick={() => { handleGenerate(teams.length > 0); if (teams.length === 0) onTutorialAction?.("generated"); }}
             disabled={isGenerating}
             title={teams.length > 0 ? "Shuffle teams" : "Generate teams"}
             data-testid={teams.length > 0 ? "button-shuffle" : "button-generate"}
           >
-            <span className="inline-flex items-center gap-1.5">
-              {isGenerating ? <Shuffle className="w-3.5 h-3.5 animate-spin" /> : teams.length > 0 ? <Shuffle className="w-3.5 h-3.5" /> : <Sparkles className="w-3.5 h-3.5" />}
+            <span className="inline-flex items-center justify-center gap-1.5">
+              {isGenerating ? <Shuffle className="h-3.5 w-3.5 animate-spin lg:h-4 lg:w-4" /> : teams.length > 0 ? <Shuffle className="h-3.5 w-3.5 lg:h-4 lg:w-4" /> : <Sparkles className="h-3.5 w-3.5 lg:h-4 lg:w-4" />}
               {isGenerating ? "Balancing" : teams.length > 0 ? "Shuffle" : "Generate"}
             </span>
           </Button>

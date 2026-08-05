@@ -2045,7 +2045,7 @@ export function ClubTab({
       <Dialog open={clubNotesOpen} onOpenChange={setClubNotesOpen}>
         <DialogContent className="max-h-[86svh] max-w-sm overflow-hidden rounded-3xl border border-amber-100 p-0 shadow-[0_14px_40px_rgba(15,23,42,0.16)]">
           <DialogHeader className="border-b border-amber-100 bg-amber-50/70 px-4 py-3 text-left">
-            <DialogTitle className="flex items-center gap-2 text-base font-black text-[#102A43]">
+            <DialogTitle className="flex items-center gap-2 text-base font-black text-[#102A43] lg:text-xl">
               <StickyNote className="h-4 w-4 text-amber-600" />
               Club notes
             </DialogTitle>
@@ -2566,15 +2566,15 @@ export function ClubTab({
           }
         }}
       >
-        <DialogContent className="fixed bottom-2 left-2 right-2 top-2 flex h-auto max-h-none w-auto max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-[2rem] p-0 sm:bottom-auto sm:left-1/2 sm:right-auto sm:top-1/2 sm:h-[96dvh] sm:w-[calc(100vw-1rem)] sm:max-w-2xl sm:-translate-x-1/2 sm:-translate-y-1/2">
+        <DialogContent className="fixed bottom-2 left-2 right-2 top-2 flex h-auto max-h-none w-auto max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-[2rem] p-0 sm:bottom-auto sm:left-1/2 sm:right-auto sm:top-1/2 sm:h-[96dvh] sm:w-[calc(100vw-1rem)] sm:max-w-2xl sm:-translate-x-1/2 sm:-translate-y-1/2 lg:h-[88dvh] lg:max-w-4xl">
           <DialogHeader className="border-b border-slate-100 px-4 py-4 pr-12 text-left">
             <div className="grid gap-3">
               <div className="min-w-0">
-                <DialogTitle className="flex items-center gap-2 text-base font-black text-[#102A43]">
-                  <AntiqueBallIcon className="h-5 w-5 text-emerald-600" />
+                <DialogTitle className="flex items-center gap-2 text-base font-black text-[#102A43] lg:text-xl">
+                  <AntiqueBallIcon className="h-5 w-5 text-emerald-600 lg:h-6 lg:w-6" />
                   Equipment board
                 </DialogTitle>
-                <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
+                <p className="mt-1 text-xs font-semibold leading-snug text-slate-500 lg:text-sm">
                   Drag bags between holders. Tap a bag to edit its name and
                   contents.
                 </p>
@@ -2594,13 +2594,13 @@ export function ClubTab({
 
           <div className="flex-1 overflow-y-auto bg-slate-50/70 p-3">
             <div
-              className={`mb-2 rounded-2xl border px-3 py-1.5 text-[11px] font-bold leading-snug shadow-sm transition ${equipmentMoveNotice ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-white text-slate-500"}`}
+              className={`mb-2 rounded-2xl border px-3 py-1.5 text-[11px] font-bold leading-snug shadow-sm transition lg:text-xs ${equipmentMoveNotice ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-white text-slate-500"}`}
             >
               {equipmentBoardStatusText}
             </div>
 
             <div className="overflow-hidden rounded-[1.65rem] border border-slate-200 bg-white shadow-[0_14px_34px_rgba(15,23,42,0.08)]">
-              <div className="grid grid-cols-[6.25rem_minmax(0,1fr)] border-b border-slate-200 bg-white text-[10px] font-black uppercase tracking-wide text-slate-400">
+              <div className="grid grid-cols-[6.25rem_minmax(0,1fr)] border-b border-slate-200 bg-white text-[10px] font-black uppercase tracking-wide text-slate-400 lg:grid-cols-[11rem_minmax(0,1fr)] lg:text-xs">
                 <div className="px-3 py-2.5">Holder</div>
                 <div className="border-l border-slate-200 px-3 py-2.5">
                   Bags
@@ -2617,18 +2617,18 @@ export function ClubTab({
                   <section
                     key={holder.id}
                     data-equipment-holder-id={holder.id}
-                    className={`grid grid-cols-[6.25rem_minmax(0,1fr)] transition ${index === 0 ? "" : "border-t border-slate-100"} ${highlighted ? "bg-emerald-50" : "bg-white"}`}
+                    className={`grid grid-cols-[6.25rem_minmax(0,1fr)] transition lg:grid-cols-[11rem_minmax(0,1fr)] ${index === 0 ? "" : "border-t border-slate-100"} ${highlighted ? "bg-emerald-50" : "bg-white"}`}
                   >
-                    <div className="flex min-h-[3.65rem] items-center px-3 py-2">
+                    <div className="flex min-h-[3.65rem] items-center px-3 py-2 lg:px-4">
                       <div className="min-w-0">
-                        <h3 className="truncate text-[12px] font-black leading-tight text-[#102A43]">
+                        <h3 className="truncate text-[12px] font-black leading-tight text-[#102A43] lg:text-sm">
                           {holder.label}
                         </h3>
                       </div>
                     </div>
 
                     <div
-                      className={`flex min-h-[3.65rem] flex-col items-stretch justify-center gap-1.5 border-l px-2 py-2 transition ${highlighted ? "border-emerald-300 bg-emerald-50 ring-2 ring-inset ring-emerald-100" : "border-slate-200 bg-slate-50/30"}`}
+                      className={`flex min-h-[3.65rem] flex-col items-stretch justify-center gap-1.5 border-l px-2 py-2 transition lg:px-3 ${highlighted ? "border-emerald-300 bg-emerald-50 ring-2 ring-inset ring-emerald-100" : "border-slate-200 bg-slate-50/30"}`}
                     >
                       {holderKits.length === 0 ? (
                         <div

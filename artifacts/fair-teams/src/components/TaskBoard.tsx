@@ -601,13 +601,16 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
                               .sort((a, b) => b.at - a.at)[0];
                             const flippedHeightClass = card.vote ? "min-h-[300px]" : card.note?.trim() ? "min-h-[190px]" : "min-h-[126px]";
                             const titleLength = card.title.trim().length;
+                            const hasFrontMetadata = Boolean(card.category || card.assignee || card.dueDate || card.vote);
                             const frontHeightClass = titleLength > 92
-                              ? "min-h-[118px]"
+                              ? "min-h-[146px] lg:min-h-[174px]"
                               : titleLength > 62
-                                ? "min-h-[100px]"
+                                ? "min-h-[124px] lg:min-h-[150px]"
                                 : titleLength > 34
-                                  ? "min-h-[82px]"
-                                  : "min-h-[64px]";
+                                  ? "min-h-[104px] lg:min-h-[126px]"
+                                  : hasFrontMetadata
+                                    ? "min-h-[88px] lg:min-h-[106px]"
+                                    : "min-h-[70px] lg:min-h-[88px]";
                             return (
                               <div key={card.id} className={`relative [perspective:900px] ${flipped ? flippedHeightClass : frontHeightClass}`}>
                                 <div className={`relative w-full transition-all duration-300 [transform-style:preserve-3d] ${flipped ? `${flippedHeightClass} [transform:rotateY(180deg)]` : frontHeightClass}`}>

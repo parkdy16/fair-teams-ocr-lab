@@ -23,6 +23,7 @@ import {
   FolderOpen,
   Info,
   ChevronRight,
+  Building2,
 } from "lucide-react";
 import { PlayersTab } from "@/components/PlayersTab";
 import { TodayTab } from "@/components/TodayTab";
@@ -3567,23 +3568,24 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 <div className="mt-0.5 text-[9px] font-black uppercase tracking-[0.14em] text-slate-400">Workspace</div>
               </div>
             </div>
-            <TabsList className="mt-6 flex h-auto w-full flex-col gap-1 rounded-2xl border border-slate-200 bg-slate-50/70 p-1.5 shadow-none">
+            <TabsList className="mt-6 flex h-auto w-full flex-col gap-1.5 rounded-none border-0 bg-transparent p-0 shadow-none">
               {([
-                ["players", "Roster"],
-                ["today", "Today"],
-                ["teams", "Teams"],
-                ["club", "Club"],
-              ] as const).map(([value, label]) => (
+                ["players", "Roster", Users],
+                ["today", "Today", Check],
+                ["teams", "Teams", RefreshCw],
+                ["club", "Club", Building2],
+              ] as const).map(([value, label, Icon]) => (
                 <TabsTrigger
                   key={value}
                   value={value}
-                  className={`fairteams-tab-trigger flex h-11 w-full justify-start rounded-xl px-4 text-sm font-black text-slate-500 data-[state=active]:bg-white data-[state=active]:text-[#102A43] data-[state=active]:shadow-sm ${(tutorialStep === "today-tab" && value === "today") || (tutorialStep === "teams-tab" && value === "teams") || (tutorialStep === "club-tab" && value === "club") || (tutorialStep === "roster-return" && value === "players") ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
+                  className={`fairteams-tab-trigger flex h-11 w-full justify-start gap-3 rounded-xl border border-transparent px-3 text-sm font-black text-slate-500 shadow-none transition-colors hover:bg-slate-50 data-[state=active]:border-slate-200 data-[state=active]:bg-slate-50 data-[state=active]:text-[#102A43] data-[state=active]:shadow-none ${(tutorialStep === "today-tab" && value === "today") || (tutorialStep === "teams-tab" && value === "teams") || (tutorialStep === "club-tab" && value === "club") || (tutorialStep === "roster-return" && value === "players") ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
                 >
+                  <Icon className="h-4 w-4 shrink-0" />
                   {label}
                 </TabsTrigger>
               ))}
             </TabsList>
-            <div className="mt-auto rounded-2xl bg-slate-50 px-3 py-3 text-[10px] font-semibold leading-relaxed text-slate-500">
+            <div className="mt-auto border-t border-slate-100 px-2 pt-4 text-[10px] font-semibold leading-relaxed text-slate-500">
               The same live roster, tasks, equipment and votes on every device.
             </div>
           </aside>
@@ -3800,7 +3802,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
         )}
 
         <div className={`flex-1 overflow-y-auto p-4 md:p-5 lg:px-7 lg:py-6 ${shouldShowTodayStartHeader ? "pb-6 md:pb-6" : "pb-20 md:pb-20 lg:pb-6"}`} style={{ WebkitOverflowScrolling: "touch" }}>
-          <div className={`mx-auto flex min-h-[calc(100dvh-116px)] w-full flex-col ${shouldShowTodayStartHeader ? "lg:max-w-6xl lg:justify-center" : activeTab === "players" ? "lg:max-w-5xl" : activeTab === "today" ? "lg:max-w-6xl" : activeTab === "teams" ? "lg:max-w-none" : "lg:max-w-7xl"}`}>
+          <div className={`mx-auto flex min-h-[calc(100dvh-116px)] w-full flex-col ${shouldShowTodayStartHeader ? "lg:max-w-6xl lg:justify-center" : activeTab === "players" ? "lg:max-w-5xl" : activeTab === "today" ? "lg:max-w-6xl" : activeTab === "teams" ? "lg:max-w-none" : "lg:mx-0 lg:max-w-none"}`}>
             <TabsContent
               value="players"
               className="fairteams-tab-panel m-0 data-[state=active]:animate-in data-[state=active]:fade-in-50"

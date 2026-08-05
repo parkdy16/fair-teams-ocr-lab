@@ -1656,7 +1656,7 @@ export function ClubTab({
   }, [clubUser, isSharedRoster, sharedPeopleCount, players.length, clubRatingsEnabled, clubRatedCount]);
 
   return (
-    <div className="mx-auto flex w-full max-w-xl flex-col gap-3 px-1 pb-2 lg:max-w-4xl lg:gap-4">
+    <div className="mx-auto flex w-full max-w-xl flex-col gap-3 px-1 pb-2 lg:mx-0 lg:max-w-none lg:gap-5 lg:px-0">
       <Dialog
         open={accountModalOpen}
         onOpenChange={setAccountDialogOpen}
@@ -1687,7 +1687,8 @@ export function ClubTab({
       />
       </div>
 
-      <section className="overflow-hidden rounded-[1.7rem] border border-violet-100 bg-[#f8f3ff] p-3 shadow-sm ring-1 ring-violet-50">
+      <div className="contents lg:grid lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)] lg:items-start lg:gap-5">
+      <section className="overflow-hidden rounded-[1.7rem] border border-violet-100 bg-[#f8f3ff] p-3 shadow-sm ring-1 ring-violet-50 lg:h-full lg:p-4">
         <div className="flex items-start justify-between gap-3">
           <button
             type="button"
@@ -1866,8 +1867,10 @@ export function ClubTab({
         user={clubUser}
         eligibleVoterCount={isSharedRoster ? Math.max(1, sharedPeopleCount) : 1}
       />
+      </div>
 
-      <section className="overflow-visible rounded-[1.7rem] border border-amber-100 bg-[#fffaf0] p-3 shadow-sm ring-1 ring-amber-50">
+      <div className="contents lg:grid lg:grid-cols-[minmax(0,1.35fr)_minmax(340px,0.65fr)] lg:items-start lg:gap-5">
+      <section className="overflow-visible rounded-[1.7rem] border border-amber-100 bg-[#fffaf0] p-3 shadow-sm ring-1 ring-amber-50 lg:h-full lg:p-4">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
             <div className="text-[17px] font-black leading-none text-[#a94f0a]">
@@ -1901,7 +1904,7 @@ export function ClubTab({
             previewClubNotes.map((note, index) => (
               <div
                 key={note.id}
-                className={`relative rounded-[0.8rem] border border-black/5 px-2.5 py-2.5 shadow-[0_4px_8px_rgba(130,85,35,0.22)] ring-1 ring-white/25 ${previewClubNotes.length === 1 ? "min-h-[5.75rem] w-[9.75rem]" : "min-h-[6.45rem]"}`}
+                className={`relative rounded-[0.8rem] border border-black/5 px-2.5 py-2.5 shadow-[0_4px_8px_rgba(130,85,35,0.22)] ring-1 ring-white/25 ${previewClubNotes.length === 1 ? "min-h-[5.75rem] w-[9.75rem] lg:w-[12rem]" : "min-h-[6.45rem]"}`}
                 style={clubNoteStyle(index)}
               >
                 <div className="flex h-full flex-col">
@@ -1929,7 +1932,7 @@ export function ClubTab({
               </div>
             ))
           ) : (
-            <div className="col-span-3 min-h-[5rem] w-full rounded-2xl border border-dashed border-amber-200 bg-white/60 px-3 py-3 text-sm font-black text-[#102A43]">
+            <div className="col-span-3 min-h-[5rem] w-full rounded-2xl border border-dashed border-amber-200 bg-white/60 px-3 py-3 text-sm font-black text-[#102A43] lg:min-h-[3.75rem] lg:py-2.5">
               Leave the first note for the organizers.
             </div>
           )}
@@ -1942,7 +1945,7 @@ export function ClubTab({
         )}
       </section>
 
-      <section className="rounded-[1.7rem] border border-sky-100 bg-[#f6fbff] p-3 shadow-sm ring-1 ring-sky-50">
+      <section className="rounded-[1.7rem] border border-sky-100 bg-[#f6fbff] p-3 shadow-sm ring-1 ring-sky-50 lg:h-full lg:p-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-wide text-blue-600">
@@ -2031,11 +2034,12 @@ export function ClubTab({
             )}
           </div>
         ) : (
-          <div className="mt-3 rounded-2xl bg-white/70 px-3 py-5 text-center text-sm font-black text-[#102A43]">
+          <div className="mt-3 rounded-2xl bg-white/70 px-3 py-5 text-center text-sm font-black text-[#102A43] lg:py-3.5">
             No bags yet
           </div>
         )}
       </section>
+      </div>
 
       <Dialog open={clubNotesOpen} onOpenChange={setClubNotesOpen}>
         <DialogContent className="max-h-[86svh] max-w-sm overflow-hidden rounded-3xl border border-amber-100 p-0 shadow-[0_14px_40px_rgba(15,23,42,0.16)]">

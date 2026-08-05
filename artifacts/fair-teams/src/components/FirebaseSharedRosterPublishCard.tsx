@@ -263,7 +263,7 @@ Your local roster will stay local. Fair Teams will copy shared identity fields o
           onRosterSaved?.(saved, activeRoster.id);
           await refreshSharedData();
           setAutoSyncStatus("saved");
-          setNotice({ tone: "success", text: "Live · saved online automatically." });
+          setNotice(null);
         })
         .catch((error) => {
           setAutoSyncStatus("error");

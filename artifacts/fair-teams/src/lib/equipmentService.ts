@@ -1,6 +1,7 @@
 import {
   collection,
   deleteDoc,
+  deleteField,
   doc,
   onSnapshot,
   serverTimestamp,
@@ -27,7 +28,6 @@ export type FirebaseEquipmentBag = {
   color: string;
   contents: string[];
   items?: EquipmentInventoryItem[];
-  note?: string;
   createdAt?: number;
   createdByEmail?: string;
   createdByName?: string;
@@ -104,7 +104,6 @@ function toEquipmentBag(id: string, data: DocumentData): FirebaseEquipmentBag {
     color: cleanString(data.color, "#111827"),
     contents: cleanContents(data.contents),
     items: cleanInventoryItems(data.items),
-    note: cleanString(data.note) || undefined,
     createdAt,
     createdByEmail: cleanString(data.createdByEmail) || undefined,
     createdByName: cleanString(data.createdByName) || undefined,
@@ -169,7 +168,7 @@ export async function saveFirebaseEquipmentBag(scopeId: string, bag: FirebaseEqu
   const scope = resolveEquipmentScope(scopeId);
   const payload: Record<string, unknown> = {
     app: "Fair Teams",
-    schemaVersion: 3,
+    schemaVersion: 4,
     scopeKind: scope.kind,
     scopeId: scope.id,
     groupId: scope.kind === "group" ? scope.id : null,
@@ -186,7 +185,7 @@ export async function saveFirebaseEquipmentBag(scopeId: string, bag: FirebaseEqu
       brand: item.brand?.trim() || null,
       size: item.size?.trim() || null,
     })),
-    note: bag.note?.trim() || null,
+    note: deleteField(),
     updatedByUid: user.uid,
     updatedByEmail: user.email,
     updatedByName: userName,

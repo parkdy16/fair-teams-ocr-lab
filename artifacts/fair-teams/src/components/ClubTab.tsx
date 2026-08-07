@@ -279,7 +279,6 @@ const DEFAULT_EQUIPMENT_KITS: ClubEquipmentKit[] = [
       { key: "balls", label: "Balls", quantity: 2 },
       { key: "ball-pumps", label: "Ball pumps", quantity: 1 },
     ],
-    note: "Check air before Saturday.",
     createdAt: Date.now(),
     createdByName: "Preview",
     updatedAt: Date.now(),
@@ -307,7 +306,6 @@ const DEFAULT_EQUIPMENT_KITS: ClubEquipmentKit[] = [
     color: "#ea580c",
     contents: ["12 Flat cones"],
     items: [{ key: "flat-cones", label: "Flat cones", quantity: 12 }],
-    note: "Someone took them after last game?",
     createdAt: Date.now(),
     createdByName: "Preview",
     updatedAt: Date.now(),
@@ -566,7 +564,6 @@ function parseEquipmentKits(
               .filter((item): item is NonNullable<typeof item> => item !== null)
               .slice(0, 30)
           : undefined,
-        note: kit.note ? String(kit.note) : undefined,
         createdAt: Number(kit.createdAt) || undefined,
         createdByEmail: kit.createdByEmail
           ? String(kit.createdByEmail)
@@ -817,8 +814,8 @@ export function ClubTab({
   const [equipmentMoveNotice, setEquipmentMoveNotice] = useState("");
   const [contentPeekKitId, setContentPeekKitId] = useState<string | null>(null);
   const [kitItems, setKitItems] = useState<EquipmentInventoryItem[]>([]);
+  const [equipmentQuantityDrafts, setEquipmentQuantityDrafts] = useState<Record<number, string>>({});
   const [customEquipmentName, setCustomEquipmentName] = useState("");
-  const [kitNote, setKitNote] = useState("");
   const [ballDetailsIndex, setBallDetailsIndex] = useState<number | null>(null);
   const [draggingKitId, setDraggingKitId] = useState<string | null>(null);
   const [dragOverHolderId, setDragOverHolderId] = useState<string | null>(null);
@@ -1536,13 +1533,37 @@ export function ClubTab({
   };
 
   const updateEquipmentItemQuantity = (index: number, delta: number) => {
+    setEquipmentQuantityDrafts((current) => {
+      if (!(index in current)) return current;
+      const next = { ...current };
+      delete next[index];
+      return next;
+    });
     setKitItems((current) =>
-      current.flatMap((item, itemIndex) => {
-        if (itemIndex !== index) return [item];
-        const quantity = item.quantity + delta;
-        return quantity <= 0 ? [] : [{ ...item, quantity: Math.min(999, quantity) }];
+      current.map((item, itemIndex) => {
+        if (itemIndex !== index) return item;
+        return { ...item, quantity: Math.max(1, Math.min(999, item.quantity + delta)) };
       }),
     );
+  };
+
+  const commitEquipmentQuantityDraft = (index: number, rawValue: string) => {
+    const trimmed = rawValue.trim();
+    if (trimmed) {
+      const parsed = Number(trimmed);
+      if (Number.isFinite(parsed)) {
+        const quantity = Math.max(1, Math.min(999, Math.round(parsed)));
+        setKitItems((current) =>
+          current.map((item, itemIndex) => itemIndex === index ? { ...item, quantity } : item),
+        );
+      }
+    }
+    setEquipmentQuantityDrafts((current) => {
+      if (!(index in current)) return current;
+      const next = { ...current };
+      delete next[index];
+      return next;
+    });
   };
 
   const addCustomEquipmentItem = () => {
@@ -1584,8 +1605,8 @@ export function ClubTab({
     setDeleteBagSlide(0);
     setDeleteConfirmOpen(false);
     setKitItems([]);
+    setEquipmentQuantityDrafts({});
     setCustomEquipmentName("");
-    setKitNote("");
     setBallDetailsIndex(null);
   };
 
@@ -1660,7 +1681,6 @@ export function ClubTab({
           brand: item.key === "balls" ? item.brand?.trim() || "" : "",
           size: item.key === "balls" ? item.size?.trim() || "" : "",
         })),
-        note: (kit.note || "").trim(),
       });
       setEditingKitId(kit.id);
       setKitName(kit.name);
@@ -1669,8 +1689,8 @@ export function ClubTab({
       setDeleteBagSlide(0);
       setDeleteConfirmOpen(false);
       setKitItems(existingItems);
+      setEquipmentQuantityDrafts({});
       setCustomEquipmentName("");
-      setKitNote(kit.note || "");
       setBallDetailsIndex(null);
     });
   };
@@ -1688,7 +1708,6 @@ export function ClubTab({
         brand: item.key === "balls" ? item.brand?.trim() || "" : "",
         size: item.key === "balls" ? item.size?.trim() || "" : "",
       })),
-      note: kitNote.trim(),
     });
   }
 
@@ -1698,7 +1717,6 @@ export function ClubTab({
     const hasMeaningfulDraft = Boolean(
       trimmedName
       || kitItems.length > 0
-      || kitNote.trim()
       || normalizedHolderId !== "storage"
       || kitColor !== DEFAULT_EQUIPMENT_COLOR,
     );
@@ -1740,7 +1758,6 @@ export function ClubTab({
       color: kitColor,
       contents: equipmentContentsFromItems(cleanedItems),
       items: cleanedItems,
-      note: kitNote.trim() || undefined,
       createdAt: existingKit?.createdAt || now,
       createdByEmail: existingKit?.createdByEmail || actorEmail,
       createdByName: existingKit?.createdByName || actorName,
@@ -1795,7 +1812,7 @@ export function ClubTab({
         equipmentAutosaveTimerRef.current = null;
       }
     };
-  }, [equipmentDialogOpen, kitName, kitHolderId, kitColor, kitItems, kitNote]);
+  }, [equipmentDialogOpen, kitName, kitHolderId, kitColor, kitItems]);
 
   const moveEquipmentKit = async (kitId: string, holderId: string) => {
     const currentKit = equipmentKits.find((kit) => kit.id === kitId);
@@ -3400,11 +3417,6 @@ export function ClubTab({
                   </div>
                 )}
 
-                {contentPeekKit.note && (
-                  <div className="mt-3 rounded-2xl bg-amber-50 px-3 py-2 text-xs font-semibold leading-snug text-amber-800">
-                    {contentPeekKit.note}
-                  </div>
-                )}
               </div>
             </div>
           )}
@@ -3727,22 +3739,30 @@ export function ClubTab({
                               −
                             </button>
                             <Input
-                              type="number"
+                              type="text"
                               inputMode="numeric"
-                              min={1}
-                              max={999}
-                              value={item.quantity}
-                              onChange={(event) => {
-                                const quantity = Math.max(1, Math.min(999, Math.round(Number(event.target.value) || 1)));
-                                setKitItems((current) => current.map((currentItem, itemIndex) => itemIndex === index ? { ...currentItem, quantity } : currentItem));
+                              pattern="[0-9]*"
+                              enterKeyHint="done"
+                              autoComplete="off"
+                              value={equipmentQuantityDrafts[index] ?? String(item.quantity)}
+                              onFocus={(event) => {
+                                setEquipmentQuantityDrafts((current) => ({
+                                  ...current,
+                                  [index]: current[index] ?? event.currentTarget.value,
+                                }));
                               }}
+                              onChange={(event) => {
+                                const value = event.target.value.replace(/\D/g, "").slice(0, 3);
+                                setEquipmentQuantityDrafts((current) => ({ ...current, [index]: value }));
+                              }}
+                              onBlur={(event) => commitEquipmentQuantityDraft(index, event.currentTarget.value)}
                               onKeyDown={(event) => {
                                 if (event.key === "Enter") {
                                   event.preventDefault();
+                                  commitEquipmentQuantityDraft(index, event.currentTarget.value);
                                   event.currentTarget.blur();
                                 }
                               }}
-                              enterKeyHint="done"
                               className="h-8 w-14 rounded-xl border-slate-200 px-1 text-center text-xs font-black tabular-nums"
                               aria-label={`${item.label} quantity`}
                             />
@@ -3759,6 +3779,7 @@ export function ClubTab({
                               className="flex h-8 w-8 items-center justify-center rounded-xl text-slate-300 hover:bg-rose-50 hover:text-rose-500"
                               onClick={() => {
                                 setKitItems((current) => current.filter((_, itemIndex) => itemIndex !== index));
+                                setEquipmentQuantityDrafts({});
                                 setBallDetailsIndex(null);
                               }}
                               aria-label={`Remove ${item.label}`}
@@ -3836,17 +3857,6 @@ export function ClubTab({
               </Button>
             </div>
 
-            <div className="grid gap-2">
-              <Label className="text-xs font-black uppercase tracking-wide text-slate-500">
-                Note optional
-              </Label>
-              <Textarea
-                value={kitNote}
-                onChange={(event) => setKitNote(event.target.value)}
-                placeholder="Example: First-aid spray is almost empty."
-                className="min-h-[3.5rem] rounded-2xl border-slate-200 text-sm font-semibold"
-              />
-            </div>
 
             {editingKitMeta && (
               <div className="rounded-2xl border border-slate-100 bg-slate-50/70 px-3 py-2 text-[11px] font-semibold leading-snug text-slate-500">

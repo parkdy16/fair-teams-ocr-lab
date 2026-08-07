@@ -16,6 +16,8 @@ export type EquipmentInventoryItem = {
   label: string;
   quantity: number;
   custom?: boolean;
+  brand?: string;
+  size?: string;
 };
 
 export type FirebaseEquipmentBag = {
@@ -69,9 +71,11 @@ function cleanInventoryItems(value: unknown): EquipmentInventoryItem[] {
         label,
         quantity,
         custom: item.custom === true || undefined,
+        brand: cleanString(item.brand) || undefined,
+        size: cleanString(item.size) || undefined,
       } satisfies EquipmentInventoryItem;
     })
-    .filter((item): item is EquipmentInventoryItem => Boolean(item))
+    .filter((item): item is NonNullable<typeof item> => item !== null)
     .slice(0, 30);
 }
 
@@ -165,7 +169,7 @@ export async function saveFirebaseEquipmentBag(scopeId: string, bag: FirebaseEqu
   const scope = resolveEquipmentScope(scopeId);
   const payload: Record<string, unknown> = {
     app: "Fair Teams",
-    schemaVersion: 2,
+    schemaVersion: 3,
     scopeKind: scope.kind,
     scopeId: scope.id,
     groupId: scope.kind === "group" ? scope.id : null,
@@ -179,6 +183,8 @@ export async function saveFirebaseEquipmentBag(scopeId: string, bag: FirebaseEqu
       label: item.label.trim(),
       quantity: Math.max(1, Math.min(999, Math.round(item.quantity || 1))),
       custom: item.custom === true,
+      brand: item.brand?.trim() || null,
+      size: item.size?.trim() || null,
     })),
     note: bag.note?.trim() || null,
     updatedByUid: user.uid,

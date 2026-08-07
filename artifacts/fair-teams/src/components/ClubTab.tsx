@@ -157,6 +157,24 @@ const EQUIPMENT_COLORS = [
 
 const DEFAULT_EQUIPMENT_COLOR = EQUIPMENT_COLORS[0];
 
+const EQUIPMENT_COLOR_NAMES: Record<string, string> = {
+  "#111827": "Black",
+  "#475569": "Slate",
+  "#1e3a8a": "Navy",
+  "#2563eb": "Blue",
+  "#0891b2": "Cyan",
+  "#0f766e": "Teal",
+  "#16a34a": "Green",
+  "#ca8a04": "Yellow",
+  "#ea580c": "Orange",
+  "#dc2626": "Red",
+  "#9f1239": "Burgundy",
+  "#db2777": "Pink",
+  "#7c3aed": "Purple",
+  "#8b5e34": "Brown",
+  "#f8fafc": "White",
+};
+
 const EQUIPMENT_PRESETS = [
   { key: "balls", label: "Balls" },
   { key: "flat-cones", label: "Flat cones" },
@@ -223,12 +241,23 @@ function equipmentItemsForKit(kit: ClubEquipmentKit): EquipmentInventoryItem[] {
   return structured.length ? structured.map((item) => ({ ...item })) : legacyEquipmentItems(kit.contents || []);
 }
 
+function equipmentItemDisplayLabel(item: EquipmentInventoryItem) {
+  if (item.key !== "balls") return item.label;
+  const brand = item.brand?.trim();
+  const size = item.size?.trim();
+  if (!brand && !size) return "Balls";
+  if (brand && size) return `${brand} · Size ${size}`;
+  if (brand) return brand;
+  return `Balls · Size ${size}`;
+}
+
 function equipmentContentsFromItems(items: EquipmentInventoryItem[]) {
   return items
     .filter((item) => item.label.trim() && item.quantity > 0)
     .map((item) => {
       const quantity = Math.max(1, Math.round(item.quantity));
-      return quantity === 1 ? item.label : `${quantity} ${item.label}`;
+      const label = equipmentItemDisplayLabel(item);
+      return quantity === 1 ? label : `${quantity} ${label}`;
     })
     .slice(0, 30);
 }
@@ -530,9 +559,11 @@ function parseEquipmentKits(
                   label,
                   quantity: Math.max(1, Math.min(999, Math.round(Number(item.quantity) || 1))),
                   custom: item.custom === true || undefined,
+                  brand: typeof item.brand === "string" && item.brand.trim() ? item.brand.trim() : undefined,
+                  size: typeof item.size === "string" && item.size.trim() ? item.size.trim() : undefined,
                 } satisfies EquipmentInventoryItem;
               })
-              .filter((item): item is EquipmentInventoryItem => Boolean(item))
+              .filter((item): item is NonNullable<typeof item> => item !== null)
               .slice(0, 30)
           : undefined,
         note: kit.note ? String(kit.note) : undefined,
@@ -788,9 +819,15 @@ export function ClubTab({
   const [kitItems, setKitItems] = useState<EquipmentInventoryItem[]>([]);
   const [customEquipmentName, setCustomEquipmentName] = useState("");
   const [kitNote, setKitNote] = useState("");
+  const [ballDetailsIndex, setBallDetailsIndex] = useState<number | null>(null);
   const [draggingKitId, setDraggingKitId] = useState<string | null>(null);
   const [dragOverHolderId, setDragOverHolderId] = useState<string | null>(null);
   const equipmentDragTimerRef = useRef<number | null>(null);
+  const equipmentAutosaveTimerRef = useRef<number | null>(null);
+  const equipmentAutosaveReadyRef = useRef(false);
+  const equipmentDraftBagIdRef = useRef<string | null>(null);
+  const equipmentLastQueuedSignatureRef = useRef("");
+  const equipmentSaveSequenceRef = useRef(0);
   const activeEquipmentDragRef = useRef<string | null>(null);
   const activeEquipmentDropHolderRef = useRef<string | null>(null);
   const suppressEquipmentClickRef = useRef(false);
@@ -1457,30 +1494,38 @@ export function ClubTab({
   }, [equipmentHolders, equipmentKits]);
   const equipmentInventoryTotals = useMemo(() => {
     const totals = new Map<string, EquipmentInventoryItem>();
-    if (equipmentKits.length > 0) {
-      totals.set("equipment-bags", { key: "equipment-bags", label: "Bags", quantity: equipmentKits.length });
-    }
     equipmentKits.forEach((kit) => {
       equipmentItemsForKit(kit).forEach((item) => {
         const normalizedLabel = item.label.trim();
         if (!normalizedLabel || item.quantity <= 0) return;
-        const key = item.custom
-          ? `custom:${equipmentItemKey(normalizedLabel)}`
-          : item.key || equipmentItemKey(normalizedLabel);
+        const brand = item.brand?.trim() || "";
+        const size = item.size?.trim() || "";
+        const key = item.key === "balls"
+          ? `balls:${equipmentItemKey(brand)}:${equipmentItemKey(size)}`
+          : item.custom
+            ? `custom:${equipmentItemKey(normalizedLabel)}`
+            : item.key || equipmentItemKey(normalizedLabel);
+        const displayLabel = item.key === "balls" ? equipmentItemDisplayLabel(item) : normalizedLabel;
         const existing = totals.get(key);
         if (existing) existing.quantity += item.quantity;
-        else totals.set(key, { ...item, key, label: normalizedLabel });
+        else totals.set(key, { ...item, key, label: displayLabel });
       });
     });
     return Array.from(totals.values()).sort((a, b) => {
-      const aOrder = EQUIPMENT_PRESET_ORDER.get(a.key) ?? 999;
-      const bOrder = EQUIPMENT_PRESET_ORDER.get(b.key) ?? 999;
+      const aBaseKey = a.key.startsWith("balls:") ? "balls" : a.key;
+      const bBaseKey = b.key.startsWith("balls:") ? "balls" : b.key;
+      const aOrder = EQUIPMENT_PRESET_ORDER.get(aBaseKey) ?? 999;
+      const bOrder = EQUIPMENT_PRESET_ORDER.get(bBaseKey) ?? 999;
       return aOrder - bOrder || a.label.localeCompare(b.label);
     });
   }, [equipmentKits]);
   const addEquipmentPreset = (preset: (typeof EQUIPMENT_PRESETS)[number]) => {
     setKitItems((current) => {
-      const existing = current.find((item) => item.key === preset.key && !item.custom);
+      const existing = current.find((item) =>
+        item.key === preset.key
+        && !item.custom
+        && (preset.key !== "balls" || (!item.brand?.trim() && !item.size?.trim())),
+      );
       if (existing) {
         return current.map((item) =>
           item === existing ? { ...item, quantity: Math.min(999, item.quantity + 1) } : item,
@@ -1541,15 +1586,21 @@ export function ClubTab({
     setKitItems([]);
     setCustomEquipmentName("");
     setKitNote("");
+    setBallDetailsIndex(null);
   };
 
   const openEquipmentEditor = (prepareForm: () => void) => {
     const openedFromBoard = equipmentBoardOpen;
+    equipmentAutosaveReadyRef.current = false;
+    equipmentLastQueuedSignatureRef.current = "";
     setEquipmentEditorReturnToBoard(openedFromBoard);
 
     const openEditor = () => {
       prepareForm();
       setEquipmentDialogOpen(true);
+      window.setTimeout(() => {
+        equipmentAutosaveReadyRef.current = true;
+      }, 0);
     };
 
     if (openedFromBoard) {
@@ -1562,6 +1613,14 @@ export function ClubTab({
   };
 
   const closeEquipmentEditor = (returnToBoard = true) => {
+    if (equipmentAutosaveTimerRef.current !== null) {
+      window.clearTimeout(equipmentAutosaveTimerRef.current);
+      equipmentAutosaveTimerRef.current = null;
+    }
+    if (equipmentAutosaveReadyRef.current) {
+      void persistEquipmentDraft();
+    }
+    equipmentAutosaveReadyRef.current = false;
     blurActiveField();
     setColorPickerOpen(false);
     setEquipmentItemPickerOpen(false);
@@ -1577,6 +1636,7 @@ export function ClubTab({
 
   const openNewEquipmentKit = () => {
     openEquipmentEditor(() => {
+      equipmentDraftBagIdRef.current = null;
       resetEquipmentForm();
       setKitHolderId("storage");
     });
@@ -1584,26 +1644,76 @@ export function ClubTab({
 
   const openEditEquipmentKit = (kit: ClubEquipmentKit) => {
     openEquipmentEditor(() => {
+      const existingItems = equipmentItemsForKit(kit);
+      const normalizedHolderId = normalizeEquipmentHolderId(kit.holderId);
+      const color = kit.color || DEFAULT_EQUIPMENT_COLOR;
+      equipmentDraftBagIdRef.current = kit.id;
+      equipmentLastQueuedSignatureRef.current = JSON.stringify({
+        name: kit.name.trim(),
+        holderId: normalizedHolderId,
+        color,
+        items: existingItems.map((item) => ({
+          key: item.key,
+          label: item.label.trim(),
+          quantity: Math.max(1, Math.min(999, Math.round(item.quantity))),
+          custom: item.custom === true,
+          brand: item.key === "balls" ? item.brand?.trim() || "" : "",
+          size: item.key === "balls" ? item.size?.trim() || "" : "",
+        })),
+        note: (kit.note || "").trim(),
+      });
       setEditingKitId(kit.id);
       setKitName(kit.name);
-      setKitHolderId(normalizeEquipmentHolderId(kit.holderId));
-      setKitColor(kit.color || DEFAULT_EQUIPMENT_COLOR);
+      setKitHolderId(normalizedHolderId);
+      setKitColor(color);
       setDeleteBagSlide(0);
       setDeleteConfirmOpen(false);
-      setKitItems(equipmentItemsForKit(kit));
+      setKitItems(existingItems);
       setCustomEquipmentName("");
       setKitNote(kit.note || "");
+      setBallDetailsIndex(null);
     });
   };
 
-  const saveEquipmentKit = async () => {
-    const trimmedName = kitName.trim();
-    if (!trimmedName) return;
+  function equipmentDraftSignature() {
+    return JSON.stringify({
+      name: kitName.trim(),
+      holderId: normalizeEquipmentHolderId(kitHolderId),
+      color: kitColor,
+      items: kitItems.map((item) => ({
+        key: item.key,
+        label: item.label.trim(),
+        quantity: Math.max(1, Math.min(999, Math.round(item.quantity))),
+        custom: item.custom === true,
+        brand: item.key === "balls" ? item.brand?.trim() || "" : "",
+        size: item.key === "balls" ? item.size?.trim() || "" : "",
+      })),
+      note: kitNote.trim(),
+    });
+  }
 
+  async function persistEquipmentDraft() {
+    const trimmedName = kitName.trim();
+    const normalizedHolderId = normalizeEquipmentHolderId(kitHolderId);
+    const hasMeaningfulDraft = Boolean(
+      trimmedName
+      || kitItems.length > 0
+      || kitNote.trim()
+      || normalizedHolderId !== "storage"
+      || kitColor !== DEFAULT_EQUIPMENT_COLOR,
+    );
+    const activeBagId = editingKitId || equipmentDraftBagIdRef.current;
+    if (!activeBagId && !hasMeaningfulDraft) return;
+
+    const signature = equipmentDraftSignature();
+    if (signature === equipmentLastQueuedSignatureRef.current) return;
+    const previousSignature = equipmentLastQueuedSignatureRef.current;
+    equipmentLastQueuedSignatureRef.current = signature;
+
+    const bagId = activeBagId || makeId("kit");
+    if (!equipmentDraftBagIdRef.current) equipmentDraftBagIdRef.current = bagId;
     const now = Date.now();
-    const existingKit = editingKitId
-      ? equipmentKits.find((kit) => kit.id === editingKitId)
-      : null;
+    const existingKit = equipmentKits.find((kit) => kit.id === bagId) || null;
     let actorEmail = clubUser?.email || undefined;
     let actorName = actorEmail || "Organizer";
     try {
@@ -1613,35 +1723,37 @@ export function ClubTab({
     } catch {
       // Local preview can run without Firebase auth ready.
     }
+    const cleanedItems = kitItems
+      .filter((item) => item.label.trim() && item.quantity > 0)
+      .map((item) => ({
+        ...item,
+        label: item.label.trim(),
+        quantity: Math.max(1, Math.min(999, Math.round(item.quantity))),
+        brand: item.key === "balls" ? item.brand?.trim() || undefined : undefined,
+        size: item.key === "balls" ? item.size?.trim() || undefined : undefined,
+      }))
+      .slice(0, 30);
     const nextKit: ClubEquipmentKit = {
-      id: editingKitId || makeId("kit"),
-      name: trimmedName,
-      holderId: normalizeEquipmentHolderId(kitHolderId),
+      id: bagId,
+      name: trimmedName || existingKit?.name || "Equipment bag",
+      holderId: normalizedHolderId,
       color: kitColor,
-      contents: equipmentContentsFromItems(kitItems),
-      items: kitItems
-        .filter((item) => item.label.trim() && item.quantity > 0)
-        .map((item) => ({
-          ...item,
-          label: item.label.trim(),
-          quantity: Math.max(1, Math.min(999, Math.round(item.quantity))),
-        }))
-        .slice(0, 30),
+      contents: equipmentContentsFromItems(cleanedItems),
+      items: cleanedItems,
       note: kitNote.trim() || undefined,
-      createdAt: existingKit?.createdAt || (!editingKitId ? now : undefined),
-      createdByEmail:
-        existingKit?.createdByEmail || (!editingKitId ? actorEmail : undefined),
-      createdByName:
-        existingKit?.createdByName || (!editingKitId ? actorName : undefined),
+      createdAt: existingKit?.createdAt || now,
+      createdByEmail: existingKit?.createdByEmail || actorEmail,
+      createdByName: existingKit?.createdByName || actorName,
       updatedAt: now,
       updatedByEmail: actorEmail,
       updatedByName: actorName,
     };
 
     const previousKits = equipmentKits;
-    const nextKits = editingKitId
-      ? previousKits.map((kit) => (kit.id === editingKitId ? nextKit : kit))
+    const nextKits = existingKit
+      ? previousKits.map((kit) => (kit.id === bagId ? nextKit : kit))
       : [nextKit, ...previousKits];
+    const saveSequence = ++equipmentSaveSequenceRef.current;
 
     try {
       setEquipmentSaving(true);
@@ -1651,20 +1763,39 @@ export function ClubTab({
         writeCachedEquipmentKits(equipmentGroupId, nextKits);
         await saveFirebaseEquipmentBag(equipmentGroupId, nextKit);
       }
-      closeEquipmentEditor(true);
+      if (saveSequence === equipmentSaveSequenceRef.current) {
+        setEquipmentLastSyncedAt(Date.now());
+      }
     } catch (error) {
-      setEquipmentKits(previousKits);
-      if (equipmentGroupId)
-        writeCachedEquipmentKits(equipmentGroupId, previousKits);
-      setEquipmentError(
-        error instanceof Error
-          ? error.message
-          : "Could not save equipment bag.",
-      );
+      if (saveSequence === equipmentSaveSequenceRef.current) {
+        equipmentLastQueuedSignatureRef.current = previousSignature;
+        setEquipmentKits(previousKits);
+        if (equipmentGroupId) writeCachedEquipmentKits(equipmentGroupId, previousKits);
+        setEquipmentError(
+          error instanceof Error ? error.message : "Could not save equipment bag.",
+        );
+      }
     } finally {
-      setEquipmentSaving(false);
+      if (saveSequence === equipmentSaveSequenceRef.current) setEquipmentSaving(false);
     }
-  };
+  }
+
+  useEffect(() => {
+    if (!equipmentDialogOpen || !equipmentAutosaveReadyRef.current) return;
+    if (equipmentAutosaveTimerRef.current !== null) {
+      window.clearTimeout(equipmentAutosaveTimerRef.current);
+    }
+    equipmentAutosaveTimerRef.current = window.setTimeout(() => {
+      equipmentAutosaveTimerRef.current = null;
+      void persistEquipmentDraft();
+    }, 500);
+    return () => {
+      if (equipmentAutosaveTimerRef.current !== null) {
+        window.clearTimeout(equipmentAutosaveTimerRef.current);
+        equipmentAutosaveTimerRef.current = null;
+      }
+    };
+  }, [equipmentDialogOpen, kitName, kitHolderId, kitColor, kitItems, kitNote]);
 
   const moveEquipmentKit = async (kitId: string, holderId: string) => {
     const currentKit = equipmentKits.find((kit) => kit.id === kitId);
@@ -1799,6 +1930,11 @@ export function ClubTab({
         await deleteFirebaseEquipmentBag(equipmentGroupId, kitId);
       }
       if (editingKitId === kitId) {
+        equipmentAutosaveReadyRef.current = false;
+        if (equipmentAutosaveTimerRef.current !== null) {
+          window.clearTimeout(equipmentAutosaveTimerRef.current);
+          equipmentAutosaveTimerRef.current = null;
+        }
         closeEquipmentEditor(true);
       }
     } catch (error) {
@@ -2056,7 +2192,6 @@ export function ClubTab({
       window.removeEventListener("fairteams:native-back", handleNativeBack);
   }, [equipmentEditorReturnToBoard]);
 
-  const canSaveEquipmentKit = kitName.trim().length > 0;
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -3255,7 +3390,7 @@ export function ClubTab({
                         key={`${contentPeekKit.id}-content-${item.key}-${index}`}
                         className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700"
                       >
-                        {item.label} × {item.quantity}
+                        {equipmentItemDisplayLabel(item)} × {item.quantity}
                       </span>
                     ))}
                   </div>
@@ -3294,28 +3429,61 @@ export function ClubTab({
             </p>
           </DialogHeader>
 
-          <div className="max-h-[68dvh] overflow-y-auto p-3">
-            {equipmentInventoryTotals.length > 0 ? (
-              <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-                <div className="grid grid-cols-[minmax(0,1fr)_4.5rem] border-b border-slate-200 bg-slate-50 px-3 py-2 text-[10px] font-black uppercase tracking-wide text-slate-400">
-                  <span>Equipment</span>
-                  <span className="text-right">Total</span>
+          <div className="max-h-[68dvh] space-y-3 overflow-y-auto p-3">
+            {equipmentKits.length > 0 && (
+              <section>
+                <div className="mb-1.5 px-1 text-[10px] font-black uppercase tracking-wide text-slate-400">
+                  Bags
                 </div>
-                {equipmentInventoryTotals.map((item, index) => (
-                  <div
-                    key={`inventory-row-${item.key}`}
-                    className={`grid grid-cols-[minmax(0,1fr)_4.5rem] items-center px-3 py-2.5 ${index === 0 ? "" : "border-t border-slate-100"} ${index % 2 === 1 ? "bg-slate-50/55" : "bg-white"}`}
-                  >
-                    <span className="truncate text-sm font-bold text-[#102A43]">{item.label}</span>
-                    <span className="text-right text-base font-black tabular-nums text-[#102A43]">{item.quantity}</span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-3 py-6 text-center text-sm font-semibold text-slate-400">
-                No equipment has been added yet.
-              </div>
+                <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                  {equipmentKits.map((kit, index) => (
+                    <div
+                      key={`inventory-bag-${kit.id}`}
+                      className={`flex items-center gap-3 px-3 py-2.5 ${index === 0 ? "" : "border-t border-slate-100"} ${index % 2 === 1 ? "bg-slate-50/55" : "bg-white"}`}
+                    >
+                      <span
+                        className="h-5 w-5 shrink-0 rounded-full border border-slate-300 shadow-inner"
+                        style={{ backgroundColor: kit.color || DEFAULT_EQUIPMENT_COLOR }}
+                        aria-hidden="true"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-black text-[#102A43]">{kit.name}</div>
+                        <div className="text-[10px] font-bold text-slate-400">
+                          {EQUIPMENT_COLOR_NAMES[kit.color || DEFAULT_EQUIPMENT_COLOR] || "Custom color"} bag
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
             )}
+
+            <section>
+              <div className="mb-1.5 px-1 text-[10px] font-black uppercase tracking-wide text-slate-400">
+                Equipment
+              </div>
+              {equipmentInventoryTotals.length > 0 ? (
+                <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                  <div className="grid grid-cols-[minmax(0,1fr)_4.5rem] border-b border-slate-200 bg-slate-50 px-3 py-2 text-[10px] font-black uppercase tracking-wide text-slate-400">
+                    <span>Item</span>
+                    <span className="text-right">Total</span>
+                  </div>
+                  {equipmentInventoryTotals.map((item, index) => (
+                    <div
+                      key={`inventory-row-${item.key}`}
+                      className={`grid grid-cols-[minmax(0,1fr)_4.5rem] items-center px-3 py-2.5 ${index === 0 ? "" : "border-t border-slate-100"} ${index % 2 === 1 ? "bg-slate-50/55" : "bg-white"}`}
+                    >
+                      <span className="truncate text-sm font-bold text-[#102A43]">{item.label}</span>
+                      <span className="text-right text-base font-black tabular-nums text-[#102A43]">{item.quantity}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-3 py-5 text-center text-sm font-semibold text-slate-400">
+                  {equipmentKits.length === 0 ? "No equipment has been added yet." : "No equipment contents added yet."}
+                </div>
+              )}
+            </section>
           </div>
         </DialogContent>
       </Dialog>
@@ -3344,7 +3512,11 @@ export function ClubTab({
           <div className="max-h-[68dvh] overflow-y-auto p-3">
             <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
               {EQUIPMENT_PRESETS.map((preset, index) => {
-                const selected = kitItems.some((item) => item.key === preset.key && !item.custom);
+                const selected = kitItems.some((item) =>
+                  item.key === preset.key
+                  && !item.custom
+                  && (preset.key !== "balls" || (!item.brand?.trim() && !item.size?.trim())),
+                );
                 return (
                   <button
                     key={preset.key}
@@ -3462,7 +3634,7 @@ export function ClubTab({
                       className="mr-2 h-5 w-5 rounded-full border border-slate-300 shadow-inner"
                       style={{ backgroundColor: kitColor }}
                     />
-                    Choose
+                    {EQUIPMENT_COLOR_NAMES[kitColor] || "Choose"}
                   </Button>
                   {colorPickerOpen && (
                     <div className="absolute right-0 z-50 mt-2 w-52 rounded-3xl border border-slate-200 bg-white p-3 shadow-[0_18px_45px_rgba(15,23,42,0.18)]">
@@ -3518,65 +3690,129 @@ export function ClubTab({
 
               {kitItems.length > 0 ? (
                 <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-                  {kitItems.map((item, index) => (
-                    <div
-                      key={`${item.key}-${index}`}
-                      className={`flex items-center gap-2 px-2.5 py-2 ${index === 0 ? "" : "border-t border-slate-100"}`}
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-xs font-black text-[#102A43]">{item.label}</div>
-                        {item.custom && (
-                          <div className="text-[9px] font-black uppercase tracking-wide text-slate-400">Custom</div>
+                  {kitItems.map((item, index) => {
+                    const isBall = item.key === "balls" && !item.custom;
+                    const hasBallDetails = Boolean(item.brand?.trim() || item.size?.trim());
+                    const ballDetailsOpen = isBall && ballDetailsIndex === index;
+                    return (
+                      <div
+                        key={`${item.key}-${index}`}
+                        className={`px-2.5 py-2 ${index === 0 ? "" : "border-t border-slate-100"}`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-xs font-black text-[#102A43]">{item.label}</div>
+                            {item.custom && (
+                              <div className="text-[9px] font-black uppercase tracking-wide text-slate-400">Custom</div>
+                            )}
+                            {isBall && (
+                              <button
+                                type="button"
+                                className={`mt-0.5 text-left text-[10px] font-bold ${hasBallDetails ? "text-blue-600" : "text-slate-400"}`}
+                                onClick={() => setBallDetailsIndex(ballDetailsOpen ? null : index)}
+                              >
+                                {hasBallDetails
+                                  ? `${item.brand?.trim() || "Ball"}${item.size?.trim() ? ` · Size ${item.size.trim()}` : ""}`
+                                  : "Add brand / size"}
+                              </button>
+                            )}
+                          </div>
+                          <div className="flex shrink-0 items-center gap-1">
+                            <button
+                              type="button"
+                              className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-sm font-black text-slate-500"
+                              onClick={() => updateEquipmentItemQuantity(index, -1)}
+                              aria-label={`Decrease ${item.label}`}
+                            >
+                              −
+                            </button>
+                            <Input
+                              type="number"
+                              inputMode="numeric"
+                              min={1}
+                              max={999}
+                              value={item.quantity}
+                              onChange={(event) => {
+                                const quantity = Math.max(1, Math.min(999, Math.round(Number(event.target.value) || 1)));
+                                setKitItems((current) => current.map((currentItem, itemIndex) => itemIndex === index ? { ...currentItem, quantity } : currentItem));
+                              }}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter") {
+                                  event.preventDefault();
+                                  event.currentTarget.blur();
+                                }
+                              }}
+                              enterKeyHint="done"
+                              className="h-8 w-14 rounded-xl border-slate-200 px-1 text-center text-xs font-black tabular-nums"
+                              aria-label={`${item.label} quantity`}
+                            />
+                            <button
+                              type="button"
+                              className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-sm font-black text-slate-500"
+                              onClick={() => updateEquipmentItemQuantity(index, 1)}
+                              aria-label={`Increase ${item.label}`}
+                            >
+                              +
+                            </button>
+                            <button
+                              type="button"
+                              className="flex h-8 w-8 items-center justify-center rounded-xl text-slate-300 hover:bg-rose-50 hover:text-rose-500"
+                              onClick={() => {
+                                setKitItems((current) => current.filter((_, itemIndex) => itemIndex !== index));
+                                setBallDetailsIndex(null);
+                              }}
+                              aria-label={`Remove ${item.label}`}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {ballDetailsOpen && (
+                          <div className="mt-2 grid grid-cols-2 gap-2 rounded-xl bg-slate-50 p-2">
+                            <div className="grid gap-1">
+                              <Label className="text-[9px] font-black uppercase tracking-wide text-slate-400">Brand</Label>
+                              <Input
+                                value={item.brand || ""}
+                                onChange={(event) => {
+                                  const brand = event.target.value;
+                                  setKitItems((current) => current.map((currentItem, itemIndex) => itemIndex === index ? { ...currentItem, brand } : currentItem));
+                                }}
+                                onKeyDown={(event) => {
+                                  if (event.key === "Enter") {
+                                    event.preventDefault();
+                                    event.currentTarget.blur();
+                                  }
+                                }}
+                                enterKeyHint="done"
+                                placeholder="e.g. Adidas Tiro"
+                                className="h-8 rounded-xl border-slate-200 bg-white px-2 text-xs font-semibold"
+                              />
+                            </div>
+                            <div className="grid gap-1">
+                              <Label className="text-[9px] font-black uppercase tracking-wide text-slate-400">Size</Label>
+                              <Input
+                                value={item.size || ""}
+                                onChange={(event) => {
+                                  const size = event.target.value;
+                                  setKitItems((current) => current.map((currentItem, itemIndex) => itemIndex === index ? { ...currentItem, size } : currentItem));
+                                }}
+                                onKeyDown={(event) => {
+                                  if (event.key === "Enter") {
+                                    event.preventDefault();
+                                    event.currentTarget.blur();
+                                  }
+                                }}
+                                enterKeyHint="done"
+                                placeholder="e.g. 5"
+                                className="h-8 rounded-xl border-slate-200 bg-white px-2 text-xs font-semibold"
+                              />
+                            </div>
+                          </div>
                         )}
                       </div>
-                      <div className="flex shrink-0 items-center gap-1">
-                        <button
-                          type="button"
-                          className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-sm font-black text-slate-500"
-                          onClick={() => updateEquipmentItemQuantity(index, -1)}
-                          aria-label={`Decrease ${item.label}`}
-                        >
-                          −
-                        </button>
-                        <Input
-                          type="number"
-                          inputMode="numeric"
-                          min={1}
-                          max={999}
-                          value={item.quantity}
-                          onChange={(event) => {
-                            const quantity = Math.max(1, Math.min(999, Math.round(Number(event.target.value) || 1)));
-                            setKitItems((current) => current.map((currentItem, itemIndex) => itemIndex === index ? { ...currentItem, quantity } : currentItem));
-                          }}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter") {
-                              event.preventDefault();
-                              event.currentTarget.blur();
-                            }
-                          }}
-                          enterKeyHint="done"
-                          className="h-8 w-14 rounded-xl border-slate-200 px-1 text-center text-xs font-black tabular-nums"
-                          aria-label={`${item.label} quantity`}
-                        />
-                        <button
-                          type="button"
-                          className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-sm font-black text-slate-500"
-                          onClick={() => updateEquipmentItemQuantity(index, 1)}
-                          aria-label={`Increase ${item.label}`}
-                        >
-                          +
-                        </button>
-                        <button
-                          type="button"
-                          className="flex h-8 w-8 items-center justify-center rounded-xl text-slate-300 hover:bg-rose-50 hover:text-rose-500"
-                          onClick={() => setKitItems((current) => current.filter((_, itemIndex) => itemIndex !== index))}
-                          aria-label={`Remove ${item.label}`}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-3 py-3 text-[11px] font-semibold text-slate-400">
@@ -3661,50 +3897,34 @@ export function ClubTab({
               </div>
             )}
 
-            <div
-              className={`grid gap-2 pt-1 ${editingKitId ? "grid-cols-[0.85fr_1.15fr]" : "grid-cols-1"}`}
-            >
-              {editingKitId && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-10 rounded-2xl border-red-200 text-sm font-black text-red-500 hover:bg-red-50 hover:text-red-600 disabled:opacity-45"
-                  disabled={
-                    equipmentSaving ||
-                    (deleteConfirmOpen && deleteBagSlide < 95)
-                  }
-                  onClick={() => {
-                    blurActiveField();
-                    setColorPickerOpen(false);
-                    if (!deleteConfirmOpen) {
-                      setDeleteConfirmOpen(true);
-                      setDeleteBagSlide(0);
-                      return;
-                    }
-                    if (deleteBagSlide < 95) return;
-                    deleteEquipmentKit(editingKitId);
-                  }}
-                >
-                  <Trash2 className="mr-1.5 h-4 w-4" />
-                  {deleteConfirmOpen && deleteBagSlide >= 95
-                    ? "Delete now"
-                    : "Delete"}
-                </Button>
-              )}
+            {(equipmentSaving || equipmentError) && (
+              <div className={`px-1 text-center text-[10px] font-bold ${equipmentError ? "text-red-500" : "text-slate-400"}`}>
+                {equipmentError ? "Couldn’t save changes. Check connection and try again." : "Saving…"}
+              </div>
+            )}
+
+            {editingKitId && (
               <Button
                 type="button"
-                className="h-10 rounded-2xl bg-[#102A43] text-sm font-black text-white hover:bg-[#0b2036]"
-                disabled={!canSaveEquipmentKit || equipmentSaving}
+                variant="outline"
+                className="h-10 rounded-2xl border-red-200 text-sm font-black text-red-500 hover:bg-red-50 hover:text-red-600 disabled:opacity-45"
+                disabled={equipmentSaving || (deleteConfirmOpen && deleteBagSlide < 95)}
                 onClick={() => {
                   blurActiveField();
                   setColorPickerOpen(false);
-                  setDeleteConfirmOpen(false);
-                  saveEquipmentKit();
+                  if (!deleteConfirmOpen) {
+                    setDeleteConfirmOpen(true);
+                    setDeleteBagSlide(0);
+                    return;
+                  }
+                  if (deleteBagSlide < 95) return;
+                  deleteEquipmentKit(editingKitId);
                 }}
               >
-                {equipmentSaving ? "Saving…" : "Save bag"}
+                <Trash2 className="mr-1.5 h-4 w-4" />
+                {deleteConfirmOpen && deleteBagSlide >= 95 ? "Delete now" : "Delete bag"}
               </Button>
-            </div>
+            )}
           </div>
         </DialogContent>
       </Dialog>

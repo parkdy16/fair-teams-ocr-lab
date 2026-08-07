@@ -13,9 +13,12 @@ import {
 } from "firebase/firestore";
 import { getFairTeamsAuth, getFairTeamsFirestore } from "@/lib/firebaseClient";
 
+export type TaskBoardColumnKind = "ideas" | "vote" | "action" | "done";
+
 export type TaskBoardColumn = {
   id: string;
   name: string;
+  kind?: TaskBoardColumnKind;
   position: number;
   archived?: boolean;
   createdAt?: number;
@@ -24,7 +27,7 @@ export type TaskBoardColumn = {
 
 export type TaskBoardActivity = {
   id: string;
-  action: "created" | "edited" | "moved" | "assigned" | "unassigned";
+  action: "created" | "edited" | "moved" | "assigned" | "unassigned" | "vote_started" | "vote_closed" | "claimed" | "released" | "completed" | "action_defined";
   actorName: string;
   actorEmail?: string;
   at: number;
@@ -46,6 +49,7 @@ export type TaskBoardNamedVote = {
 };
 
 export type TaskBoardVote = {
+  kind?: "yes-no-abstain" | "choose-one";
   question: string;
   options: TaskBoardVoteOption[];
   anonymous: boolean;
@@ -66,6 +70,11 @@ export type TaskBoardCard = {
   columnId: string;
   position: number;
   assignee?: string;
+  assigneeEmail?: string;
+  actionText?: string;
+  completedAt?: number;
+  completedByName?: string;
+  completedByEmail?: string;
   dueDate?: string;
   category?: string;
   createdAt: number;
@@ -138,7 +147,7 @@ function toMillis(value: unknown): number | undefined {
 function parseMeta(data?: DocumentData): TaskBoardMeta | null {
   if (!data) return null;
   return {
-    name: String(data.name || "Tasks"),
+    name: String(data.name || "Action Board"),
     createdAt: toMillis(data.createdAt) || toMillis(data.createdAtIso),
     updatedAt: toMillis(data.updatedAt) || toMillis(data.updatedAtIso),
     updatedByName: data.updatedByName ? String(data.updatedByName) : undefined,
@@ -149,6 +158,7 @@ function parseColumn(id: string, data: DocumentData): TaskBoardColumn {
   return {
     id,
     name: String(data.name || "Column"),
+    kind: (["ideas", "vote", "action", "done"].includes(String(data.kind)) ? String(data.kind) : undefined) as TaskBoardColumn["kind"],
     position: Number.isFinite(Number(data.position)) ? Number(data.position) : 1000,
     archived: Boolean(data.archived),
     createdAt: toMillis(data.createdAt) || toMillis(data.createdAtIso),
@@ -162,7 +172,7 @@ function parseActivities(value: unknown): TaskBoardActivity[] {
     const row = (item || {}) as Record<string, unknown>;
     return {
       id: String(row.id || `activity-${index}`),
-      action: (["created", "edited", "moved", "assigned", "unassigned"].includes(String(row.action)) ? String(row.action) : "edited") as TaskBoardActivity["action"],
+      action: (["created", "edited", "moved", "assigned", "unassigned", "vote_started", "vote_closed", "claimed", "released", "completed", "action_defined"].includes(String(row.action)) ? String(row.action) : "edited") as TaskBoardActivity["action"],
       actorName: String(row.actorName || "Organizer"),
       actorEmail: row.actorEmail ? String(row.actorEmail) : undefined,
       at: toMillis(row.at) || Date.now(),
@@ -181,7 +191,12 @@ function parseVote(value: unknown): TaskBoardVote | undefined {
     return { id: String(option.id || `option-${index}`), label: String(option.label || `Option ${index + 1}`), count: Number(option.count || 0) };
   }).filter((option) => option.label.trim());
   if (!String(row.question || "").trim() || options.length < 2) return undefined;
+  const normalizedLabels = options.map((option) => option.label.trim().toLowerCase());
+  const inferredKind = normalizedLabels.length === 3 && normalizedLabels[0] === "yes" && normalizedLabels[1] === "no" && normalizedLabels[2] === "abstain"
+    ? "yes-no-abstain"
+    : "choose-one";
   return {
+    kind: row.kind === "choose-one" || row.kind === "yes-no-abstain" ? row.kind : inferredKind,
     question: String(row.question), options, anonymous: row.anonymous !== false,
     hideParticipationUntilClosed: Boolean(row.hideParticipationUntilClosed),
     showResultsWhileOpen: Boolean(row.showResultsWhileOpen),
@@ -202,6 +217,11 @@ function parseCard(id: string, data: DocumentData): TaskBoardCard {
     columnId: String(data.columnId || ""),
     position: Number.isFinite(Number(data.position)) ? Number(data.position) : 1000,
     assignee: data.assignee ? String(data.assignee) : undefined,
+    assigneeEmail: data.assigneeEmail ? String(data.assigneeEmail) : undefined,
+    actionText: data.actionText ? String(data.actionText) : undefined,
+    completedAt: toMillis(data.completedAt) || toMillis(data.completedAtIso),
+    completedByName: data.completedByName ? String(data.completedByName) : undefined,
+    completedByEmail: data.completedByEmail ? String(data.completedByEmail) : undefined,
     dueDate: data.dueDate ? String(data.dueDate) : undefined,
     category: data.category ? String(data.category) : undefined,
     createdAt: toMillis(data.createdAt) || toMillis(data.createdAtIso) || now,
@@ -244,7 +264,7 @@ export async function saveTaskBoardMeta(scopeId: string, meta: TaskBoardMeta): P
   const user = actor();
   const now = new Date();
   await setDoc(rootDoc(scopeId), {
-    app: "Fair Teams", schemaVersion: 2, name: meta.name.trim() || "Tasks",
+    app: "Fair Teams", schemaVersion: 3, name: meta.name.trim() || "Action Board",
     updatedByUid: user.uid, updatedByEmail: user.email || null, updatedByName: user.name,
     updatedAt: serverTimestamp(), updatedAtIso: now.toISOString(),
     ...(meta.createdAt ? {} : { createdAt: serverTimestamp(), createdAtIso: now.toISOString() }),
@@ -255,7 +275,7 @@ export async function saveTaskBoardColumn(scopeId: string, column: TaskBoardColu
   const user = actor();
   const now = new Date();
   await setDoc(doc(columnsCollection(scopeId), column.id), {
-    app: "Fair Teams", schemaVersion: 2, name: column.name.trim() || "Column", position: column.position,
+    app: "Fair Teams", schemaVersion: 3, name: column.name.trim() || "Column", kind: column.kind || null, position: column.position,
     archived: Boolean(column.archived), updatedByUid: user.uid, updatedByName: user.name,
     updatedAt: serverTimestamp(), updatedAtIso: now.toISOString(),
     ...(column.createdAt ? {} : { createdAt: serverTimestamp(), createdAtIso: now.toISOString() }),
@@ -266,7 +286,7 @@ export async function saveTaskBoardColumns(scopeId: string, columns: TaskBoardCo
   actor();
   const batch = writeBatch(getFairTeamsFirestore());
   columns.forEach((column) => batch.set(doc(columnsCollection(scopeId), column.id), {
-    name: column.name.trim() || "Column", position: column.position, archived: Boolean(column.archived),
+    name: column.name.trim() || "Column", kind: column.kind || null, position: column.position, archived: Boolean(column.archived),
     updatedAt: serverTimestamp(), updatedAtIso: new Date().toISOString(),
   }, { merge: true }));
   await batch.commit();
@@ -287,7 +307,7 @@ function activityPayload(activity: TaskBoardActivity) {
 function votePayload(vote?: TaskBoardVote) {
   if (!vote) return null;
   return {
-    question: vote.question.trim(), anonymous: vote.anonymous,
+    kind: vote.kind || "yes-no-abstain", question: vote.question.trim(), anonymous: vote.anonymous,
     hideParticipationUntilClosed: vote.hideParticipationUntilClosed,
     showResultsWhileOpen: vote.showResultsWhileOpen, status: vote.status,
     eligibleCount: vote.eligibleCount || null, voterHashes: vote.voterHashes || [],
@@ -300,9 +320,12 @@ export async function saveTaskBoardCard(scopeId: string, card: TaskBoardCard): P
   const user = actor();
   const now = new Date();
   await setDoc(doc(cardsCollection(scopeId), card.id), {
-    app: "Fair Teams", schemaVersion: 2,
+    app: "Fair Teams", schemaVersion: 3,
     title: card.title.trim() || "Untitled task", note: card.note?.trim() || null,
     columnId: card.columnId, position: card.position, assignee: card.assignee?.trim() || null,
+    assigneeEmail: card.assigneeEmail?.trim() || null, actionText: card.actionText?.trim() || null,
+    completedAt: card.completedAt || null, completedAtIso: card.completedAt ? new Date(card.completedAt).toISOString() : null,
+    completedByName: card.completedByName || null, completedByEmail: card.completedByEmail || null,
     dueDate: card.dueDate || null, category: card.category || null,
     createdAt: card.createdAt, createdAtIso: new Date(card.createdAt).toISOString(),
     createdByName: card.createdByName || "Organizer", createdByEmail: card.createdByEmail || null,

@@ -1,17 +1,15 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Archive,
   ArrowRight,
-  CalendarDays,
-  ChevronLeft,
-  ChevronRight,
+  Check,
+  CheckCircle2,
   ClipboardList,
-  MoreHorizontal,
+  Hand,
+  Lightbulb,
   Pencil,
   Plus,
   RotateCcw,
   Trash2,
-  UserRound,
   Vote,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -22,16 +20,15 @@ import { Textarea } from "@/components/ui/textarea";
 import type { SharedRosterUser } from "@/lib/sharedRosterService";
 import {
   deleteTaskBoardCard,
-  deleteTaskBoardColumn,
   listenToTaskBoard,
   saveTaskBoardCard,
   castTaskBoardVote,
   saveTaskBoardColumn,
-  saveTaskBoardColumns,
   saveTaskBoardMeta,
   type TaskBoardActivity,
   type TaskBoardCard,
   type TaskBoardColumn,
+  type TaskBoardColumnKind,
   type TaskBoardMeta,
   type TaskBoardSnapshot,
   type TaskBoardVote,
@@ -48,10 +45,23 @@ type Props = {
 };
 
 type LocalBoard = TaskBoardSnapshot;
+type QuickCreateMode = "idea" | "vote" | "action";
+type VoteKind = "yes-no-abstain" | "choose-one";
+type TransitionTarget = "vote" | "action";
 
-const DEFAULT_COLUMNS = ["Agenda", "To-do", "In progress", "Done"];
+type TransitionState = {
+  cardId: string;
+  target: TransitionTarget;
+};
+
+const WORKFLOW: Array<{ kind: TaskBoardColumnKind; name: string }> = [
+  { kind: "ideas", name: "Ideas" },
+  { kind: "vote", name: "Vote" },
+  { kind: "action", name: "Needs Action" },
+  { kind: "done", name: "Done" },
+];
+const PREVIOUS_DEFAULT_COLUMNS = ["Agenda", "To-do", "In progress", "Done"];
 const LEGACY_DEFAULT_COLUMNS = ["Inbox", "Agenda", "In progress", "Waiting", "Done"];
-const CATEGORIES = ["Administration", "Sports", "Equipment", "Event", "Finance", "Membership", "Other"];
 const LONG_PRESS_MS = 560;
 
 function blurOnDoneKey(event: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) {
@@ -87,43 +97,121 @@ function localKey(workspaceKey: string) {
   return `fairteams.taskBoard.v2.${workspaceKey.trim().replace(/[^a-z0-9_-]+/gi, "-") || "roster"}`;
 }
 
-function isUntouchedLegacyBoard(board: LocalBoard) {
-  if (board.cards.length > 0 || board.columns.length !== LEGACY_DEFAULT_COLUMNS.length) return false;
-  const names = [...board.columns].sort((a, b) => a.position - b.position).map((column) => column.name);
-  return names.every((name, index) => name === LEGACY_DEFAULT_COLUMNS[index]);
+function activitySeenKey(workspaceKey: string) {
+  return `fairteams.taskBoard.seen.${workspaceKey.trim().replace(/[^a-z0-9_-]+/gi, "-") || "roster"}`;
 }
 
-function migrateUntouchedLegacyBoard(board: LocalBoard): LocalBoard {
-  if (!isUntouchedLegacyBoard(board)) return board;
-  const ordered = [...board.columns].sort((a, b) => a.position - b.position);
-  const now = Date.now();
-  return {
-    ...board,
-    columns: DEFAULT_COLUMNS.map((name, index) => ({
-      ...ordered[index],
-      name,
-      position: (index + 1) * 1000,
-      updatedAt: now,
-    })),
-  };
+function readActivitySeen(workspaceKey: string) {
+  if (typeof window === "undefined") return 0;
+  const value = Number(window.localStorage.getItem(activitySeenKey(workspaceKey)) || 0);
+  return Number.isFinite(value) ? value : 0;
+}
+
+function createWorkflowColumns(now = Date.now()): TaskBoardColumn[] {
+  return WORKFLOW.map((item, index) => ({
+    id: id("column"),
+    name: item.name,
+    kind: item.kind,
+    position: (index + 1) * 1000,
+    createdAt: now,
+    updatedAt: now,
+  }));
 }
 
 function createDefaultBoard(rosterName: string): LocalBoard {
   const now = Date.now();
   return {
-    meta: { name: rosterName.trim() || "Tasks", createdAt: now, updatedAt: now },
-    columns: DEFAULT_COLUMNS.map((name, index) => ({ id: id("column"), name, position: (index + 1) * 1000, createdAt: now, updatedAt: now })),
+    meta: { name: rosterName.trim() || "Action Board", createdAt: now, updatedAt: now },
+    columns: createWorkflowColumns(now),
     cards: [],
   };
+}
+
+function orderedActiveColumns(board: LocalBoard) {
+  return board.columns.filter((column) => !column.archived).sort((a, b) => a.position - b.position);
+}
+
+function namesEqual(columns: TaskBoardColumn[], names: string[]) {
+  return columns.length === names.length && columns.every((column, index) => column.name === names[index]);
+}
+
+function migrateDecisionBoard(board: LocalBoard): { board: LocalBoard; changed: boolean } {
+  const active = orderedActiveColumns(board);
+  let columns = board.columns;
+  let cards = board.cards;
+  let changed = false;
+
+  if (namesEqual(active, PREVIOUS_DEFAULT_COLUMNS)) {
+    const [ideasColumn, voteColumn, actionColumn, doneColumn] = active;
+    const replacements = new Map<string, TaskBoardColumn>([
+      [ideasColumn.id, { ...ideasColumn, name: "Ideas", kind: "ideas", position: 1000, updatedAt: Date.now() }],
+      [voteColumn.id, { ...voteColumn, name: "Vote", kind: "vote", position: 2000, updatedAt: Date.now() }],
+      [actionColumn.id, { ...actionColumn, name: "Needs Action", kind: "action", position: 3000, updatedAt: Date.now() }],
+      [doneColumn.id, { ...doneColumn, name: "Done", kind: "done", position: 4000, updatedAt: Date.now() }],
+    ]);
+    columns = board.columns.map((column) => replacements.get(column.id) || column);
+    cards = board.cards.map((card) => {
+      if (card.columnId === doneColumn.id) return card;
+      if (card.vote) return card.columnId === voteColumn.id ? card : { ...card, columnId: voteColumn.id, updatedAt: Date.now() };
+      if (card.columnId === voteColumn.id) return { ...card, columnId: actionColumn.id, actionText: card.actionText || card.title, updatedAt: Date.now() };
+      if (card.columnId === actionColumn.id && !card.actionText) return { ...card, actionText: card.title, updatedAt: Date.now() };
+      return card;
+    });
+    changed = true;
+  } else if (namesEqual(active, WORKFLOW.map((item) => item.name))) {
+    const kindById = new Map(active.map((column, index) => [column.id, WORKFLOW[index].kind]));
+    columns = board.columns.map((column) => {
+      const kind = kindById.get(column.id);
+      if (!kind || column.kind === kind) return column;
+      changed = true;
+      return { ...column, kind, updatedAt: Date.now() };
+    });
+  } else if (board.cards.length === 0 && namesEqual(active, LEGACY_DEFAULT_COLUMNS)) {
+    const [ideasColumn, voteColumn, actionColumn, waitingColumn, doneColumn] = active;
+    const replacements = new Map<string, TaskBoardColumn>([
+      [ideasColumn.id, { ...ideasColumn, name: "Ideas", kind: "ideas", position: 1000, updatedAt: Date.now() }],
+      [voteColumn.id, { ...voteColumn, name: "Vote", kind: "vote", position: 2000, updatedAt: Date.now() }],
+      [actionColumn.id, { ...actionColumn, name: "Needs Action", kind: "action", position: 3000, updatedAt: Date.now() }],
+      [doneColumn.id, { ...doneColumn, name: "Done", kind: "done", position: 4000, updatedAt: Date.now() }],
+      [waitingColumn.id, { ...waitingColumn, archived: true, updatedAt: Date.now() }],
+    ]);
+    columns = board.columns.map((column) => replacements.get(column.id) || column);
+    changed = true;
+  }
+
+  const normalizedActive = columns.filter((column) => !column.archived).sort((a, b) => a.position - b.position);
+  const byKind = new Map<TaskBoardColumnKind, TaskBoardColumn>();
+  normalizedActive.forEach((column, index) => {
+    const inferred = column.kind || WORKFLOW[index]?.kind;
+    if (inferred && !byKind.has(inferred)) byKind.set(inferred, column);
+  });
+  const voteColumn = byKind.get("vote");
+  const actionColumn = byKind.get("action");
+  const doneColumn = byKind.get("done");
+  if (voteColumn && actionColumn) {
+    cards = cards.map((card) => {
+      if (card.vote && card.columnId !== voteColumn.id && card.columnId !== actionColumn.id && card.columnId !== doneColumn?.id) {
+        changed = true;
+        return { ...card, columnId: voteColumn.id, updatedAt: Date.now() };
+      }
+      if (!card.vote && card.columnId === voteColumn.id) {
+        changed = true;
+        return { ...card, columnId: actionColumn.id, actionText: card.actionText || card.title, updatedAt: Date.now() };
+      }
+      return card;
+    });
+  }
+
+  return { board: { ...board, columns, cards }, changed };
 }
 
 function readLocalBoard(workspaceKey: string, rosterName: string): LocalBoard {
   if (typeof window === "undefined") return createDefaultBoard(rosterName);
   try {
     const parsed = JSON.parse(window.localStorage.getItem(localKey(workspaceKey)) || "null") as LocalBoard | null;
-    if (parsed?.meta && Array.isArray(parsed.columns) && Array.isArray(parsed.cards)) return migrateUntouchedLegacyBoard(parsed);
+    if (parsed?.meta && Array.isArray(parsed.columns) && Array.isArray(parsed.cards)) return migrateDecisionBoard(parsed).board;
   } catch {
-    // Use clean board.
+    // Use a clean board.
   }
   return createDefaultBoard(rosterName);
 }
@@ -141,25 +229,18 @@ function formatTime(value?: number) {
   return new Intl.DateTimeFormat(undefined, sameDay ? { hour: "2-digit", minute: "2-digit" } : { day: "numeric", month: "short" }).format(date);
 }
 
-function dueText(value?: string) {
-  if (!value) return "";
-  const date = new Date(`${value}T12:00:00`);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short" }).format(date);
-}
-
-function isOverdue(value?: string) {
-  if (!value) return false;
-  const due = new Date(`${value}T23:59:59`).getTime();
-  return Number.isFinite(due) && due < Date.now();
-}
-
 function activityText(activity: TaskBoardActivity) {
-  if (activity.action === "created") return `${activity.actorName} created this card`;
-  if (activity.action === "moved") return `${activity.actorName} moved it from ${activity.fromColumnName || "another column"} to ${activity.toColumnName || "this column"}`;
-  if (activity.action === "assigned") return `${activity.actorName} changed the assignee`;
-  if (activity.action === "unassigned") return `${activity.actorName} removed the assignee`;
-  return `${activity.actorName} edited this card`;
+  if (activity.action === "created") return `${activity.actorName} added this`;
+  if (activity.action === "vote_started") return `${activity.actorName} started a vote`;
+  if (activity.action === "vote_closed") return `${activity.actorName} closed the vote`;
+  if (activity.action === "claimed") return `${activity.actorName} volunteered to handle it`;
+  if (activity.action === "released") return `${activity.actorName} released the action`;
+  if (activity.action === "completed") return `${activity.actorName} completed it`;
+  if (activity.action === "action_defined") return `${activity.actorName} defined the next action`;
+  if (activity.action === "moved") return `${activity.actorName} moved it to ${activity.toColumnName || "another stage"}`;
+  if (activity.action === "assigned") return `${activity.actorName} changed the owner`;
+  if (activity.action === "unassigned") return `${activity.actorName} removed the owner`;
+  return `${activity.actorName} edited this`;
 }
 
 async function voterHashFor(user: SharedRosterUser | null, workspaceKey: string) {
@@ -174,50 +255,114 @@ async function voterHashFor(user: SharedRosterUser | null, workspaceKey: string)
   return `fallback-${(hash >>> 0).toString(16)}`;
 }
 
+function voteTotal(vote?: TaskBoardVote) {
+  return vote?.options.reduce((sum, option) => sum + option.count, 0) || 0;
+}
+
+function voteSummary(vote?: TaskBoardVote) {
+  if (!vote) return "";
+  return vote.options.map((option) => `${option.label} ${option.count}`).join(" · ");
+}
+
+function voteOptions(kind: VoteKind, raw: string) {
+  if (kind === "yes-no-abstain") return ["Yes", "No", "Abstain"];
+  return raw.split(/\n/).map((value) => value.trim()).filter(Boolean).slice(0, 8);
+}
+
+function columnIcon(kind?: TaskBoardColumnKind) {
+  if (kind === "ideas") return Lightbulb;
+  if (kind === "vote") return Vote;
+  if (kind === "action") return Hand;
+  return CheckCircle2;
+}
+
+function columnTone(kind?: TaskBoardColumnKind) {
+  if (kind === "ideas") return { icon: "text-amber-600", header: "bg-amber-50/70" };
+  if (kind === "vote") return { icon: "text-violet-600", header: "bg-violet-50/80" };
+  if (kind === "action") return { icon: "text-sky-700", header: "bg-sky-50/70" };
+  return { icon: "text-emerald-700", header: "bg-emerald-50/70" };
+}
+
+function ExampleCard({ kind }: { kind?: TaskBoardColumnKind }) {
+  if (kind === "ideas") return (
+    <div className="rounded-xl border border-dashed border-amber-200 bg-white/50 p-3 text-left opacity-80">
+      <div className="text-[9px] font-black uppercase tracking-wide text-amber-600">Example</div>
+      <div className="mt-1 text-[13px] font-black text-[#102A43]">Club jerseys</div>
+      <div className="mt-1 text-[10px] font-semibold leading-snug text-slate-500">Save a thought before it disappears in chat.</div>
+    </div>
+  );
+  if (kind === "vote") return (
+    <div className="rounded-xl border border-dashed border-violet-200 bg-white/50 p-3 text-left opacity-80">
+      <div className="text-[9px] font-black uppercase tracking-wide text-violet-600">Example</div>
+      <div className="mt-1 text-[13px] font-black leading-snug text-[#102A43]">Should we buy two new training balls?</div>
+      <div className="mt-2 flex flex-wrap gap-1 text-[9px] font-black text-violet-700"><span className="rounded-full bg-violet-50 px-2 py-1">Yes</span><span className="rounded-full bg-violet-50 px-2 py-1">No</span><span className="rounded-full bg-violet-50 px-2 py-1">Abstain</span></div>
+    </div>
+  );
+  if (kind === "action") return (
+    <div className="rounded-xl border border-dashed border-sky-200 bg-white/50 p-3 text-left opacity-80">
+      <div className="text-[9px] font-black uppercase tracking-wide text-sky-700">Example</div>
+      <div className="mt-1 text-[13px] font-black text-[#102A43]">Return the hall keys</div>
+      <div className="mt-2 inline-flex items-center gap-1 rounded-xl bg-sky-50 px-2 py-1 text-[10px] font-black text-sky-800"><Hand className="h-3 w-3" /> I’ll do it</div>
+    </div>
+  );
+  return (
+    <div className="rounded-xl border border-dashed border-emerald-200 bg-white/50 p-3 text-left opacity-80">
+      <div className="text-[9px] font-black uppercase tracking-wide text-emerald-700">Example</div>
+      <div className="mt-1 text-[13px] font-black text-[#102A43]">Book the BBQ area</div>
+      <div className="mt-2 flex items-center gap-1 text-[10px] font-black text-emerald-700"><CheckCircle2 className="h-3.5 w-3.5" /> Completed</div>
+    </div>
+  );
+}
+
 export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSharedRoster, user, eligibleVoterCount = 1 }: Props) {
   const online = Boolean(scopeId && user?.email);
   const [board, setBoard] = useState<LocalBoard>(() => readLocalBoard(workspaceKey, rosterName));
   const [boardOpen, setBoardOpen] = useState(false);
+  const [lastSeenActivityAt, setLastSeenActivityAt] = useState(() => readActivitySeen(workspaceKey));
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [flippedIds, setFlippedIds] = useState<Set<string>>(new Set());
-  const [cardEditorOpen, setCardEditorOpen] = useState(false);
+
+  const [quickCreateMode, setQuickCreateMode] = useState<QuickCreateMode | null>(null);
+  const [quickPrimary, setQuickPrimary] = useState("");
+  const [quickContext, setQuickContext] = useState("");
+  const [quickVoteKind, setQuickVoteKind] = useState<VoteKind>("yes-no-abstain");
+  const [quickVoteOptions, setQuickVoteOptions] = useState("Saturday\nSunday");
+
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
-  const [cardTitle, setCardTitle] = useState("");
-  const [cardNote, setCardNote] = useState("");
-  const [cardAssignee, setCardAssignee] = useState("");
-  const [cardDueDate, setCardDueDate] = useState("");
-  const [cardCategory, setCardCategory] = useState("Administration");
-  const [cardColumnId, setCardColumnId] = useState("");
-  const [voteEnabled, setVoteEnabled] = useState(false);
-  const [voteQuestion, setVoteQuestion] = useState("");
-  const [voteOptionsText, setVoteOptionsText] = useState("Yes\nNo\nAbstain");
-  const [voteAnonymous, setVoteAnonymous] = useState(true);
-  const [voteHideParticipation, setVoteHideParticipation] = useState(false);
-  const [voteShowResultsOpen, setVoteShowResultsOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editTitle, setEditTitle] = useState("");
+  const [editNote, setEditNote] = useState("");
+  const [editActionText, setEditActionText] = useState("");
+  const [editVoteQuestion, setEditVoteQuestion] = useState("");
+  const [editVoteOptions, setEditVoteOptions] = useState("");
+
+  const [transition, setTransition] = useState<TransitionState | null>(null);
+  const [transitionText, setTransitionText] = useState("");
+  const [transitionVoteKind, setTransitionVoteKind] = useState<VoteKind>("yes-no-abstain");
+  const [transitionVoteOptions, setTransitionVoteOptions] = useState("Option A\nOption B");
+
   const [votingCardId, setVotingCardId] = useState<string | null>(null);
   const [selectedVoteOptionId, setSelectedVoteOptionId] = useState("");
   const [voteSubmitting, setVoteSubmitting] = useState(false);
-  const [closeVoteConfirmOpen, setCloseVoteConfirmOpen] = useState(false);
   const [currentVoterHash, setCurrentVoterHash] = useState("");
+  const [postVoteCardId, setPostVoteCardId] = useState<string | null>(null);
   const [moveCardId, setMoveCardId] = useState<string | null>(null);
+
   const [desktopDragCardId, setDesktopDragCardId] = useState<string | null>(null);
   const [desktopDropColumnId, setDesktopDropColumnId] = useState<string | null>(null);
   const [desktopDragEnabled, setDesktopDragEnabled] = useState(false);
   const [boardSettingsOpen, setBoardSettingsOpen] = useState(false);
   const [boardNameDraft, setBoardNameDraft] = useState("");
-  const [columnEditorOpen, setColumnEditorOpen] = useState(false);
-  const [editingColumnId, setEditingColumnId] = useState<string | null>(null);
-  const [columnNameDraft, setColumnNameDraft] = useState("");
+
   const pressTimerRef = useRef<number | null>(null);
   const onlineInitializationRef = useRef<string | null>(null);
   const longPressTriggeredRef = useRef(false);
   const desktopDragCompletedRef = useRef(false);
   const background = mixHex(safeColor(themeColor), "#ffffff", 0.84);
-  const columnBackground = mixHex(safeColor(themeColor), "#ffffff", 0.94);
+  const columnBackground = mixHex(safeColor(themeColor), "#ffffff", 0.95);
   const accent = safeColor(themeColor);
-
 
   useEffect(() => {
     const query = window.matchMedia("(min-width: 1024px) and (pointer: fine)");
@@ -246,24 +391,26 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
         Promise.all([
           saveTaskBoardMeta(scopeId!, fresh.meta!),
           ...fresh.columns.map((column) => saveTaskBoardColumn(scopeId!, column)),
-        ]).catch((nextError) => setError(nextError instanceof Error ? nextError.message : "Could not create task board."));
+        ]).catch((nextError) => setError(nextError instanceof Error ? nextError.message : "Could not create Action Board."));
       } else {
         const received = { meta: snapshot.meta || { name: rosterName }, columns: snapshot.columns, cards: snapshot.cards };
-        const migrated = migrateUntouchedLegacyBoard(received);
-        setBoard(migrated);
-        if (migrated !== received && onlineInitializationRef.current !== `migration:${scopeId}`) {
-          onlineInitializationRef.current = `migration:${scopeId}`;
-          const keptIds = new Set(migrated.columns.map((column) => column.id));
-          Promise.all([
-            ...migrated.columns.map((column) => saveTaskBoardColumn(scopeId!, column)),
-            ...snapshot.columns.filter((column) => !keptIds.has(column.id)).map((column) => deleteTaskBoardColumn(scopeId!, column.id)),
-          ]).catch((nextError) => setError(nextError instanceof Error ? nextError.message : "Could not update default board columns."));
+        const migration = migrateDecisionBoard(received);
+        setBoard(migration.board);
+        if (migration.changed) {
+          const migrationSignature = `decision:${scopeId}:${migration.board.columns.map((column) => `${column.id}:${column.kind || ""}:${column.name}:${column.archived ? 1 : 0}`).join("|")}:${migration.board.cards.map((card) => `${card.id}:${card.columnId}:${card.actionText || ""}:${card.vote?.status || ""}`).join("|")}`;
+          if (onlineInitializationRef.current !== migrationSignature) {
+            onlineInitializationRef.current = migrationSignature;
+            Promise.all([
+              ...migration.board.columns.map((column) => saveTaskBoardColumn(scopeId!, column)),
+              ...migration.board.cards.map((card) => saveTaskBoardCard(scopeId!, card)),
+            ]).catch((nextError) => setError(nextError instanceof Error ? nextError.message : "Could not update the Action Board workflow."));
+          }
         }
       }
       setLoading(false);
     }, (nextError) => {
       setLoading(false);
-      setError(nextError.message || "Could not load task board.");
+      setError(nextError.message || "Could not load Action Board.");
     });
   }, [online, rosterName, scopeId, workspaceKey]);
 
@@ -277,103 +424,165 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
     return () => { cancelled = true; };
   }, [user, workspaceKey]);
 
-  const activeColumns = useMemo(() => board.columns.filter((column) => !column.archived).sort((a, b) => a.position - b.position), [board.columns]);
-  const openCards = useMemo(() => {
-    const doneIds = new Set(activeColumns.filter((column) => /done|complete|finished/i.test(column.name)).map((column) => column.id));
-    return board.cards.filter((card) => !doneIds.has(card.columnId));
-  }, [activeColumns, board.cards]);
-  const overdueCount = openCards.filter((card) => isOverdue(card.dueDate)).length;
-  const myName = actor(user).name.toLowerCase();
-  const mineCount = openCards.filter((card) => card.assignee?.trim().toLowerCase() === myName).length;
+  useEffect(() => {
+    setLastSeenActivityAt(readActivitySeen(workspaceKey));
+  }, [workspaceKey]);
+
+  const activeColumns = useMemo(() => orderedActiveColumns(board), [board.columns]);
+  const columnByKind = useMemo(() => {
+    const map = new Map<TaskBoardColumnKind, TaskBoardColumn>();
+    activeColumns.forEach((column, index) => {
+      const kind = column.kind || WORKFLOW[index]?.kind;
+      if (kind && !map.has(kind)) map.set(kind, column);
+    });
+    return map;
+  }, [activeColumns]);
+
+  const currentActor = actor(user);
+  const voteColumn = columnByKind.get("vote");
+  const actionColumn = columnByKind.get("action");
+  const doneColumn = columnByKind.get("done");
+  const openVoteCount = board.cards.filter((card) => card.columnId === voteColumn?.id && card.vote?.status === "open").length;
+  const needsActionCount = board.cards.filter((card) => card.columnId === actionColumn?.id).length;
+  const mineCount = board.cards.filter((card) => card.columnId === actionColumn?.id && (
+    (card.assigneeEmail && currentActor.email && card.assigneeEmail.toLowerCase() === currentActor.email.toLowerCase()) ||
+    (!card.assigneeEmail && card.assignee?.trim().toLowerCase() === currentActor.name.toLowerCase())
+  )).length;
   const latestActivity = useMemo(() => board.cards.flatMap((card) => card.activities.map((activity) => ({ card, activity }))).sort((a, b) => b.activity.at - a.activity.at)[0], [board.cards]);
+  const meaningfulActivityActions = new Set<TaskBoardActivity["action"]>(["vote_started", "vote_closed", "claimed", "completed"]);
+  const hasNewActivity = Boolean(
+    latestActivity
+    && meaningfulActivityActions.has(latestActivity.activity.action)
+    && latestActivity.activity.at > lastSeenActivityAt
+    && (!currentActor.email || !latestActivity.activity.actorEmail || latestActivity.activity.actorEmail.toLowerCase() !== currentActor.email.toLowerCase())
+  );
+
+  const openBoard = () => {
+    const seenAt = Date.now();
+    setLastSeenActivityAt(seenAt);
+    if (typeof window !== "undefined") window.localStorage.setItem(activitySeenKey(workspaceKey), String(seenAt));
+    setBoardOpen(true);
+  };
+
+  useEffect(() => {
+    if (!boardOpen || !latestActivity?.activity.at) return;
+    const seenAt = latestActivity.activity.at;
+    setLastSeenActivityAt(seenAt);
+    if (typeof window !== "undefined") window.localStorage.setItem(activitySeenKey(workspaceKey), String(seenAt));
+  }, [boardOpen, latestActivity?.activity.at, workspaceKey]);
 
   const updateBoard = (next: LocalBoard) => setBoard(next);
   const persistMeta = async (meta: TaskBoardMeta) => {
     updateBoard({ ...board, meta });
     if (online) await saveTaskBoardMeta(scopeId!, meta);
   };
-  const persistColumn = async (column: TaskBoardColumn) => {
-    updateBoard({ ...board, columns: [...board.columns.filter((item) => item.id !== column.id), column] });
-    if (online) await saveTaskBoardColumn(scopeId!, column);
-  };
-  const persistColumns = async (columns: TaskBoardColumn[]) => {
-    updateBoard({ ...board, columns });
-    if (online) await saveTaskBoardColumns(scopeId!, columns);
-  };
   const persistCard = async (card: TaskBoardCard) => {
     updateBoard({ ...board, cards: [...board.cards.filter((item) => item.id !== card.id), card] });
     if (online) await saveTaskBoardCard(scopeId!, card);
   };
 
-  const openNewCard = (columnId?: string) => {
-    setEditingCardId(null);
-    setCardTitle(""); setCardNote(""); setCardAssignee(""); setCardDueDate(""); setCardCategory("Administration");
-    setVoteEnabled(false); setVoteQuestion(""); setVoteOptionsText("Yes\nNo\nAbstain"); setVoteAnonymous(true); setVoteHideParticipation(false); setVoteShowResultsOpen(false);
-    setCardColumnId(columnId || activeColumns[0]?.id || "");
-    setCardEditorOpen(true);
+  const getColumnKind = (columnId: string): TaskBoardColumnKind | undefined => {
+    const index = activeColumns.findIndex((column) => column.id === columnId);
+    return activeColumns[index]?.kind || WORKFLOW[index]?.kind;
+  };
+
+  const buildVote = (question: string, kind: VoteKind, rawOptions: string, previous?: TaskBoardVote): TaskBoardVote => {
+    const labels = voteOptions(kind, rawOptions);
+    return {
+      kind,
+      question: question.trim(),
+      anonymous: true,
+      hideParticipationUntilClosed: false,
+      showResultsWhileOpen: false,
+      status: previous?.status || "open",
+      eligibleCount: previous?.eligibleCount || Math.max(1, eligibleVoterCount),
+      voterHashes: previous?.voterHashes || [],
+      namedVotes: previous?.namedVotes || [],
+      createdAt: previous?.createdAt || Date.now(),
+      closedAt: previous?.closedAt,
+      options: labels.map((label, index) => {
+        const prior = previous?.options[index];
+        return { id: prior?.id || id("vote-option"), label, count: prior?.count || 0 };
+      }),
+    };
+  };
+
+  const resetQuickCreate = (mode: QuickCreateMode) => {
+    setQuickCreateMode(mode);
+    setQuickPrimary("");
+    setQuickContext("");
+    setQuickVoteKind("yes-no-abstain");
+    setQuickVoteOptions("Saturday\nSunday");
+  };
+
+  const createQuickCard = async () => {
+    if (!quickCreateMode || !quickPrimary.trim()) return;
+    const kind: TaskBoardColumnKind = quickCreateMode === "idea" ? "ideas" : quickCreateMode === "vote" ? "vote" : "action";
+    const column = columnByKind.get(kind);
+    if (!column) return;
+    const now = Date.now();
+    const existing = board.cards.filter((card) => card.columnId === column.id);
+    const activity = nowActivity("created", currentActor.name, currentActor.email);
+    const card: TaskBoardCard = {
+      id: id("card"),
+      title: quickPrimary.trim(),
+      note: quickContext.trim() || undefined,
+      columnId: column.id,
+      position: (existing.length + 1) * 1000,
+      actionText: quickCreateMode === "action" ? quickPrimary.trim() : undefined,
+      createdAt: now,
+      createdByName: currentActor.name,
+      createdByEmail: currentActor.email,
+      updatedAt: now,
+      updatedByName: currentActor.name,
+      activities: quickCreateMode === "vote"
+        ? [activity, nowActivity("vote_started", currentActor.name, currentActor.email)]
+        : [activity],
+      vote: quickCreateMode === "vote" ? buildVote(quickPrimary, quickVoteKind, quickVoteOptions) : undefined,
+    };
+    if (quickCreateMode === "vote" && voteOptions(quickVoteKind, quickVoteOptions).length < 2) return;
+    setSaving(true); setError("");
+    try {
+      await persistCard(card);
+      setQuickCreateMode(null);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Could not add this item.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const openEditCard = (card: TaskBoardCard) => {
-    setEditingCardId(card.id); setCardTitle(card.title); setCardNote(card.note || ""); setCardAssignee(card.assignee || "");
-    setCardDueDate(card.dueDate || ""); setCardCategory(card.category || "Administration"); setCardColumnId(card.columnId);
-    setVoteEnabled(Boolean(card.vote)); setVoteQuestion(card.vote?.question || ""); setVoteOptionsText(card.vote?.options.map((option) => option.label).join("\n") || "Yes\nNo\nAbstain"); setVoteAnonymous(card.vote?.anonymous !== false); setVoteHideParticipation(Boolean(card.vote?.hideParticipationUntilClosed)); setVoteShowResultsOpen(Boolean(card.vote?.showResultsWhileOpen));
-    setCardEditorOpen(true);
+    setEditingCardId(card.id);
+    setEditTitle(card.title);
+    setEditNote(card.note || "");
+    setEditActionText(card.actionText || "");
+    setEditVoteQuestion(card.vote?.question || "");
+    setEditVoteOptions(card.vote?.options.map((option) => option.label).join("\n") || "");
+    setEditOpen(true);
   };
 
-  const saveCard = async () => {
-    if (!cardTitle.trim() || !cardColumnId) return;
-    const currentActor = actor(user);
+  const saveEditedCard = async () => {
     const existing = board.cards.find((card) => card.id === editingCardId);
-    const now = Date.now();
-    const columnCards = board.cards.filter((card) => card.columnId === cardColumnId);
-    const changedAssignee = existing && (existing.assignee || "") !== cardAssignee.trim();
-    const activity = existing
-      ? nowActivity(changedAssignee ? (cardAssignee.trim() ? "assigned" : "unassigned") : "edited", currentActor.name, currentActor.email)
-      : nowActivity("created", currentActor.name, currentActor.email);
-    const optionLabels = voteOptionsText.split(/\n/).map((value) => value.trim()).filter(Boolean).slice(0, 8);
-    const previousVote = existing?.vote;
-    const vote: TaskBoardVote | undefined = voteEnabled && voteQuestion.trim() && optionLabels.length >= 2
-      ? {
-          question: voteQuestion.trim(), anonymous: true, hideParticipationUntilClosed: voteHideParticipation,
-          showResultsWhileOpen: voteShowResultsOpen, status: previousVote?.status || "open",
-          eligibleCount: previousVote?.eligibleCount || Math.max(1, eligibleVoterCount), voterHashes: previousVote?.voterHashes || [],
-          namedVotes: previousVote?.namedVotes || [], createdAt: previousVote?.createdAt || now, closedAt: previousVote?.closedAt,
-          options: optionLabels.map((label, index) => {
-            const prior = previousVote?.options[index];
-            return { id: prior?.id || id("vote-option"), label, count: prior?.count || 0 };
-          }),
-        }
-      : undefined;
-    const card: TaskBoardCard = {
-      id: existing?.id || id("card"), title: cardTitle.trim(), note: cardNote.trim() || undefined,
-      columnId: cardColumnId, position: existing?.position || (columnCards.length + 1) * 1000,
-      assignee: cardAssignee.trim() || undefined, dueDate: cardDueDate || undefined, category: cardCategory,
-      createdAt: existing?.createdAt || now, createdByName: existing?.createdByName || currentActor.name,
-      createdByEmail: existing?.createdByEmail || currentActor.email, updatedAt: now, updatedByName: currentActor.name,
-      lastMovedAt: existing?.lastMovedAt, lastMovedByName: existing?.lastMovedByName,
-      activities: [...(existing?.activities || []), activity].slice(-20),
-      vote,
+    if (!existing || !editTitle.trim()) return;
+    const canEditVote = Boolean(existing.vote && existing.vote.status === "open" && existing.vote.voterHashes.length === 0);
+    const voteKind = existing.vote?.kind || (existing.vote?.options.map((option) => option.label).join("|").toLowerCase() === "yes|no|abstain" ? "yes-no-abstain" : "choose-one");
+    const nextVote = existing.vote && canEditVote && editVoteQuestion.trim()
+      ? buildVote(editVoteQuestion, voteKind, editVoteOptions, existing.vote)
+      : existing.vote;
+    const next: TaskBoardCard = {
+      ...existing,
+      title: editTitle.trim(),
+      note: editNote.trim() || undefined,
+      actionText: editActionText.trim() || existing.actionText,
+      vote: nextVote,
+      updatedAt: Date.now(),
+      updatedByName: currentActor.name,
+      activities: [...existing.activities, nowActivity("edited", currentActor.name, currentActor.email)].slice(-20),
     };
     setSaving(true); setError("");
-    try { await persistCard(card); setCardEditorOpen(false); }
-    catch (nextError) { setError(nextError instanceof Error ? nextError.message : "Could not save card."); }
-    finally { setSaving(false); }
-  };
-
-  const moveCard = async (card: TaskBoardCard, destinationId: string) => {
-    if (card.columnId === destinationId) { setMoveCardId(null); return; }
-    const currentActor = actor(user);
-    const from = activeColumns.find((column) => column.id === card.columnId)?.name;
-    const to = activeColumns.find((column) => column.id === destinationId)?.name;
-    const destinationCards = board.cards.filter((item) => item.columnId === destinationId);
-    const moved: TaskBoardCard = {
-      ...card, columnId: destinationId, position: (destinationCards.length + 1) * 1000,
-      updatedAt: Date.now(), updatedByName: currentActor.name, lastMovedAt: Date.now(), lastMovedByName: currentActor.name,
-      activities: [...card.activities, nowActivity("moved", currentActor.name, currentActor.email, { fromColumnName: from, toColumnName: to })].slice(-20),
-    };
-    setSaving(true); setError("");
-    try { await persistCard(moved); setMoveCardId(null); setFlippedIds((current) => { const next = new Set(current); next.delete(card.id); return next; }); }
-    catch (nextError) { setError(nextError instanceof Error ? nextError.message : "Could not move card."); }
+    try { await persistCard(next); setEditOpen(false); }
+    catch (nextError) { setError(nextError instanceof Error ? nextError.message : "Could not save changes."); }
     finally { setSaving(false); }
   };
 
@@ -381,73 +590,152 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
     if (!editingCardId || !window.confirm("Delete this card?")) return;
     const previous = board;
     updateBoard({ ...board, cards: board.cards.filter((card) => card.id !== editingCardId) });
-    try { if (online) await deleteTaskBoardCard(scopeId!, editingCardId); setCardEditorOpen(false); }
+    try { if (online) await deleteTaskBoardCard(scopeId!, editingCardId); setEditOpen(false); }
     catch (nextError) { updateBoard(previous); setError(nextError instanceof Error ? nextError.message : "Could not delete card."); }
   };
 
-  const saveBoardName = async () => {
-    const name = boardNameDraft.trim();
-    if (!name) return;
-    setSaving(true);
-    try { await persistMeta({ ...(board.meta || {}), name, updatedAt: Date.now(), updatedByName: actor(user).name }); setBoardSettingsOpen(false); }
-    catch (nextError) { setError(nextError instanceof Error ? nextError.message : "Could not rename board."); }
-    finally { setSaving(false); }
+  const moveDirect = async (card: TaskBoardCard, destinationId: string, extra: Partial<TaskBoardCard> = {}, actions: TaskBoardActivity[] = []) => {
+    if (card.columnId === destinationId && Object.keys(extra).length === 0 && actions.length === 0) { setMoveCardId(null); return; }
+    const from = activeColumns.find((column) => column.id === card.columnId)?.name;
+    const to = activeColumns.find((column) => column.id === destinationId)?.name;
+    const destinationCards = board.cards.filter((item) => item.columnId === destinationId && item.id !== card.id);
+    const moved: TaskBoardCard = {
+      ...card,
+      ...extra,
+      columnId: destinationId,
+      position: card.columnId === destinationId ? card.position : (destinationCards.length + 1) * 1000,
+      updatedAt: Date.now(),
+      updatedByName: currentActor.name,
+      lastMovedAt: card.columnId === destinationId ? card.lastMovedAt : Date.now(),
+      lastMovedByName: card.columnId === destinationId ? card.lastMovedByName : currentActor.name,
+      activities: [
+        ...card.activities,
+        ...(card.columnId === destinationId ? [] : [nowActivity("moved", currentActor.name, currentActor.email, { fromColumnName: from, toColumnName: to })]),
+        ...actions,
+      ].slice(-20),
+    };
+    setSaving(true); setError("");
+    try {
+      await persistCard(moved);
+      setMoveCardId(null);
+      setFlippedIds((current) => { const next = new Set(current); next.delete(card.id); return next; });
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Could not move card.");
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const openNewColumn = () => { setEditingColumnId(null); setColumnNameDraft(""); setColumnEditorOpen(true); };
-  const openEditColumn = (column: TaskBoardColumn) => { setEditingColumnId(column.id); setColumnNameDraft(column.name); setColumnEditorOpen(true); };
-  const saveColumn = async () => {
-    const name = columnNameDraft.trim();
-    if (!name) return;
-    const existing = board.columns.find((column) => column.id === editingColumnId);
-    const column: TaskBoardColumn = existing || { id: id("column"), name, position: (activeColumns.length + 1) * 1000, createdAt: Date.now() };
-    setSaving(true);
-    try { await persistColumn({ ...column, name, updatedAt: Date.now() }); setColumnEditorOpen(false); }
-    catch (nextError) { setError(nextError instanceof Error ? nextError.message : "Could not save column."); }
-    finally { setSaving(false); }
+  const requestMove = (card: TaskBoardCard, destinationId: string) => {
+    if (card.columnId === destinationId) { setMoveCardId(null); return; }
+    const targetKind = getColumnKind(destinationId);
+    const sourceKind = getColumnKind(card.columnId);
+    if (card.vote?.status === "open" && sourceKind === "vote" && targetKind !== "vote") {
+      setError("Close the vote before moving it to the next stage.");
+      setMoveCardId(null);
+      return;
+    }
+    if (targetKind === "vote" && !card.vote) {
+      setTransition({ cardId: card.id, target: "vote" });
+      setTransitionText("");
+      setTransitionVoteKind("yes-no-abstain");
+      setTransitionVoteOptions("Option A\nOption B");
+      setMoveCardId(null);
+      return;
+    }
+    if (targetKind === "action") {
+      if (card.vote?.status === "open") {
+        setError("Close the vote before turning it into an action.");
+        setMoveCardId(null);
+        return;
+      }
+      if (!card.actionText || getColumnKind(card.columnId) !== "action") {
+        setTransition({ cardId: card.id, target: "action" });
+        setTransitionText("");
+        setMoveCardId(null);
+        return;
+      }
+    }
+    if (targetKind === "done") {
+      if (card.vote?.status === "open") {
+        setError("Close the vote first.");
+        setMoveCardId(null);
+        return;
+      }
+      void completeCard(card);
+      return;
+    }
+    void moveDirect(card, destinationId);
   };
 
-  const shiftColumn = async (columnId: string, direction: -1 | 1) => {
-    const index = activeColumns.findIndex((column) => column.id === columnId);
-    const target = index + direction;
-    if (index < 0 || target < 0 || target >= activeColumns.length) return;
-    const ordered = [...activeColumns];
-    [ordered[index], ordered[target]] = [ordered[target], ordered[index]];
-    const positions = new Map(ordered.map((column, itemIndex) => [column.id, (itemIndex + 1) * 1000]));
-    const nextColumns = board.columns.map((column) => ({ ...column, position: positions.get(column.id) || column.position }));
-    try { await persistColumns(nextColumns); }
-    catch (nextError) { setError(nextError instanceof Error ? nextError.message : "Could not reorder columns."); }
+  const finishTransition = async () => {
+    if (!transition || !transitionText.trim()) return;
+    const card = board.cards.find((item) => item.id === transition.cardId);
+    if (!card) return;
+    if (transition.target === "vote") {
+      const destination = columnByKind.get("vote");
+      const labels = voteOptions(transitionVoteKind, transitionVoteOptions);
+      if (!destination || labels.length < 2) return;
+      const nextVote = buildVote(transitionText, transitionVoteKind, transitionVoteOptions);
+      await moveDirect(card, destination.id, { vote: nextVote, assignee: undefined, assigneeEmail: undefined, completedAt: undefined, completedByName: undefined, completedByEmail: undefined }, [nowActivity("vote_started", currentActor.name, currentActor.email)]);
+    } else {
+      const destination = columnByKind.get("action");
+      if (!destination) return;
+      await moveDirect(card, destination.id, {
+        actionText: transitionText.trim(),
+        assignee: undefined,
+        assigneeEmail: undefined,
+        completedAt: undefined,
+        completedByName: undefined,
+        completedByEmail: undefined,
+      }, [nowActivity("action_defined", currentActor.name, currentActor.email)]);
+    }
+    setTransition(null);
+    setTransitionText("");
   };
 
-  const archiveColumn = async () => {
-    const column = board.columns.find((item) => item.id === editingColumnId);
-    if (!column) return;
-    if (board.cards.some((card) => card.columnId === column.id)) { setError("Move this column's cards before archiving it."); return; }
-    if (activeColumns.length <= 1) { setError("Keep at least one active column."); return; }
-    try { await persistColumn({ ...column, archived: true, updatedAt: Date.now() }); setColumnEditorOpen(false); }
-    catch (nextError) { setError(nextError instanceof Error ? nextError.message : "Could not archive column."); }
+  const claimAction = async (card: TaskBoardCard) => {
+    await moveDirect(card, card.columnId, {
+      assignee: currentActor.name,
+      assigneeEmail: currentActor.email,
+    }, [nowActivity("claimed", currentActor.name, currentActor.email)]);
   };
 
-  const permanentDeleteColumn = async () => {
-    const column = board.columns.find((item) => item.id === editingColumnId);
-    if (!column || board.cards.some((card) => card.columnId === column.id) || !window.confirm("Delete this empty column?")) return;
-    const previous = board;
-    updateBoard({ ...board, columns: board.columns.filter((item) => item.id !== column.id) });
-    try { if (online) await deleteTaskBoardColumn(scopeId!, column.id); setColumnEditorOpen(false); }
-    catch (nextError) { updateBoard(previous); setError(nextError instanceof Error ? nextError.message : "Could not delete column."); }
+  const releaseAction = async (card: TaskBoardCard) => {
+    await moveDirect(card, card.columnId, { assignee: undefined, assigneeEmail: undefined }, [nowActivity("released", currentActor.name, currentActor.email)]);
   };
 
-  const restoreColumn = async (column: TaskBoardColumn) => {
-    try { await persistColumn({ ...column, archived: false, position: (activeColumns.length + 1) * 1000, updatedAt: Date.now() }); }
-    catch (nextError) { setError(nextError instanceof Error ? nextError.message : "Could not restore column."); }
+  const completeCard = async (card: TaskBoardCard) => {
+    if (!doneColumn) return;
+    const finalAssignee = card.assignee || (getColumnKind(card.columnId) === "action" ? currentActor.name : undefined);
+    const finalAssigneeEmail = card.assigneeEmail || (getColumnKind(card.columnId) === "action" ? currentActor.email : undefined);
+    await moveDirect(card, doneColumn.id, {
+      assignee: finalAssignee,
+      assigneeEmail: finalAssigneeEmail,
+      completedAt: Date.now(),
+      completedByName: currentActor.name,
+      completedByEmail: currentActor.email,
+    }, [nowActivity("completed", currentActor.name, currentActor.email)]);
   };
 
-  const deleteArchivedColumn = async (column: TaskBoardColumn) => {
-    if (board.cards.some((card) => card.columnId === column.id) || !window.confirm(`Delete the empty column “${column.name}”?`)) return;
-    const previous = board;
-    updateBoard({ ...board, columns: board.columns.filter((item) => item.id !== column.id) });
-    try { if (online) await deleteTaskBoardColumn(scopeId!, column.id); }
-    catch (nextError) { updateBoard(previous); setError(nextError instanceof Error ? nextError.message : "Could not delete column."); }
+  const closeVoteCard = async (card: TaskBoardCard) => {
+    if (!card.vote || card.vote.status !== "open") return;
+    const closed: TaskBoardCard = {
+      ...card,
+      updatedAt: Date.now(),
+      updatedByName: currentActor.name,
+      vote: { ...card.vote, status: "closed", closedAt: Date.now() },
+      activities: [...card.activities, nowActivity("vote_closed", currentActor.name, currentActor.email)].slice(-20),
+    };
+    setSaving(true); setError("");
+    try {
+      await persistCard(closed);
+      setPostVoteCardId(card.id);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Could not close vote.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const startPress = (cardId: string) => {
@@ -483,7 +771,7 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
     window.setTimeout(() => { desktopDragCompletedRef.current = false; }, 0);
   };
 
-  const dropDesktopCard = async (event: React.DragEvent<HTMLElement>, destinationId: string) => {
+  const dropDesktopCard = (event: React.DragEvent<HTMLElement>, destinationId: string) => {
     if (!desktopDragEnabled) return;
     event.preventDefault();
     const cardId = desktopDragCardId || event.dataTransfer.getData("text/plain");
@@ -491,10 +779,14 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
     desktopDragCompletedRef.current = true;
     setDesktopDragCardId(null);
     setDesktopDropColumnId(null);
-    if (card && card.columnId !== destinationId) await moveCard(card, destinationId);
+    if (card && card.columnId !== destinationId) requestMove(card, destinationId);
   };
 
   const currentVotingCard = board.cards.find((card) => card.id === votingCardId) || null;
+  const postVoteCard = board.cards.find((card) => card.id === postVoteCardId) || null;
+  const transitionCard = board.cards.find((card) => card.id === transition?.cardId) || null;
+  const currentMoveCard = board.cards.find((card) => card.id === moveCardId) || null;
+  const editingCard = board.cards.find((card) => card.id === editingCardId) || null;
 
   const submitVote = async () => {
     const card = currentVotingCard;
@@ -503,33 +795,113 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
     try {
       const hash = await voterHashFor(user, workspaceKey);
       if (online) {
-        await castTaskBoardVote(scopeId!, card.id, hash, actor(user).name, selectedVoteOptionId);
+        await castTaskBoardVote(scopeId!, card.id, hash, currentActor.name, selectedVoteOptionId);
       } else {
         if (card.vote.voterHashes.includes(hash)) throw new Error("Your vote is already recorded.");
-        const nextCard = { ...card, updatedAt: Date.now(), vote: { ...card.vote, voterHashes: [...card.vote.voterHashes, hash], options: card.vote.options.map((option) => option.id === selectedVoteOptionId ? { ...option, count: option.count + 1 } : option), namedVotes: card.vote.anonymous ? card.vote.namedVotes : [...(card.vote.namedVotes || []), { voterHash: hash, voterName: actor(user).name, optionId: selectedVoteOptionId }] } };
+        const nextCard = {
+          ...card,
+          updatedAt: Date.now(),
+          vote: {
+            ...card.vote,
+            voterHashes: [...card.vote.voterHashes, hash],
+            options: card.vote.options.map((option) => option.id === selectedVoteOptionId ? { ...option, count: option.count + 1 } : option),
+          },
+        };
         await persistCard(nextCard);
       }
       setVotingCardId(null); setSelectedVoteOptionId("");
-    } catch (nextError) { setError(nextError instanceof Error ? nextError.message : "Could not record vote."); }
-    finally { setVoteSubmitting(false); }
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Could not record vote.");
+    } finally {
+      setVoteSubmitting(false);
+    }
   };
 
-  const closeVote = async () => {
-    const existing = board.cards.find((card) => card.id === editingCardId);
-    if (!existing?.vote) return;
+  const saveBoardName = async () => {
+    const name = boardNameDraft.trim();
+    if (!name) return;
     setSaving(true);
-    try {
-      await persistCard({ ...existing, updatedAt: Date.now(), vote: { ...existing.vote, status: "closed", closedAt: Date.now() } });
-      setCloseVoteConfirmOpen(false);
-      setCardEditorOpen(false);
-    }
-    catch (nextError) { setError(nextError instanceof Error ? nextError.message : "Could not close vote."); }
+    try { await persistMeta({ ...(board.meta || {}), name, updatedAt: Date.now(), updatedByName: currentActor.name }); setBoardSettingsOpen(false); }
+    catch (nextError) { setError(nextError instanceof Error ? nextError.message : "Could not rename board."); }
     finally { setSaving(false); }
   };
 
-  const editingVoteLocked = Boolean(editingCardId && board.cards.find((card) => card.id === editingCardId)?.vote?.voterHashes.length);
-  const currentMoveCard = board.cards.find((card) => card.id === moveCardId) || null;
-  const editingColumn = board.columns.find((column) => column.id === editingColumnId) || null;
+  const isMine = (card: TaskBoardCard) => Boolean(
+    (card.assigneeEmail && currentActor.email && card.assigneeEmail.toLowerCase() === currentActor.email.toLowerCase()) ||
+    (!card.assigneeEmail && card.assignee?.trim().toLowerCase() === currentActor.name.toLowerCase())
+  );
+
+  const stopCardAction = (event: React.SyntheticEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    cancelPress();
+  };
+
+  const renderCardFront = (card: TaskBoardCard, kind?: TaskBoardColumnKind) => {
+    const total = voteTotal(card.vote);
+    const ownerMine = isMine(card);
+    const alreadyVoted = Boolean(card.vote && currentVoterHash && card.vote.voterHashes.includes(currentVoterHash));
+    return (
+      <div className="flex h-full flex-col">
+        {kind === "ideas" && <>
+          <div className="text-[9px] font-black uppercase tracking-wide text-amber-600 lg:text-[10px]">Idea</div>
+          <div className="mt-1 text-[13px] font-black leading-snug text-[#102A43] lg:text-[15px]">{card.title}</div>
+          {card.note?.trim() && <div className="mt-1 line-clamp-2 text-[10px] font-semibold leading-snug text-slate-500 lg:text-[12px]">{card.note}</div>}
+          <div className="mt-auto flex gap-1.5 pt-3">
+            <button type="button" className="flex-1 rounded-xl bg-violet-50 px-2 py-2 text-[10px] font-black text-violet-700 ring-1 ring-violet-100 lg:text-[11px]" onPointerDown={stopCardAction} onPointerUp={(event) => { stopCardAction(event); requestMove(card, voteColumn?.id || card.columnId); }}><Vote className="mr-1 inline h-3 w-3" />Start vote</button>
+            <button type="button" className="flex-1 rounded-xl bg-sky-50 px-2 py-2 text-[10px] font-black text-sky-800 ring-1 ring-sky-100 lg:text-[11px]" onPointerDown={stopCardAction} onPointerUp={(event) => { stopCardAction(event); requestMove(card, actionColumn?.id || card.columnId); }}><Hand className="mr-1 inline h-3 w-3" />Needs action</button>
+          </div>
+        </>}
+
+        {kind === "vote" && card.vote && <>
+          {card.title !== card.vote.question && <div className="text-[9px] font-black uppercase tracking-wide text-slate-400 lg:text-[10px]">{card.title}</div>}
+          <div className="text-[9px] font-black uppercase tracking-wide text-violet-600 lg:text-[10px]">{card.vote.status === "open" ? "Vote open" : "Vote closed"}</div>
+          <div className="mt-1 text-[13px] font-black leading-snug text-[#102A43] lg:text-[15px]">{card.vote.question}</div>
+          {card.vote.status === "closed" ? (
+            <div className="mt-2 text-[10px] font-black leading-snug text-violet-800 lg:text-[12px]">{voteSummary(card.vote)}</div>
+          ) : (
+            <div className="mt-2 text-[10px] font-bold text-slate-500 lg:text-[12px]">{total}{card.vote.eligibleCount ? ` of ${card.vote.eligibleCount}` : ""} voted</div>
+          )}
+          <div className="mt-auto pt-3">
+            {card.vote.status === "open" ? (
+              alreadyVoted ? <div className="w-full rounded-xl bg-emerald-50 px-3 py-2 text-center text-[10px] font-black text-emerald-700 lg:text-[12px]"><Check className="mr-1 inline h-3.5 w-3.5" />Vote submitted</div> :
+              <button type="button" className="w-full rounded-xl bg-violet-600 px-3 py-2 text-[10px] font-black text-white lg:text-[12px]" onPointerDown={stopCardAction} onPointerUp={(event) => { stopCardAction(event); setSelectedVoteOptionId(""); setVotingCardId(card.id); }}><Vote className="mr-1 inline h-3.5 w-3.5" />Vote</button>
+            ) : (
+              <div className="grid grid-cols-2 gap-1.5">
+                <button type="button" className="rounded-xl bg-sky-50 px-2 py-2 text-[10px] font-black text-sky-800 ring-1 ring-sky-100 lg:text-[11px]" onPointerDown={stopCardAction} onPointerUp={(event) => { stopCardAction(event); requestMove(card, actionColumn?.id || card.columnId); }}>Needs action</button>
+                <button type="button" className="rounded-xl bg-emerald-50 px-2 py-2 text-[10px] font-black text-emerald-700 ring-1 ring-emerald-100 lg:text-[11px]" onPointerDown={stopCardAction} onPointerUp={(event) => { stopCardAction(event); void completeCard(card); }}>Decision complete</button>
+              </div>
+            )}
+          </div>
+        </>}
+
+        {kind === "action" && <>
+          {card.actionText && card.actionText !== card.title && <div className="text-[9px] font-black uppercase tracking-wide text-slate-400 lg:text-[10px]">{card.title}</div>}
+          <div className="text-[9px] font-black uppercase tracking-wide text-sky-700 lg:text-[10px]">Needs action</div>
+          <div className="mt-1 text-[13px] font-black leading-snug text-[#102A43] lg:text-[15px]">{card.actionText || card.title}</div>
+          {card.vote?.status === "closed" && <div className="mt-2 text-[9px] font-bold leading-snug text-slate-500 lg:text-[11px]">Decision: {voteSummary(card.vote)}</div>}
+          <div className="mt-auto pt-3">
+            {!card.assignee ? <div className="grid grid-cols-[1fr_auto] gap-1.5">
+              <button type="button" className="rounded-xl bg-sky-600 px-3 py-2 text-[10px] font-black text-white lg:text-[12px]" onPointerDown={stopCardAction} onPointerUp={(event) => { stopCardAction(event); void claimAction(card); }}><Hand className="mr-1 inline h-3.5 w-3.5" />I’ll do it</button>
+              <button type="button" className="rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-[10px] font-black text-slate-600 lg:text-[11px]" onPointerDown={stopCardAction} onPointerUp={(event) => { stopCardAction(event); void completeCard(card); }}>Already done</button>
+            </div> : ownerMine ? <div className="grid gap-1.5">
+              <div className="rounded-xl bg-sky-50 px-2.5 py-1.5 text-center text-[10px] font-black text-sky-800 lg:text-[11px]">You’re handling this</div>
+              <button type="button" className="rounded-xl bg-emerald-600 px-3 py-2 text-[10px] font-black text-white lg:text-[12px]" onPointerDown={stopCardAction} onPointerUp={(event) => { stopCardAction(event); void completeCard(card); }}><Check className="mr-1 inline h-3.5 w-3.5" />Done</button>
+            </div> : <div className="rounded-xl bg-sky-50 px-2.5 py-2 text-center text-[10px] font-black text-sky-800 lg:text-[11px]"><Hand className="mr-1 inline h-3.5 w-3.5" />{card.assignee} is handling this</div>}
+          </div>
+        </>}
+
+        {kind === "done" && <>
+          <div className="text-[9px] font-black uppercase tracking-wide text-emerald-700 lg:text-[10px]">Done</div>
+          <div className="mt-1 text-[13px] font-black leading-snug text-[#102A43] lg:text-[15px]">{card.actionText || card.vote?.question || card.title}</div>
+          {card.vote?.status === "closed" && <div className="mt-2 text-[9px] font-bold leading-snug text-slate-500 lg:text-[11px]">{voteSummary(card.vote)}</div>}
+          <div className="mt-auto flex items-center gap-1.5 pt-3 text-[10px] font-black text-emerald-700 lg:text-[11px]"><CheckCircle2 className="h-3.5 w-3.5" />{card.actionText ? `Completed${card.completedByName ? ` by ${card.completedByName}` : ""}` : "Decision complete"}</div>
+        </>}
+
+        {!kind && <div className="text-[13px] font-black leading-snug text-[#102A43] lg:text-[15px]">{card.title}</div>}
+      </div>
+    );
+  };
 
   return (
     <>
@@ -539,19 +911,20 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
             <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-wide lg:text-[20px] lg:normal-case lg:tracking-normal" style={{ color: accent }}>
               <ClipboardList className="fairteams-desktop-balanced-icon h-[18px] w-[18px] lg:h-6 lg:w-6" /> Action Board
             </div>
-            <h2 className="mt-1 truncate text-[17px] font-black leading-tight text-[#102A43] lg:text-[19px]">{board.meta?.name || rosterName}</h2>
+            <div className="mt-1 text-[12px] font-bold leading-tight text-slate-600 lg:text-[14px]">Decide together · follow through</div>
           </div>
-          <Button type="button" className="h-9 shrink-0 rounded-2xl px-3 text-xs font-black text-white lg:text-sm" style={{ backgroundColor: accent }} onClick={() => setBoardOpen(true)}>
-            Open board
+          <Button type="button" className="h-9 shrink-0 rounded-2xl px-3 text-xs font-black text-white lg:text-sm" style={{ backgroundColor: accent }} onClick={openBoard}>
+            Open
           </Button>
         </div>
         <div className="mt-3 flex flex-wrap gap-2 text-[10px] font-black text-slate-600 lg:text-xs">
-          <span className="rounded-full bg-white/75 px-2.5 py-1">{openCards.length} open</span>
+          {openVoteCount > 0 && <span className="rounded-full bg-violet-50 px-2.5 py-1 text-violet-700">{openVoteCount} vote{openVoteCount === 1 ? "" : "s"} open</span>}
+          {needsActionCount > 0 && <span className="rounded-full bg-sky-50 px-2.5 py-1 text-sky-800">{needsActionCount} need action</span>}
           {mineCount > 0 && <span className="rounded-full bg-white/75 px-2.5 py-1">{mineCount} yours</span>}
-          {overdueCount > 0 && <span className="rounded-full bg-red-50 px-2.5 py-1 text-red-700">{overdueCount} overdue</span>}
+          {hasNewActivity && <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-amber-700"><span className="h-1.5 w-1.5 rounded-full bg-amber-500" />New activity</span>}
           <span className="rounded-full bg-white/75 px-2.5 py-1">{online ? "Shared" : isSharedRoster ? "Sign in" : "Private"}</span>
         </div>
-        {latestActivity && <div className="mt-2 truncate text-[10px] font-bold text-slate-500 lg:text-xs">Last: “{latestActivity.card.title}” · {activityText(latestActivity.activity)}</div>}
+        {latestActivity && <div className="mt-2 truncate text-[10px] font-bold text-slate-500 lg:text-xs">Last: “{latestActivity.card.actionText || latestActivity.card.vote?.question || latestActivity.card.title}” · {activityText(latestActivity.activity)}</div>}
       </section>
 
       <Dialog open={boardOpen} onOpenChange={setBoardOpen}>
@@ -560,19 +933,22 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
             <div className="flex items-center justify-between gap-2">
               <div className="min-w-0">
                 <DialogTitle className="truncate text-base font-black text-[#102A43] lg:text-[22px] lg:leading-tight">{board.meta?.name || rosterName}</DialogTitle>
-                <p className="mt-0.5 text-[10px] font-bold text-slate-600 lg:mt-1 lg:text-[13px]">{online ? "Live collaborator board" : "Organizer board"} · <span className="lg:hidden">long press to move · </span>tap to flip<span className="hidden lg:inline"> · drag to move · right-click for menu</span></p>
+                <p className="mt-0.5 text-[10px] font-bold text-slate-600 lg:mt-1 lg:text-[13px]">Decisions and commitments that shouldn’t get lost in chat · <span className="lg:hidden">long press to move</span><span className="hidden lg:inline">drag to move</span></p>
               </div>
               <div className="flex shrink-0 gap-1.5">
                 <Button type="button" variant="outline" className="h-9 w-9 rounded-2xl bg-white/80 p-0 lg:h-11 lg:w-11" onClick={() => { setBoardNameDraft(board.meta?.name || rosterName); setBoardSettingsOpen(true); }} aria-label="Board settings"><Pencil className="h-4 w-4 lg:h-[18px] lg:w-[18px]" /></Button>
-                <Button type="button" className="h-9 rounded-2xl px-3 text-xs font-black text-white lg:h-11 lg:px-4 lg:text-sm" style={{ backgroundColor: accent }} onClick={() => openNewCard()}><Plus className="mr-1 h-4 w-4 lg:h-[18px] lg:w-[18px]" />Card</Button>
+                <Button type="button" className="h-9 rounded-2xl bg-violet-600 px-3 text-xs font-black text-white hover:bg-violet-700 lg:h-11 lg:px-4 lg:text-sm" onClick={() => resetQuickCreate("vote")}><Vote className="mr-1 h-4 w-4 lg:h-[18px] lg:w-[18px]" />Start vote</Button>
               </div>
             </div>
           </DialogHeader>
           {error && <div className="mx-3 mt-2 rounded-xl bg-red-50 px-3 py-2 text-[11px] font-bold text-red-700">{error}</div>}
           <div className="flex-1 min-h-0 overflow-hidden" style={{ backgroundColor: background }}>
-            {loading ? <div className="p-6 text-center text-sm font-black text-slate-500">Loading task board…</div> : (
+            {loading ? <div className="p-6 text-center text-sm font-black text-slate-500">Loading Action Board…</div> : (
               <div className="flex h-full snap-x snap-proximity gap-3 overflow-x-auto overflow-y-hidden px-3 pb-4 pt-3 lg:px-5 lg:pb-5 lg:pt-5" style={{ overscrollBehaviorX: "contain" }}>
                 {activeColumns.map((column, columnIndex) => {
+                  const kind = column.kind || WORKFLOW[columnIndex]?.kind;
+                  const tone = columnTone(kind);
+                  const Icon = columnIcon(kind);
                   const cards = board.cards.filter((card) => card.columnId === column.id).sort((a, b) => a.position - b.position);
                   return (
                     <section
@@ -582,47 +958,27 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
                       onDragOver={(event) => { if (!desktopDragEnabled || !desktopDragCardId) return; event.preventDefault(); event.dataTransfer.dropEffect = "move"; setDesktopDropColumnId(column.id); }}
                       onDragEnter={(event) => { if (!desktopDragEnabled || !desktopDragCardId) return; event.preventDefault(); setDesktopDropColumnId(column.id); }}
                       onDragLeave={(event) => { if (event.currentTarget.contains(event.relatedTarget as Node | null)) return; setDesktopDropColumnId((current) => current === column.id ? null : current); }}
-                      onDrop={(event) => void dropDesktopCard(event, column.id)}
+                      onDrop={(event) => dropDesktopCard(event, column.id)}
                     >
-                      <div className="flex items-center gap-2 border-b border-black/5 px-3 py-2.5 lg:px-4 lg:py-3.5">
+                      <div className={`flex items-center gap-2 border-b border-black/5 px-3 py-2.5 lg:px-4 lg:py-3.5 ${tone.header}`}>
+                        <Icon className={`h-4 w-4 lg:h-[18px] lg:w-[18px] ${tone.icon}`} />
                         <h3 className="min-w-0 flex-1 truncate text-sm font-black text-[#102A43] lg:text-[17px]">{column.name}</h3>
-                        <span className="rounded-full bg-white/75 px-2 py-0.5 text-[10px] font-black text-slate-500 lg:px-2.5 lg:py-1 lg:text-xs">{cards.length}</span>
-                        <button type="button" className="rounded-xl p-1.5 text-slate-500 hover:bg-white/70 lg:p-2" onClick={() => openEditColumn(column)} aria-label={`Edit ${column.name}`}><MoreHorizontal className="h-4 w-4 lg:h-[18px] lg:w-[18px]" /></button>
+                        <span className="rounded-full bg-white/80 px-2 py-0.5 text-[10px] font-black text-slate-500 lg:px-2.5 lg:py-1 lg:text-xs">{cards.length}</span>
                       </div>
                       <div className="flex-1 overflow-y-auto px-2.5 py-2.5 lg:px-3 lg:py-3">
                         <div className="space-y-2">
                           {cards.map((card) => {
                             const flipped = flippedIds.has(card.id);
-                            const createdActivity = [...card.activities]
-                              .filter((activity) => activity.action === "created")
-                              .sort((a, b) => a.at - b.at)[0];
-                            const latestMoveActivity = [...card.activities]
-                              .filter((activity) => activity.action === "moved")
-                              .sort((a, b) => b.at - a.at)[0];
-                            const flippedHeightClass = card.vote ? "min-h-[300px]" : card.note?.trim() ? "min-h-[190px]" : "min-h-[126px]";
-                            const titleLength = card.title.trim().length;
-                            const hasFrontMetadata = Boolean(card.category || card.assignee || card.dueDate || card.vote);
-                            const frontHeightClass = titleLength > 92
-                              ? "min-h-[146px] lg:min-h-[174px]"
-                              : titleLength > 62
-                                ? "min-h-[124px] lg:min-h-[150px]"
-                                : titleLength > 34
-                                  ? "min-h-[104px] lg:min-h-[126px]"
-                                  : hasFrontMetadata
-                                    ? "min-h-[88px] lg:min-h-[106px]"
-                                    : "min-h-[70px] lg:min-h-[88px]";
+                            const createdActivity = [...card.activities].filter((activity) => activity.action === "created").sort((a, b) => a.at - b.at)[0];
+                            const latestActivityForCard = [...card.activities].sort((a, b) => b.at - a.at)[0];
+                            const frontHeightClass = kind === "vote" || kind === "action" ? "min-h-[154px] lg:min-h-[174px]" : kind === "ideas" ? "min-h-[136px] lg:min-h-[154px]" : "min-h-[112px] lg:min-h-[128px]";
+                            const flippedHeightClass = "min-h-[250px] lg:min-h-[280px]";
                             return (
                               <div key={card.id} className={`relative [perspective:900px] ${flipped ? flippedHeightClass : frontHeightClass}`}>
                                 <div className={`relative w-full transition-all duration-300 [transform-style:preserve-3d] ${flipped ? `${flippedHeightClass} [transform:rotateY(180deg)]` : frontHeightClass}`}>
-                                  <button type="button" draggable={desktopDragEnabled} className={`absolute inset-0 w-full rounded-xl border border-slate-200 bg-white p-3 text-left shadow-sm lg:p-4 [backface-visibility:hidden] active:scale-[0.99] lg:cursor-grab lg:active:cursor-grabbing ${desktopDragCardId === card.id ? "opacity-45 ring-2 ring-emerald-200" : ""}`} onDragStart={(event) => startDesktopCardDrag(event, card.id)} onDragEnd={finishDesktopCardDrag} onPointerDown={() => { if (!desktopDragEnabled) startPress(card.id); }} onPointerUp={() => shortTap(card.id)} onPointerCancel={cancelPress} onPointerLeave={cancelPress} onContextMenu={(event) => { event.preventDefault(); setMoveCardId(card.id); }}>
-                                    <div className="text-[13px] font-black leading-snug text-[#102A43] lg:text-[15px] lg:leading-[1.3]">{card.title}</div>
-                                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                                      {card.category && <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[9px] font-black lg:px-2.5 lg:py-1 lg:text-[11px] text-slate-700 ring-1 ring-slate-300/70">{card.category}</span>}
-                                      {card.assignee && <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-black lg:gap-1.5 lg:px-2.5 lg:py-1 lg:text-[11px] text-slate-600"><UserRound className="h-3 w-3 lg:h-3.5 lg:w-3.5" />{card.assignee}</span>}
-                                      {card.dueDate && <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-black lg:gap-1.5 lg:px-2.5 lg:py-1 lg:text-[11px] ${isOverdue(card.dueDate) ? "bg-red-50 text-red-700" : "bg-slate-100 text-slate-600"}`}><CalendarDays className="h-3 w-3 lg:h-3.5 lg:w-3.5" />{dueText(card.dueDate)}</span>}
-                                      {card.vote && <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5 text-[9px] font-black lg:gap-1.5 lg:px-2.5 lg:py-1 lg:text-[11px] text-violet-700"><Vote className="h-3 w-3 lg:h-3.5 lg:w-3.5" />{card.vote.status === "closed" ? "Result" : "Vote"}</span>}
-                                    </div>
-                                  </button>
+                                  <div role="button" tabIndex={0} draggable={desktopDragEnabled} className={`absolute inset-0 w-full rounded-xl border border-slate-200 bg-white p-3 text-left shadow-sm lg:p-4 [backface-visibility:hidden] active:scale-[0.99] lg:cursor-grab lg:active:cursor-grabbing ${desktopDragCardId === card.id ? "opacity-45 ring-2 ring-emerald-200" : ""}`} onDragStart={(event) => startDesktopCardDrag(event, card.id)} onDragEnd={finishDesktopCardDrag} onPointerDown={() => { if (!desktopDragEnabled) startPress(card.id); }} onPointerUp={() => shortTap(card.id)} onPointerCancel={cancelPress} onPointerLeave={cancelPress} onContextMenu={(event) => { event.preventDefault(); setMoveCardId(card.id); }} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") shortTap(card.id); }}>
+                                    {renderCardFront(card, kind)}
+                                  </div>
                                   <div
                                     role="button"
                                     tabIndex={0}
@@ -639,45 +995,24 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
                                     onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") shortTap(card.id); }}
                                   >
                                     <div className="flex min-h-full w-full flex-1 flex-col overflow-y-auto overscroll-contain px-3 pb-3 pt-3 lg:px-4 lg:pb-4 lg:pt-4">
-                                      {card.vote && (() => {
-                                        const total = card.vote.options.reduce((sum, option) => sum + option.count, 0);
-                                        const canShowResults = card.vote.status === "closed" || card.vote.showResultsWhileOpen;
-                                        return (
-                                          <div>
-                                            <div className="text-[10px] font-black uppercase tracking-wide text-violet-500 lg:text-xs">{card.vote.status === "closed" ? "Result" : "Vote"}</div>
-                                            <div className="mt-1 break-words text-[13px] font-black leading-snug text-[#102A43] lg:mt-1.5 lg:text-[16px] lg:leading-[1.35]">{card.vote.question}</div>
-                                            {canShowResults ? (
-                                              <div className="mt-2 space-y-1.5">{card.vote.options.map((option) => <div key={option.id} className="flex items-start gap-2 text-[10px] font-bold text-slate-600 lg:text-[12px]"><span className="min-w-0 flex-1 break-words">{option.label}</span><span className="shrink-0 rounded-full bg-slate-100 px-1.5 py-0.5 text-[#102A43]">{option.count}</span></div>)}</div>
-                                            ) : <div className="mt-1.5 text-[10px] font-bold text-slate-500 lg:text-[12px]">{card.vote.hideParticipationUntilClosed ? "Voting in progress" : `${total}${card.vote.eligibleCount ? ` of ${card.vote.eligibleCount}` : ""} voted`}</div>}
-                                            {card.vote.status === "open" && (currentVoterHash && card.vote.voterHashes.includes(currentVoterHash) ? (
-                                              <div className="mt-2 rounded-xl bg-emerald-50 px-2.5 py-2 text-center text-[10px] font-black text-emerald-700 lg:mt-3 lg:py-2.5 lg:text-[12px]">Vote submitted</div>
-                                            ) : (
-                                              <button type="button" className="mt-2 w-full rounded-xl bg-violet-600 px-3 py-2 text-[10px] font-black uppercase tracking-wide text-white lg:mt-3 lg:py-2.5 lg:text-[13px]" onPointerDown={(event) => event.stopPropagation()} onPointerUp={(event) => { event.stopPropagation(); setSelectedVoteOptionId(""); setVotingCardId(card.id); }}>Vote now</button>
-                                            ))}
-                                          </div>
-                                        );
-                                      })()}
-                                      {card.note?.trim() && (
-                                        <div className={card.vote ? "mt-3 border-t border-slate-100 pt-2" : ""}>
-                                          <div className="text-[10px] font-black uppercase tracking-wide text-slate-400 lg:text-[11px]">{card.vote ? "Context" : "Note"}</div>
-                                          <div className="mt-1 max-h-[72px] overflow-y-auto whitespace-pre-wrap break-words pr-1 text-[11px] font-semibold leading-relaxed text-[#102A43] lg:mt-1.5 lg:max-h-[96px] lg:text-[13px]">
-                                            {card.note.trim()}
-                                          </div>
-                                        </div>
-                                      )}
-                                      <div className={(card.note?.trim() || card.vote) ? "mt-3 border-t border-slate-100 pt-2 lg:mt-auto lg:pt-5" : "lg:mt-auto lg:pt-5"}>
-                                        <div className="text-[10px] font-black uppercase tracking-wide text-slate-400 lg:text-[10px]">Activity</div>
-                                        <div className="mt-1.5 space-y-1.5 lg:mt-2 lg:space-y-1">
-                                          <div className="text-[10px] font-bold leading-snug text-slate-600 lg:text-[10px] lg:text-slate-500">
-                                            <span className="text-[#102A43] lg:text-slate-500">{createdActivity ? `${createdActivity.actorName} created this card` : `Created by ${card.createdByName}`}</span>
-                                            <span className="ml-1 text-slate-400">{formatTime(createdActivity?.at || card.createdAt)}</span>
-                                          </div>
-                                          {latestMoveActivity && (
-                                            <div className="text-[10px] font-bold leading-snug text-slate-600 lg:text-[10px] lg:text-slate-500">
-                                              <span className="text-[#102A43] lg:text-slate-500">{activityText(latestMoveActivity)}</span>
-                                              <span className="ml-1 text-slate-400">{formatTime(latestMoveActivity.at)}</span>
-                                            </div>
-                                          )}
+                                      <div className="text-[10px] font-black uppercase tracking-wide text-slate-400 lg:text-[11px]">Context</div>
+                                      <div className="mt-1 text-[12px] font-black leading-snug text-[#102A43] lg:text-[14px]">{card.title}</div>
+                                      {card.note?.trim() ? <div className="mt-2 whitespace-pre-wrap break-words text-[10px] font-semibold leading-relaxed text-slate-600 lg:text-[12px]">{card.note.trim()}</div> : <div className="mt-2 text-[10px] font-semibold text-slate-400 lg:text-[12px]">No extra context.</div>}
+
+                                      {card.vote && <div className="mt-3 border-t border-slate-100 pt-2">
+                                        <div className="text-[10px] font-black uppercase tracking-wide text-violet-500 lg:text-[11px]">{card.vote.status === "closed" ? "Vote result" : "Vote"}</div>
+                                        <div className="mt-1 text-[11px] font-black leading-snug text-[#102A43] lg:text-[13px]">{card.vote.question}</div>
+                                        <div className="mt-2 space-y-1">{card.vote.options.map((option) => <div key={option.id} className="flex items-center justify-between gap-2 text-[10px] font-bold text-slate-600 lg:text-[11px]"><span className="min-w-0 flex-1 break-words">{option.label}</span><span className="rounded-full bg-slate-100 px-2 py-0.5 font-black text-[#102A43]">{card.vote?.status === "closed" ? option.count : "—"}</span></div>)}</div>
+                                        {card.vote.status === "open" && <Button type="button" variant="outline" className="mt-2 h-8 w-full rounded-xl border-violet-200 text-[10px] font-black text-violet-700" onPointerDown={stopCardAction} onPointerUp={(event) => { stopCardAction(event); void closeVoteCard(card); }}>Close vote</Button>}
+                                      </div>}
+
+                                      {kind === "action" && card.assignee && isMine(card) && <button type="button" className="mt-3 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[10px] font-black text-slate-600" onPointerDown={stopCardAction} onPointerUp={(event) => { stopCardAction(event); void releaseAction(card); }}><RotateCcw className="mr-1 inline h-3.5 w-3.5" />Release</button>}
+
+                                      <div className="mt-auto border-t border-slate-100 pt-3">
+                                        <div className="text-[9px] font-black uppercase tracking-wide text-slate-400 lg:text-[10px]">Activity</div>
+                                        <div className="mt-1.5 space-y-1 text-[9px] font-bold leading-snug text-slate-500 lg:text-[10px]">
+                                          <div>{createdActivity ? `${createdActivity.actorName} added this` : `Added by ${card.createdByName}`} <span className="text-slate-400">{formatTime(createdActivity?.at || card.createdAt)}</span></div>
+                                          {latestActivityForCard && latestActivityForCard.id !== createdActivity?.id && <div>{activityText(latestActivityForCard)} <span className="text-slate-400">{formatTime(latestActivityForCard.at)}</span></div>}
                                         </div>
                                       </div>
                                     </div>
@@ -687,109 +1022,121 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
                               </div>
                             );
                           })}
-                          {!cards.length && <div className="rounded-xl border border-dashed border-slate-300 bg-white/40 px-3 py-5 text-center text-[11px] font-bold text-slate-400 lg:py-4 lg:text-[13px]">No cards here</div>}
+                          {!cards.length && board.cards.length === 0 && <ExampleCard kind={kind} />}
+                          {!cards.length && board.cards.length > 0 && <div className="rounded-xl border border-dashed border-slate-300 bg-white/40 px-3 py-5 text-center text-[11px] font-bold text-slate-400 lg:py-4 lg:text-[13px]">Nothing here</div>}
                         </div>
-                        <button type="button" className="mt-2 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-[11px] font-black text-slate-500 hover:bg-white/60 lg:mt-3 lg:py-2.5 lg:text-[13px]" onClick={() => openNewCard(column.id)}><Plus className="h-4 w-4 lg:h-[18px] lg:w-[18px]" />Add card</button>
-                      </div>
-                      <div className="flex items-center justify-between border-t border-black/5 px-2 py-1.5 text-slate-400">
-                        <button type="button" className="rounded-lg p-1.5 disabled:opacity-25" disabled={columnIndex === 0} onClick={() => shiftColumn(column.id, -1)} aria-label="Move column left"><ChevronLeft className="h-4 w-4" /></button>
-                        <span className="text-[9px] font-black uppercase tracking-wide lg:text-[10px]">Column {columnIndex + 1}</span>
-                        <button type="button" className="rounded-lg p-1.5 disabled:opacity-25" disabled={columnIndex === activeColumns.length - 1} onClick={() => shiftColumn(column.id, 1)} aria-label="Move column right"><ChevronRight className="h-4 w-4" /></button>
+                        {kind !== "done" && <button type="button" className="mt-2 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-[11px] font-black text-slate-500 hover:bg-white/60 lg:mt-3 lg:py-2.5 lg:text-[13px]" onClick={() => resetQuickCreate(kind === "ideas" ? "idea" : kind === "vote" ? "vote" : "action")}><Plus className="h-4 w-4 lg:h-[18px] lg:w-[18px]" />{kind === "ideas" ? "Save idea" : kind === "vote" ? "Start vote" : "Add action"}</button>}
                       </div>
                     </section>
                   );
                 })}
-                <button type="button" className="flex h-12 w-[76vw] max-w-[280px] shrink-0 snap-start items-center justify-center gap-2 rounded-2xl border border-dashed border-white/80 bg-white/40 text-xs font-black text-slate-600 lg:h-14 lg:w-[280px] lg:text-sm" onClick={openNewColumn}><Plus className="h-4 w-4" />Add another column</button>
               </div>
             )}
           </div>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={cardEditorOpen} onOpenChange={setCardEditorOpen}>
+      <Dialog open={Boolean(quickCreateMode)} onOpenChange={(open) => { if (!open) setQuickCreateMode(null); }}>
+        <DialogContent className="fixed bottom-2 left-2 right-2 top-auto w-auto max-w-none translate-x-0 translate-y-0 rounded-[2rem] p-4 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-md sm:-translate-x-1/2" onOpenAutoFocus={(event) => event.preventDefault()}>
+          <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43]">{quickCreateMode === "idea" ? "Save an idea" : quickCreateMode === "vote" ? "Start a vote" : "Needs action"}</DialogTitle></DialogHeader>
+          <div className="grid gap-3">
+            <div>
+              <Label htmlFor="quick-primary">{quickCreateMode === "idea" ? "What should we remember?" : quickCreateMode === "vote" ? "What are we deciding?" : "What needs doing?"}</Label>
+              <Input id="quick-primary" value={quickPrimary} onChange={(event) => setQuickPrimary(event.target.value)} onKeyDown={blurOnDoneKey} enterKeyHint="done" maxLength={180} placeholder={quickCreateMode === "idea" ? "Club jerseys" : quickCreateMode === "vote" ? "Should we buy two new training balls?" : "Return the hall keys"} />
+            </div>
+            <div><Label htmlFor="quick-context">Context <span className="font-semibold text-slate-400">optional</span></Label><Textarea id="quick-context" value={quickContext} onChange={(event) => setQuickContext(event.target.value)} onKeyDown={blurOnDoneKey} enterKeyHint="done" rows={2} maxLength={600} placeholder="Only if people need a little background" /></div>
+            {quickCreateMode === "vote" && <div className="rounded-2xl border border-violet-100 bg-violet-50/60 p-3">
+              <div className="text-[10px] font-black uppercase tracking-wide text-violet-600">Vote type</div>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <button type="button" className={`rounded-xl border px-3 py-2 text-xs font-black ${quickVoteKind === "yes-no-abstain" ? "border-violet-400 bg-white text-violet-800" : "border-violet-100 bg-white/60 text-slate-600"}`} onClick={() => setQuickVoteKind("yes-no-abstain")}>Yes / No / Abstain</button>
+                <button type="button" className={`rounded-xl border px-3 py-2 text-xs font-black ${quickVoteKind === "choose-one" ? "border-violet-400 bg-white text-violet-800" : "border-violet-100 bg-white/60 text-slate-600"}`} onClick={() => setQuickVoteKind("choose-one")}>Choose one</button>
+              </div>
+              {quickVoteKind === "choose-one" && <div className="mt-3"><Label htmlFor="quick-options">Choices — one per line</Label><Textarea id="quick-options" value={quickVoteOptions} onChange={(event) => setQuickVoteOptions(event.target.value)} rows={3} maxLength={400} /></div>}
+              <div className="mt-2 text-[10px] font-semibold leading-snug text-slate-500">Anonymous by default. Results stay hidden until the vote closes; participation count stays visible.</div>
+            </div>}
+            <Button type="button" className={`h-11 rounded-2xl text-white ${quickCreateMode === "vote" ? "bg-violet-600 hover:bg-violet-700" : quickCreateMode === "action" ? "bg-sky-700 hover:bg-sky-800" : ""}`} style={quickCreateMode === "idea" ? { backgroundColor: accent } : undefined} disabled={!quickPrimary.trim() || saving || (quickCreateMode === "vote" && voteOptions(quickVoteKind, quickVoteOptions).length < 2)} onClick={createQuickCard}>{saving ? "Saving…" : quickCreateMode === "idea" ? "Save idea" : quickCreateMode === "vote" ? "Start vote" : "Add action"}</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="fixed inset-x-2 bottom-2 top-2 flex w-auto max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-[2rem] p-0 sm:left-1/2 sm:right-auto sm:top-1/2 sm:h-auto sm:max-h-[calc(100dvh-2rem)] sm:w-full sm:max-w-md sm:-translate-x-1/2 sm:-translate-y-1/2" onOpenAutoFocus={(event) => event.preventDefault()}>
-          <DialogHeader className="shrink-0 border-b border-slate-100 px-4 py-3 pr-12"><DialogTitle className="text-left text-base font-black text-[#102A43]">{editingCardId ? "Edit card" : "New card"}</DialogTitle></DialogHeader>
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3">
+          <DialogHeader className="shrink-0 border-b border-slate-100 px-4 py-3 pr-12"><DialogTitle className="text-left text-base font-black text-[#102A43]">Edit</DialogTitle></DialogHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
             <div className="grid gap-3">
-            <div><Label htmlFor="task-title">Title</Label><Input id="task-title" value={cardTitle} onChange={(event) => setCardTitle(event.target.value)} onKeyDown={blurOnDoneKey} enterKeyHint="done" maxLength={120} /></div>
-            <div><Label htmlFor="task-note">{voteEnabled ? "Context" : "Notes"}</Label><Textarea id="task-note" value={cardNote} onChange={(event) => setCardNote(event.target.value)} onKeyDown={blurOnDoneKey} enterKeyHint="done" maxLength={1200} rows={voteEnabled ? 2 : 3} placeholder={voteEnabled ? "Background, explanation or related information" : "Optional details"} /></div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><Label htmlFor="task-assignee">Assignee</Label><Input id="task-assignee" value={cardAssignee} onChange={(event) => setCardAssignee(event.target.value)} onKeyDown={blurOnDoneKey} enterKeyHint="done" maxLength={80} placeholder="Optional" /></div>
-              <div><Label htmlFor="task-due">Due date</Label><div className="mt-1 flex w-full min-w-0 rounded-md border border-input bg-background px-3 py-2"><input id="task-due" type="date" className="block w-full min-w-0 border-0 bg-transparent p-0 text-sm" value={cardDueDate} onChange={(event) => setCardDueDate(event.target.value)} /></div></div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><Label htmlFor="task-category">Category</Label><select id="task-category" className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={cardCategory} onChange={(event) => setCardCategory(event.target.value)}>{CATEGORIES.map((item) => <option key={item}>{item}</option>)}</select></div>
-              <div><Label htmlFor="task-column">Column</Label><select id="task-column" className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={cardColumnId} onChange={(event) => setCardColumnId(event.target.value)}>{activeColumns.map((column) => <option key={column.id} value={column.id}>{column.name}</option>)}</select></div>
-            </div>
-            <div className="rounded-2xl border border-violet-100 bg-violet-50/60 p-3">
-              <label className="flex items-center gap-2 text-sm font-black text-[#102A43]"><input type="checkbox" checked={voteEnabled} onChange={(event) => setVoteEnabled(event.target.checked)} disabled={editingVoteLocked} /> Add an anonymous vote</label>
-              {voteEnabled && <div className="mt-3 grid gap-3">
-                <div><Label htmlFor="vote-question">Question</Label><Input id="vote-question" value={voteQuestion} onChange={(event) => setVoteQuestion(event.target.value)} maxLength={180} disabled={editingVoteLocked} placeholder="What should members decide?" /></div>
-                <div><Label htmlFor="vote-options">Options — one per line</Label><Textarea id="vote-options" value={voteOptionsText} onChange={(event) => setVoteOptionsText(event.target.value)} rows={3} maxLength={400} disabled={editingVoteLocked} /></div>
-                <label className="flex items-center gap-2 text-xs font-bold text-slate-700"><input type="checkbox" checked={voteHideParticipation} onChange={(event) => setVoteHideParticipation(event.target.checked)} disabled={editingVoteLocked} /> Hide participation until closed</label>
-                <label className="flex items-center gap-2 text-xs font-bold text-slate-700"><input type="checkbox" checked={voteShowResultsOpen} onChange={(event) => setVoteShowResultsOpen(event.target.checked)} disabled={editingVoteLocked} /> Show results while open</label>
-                <div className="text-[10px] font-semibold leading-snug text-slate-500">No per-person vote notifications or vote timestamps are shown.</div>{editingVoteLocked && <div className="text-[10px] font-black text-amber-700">Question, options and anonymity are locked because voting has started.</div>}
-                {editingCardId && board.cards.find((card) => card.id === editingCardId)?.vote?.status === "open" && <Button type="button" variant="outline" className="h-9 rounded-xl" onClick={() => setCloseVoteConfirmOpen(true)}>Close vote</Button>}
+              <div><Label htmlFor="edit-title">Topic</Label><Input id="edit-title" value={editTitle} onChange={(event) => setEditTitle(event.target.value)} onKeyDown={blurOnDoneKey} enterKeyHint="done" maxLength={180} /></div>
+              <div><Label htmlFor="edit-note">Context</Label><Textarea id="edit-note" value={editNote} onChange={(event) => setEditNote(event.target.value)} onKeyDown={blurOnDoneKey} enterKeyHint="done" rows={3} maxLength={600} placeholder="Optional" /></div>
+              {editingCard?.actionText && <div><Label htmlFor="edit-action">Current action</Label><Input id="edit-action" value={editActionText} onChange={(event) => setEditActionText(event.target.value)} onKeyDown={blurOnDoneKey} enterKeyHint="done" maxLength={180} /></div>}
+              {editingCard?.vote && editingCard.vote.status === "open" && editingCard.vote.voterHashes.length === 0 && <div className="rounded-2xl border border-violet-100 bg-violet-50/50 p-3">
+                <div><Label htmlFor="edit-vote-question">Vote question</Label><Input id="edit-vote-question" value={editVoteQuestion} onChange={(event) => setEditVoteQuestion(event.target.value)} maxLength={180} /></div>
+                {editingCard.vote.kind === "choose-one" && <div className="mt-3"><Label htmlFor="edit-vote-options">Choices — one per line</Label><Textarea id="edit-vote-options" value={editVoteOptions} onChange={(event) => setEditVoteOptions(event.target.value)} rows={3} maxLength={400} /></div>}
               </div>}
-            </div>
-            <div className="flex gap-2 pt-1">{editingCardId && <Button type="button" variant="outline" className="h-11 rounded-2xl text-red-700" onClick={removeCard}><Trash2 className="mr-1 h-4 w-4" />Delete</Button>}<Button type="button" className="h-11 flex-1 rounded-2xl text-white" style={{ backgroundColor: accent }} disabled={!cardTitle.trim() || saving || (voteEnabled && (!voteQuestion.trim() || voteOptionsText.split(/\n/).filter((value) => value.trim()).length < 2))} onClick={saveCard}>{saving ? "Saving…" : "Save card"}</Button></div>
+              <div className="flex gap-2 pt-1"><Button type="button" variant="outline" className="h-11 rounded-2xl text-red-700" onClick={removeCard}><Trash2 className="mr-1 h-4 w-4" />Delete</Button><Button type="button" className="h-11 flex-1 rounded-2xl text-white" style={{ backgroundColor: accent }} disabled={!editTitle.trim() || saving} onClick={saveEditedCard}>{saving ? "Saving…" : "Save changes"}</Button></div>
             </div>
           </div>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={closeVoteConfirmOpen} onOpenChange={setCloseVoteConfirmOpen}>
-        <DialogContent className="fixed bottom-2 left-2 right-2 top-auto w-auto max-w-none translate-x-0 translate-y-0 rounded-[2rem] border border-violet-100 bg-white p-4 shadow-xl sm:left-1/2 sm:right-auto sm:w-full sm:max-w-sm sm:-translate-x-1/2" onOpenAutoFocus={(event) => event.preventDefault()}>
-          <DialogHeader>
-            <DialogTitle className="text-left text-base font-black text-[#102A43]">Close vote?</DialogTitle>
-          </DialogHeader>
+      <Dialog open={Boolean(transition)} onOpenChange={(open) => { if (!open) setTransition(null); }}>
+        <DialogContent className="fixed bottom-2 left-2 right-2 top-auto w-auto max-w-none translate-x-0 translate-y-0 rounded-[2rem] p-4 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-md sm:-translate-x-1/2" onOpenAutoFocus={(event) => event.preventDefault()}>
+          <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43]">{transition?.target === "vote" ? "Start a vote" : "Needs action"}</DialogTitle></DialogHeader>
           <div className="grid gap-3">
-            <div className="rounded-2xl bg-violet-50 px-3 py-3 text-sm font-bold leading-snug text-violet-900">
-              Results will become final and no more votes can be submitted.
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <Button type="button" variant="outline" className="h-11 rounded-2xl" onClick={() => setCloseVoteConfirmOpen(false)} disabled={saving}>Keep open</Button>
-              <Button type="button" className="h-11 rounded-2xl bg-violet-600 text-white hover:bg-violet-700" onClick={closeVote} disabled={saving}>{saving ? "Closing…" : "Close vote"}</Button>
-            </div>
+            {transitionCard && <div className="rounded-xl bg-slate-50 px-3 py-2 text-xs font-black text-slate-600">Topic: <span className="text-[#102A43]">{transitionCard.title}</span></div>}
+            <div><Label htmlFor="transition-text">{transition?.target === "vote" ? "What are we deciding?" : "What needs doing next?"}</Label><Input id="transition-text" value={transitionText} onChange={(event) => setTransitionText(event.target.value)} onKeyDown={blurOnDoneKey} enterKeyHint="done" maxLength={180} placeholder={transition?.target === "vote" ? "Write the actual decision question" : "Write the concrete next action"} /></div>
+            {transition?.target === "vote" && <div className="rounded-2xl border border-violet-100 bg-violet-50/60 p-3">
+              <div className="grid grid-cols-2 gap-2">
+                <button type="button" className={`rounded-xl border px-3 py-2 text-xs font-black ${transitionVoteKind === "yes-no-abstain" ? "border-violet-400 bg-white text-violet-800" : "border-violet-100 bg-white/60 text-slate-600"}`} onClick={() => setTransitionVoteKind("yes-no-abstain")}>Yes / No / Abstain</button>
+                <button type="button" className={`rounded-xl border px-3 py-2 text-xs font-black ${transitionVoteKind === "choose-one" ? "border-violet-400 bg-white text-violet-800" : "border-violet-100 bg-white/60 text-slate-600"}`} onClick={() => setTransitionVoteKind("choose-one")}>Choose one</button>
+              </div>
+              {transitionVoteKind === "choose-one" && <div className="mt-3"><Label htmlFor="transition-options">Choices — one per line</Label><Textarea id="transition-options" value={transitionVoteOptions} onChange={(event) => setTransitionVoteOptions(event.target.value)} rows={3} maxLength={400} /></div>}
+            </div>}
+            <Button type="button" className={`h-11 rounded-2xl text-white ${transition?.target === "vote" ? "bg-violet-600 hover:bg-violet-700" : "bg-sky-700 hover:bg-sky-800"}`} disabled={!transitionText.trim() || saving || (transition?.target === "vote" && voteOptions(transitionVoteKind, transitionVoteOptions).length < 2)} onClick={() => void finishTransition()}>{saving ? "Saving…" : transition?.target === "vote" ? "Start vote" : "Create action"}</Button>
           </div>
         </DialogContent>
       </Dialog>
 
       <Dialog open={Boolean(currentVotingCard)} onOpenChange={(open) => { if (!open) { setVotingCardId(null); setSelectedVoteOptionId(""); } }}>
         <DialogContent className="fixed bottom-2 left-2 right-2 top-auto w-auto max-w-none translate-x-0 translate-y-0 rounded-[2rem] p-4 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-sm sm:-translate-x-1/2">
-          <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43]">Vote</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43]">Vote on FT</DialogTitle></DialogHeader>
           {currentVotingCard?.vote && <div className="grid gap-3">
             <div className="text-sm font-black leading-snug text-[#102A43]">{currentVotingCard.vote.question}</div>
             <div className="grid gap-2">{currentVotingCard.vote.options.map((option) => <button key={option.id} type="button" className={`rounded-2xl border px-3 py-3 text-left text-sm font-black ${selectedVoteOptionId === option.id ? "border-violet-500 bg-violet-50 text-violet-800" : "border-slate-200 bg-white text-[#102A43]"}`} onClick={() => setSelectedVoteOptionId(option.id)}>{option.label}</button>)}</div>
-            <div className="text-[10px] font-semibold leading-snug text-slate-500">{currentVotingCard.vote.anonymous ? "Your choice is anonymous. Fair Teams records only a private account hash to prevent duplicate voting." : "This is a named vote."}</div>
+            <div className="text-[10px] font-semibold leading-snug text-slate-500">Your choice is anonymous. FT uses an account hash only to prevent duplicate voting. Results appear when voting closes.</div>
             <Button type="button" className="h-11 rounded-2xl bg-violet-600 text-white" disabled={!selectedVoteOptionId || voteSubmitting} onClick={submitVote}>{voteSubmitting ? "Recording…" : "Submit vote"}</Button>
+          </div>}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(postVoteCard)} onOpenChange={(open) => { if (!open) setPostVoteCardId(null); }}>
+        <DialogContent className="fixed bottom-2 left-2 right-2 top-auto w-auto max-w-none translate-x-0 translate-y-0 rounded-[2rem] p-4 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-sm sm:-translate-x-1/2" onOpenAutoFocus={(event) => event.preventDefault()}>
+          <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43]">Vote closed</DialogTitle></DialogHeader>
+          {postVoteCard?.vote && <div className="grid gap-3">
+            <div className="rounded-2xl bg-violet-50 px-3 py-3">
+              <div className="text-xs font-black leading-snug text-violet-900">{postVoteCard.vote.question}</div>
+              <div className="mt-2 text-[11px] font-black leading-snug text-violet-700">{voteSummary(postVoteCard.vote)}</div>
+            </div>
+            <div className="text-xs font-bold text-slate-500">What happens next?</div>
+            <Button type="button" className="h-11 rounded-2xl bg-sky-700 text-white hover:bg-sky-800" onClick={() => { setPostVoteCardId(null); setTransition({ cardId: postVoteCard.id, target: "action" }); setTransitionText(""); }}><Hand className="mr-1 h-4 w-4" />Needs action</Button>
+            <Button type="button" variant="outline" className="h-11 rounded-2xl border-emerald-200 text-emerald-700" onClick={() => { setPostVoteCardId(null); void completeCard(postVoteCard); }}><CheckCircle2 className="mr-1 h-4 w-4" />Decision complete</Button>
           </div>}
         </DialogContent>
       </Dialog>
 
       <Dialog open={Boolean(currentMoveCard)} onOpenChange={(open) => { if (!open) setMoveCardId(null); }}>
         <DialogContent className="fixed bottom-2 left-2 right-2 top-auto w-auto max-w-none translate-x-0 translate-y-0 rounded-[2rem] p-4 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-sm sm:-translate-x-1/2">
-          <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43]">Move card</DialogTitle></DialogHeader>
-          <div className="grid gap-2">{activeColumns.map((column) => <button key={column.id} type="button" className={`flex items-center justify-between rounded-2xl border px-3 py-3 text-left text-sm font-black ${currentMoveCard?.columnId === column.id ? "border-slate-300 bg-slate-100 text-slate-400" : "border-slate-200 bg-white text-[#102A43]"}`} disabled={currentMoveCard?.columnId === column.id || saving} onClick={() => currentMoveCard && moveCard(currentMoveCard, column.id)}><span>{column.name}</span>{currentMoveCard?.columnId === column.id ? <span className="text-[10px]">Current</span> : <ArrowRight className="h-4 w-4" />}</button>)}</div>
+          <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43]">Move</DialogTitle></DialogHeader>
+          <div className="grid gap-2">{activeColumns.map((column, index) => { const kind = column.kind || WORKFLOW[index]?.kind; const Icon = columnIcon(kind); return <button key={column.id} type="button" className={`flex items-center justify-between rounded-2xl border px-3 py-3 text-left text-sm font-black ${currentMoveCard?.columnId === column.id ? "border-slate-300 bg-slate-100 text-slate-400" : "border-slate-200 bg-white text-[#102A43]"}`} disabled={currentMoveCard?.columnId === column.id || saving} onClick={() => currentMoveCard && requestMove(currentMoveCard, column.id)}><span className="flex items-center gap-2"><Icon className="h-4 w-4" />{column.name}</span>{currentMoveCard?.columnId === column.id ? <span className="text-[10px]">Current</span> : <ArrowRight className="h-4 w-4" />}</button>; })}</div>
         </DialogContent>
       </Dialog>
 
       <Dialog open={boardSettingsOpen} onOpenChange={setBoardSettingsOpen}>
         <DialogContent className="max-w-sm rounded-3xl" onOpenAutoFocus={(event) => event.preventDefault()}>
-          <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43]">Board settings</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43]">Board name</DialogTitle></DialogHeader>
           <div className="grid gap-3">
-            <div><Label htmlFor="board-name">Board name</Label><Input id="board-name" value={boardNameDraft} onChange={(event) => setBoardNameDraft(event.target.value)} onKeyDown={blurOnDoneKey} enterKeyHint="done" maxLength={80} /></div>
+            <div><Label htmlFor="board-name">Name</Label><Input id="board-name" value={boardNameDraft} onChange={(event) => setBoardNameDraft(event.target.value)} onKeyDown={blurOnDoneKey} enterKeyHint="done" maxLength={80} /></div>
             <Button type="button" className="h-11 rounded-2xl text-white" style={{ backgroundColor: accent }} disabled={!boardNameDraft.trim() || saving} onClick={saveBoardName}>Save name</Button>
-            {board.columns.some((column) => column.archived) && <div className="border-t border-slate-100 pt-3">
-              <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Archived columns</div>
-              <div className="mt-2 grid gap-2">{board.columns.filter((column) => column.archived).map((column) => <div key={column.id} className="flex items-center gap-2 rounded-2xl border border-slate-200 px-3 py-2"><span className="min-w-0 flex-1 truncate text-xs font-black text-[#102A43]">{column.name}</span><button type="button" className="rounded-xl p-2 text-emerald-700" onClick={() => restoreColumn(column)} aria-label={`Restore ${column.name}`}><RotateCcw className="h-4 w-4" /></button><button type="button" className="rounded-xl p-2 text-red-600" onClick={() => deleteArchivedColumn(column)} aria-label={`Delete ${column.name}`}><Trash2 className="h-4 w-4" /></button></div>)}</div>
-            </div>}
           </div>
         </DialogContent>
-      </Dialog>
-
-      <Dialog open={columnEditorOpen} onOpenChange={setColumnEditorOpen}>
-        <DialogContent className="max-w-sm rounded-3xl" onOpenAutoFocus={(event) => event.preventDefault()}><DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43]">{editingColumn ? "Column settings" : "Add column"}</DialogTitle></DialogHeader><div className="grid gap-3"><div><Label htmlFor="column-name">Column name</Label><Input id="column-name" value={columnNameDraft} onChange={(event) => setColumnNameDraft(event.target.value)} onKeyDown={blurOnDoneKey} enterKeyHint="done" maxLength={50} /></div><div className="flex gap-2">{editingColumn && <Button type="button" variant="outline" className="h-11 rounded-2xl" onClick={archiveColumn}><Archive className="mr-1 h-4 w-4" />Archive</Button>}<Button type="button" className="h-11 flex-1 rounded-2xl text-white" style={{ backgroundColor: accent }} disabled={!columnNameDraft.trim() || saving} onClick={saveColumn}>Save column</Button></div>{editingColumn?.archived && <Button type="button" variant="outline" className="h-10 rounded-2xl text-red-700" onClick={permanentDeleteColumn}><Trash2 className="mr-1 h-4 w-4" />Delete empty column</Button>}</div></DialogContent>
       </Dialog>
     </>
   );

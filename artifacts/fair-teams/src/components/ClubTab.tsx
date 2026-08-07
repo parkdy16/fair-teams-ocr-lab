@@ -1909,7 +1909,7 @@ export function ClubTab({
       />
       </div>
 
-      <section className="order-1 overflow-hidden rounded-[1.7rem] border border-slate-200 bg-white p-3 shadow-sm ring-1 ring-slate-100 lg:col-span-1 lg:col-start-1 lg:row-start-1 lg:h-full lg:p-4">
+      <section className="order-1 overflow-hidden rounded-[1.7rem] border border-[#d9e9e4] bg-[#f3f8f7] p-3 shadow-sm ring-1 ring-[#e7f1ee] lg:col-span-1 lg:col-start-1 lg:row-start-1 lg:h-full lg:p-4">
         <div className="flex items-start justify-between gap-3">
           <button
             type="button"
@@ -1917,17 +1917,17 @@ export function ClubTab({
             onClick={() => setPlayerManagementCollapsed((current) => !current)}
             aria-expanded={!playerManagementCollapsed}
           >
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-slate-50 text-[#102A43] ring-1 ring-slate-100 lg:h-10 lg:w-10">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-white/90 text-[#2f6f65] shadow-sm ring-1 ring-[#d6e8e2] lg:h-10 lg:w-10">
               <UsersRound className="fairteams-desktop-balanced-icon h-5 w-5 lg:h-6 lg:w-6" />
             </div>
             <span className="min-w-0">
               <span className="block text-[17px] font-black leading-tight text-[#102A43] lg:text-[20px]">Player Management</span>
-              <span className="mt-0.5 block text-[10px] font-bold text-slate-500 lg:text-[12px]">Ratings · Attendance · Rules</span>
+              <span className="mt-0.5 block text-[10px] font-bold text-[#52746d] lg:text-[12px]">Ratings · Attendance · Rules</span>
             </span>
           </button>
           <button
             type="button"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-50 text-slate-500 ring-1 ring-slate-100 active:scale-[0.98]"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/85 text-[#52746d] ring-1 ring-[#d6e8e2] active:scale-[0.98]"
             onClick={() => setPlayerManagementCollapsed((current) => !current)}
             aria-label={playerManagementCollapsed ? "Expand Player Management" : "Collapse Player Management"}
           >
@@ -1940,11 +1940,11 @@ export function ClubTab({
             <div className="mt-3 overflow-hidden rounded-[1.25rem] border border-slate-200 bg-white shadow-sm">
               <button
                 type="button"
-                className="flex min-h-[3.25rem] w-full items-center gap-2.5 px-3 py-2 text-left transition hover:bg-slate-50 active:bg-slate-100 disabled:opacity-45"
+                className="flex min-h-[3.25rem] w-full items-center gap-2.5 px-3 py-2 text-left transition hover:bg-[#f4f9f7] active:bg-[#eaf4f1] disabled:opacity-45"
                 disabled={!clubRatingsEnabled || players.length === 0}
                 onClick={() => setRatingBoardOpen(true)}
               >
-                <Star className="h-4 w-4 shrink-0 text-slate-600 lg:h-5 lg:w-5" />
+                <Star className="h-4 w-4 shrink-0 text-[#3f756b] lg:h-5 lg:w-5" />
                 <span className="min-w-0 flex-1">
                   <span className="block text-[12px] font-black text-[#102A43] lg:text-sm">Club ratings</span>
                   <span className="block truncate text-[10px] font-bold text-slate-500 lg:text-[11px]">
@@ -1956,11 +1956,11 @@ export function ClubTab({
 
               <button
                 type="button"
-                className="flex min-h-[3.25rem] w-full items-center gap-2.5 border-t border-slate-100 px-3 py-2 text-left transition hover:bg-slate-50 active:bg-slate-100 disabled:opacity-45"
+                className="flex min-h-[3.25rem] w-full items-center gap-2.5 border-t border-slate-100 px-3 py-2 text-left transition hover:bg-[#f4f9f7] active:bg-[#eaf4f1] disabled:opacity-45"
                 disabled={!attendanceEnabled}
                 onClick={() => { setAttendanceHistoryPlayerId(null); setAttendanceBoardOpen(true); }}
               >
-                <Clock3 className="h-4 w-4 shrink-0 text-slate-600 lg:h-5 lg:w-5" />
+                <Clock3 className="h-4 w-4 shrink-0 text-[#3f756b] lg:h-5 lg:w-5" />
                 <span className="min-w-0 flex-1">
                   <span className="block text-[12px] font-black text-[#102A43] lg:text-sm">Attendance</span>
                   <span className="block truncate text-[10px] font-bold text-slate-500 lg:text-[11px]">
@@ -1972,11 +1972,11 @@ export function ClubTab({
 
               <button
                 type="button"
-                className="flex min-h-[3.25rem] w-full items-center gap-2.5 border-t border-slate-100 px-3 py-2 text-left transition hover:bg-slate-50 active:bg-slate-100 disabled:opacity-45"
+                className="flex min-h-[3.25rem] w-full items-center gap-2.5 border-t border-slate-100 px-3 py-2 text-left transition hover:bg-[#f4f9f7] active:bg-[#eaf4f1] disabled:opacity-45"
                 disabled={!onOpenPairingRules || playerCount < 2}
                 onClick={onOpenPairingRules}
               >
-                <ClipboardList className="h-4 w-4 shrink-0 text-slate-600 lg:h-5 lg:w-5" />
+                <ClipboardList className="h-4 w-4 shrink-0 text-[#3f756b] lg:h-5 lg:w-5" />
                 <span className="min-w-0 flex-1">
                   <span className="block text-[12px] font-black text-[#102A43] lg:text-sm">Rules</span>
                   <span className="block truncate text-[10px] font-bold text-slate-500 lg:text-[11px]">

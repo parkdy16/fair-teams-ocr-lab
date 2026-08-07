@@ -610,7 +610,7 @@ function actionPrimaryVerb(action: AiSmartCommandAction) {
   return "Apply";
 }
 
-const AI_ASSISTANT_VERSION_LABEL = "Help beta · v1.56.2 Club hierarchy + refresh";
+const AI_ASSISTANT_VERSION_LABEL = "Help beta · v1.56.3 Club visual system";
 
 type AiRosterMatch = {
   player: AiSmartCommandRosterPlayer;
@@ -1878,16 +1878,16 @@ export function AiSmartCommandPanel({
   };
 
   return (
-    <section className="rounded-3xl border border-violet-100 bg-violet-50/70 p-3 shadow-sm lg:p-4">
+    <section className="rounded-3xl border border-slate-200 bg-[#f7f8fa] p-3 shadow-sm ring-1 ring-slate-100 lg:p-4">
       <div className="lg:grid lg:grid-cols-[minmax(220px,0.62fr)_minmax(0,1.38fr)] lg:items-end lg:gap-5">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <div className="text-[10px] font-black uppercase tracking-wide text-violet-600">Help</div>
+            <div className="text-[10px] font-black uppercase tracking-wide text-slate-500">Help</div>
             <div className="mt-0.5 flex flex-wrap items-center gap-2">
-              <h3 className="flex items-center gap-2 text-base font-black text-[#102A43] lg:text-[20px]"><CircleHelp className="hidden h-6 w-6 text-violet-600 lg:block" />FairTeams Help</h3>
-              <span className="rounded-full bg-white/85 px-2 py-0.5 text-[9px] font-black text-violet-700 shadow-sm">{AI_ASSISTANT_VERSION_LABEL}</span>
+              <h3 className="flex items-center gap-2 text-base font-black text-[#102A43] lg:text-[20px]"><CircleHelp className="hidden h-6 w-6 text-slate-600 lg:block" />FairTeams Help</h3>
+              <span className="rounded-full bg-white px-2 py-0.5 text-[9px] font-black text-slate-500 shadow-sm ring-1 ring-slate-200">{AI_ASSISTANT_VERSION_LABEL}</span>
             </div>
-            <p className="mt-0.5 text-[11px] font-semibold leading-snug text-violet-800/75 lg:text-[14px]">
+            <p className="mt-0.5 text-[11px] font-semibold leading-snug text-slate-600 lg:text-[14px]">
               Ask how anything works. I’ll guide you quickly.
             </p>
           </div>
@@ -1895,7 +1895,7 @@ export function AiSmartCommandPanel({
             <button
               type="button"
               onClick={clearAssistantSession}
-              className="shrink-0 rounded-full px-2 py-1 text-[10px] font-black uppercase tracking-wide text-violet-600 active:scale-[0.98]"
+              className="shrink-0 rounded-full px-2 py-1 text-[10px] font-black uppercase tracking-wide text-slate-500 active:scale-[0.98]"
             >
               Clear
             </button>
@@ -1909,7 +1909,7 @@ export function AiSmartCommandPanel({
             onChange={(event) => setCommandText(event.target.value)}
             onFocus={() => setHelpExpanded(true)}
             rows={isHelpExpanded ? 3 : 2}
-            className={`w-full resize-none rounded-2xl border border-violet-100 bg-white px-3 py-2 text-sm font-semibold lg:text-[15px] text-[#102A43] outline-none focus:border-violet-300 ${isHelpExpanded ? "min-h-[84px]" : "min-h-[58px] lg:min-h-[52px]"} ${tutorialActive ? "fairteams-tutorial-pulse" : ""}`}
+            className={`w-full resize-none rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold lg:text-[15px] text-[#102A43] outline-none focus:border-slate-400 ${isHelpExpanded ? "min-h-[84px]" : "min-h-[58px] lg:min-h-[52px]"} ${tutorialActive ? "fairteams-tutorial-pulse" : ""}`}
             placeholder={placeholder}
           />
           <div className="mt-2 grid grid-cols-2 gap-2">
@@ -1925,7 +1925,7 @@ export function AiSmartCommandPanel({
               type="button"
               onClick={recording ? stopVoiceRecording : startVoiceRecording}
               disabled={busy || voiceBusy}
-              className={`h-10 rounded-2xl px-3 text-[11px] font-black uppercase tracking-wide text-white disabled:opacity-45 lg:text-xs ${recording ? "bg-rose-600" : "bg-violet-600"}`}
+              className={`h-10 rounded-2xl px-3 text-[11px] font-black uppercase tracking-wide text-white disabled:opacity-45 lg:text-xs ${recording ? "bg-rose-600" : "bg-slate-600"}`}
             >
               {voiceBusy ? "Hearing…" : recording ? "Done" : "Voice"}
             </button>
@@ -1938,7 +1938,7 @@ export function AiSmartCommandPanel({
         </div>
       )}
       {voiceTranscript && !recording && (
-        <div className="mt-2 rounded-2xl border border-violet-100 bg-white px-3 py-2 text-[11px] font-semibold text-violet-800">
+        <div className="mt-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600">
           I heard: “{voiceTranscript}”
         </div>
       )}

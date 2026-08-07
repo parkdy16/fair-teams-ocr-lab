@@ -27,7 +27,22 @@ export type TaskBoardColumn = {
 
 export type TaskBoardActivity = {
   id: string;
-  action: "created" | "edited" | "moved" | "assigned" | "unassigned" | "vote_started" | "vote_closed" | "claimed" | "released" | "completed" | "action_defined";
+  action:
+    | "created"
+    | "edited"
+    | "moved"
+    | "assigned"
+    | "unassigned"
+    | "vote_started"
+    | "vote_closed"
+    | "claimed"
+    | "released"
+    | "completed"
+    | "action_defined"
+    | "decision_recorded"
+    | "link_added"
+    | "link_removed"
+    | "reopened";
   actorName: string;
   actorEmail?: string;
   at: number;
@@ -35,11 +50,18 @@ export type TaskBoardActivity = {
   toColumnName?: string;
 };
 
+export type TaskBoardVoteKind = "yes-no-abstain" | "choose-one" | "multi-select";
 
 export type TaskBoardVoteOption = {
   id: string;
   label: string;
   count: number;
+};
+
+export type TaskBoardVoteBallot = {
+  voterHash: string;
+  voterName?: string;
+  optionIds: string[];
 };
 
 export type TaskBoardNamedVote = {
@@ -49,18 +71,46 @@ export type TaskBoardNamedVote = {
 };
 
 export type TaskBoardVote = {
-  kind?: "yes-no-abstain" | "choose-one";
+  id?: string;
+  mode?: "vote" | "recorded";
+  kind?: TaskBoardVoteKind;
   question: string;
+  outcome?: string;
   options: TaskBoardVoteOption[];
   anonymous: boolean;
   hideParticipationUntilClosed: boolean;
   showResultsWhileOpen: boolean;
   status: "open" | "closed";
   eligibleCount?: number;
+  maxSelections?: number;
   voterHashes: string[];
+  ballots?: TaskBoardVoteBallot[];
   namedVotes?: TaskBoardNamedVote[];
   createdAt: number;
   closedAt?: number;
+  createdByName?: string;
+  closedByName?: string;
+};
+
+export type TaskBoardLink = {
+  id: string;
+  url: string;
+  label: string;
+  createdAt: number;
+  createdByName?: string;
+};
+
+export type TaskBoardActionItem = {
+  id: string;
+  text: string;
+  status: "open" | "done";
+  assignee?: string;
+  assigneeEmail?: string;
+  createdAt: number;
+  createdByName?: string;
+  completedAt?: number;
+  completedByName?: string;
+  completedByEmail?: string;
 };
 
 export type TaskBoardCard = {
@@ -69,6 +119,10 @@ export type TaskBoardCard = {
   note?: string;
   columnId: string;
   position: number;
+  links?: TaskBoardLink[];
+  decisions?: TaskBoardVote[];
+  actions?: TaskBoardActionItem[];
+  // Legacy mirrors retained for backwards compatibility with pre-thread cards.
   assignee?: string;
   assigneeEmail?: string;
   actionText?: string;
@@ -113,7 +167,7 @@ function resolveScope(scopeId: string): Scope {
 
 function requireUser() {
   const user = getFairTeamsAuth().currentUser;
-  if (!user?.email) throw new Error("Sign in to use the shared task board.");
+  if (!user?.email) throw new Error("Sign in to use the shared Action Board.");
   return user;
 }
 
@@ -168,11 +222,15 @@ function parseColumn(id: string, data: DocumentData): TaskBoardColumn {
 
 function parseActivities(value: unknown): TaskBoardActivity[] {
   if (!Array.isArray(value)) return [];
-  return value.slice(-20).map((item, index) => {
+  const validActions: TaskBoardActivity["action"][] = [
+    "created", "edited", "moved", "assigned", "unassigned", "vote_started", "vote_closed", "claimed",
+    "released", "completed", "action_defined", "decision_recorded", "link_added", "link_removed", "reopened",
+  ];
+  return value.slice(-30).map((item, index) => {
     const row = (item || {}) as Record<string, unknown>;
     return {
       id: String(row.id || `activity-${index}`),
-      action: (["created", "edited", "moved", "assigned", "unassigned", "vote_started", "vote_closed", "claimed", "released", "completed", "action_defined"].includes(String(row.action)) ? String(row.action) : "edited") as TaskBoardActivity["action"],
+      action: (validActions.includes(String(row.action) as TaskBoardActivity["action"]) ? String(row.action) : "edited") as TaskBoardActivity["action"],
       actorName: String(row.actorName || "Organizer"),
       actorEmail: row.actorEmail ? String(row.actorEmail) : undefined,
       at: toMillis(row.at) || Date.now(),
@@ -182,43 +240,141 @@ function parseActivities(value: unknown): TaskBoardActivity[] {
   });
 }
 
-function parseVote(value: unknown): TaskBoardVote | undefined {
+function parseVote(value: unknown, fallbackId = "decision"): TaskBoardVote | undefined {
   if (!value || typeof value !== "object") return undefined;
   const row = value as Record<string, unknown>;
+  const mode = row.mode === "recorded" ? "recorded" : "vote";
+  const question = String(row.question || row.outcome || "").trim();
+  const outcome = row.outcome ? String(row.outcome).trim() : undefined;
   const rawOptions = Array.isArray(row.options) ? row.options : [];
   const options = rawOptions.map((item, index) => {
     const option = (item || {}) as Record<string, unknown>;
-    return { id: String(option.id || `option-${index}`), label: String(option.label || `Option ${index + 1}`), count: Number(option.count || 0) };
+    return {
+      id: String(option.id || `option-${index}`),
+      label: String(option.label || `Option ${index + 1}`),
+      count: Number(option.count || 0),
+    };
   }).filter((option) => option.label.trim());
-  if (!String(row.question || "").trim() || options.length < 2) return undefined;
+
+  if (!question) return undefined;
+  if (mode === "vote" && options.length < 2) return undefined;
+
   const normalizedLabels = options.map((option) => option.label.trim().toLowerCase());
-  const inferredKind = normalizedLabels.length === 3 && normalizedLabels[0] === "yes" && normalizedLabels[1] === "no" && normalizedLabels[2] === "abstain"
+  const inferredKind: TaskBoardVoteKind = normalizedLabels.length === 3
+    && normalizedLabels[0] === "yes"
+    && normalizedLabels[1] === "no"
+    && normalizedLabels[2] === "abstain"
     ? "yes-no-abstain"
     : "choose-one";
+  const rawKind = String(row.kind || "");
+  const kind: TaskBoardVoteKind = rawKind === "multi-select" || rawKind === "choose-one" || rawKind === "yes-no-abstain"
+    ? rawKind
+    : inferredKind;
+  const ballots = Array.isArray(row.ballots)
+    ? row.ballots.map((item) => {
+      const ballot = (item || {}) as Record<string, unknown>;
+      return {
+        voterHash: String(ballot.voterHash || ""),
+        voterName: ballot.voterName ? String(ballot.voterName) : undefined,
+        optionIds: Array.isArray(ballot.optionIds) ? ballot.optionIds.map(String).filter(Boolean) : [],
+      };
+    }).filter((ballot) => ballot.voterHash && ballot.optionIds.length)
+    : undefined;
+
   return {
-    kind: row.kind === "choose-one" || row.kind === "yes-no-abstain" ? row.kind : inferredKind,
-    question: String(row.question), options, anonymous: row.anonymous !== false,
+    id: String(row.id || fallbackId),
+    mode,
+    kind,
+    question,
+    outcome,
+    options,
+    anonymous: row.anonymous !== false,
     hideParticipationUntilClosed: Boolean(row.hideParticipationUntilClosed),
     showResultsWhileOpen: Boolean(row.showResultsWhileOpen),
-    status: row.status === "closed" ? "closed" : "open",
+    status: row.status === "closed" || mode === "recorded" ? "closed" : "open",
     eligibleCount: Number(row.eligibleCount || 0) || undefined,
-    voterHashes: Array.isArray(row.voterHashes) ? row.voterHashes.map(String) : [],
-    namedVotes: Array.isArray(row.namedVotes) ? row.namedVotes.map((item) => { const vote=(item||{}) as Record<string,unknown>; return { voterHash:String(vote.voterHash||""), voterName:String(vote.voterName||"Member"), optionId:String(vote.optionId||"") }; }).filter((vote)=>vote.voterHash&&vote.optionId) : undefined,
-    createdAt: toMillis(row.createdAt) || Date.now(), closedAt: toMillis(row.closedAt),
+    maxSelections: Number(row.maxSelections || 0) || undefined,
+    voterHashes: Array.isArray(row.voterHashes) ? row.voterHashes.map(String) : (ballots || []).map((ballot) => ballot.voterHash),
+    ballots,
+    namedVotes: Array.isArray(row.namedVotes) ? row.namedVotes.map((item) => {
+      const vote = (item || {}) as Record<string, unknown>;
+      return { voterHash: String(vote.voterHash || ""), voterName: String(vote.voterName || "Member"), optionId: String(vote.optionId || "") };
+    }).filter((vote) => vote.voterHash && vote.optionId) : undefined,
+    createdAt: toMillis(row.createdAt) || Date.now(),
+    closedAt: toMillis(row.closedAt),
+    createdByName: row.createdByName ? String(row.createdByName) : undefined,
+    closedByName: row.closedByName ? String(row.closedByName) : undefined,
   };
+}
+
+function parseLinks(value: unknown): TaskBoardLink[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((item, index) => {
+    const row = (item || {}) as Record<string, unknown>;
+    return {
+      id: String(row.id || `link-${index}`),
+      url: String(row.url || ""),
+      label: String(row.label || row.url || "Link"),
+      createdAt: toMillis(row.createdAt) || Date.now(),
+      createdByName: row.createdByName ? String(row.createdByName) : undefined,
+    };
+  }).filter((link) => /^https?:\/\//i.test(link.url));
+}
+
+function parseActions(value: unknown): TaskBoardActionItem[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((item, index) => {
+    const row = (item || {}) as Record<string, unknown>;
+    return {
+      id: String(row.id || `action-${index}`),
+      text: String(row.text || "").trim(),
+      status: (row.status === "done" ? "done" : "open") as TaskBoardActionItem["status"],
+      assignee: row.assignee ? String(row.assignee) : undefined,
+      assigneeEmail: row.assigneeEmail ? String(row.assigneeEmail) : undefined,
+      createdAt: toMillis(row.createdAt) || Date.now(),
+      createdByName: row.createdByName ? String(row.createdByName) : undefined,
+      completedAt: toMillis(row.completedAt),
+      completedByName: row.completedByName ? String(row.completedByName) : undefined,
+      completedByEmail: row.completedByEmail ? String(row.completedByEmail) : undefined,
+    };
+  }).filter((action) => action.text);
 }
 
 function parseCard(id: string, data: DocumentData): TaskBoardCard {
   const now = Date.now();
+  const legacyVote = parseVote(data.vote, "legacy-vote");
+  const decisions = Array.isArray(data.decisions)
+    ? data.decisions.map((item: unknown, index: number) => parseVote(item, `decision-${index}`)).filter(Boolean) as TaskBoardVote[]
+    : legacyVote ? [legacyVote] : [];
+  let actions = parseActions(data.actions);
+  if (!actions.length && data.actionText) {
+    const completedAt = toMillis(data.completedAt) || toMillis(data.completedAtIso);
+    actions = [{
+      id: "legacy-action",
+      text: String(data.actionText),
+      status: completedAt ? "done" : "open",
+      assignee: data.assignee ? String(data.assignee) : undefined,
+      assigneeEmail: data.assigneeEmail ? String(data.assigneeEmail) : undefined,
+      createdAt: toMillis(data.lastMovedAt) || toMillis(data.createdAt) || now,
+      completedAt,
+      completedByName: data.completedByName ? String(data.completedByName) : undefined,
+      completedByEmail: data.completedByEmail ? String(data.completedByEmail) : undefined,
+    }];
+  }
+  const latestDecision = decisions[decisions.length - 1];
+  const latestOpenAction = [...actions].reverse().find((action) => action.status === "open");
   return {
     id,
-    title: String(data.title || "Untitled task"),
+    title: String(data.title || "Untitled topic"),
     note: data.note ? String(data.note) : undefined,
     columnId: String(data.columnId || ""),
     position: Number.isFinite(Number(data.position)) ? Number(data.position) : 1000,
-    assignee: data.assignee ? String(data.assignee) : undefined,
-    assigneeEmail: data.assigneeEmail ? String(data.assigneeEmail) : undefined,
-    actionText: data.actionText ? String(data.actionText) : undefined,
+    links: parseLinks(data.links),
+    decisions,
+    actions,
+    assignee: latestOpenAction?.assignee || (data.assignee ? String(data.assignee) : undefined),
+    assigneeEmail: latestOpenAction?.assigneeEmail || (data.assigneeEmail ? String(data.assigneeEmail) : undefined),
+    actionText: latestOpenAction?.text || (data.actionText ? String(data.actionText) : undefined),
     completedAt: toMillis(data.completedAt) || toMillis(data.completedAtIso),
     completedByName: data.completedByName ? String(data.completedByName) : undefined,
     completedByEmail: data.completedByEmail ? String(data.completedByEmail) : undefined,
@@ -232,7 +388,7 @@ function parseCard(id: string, data: DocumentData): TaskBoardCard {
     lastMovedAt: toMillis(data.lastMovedAt) || toMillis(data.lastMovedAtIso),
     lastMovedByName: data.lastMovedByName ? String(data.lastMovedByName) : undefined,
     activities: parseActivities(data.activities),
-    vote: parseVote(data.vote),
+    vote: latestDecision,
   };
 }
 
@@ -242,7 +398,7 @@ export function listenToTaskBoard(scopeId: string, callback: (snapshot: TaskBoar
   let columns: TaskBoardColumn[] = [];
   let cards: TaskBoardCard[] = [];
   const emit = () => callback({ meta, columns, cards });
-  const fail = (error: unknown) => onError?.(error instanceof Error ? error : new Error("Could not load task board."));
+  const fail = (error: unknown) => onError?.(error instanceof Error ? error : new Error("Could not load Action Board."));
   const unsubMeta = onSnapshot(rootDoc(scopeId), (snapshot) => { meta = snapshot.exists() ? parseMeta(snapshot.data()) : null; emit(); }, fail);
   const unsubColumns = onSnapshot(columnsCollection(scopeId), (snapshot) => {
     columns = snapshot.docs.map((item) => parseColumn(item.id, item.data())).sort((a, b) => a.position - b.position);
@@ -264,7 +420,7 @@ export async function saveTaskBoardMeta(scopeId: string, meta: TaskBoardMeta): P
   const user = actor();
   const now = new Date();
   await setDoc(rootDoc(scopeId), {
-    app: "Fair Teams", schemaVersion: 3, name: meta.name.trim() || "Action Board",
+    app: "Fair Teams", schemaVersion: 4, name: meta.name.trim() || "Action Board",
     updatedByUid: user.uid, updatedByEmail: user.email || null, updatedByName: user.name,
     updatedAt: serverTimestamp(), updatedAtIso: now.toISOString(),
     ...(meta.createdAt ? {} : { createdAt: serverTimestamp(), createdAtIso: now.toISOString() }),
@@ -275,7 +431,7 @@ export async function saveTaskBoardColumn(scopeId: string, column: TaskBoardColu
   const user = actor();
   const now = new Date();
   await setDoc(doc(columnsCollection(scopeId), column.id), {
-    app: "Fair Teams", schemaVersion: 3, name: column.name.trim() || "Column", kind: column.kind || null, position: column.position,
+    app: "Fair Teams", schemaVersion: 4, name: column.name.trim() || "Column", kind: column.kind || null, position: column.position,
     archived: Boolean(column.archived), updatedByUid: user.uid, updatedByName: user.name,
     updatedAt: serverTimestamp(), updatedAtIso: now.toISOString(),
     ...(column.createdAt ? {} : { createdAt: serverTimestamp(), createdAtIso: now.toISOString() }),
@@ -307,24 +463,78 @@ function activityPayload(activity: TaskBoardActivity) {
 function votePayload(vote?: TaskBoardVote) {
   if (!vote) return null;
   return {
-    kind: vote.kind || "yes-no-abstain", question: vote.question.trim(), anonymous: vote.anonymous,
+    id: vote.id || null,
+    mode: vote.mode || "vote",
+    kind: vote.kind || "yes-no-abstain",
+    question: vote.question.trim(),
+    outcome: vote.outcome?.trim() || null,
+    anonymous: vote.anonymous,
     hideParticipationUntilClosed: vote.hideParticipationUntilClosed,
-    showResultsWhileOpen: vote.showResultsWhileOpen, status: vote.status,
-    eligibleCount: vote.eligibleCount || null, voterHashes: vote.voterHashes || [],
-    namedVotes: vote.namedVotes || [], createdAt: vote.createdAt, closedAt: vote.closedAt || null,
+    showResultsWhileOpen: vote.showResultsWhileOpen,
+    status: vote.status,
+    eligibleCount: vote.eligibleCount || null,
+    maxSelections: vote.maxSelections || null,
+    voterHashes: vote.voterHashes || [],
+    ballots: (vote.ballots || []).map((ballot) => ({
+      voterHash: ballot.voterHash,
+      voterName: ballot.voterName || null,
+      optionIds: ballot.optionIds,
+    })),
+    namedVotes: vote.namedVotes || [],
+    createdAt: vote.createdAt,
+    closedAt: vote.closedAt || null,
+    createdByName: vote.createdByName || null,
+    closedByName: vote.closedByName || null,
     options: vote.options.map((option) => ({ id: option.id, label: option.label.trim(), count: option.count || 0 })),
+  };
+}
+
+function linkPayload(link: TaskBoardLink) {
+  return {
+    id: link.id,
+    url: link.url,
+    label: link.label.trim() || link.url,
+    createdAt: link.createdAt,
+    createdByName: link.createdByName || null,
+  };
+}
+
+function actionPayload(action: TaskBoardActionItem) {
+  return {
+    id: action.id,
+    text: action.text.trim(),
+    status: action.status,
+    assignee: action.assignee?.trim() || null,
+    assigneeEmail: action.assigneeEmail?.trim() || null,
+    createdAt: action.createdAt,
+    createdByName: action.createdByName || null,
+    completedAt: action.completedAt || null,
+    completedByName: action.completedByName || null,
+    completedByEmail: action.completedByEmail || null,
   };
 }
 
 export async function saveTaskBoardCard(scopeId: string, card: TaskBoardCard): Promise<void> {
   const user = actor();
   const now = new Date();
+  const decisions = card.decisions || (card.vote ? [card.vote] : []);
+  const actions = card.actions || [];
+  const latestDecision = decisions[decisions.length - 1];
+  const latestOpenAction = [...actions].reverse().find((action) => action.status === "open");
   await setDoc(doc(cardsCollection(scopeId), card.id), {
-    app: "Fair Teams", schemaVersion: 3,
-    title: card.title.trim() || "Untitled task", note: card.note?.trim() || null,
-    columnId: card.columnId, position: card.position, assignee: card.assignee?.trim() || null,
-    assigneeEmail: card.assigneeEmail?.trim() || null, actionText: card.actionText?.trim() || null,
-    completedAt: card.completedAt || null, completedAtIso: card.completedAt ? new Date(card.completedAt).toISOString() : null,
+    app: "Fair Teams", schemaVersion: 4,
+    title: card.title.trim() || "Untitled topic", note: card.note?.trim() || null,
+    columnId: card.columnId, position: card.position,
+    links: (card.links || []).map(linkPayload),
+    decisions: decisions.map((decision) => votePayload(decision)),
+    actions: actions.map(actionPayload),
+    // Legacy mirrors keep older clients from losing the latest state.
+    vote: votePayload(latestDecision),
+    assignee: latestOpenAction?.assignee?.trim() || null,
+    assigneeEmail: latestOpenAction?.assigneeEmail?.trim() || null,
+    actionText: latestOpenAction?.text.trim() || null,
+    completedAt: card.completedAt || null,
+    completedAtIso: card.completedAt ? new Date(card.completedAt).toISOString() : null,
     completedByName: card.completedByName || null, completedByEmail: card.completedByEmail || null,
     dueDate: card.dueDate || null, category: card.category || null,
     createdAt: card.createdAt, createdAtIso: new Date(card.createdAt).toISOString(),
@@ -334,8 +544,7 @@ export async function saveTaskBoardCard(scopeId: string, card: TaskBoardCard): P
     lastMovedAt: card.lastMovedAt || null,
     lastMovedAtIso: card.lastMovedAt ? new Date(card.lastMovedAt).toISOString() : null,
     lastMovedByName: card.lastMovedByName || null,
-    activities: card.activities.slice(-20).map(activityPayload),
-    vote: votePayload(card.vote),
+    activities: card.activities.slice(-30).map(activityPayload),
   }, { merge: true });
 }
 
@@ -349,22 +558,63 @@ export async function deleteTaskBoardColumn(scopeId: string, columnId: string): 
   await deleteDoc(doc(columnsCollection(scopeId), columnId));
 }
 
-export async function castTaskBoardVote(scopeId: string, cardId: string, voterHash: string, voterName: string, optionId: string): Promise<void> {
+export async function castTaskBoardVote(
+  scopeId: string,
+  cardId: string,
+  decisionId: string,
+  voterHash: string,
+  voterName: string,
+  optionIds: string[],
+): Promise<void> {
   requireUser();
   const reference = doc(cardsCollection(scopeId), cardId);
   await runTransaction(getFairTeamsFirestore(), async (transaction) => {
     const snapshot = await transaction.get(reference);
-    if (!snapshot.exists()) throw new Error("This card no longer exists.");
+    if (!snapshot.exists()) throw new Error("This topic no longer exists.");
     const card = parseCard(snapshot.id, snapshot.data());
-    const vote = card.vote;
-    if (!vote || vote.status !== "open") throw new Error("This vote is closed.");
-    if (vote.voterHashes.includes(voterHash)) throw new Error("Your vote is already recorded.");
-    if (!vote.options.some((option) => option.id === optionId)) throw new Error("Choose a valid option.");
-    const nextVote: TaskBoardVote = {
-      ...vote, voterHashes: [...vote.voterHashes, voterHash],
-      options: vote.options.map((option) => option.id === optionId ? { ...option, count: option.count + 1 } : option),
-      namedVotes: vote.anonymous ? vote.namedVotes : [...(vote.namedVotes || []), { voterHash, voterName, optionId }],
+    const decisions = card.decisions || [];
+    const decisionIndex = decisions.findIndex((decision) => decision.id === decisionId);
+    if (decisionIndex < 0) throw new Error("This decision no longer exists.");
+    const decision = decisions[decisionIndex];
+    if (decision.mode === "recorded" || decision.status !== "open") throw new Error("This vote is closed.");
+
+    const uniqueOptionIds = [...new Set(optionIds)].filter((optionId) => decision.options.some((option) => option.id === optionId));
+    const maxSelections = decision.kind === "multi-select" ? Math.max(1, decision.maxSelections || decision.options.length) : 1;
+    if (!uniqueOptionIds.length) throw new Error("Choose an option.");
+    if (uniqueOptionIds.length > maxSelections) throw new Error(`Choose up to ${maxSelections}.`);
+
+    const ballots = [...(decision.ballots || [])];
+    const existingBallotIndex = ballots.findIndex((ballot) => ballot.voterHash === voterHash);
+    if (existingBallotIndex < 0 && decision.voterHashes.includes(voterHash) && !decision.ballots?.length) {
+      throw new Error("Your earlier vote is already recorded on this legacy poll.");
+    }
+    const previousIds = existingBallotIndex >= 0 ? ballots[existingBallotIndex].optionIds : [];
+    const nextOptions = decision.options.map((option) => {
+      let count = option.count || 0;
+      if (previousIds.includes(option.id)) count = Math.max(0, count - 1);
+      if (uniqueOptionIds.includes(option.id)) count += 1;
+      return { ...option, count };
+    });
+    const nextBallot: TaskBoardVoteBallot = {
+      voterHash,
+      voterName: decision.anonymous ? undefined : voterName,
+      optionIds: uniqueOptionIds,
     };
-    transaction.update(reference, { vote: votePayload(nextVote), updatedAt: serverTimestamp(), updatedAtIso: new Date().toISOString() });
+    if (existingBallotIndex >= 0) ballots[existingBallotIndex] = nextBallot;
+    else ballots.push(nextBallot);
+
+    const nextDecision: TaskBoardVote = {
+      ...decision,
+      options: nextOptions,
+      ballots,
+      voterHashes: ballots.map((ballot) => ballot.voterHash),
+    };
+    const nextDecisions = decisions.map((item, index) => index === decisionIndex ? nextDecision : item);
+    transaction.update(reference, {
+      decisions: nextDecisions.map((item) => votePayload(item)),
+      vote: votePayload(nextDecisions[nextDecisions.length - 1]),
+      updatedAt: serverTimestamp(),
+      updatedAtIso: new Date().toISOString(),
+    });
   });
 }

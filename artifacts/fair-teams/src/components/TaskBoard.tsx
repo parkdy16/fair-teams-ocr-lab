@@ -1,11 +1,15 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
-  ArrowRight,
   Check,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   ClipboardList,
+  ExternalLink,
+  Gavel,
   Hand,
   Lightbulb,
+  Link2,
   Pencil,
   Plus,
   RotateCcw,
@@ -19,19 +23,22 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import type { SharedRosterUser } from "@/lib/sharedRosterService";
 import {
+  castTaskBoardVote,
   deleteTaskBoardCard,
   listenToTaskBoard,
   saveTaskBoardCard,
-  castTaskBoardVote,
   saveTaskBoardColumn,
   saveTaskBoardMeta,
+  type TaskBoardActionItem,
   type TaskBoardActivity,
   type TaskBoardCard,
   type TaskBoardColumn,
   type TaskBoardColumnKind,
+  type TaskBoardLink,
   type TaskBoardMeta,
   type TaskBoardSnapshot,
   type TaskBoardVote,
+  type TaskBoardVoteKind,
 } from "@/lib/taskBoardService";
 
 type Props = {
@@ -45,30 +52,16 @@ type Props = {
 };
 
 type LocalBoard = TaskBoardSnapshot;
-type QuickCreateMode = "idea" | "vote" | "action";
-type VoteKind = "yes-no-abstain" | "choose-one";
-type TransitionTarget = "vote" | "action";
-
-type TransitionState = {
-  cardId: string;
-  target: TransitionTarget;
-};
+type FeedFilter = "active" | "deciding" | "action" | "done";
+type DecisionMode = "vote" | "recorded";
+type TopicStage = "idea" | "deciding" | "action" | "ready" | "done";
 
 const WORKFLOW: Array<{ kind: TaskBoardColumnKind; name: string }> = [
   { kind: "ideas", name: "Ideas" },
-  { kind: "vote", name: "Vote" },
-  { kind: "action", name: "Needs Action" },
+  { kind: "vote", name: "Decide" },
+  { kind: "action", name: "Action" },
   { kind: "done", name: "Done" },
 ];
-const PREVIOUS_DEFAULT_COLUMNS = ["Agenda", "To-do", "In progress", "Done"];
-const LEGACY_DEFAULT_COLUMNS = ["Inbox", "Agenda", "In progress", "Waiting", "Done"];
-const LONG_PRESS_MS = 560;
-
-function blurOnDoneKey(event: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) {
-  if (event.key !== "Enter" || event.shiftKey) return;
-  event.preventDefault();
-  event.currentTarget.blur();
-}
 
 function id(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -85,8 +78,8 @@ function mixHex(base: string, target: string, ratio: number) {
   return `#${a.map((value, index) => Math.round(value + (b[index] - value) * ratio).toString(16).padStart(2, "0")).join("")}`;
 }
 
-function nowActivity(action: TaskBoardActivity["action"], actorName: string, actorEmail?: string, extra: Partial<TaskBoardActivity> = {}): TaskBoardActivity {
-  return { id: id("activity"), action, actorName, actorEmail, at: Date.now(), ...extra };
+function nowActivity(action: TaskBoardActivity["action"], actorName: string, actorEmail?: string): TaskBoardActivity {
+  return { id: id("activity"), action, actorName, actorEmail, at: Date.now() };
 }
 
 function actor(user: SharedRosterUser | null) {
@@ -127,91 +120,34 @@ function createDefaultBoard(rosterName: string): LocalBoard {
   };
 }
 
-function orderedActiveColumns(board: LocalBoard) {
-  return board.columns.filter((column) => !column.archived).sort((a, b) => a.position - b.position);
-}
-
-function namesEqual(columns: TaskBoardColumn[], names: string[]) {
-  return columns.length === names.length && columns.every((column, index) => column.name === names[index]);
-}
-
-function migrateDecisionBoard(board: LocalBoard): { board: LocalBoard; changed: boolean } {
-  const active = orderedActiveColumns(board);
-  let columns = board.columns;
-  let cards = board.cards;
-  let changed = false;
-
-  if (namesEqual(active, PREVIOUS_DEFAULT_COLUMNS)) {
-    const [ideasColumn, voteColumn, actionColumn, doneColumn] = active;
-    const replacements = new Map<string, TaskBoardColumn>([
-      [ideasColumn.id, { ...ideasColumn, name: "Ideas", kind: "ideas", position: 1000, updatedAt: Date.now() }],
-      [voteColumn.id, { ...voteColumn, name: "Vote", kind: "vote", position: 2000, updatedAt: Date.now() }],
-      [actionColumn.id, { ...actionColumn, name: "Needs Action", kind: "action", position: 3000, updatedAt: Date.now() }],
-      [doneColumn.id, { ...doneColumn, name: "Done", kind: "done", position: 4000, updatedAt: Date.now() }],
-    ]);
-    columns = board.columns.map((column) => replacements.get(column.id) || column);
-    cards = board.cards.map((card) => {
-      if (card.columnId === doneColumn.id) return card;
-      if (card.vote) return card.columnId === voteColumn.id ? card : { ...card, columnId: voteColumn.id, updatedAt: Date.now() };
-      if (card.columnId === voteColumn.id) return { ...card, columnId: actionColumn.id, actionText: card.actionText || card.title, updatedAt: Date.now() };
-      if (card.columnId === actionColumn.id && !card.actionText) return { ...card, actionText: card.title, updatedAt: Date.now() };
-      return card;
-    });
-    changed = true;
-  } else if (namesEqual(active, WORKFLOW.map((item) => item.name))) {
-    const kindById = new Map(active.map((column, index) => [column.id, WORKFLOW[index].kind]));
-    columns = board.columns.map((column) => {
-      const kind = kindById.get(column.id);
-      if (!kind || column.kind === kind) return column;
-      changed = true;
-      return { ...column, kind, updatedAt: Date.now() };
-    });
-  } else if (board.cards.length === 0 && namesEqual(active, LEGACY_DEFAULT_COLUMNS)) {
-    const [ideasColumn, voteColumn, actionColumn, waitingColumn, doneColumn] = active;
-    const replacements = new Map<string, TaskBoardColumn>([
-      [ideasColumn.id, { ...ideasColumn, name: "Ideas", kind: "ideas", position: 1000, updatedAt: Date.now() }],
-      [voteColumn.id, { ...voteColumn, name: "Vote", kind: "vote", position: 2000, updatedAt: Date.now() }],
-      [actionColumn.id, { ...actionColumn, name: "Needs Action", kind: "action", position: 3000, updatedAt: Date.now() }],
-      [doneColumn.id, { ...doneColumn, name: "Done", kind: "done", position: 4000, updatedAt: Date.now() }],
-      [waitingColumn.id, { ...waitingColumn, archived: true, updatedAt: Date.now() }],
-    ]);
-    columns = board.columns.map((column) => replacements.get(column.id) || column);
-    changed = true;
+function normalizeLocalCard(card: TaskBoardCard): TaskBoardCard {
+  const decisions = Array.isArray(card.decisions) && card.decisions.length ? card.decisions : card.vote ? [{ ...card.vote, id: card.vote.id || "legacy-vote" }] : [];
+  let actions = Array.isArray(card.actions) ? card.actions : [];
+  if (!actions.length && card.actionText) {
+    actions = [{
+      id: "legacy-action",
+      text: card.actionText,
+      status: card.completedAt ? "done" : "open",
+      assignee: card.assignee,
+      assigneeEmail: card.assigneeEmail,
+      createdAt: card.lastMovedAt || card.createdAt,
+      completedAt: card.completedAt,
+      completedByName: card.completedByName,
+      completedByEmail: card.completedByEmail,
+    }];
   }
-
-  const normalizedActive = columns.filter((column) => !column.archived).sort((a, b) => a.position - b.position);
-  const byKind = new Map<TaskBoardColumnKind, TaskBoardColumn>();
-  normalizedActive.forEach((column, index) => {
-    const inferred = column.kind || WORKFLOW[index]?.kind;
-    if (inferred && !byKind.has(inferred)) byKind.set(inferred, column);
-  });
-  const voteColumn = byKind.get("vote");
-  const actionColumn = byKind.get("action");
-  const doneColumn = byKind.get("done");
-  if (voteColumn && actionColumn) {
-    cards = cards.map((card) => {
-      if (card.vote && card.columnId !== voteColumn.id && card.columnId !== actionColumn.id && card.columnId !== doneColumn?.id) {
-        changed = true;
-        return { ...card, columnId: voteColumn.id, updatedAt: Date.now() };
-      }
-      if (!card.vote && card.columnId === voteColumn.id) {
-        changed = true;
-        return { ...card, columnId: actionColumn.id, actionText: card.actionText || card.title, updatedAt: Date.now() };
-      }
-      return card;
-    });
-  }
-
-  return { board: { ...board, columns, cards }, changed };
+  return { ...card, decisions, actions, links: Array.isArray(card.links) ? card.links : [] };
 }
 
 function readLocalBoard(workspaceKey: string, rosterName: string): LocalBoard {
   if (typeof window === "undefined") return createDefaultBoard(rosterName);
   try {
     const parsed = JSON.parse(window.localStorage.getItem(localKey(workspaceKey)) || "null") as LocalBoard | null;
-    if (parsed?.meta && Array.isArray(parsed.columns) && Array.isArray(parsed.cards)) return migrateDecisionBoard(parsed).board;
+    if (parsed?.meta && Array.isArray(parsed.columns) && Array.isArray(parsed.cards)) {
+      return { ...parsed, cards: parsed.cards.map(normalizeLocalCard) };
+    }
   } catch {
-    // Use a clean board.
+    // Fall through to a clean board.
   }
   return createDefaultBoard(rosterName);
 }
@@ -219,6 +155,34 @@ function readLocalBoard(workspaceKey: string, rosterName: string): LocalBoard {
 function writeLocalBoard(workspaceKey: string, board: LocalBoard) {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(localKey(workspaceKey), JSON.stringify(board));
+}
+
+function orderedActiveColumns(board: LocalBoard) {
+  return board.columns.filter((column) => !column.archived).sort((a, b) => a.position - b.position);
+}
+
+function latestOpenDecision(card: TaskBoardCard) {
+  return [...(card.decisions || [])].reverse().find((decision) => decision.mode !== "recorded" && decision.status === "open");
+}
+
+function latestOpenAction(card: TaskBoardCard) {
+  return [...(card.actions || [])].reverse().find((action) => action.status === "open");
+}
+
+function topicStage(card: TaskBoardCard): TopicStage {
+  if (card.completedAt) return "done";
+  if (latestOpenAction(card)) return "action";
+  if (latestOpenDecision(card)) return "deciding";
+  if ((card.decisions?.length || 0) > 0 || (card.actions?.length || 0) > 0) return "ready";
+  return "idea";
+}
+
+function stageColumnKind(card: TaskBoardCard): TaskBoardColumnKind {
+  const stage = topicStage(card);
+  if (stage === "done") return "done";
+  if (stage === "action") return "action";
+  if (stage === "deciding") return "vote";
+  return "ideas";
 }
 
 function formatTime(value?: number) {
@@ -230,22 +194,22 @@ function formatTime(value?: number) {
 }
 
 function activityText(activity: TaskBoardActivity) {
-  if (activity.action === "created") return `${activity.actorName} added this`;
-  if (activity.action === "vote_started") return `${activity.actorName} started a vote`;
-  if (activity.action === "vote_closed") return `${activity.actorName} closed the vote`;
-  if (activity.action === "claimed") return `${activity.actorName} volunteered to handle it`;
-  if (activity.action === "released") return `${activity.actorName} released the action`;
-  if (activity.action === "completed") return `${activity.actorName} completed it`;
-  if (activity.action === "action_defined") return `${activity.actorName} defined the next action`;
-  if (activity.action === "moved") return `${activity.actorName} moved it to ${activity.toColumnName || "another stage"}`;
-  if (activity.action === "assigned") return `${activity.actorName} changed the owner`;
-  if (activity.action === "unassigned") return `${activity.actorName} removed the owner`;
-  return `${activity.actorName} edited this`;
+  if (activity.action === "created") return `${activity.actorName} added a topic`;
+  if (activity.action === "vote_started") return `${activity.actorName} opened a decision`;
+  if (activity.action === "vote_closed") return `${activity.actorName} closed a vote`;
+  if (activity.action === "decision_recorded") return `${activity.actorName} recorded a decision`;
+  if (activity.action === "action_defined") return `${activity.actorName} added an action`;
+  if (activity.action === "claimed") return `${activity.actorName} is handling an action`;
+  if (activity.action === "released") return `${activity.actorName} released an action`;
+  if (activity.action === "completed") return `${activity.actorName} completed something`;
+  if (activity.action === "link_added") return `${activity.actorName} added a link`;
+  if (activity.action === "reopened") return `${activity.actorName} reopened the topic`;
+  return `${activity.actorName} updated it`;
 }
 
 async function voterHashFor(user: SharedRosterUser | null, workspaceKey: string) {
-  const source = user?.uid || user?.email || `local:${workspaceKey}`;
-  if (typeof crypto !== "undefined" && crypto.subtle) {
+  const source = user?.email?.trim().toLowerCase() || `local:${workspaceKey}`;
+  if (typeof crypto !== "undefined" && crypto.subtle && typeof TextEncoder !== "undefined") {
     const bytes = new TextEncoder().encode(`fairteams-vote:${source}`);
     const digest = await crypto.subtle.digest("SHA-256", bytes);
     return Array.from(new Uint8Array(digest)).map((value) => value.toString(16).padStart(2, "0")).join("");
@@ -256,124 +220,136 @@ async function voterHashFor(user: SharedRosterUser | null, workspaceKey: string)
 }
 
 function voteTotal(vote?: TaskBoardVote) {
+  if (!vote) return 0;
+  if (vote.ballots?.length) return vote.ballots.length;
+  return vote.voterHashes?.length || 0;
+}
+
+function totalSelections(vote?: TaskBoardVote) {
   return vote?.options.reduce((sum, option) => sum + option.count, 0) || 0;
 }
 
-function voteSummary(vote?: TaskBoardVote) {
-  if (!vote) return "";
-  return vote.options.map((option) => `${option.label} ${option.count}`).join(" · ");
+function stageMeta(stage: TopicStage) {
+  if (stage === "deciding") return { label: "Deciding", icon: Gavel, className: "bg-violet-50 text-violet-700 ring-violet-100" };
+  if (stage === "action") return { label: "Action", icon: Hand, className: "bg-sky-50 text-sky-800 ring-sky-100" };
+  if (stage === "ready") return { label: "Ready", icon: CheckCircle2, className: "bg-emerald-50 text-emerald-700 ring-emerald-100" };
+  if (stage === "done") return { label: "Done", icon: Check, className: "bg-slate-100 text-slate-600 ring-slate-200" };
+  return { label: "Idea", icon: Lightbulb, className: "bg-amber-50 text-amber-700 ring-amber-100" };
 }
 
-function voteOptions(kind: VoteKind, raw: string) {
+function providerLabel(url: string) {
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.replace(/^www\./, "");
+    if (host === "docs.google.com") {
+      if (parsed.pathname.startsWith("/document")) return "Google Doc";
+      if (parsed.pathname.startsWith("/spreadsheets")) return "Google Sheet";
+      if (parsed.pathname.startsWith("/presentation")) return "Google Slides";
+      if (parsed.pathname.startsWith("/forms")) return "Google Form";
+      return "Google Docs";
+    }
+    if (host === "drive.google.com") return "Google Drive";
+    if (host.endsWith("trello.com")) return "Trello";
+    if (host.endsWith("notion.so") || host.endsWith("notion.site")) return "Notion";
+    return host;
+  } catch {
+    return "Link";
+  }
+}
+
+function validHttpUrl(value: string) {
+  try {
+    const parsed = new URL(value.trim());
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function voteOptionLabels(kind: TaskBoardVoteKind, raw: string) {
   if (kind === "yes-no-abstain") return ["Yes", "No", "Abstain"];
-  return raw.split(/\n/).map((value) => value.trim()).filter(Boolean).slice(0, 8);
+  return raw.split(/\n/).map((value) => value.trim()).filter(Boolean).slice(0, 12);
 }
 
-function columnIcon(kind?: TaskBoardColumnKind) {
-  if (kind === "ideas") return Lightbulb;
-  if (kind === "vote") return Vote;
-  if (kind === "action") return Hand;
-  return CheckCircle2;
-}
-
-function columnTone(kind?: TaskBoardColumnKind) {
-  if (kind === "ideas") return { icon: "text-amber-600", header: "bg-amber-50/70" };
-  if (kind === "vote") return { icon: "text-violet-600", header: "bg-violet-50/80" };
-  if (kind === "action") return { icon: "text-sky-700", header: "bg-sky-50/70" };
-  return { icon: "text-emerald-700", header: "bg-emerald-50/70" };
-}
-
-function ExampleCard({ kind }: { kind?: TaskBoardColumnKind }) {
-  if (kind === "ideas") return (
-    <div className="rounded-xl border border-dashed border-amber-200 bg-white/50 p-3 text-left opacity-80">
-      <div className="text-[9px] font-black uppercase tracking-wide text-amber-600">Example</div>
-      <div className="mt-1 text-[13px] font-black text-[#102A43]">Club jerseys</div>
-      <div className="mt-1 text-[10px] font-semibold leading-snug text-slate-500">Save a thought before it disappears in chat.</div>
-    </div>
-  );
-  if (kind === "vote") return (
-    <div className="rounded-xl border border-dashed border-violet-200 bg-white/50 p-3 text-left opacity-80">
-      <div className="text-[9px] font-black uppercase tracking-wide text-violet-600">Example</div>
-      <div className="mt-1 text-[13px] font-black leading-snug text-[#102A43]">Should we buy two new training balls?</div>
-      <div className="mt-2 flex flex-wrap gap-1 text-[9px] font-black text-violet-700"><span className="rounded-full bg-violet-50 px-2 py-1">Yes</span><span className="rounded-full bg-violet-50 px-2 py-1">No</span><span className="rounded-full bg-violet-50 px-2 py-1">Abstain</span></div>
-    </div>
-  );
-  if (kind === "action") return (
-    <div className="rounded-xl border border-dashed border-sky-200 bg-white/50 p-3 text-left opacity-80">
-      <div className="text-[9px] font-black uppercase tracking-wide text-sky-700">Example</div>
-      <div className="mt-1 text-[13px] font-black text-[#102A43]">Return the hall keys</div>
-      <div className="mt-2 inline-flex items-center gap-1 rounded-xl bg-sky-50 px-2 py-1 text-[10px] font-black text-sky-800"><Hand className="h-3 w-3" /> I’ll do it</div>
-    </div>
-  );
+function EmptyActionBoard({ onCreate }: { onCreate: () => void }) {
   return (
-    <div className="rounded-xl border border-dashed border-emerald-200 bg-white/50 p-3 text-left opacity-80">
-      <div className="text-[9px] font-black uppercase tracking-wide text-emerald-700">Example</div>
-      <div className="mt-1 text-[13px] font-black text-[#102A43]">Book the BBQ area</div>
-      <div className="mt-2 flex items-center gap-1 text-[10px] font-black text-emerald-700"><CheckCircle2 className="h-3.5 w-3.5" /> Completed</div>
+    <div className="mx-auto flex max-w-2xl flex-col items-center px-4 py-8 text-center lg:py-12">
+      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-violet-600 shadow-sm ring-1 ring-slate-200"><Gavel className="h-6 w-6" /></div>
+      <h3 className="mt-4 text-lg font-black text-[#102A43]">Turn a club topic into a decision</h3>
+      <p className="mt-1 max-w-md text-sm font-semibold leading-relaxed text-slate-500">Keep the topic, links, votes, outcome and follow-through together instead of losing them across chat messages.</p>
+      <Button type="button" className="mt-5 h-11 rounded-2xl px-5 font-black text-white" onClick={onCreate}><Plus className="mr-1 h-4 w-4" />New topic</Button>
+      <div className="mt-7 grid w-full gap-2 text-left sm:grid-cols-3">
+        <div className="rounded-2xl border border-dashed border-slate-200 bg-white/70 p-3"><div className="text-xs font-black text-[#102A43]">Replace dead ball</div><div className="mt-1 text-[11px] font-semibold text-slate-500">Compare links → vote → order</div></div>
+        <div className="rounded-2xl border border-dashed border-slate-200 bg-white/70 p-3"><div className="text-xs font-black text-[#102A43]">New club members</div><div className="mt-1 text-[11px] font-semibold text-slate-500">Choose several → record outcome</div></div>
+        <div className="rounded-2xl border border-dashed border-slate-200 bg-white/70 p-3"><div className="text-xs font-black text-[#102A43]">Summer BBQ</div><div className="mt-1 text-[11px] font-semibold text-slate-500">Vote → date → place → action</div></div>
+      </div>
     </div>
   );
 }
 
 export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSharedRoster, user, eligibleVoterCount = 1 }: Props) {
   const online = Boolean(scopeId && user?.email);
+  const accent = safeColor(themeColor);
+  const background = mixHex(accent, "#ffffff", 0.91);
+  const currentActor = actor(user);
+
   const [board, setBoard] = useState<LocalBoard>(() => readLocalBoard(workspaceKey, rosterName));
   const [boardOpen, setBoardOpen] = useState(false);
+  const [filter, setFilter] = useState<FeedFilter>("active");
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [lastSeenActivityAt, setLastSeenActivityAt] = useState(() => readActivitySeen(workspaceKey));
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [flippedIds, setFlippedIds] = useState<Set<string>>(new Set());
+  const [currentVoterHash, setCurrentVoterHash] = useState("");
 
-  const [quickCreateMode, setQuickCreateMode] = useState<QuickCreateMode | null>(null);
-  const [quickPrimary, setQuickPrimary] = useState("");
-  const [quickContext, setQuickContext] = useState("");
-  const [quickVoteKind, setQuickVoteKind] = useState<VoteKind>("yes-no-abstain");
-  const [quickVoteOptions, setQuickVoteOptions] = useState("Saturday\nSunday");
+  const [newTopicOpen, setNewTopicOpen] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
+  const [newNote, setNewNote] = useState("");
 
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [editTitle, setEditTitle] = useState("");
   const [editNote, setEditNote] = useState("");
-  const [editActionText, setEditActionText] = useState("");
-  const [editVoteQuestion, setEditVoteQuestion] = useState("");
-  const [editVoteOptions, setEditVoteOptions] = useState("");
 
-  const [transition, setTransition] = useState<TransitionState | null>(null);
-  const [transitionText, setTransitionText] = useState("");
-  const [transitionVoteKind, setTransitionVoteKind] = useState<VoteKind>("yes-no-abstain");
-  const [transitionVoteOptions, setTransitionVoteOptions] = useState("Option A\nOption B");
+  const [decisionCardId, setDecisionCardId] = useState<string | null>(null);
+  const [decisionMode, setDecisionMode] = useState<DecisionMode>("vote");
+  const [decisionQuestion, setDecisionQuestion] = useState("");
+  const [decisionOutcome, setDecisionOutcome] = useState("");
+  const [decisionKind, setDecisionKind] = useState<TaskBoardVoteKind>("yes-no-abstain");
+  const [decisionOptions, setDecisionOptions] = useState("");
+  const [decisionMaxSelections, setDecisionMaxSelections] = useState("3");
+
+  const [linkCardId, setLinkCardId] = useState<string | null>(null);
+  const [linkUrl, setLinkUrl] = useState("");
+  const [linkLabel, setLinkLabel] = useState("");
+
+  const [actionCardId, setActionCardId] = useState<string | null>(null);
+  const [actionText, setActionText] = useState("");
 
   const [votingCardId, setVotingCardId] = useState<string | null>(null);
-  const [selectedVoteOptionId, setSelectedVoteOptionId] = useState("");
+  const [votingDecisionId, setVotingDecisionId] = useState<string | null>(null);
+  const [selectedVoteOptionIds, setSelectedVoteOptionIds] = useState<string[]>([]);
   const [voteSubmitting, setVoteSubmitting] = useState(false);
-  const [currentVoterHash, setCurrentVoterHash] = useState("");
-  const [postVoteCardId, setPostVoteCardId] = useState<string | null>(null);
-  const [moveCardId, setMoveCardId] = useState<string | null>(null);
 
-  const [desktopDragCardId, setDesktopDragCardId] = useState<string | null>(null);
-  const [desktopDropColumnId, setDesktopDropColumnId] = useState<string | null>(null);
-  const [desktopDragEnabled, setDesktopDragEnabled] = useState(false);
+  const [outcomeCardId, setOutcomeCardId] = useState<string | null>(null);
+  const [outcomeDecisionId, setOutcomeDecisionId] = useState<string | null>(null);
+  const [outcomeText, setOutcomeText] = useState("");
+
   const [boardSettingsOpen, setBoardSettingsOpen] = useState(false);
   const [boardNameDraft, setBoardNameDraft] = useState("");
 
-  const pressTimerRef = useRef<number | null>(null);
-  const onlineInitializationRef = useRef<string | null>(null);
-  const longPressTriggeredRef = useRef(false);
-  const desktopDragCompletedRef = useRef(false);
-  const background = mixHex(safeColor(themeColor), "#ffffff", 0.84);
-  const columnBackground = mixHex(safeColor(themeColor), "#ffffff", 0.95);
-  const accent = safeColor(themeColor);
+  const activeColumns = useMemo(() => orderedActiveColumns(board), [board.columns]);
+  const columnByKind = useMemo(() => {
+    const map = new Map<TaskBoardColumnKind, TaskBoardColumn>();
+    activeColumns.forEach((column, index) => {
+      const kind = column.kind || WORKFLOW[index]?.kind;
+      if (kind && !map.has(kind)) map.set(kind, column);
+    });
+    return map;
+  }, [activeColumns]);
 
   useEffect(() => {
-    const query = window.matchMedia("(min-width: 1024px) and (pointer: fine)");
-    const sync = () => setDesktopDragEnabled(query.matches);
-    sync();
-    query.addEventListener?.("change", sync);
-    return () => query.removeEventListener?.("change", sync);
-  }, []);
-
-  useEffect(() => {
-    setFlippedIds(new Set());
     if (!online) {
       setBoard(readLocalBoard(workspaceKey, rosterName));
       setLoading(false);
@@ -382,10 +358,10 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
     }
     setLoading(true);
     setError("");
-    onlineInitializationRef.current = null;
+    let initialized = false;
     return listenToTaskBoard(scopeId!, (snapshot) => {
-      if (!snapshot.meta && snapshot.columns.length === 0 && onlineInitializationRef.current !== scopeId) {
-        onlineInitializationRef.current = scopeId!;
+      if (!snapshot.meta && snapshot.columns.length === 0 && !initialized) {
+        initialized = true;
         const fresh = createDefaultBoard(rosterName);
         setBoard(fresh);
         Promise.all([
@@ -393,19 +369,20 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
           ...fresh.columns.map((column) => saveTaskBoardColumn(scopeId!, column)),
         ]).catch((nextError) => setError(nextError instanceof Error ? nextError.message : "Could not create Action Board."));
       } else {
-        const received = { meta: snapshot.meta || { name: rosterName }, columns: snapshot.columns, cards: snapshot.cards };
-        const migration = migrateDecisionBoard(received);
-        setBoard(migration.board);
-        if (migration.changed) {
-          const migrationSignature = `decision:${scopeId}:${migration.board.columns.map((column) => `${column.id}:${column.kind || ""}:${column.name}:${column.archived ? 1 : 0}`).join("|")}:${migration.board.cards.map((card) => `${card.id}:${card.columnId}:${card.actionText || ""}:${card.vote?.status || ""}`).join("|")}`;
-          if (onlineInitializationRef.current !== migrationSignature) {
-            onlineInitializationRef.current = migrationSignature;
-            Promise.all([
-              ...migration.board.columns.map((column) => saveTaskBoardColumn(scopeId!, column)),
-              ...migration.board.cards.map((card) => saveTaskBoardCard(scopeId!, card)),
-            ]).catch((nextError) => setError(nextError instanceof Error ? nextError.message : "Could not update the Action Board workflow."));
-          }
-        }
+        const received: LocalBoard = {
+          meta: snapshot.meta || { name: rosterName },
+          columns: snapshot.columns,
+          cards: snapshot.cards.map(normalizeLocalCard),
+        };
+        setBoard(received);
+        const ordered = orderedActiveColumns(received);
+        const columnFixes = ordered.map((column, index) => {
+          const target = WORKFLOW[index];
+          if (!target) return null;
+          if (column.name === target.name && column.kind === target.kind) return null;
+          return { ...column, name: target.name, kind: target.kind, position: (index + 1) * 1000, updatedAt: Date.now() };
+        }).filter(Boolean) as TaskBoardColumn[];
+        if (columnFixes.length) Promise.all(columnFixes.map((column) => saveTaskBoardColumn(scopeId!, column))).catch(() => undefined);
       }
       setLoading(false);
     }, (nextError) => {
@@ -428,28 +405,30 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
     setLastSeenActivityAt(readActivitySeen(workspaceKey));
   }, [workspaceKey]);
 
-  const activeColumns = useMemo(() => orderedActiveColumns(board), [board.columns]);
-  const columnByKind = useMemo(() => {
-    const map = new Map<TaskBoardColumnKind, TaskBoardColumn>();
-    activeColumns.forEach((column, index) => {
-      const kind = column.kind || WORKFLOW[index]?.kind;
-      if (kind && !map.has(kind)) map.set(kind, column);
-    });
-    return map;
-  }, [activeColumns]);
+  const withDerivedColumn = (card: TaskBoardCard) => {
+    const kind = stageColumnKind(card);
+    const column = columnByKind.get(kind);
+    return column && card.columnId !== column.id ? { ...card, columnId: column.id, lastMovedAt: Date.now(), lastMovedByName: currentActor.name } : card;
+  };
 
-  const currentActor = actor(user);
-  const voteColumn = columnByKind.get("vote");
-  const actionColumn = columnByKind.get("action");
-  const doneColumn = columnByKind.get("done");
-  const openVoteCount = board.cards.filter((card) => card.columnId === voteColumn?.id && card.vote?.status === "open").length;
-  const needsActionCount = board.cards.filter((card) => card.columnId === actionColumn?.id).length;
-  const mineCount = board.cards.filter((card) => card.columnId === actionColumn?.id && (
-    (card.assigneeEmail && currentActor.email && card.assigneeEmail.toLowerCase() === currentActor.email.toLowerCase()) ||
-    (!card.assigneeEmail && card.assignee?.trim().toLowerCase() === currentActor.name.toLowerCase())
-  )).length;
+  const updateBoardCard = (card: TaskBoardCard) => {
+    setBoard((current) => ({ ...current, cards: [...current.cards.filter((item) => item.id !== card.id), card] }));
+  };
+
+  const persistCard = async (rawCard: TaskBoardCard) => {
+    const card = withDerivedColumn(rawCard);
+    updateBoardCard(card);
+    if (online) await saveTaskBoardCard(scopeId!, card);
+    return card;
+  };
+
+  const persistMeta = async (meta: TaskBoardMeta) => {
+    setBoard((current) => ({ ...current, meta }));
+    if (online) await saveTaskBoardMeta(scopeId!, meta);
+  };
+
   const latestActivity = useMemo(() => board.cards.flatMap((card) => card.activities.map((activity) => ({ card, activity }))).sort((a, b) => b.activity.at - a.activity.at)[0], [board.cards]);
-  const meaningfulActivityActions = new Set<TaskBoardActivity["action"]>(["vote_started", "vote_closed", "claimed", "completed"]);
+  const meaningfulActivityActions = new Set<TaskBoardActivity["action"]>(["vote_started", "vote_closed", "decision_recorded", "claimed", "completed"]);
   const hasNewActivity = Boolean(
     latestActivity
     && meaningfulActivityActions.has(latestActivity.activity.action)
@@ -471,114 +450,92 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
     if (typeof window !== "undefined") window.localStorage.setItem(activitySeenKey(workspaceKey), String(seenAt));
   }, [boardOpen, latestActivity?.activity.at, workspaceKey]);
 
-  const updateBoard = (next: LocalBoard) => setBoard(next);
-  const persistMeta = async (meta: TaskBoardMeta) => {
-    updateBoard({ ...board, meta });
-    if (online) await saveTaskBoardMeta(scopeId!, meta);
-  };
-  const persistCard = async (card: TaskBoardCard) => {
-    updateBoard({ ...board, cards: [...board.cards.filter((item) => item.id !== card.id), card] });
-    if (online) await saveTaskBoardCard(scopeId!, card);
-  };
+  const openDecisionCount = board.cards.filter((card) => Boolean(latestOpenDecision(card))).length;
+  const openActionCount = board.cards.filter((card) => Boolean(latestOpenAction(card))).length;
+  const mineCount = board.cards.filter((card) => {
+    const action = latestOpenAction(card);
+    if (!action) return false;
+    return (action.assigneeEmail && currentActor.email && action.assigneeEmail.toLowerCase() === currentActor.email.toLowerCase())
+      || (!action.assigneeEmail && action.assignee?.trim().toLowerCase() === currentActor.name.toLowerCase());
+  }).length;
 
-  const getColumnKind = (columnId: string): TaskBoardColumnKind | undefined => {
-    const index = activeColumns.findIndex((column) => column.id === columnId);
-    return activeColumns[index]?.kind || WORKFLOW[index]?.kind;
-  };
-
-  const buildVote = (question: string, kind: VoteKind, rawOptions: string, previous?: TaskBoardVote): TaskBoardVote => {
-    const labels = voteOptions(kind, rawOptions);
-    return {
-      kind,
-      question: question.trim(),
-      anonymous: true,
-      hideParticipationUntilClosed: false,
-      showResultsWhileOpen: false,
-      status: previous?.status || "open",
-      eligibleCount: previous?.eligibleCount || Math.max(1, eligibleVoterCount),
-      voterHashes: previous?.voterHashes || [],
-      namedVotes: previous?.namedVotes || [],
-      createdAt: previous?.createdAt || Date.now(),
-      closedAt: previous?.closedAt,
-      options: labels.map((label, index) => {
-        const prior = previous?.options[index];
-        return { id: prior?.id || id("vote-option"), label, count: prior?.count || 0 };
-      }),
+  const visibleCards = useMemo(() => {
+    const filtered = board.cards.filter((card) => {
+      const stage = topicStage(card);
+      if (filter === "done") return stage === "done";
+      if (filter === "deciding") return stage === "deciding";
+      if (filter === "action") return stage === "action";
+      return stage !== "done";
+    });
+    const rank = (card: TaskBoardCard) => {
+      const stage = topicStage(card);
+      if (stage === "action" && !latestOpenAction(card)?.assignee) return 0;
+      if (stage === "deciding") return 1;
+      if (stage === "action") return 2;
+      if (stage === "ready") return 3;
+      if (stage === "idea") return 4;
+      return 5;
     };
+    return filtered.sort((a, b) => rank(a) - rank(b) || b.updatedAt - a.updatedAt);
+  }, [board.cards, filter]);
+
+  const toggleExpanded = (cardId: string) => {
+    setExpandedIds((current) => {
+      const next = new Set(current);
+      next.has(cardId) ? next.delete(cardId) : next.add(cardId);
+      return next;
+    });
   };
 
-  const resetQuickCreate = (mode: QuickCreateMode) => {
-    setQuickCreateMode(mode);
-    setQuickPrimary("");
-    setQuickContext("");
-    setQuickVoteKind("yes-no-abstain");
-    setQuickVoteOptions("Saturday\nSunday");
-  };
-
-  const createQuickCard = async () => {
-    if (!quickCreateMode || !quickPrimary.trim()) return;
-    const kind: TaskBoardColumnKind = quickCreateMode === "idea" ? "ideas" : quickCreateMode === "vote" ? "vote" : "action";
-    const column = columnByKind.get(kind);
-    if (!column) return;
+  const createTopic = async () => {
+    if (!newTitle.trim()) return;
+    const ideasColumn = columnByKind.get("ideas") || activeColumns[0];
+    if (!ideasColumn) return;
     const now = Date.now();
-    const existing = board.cards.filter((card) => card.columnId === column.id);
-    const activity = nowActivity("created", currentActor.name, currentActor.email);
     const card: TaskBoardCard = {
-      id: id("card"),
-      title: quickPrimary.trim(),
-      note: quickContext.trim() || undefined,
-      columnId: column.id,
-      position: (existing.length + 1) * 1000,
-      actionText: quickCreateMode === "action" ? quickPrimary.trim() : undefined,
+      id: id("topic"),
+      title: newTitle.trim(),
+      note: newNote.trim() || undefined,
+      columnId: ideasColumn.id,
+      position: now,
+      links: [],
+      decisions: [],
+      actions: [],
       createdAt: now,
       createdByName: currentActor.name,
       createdByEmail: currentActor.email,
       updatedAt: now,
       updatedByName: currentActor.name,
-      activities: quickCreateMode === "vote"
-        ? [activity, nowActivity("vote_started", currentActor.name, currentActor.email)]
-        : [activity],
-      vote: quickCreateMode === "vote" ? buildVote(quickPrimary, quickVoteKind, quickVoteOptions) : undefined,
+      activities: [nowActivity("created", currentActor.name, currentActor.email)],
     };
-    if (quickCreateMode === "vote" && voteOptions(quickVoteKind, quickVoteOptions).length < 2) return;
     setSaving(true); setError("");
     try {
       await persistCard(card);
-      setQuickCreateMode(null);
+      setNewTopicOpen(false);
+      setNewTitle(""); setNewNote("");
+      setExpandedIds((current) => new Set(current).add(card.id));
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Could not add this item.");
-    } finally {
-      setSaving(false);
-    }
+      setError(nextError instanceof Error ? nextError.message : "Could not add topic.");
+    } finally { setSaving(false); }
   };
 
   const openEditCard = (card: TaskBoardCard) => {
     setEditingCardId(card.id);
     setEditTitle(card.title);
     setEditNote(card.note || "");
-    setEditActionText(card.actionText || "");
-    setEditVoteQuestion(card.vote?.question || "");
-    setEditVoteOptions(card.vote?.options.map((option) => option.label).join("\n") || "");
     setEditOpen(true);
   };
 
   const saveEditedCard = async () => {
     const existing = board.cards.find((card) => card.id === editingCardId);
     if (!existing || !editTitle.trim()) return;
-    const canEditVote = Boolean(existing.vote && existing.vote.status === "open" && existing.vote.voterHashes.length === 0);
-    const voteKind = existing.vote?.kind || (existing.vote?.options.map((option) => option.label).join("|").toLowerCase() === "yes|no|abstain" ? "yes-no-abstain" : "choose-one");
-    const nextVote = existing.vote && canEditVote && editVoteQuestion.trim()
-      ? buildVote(editVoteQuestion, voteKind, editVoteOptions, existing.vote)
-      : existing.vote;
     const next: TaskBoardCard = {
       ...existing,
       title: editTitle.trim(),
       note: editNote.trim() || undefined,
-      actionText: editActionText.trim() || existing.actionText,
-      vote: nextVote,
       updatedAt: Date.now(),
       updatedByName: currentActor.name,
-      activities: [...existing.activities, nowActivity("edited", currentActor.name, currentActor.email)].slice(-20),
+      activities: [...existing.activities, nowActivity("edited", currentActor.name, currentActor.email)].slice(-30),
     };
     setSaving(true); setError("");
     try { await persistCard(next); setEditOpen(false); }
@@ -587,318 +544,383 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
   };
 
   const removeCard = async () => {
-    if (!editingCardId || !window.confirm("Delete this card?")) return;
+    if (!editingCardId || !window.confirm("Delete this topic?")) return;
     const previous = board;
-    updateBoard({ ...board, cards: board.cards.filter((card) => card.id !== editingCardId) });
-    try { if (online) await deleteTaskBoardCard(scopeId!, editingCardId); setEditOpen(false); }
-    catch (nextError) { updateBoard(previous); setError(nextError instanceof Error ? nextError.message : "Could not delete card."); }
+    setBoard((current) => ({ ...current, cards: current.cards.filter((card) => card.id !== editingCardId) }));
+    try {
+      if (online) await deleteTaskBoardCard(scopeId!, editingCardId);
+      setEditOpen(false);
+    } catch (nextError) {
+      setBoard(previous);
+      setError(nextError instanceof Error ? nextError.message : "Could not delete topic.");
+    }
   };
 
-  const moveDirect = async (card: TaskBoardCard, destinationId: string, extra: Partial<TaskBoardCard> = {}, actions: TaskBoardActivity[] = []) => {
-    if (card.columnId === destinationId && Object.keys(extra).length === 0 && actions.length === 0) { setMoveCardId(null); return; }
-    const from = activeColumns.find((column) => column.id === card.columnId)?.name;
-    const to = activeColumns.find((column) => column.id === destinationId)?.name;
-    const destinationCards = board.cards.filter((item) => item.columnId === destinationId && item.id !== card.id);
-    const moved: TaskBoardCard = {
+  const startDecision = (card: TaskBoardCard) => {
+    if (latestOpenAction(card) || latestOpenDecision(card)) return;
+    setDecisionCardId(card.id);
+    setDecisionMode("vote");
+    setDecisionQuestion(card.title);
+    setDecisionOutcome("");
+    setDecisionKind("yes-no-abstain");
+    setDecisionOptions("");
+    setDecisionMaxSelections("3");
+  };
+
+  const addDecision = async () => {
+    const card = board.cards.find((item) => item.id === decisionCardId);
+    if (!card) return;
+    const now = Date.now();
+    let decision: TaskBoardVote;
+    let activity: TaskBoardActivity;
+    if (decisionMode === "recorded") {
+      if (!decisionOutcome.trim()) return;
+      decision = {
+        id: id("decision"), mode: "recorded", kind: "choose-one", question: decisionOutcome.trim(), outcome: decisionOutcome.trim(), options: [],
+        anonymous: true, hideParticipationUntilClosed: false, showResultsWhileOpen: false, status: "closed", voterHashes: [], ballots: [],
+        createdAt: now, closedAt: now, createdByName: currentActor.name, closedByName: currentActor.name,
+      };
+      activity = nowActivity("decision_recorded", currentActor.name, currentActor.email);
+    } else {
+      const labels = voteOptionLabels(decisionKind, decisionOptions);
+      if (!decisionQuestion.trim() || labels.length < 2) return;
+      const max = decisionKind === "multi-select" ? Math.max(1, Math.min(labels.length, Number(decisionMaxSelections) || labels.length)) : undefined;
+      decision = {
+        id: id("decision"), mode: "vote", kind: decisionKind, question: decisionQuestion.trim(), options: labels.map((label) => ({ id: id("option"), label, count: 0 })),
+        anonymous: true, hideParticipationUntilClosed: false, showResultsWhileOpen: false, status: "open", eligibleCount: Math.max(1, eligibleVoterCount),
+        maxSelections: max, voterHashes: [], ballots: [], createdAt: now, createdByName: currentActor.name,
+      };
+      activity = nowActivity("vote_started", currentActor.name, currentActor.email);
+    }
+    const next: TaskBoardCard = {
       ...card,
-      ...extra,
-      columnId: destinationId,
-      position: card.columnId === destinationId ? card.position : (destinationCards.length + 1) * 1000,
-      updatedAt: Date.now(),
+      completedAt: undefined,
+      completedByName: undefined,
+      completedByEmail: undefined,
+      decisions: [...(card.decisions || []), decision],
+      vote: decision,
+      updatedAt: now,
       updatedByName: currentActor.name,
-      lastMovedAt: card.columnId === destinationId ? card.lastMovedAt : Date.now(),
-      lastMovedByName: card.columnId === destinationId ? card.lastMovedByName : currentActor.name,
-      activities: [
-        ...card.activities,
-        ...(card.columnId === destinationId ? [] : [nowActivity("moved", currentActor.name, currentActor.email, { fromColumnName: from, toColumnName: to })]),
-        ...actions,
-      ].slice(-20),
+      activities: [...card.activities, activity].slice(-30),
     };
     setSaving(true); setError("");
-    try {
-      await persistCard(moved);
-      setMoveCardId(null);
-      setFlippedIds((current) => { const next = new Set(current); next.delete(card.id); return next; });
-    } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Could not move card.");
-    } finally {
-      setSaving(false);
-    }
+    try { await persistCard(next); setDecisionCardId(null); }
+    catch (nextError) { setError(nextError instanceof Error ? nextError.message : "Could not add decision."); }
+    finally { setSaving(false); }
   };
 
-  const requestMove = (card: TaskBoardCard, destinationId: string) => {
-    if (card.columnId === destinationId) { setMoveCardId(null); return; }
-    const targetKind = getColumnKind(destinationId);
-    const sourceKind = getColumnKind(card.columnId);
-    if (card.vote?.status === "open" && sourceKind === "vote" && targetKind !== "vote") {
-      setError("Close the vote before moving it to the next stage.");
-      setMoveCardId(null);
-      return;
-    }
-    if (targetKind === "vote" && !card.vote) {
-      setTransition({ cardId: card.id, target: "vote" });
-      setTransitionText("");
-      setTransitionVoteKind("yes-no-abstain");
-      setTransitionVoteOptions("Option A\nOption B");
-      setMoveCardId(null);
-      return;
-    }
-    if (targetKind === "action") {
-      if (card.vote?.status === "open") {
-        setError("Close the vote before turning it into an action.");
-        setMoveCardId(null);
-        return;
-      }
-      if (!card.actionText || getColumnKind(card.columnId) !== "action") {
-        setTransition({ cardId: card.id, target: "action" });
-        setTransitionText("");
-        setMoveCardId(null);
-        return;
-      }
-    }
-    if (targetKind === "done") {
-      if (card.vote?.status === "open") {
-        setError("Close the vote first.");
-        setMoveCardId(null);
-        return;
-      }
-      void completeCard(card);
-      return;
-    }
-    void moveDirect(card, destinationId);
+  const closeVote = async (card: TaskBoardCard, decision: TaskBoardVote) => {
+    if (decision.status !== "open") return;
+    const now = Date.now();
+    const nextDecisions = (card.decisions || []).map((item) => item.id === decision.id ? { ...item, status: "closed" as const, closedAt: now, closedByName: currentActor.name } : item);
+    const next: TaskBoardCard = {
+      ...card,
+      decisions: nextDecisions,
+      vote: nextDecisions[nextDecisions.length - 1],
+      updatedAt: now,
+      updatedByName: currentActor.name,
+      activities: [...card.activities, nowActivity("vote_closed", currentActor.name, currentActor.email)].slice(-30),
+    };
+    setSaving(true); setError("");
+    try { await persistCard(next); }
+    catch (nextError) { setError(nextError instanceof Error ? nextError.message : "Could not close vote."); }
+    finally { setSaving(false); }
   };
 
-  const finishTransition = async () => {
-    if (!transition || !transitionText.trim()) return;
-    const card = board.cards.find((item) => item.id === transition.cardId);
-    if (!card) return;
-    if (transition.target === "vote") {
-      const destination = columnByKind.get("vote");
-      const labels = voteOptions(transitionVoteKind, transitionVoteOptions);
-      if (!destination || labels.length < 2) return;
-      const nextVote = buildVote(transitionText, transitionVoteKind, transitionVoteOptions);
-      await moveDirect(card, destination.id, { vote: nextVote, assignee: undefined, assigneeEmail: undefined, completedAt: undefined, completedByName: undefined, completedByEmail: undefined }, [nowActivity("vote_started", currentActor.name, currentActor.email)]);
-    } else {
-      const destination = columnByKind.get("action");
-      if (!destination) return;
-      await moveDirect(card, destination.id, {
-        actionText: transitionText.trim(),
-        assignee: undefined,
-        assigneeEmail: undefined,
-        completedAt: undefined,
-        completedByName: undefined,
-        completedByEmail: undefined,
-      }, [nowActivity("action_defined", currentActor.name, currentActor.email)]);
-    }
-    setTransition(null);
-    setTransitionText("");
+  const openOutcome = (card: TaskBoardCard, decision: TaskBoardVote) => {
+    setOutcomeCardId(card.id);
+    setOutcomeDecisionId(decision.id || "");
+    setOutcomeText(decision.outcome || "");
   };
 
-  const claimAction = async (card: TaskBoardCard) => {
-    await moveDirect(card, card.columnId, {
-      assignee: currentActor.name,
-      assigneeEmail: currentActor.email,
-    }, [nowActivity("claimed", currentActor.name, currentActor.email)]);
+  const saveOutcome = async () => {
+    const card = board.cards.find((item) => item.id === outcomeCardId);
+    if (!card || !outcomeDecisionId || !outcomeText.trim()) return;
+    const nextDecisions = (card.decisions || []).map((decision) => decision.id === outcomeDecisionId ? { ...decision, outcome: outcomeText.trim() } : decision);
+    const next: TaskBoardCard = {
+      ...card,
+      decisions: nextDecisions,
+      vote: nextDecisions[nextDecisions.length - 1],
+      updatedAt: Date.now(),
+      updatedByName: currentActor.name,
+      activities: [...card.activities, nowActivity("decision_recorded", currentActor.name, currentActor.email)].slice(-30),
+    };
+    setSaving(true); setError("");
+    try { await persistCard(next); setOutcomeCardId(null); setOutcomeDecisionId(null); }
+    catch (nextError) { setError(nextError instanceof Error ? nextError.message : "Could not record outcome."); }
+    finally { setSaving(false); }
   };
 
-  const releaseAction = async (card: TaskBoardCard) => {
-    await moveDirect(card, card.columnId, { assignee: undefined, assigneeEmail: undefined }, [nowActivity("released", currentActor.name, currentActor.email)]);
+  const openAddLink = (card: TaskBoardCard) => {
+    setLinkCardId(card.id);
+    setLinkUrl("");
+    setLinkLabel("");
   };
 
-  const completeCard = async (card: TaskBoardCard) => {
-    if (!doneColumn) return;
-    const finalAssignee = card.assignee || (getColumnKind(card.columnId) === "action" ? currentActor.name : undefined);
-    const finalAssigneeEmail = card.assigneeEmail || (getColumnKind(card.columnId) === "action" ? currentActor.email : undefined);
-    await moveDirect(card, doneColumn.id, {
-      assignee: finalAssignee,
-      assigneeEmail: finalAssigneeEmail,
+  const addLink = async () => {
+    const card = board.cards.find((item) => item.id === linkCardId);
+    if (!card || !validHttpUrl(linkUrl) || (card.links?.length || 0) >= 5) return;
+    const cleanUrl = linkUrl.trim();
+    const link: TaskBoardLink = {
+      id: id("link"),
+      url: cleanUrl,
+      label: linkLabel.trim() || providerLabel(cleanUrl),
+      createdAt: Date.now(),
+      createdByName: currentActor.name,
+    };
+    const next: TaskBoardCard = {
+      ...card,
+      links: [...(card.links || []), link],
+      updatedAt: Date.now(),
+      updatedByName: currentActor.name,
+      activities: [...card.activities, nowActivity("link_added", currentActor.name, currentActor.email)].slice(-30),
+    };
+    setSaving(true); setError("");
+    try { await persistCard(next); setLinkCardId(null); }
+    catch (nextError) { setError(nextError instanceof Error ? nextError.message : "Could not add link."); }
+    finally { setSaving(false); }
+  };
+
+  const removeLink = async (card: TaskBoardCard, linkId: string) => {
+    const next: TaskBoardCard = {
+      ...card,
+      links: (card.links || []).filter((link) => link.id !== linkId),
+      updatedAt: Date.now(),
+      updatedByName: currentActor.name,
+      activities: [...card.activities, nowActivity("link_removed", currentActor.name, currentActor.email)].slice(-30),
+    };
+    try { await persistCard(next); }
+    catch (nextError) { setError(nextError instanceof Error ? nextError.message : "Could not remove link."); }
+  };
+
+  const openAddAction = (card: TaskBoardCard) => {
+    if (latestOpenAction(card) || latestOpenDecision(card)) return;
+    setActionCardId(card.id);
+    setActionText(card.title);
+  };
+
+  const addAction = async () => {
+    const card = board.cards.find((item) => item.id === actionCardId);
+    if (!card || !actionText.trim()) return;
+    const action: TaskBoardActionItem = {
+      id: id("action"), text: actionText.trim(), status: "open", createdAt: Date.now(), createdByName: currentActor.name,
+    };
+    const next: TaskBoardCard = {
+      ...card,
+      completedAt: undefined,
+      completedByName: undefined,
+      completedByEmail: undefined,
+      actions: [...(card.actions || []), action],
+      actionText: action.text,
+      assignee: undefined,
+      assigneeEmail: undefined,
+      updatedAt: Date.now(),
+      updatedByName: currentActor.name,
+      activities: [...card.activities, nowActivity("action_defined", currentActor.name, currentActor.email)].slice(-30),
+    };
+    setSaving(true); setError("");
+    try { await persistCard(next); setActionCardId(null); }
+    catch (nextError) { setError(nextError instanceof Error ? nextError.message : "Could not add action."); }
+    finally { setSaving(false); }
+  };
+
+  const updateAction = async (card: TaskBoardCard, actionId: string, patch: Partial<TaskBoardActionItem>, activity: TaskBoardActivity["action"]) => {
+    const nextActions = (card.actions || []).map((action) => action.id === actionId ? { ...action, ...patch } : action);
+    const nextOpen = [...nextActions].reverse().find((action) => action.status === "open");
+    const next: TaskBoardCard = {
+      ...card,
+      actions: nextActions,
+      actionText: nextOpen?.text,
+      assignee: nextOpen?.assignee,
+      assigneeEmail: nextOpen?.assigneeEmail,
+      updatedAt: Date.now(),
+      updatedByName: currentActor.name,
+      activities: [...card.activities, nowActivity(activity, currentActor.name, currentActor.email)].slice(-30),
+    };
+    setSaving(true); setError("");
+    try { await persistCard(next); }
+    catch (nextError) { setError(nextError instanceof Error ? nextError.message : "Could not update action."); }
+    finally { setSaving(false); }
+  };
+
+  const claimAction = (card: TaskBoardCard, action: TaskBoardActionItem) => updateAction(card, action.id, { assignee: currentActor.name, assigneeEmail: currentActor.email }, "claimed");
+  const releaseAction = (card: TaskBoardCard, action: TaskBoardActionItem) => updateAction(card, action.id, { assignee: undefined, assigneeEmail: undefined }, "released");
+  const completeAction = (card: TaskBoardCard, action: TaskBoardActionItem) => updateAction(card, action.id, {
+    status: "done", completedAt: Date.now(), completedByName: currentActor.name, completedByEmail: currentActor.email,
+    assignee: action.assignee || currentActor.name, assigneeEmail: action.assigneeEmail || currentActor.email,
+  }, "completed");
+
+  const finishTopic = async (card: TaskBoardCard) => {
+    if (latestOpenAction(card) || latestOpenDecision(card)) return;
+    const next: TaskBoardCard = {
+      ...card,
       completedAt: Date.now(),
       completedByName: currentActor.name,
       completedByEmail: currentActor.email,
-    }, [nowActivity("completed", currentActor.name, currentActor.email)]);
-  };
-
-  const closeVoteCard = async (card: TaskBoardCard) => {
-    if (!card.vote || card.vote.status !== "open") return;
-    const closed: TaskBoardCard = {
-      ...card,
       updatedAt: Date.now(),
       updatedByName: currentActor.name,
-      vote: { ...card.vote, status: "closed", closedAt: Date.now() },
-      activities: [...card.activities, nowActivity("vote_closed", currentActor.name, currentActor.email)].slice(-20),
+      activities: [...card.activities, nowActivity("completed", currentActor.name, currentActor.email)].slice(-30),
     };
     setSaving(true); setError("");
-    try {
-      await persistCard(closed);
-      setPostVoteCardId(card.id);
-    } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Could not close vote.");
-    } finally {
-      setSaving(false);
+    try { await persistCard(next); }
+    catch (nextError) { setError(nextError instanceof Error ? nextError.message : "Could not finish topic."); }
+    finally { setSaving(false); }
+  };
+
+  const reopenTopic = async (card: TaskBoardCard) => {
+    const next: TaskBoardCard = {
+      ...card,
+      completedAt: undefined,
+      completedByName: undefined,
+      completedByEmail: undefined,
+      updatedAt: Date.now(),
+      updatedByName: currentActor.name,
+      activities: [...card.activities, nowActivity("reopened", currentActor.name, currentActor.email)].slice(-30),
+    };
+    try { await persistCard(next); }
+    catch (nextError) { setError(nextError instanceof Error ? nextError.message : "Could not reopen topic."); }
+  };
+
+  const isMine = (action: TaskBoardActionItem) => Boolean(
+    (action.assigneeEmail && currentActor.email && action.assigneeEmail.toLowerCase() === currentActor.email.toLowerCase())
+    || (!action.assigneeEmail && action.assignee?.trim().toLowerCase() === currentActor.name.toLowerCase())
+  );
+
+  const openVoteDialog = (card: TaskBoardCard, decision: TaskBoardVote) => {
+    const existingBallot = decision.ballots?.find((ballot) => ballot.voterHash === currentVoterHash);
+    setVotingCardId(card.id);
+    setVotingDecisionId(decision.id || "");
+    setSelectedVoteOptionIds(existingBallot?.optionIds || []);
+  };
+
+  const votingCard = board.cards.find((card) => card.id === votingCardId);
+  const votingDecision = votingCard?.decisions?.find((decision) => decision.id === votingDecisionId);
+
+  const toggleVoteOption = (optionId: string) => {
+    if (!votingDecision) return;
+    if (votingDecision.kind !== "multi-select") {
+      setSelectedVoteOptionIds([optionId]);
+      return;
     }
+    setSelectedVoteOptionIds((current) => {
+      if (current.includes(optionId)) return current.filter((idValue) => idValue !== optionId);
+      const max = votingDecision.maxSelections || votingDecision.options.length;
+      if (current.length >= max) return current;
+      return [...current, optionId];
+    });
   };
-
-  const startPress = (cardId: string) => {
-    longPressTriggeredRef.current = false;
-    if (pressTimerRef.current) window.clearTimeout(pressTimerRef.current);
-    pressTimerRef.current = window.setTimeout(() => {
-      longPressTriggeredRef.current = true;
-      setMoveCardId(cardId);
-      navigator.vibrate?.(18);
-    }, LONG_PRESS_MS);
-  };
-  const cancelPress = () => { if (pressTimerRef.current) window.clearTimeout(pressTimerRef.current); pressTimerRef.current = null; };
-  const shortTap = (cardId: string) => {
-    cancelPress();
-    if (desktopDragCompletedRef.current) { desktopDragCompletedRef.current = false; return; }
-    if (longPressTriggeredRef.current) { longPressTriggeredRef.current = false; return; }
-    setFlippedIds((current) => { const next = new Set(current); next.has(cardId) ? next.delete(cardId) : next.add(cardId); return next; });
-  };
-
-  const startDesktopCardDrag = (event: React.DragEvent<HTMLElement>, cardId: string) => {
-    if (!desktopDragEnabled || saving) { event.preventDefault(); return; }
-    cancelPress();
-    desktopDragCompletedRef.current = false;
-    setDesktopDragCardId(cardId);
-    setDesktopDropColumnId(null);
-    event.dataTransfer.effectAllowed = "move";
-    event.dataTransfer.setData("text/plain", cardId);
-  };
-
-  const finishDesktopCardDrag = () => {
-    setDesktopDragCardId(null);
-    setDesktopDropColumnId(null);
-    window.setTimeout(() => { desktopDragCompletedRef.current = false; }, 0);
-  };
-
-  const dropDesktopCard = (event: React.DragEvent<HTMLElement>, destinationId: string) => {
-    if (!desktopDragEnabled) return;
-    event.preventDefault();
-    const cardId = desktopDragCardId || event.dataTransfer.getData("text/plain");
-    const card = board.cards.find((item) => item.id === cardId);
-    desktopDragCompletedRef.current = true;
-    setDesktopDragCardId(null);
-    setDesktopDropColumnId(null);
-    if (card && card.columnId !== destinationId) requestMove(card, destinationId);
-  };
-
-  const currentVotingCard = board.cards.find((card) => card.id === votingCardId) || null;
-  const postVoteCard = board.cards.find((card) => card.id === postVoteCardId) || null;
-  const transitionCard = board.cards.find((card) => card.id === transition?.cardId) || null;
-  const currentMoveCard = board.cards.find((card) => card.id === moveCardId) || null;
-  const editingCard = board.cards.find((card) => card.id === editingCardId) || null;
 
   const submitVote = async () => {
-    const card = currentVotingCard;
-    if (!card?.vote || !selectedVoteOptionId) return;
+    if (!votingCard || !votingDecision || !votingDecisionId || !selectedVoteOptionIds.length || !currentVoterHash) return;
     setVoteSubmitting(true); setError("");
     try {
-      const hash = await voterHashFor(user, workspaceKey);
       if (online) {
-        await castTaskBoardVote(scopeId!, card.id, hash, currentActor.name, selectedVoteOptionId);
+        await castTaskBoardVote(scopeId!, votingCard.id, votingDecisionId, currentVoterHash, currentActor.name, selectedVoteOptionIds);
       } else {
-        if (card.vote.voterHashes.includes(hash)) throw new Error("Your vote is already recorded.");
-        const nextCard = {
-          ...card,
-          updatedAt: Date.now(),
-          vote: {
-            ...card.vote,
-            voterHashes: [...card.vote.voterHashes, hash],
-            options: card.vote.options.map((option) => option.id === selectedVoteOptionId ? { ...option, count: option.count + 1 } : option),
-          },
-        };
-        await persistCard(nextCard);
+        const ballots = [...(votingDecision.ballots || [])];
+        const oldIndex = ballots.findIndex((ballot) => ballot.voterHash === currentVoterHash);
+        const oldIds = oldIndex >= 0 ? ballots[oldIndex].optionIds : [];
+        const nextOptions = votingDecision.options.map((option) => ({
+          ...option,
+          count: Math.max(0, option.count - (oldIds.includes(option.id) ? 1 : 0)) + (selectedVoteOptionIds.includes(option.id) ? 1 : 0),
+        }));
+        const nextBallot = { voterHash: currentVoterHash, optionIds: selectedVoteOptionIds };
+        if (oldIndex >= 0) ballots[oldIndex] = nextBallot; else ballots.push(nextBallot);
+        const nextDecisions = (votingCard.decisions || []).map((decision) => decision.id === votingDecisionId ? { ...decision, options: nextOptions, ballots, voterHashes: ballots.map((ballot) => ballot.voterHash) } : decision);
+        await persistCard({ ...votingCard, decisions: nextDecisions, vote: nextDecisions[nextDecisions.length - 1], updatedAt: Date.now() });
       }
-      setVotingCardId(null); setSelectedVoteOptionId("");
+      setVotingCardId(null); setVotingDecisionId(null); setSelectedVoteOptionIds([]);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Could not record vote.");
-    } finally {
-      setVoteSubmitting(false);
-    }
+    } finally { setVoteSubmitting(false); }
   };
 
   const saveBoardName = async () => {
-    const name = boardNameDraft.trim();
-    if (!name) return;
-    setSaving(true);
-    try { await persistMeta({ ...(board.meta || {}), name, updatedAt: Date.now(), updatedByName: currentActor.name }); setBoardSettingsOpen(false); }
+    if (!boardNameDraft.trim()) return;
+    const meta: TaskBoardMeta = { ...(board.meta || {}), name: boardNameDraft.trim(), updatedAt: Date.now(), updatedByName: currentActor.name };
+    setSaving(true); setError("");
+    try { await persistMeta(meta); setBoardSettingsOpen(false); }
     catch (nextError) { setError(nextError instanceof Error ? nextError.message : "Could not rename board."); }
     finally { setSaving(false); }
   };
 
-  const isMine = (card: TaskBoardCard) => Boolean(
-    (card.assigneeEmail && currentActor.email && card.assigneeEmail.toLowerCase() === currentActor.email.toLowerCase()) ||
-    (!card.assigneeEmail && card.assignee?.trim().toLowerCase() === currentActor.name.toLowerCase())
-  );
-
-  const stopCardAction = (event: React.SyntheticEvent) => {
-    event.preventDefault();
-    event.stopPropagation();
-    cancelPress();
-  };
-
-  const renderCardFront = (card: TaskBoardCard, kind?: TaskBoardColumnKind) => {
-    const total = voteTotal(card.vote);
-    const ownerMine = isMine(card);
-    const alreadyVoted = Boolean(card.vote && currentVoterHash && card.vote.voterHashes.includes(currentVoterHash));
+  const renderDecision = (card: TaskBoardCard, decision: TaskBoardVote, index: number) => {
+    const isOpen = decision.mode !== "recorded" && decision.status === "open";
+    const totalVoters = voteTotal(decision);
+    const userBallot = decision.ballots?.find((ballot) => ballot.voterHash === currentVoterHash);
+    const legacyVoted = !decision.ballots?.length && decision.voterHashes.includes(currentVoterHash);
     return (
-      <div className="flex h-full flex-col">
-        {kind === "ideas" && <>
-          <div className="text-[9px] font-black uppercase tracking-wide text-amber-600 lg:text-[10px]">Idea</div>
-          <div className="mt-1 text-[13px] font-black leading-snug text-[#102A43] lg:text-[15px]">{card.title}</div>
-          {card.note?.trim() && <div className="mt-1 line-clamp-2 text-[10px] font-semibold leading-snug text-slate-500 lg:text-[12px]">{card.note}</div>}
-          <div className="mt-auto flex gap-1.5 pt-3">
-            <button type="button" className="flex-1 rounded-xl bg-violet-50 px-2 py-2 text-[10px] font-black text-violet-700 ring-1 ring-violet-100 lg:text-[11px]" onPointerDown={stopCardAction} onPointerUp={(event) => { stopCardAction(event); requestMove(card, voteColumn?.id || card.columnId); }}><Vote className="mr-1 inline h-3 w-3" />Start vote</button>
-            <button type="button" className="flex-1 rounded-xl bg-sky-50 px-2 py-2 text-[10px] font-black text-sky-800 ring-1 ring-sky-100 lg:text-[11px]" onPointerDown={stopCardAction} onPointerUp={(event) => { stopCardAction(event); requestMove(card, actionColumn?.id || card.columnId); }}><Hand className="mr-1 inline h-3 w-3" />Needs action</button>
+      <div key={decision.id || `${card.id}-decision-${index}`} className={`rounded-2xl border p-3 lg:p-4 ${isOpen ? "border-violet-200 bg-violet-50/55" : "border-slate-200 bg-slate-50/65"}`}>
+        <div className="flex items-start gap-2">
+          <div className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-xl ${isOpen ? "bg-violet-100 text-violet-700" : "bg-white text-slate-500 ring-1 ring-slate-200"}`}>
+            <Gavel className="h-3.5 w-3.5" />
           </div>
-        </>}
+          <div className="min-w-0 flex-1">
+            <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Decision {index + 1}{decision.mode === "recorded" ? " · recorded" : isOpen ? " · voting" : " · closed"}</div>
+            <div className="mt-1 whitespace-normal break-words text-sm font-black leading-snug text-[#102A43]">{decision.question}</div>
+          </div>
+        </div>
 
-        {kind === "vote" && card.vote && <>
-          {card.title !== card.vote.question && <div className="text-[9px] font-black uppercase tracking-wide text-slate-400 lg:text-[10px]">{card.title}</div>}
-          <div className="text-[9px] font-black uppercase tracking-wide text-violet-600 lg:text-[10px]">{card.vote.status === "open" ? "Vote open" : "Vote closed"}</div>
-          <div className="mt-1 text-[13px] font-black leading-snug text-[#102A43] lg:text-[15px]">{card.vote.question}</div>
-          {card.vote.status === "closed" ? (
-            <div className="mt-2 text-[10px] font-black leading-snug text-violet-800 lg:text-[12px]">{voteSummary(card.vote)}</div>
-          ) : (
-            <div className="mt-2 text-[10px] font-bold text-slate-500 lg:text-[12px]">{total}{card.vote.eligibleCount ? ` of ${card.vote.eligibleCount}` : ""} voted</div>
-          )}
-          <div className="mt-auto pt-3">
-            {card.vote.status === "open" ? (
-              alreadyVoted ? <div className="w-full rounded-xl bg-emerald-50 px-3 py-2 text-center text-[10px] font-black text-emerald-700 lg:text-[12px]"><Check className="mr-1 inline h-3.5 w-3.5" />Vote submitted</div> :
-              <button type="button" className="w-full rounded-xl bg-violet-600 px-3 py-2 text-[10px] font-black text-white lg:text-[12px]" onPointerDown={stopCardAction} onPointerUp={(event) => { stopCardAction(event); setSelectedVoteOptionId(""); setVotingCardId(card.id); }}><Vote className="mr-1 inline h-3.5 w-3.5" />Vote</button>
+        {decision.mode === "recorded" ? (
+          <div className="mt-3 rounded-xl bg-white px-3 py-2 text-xs font-bold text-emerald-700 ring-1 ring-slate-100"><Check className="mr-1 inline h-3.5 w-3.5" />{decision.outcome || decision.question}</div>
+        ) : isOpen ? (
+          <div className="mt-3">
+            <div className="flex items-center justify-between gap-2 text-[11px] font-bold text-slate-500">
+              <span>{totalVoters}{decision.eligibleCount ? ` of ${decision.eligibleCount}` : ""} voted</span>
+              {decision.kind === "multi-select" && <span>Choose up to {decision.maxSelections || decision.options.length}</span>}
+            </div>
+            <div className="mt-2 flex gap-2">
+              <button type="button" className="flex-1 rounded-xl bg-violet-600 px-3 py-2 text-xs font-black text-white" onClick={() => openVoteDialog(card, decision)}>{userBallot ? "Change vote" : legacyVoted ? "Vote submitted" : "Vote"}</button>
+              <button type="button" className="rounded-xl border border-violet-200 bg-white px-3 py-2 text-xs font-black text-violet-700" disabled={saving} onClick={() => void closeVote(card, decision)}>Close</button>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-3">
+            <div className="space-y-1.5">
+              {decision.options.map((option) => {
+                const denominator = decision.kind === "multi-select" ? Math.max(1, totalVoters) : Math.max(1, totalSelections(decision));
+                const percent = Math.round((option.count / denominator) * 100);
+                return <div key={option.id} className="flex items-center gap-2 text-xs font-bold text-slate-600"><span className="min-w-0 flex-1 break-words">{option.label}</span><span className="shrink-0 rounded-full bg-white px-2 py-0.5 font-black text-[#102A43] ring-1 ring-slate-200">{option.count}</span>{decision.kind !== "multi-select" && <span className="w-8 text-right text-[10px] text-slate-400">{percent}%</span>}</div>;
+              })}
+            </div>
+            {decision.outcome ? (
+              <button type="button" className="mt-3 w-full rounded-xl bg-emerald-50 px-3 py-2 text-left text-xs font-bold text-emerald-800 ring-1 ring-emerald-100" onClick={() => openOutcome(card, decision)}><span className="font-black">Outcome:</span> {decision.outcome}</button>
             ) : (
-              <div className="grid grid-cols-2 gap-1.5">
-                <button type="button" className="rounded-xl bg-sky-50 px-2 py-2 text-[10px] font-black text-sky-800 ring-1 ring-sky-100 lg:text-[11px]" onPointerDown={stopCardAction} onPointerUp={(event) => { stopCardAction(event); requestMove(card, actionColumn?.id || card.columnId); }}>Needs action</button>
-                <button type="button" className="rounded-xl bg-emerald-50 px-2 py-2 text-[10px] font-black text-emerald-700 ring-1 ring-emerald-100 lg:text-[11px]" onPointerDown={stopCardAction} onPointerUp={(event) => { stopCardAction(event); void completeCard(card); }}>Decision complete</button>
-              </div>
+              <button type="button" className="mt-3 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600" onClick={() => openOutcome(card, decision)}>Record outcome</button>
             )}
           </div>
-        </>}
+        )}
+      </div>
+    );
+  };
 
-        {kind === "action" && <>
-          {card.actionText && card.actionText !== card.title && <div className="text-[9px] font-black uppercase tracking-wide text-slate-400 lg:text-[10px]">{card.title}</div>}
-          <div className="text-[9px] font-black uppercase tracking-wide text-sky-700 lg:text-[10px]">Needs action</div>
-          <div className="mt-1 text-[13px] font-black leading-snug text-[#102A43] lg:text-[15px]">{card.actionText || card.title}</div>
-          {card.vote?.status === "closed" && <div className="mt-2 text-[9px] font-bold leading-snug text-slate-500 lg:text-[11px]">Decision: {voteSummary(card.vote)}</div>}
-          <div className="mt-auto pt-3">
-            {!card.assignee ? <div className="grid grid-cols-[1fr_auto] gap-1.5">
-              <button type="button" className="rounded-xl bg-sky-600 px-3 py-2 text-[10px] font-black text-white lg:text-[12px]" onPointerDown={stopCardAction} onPointerUp={(event) => { stopCardAction(event); void claimAction(card); }}><Hand className="mr-1 inline h-3.5 w-3.5" />I’ll do it</button>
-              <button type="button" className="rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-[10px] font-black text-slate-600 lg:text-[11px]" onPointerDown={stopCardAction} onPointerUp={(event) => { stopCardAction(event); void completeCard(card); }}>Already done</button>
-            </div> : ownerMine ? <div className="grid gap-1.5">
-              <div className="rounded-xl bg-sky-50 px-2.5 py-1.5 text-center text-[10px] font-black text-sky-800 lg:text-[11px]">You’re handling this</div>
-              <button type="button" className="rounded-xl bg-emerald-600 px-3 py-2 text-[10px] font-black text-white lg:text-[12px]" onPointerDown={stopCardAction} onPointerUp={(event) => { stopCardAction(event); void completeCard(card); }}><Check className="mr-1 inline h-3.5 w-3.5" />Done</button>
-            </div> : <div className="rounded-xl bg-sky-50 px-2.5 py-2 text-center text-[10px] font-black text-sky-800 lg:text-[11px]"><Hand className="mr-1 inline h-3.5 w-3.5" />{card.assignee} is handling this</div>}
+  const renderAction = (card: TaskBoardCard, action: TaskBoardActionItem, index: number) => {
+    const open = action.status === "open";
+    const mine = isMine(action);
+    return (
+      <div key={action.id} className={`rounded-2xl border p-3 lg:p-4 ${open ? "border-sky-200 bg-sky-50/55" : "border-slate-200 bg-slate-50/65"}`}>
+        <div className="flex items-start gap-2">
+          <div className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-xl ${open ? "bg-sky-100 text-sky-800" : "bg-white text-slate-500 ring-1 ring-slate-200"}`}><Hand className="h-3.5 w-3.5" /></div>
+          <div className="min-w-0 flex-1">
+            <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Action {index + 1}{open ? " · open" : " · done"}</div>
+            <div className="mt-1 whitespace-normal break-words text-sm font-black leading-snug text-[#102A43]">{action.text}</div>
           </div>
-        </>}
-
-        {kind === "done" && <>
-          <div className="text-[9px] font-black uppercase tracking-wide text-emerald-700 lg:text-[10px]">Done</div>
-          <div className="mt-1 text-[13px] font-black leading-snug text-[#102A43] lg:text-[15px]">{card.actionText || card.vote?.question || card.title}</div>
-          {card.vote?.status === "closed" && <div className="mt-2 text-[9px] font-bold leading-snug text-slate-500 lg:text-[11px]">{voteSummary(card.vote)}</div>}
-          <div className="mt-auto flex items-center gap-1.5 pt-3 text-[10px] font-black text-emerald-700 lg:text-[11px]"><CheckCircle2 className="h-3.5 w-3.5" />{card.actionText ? `Completed${card.completedByName ? ` by ${card.completedByName}` : ""}` : "Decision complete"}</div>
-        </>}
-
-        {!kind && <div className="text-[13px] font-black leading-snug text-[#102A43] lg:text-[15px]">{card.title}</div>}
+        </div>
+        {open ? (
+          <div className="mt-3">
+            {!action.assignee ? (
+              <div className="grid grid-cols-[1fr_auto] gap-2">
+                <button type="button" className="rounded-xl bg-sky-700 px-3 py-2 text-xs font-black text-white" onClick={() => void claimAction(card, action)}><Hand className="mr-1 inline h-3.5 w-3.5" />I’ll handle it</button>
+                <button type="button" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600" onClick={() => void completeAction(card, action)}>Already done</button>
+              </div>
+            ) : mine ? (
+              <div className="grid grid-cols-[1fr_auto] gap-2">
+                <button type="button" className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white" onClick={() => void completeAction(card, action)}><Check className="mr-1 inline h-3.5 w-3.5" />Done</button>
+                <button type="button" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-500" onClick={() => void releaseAction(card, action)}><RotateCcw className="mr-1 inline h-3.5 w-3.5" />Release</button>
+              </div>
+            ) : <div className="rounded-xl bg-white px-3 py-2 text-xs font-black text-sky-800 ring-1 ring-sky-100"><Hand className="mr-1 inline h-3.5 w-3.5" />{action.assignee} is handling this</div>}
+          </div>
+        ) : <div className="mt-3 text-xs font-black text-emerald-700"><CheckCircle2 className="mr-1 inline h-3.5 w-3.5" />Completed{action.completedByName ? ` by ${action.completedByName}` : ""}</div>}
       </div>
     );
   };
@@ -911,231 +933,231 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
             <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-wide lg:text-[20px] lg:normal-case lg:tracking-normal" style={{ color: accent }}>
               <ClipboardList className="fairteams-desktop-balanced-icon h-[18px] w-[18px] lg:h-6 lg:w-6" /> Action Board
             </div>
-            <div className="mt-1 text-[12px] font-bold leading-tight text-slate-600 lg:text-[14px]">Decide together · follow through</div>
+            <div className="mt-1 text-[12px] font-bold leading-tight text-slate-600 lg:text-[14px]">Topics → decisions → action</div>
           </div>
-          <Button type="button" className="h-9 shrink-0 rounded-2xl px-3 text-xs font-black text-white lg:text-sm" style={{ backgroundColor: accent }} onClick={openBoard}>
-            Open
-          </Button>
+          <Button type="button" className="h-9 shrink-0 rounded-2xl px-3 text-xs font-black text-white lg:text-sm" style={{ backgroundColor: accent }} onClick={openBoard}>Open</Button>
         </div>
         <div className="mt-3 flex flex-wrap gap-2 text-[10px] font-black text-slate-600 lg:text-xs">
-          {openVoteCount > 0 && <span className="rounded-full bg-violet-50 px-2.5 py-1 text-violet-700">{openVoteCount} vote{openVoteCount === 1 ? "" : "s"} open</span>}
-          {needsActionCount > 0 && <span className="rounded-full bg-sky-50 px-2.5 py-1 text-sky-800">{needsActionCount} need action</span>}
+          {openDecisionCount > 0 && <span className="rounded-full bg-violet-50 px-2.5 py-1 text-violet-700"><Gavel className="mr-1 inline h-3 w-3" />{openDecisionCount} deciding</span>}
+          {openActionCount > 0 && <span className="rounded-full bg-sky-50 px-2.5 py-1 text-sky-800"><Hand className="mr-1 inline h-3 w-3" />{openActionCount} action</span>}
           {mineCount > 0 && <span className="rounded-full bg-white/75 px-2.5 py-1">{mineCount} yours</span>}
           {hasNewActivity && <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-amber-700"><span className="h-1.5 w-1.5 rounded-full bg-amber-500" />New activity</span>}
           <span className="rounded-full bg-white/75 px-2.5 py-1">{online ? "Shared" : isSharedRoster ? "Sign in" : "Private"}</span>
         </div>
-        {latestActivity && <div className="mt-2 truncate text-[10px] font-bold text-slate-500 lg:text-xs">Last: “{latestActivity.card.actionText || latestActivity.card.vote?.question || latestActivity.card.title}” · {activityText(latestActivity.activity)}</div>}
+        {latestActivity && <div className="mt-2 truncate text-[10px] font-bold text-slate-500 lg:text-xs">Last: “{latestActivity.card.title}” · {activityText(latestActivity.activity)}</div>}
       </section>
 
       <Dialog open={boardOpen} onOpenChange={setBoardOpen}>
         <DialogContent className="fixed inset-0 flex h-[100dvh] max-h-none w-screen max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-0 p-0 sm:inset-2 sm:h-auto sm:w-auto sm:rounded-[2rem] sm:border lg:inset-6 lg:rounded-[2rem]">
-          <DialogHeader className="border-b border-white/45 px-3 py-3 pr-12 text-left lg:px-5 lg:py-4 lg:pr-14" style={{ backgroundColor: mixHex(accent, "#ffffff", 0.7) }}>
+          <DialogHeader className="shrink-0 border-b border-white/45 px-3 py-3 pr-12 text-left lg:px-5 lg:py-4 lg:pr-14" style={{ backgroundColor: mixHex(accent, "#ffffff", 0.7) }}>
             <div className="flex items-center justify-between gap-2">
               <div className="min-w-0">
                 <DialogTitle className="truncate text-base font-black text-[#102A43] lg:text-[22px] lg:leading-tight">{board.meta?.name || rosterName}</DialogTitle>
-                <p className="mt-0.5 text-[10px] font-bold text-slate-600 lg:mt-1 lg:text-[13px]">Decisions and commitments that shouldn’t get lost in chat · <span className="lg:hidden">long press to move</span><span className="hidden lg:inline">drag to move</span></p>
+                <p className="mt-0.5 text-[10px] font-bold text-slate-600 lg:mt-1 lg:text-[13px]">Keep the whole decision in one place.</p>
               </div>
               <div className="flex shrink-0 gap-1.5">
                 <Button type="button" variant="outline" className="h-9 w-9 rounded-2xl bg-white/80 p-0 lg:h-11 lg:w-11" onClick={() => { setBoardNameDraft(board.meta?.name || rosterName); setBoardSettingsOpen(true); }} aria-label="Board settings"><Pencil className="h-4 w-4 lg:h-[18px] lg:w-[18px]" /></Button>
-                <Button type="button" className="h-9 rounded-2xl bg-violet-600 px-3 text-xs font-black text-white hover:bg-violet-700 lg:h-11 lg:px-4 lg:text-sm" onClick={() => resetQuickCreate("vote")}><Vote className="mr-1 h-4 w-4 lg:h-[18px] lg:w-[18px]" />Start vote</Button>
+                <Button type="button" className="h-9 rounded-2xl px-3 text-xs font-black text-white lg:h-11 lg:px-4 lg:text-sm" style={{ backgroundColor: accent }} onClick={() => { setNewTitle(""); setNewNote(""); setNewTopicOpen(true); }}><Plus className="mr-1 h-4 w-4" />New topic</Button>
               </div>
             </div>
           </DialogHeader>
-          {error && <div className="mx-3 mt-2 rounded-xl bg-red-50 px-3 py-2 text-[11px] font-bold text-red-700">{error}</div>}
-          <div className="flex-1 min-h-0 overflow-hidden" style={{ backgroundColor: background }}>
-            {loading ? <div className="p-6 text-center text-sm font-black text-slate-500">Loading Action Board…</div> : (
-              <div className="flex h-full snap-x snap-proximity gap-3 overflow-x-auto overflow-y-hidden px-3 pb-4 pt-3 lg:px-5 lg:pb-5 lg:pt-5" style={{ overscrollBehaviorX: "contain" }}>
-                {activeColumns.map((column, columnIndex) => {
-                  const kind = column.kind || WORKFLOW[columnIndex]?.kind;
-                  const tone = columnTone(kind);
-                  const Icon = columnIcon(kind);
-                  const cards = board.cards.filter((card) => card.columnId === column.id).sort((a, b) => a.position - b.position);
+
+          <div className="shrink-0 border-b border-slate-200/70 bg-white/90 px-3 py-2 lg:px-5">
+            <div className="mx-auto flex max-w-3xl gap-1 rounded-2xl bg-slate-100 p-1">
+              {(["active", "deciding", "action", "done"] as FeedFilter[]).map((item) => {
+                const label = item === "active" ? "Active" : item === "deciding" ? "Decide" : item === "action" ? "Action" : "Done";
+                const count = item === "active" ? board.cards.filter((card) => topicStage(card) !== "done").length : item === "deciding" ? openDecisionCount : item === "action" ? openActionCount : board.cards.filter((card) => topicStage(card) === "done").length;
+                return <button key={item} type="button" className={`flex-1 rounded-xl px-2 py-2 text-[11px] font-black transition lg:text-xs ${filter === item ? "bg-white text-[#102A43] shadow-sm" : "text-slate-500"}`} onClick={() => setFilter(item)}>{label}{count > 0 ? ` · ${count}` : ""}</button>;
+              })}
+            </div>
+          </div>
+
+          {error && <div className="mx-3 mt-2 rounded-xl bg-red-50 px-3 py-2 text-[11px] font-bold text-red-700 lg:mx-auto lg:w-full lg:max-w-3xl">{error}</div>}
+
+          <div className="min-h-0 flex-1 overflow-y-auto" style={{ backgroundColor: background }}>
+            {loading ? <div className="p-8 text-center text-sm font-black text-slate-500">Loading Action Board…</div> : board.cards.length === 0 ? (
+              <EmptyActionBoard onCreate={() => { setNewTitle(""); setNewNote(""); setNewTopicOpen(true); }} />
+            ) : (
+              <div className="mx-auto w-full max-w-3xl space-y-3 px-3 py-3 pb-20 lg:space-y-4 lg:px-5 lg:py-5">
+                {visibleCards.map((card) => {
+                  const stage = topicStage(card);
+                  const meta = stageMeta(stage);
+                  const StageIcon = meta.icon;
+                  const expanded = expandedIds.has(card.id);
+                  const openDecision = latestOpenDecision(card);
+                  const openAction = latestOpenAction(card);
+                  const decisions = card.decisions || [];
+                  const actions = card.actions || [];
+                  const latestClosedDecision = [...decisions].reverse().find((decision) => decision.status === "closed");
                   return (
-                    <section
-                      key={column.id}
-                      className={`flex h-full w-[84vw] max-w-[320px] shrink-0 snap-start flex-col overflow-hidden rounded-2xl border shadow-sm transition lg:w-[330px] lg:max-w-none ${desktopDropColumnId === column.id ? "border-emerald-300 ring-2 ring-emerald-200" : "border-white/60"}`}
-                      style={{ backgroundColor: columnBackground }}
-                      onDragOver={(event) => { if (!desktopDragEnabled || !desktopDragCardId) return; event.preventDefault(); event.dataTransfer.dropEffect = "move"; setDesktopDropColumnId(column.id); }}
-                      onDragEnter={(event) => { if (!desktopDragEnabled || !desktopDragCardId) return; event.preventDefault(); setDesktopDropColumnId(column.id); }}
-                      onDragLeave={(event) => { if (event.currentTarget.contains(event.relatedTarget as Node | null)) return; setDesktopDropColumnId((current) => current === column.id ? null : current); }}
-                      onDrop={(event) => dropDesktopCard(event, column.id)}
-                    >
-                      <div className={`flex items-center gap-2 border-b border-black/5 px-3 py-2.5 lg:px-4 lg:py-3.5 ${tone.header}`}>
-                        <Icon className={`h-4 w-4 lg:h-[18px] lg:w-[18px] ${tone.icon}`} />
-                        <h3 className="min-w-0 flex-1 truncate text-sm font-black text-[#102A43] lg:text-[17px]">{column.name}</h3>
-                        <span className="rounded-full bg-white/80 px-2 py-0.5 text-[10px] font-black text-slate-500 lg:px-2.5 lg:py-1 lg:text-xs">{cards.length}</span>
-                      </div>
-                      <div className="flex-1 overflow-y-auto px-2.5 py-2.5 lg:px-3 lg:py-3">
-                        <div className="space-y-2">
-                          {cards.map((card) => {
-                            const flipped = flippedIds.has(card.id);
-                            const createdActivity = [...card.activities].filter((activity) => activity.action === "created").sort((a, b) => a.at - b.at)[0];
-                            const latestActivityForCard = [...card.activities].sort((a, b) => b.at - a.at)[0];
-                            const frontHeightClass = kind === "vote" || kind === "action" ? "min-h-[154px] lg:min-h-[174px]" : kind === "ideas" ? "min-h-[136px] lg:min-h-[154px]" : "min-h-[112px] lg:min-h-[128px]";
-                            const flippedHeightClass = "min-h-[250px] lg:min-h-[280px]";
-                            return (
-                              <div key={card.id} className={`relative [perspective:900px] ${flipped ? flippedHeightClass : frontHeightClass}`}>
-                                <div className={`relative w-full transition-all duration-300 [transform-style:preserve-3d] ${flipped ? `${flippedHeightClass} [transform:rotateY(180deg)]` : frontHeightClass}`}>
-                                  <div role="button" tabIndex={0} draggable={desktopDragEnabled} className={`absolute inset-0 w-full rounded-xl border border-slate-200 bg-white p-3 text-left shadow-sm lg:p-4 [backface-visibility:hidden] active:scale-[0.99] lg:cursor-grab lg:active:cursor-grabbing ${desktopDragCardId === card.id ? "opacity-45 ring-2 ring-emerald-200" : ""}`} onDragStart={(event) => startDesktopCardDrag(event, card.id)} onDragEnd={finishDesktopCardDrag} onPointerDown={() => { if (!desktopDragEnabled) startPress(card.id); }} onPointerUp={() => shortTap(card.id)} onPointerCancel={cancelPress} onPointerLeave={cancelPress} onContextMenu={(event) => { event.preventDefault(); setMoveCardId(card.id); }} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") shortTap(card.id); }}>
-                                    {renderCardFront(card, kind)}
-                                  </div>
-                                  <div
-                                    role="button"
-                                    tabIndex={0}
-                                    draggable={desktopDragEnabled}
-                                    className={`absolute inset-0 flex w-full flex-col rounded-xl border border-slate-200 bg-white p-0 text-left shadow-sm [backface-visibility:hidden] [transform:rotateY(180deg)] active:scale-[0.99] lg:cursor-grab lg:active:cursor-grabbing ${desktopDragCardId === card.id ? "opacity-45 ring-2 ring-emerald-200" : ""}`}
-                                    onDragStart={(event) => startDesktopCardDrag(event, card.id)}
-                                    onDragEnd={finishDesktopCardDrag}
-                                    onPointerDown={() => { if (!desktopDragEnabled) startPress(card.id); }}
-                                    onPointerUp={() => shortTap(card.id)}
-                                    onPointerCancel={cancelPress}
-                                    onPointerLeave={cancelPress}
-                                    onContextMenu={(event) => { event.preventDefault(); setMoveCardId(card.id); }}
-                                    aria-label={`Show ${card.title} card front`}
-                                    onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") shortTap(card.id); }}
-                                  >
-                                    <div className="flex min-h-full w-full flex-1 flex-col overflow-y-auto overscroll-contain px-3 pb-3 pt-3 lg:px-4 lg:pb-4 lg:pt-4">
-                                      <div className="text-[10px] font-black uppercase tracking-wide text-slate-400 lg:text-[11px]">Context</div>
-                                      <div className="mt-1 text-[12px] font-black leading-snug text-[#102A43] lg:text-[14px]">{card.title}</div>
-                                      {card.note?.trim() ? <div className="mt-2 whitespace-pre-wrap break-words text-[10px] font-semibold leading-relaxed text-slate-600 lg:text-[12px]">{card.note.trim()}</div> : <div className="mt-2 text-[10px] font-semibold text-slate-400 lg:text-[12px]">No extra context.</div>}
-
-                                      {card.vote && <div className="mt-3 border-t border-slate-100 pt-2">
-                                        <div className="text-[10px] font-black uppercase tracking-wide text-violet-500 lg:text-[11px]">{card.vote.status === "closed" ? "Vote result" : "Vote"}</div>
-                                        <div className="mt-1 text-[11px] font-black leading-snug text-[#102A43] lg:text-[13px]">{card.vote.question}</div>
-                                        <div className="mt-2 space-y-1">{card.vote.options.map((option) => <div key={option.id} className="flex items-center justify-between gap-2 text-[10px] font-bold text-slate-600 lg:text-[11px]"><span className="min-w-0 flex-1 break-words">{option.label}</span><span className="rounded-full bg-slate-100 px-2 py-0.5 font-black text-[#102A43]">{card.vote?.status === "closed" ? option.count : "—"}</span></div>)}</div>
-                                        {card.vote.status === "open" && <Button type="button" variant="outline" className="mt-2 h-8 w-full rounded-xl border-violet-200 text-[10px] font-black text-violet-700" onPointerDown={stopCardAction} onPointerUp={(event) => { stopCardAction(event); void closeVoteCard(card); }}>Close vote</Button>}
-                                      </div>}
-
-                                      {kind === "action" && card.assignee && isMine(card) && <button type="button" className="mt-3 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[10px] font-black text-slate-600" onPointerDown={stopCardAction} onPointerUp={(event) => { stopCardAction(event); void releaseAction(card); }}><RotateCcw className="mr-1 inline h-3.5 w-3.5" />Release</button>}
-
-                                      <div className="mt-auto border-t border-slate-100 pt-3">
-                                        <div className="text-[9px] font-black uppercase tracking-wide text-slate-400 lg:text-[10px]">Activity</div>
-                                        <div className="mt-1.5 space-y-1 text-[9px] font-bold leading-snug text-slate-500 lg:text-[10px]">
-                                          <div>{createdActivity ? `${createdActivity.actorName} added this` : `Added by ${card.createdByName}`} <span className="text-slate-400">{formatTime(createdActivity?.at || card.createdAt)}</span></div>
-                                          {latestActivityForCard && latestActivityForCard.id !== createdActivity?.id && <div>{activityText(latestActivityForCard)} <span className="text-slate-400">{formatTime(latestActivityForCard.at)}</span></div>}
-                                        </div>
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
-                                <button type="button" className="absolute right-1.5 top-1.5 z-10 rounded-full bg-white/90 p-1 text-slate-400 shadow-sm lg:right-2 lg:top-2 lg:p-1.5" onClick={(event) => { event.stopPropagation(); openEditCard(card); }} aria-label={`Edit ${card.title}`}><Pencil className="h-3 w-3 lg:h-3.5 lg:w-3.5" /></button>
-                              </div>
-                            );
-                          })}
-                          {!cards.length && board.cards.length === 0 && <ExampleCard kind={kind} />}
-                          {!cards.length && board.cards.length > 0 && <div className="rounded-xl border border-dashed border-slate-300 bg-white/40 px-3 py-5 text-center text-[11px] font-bold text-slate-400 lg:py-4 lg:text-[13px]">Nothing here</div>}
+                    <article key={card.id} className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+                      <div className="p-4 lg:p-5">
+                        <div className="flex items-start gap-3">
+                          <button type="button" className="min-w-0 flex-1 text-left" onClick={() => toggleExpanded(card.id)}>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-black ring-1 ${meta.className}`}><StageIcon className="h-3 w-3" />{meta.label}</span>
+                              {decisions.length > 0 && <span className="text-[10px] font-black text-slate-400">{decisions.length} decision{decisions.length === 1 ? "" : "s"}</span>}
+                              {(card.links?.length || 0) > 0 && <span className="text-[10px] font-black text-slate-400"><Link2 className="mr-0.5 inline h-3 w-3" />{card.links?.length}</span>}
+                            </div>
+                            <h3 className="mt-2 whitespace-normal break-words text-[15px] font-black leading-snug text-[#102A43] lg:text-[18px]">{card.title}</h3>
+                            {!expanded && card.note?.trim() && <p className="mt-1 whitespace-pre-wrap break-words text-[11px] font-semibold leading-relaxed text-slate-500 lg:text-[13px]">{card.note.trim()}</p>}
+                          </button>
+                          <div className="flex shrink-0 items-center gap-1">
+                            <button type="button" className="rounded-full p-2 text-slate-400 hover:bg-slate-50" onClick={() => openEditCard(card)} aria-label={`Edit ${card.title}`}><Pencil className="h-3.5 w-3.5" /></button>
+                            <button type="button" className="rounded-full p-2 text-slate-400 hover:bg-slate-50" onClick={() => toggleExpanded(card.id)} aria-label={expanded ? "Collapse topic" : "Expand topic"}>{expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}</button>
+                          </div>
                         </div>
-                        {kind !== "done" && <button type="button" className="mt-2 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-[11px] font-black text-slate-500 hover:bg-white/60 lg:mt-3 lg:py-2.5 lg:text-[13px]" onClick={() => resetQuickCreate(kind === "ideas" ? "idea" : kind === "vote" ? "vote" : "action")}><Plus className="h-4 w-4 lg:h-[18px] lg:w-[18px]" />{kind === "ideas" ? "Save idea" : kind === "vote" ? "Start vote" : "Add action"}</button>}
+
+                        {!expanded && openDecision && <div className="mt-3 rounded-2xl border border-violet-100 bg-violet-50/55 p-3">
+                          <div className="text-[10px] font-black uppercase tracking-wide text-violet-600">Voting now</div>
+                          <div className="mt-1 whitespace-normal break-words text-xs font-black leading-snug text-[#102A43] lg:text-sm">{openDecision.question}</div>
+                          <div className="mt-2 flex items-center justify-between gap-2"><span className="text-[10px] font-bold text-slate-500">{voteTotal(openDecision)}{openDecision.eligibleCount ? ` of ${openDecision.eligibleCount}` : ""} voted</span><button type="button" className="rounded-xl bg-violet-600 px-3 py-2 text-[11px] font-black text-white" onClick={() => openVoteDialog(card, openDecision)}>Vote</button></div>
+                        </div>}
+
+                        {!expanded && openAction && <div className="mt-3 rounded-2xl border border-sky-100 bg-sky-50/55 p-3">
+                          <div className="text-[10px] font-black uppercase tracking-wide text-sky-700">Next action</div>
+                          <div className="mt-1 whitespace-normal break-words text-xs font-black leading-snug text-[#102A43] lg:text-sm">{openAction.text}</div>
+                          <div className="mt-2">{!openAction.assignee ? <button type="button" className="rounded-xl bg-sky-700 px-3 py-2 text-[11px] font-black text-white" onClick={() => void claimAction(card, openAction)}><Hand className="mr-1 inline h-3.5 w-3.5" />I’ll handle it</button> : <span className="text-[10px] font-black text-sky-800">{isMine(openAction) ? "You’re handling this" : `${openAction.assignee} is handling this`}</span>}</div>
+                        </div>}
+
+                        {!expanded && !openDecision && !openAction && latestClosedDecision?.outcome && <div className="mt-3 rounded-2xl bg-emerald-50/70 px-3 py-2 text-[11px] font-bold text-emerald-800"><span className="font-black">Latest outcome:</span> {latestClosedDecision.outcome}</div>}
+
+                        {!expanded && (card.links?.length || 0) > 0 && <div className="mt-3 flex flex-wrap gap-1.5">{card.links?.slice(0, 3).map((link) => <a key={link.id} href={link.url} target="_blank" rel="noreferrer" className="inline-flex max-w-full items-center gap-1 rounded-xl bg-slate-50 px-2.5 py-1.5 text-[10px] font-black text-slate-600 ring-1 ring-slate-200" onClick={(event) => event.stopPropagation()}><Link2 className="h-3 w-3 shrink-0" /><span className="truncate">{link.label}</span><ExternalLink className="h-3 w-3 shrink-0" /></a>)}</div>}
                       </div>
-                    </section>
+
+                      {expanded && <div className="border-t border-slate-100 bg-slate-50/35 px-4 pb-4 pt-3 lg:px-5 lg:pb-5 lg:pt-4">
+                        {card.note?.trim() && <div className="mb-4"><div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Context</div><p className="mt-1 whitespace-pre-wrap break-words text-xs font-semibold leading-relaxed text-slate-600 lg:text-sm">{card.note.trim()}</p></div>}
+
+                        {(card.links?.length || 0) > 0 && <div className="mb-4">
+                          <div className="mb-2 text-[10px] font-black uppercase tracking-wide text-slate-400">References</div>
+                          <div className="grid gap-2 sm:grid-cols-2">{card.links?.map((link) => <div key={link.id} className="flex min-w-0 items-center gap-2 rounded-xl bg-white p-2.5 ring-1 ring-slate-200"><a href={link.url} target="_blank" rel="noreferrer" className="flex min-w-0 flex-1 items-center gap-2 text-xs font-black text-[#102A43]"><Link2 className="h-3.5 w-3.5 shrink-0 text-slate-400" /><span className="truncate">{link.label}</span><ExternalLink className="h-3 w-3 shrink-0 text-slate-400" /></a><button type="button" className="rounded-lg p-1 text-slate-300 hover:bg-red-50 hover:text-red-600" onClick={() => void removeLink(card, link.id)} aria-label={`Remove ${link.label}`}><Trash2 className="h-3.5 w-3.5" /></button></div>)}</div>
+                        </div>}
+
+                        {(decisions.length > 0 || actions.length > 0) && <div className="mb-4">
+                          <div className="mb-2 text-[10px] font-black uppercase tracking-wide text-slate-400">Thread</div>
+                          <div className="space-y-2.5">
+                            {decisions.map((decision, index) => renderDecision(card, decision, index))}
+                            {actions.map((action, index) => renderAction(card, action, index))}
+                          </div>
+                        </div>}
+
+                        <div className="flex flex-wrap gap-2 border-t border-slate-200 pt-3">
+                          {stage !== "done" && !openDecision && !openAction && <button type="button" className="rounded-xl bg-violet-50 px-3 py-2 text-xs font-black text-violet-700 ring-1 ring-violet-100" onClick={() => startDecision(card)}><Gavel className="mr-1 inline h-3.5 w-3.5" />+ Decision</button>}
+                          {stage !== "done" && !openDecision && !openAction && <button type="button" className="rounded-xl bg-sky-50 px-3 py-2 text-xs font-black text-sky-800 ring-1 ring-sky-100" onClick={() => openAddAction(card)}><Hand className="mr-1 inline h-3.5 w-3.5" />+ Action</button>}
+                          {stage !== "done" && (card.links?.length || 0) < 5 && <button type="button" className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-600 ring-1 ring-slate-200" onClick={() => openAddLink(card)}><Link2 className="mr-1 inline h-3.5 w-3.5" />+ Link</button>}
+                          {stage !== "done" && !openDecision && !openAction && (decisions.length > 0 || actions.length > 0) && <button type="button" className="ml-auto rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white" onClick={() => void finishTopic(card)}><Check className="mr-1 inline h-3.5 w-3.5" />Finish topic</button>}
+                          {stage === "done" && <button type="button" className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-600 ring-1 ring-slate-200" onClick={() => void reopenTopic(card)}><RotateCcw className="mr-1 inline h-3.5 w-3.5" />Reopen</button>}
+                        </div>
+
+                        <div className="mt-3 text-[10px] font-bold text-slate-400">Added by {card.createdByName} · {formatTime(card.createdAt)}{card.activities.length > 1 ? ` · ${activityText(card.activities[card.activities.length - 1])}` : ""}</div>
+                      </div>}
+                    </article>
                   );
                 })}
+                {visibleCards.length === 0 && <div className="rounded-3xl border border-dashed border-slate-300 bg-white/50 px-4 py-10 text-center text-sm font-bold text-slate-400">Nothing here right now.</div>}
               </div>
             )}
           </div>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={Boolean(quickCreateMode)} onOpenChange={(open) => { if (!open) setQuickCreateMode(null); }}>
+      <Dialog open={newTopicOpen} onOpenChange={setNewTopicOpen}>
         <DialogContent className="fixed bottom-2 left-2 right-2 top-auto w-auto max-w-none translate-x-0 translate-y-0 rounded-[2rem] p-4 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-md sm:-translate-x-1/2" onOpenAutoFocus={(event) => event.preventDefault()}>
-          <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43]">{quickCreateMode === "idea" ? "Save an idea" : quickCreateMode === "vote" ? "Start a vote" : "Needs action"}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43]">New topic</DialogTitle></DialogHeader>
           <div className="grid gap-3">
-            <div>
-              <Label htmlFor="quick-primary">{quickCreateMode === "idea" ? "What should we remember?" : quickCreateMode === "vote" ? "What are we deciding?" : "What needs doing?"}</Label>
-              <Input id="quick-primary" value={quickPrimary} onChange={(event) => setQuickPrimary(event.target.value)} onKeyDown={blurOnDoneKey} enterKeyHint="done" maxLength={180} placeholder={quickCreateMode === "idea" ? "Club jerseys" : quickCreateMode === "vote" ? "Should we buy two new training balls?" : "Return the hall keys"} />
+            <div><Label htmlFor="topic-title">Topic</Label><Textarea id="topic-title" value={newTitle} onChange={(event) => setNewTitle(event.target.value)} rows={2} maxLength={220} placeholder="Replace our dead match ball" /></div>
+            <div><Label htmlFor="topic-context">Context <span className="font-semibold text-slate-400">optional</span></Label><Textarea id="topic-context" value={newNote} onChange={(event) => setNewNote(event.target.value)} rows={2} maxLength={700} placeholder="Only what people need to understand the topic" /></div>
+            <Button type="button" className="h-11 rounded-2xl font-black text-white" style={{ backgroundColor: accent }} disabled={!newTitle.trim() || saving} onClick={() => void createTopic()}>{saving ? "Saving…" : "Create topic"}</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(decisionCardId)} onOpenChange={(open) => { if (!open) setDecisionCardId(null); }}>
+        <DialogContent className="fixed inset-x-2 bottom-2 top-auto w-auto max-w-none translate-x-0 translate-y-0 rounded-[2rem] p-4 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-md sm:-translate-x-1/2" onOpenAutoFocus={(event) => event.preventDefault()}>
+          <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43]">Add decision</DialogTitle></DialogHeader>
+          <div className="grid gap-3">
+            <div className="grid grid-cols-2 gap-1 rounded-2xl bg-slate-100 p-1">
+              <button type="button" className={`rounded-xl px-3 py-2 text-xs font-black ${decisionMode === "vote" ? "bg-white text-violet-700 shadow-sm" : "text-slate-500"}`} onClick={() => setDecisionMode("vote")}><Vote className="mr-1 inline h-3.5 w-3.5" />Vote together</button>
+              <button type="button" className={`rounded-xl px-3 py-2 text-xs font-black ${decisionMode === "recorded" ? "bg-white text-emerald-700 shadow-sm" : "text-slate-500"}`} onClick={() => setDecisionMode("recorded")}><Check className="mr-1 inline h-3.5 w-3.5" />Record decision</button>
             </div>
-            <div><Label htmlFor="quick-context">Context <span className="font-semibold text-slate-400">optional</span></Label><Textarea id="quick-context" value={quickContext} onChange={(event) => setQuickContext(event.target.value)} onKeyDown={blurOnDoneKey} enterKeyHint="done" rows={2} maxLength={600} placeholder="Only if people need a little background" /></div>
-            {quickCreateMode === "vote" && <div className="rounded-2xl border border-violet-100 bg-violet-50/60 p-3">
-              <div className="text-[10px] font-black uppercase tracking-wide text-violet-600">Vote type</div>
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                <button type="button" className={`rounded-xl border px-3 py-2 text-xs font-black ${quickVoteKind === "yes-no-abstain" ? "border-violet-400 bg-white text-violet-800" : "border-violet-100 bg-white/60 text-slate-600"}`} onClick={() => setQuickVoteKind("yes-no-abstain")}>Yes / No / Abstain</button>
-                <button type="button" className={`rounded-xl border px-3 py-2 text-xs font-black ${quickVoteKind === "choose-one" ? "border-violet-400 bg-white text-violet-800" : "border-violet-100 bg-white/60 text-slate-600"}`} onClick={() => setQuickVoteKind("choose-one")}>Choose one</button>
+            {decisionMode === "vote" ? <>
+              <div><Label htmlFor="decision-question">What are we deciding?</Label><Textarea id="decision-question" value={decisionQuestion} onChange={(event) => setDecisionQuestion(event.target.value)} rows={2} maxLength={220} /><div className="mt-1 text-[10px] font-semibold text-slate-400">Keep the topic title as-is, or make the question more specific.</div></div>
+              <div className="grid grid-cols-3 gap-1 rounded-2xl bg-violet-50 p-1">
+                <button type="button" className={`rounded-xl px-2 py-2 text-[10px] font-black ${decisionKind === "yes-no-abstain" ? "bg-white text-violet-700 shadow-sm" : "text-violet-500"}`} onClick={() => setDecisionKind("yes-no-abstain")}>Yes / No</button>
+                <button type="button" className={`rounded-xl px-2 py-2 text-[10px] font-black ${decisionKind === "choose-one" ? "bg-white text-violet-700 shadow-sm" : "text-violet-500"}`} onClick={() => setDecisionKind("choose-one")}>Choose one</button>
+                <button type="button" className={`rounded-xl px-2 py-2 text-[10px] font-black ${decisionKind === "multi-select" ? "bg-white text-violet-700 shadow-sm" : "text-violet-500"}`} onClick={() => setDecisionKind("multi-select")}>Choose several</button>
               </div>
-              {quickVoteKind === "choose-one" && <div className="mt-3"><Label htmlFor="quick-options">Choices — one per line</Label><Textarea id="quick-options" value={quickVoteOptions} onChange={(event) => setQuickVoteOptions(event.target.value)} rows={3} maxLength={400} /></div>}
-              <div className="mt-2 text-[10px] font-semibold leading-snug text-slate-500">Anonymous by default. Results stay hidden until the vote closes; participation count stays visible.</div>
-            </div>}
-            <Button type="button" className={`h-11 rounded-2xl text-white ${quickCreateMode === "vote" ? "bg-violet-600 hover:bg-violet-700" : quickCreateMode === "action" ? "bg-sky-700 hover:bg-sky-800" : ""}`} style={quickCreateMode === "idea" ? { backgroundColor: accent } : undefined} disabled={!quickPrimary.trim() || saving || (quickCreateMode === "vote" && voteOptions(quickVoteKind, quickVoteOptions).length < 2)} onClick={createQuickCard}>{saving ? "Saving…" : quickCreateMode === "idea" ? "Save idea" : quickCreateMode === "vote" ? "Start vote" : "Add action"}</Button>
+              {decisionKind !== "yes-no-abstain" && <div><Label htmlFor="decision-options">Choices — one per line</Label><Textarea id="decision-options" value={decisionOptions} onChange={(event) => setDecisionOptions(event.target.value)} rows={4} maxLength={700} placeholder={decisionKind === "multi-select" ? "Anna\nBen\nChris\nDaniel" : "Mauerpark\nTempelhofer Feld"} /></div>}
+              {decisionKind === "multi-select" && <div><Label htmlFor="decision-max">Maximum choices</Label><Input id="decision-max" type="number" min="1" max="12" value={decisionMaxSelections} onChange={(event) => setDecisionMaxSelections(event.target.value)} inputMode="numeric" /></div>}
+              <div className="text-[10px] font-semibold leading-snug text-slate-500">Anonymous by default. People can change their vote while it is open. Results appear after closing.</div>
+            </> : <div><Label htmlFor="decision-outcome">What was decided?</Label><Textarea id="decision-outcome" value={decisionOutcome} onChange={(event) => setDecisionOutcome(event.target.value)} rows={3} maxLength={300} placeholder="We will buy the Select Brillant ball." /></div>}
+            <Button type="button" className={`h-11 rounded-2xl font-black text-white ${decisionMode === "vote" ? "bg-violet-600 hover:bg-violet-700" : "bg-emerald-600 hover:bg-emerald-700"}`} disabled={saving || (decisionMode === "vote" ? !decisionQuestion.trim() || voteOptionLabels(decisionKind, decisionOptions).length < 2 : !decisionOutcome.trim())} onClick={() => void addDecision()}>{saving ? "Saving…" : decisionMode === "vote" ? "Open vote" : "Record decision"}</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(linkCardId)} onOpenChange={(open) => { if (!open) setLinkCardId(null); }}>
+        <DialogContent className="fixed bottom-2 left-2 right-2 top-auto w-auto max-w-none translate-x-0 translate-y-0 rounded-[2rem] p-4 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-md sm:-translate-x-1/2" onOpenAutoFocus={(event) => event.preventDefault()}>
+          <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43]">Add reference link</DialogTitle></DialogHeader>
+          <div className="grid gap-3">
+            <div><Label htmlFor="link-url">Paste link</Label><Input id="link-url" type="url" inputMode="url" value={linkUrl} onChange={(event) => setLinkUrl(event.target.value)} placeholder="https://…" /></div>
+            <div><Label htmlFor="link-label">Label <span className="font-semibold text-slate-400">optional</span></Label><Input id="link-label" value={linkLabel} onChange={(event) => setLinkLabel(event.target.value)} maxLength={80} placeholder={validHttpUrl(linkUrl) ? providerLabel(linkUrl) : "e.g. Select Brillant"} /></div>
+            <Button type="button" className="h-11 rounded-2xl font-black text-white" style={{ backgroundColor: accent }} disabled={!validHttpUrl(linkUrl) || saving} onClick={() => void addLink()}>{saving ? "Saving…" : "Add link"}</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(actionCardId)} onOpenChange={(open) => { if (!open) setActionCardId(null); }}>
+        <DialogContent className="fixed bottom-2 left-2 right-2 top-auto w-auto max-w-none translate-x-0 translate-y-0 rounded-[2rem] p-4 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-md sm:-translate-x-1/2" onOpenAutoFocus={(event) => event.preventDefault()}>
+          <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43]">Add action</DialogTitle></DialogHeader>
+          <div className="grid gap-3">
+            <div><Label htmlFor="action-text">What needs to happen?</Label><Textarea id="action-text" value={actionText} onChange={(event) => setActionText(event.target.value)} rows={2} maxLength={220} /><div className="mt-1 text-[10px] font-semibold text-slate-400">Keep the topic title, or make the follow-through more specific.</div></div>
+            <Button type="button" className="h-11 rounded-2xl bg-sky-700 font-black text-white hover:bg-sky-800" disabled={!actionText.trim() || saving} onClick={() => void addAction()}>{saving ? "Saving…" : "Add action"}</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(votingCard && votingDecision)} onOpenChange={(open) => { if (!open) { setVotingCardId(null); setVotingDecisionId(null); setSelectedVoteOptionIds([]); } }}>
+        <DialogContent className="fixed bottom-2 left-2 right-2 top-auto w-auto max-w-none translate-x-0 translate-y-0 rounded-[2rem] p-4 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-sm sm:-translate-x-1/2">
+          <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43]">Vote on FT</DialogTitle></DialogHeader>
+          {votingDecision && <div className="grid gap-3">
+            <div className="whitespace-normal break-words text-sm font-black leading-snug text-[#102A43]">{votingDecision.question}</div>
+            {votingDecision.kind === "multi-select" && <div className="text-[10px] font-bold text-slate-500">Choose up to {votingDecision.maxSelections || votingDecision.options.length}.</div>}
+            <div className="grid gap-2">{votingDecision.options.map((option) => {
+              const selected = selectedVoteOptionIds.includes(option.id);
+              return <button key={option.id} type="button" className={`rounded-2xl border px-3 py-3 text-left text-sm font-black ${selected ? "border-violet-500 bg-violet-50 text-violet-800" : "border-slate-200 bg-white text-[#102A43]"}`} onClick={() => toggleVoteOption(option.id)}>{selected && <Check className="mr-1 inline h-4 w-4" />}{option.label}</button>;
+            })}</div>
+            <div className="text-[10px] font-semibold leading-snug text-slate-500">Anonymous. You can change your choice while the vote remains open.</div>
+            <Button type="button" className="h-11 rounded-2xl bg-violet-600 font-black text-white" disabled={!selectedVoteOptionIds.length || voteSubmitting} onClick={() => void submitVote()}>{voteSubmitting ? "Recording…" : votingDecision.ballots?.some((ballot) => ballot.voterHash === currentVoterHash) ? "Update vote" : "Submit vote"}</Button>
+          </div>}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(outcomeCardId && outcomeDecisionId)} onOpenChange={(open) => { if (!open) { setOutcomeCardId(null); setOutcomeDecisionId(null); } }}>
+        <DialogContent className="fixed bottom-2 left-2 right-2 top-auto w-auto max-w-none translate-x-0 translate-y-0 rounded-[2rem] p-4 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-md sm:-translate-x-1/2" onOpenAutoFocus={(event) => event.preventDefault()}>
+          <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43]">Record outcome</DialogTitle></DialogHeader>
+          <div className="grid gap-3">
+            <div><Label htmlFor="outcome-text">What did the club decide?</Label><Textarea id="outcome-text" value={outcomeText} onChange={(event) => setOutcomeText(event.target.value)} rows={3} maxLength={300} placeholder="Anna, Chris and Emma become club members." /></div>
+            <Button type="button" className="h-11 rounded-2xl bg-emerald-600 font-black text-white" disabled={!outcomeText.trim() || saving} onClick={() => void saveOutcome()}>{saving ? "Saving…" : "Save outcome"}</Button>
           </div>
         </DialogContent>
       </Dialog>
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="fixed inset-x-2 bottom-2 top-2 flex w-auto max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-[2rem] p-0 sm:left-1/2 sm:right-auto sm:top-1/2 sm:h-auto sm:max-h-[calc(100dvh-2rem)] sm:w-full sm:max-w-md sm:-translate-x-1/2 sm:-translate-y-1/2" onOpenAutoFocus={(event) => event.preventDefault()}>
-          <DialogHeader className="shrink-0 border-b border-slate-100 px-4 py-3 pr-12"><DialogTitle className="text-left text-base font-black text-[#102A43]">Edit</DialogTitle></DialogHeader>
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-            <div className="grid gap-3">
-              <div><Label htmlFor="edit-title">Topic</Label><Input id="edit-title" value={editTitle} onChange={(event) => setEditTitle(event.target.value)} onKeyDown={blurOnDoneKey} enterKeyHint="done" maxLength={180} /></div>
-              <div><Label htmlFor="edit-note">Context</Label><Textarea id="edit-note" value={editNote} onChange={(event) => setEditNote(event.target.value)} onKeyDown={blurOnDoneKey} enterKeyHint="done" rows={3} maxLength={600} placeholder="Optional" /></div>
-              {editingCard?.actionText && <div><Label htmlFor="edit-action">Current action</Label><Input id="edit-action" value={editActionText} onChange={(event) => setEditActionText(event.target.value)} onKeyDown={blurOnDoneKey} enterKeyHint="done" maxLength={180} /></div>}
-              {editingCard?.vote && editingCard.vote.status === "open" && editingCard.vote.voterHashes.length === 0 && <div className="rounded-2xl border border-violet-100 bg-violet-50/50 p-3">
-                <div><Label htmlFor="edit-vote-question">Vote question</Label><Input id="edit-vote-question" value={editVoteQuestion} onChange={(event) => setEditVoteQuestion(event.target.value)} maxLength={180} /></div>
-                {editingCard.vote.kind === "choose-one" && <div className="mt-3"><Label htmlFor="edit-vote-options">Choices — one per line</Label><Textarea id="edit-vote-options" value={editVoteOptions} onChange={(event) => setEditVoteOptions(event.target.value)} rows={3} maxLength={400} /></div>}
-              </div>}
-              <div className="flex gap-2 pt-1"><Button type="button" variant="outline" className="h-11 rounded-2xl text-red-700" onClick={removeCard}><Trash2 className="mr-1 h-4 w-4" />Delete</Button><Button type="button" className="h-11 flex-1 rounded-2xl text-white" style={{ backgroundColor: accent }} disabled={!editTitle.trim() || saving} onClick={saveEditedCard}>{saving ? "Saving…" : "Save changes"}</Button></div>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={Boolean(transition)} onOpenChange={(open) => { if (!open) setTransition(null); }}>
-        <DialogContent className="fixed bottom-2 left-2 right-2 top-auto w-auto max-w-none translate-x-0 translate-y-0 rounded-[2rem] p-4 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-md sm:-translate-x-1/2" onOpenAutoFocus={(event) => event.preventDefault()}>
-          <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43]">{transition?.target === "vote" ? "Start a vote" : "Needs action"}</DialogTitle></DialogHeader>
+        <DialogContent className="fixed inset-x-2 bottom-2 top-auto w-auto max-w-none translate-x-0 translate-y-0 rounded-[2rem] p-4 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-md sm:-translate-x-1/2" onOpenAutoFocus={(event) => event.preventDefault()}>
+          <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43]">Edit topic</DialogTitle></DialogHeader>
           <div className="grid gap-3">
-            {transitionCard && <div className="rounded-xl bg-slate-50 px-3 py-2 text-xs font-black text-slate-600">Topic: <span className="text-[#102A43]">{transitionCard.title}</span></div>}
-            <div><Label htmlFor="transition-text">{transition?.target === "vote" ? "What are we deciding?" : "What needs doing next?"}</Label><Input id="transition-text" value={transitionText} onChange={(event) => setTransitionText(event.target.value)} onKeyDown={blurOnDoneKey} enterKeyHint="done" maxLength={180} placeholder={transition?.target === "vote" ? "Write the actual decision question" : "Write the concrete next action"} /></div>
-            {transition?.target === "vote" && <div className="rounded-2xl border border-violet-100 bg-violet-50/60 p-3">
-              <div className="grid grid-cols-2 gap-2">
-                <button type="button" className={`rounded-xl border px-3 py-2 text-xs font-black ${transitionVoteKind === "yes-no-abstain" ? "border-violet-400 bg-white text-violet-800" : "border-violet-100 bg-white/60 text-slate-600"}`} onClick={() => setTransitionVoteKind("yes-no-abstain")}>Yes / No / Abstain</button>
-                <button type="button" className={`rounded-xl border px-3 py-2 text-xs font-black ${transitionVoteKind === "choose-one" ? "border-violet-400 bg-white text-violet-800" : "border-violet-100 bg-white/60 text-slate-600"}`} onClick={() => setTransitionVoteKind("choose-one")}>Choose one</button>
-              </div>
-              {transitionVoteKind === "choose-one" && <div className="mt-3"><Label htmlFor="transition-options">Choices — one per line</Label><Textarea id="transition-options" value={transitionVoteOptions} onChange={(event) => setTransitionVoteOptions(event.target.value)} rows={3} maxLength={400} /></div>}
-            </div>}
-            <Button type="button" className={`h-11 rounded-2xl text-white ${transition?.target === "vote" ? "bg-violet-600 hover:bg-violet-700" : "bg-sky-700 hover:bg-sky-800"}`} disabled={!transitionText.trim() || saving || (transition?.target === "vote" && voteOptions(transitionVoteKind, transitionVoteOptions).length < 2)} onClick={() => void finishTransition()}>{saving ? "Saving…" : transition?.target === "vote" ? "Start vote" : "Create action"}</Button>
+            <div><Label htmlFor="edit-title">Topic</Label><Textarea id="edit-title" value={editTitle} onChange={(event) => setEditTitle(event.target.value)} rows={2} maxLength={220} /></div>
+            <div><Label htmlFor="edit-note">Context</Label><Textarea id="edit-note" value={editNote} onChange={(event) => setEditNote(event.target.value)} rows={3} maxLength={700} placeholder="Optional" /></div>
+            <div className="flex gap-2"><Button type="button" variant="outline" className="h-11 rounded-2xl text-red-700" onClick={() => void removeCard()}><Trash2 className="mr-1 h-4 w-4" />Delete</Button><Button type="button" className="h-11 flex-1 rounded-2xl font-black text-white" style={{ backgroundColor: accent }} disabled={!editTitle.trim() || saving} onClick={() => void saveEditedCard()}>{saving ? "Saving…" : "Save"}</Button></div>
           </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={Boolean(currentVotingCard)} onOpenChange={(open) => { if (!open) { setVotingCardId(null); setSelectedVoteOptionId(""); } }}>
-        <DialogContent className="fixed bottom-2 left-2 right-2 top-auto w-auto max-w-none translate-x-0 translate-y-0 rounded-[2rem] p-4 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-sm sm:-translate-x-1/2">
-          <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43]">Vote on FT</DialogTitle></DialogHeader>
-          {currentVotingCard?.vote && <div className="grid gap-3">
-            <div className="text-sm font-black leading-snug text-[#102A43]">{currentVotingCard.vote.question}</div>
-            <div className="grid gap-2">{currentVotingCard.vote.options.map((option) => <button key={option.id} type="button" className={`rounded-2xl border px-3 py-3 text-left text-sm font-black ${selectedVoteOptionId === option.id ? "border-violet-500 bg-violet-50 text-violet-800" : "border-slate-200 bg-white text-[#102A43]"}`} onClick={() => setSelectedVoteOptionId(option.id)}>{option.label}</button>)}</div>
-            <div className="text-[10px] font-semibold leading-snug text-slate-500">Your choice is anonymous. FT uses an account hash only to prevent duplicate voting. Results appear when voting closes.</div>
-            <Button type="button" className="h-11 rounded-2xl bg-violet-600 text-white" disabled={!selectedVoteOptionId || voteSubmitting} onClick={submitVote}>{voteSubmitting ? "Recording…" : "Submit vote"}</Button>
-          </div>}
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={Boolean(postVoteCard)} onOpenChange={(open) => { if (!open) setPostVoteCardId(null); }}>
-        <DialogContent className="fixed bottom-2 left-2 right-2 top-auto w-auto max-w-none translate-x-0 translate-y-0 rounded-[2rem] p-4 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-sm sm:-translate-x-1/2" onOpenAutoFocus={(event) => event.preventDefault()}>
-          <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43]">Vote closed</DialogTitle></DialogHeader>
-          {postVoteCard?.vote && <div className="grid gap-3">
-            <div className="rounded-2xl bg-violet-50 px-3 py-3">
-              <div className="text-xs font-black leading-snug text-violet-900">{postVoteCard.vote.question}</div>
-              <div className="mt-2 text-[11px] font-black leading-snug text-violet-700">{voteSummary(postVoteCard.vote)}</div>
-            </div>
-            <div className="text-xs font-bold text-slate-500">What happens next?</div>
-            <Button type="button" className="h-11 rounded-2xl bg-sky-700 text-white hover:bg-sky-800" onClick={() => { setPostVoteCardId(null); setTransition({ cardId: postVoteCard.id, target: "action" }); setTransitionText(""); }}><Hand className="mr-1 h-4 w-4" />Needs action</Button>
-            <Button type="button" variant="outline" className="h-11 rounded-2xl border-emerald-200 text-emerald-700" onClick={() => { setPostVoteCardId(null); void completeCard(postVoteCard); }}><CheckCircle2 className="mr-1 h-4 w-4" />Decision complete</Button>
-          </div>}
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={Boolean(currentMoveCard)} onOpenChange={(open) => { if (!open) setMoveCardId(null); }}>
-        <DialogContent className="fixed bottom-2 left-2 right-2 top-auto w-auto max-w-none translate-x-0 translate-y-0 rounded-[2rem] p-4 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-sm sm:-translate-x-1/2">
-          <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43]">Move</DialogTitle></DialogHeader>
-          <div className="grid gap-2">{activeColumns.map((column, index) => { const kind = column.kind || WORKFLOW[index]?.kind; const Icon = columnIcon(kind); return <button key={column.id} type="button" className={`flex items-center justify-between rounded-2xl border px-3 py-3 text-left text-sm font-black ${currentMoveCard?.columnId === column.id ? "border-slate-300 bg-slate-100 text-slate-400" : "border-slate-200 bg-white text-[#102A43]"}`} disabled={currentMoveCard?.columnId === column.id || saving} onClick={() => currentMoveCard && requestMove(currentMoveCard, column.id)}><span className="flex items-center gap-2"><Icon className="h-4 w-4" />{column.name}</span>{currentMoveCard?.columnId === column.id ? <span className="text-[10px]">Current</span> : <ArrowRight className="h-4 w-4" />}</button>; })}</div>
         </DialogContent>
       </Dialog>
 
       <Dialog open={boardSettingsOpen} onOpenChange={setBoardSettingsOpen}>
         <DialogContent className="max-w-sm rounded-3xl" onOpenAutoFocus={(event) => event.preventDefault()}>
           <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43]">Board name</DialogTitle></DialogHeader>
-          <div className="grid gap-3">
-            <div><Label htmlFor="board-name">Name</Label><Input id="board-name" value={boardNameDraft} onChange={(event) => setBoardNameDraft(event.target.value)} onKeyDown={blurOnDoneKey} enterKeyHint="done" maxLength={80} /></div>
-            <Button type="button" className="h-11 rounded-2xl text-white" style={{ backgroundColor: accent }} disabled={!boardNameDraft.trim() || saving} onClick={saveBoardName}>Save name</Button>
-          </div>
+          <div className="grid gap-3"><div><Label htmlFor="board-name">Name</Label><Input id="board-name" value={boardNameDraft} onChange={(event) => setBoardNameDraft(event.target.value)} maxLength={80} /></div><Button type="button" className="h-11 rounded-2xl font-black text-white" style={{ backgroundColor: accent }} disabled={!boardNameDraft.trim() || saving} onClick={() => void saveBoardName()}>Save name</Button></div>
         </DialogContent>
       </Dialog>
     </>

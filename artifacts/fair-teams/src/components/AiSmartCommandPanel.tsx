@@ -610,7 +610,7 @@ function actionPrimaryVerb(action: AiSmartCommandAction) {
   return "Apply";
 }
 
-const AI_ASSISTANT_VERSION_LABEL = "Help beta · v1.58.0 Decision Action Board";
+const AI_ASSISTANT_VERSION_LABEL = "Help beta · v1.58.1 Decision Threads";
 
 type AiRosterMatch = {
   player: AiSmartCommandRosterPlayer;

@@ -610,7 +610,7 @@ function actionPrimaryVerb(action: AiSmartCommandAction) {
   return "Apply";
 }
 
-const AI_ASSISTANT_VERSION_LABEL = "Help beta · v1.57.0 Equipment inventory";
+const AI_ASSISTANT_VERSION_LABEL = "Help beta · v1.57.1 Equipment cleanup";
 
 type AiRosterMatch = {
   player: AiSmartCommandRosterPlayer;

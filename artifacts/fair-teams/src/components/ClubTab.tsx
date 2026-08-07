@@ -164,9 +164,9 @@ const EQUIPMENT_PRESETS = [
   { key: "bibs", label: "Bibs / vests" },
   { key: "team-bands", label: "Team bands" },
   { key: "ball-pumps", label: "Ball pumps" },
-  { key: "ball-needles", label: "Ball needles" },
   { key: "goals", label: "Goals" },
   { key: "first-aid", label: "First-aid kits" },
+  { key: "first-aid-spray", label: "First-aid spray" },
   { key: "whistles", label: "Whistles" },
 ] as const;
 
@@ -198,9 +198,9 @@ function legacyEquipmentItems(contents: string[]): EquipmentInventoryItem[] {
       if (item.key === "bibs") return /^(bibs?|vests?|training bibs?|training vests?)$/.test(normalized);
       if (item.key === "team-bands") return /\b(team\s*)?(bands?|sashes?)\b/.test(normalized);
       if (item.key === "ball-pumps") return /\b(ball\s*)?pumps?\b/.test(normalized);
-      if (item.key === "ball-needles") return /\b(ball\s*)?needles?\b/.test(normalized);
       if (item.key === "goals") return /\bgoals?\b/.test(normalized);
       if (item.key === "whistles") return /\bwhistles?\b/.test(normalized);
+      if (item.key === "first-aid-spray") return /first[- ]?aid.*spray|spray.*first[- ]?aid/.test(normalized);
       if (item.key === "first-aid") return /first[- ]?aid/.test(normalized);
       return false;
     });
@@ -245,11 +245,10 @@ const DEFAULT_EQUIPMENT_KITS: ClubEquipmentKit[] = [
     name: "Ball bag",
     holderId: "you",
     color: "#2563eb",
-    contents: ["2 Balls", "Ball pumps", "Ball needles"],
+    contents: ["2 Balls", "Ball pumps"],
     items: [
       { key: "balls", label: "Balls", quantity: 2 },
       { key: "ball-pumps", label: "Ball pumps", quantity: 1 },
-      { key: "ball-needles", label: "Ball needles", quantity: 1 },
     ],
     note: "Check air before Saturday.",
     createdAt: Date.now(),
@@ -772,7 +771,9 @@ export function ClubTab({
     number | null
   >(null);
   const [equipmentBoardOpen, setEquipmentBoardOpen] = useState(false);
+  const [equipmentInventoryOpen, setEquipmentInventoryOpen] = useState(false);
   const [equipmentDialogOpen, setEquipmentDialogOpen] = useState(false);
+  const [equipmentItemPickerOpen, setEquipmentItemPickerOpen] = useState(false);
   const [equipmentEditorReturnToBoard, setEquipmentEditorReturnToBoard] =
     useState(false);
   const [editingKitId, setEditingKitId] = useState<string | null>(null);
@@ -797,7 +798,9 @@ export function ClubTab({
     colorPickerOpen: false,
     contentPeekKitId: null as string | null,
     equipmentBoardOpen: false,
+    equipmentInventoryOpen: false,
     equipmentDialogOpen: false,
+    equipmentItemPickerOpen: false,
     ratingPlayerId: null as string | null,
     ratingBoardOpen: false,
     accountDialogOpen: false,
@@ -1475,11 +1478,6 @@ export function ClubTab({
       return aOrder - bOrder || a.label.localeCompare(b.label);
     });
   }, [equipmentKits]);
-  const equipmentTotalPieceCount = useMemo(
-    () => equipmentInventoryTotals.reduce((sum, item) => sum + item.quantity, 0),
-    [equipmentInventoryTotals],
-  );
-
   const addEquipmentPreset = (preset: (typeof EQUIPMENT_PRESETS)[number]) => {
     setKitItems((current) => {
       const existing = current.find((item) => item.key === preset.key && !item.custom);
@@ -1537,6 +1535,7 @@ export function ClubTab({
     setKitHolderId("storage");
     setKitColor(DEFAULT_EQUIPMENT_COLOR);
     setColorPickerOpen(false);
+    setEquipmentItemPickerOpen(false);
     setDeleteBagSlide(0);
     setDeleteConfirmOpen(false);
     setKitItems([]);
@@ -1565,6 +1564,7 @@ export function ClubTab({
   const closeEquipmentEditor = (returnToBoard = true) => {
     blurActiveField();
     setColorPickerOpen(false);
+    setEquipmentItemPickerOpen(false);
     setDeleteConfirmOpen(false);
     setEquipmentDialogOpen(false);
     resetEquipmentForm();
@@ -1937,7 +1937,9 @@ export function ClubTab({
 
   const hasClubBackTarget = Boolean(
     colorPickerOpen ||
+    equipmentItemPickerOpen ||
     contentPeekKitId ||
+    equipmentInventoryOpen ||
     equipmentDialogOpen ||
     equipmentBoardOpen ||
     ratingPlayerId ||
@@ -1952,7 +1954,9 @@ export function ClubTab({
       colorPickerOpen,
       contentPeekKitId,
       equipmentBoardOpen,
+      equipmentInventoryOpen,
       equipmentDialogOpen,
+      equipmentItemPickerOpen,
       ratingPlayerId,
       ratingBoardOpen,
       accountDialogOpen,
@@ -1964,7 +1968,9 @@ export function ClubTab({
     colorPickerOpen,
     contentPeekKitId,
     equipmentBoardOpen,
+    equipmentInventoryOpen,
     equipmentDialogOpen,
+    equipmentItemPickerOpen,
     ratingPlayerId,
     ratingBoardOpen,
     attendanceBoardOpen,
@@ -1989,6 +1995,11 @@ export function ClubTab({
         setColorPickerOpen(false);
         return;
       }
+      if (state.equipmentItemPickerOpen) {
+        event.preventDefault();
+        setEquipmentItemPickerOpen(false);
+        return;
+      }
       if (state.contentPeekKitId) {
         event.preventDefault();
         setContentPeekKitId(null);
@@ -1997,6 +2008,11 @@ export function ClubTab({
       if (state.equipmentDialogOpen) {
         event.preventDefault();
         closeEquipmentEditor(true);
+        return;
+      }
+      if (state.equipmentInventoryOpen) {
+        event.preventDefault();
+        setEquipmentInventoryOpen(false);
         return;
       }
       if (state.equipmentBoardOpen) {
@@ -2412,33 +2428,7 @@ export function ClubTab({
           </Button>
         </div>
 
-        {equipmentInventoryTotals.length > 0 && (
-          <div className="mt-3 rounded-[1.25rem] border border-sky-100 bg-white/75 px-3 py-2.5">
-            <div className="flex items-center justify-between gap-2">
-              <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-                Club total
-              </div>
-              <div className="text-[10px] font-bold text-slate-400">
-                {equipmentTotalPieceCount} total
-              </div>
-            </div>
-            <div className="mt-1.5 flex flex-wrap gap-1.5">
-              {equipmentInventoryTotals.slice(0, 4).map((item) => (
-                <span
-                  key={`equipment-total-preview-${item.key}`}
-                  className="rounded-full border border-sky-100 bg-sky-50 px-2 py-1 text-[10px] font-black text-[#102A43]"
-                >
-                  {item.label} × {item.quantity}
-                </span>
-              ))}
-              {equipmentInventoryTotals.length > 4 && (
-                <span className="rounded-full border border-slate-100 bg-white px-2 py-1 text-[10px] font-black text-slate-400">
-                  +{equipmentInventoryTotals.length - 4} more
-                </span>
-              )}
-            </div>
-          </div>
-        )}
+
 
         {equipmentKits.length > 0 ? (
           <div className="mt-3 overflow-hidden rounded-[1.35rem] border border-slate-100 bg-slate-50/60">
@@ -3093,6 +3083,14 @@ export function ClubTab({
               <div className="flex flex-wrap gap-2">
                 <Button
                   type="button"
+                  variant="outline"
+                  className="h-9 rounded-2xl border-slate-200 bg-white px-3 text-xs font-black text-[#102A43]"
+                  onClick={() => setEquipmentInventoryOpen(true)}
+                >
+                  View club inventory
+                </Button>
+                <Button
+                  type="button"
                   className="h-9 rounded-2xl bg-[#102A43] px-3 text-xs font-black text-white hover:bg-[#0b2036]"
                   onClick={openNewEquipmentKit}
                 >
@@ -3110,33 +3108,7 @@ export function ClubTab({
               {equipmentBoardStatusText}
             </div>
 
-            <div className="mb-3 rounded-[1.5rem] border border-sky-100 bg-white p-3 shadow-sm">
-              <div className="flex items-end justify-between gap-3">
-                <div>
-                  <div className="text-xs font-black uppercase tracking-wide text-blue-600">Club inventory</div>
-                  <div className="mt-0.5 text-[11px] font-semibold text-slate-500">Everything across all bags.</div>
-                </div>
-                {equipmentInventoryTotals.length > 0 && (
-                  <div className="text-[11px] font-black text-slate-400">{equipmentTotalPieceCount} total</div>
-                )}
-              </div>
-              {equipmentInventoryTotals.length > 0 ? (
-                <div className="mt-2.5 flex flex-wrap gap-1.5">
-                  {equipmentInventoryTotals.map((item) => (
-                    <span
-                      key={`equipment-total-${item.key}`}
-                      className="rounded-full border border-sky-100 bg-sky-50 px-2.5 py-1.5 text-[11px] font-black text-[#102A43]"
-                    >
-                      {item.label} × {item.quantity}
-                    </span>
-                  ))}
-                </div>
-              ) : (
-                <div className="mt-2 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-3 py-3 text-xs font-bold text-slate-400">
-                  Add equipment to see the club total here.
-                </div>
-              )}
-            </div>
+
 
             <div className="overflow-hidden rounded-[1.65rem] border border-slate-200 bg-white shadow-[0_14px_34px_rgba(15,23,42,0.08)]">
               <div className="grid grid-cols-[6.25rem_minmax(0,1fr)] border-b border-slate-200 bg-white text-[10px] font-black uppercase tracking-wide text-slate-400 lg:grid-cols-[11rem_minmax(0,1fr)] lg:text-xs">
@@ -3305,6 +3277,132 @@ export function ClubTab({
       </Dialog>
 
       <Dialog
+        open={equipmentInventoryOpen}
+        onOpenChange={setEquipmentInventoryOpen}
+      >
+        <DialogContent
+          className="max-h-[82dvh] max-w-sm overflow-hidden rounded-3xl p-0 sm:max-w-md"
+          onOpenAutoFocus={(event) => event.preventDefault()}
+        >
+          <DialogHeader className="border-b border-slate-100 px-4 py-3 text-left">
+            <DialogTitle className="flex items-center gap-2 text-base font-black text-[#102A43]">
+              <AntiqueBallIcon className="h-5 w-5 text-blue-600" />
+              Club inventory
+            </DialogTitle>
+            <p className="text-[11px] font-semibold text-slate-500">
+              Everything across {equipmentKits.length} bag{equipmentKits.length === 1 ? "" : "s"}.
+            </p>
+          </DialogHeader>
+
+          <div className="max-h-[68dvh] overflow-y-auto p-3">
+            {equipmentInventoryTotals.length > 0 ? (
+              <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                <div className="grid grid-cols-[minmax(0,1fr)_4.5rem] border-b border-slate-200 bg-slate-50 px-3 py-2 text-[10px] font-black uppercase tracking-wide text-slate-400">
+                  <span>Equipment</span>
+                  <span className="text-right">Total</span>
+                </div>
+                {equipmentInventoryTotals.map((item, index) => (
+                  <div
+                    key={`inventory-row-${item.key}`}
+                    className={`grid grid-cols-[minmax(0,1fr)_4.5rem] items-center px-3 py-2.5 ${index === 0 ? "" : "border-t border-slate-100"} ${index % 2 === 1 ? "bg-slate-50/55" : "bg-white"}`}
+                  >
+                    <span className="truncate text-sm font-bold text-[#102A43]">{item.label}</span>
+                    <span className="text-right text-base font-black tabular-nums text-[#102A43]">{item.quantity}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-3 py-6 text-center text-sm font-semibold text-slate-400">
+                No equipment has been added yet.
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={equipmentItemPickerOpen}
+        onOpenChange={(open) => {
+          setEquipmentItemPickerOpen(open);
+          if (!open) {
+            setCustomEquipmentName("");
+            blurActiveField();
+          }
+        }}
+      >
+        <DialogContent
+          className="max-h-[82dvh] max-w-sm overflow-hidden rounded-3xl p-0"
+          onOpenAutoFocus={(event) => event.preventDefault()}
+        >
+          <DialogHeader className="border-b border-slate-100 px-4 py-3 text-left">
+            <DialogTitle className="text-base font-black text-[#102A43]">Add item</DialogTitle>
+            <p className="text-[11px] font-semibold text-slate-500">
+              Choose one common item or add a custom category.
+            </p>
+          </DialogHeader>
+
+          <div className="max-h-[68dvh] overflow-y-auto p-3">
+            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+              {EQUIPMENT_PRESETS.map((preset, index) => {
+                const selected = kitItems.some((item) => item.key === preset.key && !item.custom);
+                return (
+                  <button
+                    key={preset.key}
+                    type="button"
+                    className={`flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left transition ${index === 0 ? "" : "border-t border-slate-100"} ${selected ? "bg-sky-50" : "bg-white hover:bg-slate-50"}`}
+                    onClick={() => {
+                      addEquipmentPreset(preset);
+                      setCustomEquipmentName("");
+                      setEquipmentItemPickerOpen(false);
+                    }}
+                  >
+                    <span className={`text-sm font-bold ${selected ? "text-blue-700" : "text-[#102A43]"}`}>{preset.label}</span>
+                    <Plus className={`h-4 w-4 shrink-0 ${selected ? "text-blue-600" : "text-slate-300"}`} />
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50/70 p-2.5">
+              <div className="mb-1.5 text-[10px] font-black uppercase tracking-wide text-slate-400">Custom item</div>
+              <div className="flex items-center gap-2">
+                <Input
+                  value={customEquipmentName}
+                  onChange={(event) => setCustomEquipmentName(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      if (!customEquipmentName.trim()) {
+                        event.currentTarget.blur();
+                        return;
+                      }
+                      addCustomEquipmentItem();
+                      setEquipmentItemPickerOpen(false);
+                    }
+                  }}
+                  enterKeyHint="done"
+                  placeholder="Example: Corner flags"
+                  maxLength={40}
+                  className="h-10 min-w-0 flex-1 rounded-2xl border-slate-200 bg-white text-sm font-semibold"
+                />
+                <Button
+                  type="button"
+                  className="h-10 shrink-0 rounded-2xl bg-[#102A43] px-3 text-xs font-black text-white hover:bg-[#0b2036]"
+                  disabled={!customEquipmentName.trim()}
+                  onClick={() => {
+                    addCustomEquipmentItem();
+                    setEquipmentItemPickerOpen(false);
+                  }}
+                >
+                  Add
+                </Button>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
         open={equipmentDialogOpen}
         onOpenChange={(open) => {
           if (open) {
@@ -3329,11 +3427,11 @@ export function ClubTab({
           </DialogHeader>
 
           <div className="grid gap-2.5 p-3 pt-2">
-            <div className="grid gap-1.5">
-              <Label className="text-xs font-black uppercase tracking-wide text-slate-500">
-                Bag name
-              </Label>
-              <div className="flex items-center gap-2">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+              <div className="grid min-w-0 gap-1.5">
+                <Label className="text-xs font-black uppercase tracking-wide text-slate-500">
+                  Bag name
+                </Label>
                 <Input
                   value={kitName}
                   onChange={(event) => setKitName(event.target.value)}
@@ -3345,20 +3443,26 @@ export function ClubTab({
                   }}
                   enterKeyHint="done"
                   placeholder="Example: Saturday match bag"
-                  className="h-10 min-w-0 flex-1 rounded-2xl border-slate-200 text-sm font-semibold"
+                  className="h-10 min-w-0 rounded-2xl border-slate-200 text-sm font-semibold"
                 />
-                <div className="relative shrink-0">
+              </div>
+              <div className="grid gap-1.5">
+                <Label className="text-xs font-black uppercase tracking-wide text-slate-500">
+                  Bag color
+                </Label>
+                <div className="relative">
                   <Button
                     type="button"
                     variant="outline"
-                    className="h-10 rounded-2xl border-slate-200 px-2.5 text-[11px] font-black text-slate-600"
+                    className="h-10 min-w-[5.3rem] rounded-2xl border-slate-200 px-2.5 text-[11px] font-black text-slate-600"
                     onClick={() => setColorPickerOpen((open) => !open)}
                     aria-label="Choose bag color"
                   >
                     <span
-                      className="h-5 w-5 rounded-full border border-slate-300 shadow-inner"
+                      className="mr-2 h-5 w-5 rounded-full border border-slate-300 shadow-inner"
                       style={{ backgroundColor: kitColor }}
                     />
+                    Choose
                   </Button>
                   {colorPickerOpen && (
                     <div className="absolute right-0 z-50 mt-2 w-52 rounded-3xl border border-slate-200 bg-white p-3 shadow-[0_18px_45px_rgba(15,23,42,0.18)]">
@@ -3402,7 +3506,7 @@ export function ClubTab({
                     Bag contents
                   </Label>
                   <div className="mt-0.5 text-[10px] font-semibold text-slate-400">
-                    Tap a common item, then set the quantity.
+                    Only items already in this bag are shown here.
                   </div>
                 </div>
                 {kitItems.length > 0 && (
@@ -3410,25 +3514,6 @@ export function ClubTab({
                     {kitItems.reduce((sum, item) => sum + item.quantity, 0)} total
                   </div>
                 )}
-              </div>
-
-              <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
-                {EQUIPMENT_PRESETS.map((preset) => {
-                  const selected = kitItems.some((item) => item.key === preset.key && !item.custom);
-                  return (
-                    <button
-                      key={preset.key}
-                      type="button"
-                      onClick={() => addEquipmentPreset(preset)}
-                      className={`min-h-9 rounded-2xl border px-2 py-1.5 text-left text-[11px] font-black transition active:scale-[0.98] ${selected ? "border-sky-200 bg-sky-50 text-blue-700" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
-                    >
-                      <span className="flex items-center justify-between gap-1">
-                        <span>{preset.label}</span>
-                        <Plus className="h-3.5 w-3.5 shrink-0" />
-                      </span>
-                    </button>
-                  );
-                })}
               </div>
 
               {kitItems.length > 0 ? (
@@ -3495,35 +3580,24 @@ export function ClubTab({
                 </div>
               ) : (
                 <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-3 py-3 text-[11px] font-semibold text-slate-400">
-                  No contents yet. Choose a common item or add your own below.
+                  No contents yet. Add the first item when you need it.
                 </div>
               )}
 
-              <div className="flex items-center gap-2">
-                <Input
-                  value={customEquipmentName}
-                  onChange={(event) => setCustomEquipmentName(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      addCustomEquipmentItem();
-                    }
-                  }}
-                  enterKeyHint="done"
-                  placeholder="Custom item"
-                  maxLength={40}
-                  className="h-9 min-w-0 flex-1 rounded-2xl border-slate-200 text-xs font-semibold"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-9 shrink-0 rounded-2xl border-slate-200 px-3 text-[11px] font-black text-slate-600"
-                  disabled={!customEquipmentName.trim()}
-                  onClick={addCustomEquipmentItem}
-                >
-                  Add custom
-                </Button>
-              </div>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-10 w-full rounded-2xl border-slate-200 bg-white text-xs font-black text-[#102A43]"
+                onClick={() => {
+                  blurActiveField();
+                  setColorPickerOpen(false);
+                  setCustomEquipmentName("");
+                  setEquipmentItemPickerOpen(true);
+                }}
+              >
+                <Plus className="mr-1.5 h-4 w-4" />
+                Add item
+              </Button>
             </div>
 
             <div className="grid gap-2">

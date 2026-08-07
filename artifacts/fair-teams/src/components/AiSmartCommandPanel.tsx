@@ -610,7 +610,7 @@ function actionPrimaryVerb(action: AiSmartCommandAction) {
   return "Apply";
 }
 
-const AI_ASSISTANT_VERSION_LABEL = "Help beta · v1.56.1 Club workspace hierarchy";
+const AI_ASSISTANT_VERSION_LABEL = "Help beta · v1.56.2 Club hierarchy + refresh";
 
 type AiRosterMatch = {
   player: AiSmartCommandRosterPlayer;

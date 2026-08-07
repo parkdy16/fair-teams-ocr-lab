@@ -11,7 +11,10 @@ import {
   Trash2,
   AlertTriangle,
   ChevronLeft,
+  ChevronRight,
   UserCircle,
+  UsersRound,
+  KeyRound,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FirebaseSharedRosterAuthCard } from "@/components/FirebaseSharedRosterAuthCard";
@@ -1861,7 +1864,7 @@ export function ClubTab({
   }, [clubDeskCollapsed]);
 
   const clubDeskSummary = useMemo(() => {
-    if (!clubUser) return "Sign in for shared tools";
+    if (!clubUser) return "Sign in to share and manage collaborators";
     const parts: string[] = [];
     if (isSharedRoster) {
       parts.push(`${sharedPeopleCount} organizer${sharedPeopleCount === 1 ? "" : "s"}`);
@@ -1869,11 +1872,8 @@ export function ClubTab({
     } else {
       parts.push("Private setup");
     }
-    if (players.length > 0 && clubRatingsEnabled) {
-      parts.push(`${clubRatedCount}/${players.length} rated`);
-    }
     return parts.join(" · ");
-  }, [clubUser, isSharedRoster, sharedPeopleCount, players.length, clubRatingsEnabled, clubRatedCount]);
+  }, [clubUser, isSharedRoster, sharedPeopleCount]);
 
   return (
     <div className="mx-auto flex w-full max-w-xl flex-col gap-3 px-1 pb-2 lg:mx-0 lg:max-w-none lg:gap-5 lg:px-0">
@@ -1892,7 +1892,7 @@ export function ClubTab({
       </Dialog>
 
       <div className="contents lg:grid lg:grid-cols-2 lg:items-start lg:gap-5 xl:[grid-template-columns:minmax(18rem,0.84fr)_minmax(0,1.26fr)] xl:[grid-template-rows:auto_auto_auto]">
-      <div id="fairteams-help-panel" className="lg:order-2 lg:col-span-2 lg:h-full lg:[&>section]:h-full xl:order-none xl:col-span-1 xl:col-start-2 xl:row-start-3 xl:h-auto xl:[&>section]:h-auto">
+      <div id="fairteams-help-panel" className="order-6 lg:col-span-1 lg:col-start-2 lg:row-start-3 lg:h-full lg:[&>section]:h-full">
       <AiSmartCommandPanel
         players={players}
         rosterName={activeRosterName}
@@ -1908,23 +1908,148 @@ export function ClubTab({
       />
       </div>
 
-      <section className="overflow-hidden rounded-[1.7rem] border border-violet-100 bg-[#f8f3ff] p-3 shadow-sm ring-1 ring-violet-50 lg:order-1 lg:col-span-2 lg:h-full lg:p-4 xl:order-none xl:col-span-1 xl:col-start-1 xl:row-start-1 xl:h-auto">
+      <section className="order-1 overflow-hidden rounded-[1.7rem] border border-violet-100 bg-[#f8f3ff] p-3 shadow-sm ring-1 ring-violet-50 lg:col-span-1 lg:col-start-1 lg:row-start-1 lg:h-full lg:p-4">
+        <div className="flex items-start gap-2.5">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-white/85 text-violet-700 shadow-sm ring-1 ring-violet-100 lg:h-10 lg:w-10">
+            <UsersRound className="fairteams-desktop-balanced-icon h-5 w-5 lg:h-6 lg:w-6" />
+          </div>
+          <div className="min-w-0">
+            <div className="text-[17px] font-black leading-tight text-[#102A43] lg:text-[20px]">Player Management</div>
+            <div className="mt-0.5 text-[10px] font-bold text-violet-700/75 lg:text-[12px]">Ratings · Attendance · Rules</div>
+          </div>
+        </div>
+
+        <div className="mt-3 overflow-hidden rounded-[1.25rem] border border-violet-100 bg-white/75 shadow-sm">
+          <button
+            type="button"
+            className="flex min-h-[3.25rem] w-full items-center gap-2.5 px-3 py-2 text-left transition hover:bg-white active:bg-violet-50 disabled:opacity-45"
+            disabled={!clubRatingsEnabled || players.length === 0}
+            onClick={() => setRatingBoardOpen(true)}
+          >
+            <Star className="h-4 w-4 shrink-0 text-violet-600 lg:h-5 lg:w-5" />
+            <span className="min-w-0 flex-1">
+              <span className="block text-[12px] font-black text-[#102A43] lg:text-sm">Club ratings</span>
+              <span className="block truncate text-[10px] font-bold text-slate-500 lg:text-[11px]">
+                {clubRatingsEnabled ? `${clubRatedCount}/${players.length} rated` : isSharedRoster ? "Sign in to rate" : "Shared rosters only"}
+              </span>
+            </span>
+            <ChevronRight className="h-4 w-4 shrink-0 text-violet-300" />
+          </button>
+
+          <button
+            type="button"
+            className="flex min-h-[3.25rem] w-full items-center gap-2.5 border-t border-violet-100 px-3 py-2 text-left transition hover:bg-white active:bg-violet-50 disabled:opacity-45"
+            disabled={!attendanceEnabled}
+            onClick={() => { setAttendanceHistoryPlayerId(null); setAttendanceBoardOpen(true); }}
+          >
+            <Clock3 className="h-4 w-4 shrink-0 text-violet-600 lg:h-5 lg:w-5" />
+            <span className="min-w-0 flex-1">
+              <span className="block text-[12px] font-black text-[#102A43] lg:text-sm">Attendance</span>
+              <span className="block truncate text-[10px] font-bold text-slate-500 lg:text-[11px]">
+                {attendanceEnabled ? "Shared organizer log" : isSharedRoster ? "Sign in to record" : "Shared rosters only"}
+              </span>
+            </span>
+            <ChevronRight className="h-4 w-4 shrink-0 text-violet-300" />
+          </button>
+
+          <button
+            type="button"
+            className="flex min-h-[3.25rem] w-full items-center gap-2.5 border-t border-violet-100 px-3 py-2 text-left transition hover:bg-white active:bg-violet-50 disabled:opacity-45"
+            disabled={!onOpenPairingRules || playerCount < 2}
+            onClick={onOpenPairingRules}
+          >
+            <ClipboardList className="h-4 w-4 shrink-0 text-violet-600 lg:h-5 lg:w-5" />
+            <span className="min-w-0 flex-1">
+              <span className="block text-[12px] font-black text-[#102A43] lg:text-sm">Rules</span>
+              <span className="block truncate text-[10px] font-bold text-slate-500 lg:text-[11px]">
+                {cleanPairingRuleCount > 0 ? `${cleanPairingRuleCount} pairing rule${cleanPairingRuleCount === 1 ? "" : "s"}` : "No pairing rules"}
+              </span>
+            </span>
+            <ChevronRight className="h-4 w-4 shrink-0 text-violet-300" />
+          </button>
+        </div>
+
+        {(isSharedRoster && legacySkillSeedPlayers.length > 0) && (
+          <div className="mt-2 rounded-2xl border border-violet-100 bg-white/70 px-3 py-2">
+            <div className="text-[11px] font-bold leading-snug text-violet-900">
+              Use current roster ratings as your first Club ratings.
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-2 h-8 w-full rounded-xl border-violet-200 bg-white text-[11px] font-black text-violet-700 hover:bg-violet-50"
+              disabled={!clubRatingsEnabled || ratingSeedSaving}
+              onClick={seedClubRatingsFromRosterSkills}
+            >
+              {ratingSeedSaving ? "Importing…" : `Use ratings for ${legacySkillSeedPlayers.length} player${legacySkillSeedPlayers.length === 1 ? "" : "s"}`}
+            </Button>
+          </div>
+        )}
+
+        {ratingSeedMessage && (
+          <div className="mt-2 rounded-2xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-[11px] font-bold leading-snug text-emerald-800">
+            {ratingSeedMessage}
+          </div>
+        )}
+
+        {clubRatingError && (
+          <div className="mt-2 rounded-2xl border border-amber-100 bg-amber-50 px-3 py-2 text-[11px] font-bold leading-snug text-amber-800">
+            {clubRatingError}
+          </div>
+        )}
+
+        {isSharedRoster && (clubNeedRatingCount > 0 || clubSkippedCount > 0) && (
+          <div className="mt-2 grid gap-2">
+            {clubNeedRatingCount > 0 && (
+              <button
+                type="button"
+                className="flex items-center justify-between rounded-2xl border border-violet-100 bg-white/70 px-3 py-2 text-left active:scale-[0.99] disabled:opacity-50"
+                disabled={!clubRatingsEnabled}
+                onClick={() => setRatingBoardOpen(true)}
+              >
+                <span className="min-w-0">
+                  <span className="block text-xs font-black text-[#102A43]">Needs your rating</span>
+                  <span className="block truncate text-[11px] font-semibold text-violet-700">
+                    {orderedNeedRatingPlayers.slice(0, 3).map((player) => player.name).join(", ")}
+                  </span>
+                </span>
+                <span className="rounded-full bg-violet-50 px-2 py-1 text-[10px] font-black text-violet-700">{clubNeedRatingCount}</span>
+              </button>
+            )}
+            {clubSkippedCount > 0 && (
+              <button
+                type="button"
+                className="flex items-center justify-between rounded-2xl border border-amber-100 bg-amber-50/80 px-3 py-2 text-left active:scale-[0.99] disabled:opacity-50"
+                disabled={!clubRatingsEnabled}
+                onClick={() => setRatingBoardOpen(true)}
+              >
+                <span className="min-w-0">
+                  <span className="block text-xs font-black text-[#102A43]">Skipped for later</span>
+                  <span className="block truncate text-[11px] font-semibold text-amber-700">
+                    {skippedPlayers.slice(0, 3).map((player) => player.name).join(", ")}
+                  </span>
+                </span>
+                <span className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-amber-700">{clubSkippedCount}</span>
+              </button>
+            )}
+          </div>
+        )}
+      </section>
+
+      <section className="order-2 overflow-hidden rounded-[1.7rem] border border-slate-200 bg-white p-3 shadow-sm ring-1 ring-slate-100 lg:col-span-1 lg:col-start-1 lg:row-start-2 lg:h-full lg:p-4">
         <div className="flex items-start justify-between gap-3">
           <button
             type="button"
-            className="flex min-w-0 items-center gap-2 text-left active:scale-[0.99]"
+            className="flex min-w-0 items-center gap-2.5 text-left active:scale-[0.99]"
             onClick={() => setAccountDialogOpen(true)}
           >
-            <UserCircle className="fairteams-desktop-balanced-icon h-4 w-4 shrink-0 text-violet-600 lg:h-6 lg:w-6" />
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-slate-50 text-slate-600 ring-1 ring-slate-100 lg:h-10 lg:w-10">
+              <KeyRound className="fairteams-desktop-balanced-icon h-[18px] w-[18px] lg:h-5 lg:w-5" />
+            </div>
             <span className="min-w-0">
-              <span className="block truncate text-sm font-black text-[#102A43] lg:text-[13px] lg:font-extrabold lg:uppercase lg:tracking-[0.08em] lg:text-violet-700">
-                Club Tools
-              </span>
-              <span className="block truncate text-[11px] font-bold text-violet-700/80 lg:mt-1 lg:text-[20px] lg:font-black lg:leading-tight lg:text-[#102A43]">
-                {clubUser ? `Hey, ${clubGreetingName}` : "Shared workspace"}
-              </span>
-              <span className="mt-0.5 block truncate text-[10px] font-semibold text-violet-700/70 lg:mt-1 lg:text-[14px] lg:font-bold lg:text-violet-800/80">
-                {clubUser ? clubDeskSummary : "Sign in for shared rosters, ratings and organizer tools"}
+              <span className="block truncate text-[17px] font-black leading-tight text-[#102A43] lg:text-[20px]">Club Access</span>
+              <span className="mt-0.5 block truncate text-[10px] font-bold text-slate-500 lg:text-[12px]">
+                {clubUser ? `${clubGreetingName} · ${clubDeskSummary}` : clubDeskSummary}
               </span>
             </span>
           </button>
@@ -1932,7 +2057,7 @@ export function ClubTab({
             {!clubUser && (
               <Button
                 type="button"
-                className="h-9 shrink-0 rounded-full bg-violet-600 px-3 text-[11px] font-black text-white hover:bg-violet-700 lg:text-xs"
+                className="h-9 shrink-0 rounded-full bg-[#102A43] px-3 text-[11px] font-black text-white hover:bg-[#0b2036] lg:text-xs"
                 onClick={() => setAccountDialogOpen(true)}
               >
                 Sign in
@@ -1941,7 +2066,7 @@ export function ClubTab({
             {clubUser && (
               <Button
                 type="button"
-                className="hidden h-9 shrink-0 rounded-full bg-violet-600 px-3 text-xs font-black text-white hover:bg-violet-700 lg:inline-flex"
+                className="hidden h-9 shrink-0 rounded-full border border-slate-200 bg-white px-3 text-xs font-black text-slate-600 hover:bg-slate-50 lg:inline-flex"
                 onClick={(event) => {
                   event.stopPropagation();
                   void signOutOfSharedRosters();
@@ -1952,160 +2077,21 @@ export function ClubTab({
             )}
             <button
               type="button"
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-white/80 text-violet-700 shadow-sm ring-1 ring-violet-100 active:scale-[0.98]"
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-50 text-slate-500 ring-1 ring-slate-100 active:scale-[0.98]"
               onClick={() => setClubDeskCollapsed((current) => !current)}
-              aria-label={clubDeskCollapsed ? "Expand Club Tools" : "Collapse Club Tools"}
+              aria-label={clubDeskCollapsed ? "Expand Club Access" : "Collapse Club Access"}
             >
-              {clubDeskCollapsed ? <ChevronDown className="fairteams-desktop-balanced-icon h-4 w-4 lg:h-5 lg:w-5" /> : <ChevronUp className="fairteams-desktop-balanced-icon h-4 w-4 lg:h-5 lg:w-5" />}
+              {clubDeskCollapsed ? <ChevronDown className="h-4 w-4 lg:h-5 lg:w-5" /> : <ChevronUp className="h-4 w-4 lg:h-5 lg:w-5" />}
             </button>
           </div>
         </div>
 
         {!clubDeskCollapsed && (
-          <>
-            <div className="mt-3 grid gap-2">
-              <div className="min-w-0">{sharedToolsNode}</div>
-              <div className="grid grid-cols-3 gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-12 justify-start rounded-2xl border-violet-100 bg-white/70 px-2.5 text-left text-violet-700 shadow-sm hover:bg-white hover:text-violet-800"
-                  disabled={!attendanceEnabled}
-                  onClick={() => { setAttendanceHistoryPlayerId(null); setAttendanceBoardOpen(true); }}
-                >
-                  <Clock3 className="fairteams-desktop-balanced-icon mr-1.5 h-4 w-4 shrink-0 lg:h-5 lg:w-5" />
-                  <span className="min-w-0">
-                    <span className="block truncate text-[11px] font-black lg:text-xs">Attendance</span>
-                    <span className="block truncate text-[10px] font-black text-violet-600/75">
-                      {attendanceEnabled ? "Shared log" : isSharedRoster ? "Sign in" : "Shared only"}
-                    </span>
-                  </span>
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-12 justify-start rounded-2xl border-violet-100 bg-white/70 px-2.5 text-left text-violet-700 shadow-sm hover:bg-white hover:text-violet-800"
-                  disabled={!clubRatingsEnabled || players.length === 0}
-                  onClick={() => setRatingBoardOpen(true)}
-                >
-                  <Star className="fairteams-desktop-balanced-icon mr-1.5 h-4 w-4 shrink-0 lg:h-5 lg:w-5" />
-                  <span className="min-w-0">
-                    <span className="block truncate text-[11px] font-black lg:text-xs">Ratings</span>
-                    <span className="block truncate text-[10px] font-black text-violet-600/75">
-                      {clubRatingsEnabled
-                        ? `${clubRatedCount}/${players.length}`
-                        : isSharedRoster
-                          ? "Sign in"
-                          : "Shared only"}
-                    </span>
-                  </span>
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-12 justify-start rounded-2xl border-violet-100 bg-white/70 px-2.5 text-left text-violet-700 shadow-sm hover:bg-white hover:text-violet-800"
-                  disabled={!onOpenPairingRules || playerCount < 2}
-                  onClick={onOpenPairingRules}
-                >
-                  <ClipboardList className="fairteams-desktop-balanced-icon mr-1.5 h-4 w-4 shrink-0 lg:h-5 lg:w-5" />
-                  <span className="min-w-0">
-                    <span className="block truncate text-[11px] font-black lg:text-xs">Pairing</span>
-                    <span className="block truncate text-[10px] font-black text-violet-600/75">
-                      {cleanPairingRuleCount > 0
-                        ? `${cleanPairingRuleCount} rule${cleanPairingRuleCount === 1 ? "" : "s"}`
-                        : "None"}
-                    </span>
-                  </span>
-                </Button>
-              </div>
-            </div>
-
-            {(isSharedRoster && legacySkillSeedPlayers.length > 0) && (
-              <div className="mt-2 rounded-2xl border border-violet-100 bg-white/70 px-3 py-2">
-                <div className="text-[11px] font-bold leading-snug text-violet-900">
-                  Use current roster ratings as your first Club ratings.
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="mt-2 h-8 w-full rounded-xl border-violet-200 bg-white text-[11px] font-black text-violet-700 hover:bg-violet-50"
-                  disabled={!clubRatingsEnabled || ratingSeedSaving}
-                  onClick={seedClubRatingsFromRosterSkills}
-                >
-                  {ratingSeedSaving
-                    ? "Importing…"
-                    : `Use ratings for ${legacySkillSeedPlayers.length} player${legacySkillSeedPlayers.length === 1 ? "" : "s"}`}
-                </Button>
-              </div>
-            )}
-
-            {ratingSeedMessage && (
-              <div className="mt-2 rounded-2xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-[11px] font-bold leading-snug text-emerald-800">
-                {ratingSeedMessage}
-              </div>
-            )}
-
-            {clubRatingError && (
-              <div className="mt-2 rounded-2xl border border-amber-100 bg-amber-50 px-3 py-2 text-[11px] font-bold leading-snug text-amber-800">
-                {clubRatingError}
-              </div>
-            )}
-
-            {isSharedRoster && (clubNeedRatingCount > 0 || clubSkippedCount > 0) && (
-              <div className="mt-2 grid gap-2">
-                {clubNeedRatingCount > 0 && (
-                  <button
-                    type="button"
-                    className="flex items-center justify-between rounded-2xl border border-violet-100 bg-white/70 px-3 py-2 text-left active:scale-[0.99] disabled:opacity-50"
-                    disabled={!clubRatingsEnabled}
-                    onClick={() => setRatingBoardOpen(true)}
-                  >
-                    <span className="min-w-0">
-                      <span className="block text-xs font-black text-[#102A43]">
-                        Needs your rating
-                      </span>
-                      <span className="block truncate text-[11px] font-semibold text-violet-700">
-                        {orderedNeedRatingPlayers
-                          .slice(0, 3)
-                          .map((player) => player.name)
-                          .join(", ")}
-                      </span>
-                    </span>
-                    <span className="rounded-full bg-violet-50 px-2 py-1 text-[10px] font-black text-violet-700">
-                      {clubNeedRatingCount}
-                    </span>
-                  </button>
-                )}
-                {clubSkippedCount > 0 && (
-                  <button
-                    type="button"
-                    className="flex items-center justify-between rounded-2xl border border-amber-100 bg-amber-50/80 px-3 py-2 text-left active:scale-[0.99] disabled:opacity-50"
-                    disabled={!clubRatingsEnabled}
-                    onClick={() => setRatingBoardOpen(true)}
-                  >
-                    <span className="min-w-0">
-                      <span className="block text-xs font-black text-[#102A43]">
-                        Skipped for later
-                      </span>
-                      <span className="block truncate text-[11px] font-semibold text-amber-700">
-                        {skippedPlayers
-                          .slice(0, 3)
-                          .map((player) => player.name)
-                          .join(", ")}
-                      </span>
-                    </span>
-                    <span className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-amber-700">
-                      {clubSkippedCount}
-                    </span>
-                  </button>
-                )}
-              </div>
-            )}
-          </>
+          <div className="mt-3 min-w-0">{sharedToolsNode}</div>
         )}
       </section>
 
-      <div className="contents lg:order-3 lg:col-span-1 lg:block lg:h-full lg:[&>section]:h-full xl:order-none xl:col-span-1 xl:col-start-2 xl:row-start-1 xl:[&>section]:h-full">
+      <div className="order-4 lg:col-span-1 lg:col-start-2 lg:row-start-1 lg:h-full lg:[&>section]:h-full">
         <TaskBoard
           rosterName={activeRosterName}
           workspaceKey={workspaceKey}
@@ -2117,7 +2103,7 @@ export function ClubTab({
         />
       </div>
 
-      <section className="overflow-visible rounded-[1.7rem] border border-amber-100 bg-[#fffaf0] p-3 shadow-sm ring-1 ring-amber-50 lg:order-4 lg:col-span-1 lg:h-full lg:p-4 xl:order-none xl:col-span-1 xl:col-start-2 xl:row-start-2 xl:h-full">
+      <section className="order-3 overflow-visible rounded-[1.7rem] border border-amber-100 bg-[#fffaf0] p-3 shadow-sm ring-1 ring-amber-50 lg:col-span-1 lg:col-start-2 lg:row-start-2 lg:h-full lg:p-4">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
             <div className="flex items-center gap-2 text-[17px] font-black leading-none text-[#a94f0a] lg:text-[20px]">
@@ -2193,7 +2179,7 @@ export function ClubTab({
         )}
       </section>
 
-      <section className="rounded-[1.7rem] border border-sky-100 bg-[#f6fbff] p-3 shadow-sm ring-1 ring-sky-50 lg:order-5 lg:col-span-2 lg:p-4 xl:order-none xl:col-span-1 xl:col-start-1 xl:row-start-2 xl:row-span-2 xl:h-full">
+      <section className="order-5 rounded-[1.7rem] border border-sky-100 bg-[#f6fbff] p-3 shadow-sm ring-1 ring-sky-50 lg:col-span-1 lg:col-start-1 lg:row-start-3 lg:h-full lg:p-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-wide text-blue-600 lg:text-[20px] lg:normal-case lg:tracking-normal">

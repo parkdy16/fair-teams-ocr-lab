@@ -3980,7 +3980,7 @@ export function TodayTab({
           >
             <div className="flex flex-col">
               <span className="text-[10px] uppercase font-black tracking-wider text-slate-500">
-                Today
+                Session
               </span>
               <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1 leading-tight">
                 <span className="text-base font-black text-slate-900">

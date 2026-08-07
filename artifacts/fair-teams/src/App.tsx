@@ -93,6 +93,7 @@ const EMPTY_ROSTER_NAME = "New roster";
 const ROSTERS_STORAGE_KEY = "fair-teams-rosters-v1";
 const DRIVE_RECIPIENTS_STORAGE_KEY = "fair-teams-drive-backup-recipients-v1";
 const DRIVE_ACTIVE_BACKUP_STORAGE_KEY = "fair-teams-drive-active-backup-v1";
+const ACTIVE_TAB_STORAGE_KEY = "fair-teams-active-tab-v1";
 
 function hasSavedRosterState() {
   try {
@@ -368,6 +369,15 @@ function isAppTab(value: string): value is AppTab {
   return (APP_TAB_VALUES as readonly string[]).includes(value);
 }
 
+function readStoredAppTab(): AppTab {
+  try {
+    const stored = window.localStorage.getItem(ACTIVE_TAB_STORAGE_KEY);
+    return stored && isAppTab(stored) ? stored : "today";
+  } catch {
+    return "today";
+  }
+}
+
 function App() {
   const [showSplash, setShowSplash] = useState(true);
   const [splashVisible, setSplashVisible] = useState(false);
@@ -414,7 +424,7 @@ function App() {
     };
   }, [showSplash]);
 
-  const [activeTab, setActiveTab] = useState<AppTab>("today");
+  const [activeTab, setActiveTab] = useState<AppTab>(readStoredAppTab);
   const [tutorialStep, setTutorialStep] = useState<string | null>(null);
   const [tutorialPlayerId, setTutorialPlayerId] = useState<string | null>(null);
   const [onboardingReady, setOnboardingReady] = useState(false);
@@ -432,7 +442,7 @@ function App() {
     "advanced-edit": { title: "Advanced Edit", body: "Open Advanced Edit. It is optional, but useful when you know a player well." },
     "save-edit": { title: "Save the profile", body: "You have seen the detailed controls. Save the player profile." },
     "flip-card": { title: "See the other side", body: "Tap Heung-min’s card to flip it and see more player information." },
-    "today-tab": { title: "Match day", body: "Open Today to choose who is playing." },
+    "today-tab": { title: "Match day", body: "Open Session to choose who is playing." },
     "select-today": { title: "Complete the lineup", body: "Select Heung-min on the attendance screen." },
     "teams-tab": { title: "Make teams", body: "Open the Teams tab." },
     "field-size": { title: "Choose the pitch", body: "Open Field Size and choose any size." },
@@ -452,8 +462,8 @@ function App() {
   const [aiTeamsState, setAiTeamsState] = useState<{ hasTeams: boolean; teamCount: number; selectedCount: number }>({ hasTeams: false, teamCount: 2, selectedCount: 0 });
   const [clubBackTargetOpen, setClubBackTargetOpen] = useState(false);
   const [openPairingRulesToken, setOpenPairingRulesToken] = useState(0);
-  const activeTabRef = useRef<AppTab>("today");
-  const tabHistoryRef = useRef<AppTab[]>(["today"]);
+  const activeTabRef = useRef<AppTab>(activeTab);
+  const tabHistoryRef = useRef<AppTab[]>([activeTab]);
   const restoringTabFromBackRef = useRef(false);
   const fairTeamsBackTrapArmedRef = useRef(false);
   const [todayRosterChosen, setTodayRosterChosen] = useState(false);
@@ -3362,6 +3372,14 @@ They will no longer be able to open or edit this shared roster unless it is shar
     activeTab !== "today";
 
   useEffect(() => {
+    try {
+      window.localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, activeTab);
+    } catch {
+      // Last-view persistence is optional when storage is unavailable.
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
     activeTabRef.current = activeTab;
     if (restoringTabFromBackRef.current) {
       restoringTabFromBackRef.current = false;
@@ -3613,7 +3631,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
             <TabsList className="mt-6 flex h-auto w-full flex-col gap-1.5 rounded-none border-0 bg-transparent p-0 shadow-none">
               {([
                 ["players", "Roster", Users],
-                ["today", "Today", Check],
+                ["today", "Session", Check],
                 ["teams", "Teams", RefreshCw],
                 ["club", "Club", Building2],
               ] as const).map(([value, label, Icon]) => (
@@ -3643,7 +3661,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                     </span>
                   )}
                 </div>
-                <div className="mt-0.5 text-xs font-bold text-slate-400">{activeTab === "players" ? "Roster" : activeTab === "today" ? "Today" : activeTab === "teams" ? "Teams" : "Club"}</div>
+                <div className="mt-0.5 text-xs font-bold text-slate-400">{activeTab === "players" ? "Roster" : activeTab === "today" ? "Session" : activeTab === "teams" ? "Teams" : "Club"}</div>
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-2">
@@ -3988,7 +4006,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 value="today"
                 className={`fairteams-tab-trigger ${tutorialStep === "today-tab" ? "fairteams-tutorial-pulse relative z-[82]" : ""} fairteams-footer-text-tab flex h-full items-center justify-center rounded-xl text-slate-500 transition-all`}
               >
-                <span className="text-[12px] font-semibold leading-none tracking-tight">Today</span>
+                <span className="text-[12px] font-semibold leading-none tracking-tight">Session</span>
               </TabsTrigger>
               <TabsTrigger
                 value="teams"

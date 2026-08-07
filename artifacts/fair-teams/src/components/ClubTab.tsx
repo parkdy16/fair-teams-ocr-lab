@@ -1703,7 +1703,7 @@ export function ClubTab({
             <UserCircle className="fairteams-desktop-balanced-icon h-4 w-4 shrink-0 text-violet-600 lg:h-6 lg:w-6" />
             <span className="min-w-0">
               <span className="block truncate text-sm font-black text-[#102A43] lg:text-[13px] lg:font-extrabold lg:uppercase lg:tracking-[0.08em] lg:text-violet-700">
-                Club Desk
+                Club Tools
               </span>
               <span className="block truncate text-[11px] font-bold text-violet-700/80 lg:mt-1 lg:text-[20px] lg:font-black lg:leading-tight lg:text-[#102A43]">
                 {clubUser ? `Hey, ${clubGreetingName}` : "Shared workspace"}
@@ -1739,7 +1739,7 @@ export function ClubTab({
               type="button"
               className="flex h-9 w-9 items-center justify-center rounded-full bg-white/80 text-violet-700 shadow-sm ring-1 ring-violet-100 active:scale-[0.98]"
               onClick={() => setClubDeskCollapsed((current) => !current)}
-              aria-label={clubDeskCollapsed ? "Expand Club Desk" : "Collapse Club Desk"}
+              aria-label={clubDeskCollapsed ? "Expand Club Tools" : "Collapse Club Tools"}
             >
               {clubDeskCollapsed ? <ChevronDown className="fairteams-desktop-balanced-icon h-4 w-4 lg:h-5 lg:w-5" /> : <ChevronUp className="fairteams-desktop-balanced-icon h-4 w-4 lg:h-5 lg:w-5" />}
             </button>

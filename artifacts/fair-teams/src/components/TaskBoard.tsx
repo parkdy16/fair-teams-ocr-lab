@@ -537,7 +537,7 @@ export function TaskBoard({ rosterName, workspaceKey, themeColor, scopeId, isSha
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-wide lg:text-[20px] lg:normal-case lg:tracking-normal" style={{ color: accent }}>
-              <ClipboardList className="fairteams-desktop-balanced-icon h-[18px] w-[18px] lg:h-6 lg:w-6" /> Tasks &amp; Votes
+              <ClipboardList className="fairteams-desktop-balanced-icon h-[18px] w-[18px] lg:h-6 lg:w-6" /> Action Board
             </div>
             <h2 className="mt-1 truncate text-[17px] font-black leading-tight text-[#102A43] lg:text-[19px]">{board.meta?.name || rosterName}</h2>
           </div>

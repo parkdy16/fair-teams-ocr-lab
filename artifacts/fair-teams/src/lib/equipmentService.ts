@@ -11,12 +11,20 @@ import {
 } from "firebase/firestore";
 import { getFairTeamsAuth, getFairTeamsFirestore } from "@/lib/firebaseClient";
 
+export type EquipmentInventoryItem = {
+  key: string;
+  label: string;
+  quantity: number;
+  custom?: boolean;
+};
+
 export type FirebaseEquipmentBag = {
   id: string;
   name: string;
   holderId: string;
   color: string;
   contents: string[];
+  items?: EquipmentInventoryItem[];
   note?: string;
   createdAt?: number;
   createdByEmail?: string;
@@ -46,12 +54,33 @@ function timestampToMillis(value: unknown): number | undefined {
   return undefined;
 }
 
+function cleanInventoryItems(value: unknown): EquipmentInventoryItem[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((raw) => {
+      if (!raw || typeof raw !== "object") return null;
+      const item = raw as Record<string, unknown>;
+      const label = cleanString(item.label);
+      if (!label) return null;
+      const quantity = Math.max(1, Math.min(999, Math.round(Number(item.quantity) || 1)));
+      const key = cleanString(item.key, label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""));
+      return {
+        key: key || "custom",
+        label,
+        quantity,
+        custom: item.custom === true || undefined,
+      } satisfies EquipmentInventoryItem;
+    })
+    .filter((item): item is EquipmentInventoryItem => Boolean(item))
+    .slice(0, 30);
+}
+
 function cleanContents(value: unknown) {
   if (!Array.isArray(value)) return [];
   return value
     .map((item) => String(item).trim())
     .filter(Boolean)
-    .slice(0, 20);
+    .slice(0, 30);
 }
 
 function toEquipmentBag(id: string, data: DocumentData): FirebaseEquipmentBag {
@@ -70,6 +99,7 @@ function toEquipmentBag(id: string, data: DocumentData): FirebaseEquipmentBag {
     holderId: cleanString(data.holderId, "unknown"),
     color: cleanString(data.color, "#111827"),
     contents: cleanContents(data.contents),
+    items: cleanInventoryItems(data.items),
     note: cleanString(data.note) || undefined,
     createdAt,
     createdByEmail: cleanString(data.createdByEmail) || undefined,
@@ -135,7 +165,7 @@ export async function saveFirebaseEquipmentBag(scopeId: string, bag: FirebaseEqu
   const scope = resolveEquipmentScope(scopeId);
   const payload: Record<string, unknown> = {
     app: "Fair Teams",
-    schemaVersion: 1,
+    schemaVersion: 2,
     scopeKind: scope.kind,
     scopeId: scope.id,
     groupId: scope.kind === "group" ? scope.id : null,
@@ -143,7 +173,13 @@ export async function saveFirebaseEquipmentBag(scopeId: string, bag: FirebaseEqu
     name: bag.name.trim() || "Equipment bag",
     holderId: bag.holderId || "unknown",
     color: bag.color || "#111827",
-    contents: bag.contents.map((item) => item.trim()).filter(Boolean).slice(0, 20),
+    contents: bag.contents.map((item) => item.trim()).filter(Boolean).slice(0, 30),
+    items: (bag.items || []).slice(0, 30).map((item) => ({
+      key: item.key.trim(),
+      label: item.label.trim(),
+      quantity: Math.max(1, Math.min(999, Math.round(item.quantity || 1))),
+      custom: item.custom === true,
+    })),
     note: bag.note?.trim() || null,
     updatedByUid: user.uid,
     updatedByEmail: user.email,

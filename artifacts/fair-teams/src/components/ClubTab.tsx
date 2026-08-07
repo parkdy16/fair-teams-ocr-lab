@@ -40,6 +40,7 @@ import {
   deleteFirebaseEquipmentBag,
   listenToFirebaseEquipmentBags,
   saveFirebaseEquipmentBag,
+  type EquipmentInventoryItem,
   type FirebaseEquipmentBag,
 } from "@/lib/equipmentService";
 import type { PairingRule } from "@/lib/types";
@@ -156,6 +157,82 @@ const EQUIPMENT_COLORS = [
 
 const DEFAULT_EQUIPMENT_COLOR = EQUIPMENT_COLORS[0];
 
+const EQUIPMENT_PRESETS = [
+  { key: "balls", label: "Balls" },
+  { key: "flat-cones", label: "Flat cones" },
+  { key: "tower-cones", label: "Tower cones" },
+  { key: "bibs", label: "Bibs / vests" },
+  { key: "team-bands", label: "Team bands" },
+  { key: "ball-pumps", label: "Ball pumps" },
+  { key: "ball-needles", label: "Ball needles" },
+  { key: "goals", label: "Goals" },
+  { key: "first-aid", label: "First-aid kits" },
+  { key: "whistles", label: "Whistles" },
+] as const;
+
+const EQUIPMENT_PRESET_ORDER = new Map<string, number>(
+  [["equipment-bags", -1], ...EQUIPMENT_PRESETS.map((item, index) => [item.key, index] as [string, number])],
+);
+
+function equipmentItemKey(label: string) {
+  return label
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "") || "custom";
+}
+
+function legacyEquipmentItems(contents: string[]): EquipmentInventoryItem[] {
+  const items: EquipmentInventoryItem[] = [];
+  contents.forEach((raw) => {
+    const text = raw.trim();
+    if (!text) return;
+    const match = text.match(/^(\d+)\s*(?:x|×)?\s+(.+)$/i);
+    const quantity = Math.max(1, Math.min(999, Number(match?.[1]) || 1));
+    const rawLabel = (match?.[2] || text).trim();
+    const normalized = rawLabel.toLowerCase();
+    let preset = EQUIPMENT_PRESETS.find((item) => {
+      if (item.key === "balls") return /\bballs?\b/.test(normalized);
+      if (item.key === "flat-cones") return /\b(flat|disc|marker)\b.*\bcones?\b|\bcones?\b.*\b(flat|disc|marker)\b/.test(normalized);
+      if (item.key === "tower-cones") return /\b(tower|tall|training)\b.*\bcones?\b|\bcones?\b.*\b(tower|tall|training)\b/.test(normalized);
+      if (item.key === "bibs") return /^(bibs?|vests?|training bibs?|training vests?)$/.test(normalized);
+      if (item.key === "team-bands") return /\b(team\s*)?(bands?|sashes?)\b/.test(normalized);
+      if (item.key === "ball-pumps") return /\b(ball\s*)?pumps?\b/.test(normalized);
+      if (item.key === "ball-needles") return /\b(ball\s*)?needles?\b/.test(normalized);
+      if (item.key === "goals") return /\bgoals?\b/.test(normalized);
+      if (item.key === "whistles") return /\bwhistles?\b/.test(normalized);
+      if (item.key === "first-aid") return /first[- ]?aid/.test(normalized);
+      return false;
+    });
+    // Old generic cones and color-specific bibs are deliberately kept custom;
+    // we cannot safely guess flat vs tower or erase useful color information.
+    const legacyLabel = /^cones?$/.test(normalized) ? "Cones (legacy)" : rawLabel.replace(/^\w/, (letter) => letter.toUpperCase());
+    const label = preset?.label || legacyLabel;
+    const key = preset?.key || `custom:${equipmentItemKey(label)}`;
+    const existing = items.find((item) => item.key === key && item.label.toLowerCase() === label.toLowerCase());
+    if (existing) existing.quantity += quantity;
+    else items.push({ key, label, quantity, custom: preset ? undefined : true });
+  });
+  return items;
+}
+
+function equipmentItemsForKit(kit: ClubEquipmentKit): EquipmentInventoryItem[] {
+  const structured = Array.isArray(kit.items)
+    ? kit.items.filter((item) => item.label?.trim() && item.quantity > 0)
+    : [];
+  return structured.length ? structured.map((item) => ({ ...item })) : legacyEquipmentItems(kit.contents || []);
+}
+
+function equipmentContentsFromItems(items: EquipmentInventoryItem[]) {
+  return items
+    .filter((item) => item.label.trim() && item.quantity > 0)
+    .map((item) => {
+      const quantity = Math.max(1, Math.round(item.quantity));
+      return quantity === 1 ? item.label : `${quantity} ${item.label}`;
+    })
+    .slice(0, 30);
+}
+
 const LOCAL_EQUIPMENT_HOLDERS: EquipmentHolder[] = [
   { id: "storage", label: "Club storage" },
   { id: "you", label: "You" },
@@ -168,7 +245,12 @@ const DEFAULT_EQUIPMENT_KITS: ClubEquipmentKit[] = [
     name: "Ball bag",
     holderId: "you",
     color: "#2563eb",
-    contents: ["2 balls", "Pump", "Needles"],
+    contents: ["2 Balls", "Ball pumps", "Ball needles"],
+    items: [
+      { key: "balls", label: "Balls", quantity: 2 },
+      { key: "ball-pumps", label: "Ball pumps", quantity: 1 },
+      { key: "ball-needles", label: "Ball needles", quantity: 1 },
+    ],
     note: "Check air before Saturday.",
     createdAt: Date.now(),
     createdByName: "Preview",
@@ -180,7 +262,11 @@ const DEFAULT_EQUIPMENT_KITS: ClubEquipmentKit[] = [
     name: "Bibs",
     holderId: "storage",
     color: "#db2777",
-    contents: ["10 dark bibs", "10 light bibs"],
+    contents: ["10 Dark bibs", "10 Light bibs"],
+    items: [
+      { key: "custom:dark-bibs", label: "Dark bibs", quantity: 10, custom: true },
+      { key: "custom:light-bibs", label: "Light bibs", quantity: 10, custom: true },
+    ],
     createdAt: Date.now(),
     createdByName: "Preview",
     updatedAt: Date.now(),
@@ -191,7 +277,8 @@ const DEFAULT_EQUIPMENT_KITS: ClubEquipmentKit[] = [
     name: "Cone stack",
     holderId: "storage",
     color: "#ea580c",
-    contents: ["12 cones"],
+    contents: ["12 Flat cones"],
+    items: [{ key: "flat-cones", label: "Flat cones", quantity: 12 }],
     note: "Someone took them after last game?",
     createdAt: Date.now(),
     createdByName: "Preview",
@@ -431,8 +518,24 @@ function parseEquipmentKits(
           ? kit.contents
               .map((item) => String(item).trim())
               .filter(Boolean)
-              .slice(0, 20)
+              .slice(0, 30)
           : [],
+        items: Array.isArray(kit.items)
+          ? kit.items
+              .map((rawItem) => {
+                const item = rawItem as Partial<EquipmentInventoryItem>;
+                const label = String(item.label || "").trim();
+                if (!label) return null;
+                return {
+                  key: String(item.key || equipmentItemKey(label)),
+                  label,
+                  quantity: Math.max(1, Math.min(999, Math.round(Number(item.quantity) || 1))),
+                  custom: item.custom === true || undefined,
+                } satisfies EquipmentInventoryItem;
+              })
+              .filter((item): item is EquipmentInventoryItem => Boolean(item))
+              .slice(0, 30)
+          : undefined,
         note: kit.note ? String(kit.note) : undefined,
         createdAt: Number(kit.createdAt) || undefined,
         createdByEmail: kit.createdByEmail
@@ -681,7 +784,8 @@ export function ClubTab({
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [equipmentMoveNotice, setEquipmentMoveNotice] = useState("");
   const [contentPeekKitId, setContentPeekKitId] = useState<string | null>(null);
-  const [kitContents, setKitContents] = useState("");
+  const [kitItems, setKitItems] = useState<EquipmentInventoryItem[]>([]);
+  const [customEquipmentName, setCustomEquipmentName] = useState("");
   const [kitNote, setKitNote] = useState("");
   const [draggingKitId, setDraggingKitId] = useState<string | null>(null);
   const [dragOverHolderId, setDragOverHolderId] = useState<string | null>(null);
@@ -1348,6 +1452,83 @@ export function ClubTab({
       : equipmentHolders.slice(0, Math.min(3, equipmentHolders.length));
     return holdersToShow.slice(0, 4);
   }, [equipmentHolders, equipmentKits]);
+  const equipmentInventoryTotals = useMemo(() => {
+    const totals = new Map<string, EquipmentInventoryItem>();
+    if (equipmentKits.length > 0) {
+      totals.set("equipment-bags", { key: "equipment-bags", label: "Bags", quantity: equipmentKits.length });
+    }
+    equipmentKits.forEach((kit) => {
+      equipmentItemsForKit(kit).forEach((item) => {
+        const normalizedLabel = item.label.trim();
+        if (!normalizedLabel || item.quantity <= 0) return;
+        const key = item.custom
+          ? `custom:${equipmentItemKey(normalizedLabel)}`
+          : item.key || equipmentItemKey(normalizedLabel);
+        const existing = totals.get(key);
+        if (existing) existing.quantity += item.quantity;
+        else totals.set(key, { ...item, key, label: normalizedLabel });
+      });
+    });
+    return Array.from(totals.values()).sort((a, b) => {
+      const aOrder = EQUIPMENT_PRESET_ORDER.get(a.key) ?? 999;
+      const bOrder = EQUIPMENT_PRESET_ORDER.get(b.key) ?? 999;
+      return aOrder - bOrder || a.label.localeCompare(b.label);
+    });
+  }, [equipmentKits]);
+  const equipmentTotalPieceCount = useMemo(
+    () => equipmentInventoryTotals.reduce((sum, item) => sum + item.quantity, 0),
+    [equipmentInventoryTotals],
+  );
+
+  const addEquipmentPreset = (preset: (typeof EQUIPMENT_PRESETS)[number]) => {
+    setKitItems((current) => {
+      const existing = current.find((item) => item.key === preset.key && !item.custom);
+      if (existing) {
+        return current.map((item) =>
+          item === existing ? { ...item, quantity: Math.min(999, item.quantity + 1) } : item,
+        );
+      }
+      return [...current, { key: preset.key, label: preset.label, quantity: 1 }];
+    });
+  };
+
+  const updateEquipmentItemQuantity = (index: number, delta: number) => {
+    setKitItems((current) =>
+      current.flatMap((item, itemIndex) => {
+        if (itemIndex !== index) return [item];
+        const quantity = item.quantity + delta;
+        return quantity <= 0 ? [] : [{ ...item, quantity: Math.min(999, quantity) }];
+      }),
+    );
+  };
+
+  const addCustomEquipmentItem = () => {
+    const label = customEquipmentName.trim();
+    if (!label) return;
+    const matchingPreset = EQUIPMENT_PRESETS.find(
+      (preset) => preset.label.toLowerCase() === label.toLowerCase(),
+    );
+    if (matchingPreset) {
+      addEquipmentPreset(matchingPreset);
+      setCustomEquipmentName("");
+      blurActiveField();
+      return;
+    }
+    const key = `custom:${equipmentItemKey(label)}`;
+    setKitItems((current) => {
+      const existingIndex = current.findIndex(
+        (item) => item.custom && equipmentItemKey(item.label) === equipmentItemKey(label),
+      );
+      if (existingIndex >= 0) {
+        return current.map((item, index) =>
+          index === existingIndex ? { ...item, quantity: Math.min(999, item.quantity + 1) } : item,
+        );
+      }
+      return [...current, { key, label, quantity: 1, custom: true }];
+    });
+    setCustomEquipmentName("");
+    blurActiveField();
+  };
   const accountModalOpen = accountDialogOpen;
   const clubGreetingName = getClubGreetingName(clubUser);
   const resetEquipmentForm = () => {
@@ -1358,7 +1539,8 @@ export function ClubTab({
     setColorPickerOpen(false);
     setDeleteBagSlide(0);
     setDeleteConfirmOpen(false);
-    setKitContents("");
+    setKitItems([]);
+    setCustomEquipmentName("");
     setKitNote("");
   };
 
@@ -1408,7 +1590,8 @@ export function ClubTab({
       setKitColor(kit.color || DEFAULT_EQUIPMENT_COLOR);
       setDeleteBagSlide(0);
       setDeleteConfirmOpen(false);
-      setKitContents(kit.contents.join(", "));
+      setKitItems(equipmentItemsForKit(kit));
+      setCustomEquipmentName("");
       setKitNote(kit.note || "");
     });
   };
@@ -1435,11 +1618,15 @@ export function ClubTab({
       name: trimmedName,
       holderId: normalizeEquipmentHolderId(kitHolderId),
       color: kitColor,
-      contents: kitContents
-        .split(/[\n,]/)
-        .map((line) => line.trim())
-        .filter(Boolean)
-        .slice(0, 20),
+      contents: equipmentContentsFromItems(kitItems),
+      items: kitItems
+        .filter((item) => item.label.trim() && item.quantity > 0)
+        .map((item) => ({
+          ...item,
+          label: item.label.trim(),
+          quantity: Math.max(1, Math.min(999, Math.round(item.quantity))),
+        }))
+        .slice(0, 30),
       note: kitNote.trim() || undefined,
       createdAt: existingKit?.createdAt || (!editingKitId ? now : undefined),
       createdByEmail:
@@ -2225,6 +2412,34 @@ export function ClubTab({
           </Button>
         </div>
 
+        {equipmentInventoryTotals.length > 0 && (
+          <div className="mt-3 rounded-[1.25rem] border border-sky-100 bg-white/75 px-3 py-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+                Club total
+              </div>
+              <div className="text-[10px] font-bold text-slate-400">
+                {equipmentTotalPieceCount} total
+              </div>
+            </div>
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {equipmentInventoryTotals.slice(0, 4).map((item) => (
+                <span
+                  key={`equipment-total-preview-${item.key}`}
+                  className="rounded-full border border-sky-100 bg-sky-50 px-2 py-1 text-[10px] font-black text-[#102A43]"
+                >
+                  {item.label} × {item.quantity}
+                </span>
+              ))}
+              {equipmentInventoryTotals.length > 4 && (
+                <span className="rounded-full border border-slate-100 bg-white px-2 py-1 text-[10px] font-black text-slate-400">
+                  +{equipmentInventoryTotals.length - 4} more
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
         {equipmentKits.length > 0 ? (
           <div className="mt-3 overflow-hidden rounded-[1.35rem] border border-slate-100 bg-slate-50/60">
             {equipmentDashboardHolders.map((holder, index) => {
@@ -2895,6 +3110,34 @@ export function ClubTab({
               {equipmentBoardStatusText}
             </div>
 
+            <div className="mb-3 rounded-[1.5rem] border border-sky-100 bg-white p-3 shadow-sm">
+              <div className="flex items-end justify-between gap-3">
+                <div>
+                  <div className="text-xs font-black uppercase tracking-wide text-blue-600">Club inventory</div>
+                  <div className="mt-0.5 text-[11px] font-semibold text-slate-500">Everything across all bags.</div>
+                </div>
+                {equipmentInventoryTotals.length > 0 && (
+                  <div className="text-[11px] font-black text-slate-400">{equipmentTotalPieceCount} total</div>
+                )}
+              </div>
+              {equipmentInventoryTotals.length > 0 ? (
+                <div className="mt-2.5 flex flex-wrap gap-1.5">
+                  {equipmentInventoryTotals.map((item) => (
+                    <span
+                      key={`equipment-total-${item.key}`}
+                      className="rounded-full border border-sky-100 bg-sky-50 px-2.5 py-1.5 text-[11px] font-black text-[#102A43]"
+                    >
+                      {item.label} × {item.quantity}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <div className="mt-2 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-3 py-3 text-xs font-bold text-slate-400">
+                  Add equipment to see the club total here.
+                </div>
+              )}
+            </div>
+
             <div className="overflow-hidden rounded-[1.65rem] border border-slate-200 bg-white shadow-[0_14px_34px_rgba(15,23,42,0.08)]">
               <div className="grid grid-cols-[6.25rem_minmax(0,1fr)] border-b border-slate-200 bg-white text-[10px] font-black uppercase tracking-wide text-slate-400 lg:grid-cols-[11rem_minmax(0,1fr)] lg:text-xs">
                 <div className="px-3 py-2.5">Holder</div>
@@ -3033,14 +3276,14 @@ export function ClubTab({
                   </Button>
                 </div>
 
-                {contentPeekKit.contents.length > 0 ? (
+                {equipmentItemsForKit(contentPeekKit).length > 0 ? (
                   <div className="mt-3 flex flex-wrap gap-2">
-                    {contentPeekKit.contents.map((item, index) => (
+                    {equipmentItemsForKit(contentPeekKit).map((item, index) => (
                       <span
-                        key={`${contentPeekKit.id}-content-${index}`}
+                        key={`${contentPeekKit.id}-content-${item.key}-${index}`}
                         className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700"
                       >
-                        {item}
+                        {item.label} × {item.quantity}
                       </span>
                     ))}
                   </div>
@@ -3153,26 +3396,134 @@ export function ClubTab({
             </div>
 
             <div className="grid gap-2">
-              <Label className="text-xs font-black uppercase tracking-wide text-slate-500">
-                What is inside?
-              </Label>
-              <Input
-                value={kitContents}
-                onChange={(event) => setKitContents(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    event.currentTarget.blur();
-                  }
-                }}
-                enterKeyHint="done"
-                placeholder="Enough cones for 2 teams, 2 balls, pump"
-                className="h-10 rounded-2xl border-slate-200 text-sm font-semibold"
-              />
-              <p className="text-[11px] font-semibold text-slate-500">
-                Separate items with commas. Example: enough cones for 2 teams, 2
-                balls, pump.
-              </p>
+              <div className="flex items-end justify-between gap-2">
+                <div>
+                  <Label className="text-xs font-black uppercase tracking-wide text-slate-500">
+                    Bag contents
+                  </Label>
+                  <div className="mt-0.5 text-[10px] font-semibold text-slate-400">
+                    Tap a common item, then set the quantity.
+                  </div>
+                </div>
+                {kitItems.length > 0 && (
+                  <div className="text-[10px] font-black text-slate-400">
+                    {kitItems.reduce((sum, item) => sum + item.quantity, 0)} total
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+                {EQUIPMENT_PRESETS.map((preset) => {
+                  const selected = kitItems.some((item) => item.key === preset.key && !item.custom);
+                  return (
+                    <button
+                      key={preset.key}
+                      type="button"
+                      onClick={() => addEquipmentPreset(preset)}
+                      className={`min-h-9 rounded-2xl border px-2 py-1.5 text-left text-[11px] font-black transition active:scale-[0.98] ${selected ? "border-sky-200 bg-sky-50 text-blue-700" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
+                    >
+                      <span className="flex items-center justify-between gap-1">
+                        <span>{preset.label}</span>
+                        <Plus className="h-3.5 w-3.5 shrink-0" />
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {kitItems.length > 0 ? (
+                <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                  {kitItems.map((item, index) => (
+                    <div
+                      key={`${item.key}-${index}`}
+                      className={`flex items-center gap-2 px-2.5 py-2 ${index === 0 ? "" : "border-t border-slate-100"}`}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-xs font-black text-[#102A43]">{item.label}</div>
+                        {item.custom && (
+                          <div className="text-[9px] font-black uppercase tracking-wide text-slate-400">Custom</div>
+                        )}
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1">
+                        <button
+                          type="button"
+                          className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-sm font-black text-slate-500"
+                          onClick={() => updateEquipmentItemQuantity(index, -1)}
+                          aria-label={`Decrease ${item.label}`}
+                        >
+                          −
+                        </button>
+                        <Input
+                          type="number"
+                          inputMode="numeric"
+                          min={1}
+                          max={999}
+                          value={item.quantity}
+                          onChange={(event) => {
+                            const quantity = Math.max(1, Math.min(999, Math.round(Number(event.target.value) || 1)));
+                            setKitItems((current) => current.map((currentItem, itemIndex) => itemIndex === index ? { ...currentItem, quantity } : currentItem));
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              event.currentTarget.blur();
+                            }
+                          }}
+                          enterKeyHint="done"
+                          className="h-8 w-14 rounded-xl border-slate-200 px-1 text-center text-xs font-black tabular-nums"
+                          aria-label={`${item.label} quantity`}
+                        />
+                        <button
+                          type="button"
+                          className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-sm font-black text-slate-500"
+                          onClick={() => updateEquipmentItemQuantity(index, 1)}
+                          aria-label={`Increase ${item.label}`}
+                        >
+                          +
+                        </button>
+                        <button
+                          type="button"
+                          className="flex h-8 w-8 items-center justify-center rounded-xl text-slate-300 hover:bg-rose-50 hover:text-rose-500"
+                          onClick={() => setKitItems((current) => current.filter((_, itemIndex) => itemIndex !== index))}
+                          aria-label={`Remove ${item.label}`}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-3 py-3 text-[11px] font-semibold text-slate-400">
+                  No contents yet. Choose a common item or add your own below.
+                </div>
+              )}
+
+              <div className="flex items-center gap-2">
+                <Input
+                  value={customEquipmentName}
+                  onChange={(event) => setCustomEquipmentName(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      addCustomEquipmentItem();
+                    }
+                  }}
+                  enterKeyHint="done"
+                  placeholder="Custom item"
+                  maxLength={40}
+                  className="h-9 min-w-0 flex-1 rounded-2xl border-slate-200 text-xs font-semibold"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-9 shrink-0 rounded-2xl border-slate-200 px-3 text-[11px] font-black text-slate-600"
+                  disabled={!customEquipmentName.trim()}
+                  onClick={addCustomEquipmentItem}
+                >
+                  Add custom
+                </Button>
+              </div>
             </div>
 
             <div className="grid gap-2">

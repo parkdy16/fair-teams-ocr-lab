@@ -3,11 +3,14 @@ import {
   ChevronDown,
   ChevronUp,
   ClipboardList,
+  Clock3,
   Pencil,
   Plus,
   Star,
   StickyNote,
   Trash2,
+  AlertTriangle,
+  ChevronLeft,
   UserCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -37,6 +40,14 @@ import {
   type FirebaseEquipmentBag,
 } from "@/lib/equipmentService";
 import type { PairingRule } from "@/lib/types";
+import { bestPlayerNameMatch } from "@/lib/playerNameMatching";
+import {
+  deleteAttendanceIssue,
+  listenToAttendanceIssues,
+  saveAttendanceIssue,
+  type AttendanceIssueRecord,
+  type AttendanceIssueType,
+} from "@/lib/attendanceService";
 import { calculateOverall, type RoomPlayer } from "@/lib/localRoster";
 import {
   addClubNote,
@@ -96,6 +107,31 @@ type ClubEquipmentKit = FirebaseEquipmentBag;
 
 const EQUIPMENT_PREVIEW_STORAGE_KEY = "fairteams.clubEquipment.preview.v1";
 const CLUB_DESK_COLLAPSED_STORAGE_KEY = "fairteams.clubDesk.collapsed.v2";
+
+const ATTENDANCE_ISSUE_OPTIONS: Array<{ value: AttendanceIssueType; label: string }> = [
+  { value: "tardy", label: "Tardy" },
+  { value: "late-cancellation", label: "Last-minute cancellation" },
+  { value: "no-show", label: "No-show" },
+  { value: "conduct", label: "Conduct issue" },
+];
+
+type AttendanceRange = "3m" | "6m" | "12m" | "all";
+
+function todayIsoDate() {
+  const now = new Date();
+  const local = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 10);
+}
+
+function attendanceIssueLabel(issueType: AttendanceIssueType) {
+  return ATTENDANCE_ISSUE_OPTIONS.find((option) => option.value === issueType)?.label || "Attendance issue";
+}
+
+function formatAttendanceDate(value: string) {
+  const parsed = new Date(`${value}T12:00:00`);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short", year: "numeric" }).format(parsed);
+}
 
 const EQUIPMENT_COLORS = [
   "#111827",
@@ -603,6 +639,20 @@ export function ClubTab({
   const [clubNoteDeletingId, setClubNoteDeletingId] = useState<string | null>(
     null,
   );
+  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceIssueRecord[]>([]);
+  const [attendanceError, setAttendanceError] = useState("");
+  const [attendanceLoading, setAttendanceLoading] = useState(false);
+  const [attendanceSaving, setAttendanceSaving] = useState(false);
+  const [attendanceBoardOpen, setAttendanceBoardOpen] = useState(false);
+  const [attendanceEditorOpen, setAttendanceEditorOpen] = useState(false);
+  const [attendanceRange, setAttendanceRange] = useState<AttendanceRange>("3m");
+  const [attendanceHistoryPlayerId, setAttendanceHistoryPlayerId] = useState<string | null>(null);
+  const [attendanceEditingId, setAttendanceEditingId] = useState<string | null>(null);
+  const [attendancePlayerId, setAttendancePlayerId] = useState("");
+  const [attendanceIssueType, setAttendanceIssueType] = useState<AttendanceIssueType>("tardy");
+  const [attendanceDate, setAttendanceDate] = useState(todayIsoDate);
+  const [attendanceNote, setAttendanceNote] = useState("");
+  const [attendanceDuplicate, setAttendanceDuplicate] = useState<AttendanceIssueRecord | null>(null);
   const [equipmentKits, setEquipmentKits] = useState<ClubEquipmentKit[]>(() => {
     if (typeof window === "undefined") return DEFAULT_EQUIPMENT_KITS;
     return parseEquipmentKits(
@@ -644,6 +694,8 @@ export function ClubTab({
     ratingPlayerId: null as string | null,
     ratingBoardOpen: false,
     accountDialogOpen: false,
+    attendanceBoardOpen: false,
+    attendanceEditorOpen: false,
   });
   const [authReady, setAuthReady] = useState(false);
   const [clubUser, setClubUser] = useState<SharedRosterUser | null>(null);
@@ -819,6 +871,36 @@ export function ClubTab({
       );
     }
   }, [authReady, clubUser?.email, equipmentGroupId, isSharedRoster]);
+
+  const attendanceEnabled = Boolean(isSharedRoster && sharedRosterId && clubUser?.email);
+
+  useEffect(() => {
+    if (!attendanceEnabled || !sharedRosterId) {
+      setAttendanceRecords([]);
+      setAttendanceError("");
+      setAttendanceLoading(false);
+      return;
+    }
+    setAttendanceLoading(true);
+    setAttendanceError("");
+    try {
+      return listenToAttendanceIssues(
+        sharedRosterId,
+        (records) => {
+          setAttendanceRecords(records);
+          setAttendanceLoading(false);
+          setAttendanceError("");
+        },
+        (error) => {
+          setAttendanceLoading(false);
+          setAttendanceError(error.message || "Could not load attendance records.");
+        },
+      );
+    } catch (error) {
+      setAttendanceLoading(false);
+      setAttendanceError(error instanceof Error ? error.message : "Could not connect Club attendance.");
+    }
+  }, [attendanceEnabled, sharedRosterId]);
 
   const clubRatingsEnabled = Boolean(
     isSharedRoster && sharedRosterId && clubUser?.email,
@@ -1542,6 +1624,120 @@ export function ClubTab({
     }
   };
 
+  const resolveAttendancePlayer = (record: AttendanceIssueRecord) => {
+    const direct = players.find((player) => player.id === record.playerId);
+    if (direct) return direct;
+    const match = bestPlayerNameMatch(record.playerName, players, { includeDisplayName: true });
+    if (!match || match.score < 86 || match.score - match.secondBestScore < 4) return null;
+    return match.player;
+  };
+
+  const attendanceCutoff = useMemo(() => {
+    if (attendanceRange === "all") return null;
+    const months = attendanceRange === "3m" ? 3 : attendanceRange === "6m" ? 6 : 12;
+    const cutoff = new Date();
+    cutoff.setHours(0, 0, 0, 0);
+    cutoff.setMonth(cutoff.getMonth() - months);
+    return cutoff;
+  }, [attendanceRange]);
+
+  const filteredAttendanceRecords = useMemo(() => attendanceRecords.filter((record) => {
+    if (!attendanceCutoff) return true;
+    const date = new Date(`${record.incidentDate}T12:00:00`);
+    return !Number.isNaN(date.getTime()) && date >= attendanceCutoff;
+  }), [attendanceRecords, attendanceCutoff]);
+
+  const attendanceOverview = useMemo(() => {
+    const map = new Map<string, { playerId: string; name: string; records: AttendanceIssueRecord[] }>();
+    filteredAttendanceRecords.forEach((record) => {
+      const matched = resolveAttendancePlayer(record);
+      const playerId = matched?.id || record.playerId || `name:${record.playerName.toLowerCase()}`;
+      const name = matched?.name || record.playerName || "Unknown player";
+      const current = map.get(playerId) || { playerId, name, records: [] };
+      current.records.push(record);
+      map.set(playerId, current);
+    });
+    return [...map.values()].sort((a, b) => b.records.length - a.records.length || a.name.localeCompare(b.name));
+  }, [filteredAttendanceRecords, players]);
+
+  const resetAttendanceEditor = () => {
+    setAttendanceEditingId(null);
+    setAttendancePlayerId("");
+    setAttendanceIssueType("tardy");
+    setAttendanceDate(todayIsoDate());
+    setAttendanceNote("");
+    setAttendanceDuplicate(null);
+  };
+
+  const openNewAttendanceIssue = () => {
+    resetAttendanceEditor();
+    setAttendanceEditorOpen(true);
+  };
+
+  const openAttendanceRecord = (record: AttendanceIssueRecord) => {
+    const matched = resolveAttendancePlayer(record);
+    setAttendanceEditingId(record.id);
+    setAttendancePlayerId(matched?.id || record.playerId);
+    setAttendanceIssueType(record.issueType);
+    setAttendanceDate(record.incidentDate);
+    setAttendanceNote(record.note || "");
+    setAttendanceDuplicate(null);
+    setAttendanceEditorOpen(true);
+  };
+
+  const saveAttendanceRecord = async (forceDuplicate = false) => {
+    if (!sharedRosterId || !attendanceEnabled || !attendancePlayerId || attendanceSaving) return;
+    const player = players.find((candidate) => candidate.id === attendancePlayerId);
+    if (!player) {
+      setAttendanceError("Choose a player from the roster.");
+      return;
+    }
+    const duplicate = attendanceRecords.find((record) =>
+      record.id !== attendanceEditingId &&
+      (record.playerId === player.id || resolveAttendancePlayer(record)?.id === player.id) &&
+      record.issueType === attendanceIssueType &&
+      record.incidentDate === attendanceDate
+    );
+    if (duplicate && !forceDuplicate) {
+      setAttendanceDuplicate(duplicate);
+      return;
+    }
+    setAttendanceSaving(true);
+    setAttendanceError("");
+    try {
+      await saveAttendanceIssue(sharedRosterId, {
+        id: attendanceEditingId || undefined,
+        playerId: player.id,
+        playerName: player.name,
+        issueType: attendanceIssueType,
+        incidentDate: attendanceDate,
+        note: attendanceIssueType === "conduct" ? attendanceNote : undefined,
+      });
+      setAttendanceEditorOpen(false);
+      setAttendanceDuplicate(null);
+      resetAttendanceEditor();
+    } catch (error) {
+      setAttendanceError(error instanceof Error ? error.message : "Could not save attendance record.");
+    } finally {
+      setAttendanceSaving(false);
+    }
+  };
+
+  const removeAttendanceRecord = async () => {
+    if (!sharedRosterId || !attendanceEditingId || attendanceSaving) return;
+    setAttendanceSaving(true);
+    setAttendanceError("");
+    try {
+      await deleteAttendanceIssue(sharedRosterId, attendanceEditingId);
+      setAttendanceEditorOpen(false);
+      resetAttendanceEditor();
+    } catch (error) {
+      setAttendanceError(error instanceof Error ? error.message : "Could not delete attendance record.");
+    } finally {
+      setAttendanceSaving(false);
+    }
+  };
+
   const blurActiveField = () => {
     if (typeof document === "undefined") return;
     const activeElement = document.activeElement;
@@ -1555,6 +1751,8 @@ export function ClubTab({
     equipmentBoardOpen ||
     ratingPlayerId ||
     ratingBoardOpen ||
+    attendanceEditorOpen ||
+    attendanceBoardOpen ||
     accountDialogOpen,
   );
 
@@ -1567,6 +1765,8 @@ export function ClubTab({
       ratingPlayerId,
       ratingBoardOpen,
       accountDialogOpen,
+      attendanceBoardOpen,
+      attendanceEditorOpen,
     };
   }, [
     accountDialogOpen,
@@ -1576,6 +1776,8 @@ export function ClubTab({
     equipmentDialogOpen,
     ratingPlayerId,
     ratingBoardOpen,
+    attendanceBoardOpen,
+    attendanceEditorOpen,
   ]);
 
   useEffect(() => {
@@ -1610,6 +1812,19 @@ export function ClubTab({
         event.preventDefault();
         setContentPeekKitId(null);
         setEquipmentBoardOpen(false);
+        return;
+      }
+      if (state.attendanceEditorOpen) {
+        event.preventDefault();
+        blurActiveField();
+        setAttendanceEditorOpen(false);
+        setAttendanceDuplicate(null);
+        return;
+      }
+      if (state.attendanceBoardOpen) {
+        event.preventDefault();
+        setAttendanceHistoryPlayerId(null);
+        setAttendanceBoardOpen(false);
         return;
       }
       if (state.ratingPlayerId) {
@@ -1750,15 +1965,30 @@ export function ClubTab({
           <>
             <div className="mt-3 grid gap-2">
               <div className="min-w-0">{sharedToolsNode}</div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 <Button
                   type="button"
                   variant="outline"
-                  className="h-12 justify-start rounded-2xl border-violet-100 bg-white/70 px-3 text-left text-violet-700 shadow-sm hover:bg-white hover:text-violet-800"
+                  className="h-12 justify-start rounded-2xl border-violet-100 bg-white/70 px-2.5 text-left text-violet-700 shadow-sm hover:bg-white hover:text-violet-800"
+                  disabled={!attendanceEnabled}
+                  onClick={() => { setAttendanceHistoryPlayerId(null); setAttendanceBoardOpen(true); }}
+                >
+                  <Clock3 className="fairteams-desktop-balanced-icon mr-1.5 h-4 w-4 shrink-0 lg:h-5 lg:w-5" />
+                  <span className="min-w-0">
+                    <span className="block truncate text-[11px] font-black lg:text-xs">Attendance</span>
+                    <span className="block truncate text-[10px] font-black text-violet-600/75">
+                      {attendanceEnabled ? "Shared log" : isSharedRoster ? "Sign in" : "Shared only"}
+                    </span>
+                  </span>
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-12 justify-start rounded-2xl border-violet-100 bg-white/70 px-2.5 text-left text-violet-700 shadow-sm hover:bg-white hover:text-violet-800"
                   disabled={!clubRatingsEnabled || players.length === 0}
                   onClick={() => setRatingBoardOpen(true)}
                 >
-                  <Star className="fairteams-desktop-balanced-icon mr-2 h-4 w-4 shrink-0 lg:h-5 lg:w-5" />
+                  <Star className="fairteams-desktop-balanced-icon mr-1.5 h-4 w-4 shrink-0 lg:h-5 lg:w-5" />
                   <span className="min-w-0">
                     <span className="block truncate text-[11px] font-black lg:text-xs">Ratings</span>
                     <span className="block truncate text-[10px] font-black text-violet-600/75">
@@ -1773,11 +2003,11 @@ export function ClubTab({
                 <Button
                   type="button"
                   variant="outline"
-                  className="h-12 justify-start rounded-2xl border-violet-100 bg-white/70 px-3 text-left text-violet-700 shadow-sm hover:bg-white hover:text-violet-800"
+                  className="h-12 justify-start rounded-2xl border-violet-100 bg-white/70 px-2.5 text-left text-violet-700 shadow-sm hover:bg-white hover:text-violet-800"
                   disabled={!onOpenPairingRules || playerCount < 2}
                   onClick={onOpenPairingRules}
                 >
-                  <ClipboardList className="fairteams-desktop-balanced-icon mr-2 h-4 w-4 shrink-0 lg:h-5 lg:w-5" />
+                  <ClipboardList className="fairteams-desktop-balanced-icon mr-1.5 h-4 w-4 shrink-0 lg:h-5 lg:w-5" />
                   <span className="min-w-0">
                     <span className="block truncate text-[11px] font-black lg:text-xs">Pairing</span>
                     <span className="block truncate text-[10px] font-black text-violet-600/75">
@@ -2166,6 +2396,49 @@ export function ClubTab({
                 Only you
               </div>
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={attendanceBoardOpen} onOpenChange={(open) => { setAttendanceBoardOpen(open); if (!open) setAttendanceHistoryPlayerId(null); }}>
+        <DialogContent className="max-h-[88dvh] max-w-md overflow-y-auto rounded-3xl p-0" onOpenAutoFocus={(event) => event.preventDefault()}>
+          <DialogHeader className="border-b border-slate-100 px-4 py-3 text-left">
+            <DialogTitle className="flex items-center gap-2 text-base font-black text-[#102A43]">
+              {attendanceHistoryPlayerId && <button type="button" className="-ml-1 rounded-full p-1 text-slate-500 hover:bg-slate-100" onClick={() => setAttendanceHistoryPlayerId(null)} aria-label="Back to attendance overview"><ChevronLeft className="h-5 w-5" /></button>}
+              <Clock3 className="h-5 w-5 text-violet-600" />
+              {attendanceHistoryPlayerId ? (attendanceOverview.find((row) => row.playerId === attendanceHistoryPlayerId)?.name || "Attendance history") : "Club attendance"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-3 p-4">
+            {!attendanceHistoryPlayerId ? <>
+              <div className="grid grid-cols-4 rounded-2xl bg-slate-100 p-1">
+                {([["3m","3 months"],["6m","6 months"],["12m","12 months"],["all","All"]] as Array<[AttendanceRange,string]>).map(([value,label]) => <button key={value} type="button" onClick={() => setAttendanceRange(value)} className={`rounded-xl px-1 py-2 text-[10px] font-black ${attendanceRange === value ? "bg-white text-[#102A43] shadow-sm" : "text-slate-500"}`}>{label}</button>)}
+              </div>
+              <Button type="button" className="h-10 rounded-2xl bg-[#102A43] text-sm font-black text-white hover:bg-[#0b2036]" disabled={!attendanceEnabled || players.length === 0} onClick={openNewAttendanceIssue}><Plus className="mr-1.5 h-4 w-4" />Record attendance issue</Button>
+              {attendanceError && <div className="rounded-2xl border border-amber-100 bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-800">{attendanceError}</div>}
+              {attendanceLoading ? <div className="rounded-2xl bg-slate-50 px-3 py-3 text-sm font-bold text-slate-500">Loading attendance…</div> : attendanceOverview.length === 0 ? <div className="rounded-2xl bg-slate-50 px-3 py-4 text-center text-sm font-bold text-slate-500">No attendance issues recorded.</div> : <div className="grid gap-2">{attendanceOverview.map((row) => {
+                const counts = { tardy: 0, lateCancellation: 0, noShow: 0, conduct: 0 };
+                row.records.forEach((record) => { if (record.issueType === "tardy") counts.tardy += 1; if (record.issueType === "late-cancellation") counts.lateCancellation += 1; if (record.issueType === "no-show") counts.noShow += 1; if (record.issueType === "conduct") counts.conduct += 1; });
+                const parts = [counts.tardy ? `Tardy ${counts.tardy}` : "", counts.lateCancellation ? `Late cancel ${counts.lateCancellation}` : "", counts.noShow ? `No-show ${counts.noShow}` : "", counts.conduct ? `Conduct ${counts.conduct}` : ""].filter(Boolean);
+                return <button key={row.playerId} type="button" className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white px-3 py-3 text-left shadow-sm active:scale-[0.99]" onClick={() => setAttendanceHistoryPlayerId(row.playerId)}><span className="min-w-0"><span className="block truncate text-sm font-black text-[#102A43]">{row.name}</span><span className="block truncate text-[11px] font-semibold text-slate-500">{parts.join(" · ")}</span></span><span className="rounded-full bg-violet-50 px-2 py-1 text-[10px] font-black text-violet-700">{row.records.length}</span></button>;
+              })}</div>}
+            </> : <div className="grid gap-2">{(attendanceOverview.find((row) => row.playerId === attendanceHistoryPlayerId)?.records || []).map((record) => <button key={record.id} type="button" className="rounded-2xl border border-slate-100 bg-white px-3 py-3 text-left shadow-sm active:scale-[0.99]" onClick={() => openAttendanceRecord(record)}><div className="flex items-start justify-between gap-2"><span className="text-sm font-black text-[#102A43]">{attendanceIssueLabel(record.issueType)}</span><span className="text-[10px] font-black text-slate-400">{formatAttendanceDate(record.incidentDate)}</span></div>{record.note && <div className="mt-1 text-[11px] font-semibold leading-snug text-slate-600">{record.note}</div>}{(record.createdByName || record.createdByEmail) && <div className="mt-1.5 text-[10px] font-semibold text-slate-400">Recorded by {record.createdByName || record.createdByEmail}</div>}</button>)}</div>}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={attendanceEditorOpen} onOpenChange={(open) => { setAttendanceEditorOpen(open); if (!open) { blurActiveField(); setAttendanceDuplicate(null); } }}>
+        <DialogContent className="max-h-[88dvh] max-w-md overflow-y-auto rounded-3xl p-0" onOpenAutoFocus={(event) => event.preventDefault()}>
+          <DialogHeader className="border-b border-slate-100 px-4 py-3 text-left"><DialogTitle className="flex items-center gap-2 text-base font-black text-[#102A43]"><Clock3 className="h-5 w-5 text-violet-600" />{attendanceEditingId ? "Edit attendance record" : "Record attendance issue"}</DialogTitle></DialogHeader>
+          <div className="grid gap-3 p-4" onPointerDown={(event) => { const target = event.target as HTMLElement; if (!target.closest("input,button,select,textarea")) blurActiveField(); }}>
+            <div className="grid gap-1.5"><Label className="text-xs font-black uppercase tracking-wide text-slate-500">Player</Label><select value={attendancePlayerId} onChange={(event) => { setAttendancePlayerId(event.target.value); setAttendanceDuplicate(null); }} className="h-10 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm font-semibold text-[#102A43]" disabled={attendanceSaving}><option value="">Choose player…</option>{[...players].sort((a,b) => a.name.localeCompare(b.name)).map((player) => <option key={player.id} value={player.id}>{player.name}{player.aka ? ` (${player.aka})` : ""}</option>)}</select></div>
+            <div className="grid gap-1.5"><Label className="text-xs font-black uppercase tracking-wide text-slate-500">Issue</Label><div className="grid grid-cols-2 gap-2">{ATTENDANCE_ISSUE_OPTIONS.map((option) => <button key={option.value} type="button" className={`min-h-10 rounded-2xl border px-2 py-2 text-[11px] font-black ${attendanceIssueType === option.value ? "border-violet-300 bg-violet-50 text-violet-800" : "border-slate-200 bg-white text-slate-600"}`} onClick={() => { setAttendanceIssueType(option.value); setAttendanceDuplicate(null); }}>{option.label}</button>)}</div></div>
+            <div className="grid gap-1.5"><Label className="text-xs font-black uppercase tracking-wide text-slate-500">Date</Label><Input type="date" value={attendanceDate} onChange={(event) => { setAttendanceDate(event.target.value); setAttendanceDuplicate(null); }} max={todayIsoDate()} className="h-10 rounded-2xl border-slate-200 text-sm font-semibold" /></div>
+            {attendanceIssueType === "conduct" && <div className="grid gap-1.5"><Label className="text-xs font-black uppercase tracking-wide text-slate-500">What happened? <span className="normal-case text-slate-400">optional</span></Label><Input value={attendanceNote} onChange={(event) => setAttendanceNote(event.target.value.slice(0,240))} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } }} enterKeyHint="done" maxLength={240} placeholder="Short organizer note" className="h-10 rounded-2xl border-slate-200 text-sm font-semibold" /></div>}
+            <div className="rounded-2xl bg-slate-50 px-3 py-2 text-[10px] font-semibold leading-snug text-slate-500">Session “Late” only keeps someone out of team generation. It does not create an attendance record.</div>
+            {attendanceDuplicate && <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3"><div className="flex items-start gap-2 text-[11px] font-bold leading-snug text-amber-900"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /><span>{attendanceIssueLabel(attendanceDuplicate.issueType)} is already recorded for this player on {formatAttendanceDate(attendanceDuplicate.incidentDate)}.</span></div><div className="mt-2 grid grid-cols-2 gap-2"><Button type="button" variant="outline" className="h-9 rounded-xl border-amber-200 bg-white text-[11px] font-black text-amber-800" onClick={() => setAttendanceDuplicate(null)}>Cancel</Button><Button type="button" className="h-9 rounded-xl bg-amber-700 text-[11px] font-black text-white hover:bg-amber-800" onClick={() => saveAttendanceRecord(true)}>Record another</Button></div></div>}
+            {attendanceError && <div className="rounded-2xl border border-amber-100 bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-800">{attendanceError}</div>}
+            <div className={`grid gap-2 ${attendanceEditingId ? "grid-cols-[0.8fr_1.2fr]" : "grid-cols-1"}`}>{attendanceEditingId && <Button type="button" variant="outline" className="h-10 rounded-2xl border-red-200 text-sm font-black text-red-500 hover:bg-red-50" disabled={attendanceSaving} onClick={removeAttendanceRecord}><Trash2 className="mr-1.5 h-4 w-4" />Delete</Button>}<Button type="button" className="h-10 rounded-2xl bg-[#102A43] text-sm font-black text-white hover:bg-[#0b2036]" disabled={!attendancePlayerId || !attendanceDate || attendanceSaving} onClick={() => { blurActiveField(); saveAttendanceRecord(false); }}>{attendanceSaving ? "Saving…" : attendanceEditingId ? "Save changes" : "Save record"}</Button></div>
           </div>
         </DialogContent>
       </Dialog>

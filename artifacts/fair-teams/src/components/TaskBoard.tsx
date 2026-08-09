@@ -65,6 +65,7 @@ type Props = {
 type LocalBoard = TaskBoardSnapshot;
 type MobileFilter = "ideas" | "deciding" | "action" | "done";
 type DecisionMode = "vote" | "recorded";
+type NewTopicKind = "idea" | "decide" | "action";
 type TopicStage = MobileFilter;
 type DecisionSetupStep = TaskBoardDecisionType | null;
 type DraftQuestion = {
@@ -87,6 +88,18 @@ const WORKFLOW: Array<{ kind: TaskBoardColumnKind; name: string }> = [
 ];
 
 const TAGS = ["Administration", "Sports", "Equipment", "Event", "Finance", "Membership", "Other"];
+
+function tagTone(category?: string) {
+  switch ((category || "").toLowerCase()) {
+    case "administration": return "bg-slate-100 text-slate-700 ring-slate-200";
+    case "sports": return "bg-emerald-50 text-emerald-700 ring-emerald-100";
+    case "equipment": return "bg-sky-50 text-sky-700 ring-sky-100";
+    case "event": return "bg-amber-50 text-amber-800 ring-amber-100";
+    case "finance": return "bg-teal-50 text-teal-700 ring-teal-100";
+    case "membership": return "bg-violet-50 text-violet-700 ring-violet-100";
+    default: return "bg-stone-100 text-stone-600 ring-stone-200";
+  }
+}
 
 function id(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -503,6 +516,7 @@ export function TaskBoard({
   const [currentVoterHash, setCurrentVoterHash] = useState("");
 
   const [newTopicOpen, setNewTopicOpen] = useState(false);
+  const [newTopicKind, setNewTopicKind] = useState<NewTopicKind | null>(null);
   const [newTitle, setNewTitle] = useState("");
   const [newCategory, setNewCategory] = useState("");
   const [newDueDate, setNewDueDate] = useState("");
@@ -693,6 +707,7 @@ export function TaskBoard({
   };
 
   const resetNewTopic = () => {
+    setNewTopicKind(null);
     setNewTitle("");
     setNewCategory("");
     setNewDueDate("");
@@ -706,19 +721,33 @@ export function TaskBoard({
   };
 
   const createTopic = async () => {
-    if (!newTitle.trim()) return;
+    if (!newTitle.trim() || !newTopicKind) return;
     const ideasColumn = columnByKind.get("ideas") || activeColumns[0];
     if (!ideasColumn) return;
     const now = Date.now();
+    const selectedPeople = peopleFromKeys(newPeopleKeys);
+    const initialAction: TaskBoardActionItem | null = newTopicKind === "action" ? {
+      id: id("action"),
+      text: newTitle.trim(),
+      status: "open",
+      assignees: selectedPeople,
+      assignee: selectedPeople[0]?.name,
+      assigneeEmail: selectedPeople[0]?.email,
+      createdAt: now,
+      createdByName: currentActor.name,
+    } : null;
     const card: TaskBoardCard = {
       id: id("topic"),
       title: newTitle.trim(),
       columnId: ideasColumn.id,
       position: now,
-      people: peopleFromKeys(newPeopleKeys),
+      people: selectedPeople,
       links: [],
       decisions: [],
-      actions: [],
+      actions: initialAction ? [initialAction] : [],
+      actionText: initialAction?.text,
+      assignee: initialAction?.assignee,
+      assigneeEmail: initialAction?.assigneeEmail,
       dueDate: newDueDate || undefined,
       category: newCategory || undefined,
       createdAt: now,
@@ -726,14 +755,21 @@ export function TaskBoard({
       createdByEmail: currentActor.email,
       updatedAt: now,
       updatedByName: currentActor.name,
-      activities: [nowActivity("created", currentActor.name, currentActor.email)],
+      activities: [
+        nowActivity("created", currentActor.name, currentActor.email),
+        ...(initialAction ? [nowActivity("action_defined", currentActor.name, currentActor.email)] : []),
+      ],
     };
+    const startKind = newTopicKind;
     setSaving(true); setError("");
     try {
-      await persistCard(card);
+      const saved = await persistCard(card);
       setNewTopicOpen(false);
       resetNewTopic();
-      setExpandedIds((current) => new Set(current).add(card.id));
+      setExpandedIds((current) => new Set(current).add(saved.id));
+      if (startKind === "idea") setMobileFilter("ideas");
+      if (startKind === "action") setMobileFilter("action");
+      if (startKind === "decide") startDecision(saved);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Could not add topic.");
     } finally { setSaving(false); }
@@ -962,7 +998,7 @@ export function TaskBoard({
       activities: [...card.activities, activity].slice(-30),
     };
     setSaving(true); setError("");
-    try { await persistCard(next); setDecisionCardId(null); setDecisionStep(null); }
+    try { await persistCard(next); setDecisionCardId(null); setDecisionStep(null); setMobileFilter("deciding"); }
     catch (nextError) { setError(nextError instanceof Error ? nextError.message : "Could not add decision."); }
     finally { setSaving(false); }
   };
@@ -1530,7 +1566,7 @@ export function TaskBoard({
           <div className="flex items-start gap-2">
             <button type="button" className="min-w-0 flex-1 text-left" onClick={() => toggleExpanded(card.id)}>
               <div className="flex flex-wrap items-center gap-1.5">
-                {card.category && <span className="rounded-full px-2 py-0.5 text-[9px] font-black" style={{ color: accent, backgroundColor: mixHex(accent, "#ffffff", 0.9) }}>{card.category}</span>}
+                {card.category && <span className={`rounded-full px-2 py-0.5 text-[9px] font-black ring-1 ${tagTone(card.category)}`}>{card.category}</span>}
                 {displayPeople?.length ? <span className="inline-flex max-w-full items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-black text-slate-600"><Users className="h-3 w-3 shrink-0" /><span className="truncate">{personSummary(displayPeople)}</span></span> : null}
                 {card.dueDate && <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-black ${isOverdue(card.dueDate) && stage !== "done" ? "bg-red-50 text-red-700" : "bg-slate-100 text-slate-600"}`}><CalendarDays className="h-3 w-3" />{dueText(card.dueDate)}</span>}
               </div>
@@ -1591,7 +1627,7 @@ export function TaskBoard({
 
   const boardColumn = (stage: TopicStage, title: string, Icon: React.ComponentType<{ className?: string }>) => (
     <section className={`min-w-0 rounded-[1.35rem] border p-2.5 ${stage === "deciding" ? "border-violet-200 bg-violet-50/35" : stage === "action" ? "border-sky-200 bg-sky-50/35" : stage === "done" ? "border-slate-200 bg-slate-100/50" : "border-slate-200 bg-white/55"}`}>
-      <div className={`mb-2 flex items-center gap-1.5 px-1 text-xs font-black ${stage === "deciding" ? "text-violet-700" : stage === "action" ? "text-sky-800" : stage === "done" ? "text-slate-500" : "text-slate-700"}`}><Icon className="h-4 w-4" />{title}</div>
+      <div className={`mb-2 flex items-center gap-1.5 px-1 text-xs font-black ${stage === "deciding" ? "text-violet-700" : stage === "action" ? "text-sky-800" : stage === "done" ? "text-slate-500" : "text-slate-700"}`}><Icon className="h-4 w-4" /><span>{title}</span><span className="ml-0.5 rounded-full bg-white/80 px-1.5 py-0.5 text-[9px] font-black text-slate-500 ring-1 ring-slate-200/70">{cardsByStage[stage].length}</span></div>
       <div className="space-y-2">
         {cardsByStage[stage].map((card) => renderCard(card, true))}
         {cardsByStage[stage].length === 0 && <div className="rounded-2xl border border-dashed border-slate-200 bg-white/40 px-2 py-5 text-center text-[10px] font-bold text-slate-400">Nothing here</div>}
@@ -1640,7 +1676,7 @@ export function TaskBoard({
       </section>
 
       <Dialog open={boardOpen} onOpenChange={setBoardOpen}>
-        <DialogContent className="fixed inset-0 flex h-[100dvh] max-h-none w-screen max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-0 p-0 sm:inset-2 sm:h-auto sm:w-auto sm:rounded-[2rem] sm:border lg:inset-6 lg:rounded-[2rem]">
+        <DialogContent className="fixed inset-x-2 inset-y-3 flex h-[calc(100dvh-1.5rem)] max-h-none w-auto max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-[1.8rem] border border-white/70 bg-white p-0 shadow-2xl sm:inset-3 sm:h-[calc(100dvh-1.5rem)] sm:w-auto sm:rounded-[2rem] lg:inset-6 lg:h-[calc(100dvh-3rem)] lg:rounded-[2rem]">
           <DialogHeader className="shrink-0 border-b border-white/45 px-3 py-3 pr-12 text-left lg:px-5 lg:py-4 lg:pr-14" style={{ backgroundColor: mixHex(accent, "#ffffff", 0.7) }}>
             <div className="flex items-center justify-between gap-2">
               <div className="min-w-0">
@@ -1662,7 +1698,7 @@ export function TaskBoard({
                 ["action", "Action", Hand],
                 ["done", "Done", Check],
               ] as Array<[MobileFilter, string, React.ComponentType<{ className?: string }>]>).map(([item, label, Icon]) => (
-                <button key={item} type="button" className={`flex flex-1 items-center justify-center gap-1 rounded-xl px-1 py-2 text-[10px] font-black transition ${mobileFilter === item ? "bg-white text-[#102A43] shadow-sm" : "text-slate-500"}`} onClick={() => setMobileFilter(item)}><Icon className="h-3.5 w-3.5" />{label}</button>
+                <button key={item} type="button" className={`flex flex-1 items-center justify-center gap-1 rounded-xl px-1 py-2 text-[10px] font-black transition ${mobileFilter === item ? "bg-white text-[#102A43] shadow-sm" : "text-slate-500"}`} onClick={() => setMobileFilter(item)}><Icon className="h-3.5 w-3.5" /><span>{label}</span><span className={`min-w-[18px] rounded-full px-1 py-0.5 text-[9px] ${mobileFilter === item ? "bg-slate-100 text-slate-600" : "bg-white/70 text-slate-400"}`}>{cardsByStage[item].length}</span></button>
               ))}
             </div>
           </div>
@@ -1690,21 +1726,38 @@ export function TaskBoard({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={newTopicOpen} onOpenChange={setNewTopicOpen}>
-        <DialogContent className="fixed bottom-2 left-2 right-2 top-auto w-auto max-w-none translate-x-0 translate-y-0 rounded-[2rem] p-4 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-md sm:-translate-x-1/2" onOpenAutoFocus={(event) => event.preventDefault()}>
-          <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43]">New topic</DialogTitle></DialogHeader>
-          <div className="grid gap-3">
-            <div><Label htmlFor="topic-title">Topic</Label><Textarea id="topic-title" value={newTitle} onChange={(event) => setNewTitle(event.target.value)} rows={2} maxLength={220} placeholder="Replace our dead match ball" /></div>
-            <div className="grid grid-cols-2 gap-2">
-              <div><Label htmlFor="topic-tag"><Tag className="mr-1 inline h-3.5 w-3.5" />Tag</Label><select id="topic-tag" className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={newCategory} onChange={(event) => setNewCategory(event.target.value)}><option value="">None</option>{TAGS.map((item) => <option key={item}>{item}</option>)}</select></div>
-              <div><Label htmlFor="topic-due"><CalendarDays className="mr-1 inline h-3.5 w-3.5" />Due</Label><Input id="topic-due" type="date" value={newDueDate} onChange={(event) => setNewDueDate(event.target.value)} /></div>
+      <Dialog open={newTopicOpen} onOpenChange={(open) => { setNewTopicOpen(open); if (!open) resetNewTopic(); }}>
+        <DialogContent className="fixed bottom-2 left-2 right-2 top-auto max-h-[88dvh] w-auto max-w-none translate-x-0 translate-y-0 overflow-y-auto rounded-[2rem] p-4 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-md sm:-translate-x-1/2" onOpenAutoFocus={(event) => event.preventDefault()}>
+          <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43]">{newTopicKind ? (newTopicKind === "idea" ? "New idea" : newTopicKind === "decide" ? "New decision" : "New action") : "Create"}</DialogTitle></DialogHeader>
+          {!newTopicKind ? (
+            <div className="grid gap-2.5">
+              <button type="button" className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 text-left transition hover:bg-slate-50" onClick={() => setNewTopicKind("idea")}>
+                <div className="flex items-start gap-3"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-700"><Lightbulb className="h-5 w-5" /></div><div><div className="text-sm font-black text-[#102A43]">Idea</div><div className="mt-0.5 text-[11px] font-semibold leading-relaxed text-slate-500">Save something worth thinking about later.</div><div className="mt-1 text-[10px] font-bold text-slate-400">Example: Club jerseys</div></div></div>
+              </button>
+              <button type="button" className="rounded-2xl border border-violet-100 bg-violet-50/60 p-4 text-left transition hover:bg-violet-50" onClick={() => setNewTopicKind("decide")}>
+                <div className="flex items-start gap-3"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-violet-700 ring-1 ring-violet-100"><Gavel className="h-5 w-5" /></div><div><div className="text-sm font-black text-[#102A43]">Decide</div><div className="mt-0.5 text-[11px] font-semibold leading-relaxed text-slate-500">Ask people to choose, schedule or agree on something.</div><div className="mt-1 text-[10px] font-bold text-slate-400">Example: Which players become members?</div></div></div>
+              </button>
+              <button type="button" className="rounded-2xl border border-sky-100 bg-sky-50/60 p-4 text-left transition hover:bg-sky-50" onClick={() => setNewTopicKind("action")}>
+                <div className="flex items-start gap-3"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-sky-800 ring-1 ring-sky-100"><Hand className="h-5 w-5" /></div><div><div className="text-sm font-black text-[#102A43]">Action</div><div className="mt-0.5 text-[11px] font-semibold leading-relaxed text-slate-500">Something important needs to get done.</div><div className="mt-1 text-[10px] font-bold text-slate-400">Example: Contact the new members</div></div></div>
+              </button>
             </div>
-            {renderPeoplePicker(newPeopleKeys, setNewPeopleKeys)}
-            <Button type="button" className="h-11 rounded-2xl font-black text-white" style={{ backgroundColor: accent }} disabled={!newTitle.trim() || saving} onClick={() => void createTopic()}>{saving ? "Saving…" : "Create topic"}</Button>
-          </div>
+          ) : (
+            <div className="grid gap-3">
+              <button type="button" className="w-fit text-[11px] font-black text-slate-500" onClick={() => setNewTopicKind(null)}>← Back</button>
+              <div>
+                <Label htmlFor="topic-title">{newTopicKind === "idea" ? "What’s the idea?" : newTopicKind === "decide" ? "What are you deciding?" : "What needs to happen?"}</Label>
+                <Textarea id="topic-title" value={newTitle} onChange={(event) => setNewTitle(event.target.value)} rows={2} maxLength={220} placeholder={newTopicKind === "idea" ? "Club jerseys" : newTopicKind === "decide" ? "New club members" : "Contact the new members"} />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div><Label htmlFor="topic-tag"><Tag className="mr-1 inline h-3.5 w-3.5" />Tag</Label><select id="topic-tag" className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={newCategory} onChange={(event) => setNewCategory(event.target.value)}><option value="">None</option>{TAGS.map((item) => <option key={item}>{item}</option>)}</select></div>
+                <div><Label htmlFor="topic-due"><CalendarDays className="mr-1 inline h-3.5 w-3.5" />Due</Label><Input id="topic-due" type="date" value={newDueDate} onChange={(event) => setNewDueDate(event.target.value)} /></div>
+              </div>
+              {renderPeoplePicker(newPeopleKeys, setNewPeopleKeys)}
+              <Button type="button" className="h-11 rounded-2xl font-black text-white" style={{ backgroundColor: accent }} disabled={!newTitle.trim() || saving} onClick={() => void createTopic()}>{saving ? "Saving…" : newTopicKind === "idea" ? "Save idea" : newTopicKind === "decide" ? "Continue to decision" : "Create action"}</Button>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
-
       <Dialog open={Boolean(decisionCardId)} onOpenChange={(open) => { if (!open) { setDecisionCardId(null); setDecisionStep(null); } }}>
         <DialogContent className="fixed bottom-2 left-2 right-2 top-auto max-h-[90dvh] w-auto max-w-none translate-x-0 translate-y-0 overflow-y-auto rounded-[2rem] p-4 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-lg sm:-translate-x-1/2" onOpenAutoFocus={(event) => event.preventDefault()}>
           <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43]">{decisionStep ? "Set up decision" : "What kind of decision?"}</DialogTitle></DialogHeader>

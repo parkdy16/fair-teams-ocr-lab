@@ -75,6 +75,9 @@ type DraftQuestion = {
   maxSelections: string;
 };
 type ScheduleDateGroup = { id: string; date: string; times: string[] };
+type TimelineEntry =
+  | { key: string; kind: "decision"; createdAt: number; decision: TaskBoardVote; index: number }
+  | { key: string; kind: "action"; createdAt: number; action: TaskBoardActionItem; index: number };
 
 const WORKFLOW: Array<{ kind: TaskBoardColumnKind; name: string }> = [
   { kind: "ideas", name: "Ideas" },
@@ -417,6 +420,44 @@ function decisionTypeLabel(decision: TaskBoardVote) {
   return decision.mode === "recorded" ? "Decision" : "Vote";
 }
 
+function timelineEntries(card: TaskBoardCard): TimelineEntry[] {
+  const decisions: TimelineEntry[] = (card.decisions || []).map((decision, index) => ({
+    key: `decision:${decision.id || index}`,
+    kind: "decision",
+    createdAt: decision.createdAt || card.createdAt,
+    decision,
+    index,
+  }));
+  const actions: TimelineEntry[] = (card.actions || []).map((action, index) => ({
+    key: `action:${action.id || index}`,
+    kind: "action",
+    createdAt: action.createdAt || card.createdAt,
+    action,
+    index,
+  }));
+  return [...decisions, ...actions].sort((a, b) => a.createdAt - b.createdAt);
+}
+
+function currentTimelineKey(card: TaskBoardCard) {
+  if (card.completedAt) return null;
+  const openDecision = latestOpenDecision(card);
+  if (openDecision) return `decision:${openDecision.id || (card.decisions || []).indexOf(openDecision)}`;
+  const openAction = latestOpenAction(card);
+  if (openAction) return `action:${openAction.id || (card.actions || []).indexOf(openAction)}`;
+  const entries = timelineEntries(card);
+  return entries[entries.length - 1]?.key || null;
+}
+
+function decisionHistoryMeta(decision: TaskBoardVote) {
+  if (decision.mode === "recorded") return "Recorded";
+  const responses = voteTotal(decision);
+  const questions = decisionQuestions(decision);
+  const responseText = `${responses} response${responses === 1 ? "" : "s"}`;
+  if (decision.status === "open") return `Open · ${responseText}`;
+  if (questions.length > 1) return `Closed · ${questions.length} questions · ${responseText}`;
+  return `Closed · ${responseText}`;
+}
+
 function EmptyActionBoard({ onCreate }: { onCreate: () => void }) {
   return (
     <div className="mx-auto flex max-w-3xl flex-col items-center px-4 py-10 text-center">
@@ -454,6 +495,7 @@ export function TaskBoard({
   const [boardOpen, setBoardOpen] = useState(false);
   const [mobileFilter, setMobileFilter] = useState<MobileFilter>("deciding");
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [expandedHistoryIds, setExpandedHistoryIds] = useState<Set<string>>(new Set());
   const [lastSeenActivityAt, setLastSeenActivityAt] = useState(() => readActivitySeen(workspaceKey));
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -638,6 +680,14 @@ export function TaskBoard({
     setExpandedIds((current) => {
       const next = new Set(current);
       next.has(cardId) ? next.delete(cardId) : next.add(cardId);
+      return next;
+    });
+  };
+
+  const toggleHistoryExpanded = (entryKey: string) => {
+    setExpandedHistoryIds((current) => {
+      const next = new Set(current);
+      next.has(entryKey) ? next.delete(entryKey) : next.add(entryKey);
       return next;
     });
   };
@@ -1269,98 +1319,190 @@ export function TaskBoard({
     </div>
   );
 
-  const renderDecision = (card: TaskBoardCard, decision: TaskBoardVote, index: number) => {
+  const renderDecision = (
+    card: TaskBoardCard,
+    decision: TaskBoardVote,
+    index: number,
+    isCurrent: boolean,
+    entryKey: string,
+  ) => {
     const open = decision.status === "open" && decision.mode !== "recorded";
     const totalVoters = voteTotal(decision);
     const canVote = open && canCurrentUserVote(decision);
     const questions = decisionQuestions(decision);
     const heading = decision.title?.trim() || (questions.length === 1 ? questions[0].text : "Multiple questions");
-    return (
-      <div key={decision.id || index} className={`rounded-2xl border p-3 ${open ? "border-violet-200 bg-violet-50/55" : "border-slate-200 bg-white"}`}>
-        <div className="flex items-start gap-2">
-          <div className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-xl ${open ? "bg-violet-100 text-violet-700" : "bg-slate-100 text-slate-500"}`}><Gavel className="h-3.5 w-3.5" /></div>
-          <div className="min-w-0 flex-1">
-            <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">{decisionTypeLabel(decision)} {index + 1}{open ? " · open" : " · closed"}</div>
-            <div className="mt-1 whitespace-normal break-words text-sm font-black leading-snug text-[#102A43]">{heading}</div>
-            {decision.hostName && <div className="mt-1 text-[10px] font-bold text-slate-500">Host: <span className="font-black text-slate-700">{decision.hostName}</span></div>}
-            {decision.participantNames?.length ? <div className="mt-1 text-[10px] font-bold text-slate-500"><Users className="mr-1 inline h-3 w-3" />{personSummary(decision.participantNames.map((name) => ({ name })))}</div> : null}
-          </div>
-        </div>
+    const historyExpanded = expandedHistoryIds.has(entryKey);
 
-        {decision.mode === "recorded" ? (
-          <div className="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800"><Check className="mr-1 inline h-3.5 w-3.5" />{decision.outcome}</div>
-        ) : open ? (
-          <div className="mt-3">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[10px] font-bold text-slate-500">{totalVoters}{decision.eligibleCount ? ` of ${decision.eligibleCount}` : ""} responded</span>
-              {canVote
-                ? <button type="button" className="rounded-xl bg-violet-600 px-3 py-2 text-xs font-black text-white" onClick={() => openVoteDialog(card, decision)}>{decision.kind === "schedule" ? "Availability" : "Vote"}</button>
-                : <span className="text-[10px] font-black text-slate-400">Not asking you</span>}
-              <button type="button" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600" onClick={() => void closeVote(card, decision)}>Close</button>
+    const results = (
+      <div className="space-y-3">
+        {questions.map((question, questionIndex) => (
+          <div key={question.id} className={questions.length > 1 ? "rounded-xl bg-slate-50 p-2.5" : ""}>
+            {questions.length > 1 && <div className="mb-2 text-xs font-black leading-snug text-[#102A43]">{questionIndex + 1}. {question.text}</div>}
+            <div className="grid gap-1.5">
+              {question.options.map((option) => {
+                const denominator = question.kind === "multi-select" ? Math.max(1, totalVoters) : Math.max(1, question.options.reduce((sum, item) => sum + item.count, 0));
+                const percent = Math.round((option.count / denominator) * 100);
+                const responderNames = decision.kind === "schedule"
+                  ? (decision.ballots || []).filter((ballot) => {
+                    const answer = ballot.answers?.find((item) => item.questionId === question.id);
+                    return (answer?.optionIds || ballot.optionIds || []).includes(option.id);
+                  }).map((ballot) => ballot.voterName).filter(Boolean) as string[]
+                  : [];
+                return (
+                  <div key={option.id} className="rounded-xl bg-white px-2.5 py-2 ring-1 ring-slate-100">
+                    <div className="flex items-center gap-2 text-xs font-bold text-slate-600">
+                      <span className="min-w-0 flex-1 break-words">{option.label}</span>
+                      <span className="shrink-0 rounded-full bg-slate-50 px-2 py-0.5 font-black text-[#102A43] ring-1 ring-slate-200">{option.count}</span>
+                      {question.kind !== "multi-select" && <span className="w-8 text-right text-[10px] text-slate-400">{percent}%</span>}
+                    </div>
+                    {responderNames.length > 0 && <div className="mt-1 text-[10px] font-bold text-sky-700">{responderNames.join(" · ")}</div>}
+                  </div>
+                );
+              })}
             </div>
           </div>
-        ) : (
-          <div className="mt-3 space-y-3">
-            {questions.map((question, questionIndex) => (
-              <div key={question.id} className={questions.length > 1 ? "rounded-xl bg-slate-50 p-2.5" : ""}>
-                {questions.length > 1 && <div className="mb-2 text-xs font-black leading-snug text-[#102A43]">{questionIndex + 1}. {question.text}</div>}
-                <div className="grid gap-1.5">
-                  {question.options.map((option) => {
-                    const denominator = question.kind === "multi-select" ? Math.max(1, totalVoters) : Math.max(1, question.options.reduce((sum, item) => sum + item.count, 0));
-                    const percent = Math.round((option.count / denominator) * 100);
-                    const responderNames = decision.kind === "schedule"
-                      ? (decision.ballots || []).filter((ballot) => {
-                        const answer = ballot.answers?.find((item) => item.questionId === question.id);
-                        return (answer?.optionIds || ballot.optionIds || []).includes(option.id);
-                      }).map((ballot) => ballot.voterName).filter(Boolean) as string[]
-                      : [];
-                    return (
-                      <div key={option.id} className="rounded-xl bg-white px-2 py-1.5 ring-1 ring-slate-100">
-                        <div className="flex items-center gap-2 text-xs font-bold text-slate-600">
-                          <span className="min-w-0 flex-1 break-words">{option.label}</span>
-                          <span className="shrink-0 rounded-full bg-slate-50 px-2 py-0.5 font-black text-[#102A43] ring-1 ring-slate-200">{option.count}</span>
-                          {question.kind !== "multi-select" && <span className="w-8 text-right text-[10px] text-slate-400">{percent}%</span>}
-                        </div>
-                        {responderNames.length > 0 && <div className="mt-1 text-[10px] font-bold text-sky-700">{responderNames.join(" · ")}</div>}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-            {decision.outcome ? (
-              <button type="button" className="w-full rounded-xl bg-emerald-50 px-3 py-2 text-left text-xs font-bold text-emerald-800 ring-1 ring-emerald-100" onClick={() => openOutcome(card, decision)}><span className="font-black">Note:</span> {decision.outcome}</button>
-            ) : (
-              <button type="button" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-500" onClick={() => openOutcome(card, decision)}>+ Add decision note</button>
-            )}
+        ))}
+        {decision.outcome && <button type="button" className="w-full rounded-xl bg-emerald-50 px-3 py-2 text-left text-[11px] font-bold text-emerald-800" onClick={() => openOutcome(card, decision)}><span className="font-black">Note:</span> {decision.outcome}</button>}
+        {!decision.outcome && !open && <button type="button" className="px-1 text-[10px] font-black text-slate-400 hover:text-slate-600" onClick={() => openOutcome(card, decision)}>+ Add note</button>}
+      </div>
+    );
+
+    if (!isCurrent) {
+      return (
+        <div key={entryKey} className="relative pl-8">
+          <div className={`absolute left-0 top-2.5 flex h-7 w-7 items-center justify-center rounded-full border bg-white ${open ? "border-violet-200 text-violet-600" : "border-slate-200 text-slate-400"}`}>
+            {open ? <Gavel className="h-3.5 w-3.5" /> : <Check className="h-3.5 w-3.5" />}
           </div>
-        )}
+          <button type="button" className="w-full rounded-xl bg-white/80 px-3 py-2.5 text-left ring-1 ring-slate-200/80 transition hover:bg-white" onClick={() => toggleHistoryExpanded(entryKey)}>
+            <div className="flex items-start gap-2">
+              <div className="min-w-0 flex-1">
+                <div className="text-[9px] font-black uppercase tracking-wide text-slate-400">{decisionTypeLabel(decision)} · {decision.mode === "recorded" ? "recorded" : decision.status}</div>
+                <div className="mt-0.5 whitespace-normal break-words text-[12px] font-black leading-snug text-[#102A43]">{heading}</div>
+                <div className="mt-1 text-[9px] font-bold text-slate-400">{decisionHistoryMeta(decision)} · {historyExpanded ? "Hide details" : open ? "Open details" : "View result"}</div>
+              </div>
+              {historyExpanded ? <ChevronUp className="mt-1 h-4 w-4 shrink-0 text-slate-400" /> : <ChevronDown className="mt-1 h-4 w-4 shrink-0 text-slate-400" />}
+            </div>
+          </button>
+          {historyExpanded && <div className="mt-2 rounded-xl border border-slate-200 bg-white p-3">
+            {decision.hostName && <div className="mb-1 text-[10px] font-bold text-slate-500">Host: <span className="font-black text-slate-700">{decision.hostName}</span></div>}
+            {decision.participantNames?.length ? <div className="mb-2 text-[10px] font-bold text-slate-500"><Users className="mr-1 inline h-3 w-3" />{personSummary(decision.participantNames.map((name) => ({ name })))}</div> : null}
+            {decision.mode === "recorded" ? (
+              <div className="rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800"><Check className="mr-1 inline h-3.5 w-3.5" />{decision.outcome}</div>
+            ) : open ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="mr-auto text-[10px] font-bold text-slate-500">{totalVoters}{decision.eligibleCount ? ` of ${decision.eligibleCount}` : ""} responded</span>
+                {canVote ? <button type="button" className="rounded-xl bg-violet-600 px-3 py-2 text-xs font-black text-white" onClick={() => openVoteDialog(card, decision)}>{decision.kind === "schedule" ? "Availability" : "Vote"}</button> : <span className="text-[10px] font-black text-slate-400">Not asking you</span>}
+                <button type="button" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-500" onClick={() => void closeVote(card, decision)}>Close</button>
+              </div>
+            ) : results}
+          </div>}
+        </div>
+      );
+    }
+
+    const currentLabel = decision.mode === "recorded"
+      ? "Decision recorded"
+      : open
+        ? decision.decisionType === "schedule" || decision.kind === "schedule" ? "Current schedule" : "Current decision"
+        : "Decision complete";
+
+    return (
+      <div key={entryKey} className="relative pl-8">
+        <div className={`absolute left-0 top-3 flex h-7 w-7 items-center justify-center rounded-full border-2 bg-white ${open ? "border-violet-500 text-violet-700" : "border-emerald-400 text-emerald-700"}`}>
+          {open ? <Gavel className="h-3.5 w-3.5" /> : <Check className="h-3.5 w-3.5" />}
+        </div>
+        <div className={`rounded-2xl border p-3 ${open ? "border-violet-200 bg-violet-50/65" : "border-emerald-100 bg-white"}`}>
+          <div className="text-[9px] font-black uppercase tracking-wide text-slate-400">{currentLabel}</div>
+          <div className="mt-1 whitespace-normal break-words text-sm font-black leading-snug text-[#102A43]">{heading}</div>
+          {decision.hostName && <div className="mt-1 text-[10px] font-bold text-slate-500">Host: <span className="font-black text-slate-700">{decision.hostName}</span></div>}
+          {decision.participantNames?.length ? <div className="mt-1 text-[10px] font-bold text-slate-500"><Users className="mr-1 inline h-3 w-3" />{personSummary(decision.participantNames.map((name) => ({ name })))}</div> : null}
+
+          {decision.mode === "recorded" ? (
+            <div className="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800"><Check className="mr-1 inline h-3.5 w-3.5" />{decision.outcome}</div>
+          ) : open ? (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <span className="mr-auto text-[10px] font-bold text-slate-500">{totalVoters}{decision.eligibleCount ? ` of ${decision.eligibleCount}` : ""} responded</span>
+              {canVote ? <button type="button" className="rounded-xl bg-violet-600 px-3 py-2 text-xs font-black text-white" onClick={() => openVoteDialog(card, decision)}>{decision.kind === "schedule" ? "Availability" : "Vote"}</button> : <span className="text-[10px] font-black text-slate-400">Not asking you</span>}
+              <button type="button" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-500" onClick={() => void closeVote(card, decision)}>Close</button>
+            </div>
+          ) : <div className="mt-3">{results}</div>}
+        </div>
       </div>
     );
   };
 
-  const renderAction = (card: TaskBoardCard, action: TaskBoardActionItem, index: number) => {
+  const renderAction = (
+    card: TaskBoardCard,
+    action: TaskBoardActionItem,
+    index: number,
+    isCurrent: boolean,
+    entryKey: string,
+    resumed = false,
+    waitingOnDecision = false,
+  ) => {
     const open = action.status === "open";
     const mine = isMine(action);
     const assignees = actionPeople(action);
-    return (
-      <div key={action.id} className={`rounded-2xl border p-3 ${open ? "border-sky-200 bg-sky-50/55" : "border-slate-200 bg-slate-50/65"}`}>
-        <div className="flex items-start gap-2">
-          <div className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-xl ${open ? "bg-sky-100 text-sky-800" : "bg-white text-slate-500 ring-1 ring-slate-200"}`}><Hand className="h-3.5 w-3.5" /></div>
-          <div className="min-w-0 flex-1">
-            <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Action {index + 1}{open ? "" : " · done"}</div>
-            <div className="mt-1 whitespace-normal break-words text-sm font-black leading-snug text-[#102A43]">{action.text}</div>
-            {assignees.length > 0 && <div className="mt-1 text-[10px] font-black text-sky-800"><Users className="mr-1 inline h-3 w-3" />{personSummary(assignees)}</div>}
+
+    if (!isCurrent) {
+      return (
+        <div key={entryKey} className="relative pl-8">
+          <div className={`absolute left-0 top-2.5 flex h-7 w-7 items-center justify-center rounded-full border bg-white ${open ? "border-sky-200 text-sky-600" : "border-slate-200 text-slate-400"}`}>
+            {open ? <Hand className="h-3.5 w-3.5" /> : <Check className="h-3.5 w-3.5" />}
+          </div>
+          <div className="rounded-xl bg-white/80 px-3 py-2.5 ring-1 ring-slate-200/80">
+            <div className="text-[9px] font-black uppercase tracking-wide text-slate-400">Action · {open ? waitingOnDecision ? "waiting on decision" : "open" : "done"}</div>
+            <div className="mt-0.5 whitespace-normal break-words text-[12px] font-black leading-snug text-[#102A43]">{action.text}</div>
+            {assignees.length > 0 && <div className="mt-1 text-[9px] font-bold text-slate-500"><Users className="mr-1 inline h-3 w-3" />{personSummary(assignees)}</div>}
+            {!open && <div className="mt-1 text-[9px] font-bold text-emerald-700">Completed{action.completedByName ? ` by ${action.completedByName}` : ""}</div>}
           </div>
         </div>
-        {open ? (
-          <div className="mt-3 flex flex-wrap gap-2">
-            {!mine && <button type="button" className="rounded-xl bg-sky-700 px-3 py-2 text-xs font-black text-white" onClick={() => void joinAction(card, action)}><Hand className="mr-1 inline h-3.5 w-3.5" />{assignees.length ? "Join" : "I’ll handle it"}</button>}
-            {mine && <button type="button" className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white" onClick={() => void completeAction(card, action)}><Check className="mr-1 inline h-3.5 w-3.5" />Done</button>}
-            {mine && assignees.length > 1 && <button type="button" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-500" onClick={() => void releaseAction(card, action)}><RotateCcw className="mr-1 inline h-3.5 w-3.5" />Leave</button>}
-            {!assignees.length && <button type="button" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600" onClick={() => void completeAction(card, action)}>Already done</button>}
-          </div>
-        ) : <div className="mt-3 text-xs font-black text-emerald-700"><CheckCircle2 className="mr-1 inline h-3.5 w-3.5" />Completed{action.completedByName ? ` by ${action.completedByName}` : ""}</div>}
+      );
+    }
+
+    return (
+      <div key={entryKey} className="relative pl-8">
+        <div className={`absolute left-0 top-3 flex h-7 w-7 items-center justify-center rounded-full border-2 bg-white ${open ? "border-sky-500 text-sky-700" : "border-emerald-400 text-emerald-700"}`}>
+          {open ? <Hand className="h-3.5 w-3.5" /> : <Check className="h-3.5 w-3.5" />}
+        </div>
+        <div className={`rounded-2xl border p-3 ${open ? "border-sky-200 bg-sky-50/65" : "border-emerald-100 bg-white"}`}>
+          <div className="text-[9px] font-black uppercase tracking-wide text-slate-400">{open ? resumed ? "Current action · resumed" : "Current action" : "Action complete"}</div>
+          <div className="mt-1 whitespace-normal break-words text-sm font-black leading-snug text-[#102A43]">{action.text}</div>
+          {assignees.length > 0 && <div className="mt-1 text-[10px] font-black text-sky-800"><Users className="mr-1 inline h-3 w-3" />{personSummary(assignees)}</div>}
+          {open ? (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {!mine && <button type="button" className="rounded-xl bg-sky-700 px-3 py-2 text-xs font-black text-white" onClick={() => void joinAction(card, action)}><Hand className="mr-1 inline h-3.5 w-3.5" />{assignees.length ? "Join" : "I’ll handle it"}</button>}
+              {mine && <button type="button" className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white" onClick={() => void completeAction(card, action)}><Check className="mr-1 inline h-3.5 w-3.5" />Done</button>}
+              {mine && assignees.length > 1 && <button type="button" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-500" onClick={() => void releaseAction(card, action)}><RotateCcw className="mr-1 inline h-3.5 w-3.5" />Leave</button>}
+              {!assignees.length && <button type="button" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600" onClick={() => void completeAction(card, action)}>Already done</button>}
+            </div>
+          ) : <div className="mt-2 text-xs font-black text-emerald-700"><CheckCircle2 className="mr-1 inline h-3.5 w-3.5" />Completed{action.completedByName ? ` by ${action.completedByName}` : ""}</div>}
+        </div>
+      </div>
+    );
+  };
+
+  const renderTimeline = (card: TaskBoardCard) => {
+    const entries = timelineEntries(card);
+    const currentKey = currentTimelineKey(card);
+    const currentEntry = currentKey ? entries.find((entry) => entry.key === currentKey) : undefined;
+    const historyEntries = currentEntry ? entries.filter((entry) => entry.key !== currentEntry.key) : entries;
+    const currentIsDecision = currentEntry?.kind === "decision";
+    const currentActionResumed = currentEntry?.kind === "action" && historyEntries.some((entry) => entry.createdAt > currentEntry.createdAt);
+
+    if (!entries.length) return null;
+
+    return (
+      <div className="relative">
+        <div className="absolute bottom-4 left-[13px] top-4 w-px bg-slate-200" aria-hidden="true" />
+        <div className="relative space-y-2">
+          {historyEntries.map((entry) => entry.kind === "decision"
+            ? renderDecision(card, entry.decision, entry.index, false, entry.key)
+            : renderAction(card, entry.action, entry.index, false, entry.key, false, Boolean(currentIsDecision && entry.action.status === "open")))}
+          {currentEntry && (currentEntry.kind === "decision"
+            ? renderDecision(card, currentEntry.decision, currentEntry.index, true, currentEntry.key)
+            : renderAction(card, currentEntry.action, currentEntry.index, true, currentEntry.key, currentActionResumed))}
+        </div>
       </div>
     );
   };
@@ -1393,13 +1535,13 @@ export function TaskBoard({
                 {card.dueDate && <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-black ${isOverdue(card.dueDate) && stage !== "done" ? "bg-red-50 text-red-700" : "bg-slate-100 text-slate-600"}`}><CalendarDays className="h-3 w-3" />{dueText(card.dueDate)}</span>}
               </div>
               <h3 className="mt-2 whitespace-normal break-words text-[14px] font-black leading-snug text-[#102A43] lg:text-[15px]">{card.title}</h3>
-              {need && <div className={`mt-2 whitespace-normal break-words text-[11px] font-black leading-snug ${stage === "deciding" ? "text-violet-700" : stage === "action" ? "text-sky-800" : stage === "done" ? "text-slate-500" : "text-slate-600"}`}>
+              {need && !expanded && <div className={`mt-2 whitespace-normal break-words text-[11px] font-black leading-snug ${stage === "deciding" ? "text-violet-700" : stage === "action" ? "text-sky-800" : stage === "done" ? "text-slate-500" : "text-slate-600"}`}>
                 {stage === "deciding" && <Gavel className="mr-1 inline h-3.5 w-3.5" />}
                 {stage === "action" && <Hand className="mr-1 inline h-3.5 w-3.5" />}
                 {stage === "done" && <Check className="mr-1 inline h-3.5 w-3.5" />}
                 {need}
               </div>}
-              {openDecision && <div className="mt-1 text-[9px] font-bold text-slate-400">{voteTotal(openDecision)}{openDecision.eligibleCount ? ` of ${openDecision.eligibleCount}` : ""} responded</div>}
+              {openDecision && !expanded && <div className="mt-1 text-[9px] font-bold text-slate-400">{voteTotal(openDecision)}{openDecision.eligibleCount ? ` of ${openDecision.eligibleCount}` : ""} responded</div>}
             </button>
             <div className="flex shrink-0 flex-col items-center gap-0.5">
               <button type="button" className="rounded-full p-1.5 text-slate-400 hover:bg-slate-50" onClick={() => openEditCard(card)} aria-label={`Edit ${card.title}`}><Pencil className="h-3.5 w-3.5" /></button>
@@ -1411,25 +1553,36 @@ export function TaskBoard({
         {expanded && <div className="border-t border-slate-100 bg-slate-50/35 px-3 pb-3 pt-3">
           {card.note?.trim() && <p className="mb-3 whitespace-pre-wrap break-words text-xs font-semibold leading-relaxed text-slate-500">{card.note.trim()}</p>}
 
-          {(card.links?.length || 0) > 0 && <div className="mb-3">
-            <div className="mb-1.5 text-[9px] font-black uppercase tracking-wide text-slate-400">Links</div>
-            <div className="grid gap-1.5">{card.links?.map((link) => <div key={link.id} className="flex min-w-0 items-center gap-2 rounded-xl bg-white p-2 ring-1 ring-slate-200"><a href={link.url} target="_blank" rel="noreferrer" className="flex min-w-0 flex-1 items-center gap-2 text-[11px] font-black text-[#102A43]"><Link2 className="h-3.5 w-3.5 shrink-0 text-slate-400" /><span className="truncate">{link.label}</span><ExternalLink className="h-3 w-3 shrink-0 text-slate-400" /></a><button type="button" className="rounded-lg p-1 text-slate-300 hover:bg-red-50 hover:text-red-600" onClick={() => void removeLink(card, link.id)} aria-label={`Remove ${link.label}`}><Trash2 className="h-3.5 w-3.5" /></button></div>)}</div>
-          </div>}
+          <div className="mb-3 flex flex-wrap items-center gap-1.5">
+            {card.links?.map((link) => <div key={link.id} className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full bg-white px-2.5 py-1.5 ring-1 ring-slate-200"><a href={link.url} target="_blank" rel="noreferrer" className="inline-flex min-w-0 max-w-[15rem] items-center gap-1.5 text-[10px] font-black text-slate-600"><Link2 className="h-3 w-3 shrink-0 text-slate-400" /><span className="truncate">{link.label}</span><ExternalLink className="h-3 w-3 shrink-0 text-slate-400" /></a><button type="button" className="rounded-full p-0.5 text-slate-300 hover:text-red-600" onClick={() => void removeLink(card, link.id)} aria-label={`Remove ${link.label}`}><Trash2 className="h-3 w-3" /></button></div>)}
+            {stage !== "done" && (card.links?.length || 0) < 5 && <button type="button" className="inline-flex items-center gap-1 rounded-full px-2 py-1.5 text-[10px] font-black text-slate-400 hover:bg-white hover:text-slate-600" onClick={() => openAddLink(card)}><Link2 className="h-3 w-3" />+ Link</button>}
+          </div>
 
-          {(decisions.length > 0 || actions.length > 0) && <div className="mb-3">
-            <div className="mb-1.5 text-[9px] font-black uppercase tracking-wide text-slate-400">Thread</div>
-            <div className="space-y-2">
-              {decisions.map((decision, index) => renderDecision(card, decision, index))}
-              {actions.map((action, index) => renderAction(card, action, index))}
+          {(decisions.length > 0 || actions.length > 0) ? renderTimeline(card) : (
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-white/50 px-3 py-5 text-center">
+              <div className="text-xs font-black text-[#102A43]">What does this need?</div>
+              <div className="mt-1 text-[10px] font-semibold text-slate-400">Start a decision or add an action when the topic is ready.</div>
             </div>
-          </div>}
+          )}
 
-          <div className="flex flex-wrap gap-1.5 border-t border-slate-200 pt-3">
-            {stage !== "done" && !openDecision && <button type="button" className="rounded-xl bg-violet-50 px-3 py-2 text-[11px] font-black text-violet-700 ring-1 ring-violet-100" onClick={() => startDecision(card)}><Gavel className="mr-1 inline h-3.5 w-3.5" />{openAction ? "Needs decision" : decisions.length ? "+ Decision" : "Decide"}</button>}
-            {stage !== "done" && !openDecision && !openAction && <button type="button" className="rounded-xl bg-sky-50 px-3 py-2 text-[11px] font-black text-sky-800 ring-1 ring-sky-100" onClick={() => openAddAction(card)}><Hand className="mr-1 inline h-3.5 w-3.5" />+ Action</button>}
-            {stage !== "done" && (card.links?.length || 0) < 5 && <button type="button" className="rounded-xl bg-white px-3 py-2 text-[11px] font-black text-slate-600 ring-1 ring-slate-200" onClick={() => openAddLink(card)}><Link2 className="mr-1 inline h-3.5 w-3.5" />Link</button>}
-            {stage !== "done" && !openDecision && !openAction && (decisions.length > 0 || actions.length > 0) && <button type="button" className="ml-auto rounded-xl bg-emerald-600 px-3 py-2 text-[11px] font-black text-white" onClick={() => void finishTopic(card)}><Check className="mr-1 inline h-3.5 w-3.5" />Done</button>}
-            {stage === "done" && <button type="button" className="rounded-xl bg-white px-3 py-2 text-[11px] font-black text-slate-600 ring-1 ring-slate-200" onClick={() => void reopenTopic(card)}><RotateCcw className="mr-1 inline h-3.5 w-3.5" />Reopen</button>}
+          <div className="mt-3 border-t border-slate-200 pt-3">
+            {stage === "done" ? (
+              <button type="button" className="rounded-xl bg-white px-3 py-2 text-[11px] font-black text-slate-600 ring-1 ring-slate-200" onClick={() => void reopenTopic(card)}><RotateCcw className="mr-1 inline h-3.5 w-3.5" />Reopen</button>
+            ) : openDecision ? null : openAction ? (
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="mr-1 text-[9px] font-black uppercase tracking-wide text-slate-400">Need a decision first?</span>
+                <button type="button" className="rounded-xl bg-white px-3 py-2 text-[11px] font-black text-violet-700 ring-1 ring-violet-100" onClick={() => startDecision(card)}><Gavel className="mr-1 inline h-3.5 w-3.5" />+ Decision</button>
+              </div>
+            ) : (
+              <div>
+                {(decisions.length > 0 || actions.length > 0) && <div className="mb-2 text-[9px] font-black uppercase tracking-wide text-slate-400">What next?</div>}
+                <div className="flex flex-wrap gap-1.5">
+                  <button type="button" className="rounded-xl bg-violet-50 px-3 py-2 text-[11px] font-black text-violet-700 ring-1 ring-violet-100" onClick={() => startDecision(card)}><Gavel className="mr-1 inline h-3.5 w-3.5" />{decisions.length || actions.length ? "+ Decision" : "Decide"}</button>
+                  <button type="button" className="rounded-xl bg-sky-50 px-3 py-2 text-[11px] font-black text-sky-800 ring-1 ring-sky-100" onClick={() => openAddAction(card)}><Hand className="mr-1 inline h-3.5 w-3.5" />{decisions.length || actions.length ? "+ Action" : "Action"}</button>
+                  {(decisions.length > 0 || actions.length > 0) && <button type="button" className="ml-auto rounded-xl bg-emerald-600 px-3 py-2 text-[11px] font-black text-white" onClick={() => void finishTopic(card)}><Check className="mr-1 inline h-3.5 w-3.5" />Done</button>}
+                </div>
+              </div>
+            )}
           </div>
         </div>}
       </article>

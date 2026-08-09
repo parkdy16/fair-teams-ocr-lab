@@ -16,6 +16,7 @@ import {
   Pencil,
   Plus,
   RotateCcw,
+  Settings,
   Smartphone,
   Tag,
   Trash2,
@@ -658,7 +659,6 @@ export function TaskBoard({
   const [outcomeText, setOutcomeText] = useState("");
 
   const [boardSettingsOpen, setBoardSettingsOpen] = useState(false);
-  const [notificationSettingsOpen, setNotificationSettingsOpen] = useState(false);
   const [boardNameDraft, setBoardNameDraft] = useState("");
 
   const [notifyCardId, setNotifyCardId] = useState<string | null>(null);
@@ -1913,19 +1913,18 @@ export function TaskBoard({
                 <Button
                   type="button"
                   variant="outline"
-                  className={`relative h-9 w-9 rounded-2xl p-0 lg:h-11 lg:w-11 ${phoneStatus === "enabled" ? "border-sky-200 bg-sky-50 text-sky-700" : "bg-white/80 text-slate-600"}`}
+                  className="h-9 w-9 rounded-2xl bg-white/80 p-0 lg:h-11 lg:w-11"
                   onClick={() => {
                     setNotifyError("");
-                    setNotificationSettingsOpen(true);
+                    setBoardNameDraft(customBoardName || "");
+                    setBoardSettingsOpen(true);
                     void getPhoneNotificationStatus().then(setPhoneStatus);
                   }}
-                  aria-label="Notification settings"
-                  title="Notifications"
+                  aria-label="Board settings"
+                  title="Board settings"
                 >
-                  <Bell className="h-4 w-4 lg:h-[18px] lg:w-[18px]" />
-                  {phoneStatus === "enabled" && <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-emerald-500 ring-2 ring-white" />}
+                  <Settings className="h-4 w-4 lg:h-[18px] lg:w-[18px]" />
                 </Button>
-                <Button type="button" variant="outline" className="h-9 w-9 rounded-2xl bg-white/80 p-0 lg:h-11 lg:w-11" onClick={() => { setBoardNameDraft(customBoardName || ""); setBoardSettingsOpen(true); }} aria-label="Board settings"><Pencil className="h-4 w-4 lg:h-[18px] lg:w-[18px]" /></Button>
                 <Button type="button" className="h-9 w-9 rounded-2xl p-0 font-black text-white lg:h-11 lg:w-11" style={{ backgroundColor: accent }} onClick={() => { resetNewTopic(); setNewTopicOpen(true); }} aria-label="New topic"><Plus className="h-4 w-4 lg:h-5 lg:w-5" /></Button>
               </div>
             </div>
@@ -2248,78 +2247,26 @@ export function TaskBoard({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={notificationSettingsOpen} onOpenChange={setNotificationSettingsOpen}>
-    <DialogContent className="max-w-sm rounded-3xl" onOpenAutoFocus={(event) => event.preventDefault()}>
-      <DialogHeader>
-        <DialogTitle className="text-left text-base font-black text-[#102A43]">Notifications</DialogTitle>
-      </DialogHeader>
-
-      <div className="grid gap-4">
-        <div className="rounded-2xl bg-sky-50/70 p-3 ring-1 ring-sky-100">
-          <div className="flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5 text-xs font-black text-[#102A43]">
-                <Smartphone className="h-4 w-4 text-sky-700" />
-                Phone notifications
-              </div>
-              <div className="mt-1 text-[10px] font-semibold leading-relaxed text-slate-500">
-                {phoneStatus === "enabled"
-                  ? "Enabled on this device. Phone will be selected automatically when you notify organizers."
-                  : phoneStatus === "blocked"
-                    ? "Blocked in this browser. Allow notifications in your browser or site settings."
-                    : phoneStatus === "unsupported"
-                      ? "Phone notifications are not supported on this device or browser."
-                      : "Enable this device to receive Action Board organizer notifications."}
-              </div>
-            </div>
-
-            {phoneStatus === "available" && (
-              <button
-                type="button"
-                className="shrink-0 rounded-xl bg-white px-3 py-2 text-[11px] font-black text-sky-700 ring-1 ring-sky-100"
-                disabled={phoneEnabling}
-                onClick={() => void enablePhone()}
-              >
-                {phoneEnabling ? "Enabling…" : "Enable"}
-              </button>
-            )}
-
-            {phoneStatus === "enabled" && (
-              <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-black text-emerald-700">
-                <Check className="h-3 w-3" />
-                On
-              </span>
-            )}
-          </div>
-        </div>
-
-        <div className="rounded-2xl bg-slate-50 px-3 py-2.5 text-[10px] font-semibold leading-relaxed text-slate-500">
-          Stripes only sends these alerts when an organizer manually uses the notification bell on an Action Board item.
-        </div>
-
-        {notifyError && (
-          <div className="rounded-xl bg-red-50 px-3 py-2 text-[11px] font-bold text-red-700">
-            {notifyError}
-          </div>
-        )}
-
-        <Button
-          type="button"
-          variant="outline"
-          className="h-11 rounded-2xl font-black"
-          onClick={() => setNotificationSettingsOpen(false)}
-        >
-          Done
-        </Button>
-      </div>
-    </DialogContent>
-  </Dialog>
-
-  <Dialog open={boardSettingsOpen} onOpenChange={setBoardSettingsOpen}>
+        <Dialog open={boardSettingsOpen} onOpenChange={setBoardSettingsOpen}>
         <DialogContent className="max-w-sm rounded-3xl" onOpenAutoFocus={(event) => event.preventDefault()}>
           <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43]">Board settings</DialogTitle></DialogHeader>
           <div className="grid gap-4">
             <div><Label htmlFor="board-name">Custom name <span className="font-semibold text-slate-400">optional</span></Label><Input id="board-name" value={boardNameDraft} onChange={(event) => setBoardNameDraft(event.target.value)} maxLength={80} placeholder="e.g. Club decisions" /></div>
+            <div className="rounded-2xl bg-slate-50 p-3 ring-1 ring-slate-100">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 text-xs font-black text-[#102A43]"><Smartphone className="h-4 w-4 text-sky-700" />Phone notifications</div>
+                  <div className="mt-1 text-[10px] font-semibold leading-relaxed text-slate-500">
+                    {phoneStatus === "enabled" ? "Enabled on this device."
+                      : phoneStatus === "blocked" ? "Blocked in this browser's notification settings."
+                        : phoneStatus === "unsupported" ? "Not supported on this device/browser."
+                          : "Optional. Enable this device to receive organizer pings."}
+                  </div>
+                </div>
+                {phoneStatus === "available" && <button type="button" className="shrink-0 rounded-xl bg-white px-3 py-2 text-[11px] font-black text-sky-700 ring-1 ring-sky-100" disabled={phoneEnabling} onClick={() => void enablePhone()}>{phoneEnabling ? "Enabling…" : "Enable"}</button>}
+                {phoneStatus === "enabled" && <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-black text-emerald-700"><Check className="h-3 w-3" />On</span>}
+              </div>
+            </div>
             {notifyError && <div className="rounded-xl bg-red-50 px-3 py-2 text-[11px] font-bold text-red-700">{notifyError}</div>}
             <Button type="button" className="h-11 rounded-2xl font-black text-white" style={{ backgroundColor: accent }} disabled={saving} onClick={() => void saveBoardName()}>{saving ? "Saving…" : "Save name"}</Button>
           </div>

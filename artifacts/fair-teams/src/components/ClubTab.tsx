@@ -6,6 +6,7 @@ import {
   Clock3,
   Pencil,
   Plus,
+  Search,
   Star,
   StickyNote,
   Trash2,
@@ -98,6 +99,7 @@ type ClubTabProps = {
   currentTeamsGenerated?: boolean;
   onApplyAiSmartCommandAction?: (action: AiSmartCommandAction) => Promise<string | void> | string | void;
   onOpenTodayFromAi?: () => void;
+  onRequestAddPlayer?: (suggestedName?: string) => void;
   tutorialStep?: string | null;
   onTutorialAction?: (action: string, playerId?: string) => void;
 };
@@ -120,6 +122,7 @@ const ATTENDANCE_ISSUE_OPTIONS: Array<{ value: AttendanceIssueType; label: strin
 ];
 
 type AttendanceRange = "3m" | "6m" | "12m" | "all";
+type AttendanceSort = "issues" | "recent";
 
 function todayIsoDate() {
   const now = new Date();
@@ -744,6 +747,7 @@ export function ClubTab({
   currentTeamsGenerated = false,
   onApplyAiSmartCommandAction,
   onOpenTodayFromAi,
+  onRequestAddPlayer,
   tutorialStep,
   onTutorialAction,
 }: ClubTabProps) {
@@ -779,6 +783,8 @@ export function ClubTab({
   const [attendanceBoardOpen, setAttendanceBoardOpen] = useState(false);
   const [attendanceEditorOpen, setAttendanceEditorOpen] = useState(false);
   const [attendanceRange, setAttendanceRange] = useState<AttendanceRange>("3m");
+  const [attendanceSort, setAttendanceSort] = useState<AttendanceSort>("issues");
+  const [attendancePlayerSearch, setAttendancePlayerSearch] = useState("");
   const [attendanceHistoryPlayerId, setAttendanceHistoryPlayerId] = useState<string | null>(null);
   const [attendanceEditingId, setAttendanceEditingId] = useState<string | null>(null);
   const [attendancePlayerId, setAttendancePlayerId] = useState("");
@@ -928,6 +934,32 @@ export function ClubTab({
     equipmentRealtimeEnabled,
     isSharedRoster,
   ]);
+  const actionBoardOrganizerPeople = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          (equipmentHolderLabels || [])
+            .map((email) => email.trim().toLowerCase())
+            .filter((email) => email.includes("@")),
+        ),
+      ).map((email) => ({
+        email,
+        name: cleanEquipmentHolderLabel(email, equipmentHolderNamesByEmail),
+      })),
+    [equipmentHolderLabels, equipmentHolderNamesByEmail],
+  );
+  const actionBoardEquipmentItems = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          equipmentKits
+            .flatMap((kit) => equipmentItemsForKit(kit))
+            .map(equipmentItemDisplayLabel)
+            .filter(Boolean),
+        ),
+      ).slice(0, 24),
+    [equipmentKits],
+  );
   const cleanPairingRuleCount = pairingRules.filter(
     (rule) => rule.playerAId && rule.playerBId,
   ).length;
@@ -2001,12 +2033,34 @@ export function ClubTab({
       current.records.push(record);
       map.set(playerId, current);
     });
-    return [...map.values()].sort((a, b) => b.records.length - a.records.length || a.name.localeCompare(b.name));
-  }, [filteredAttendanceRecords, players]);
+    const rows = [...map.values()];
+    if (attendanceSort === "recent") {
+      return rows.sort((a, b) => {
+        const aLatest = Math.max(...a.records.map((record) => new Date(`${record.incidentDate}T12:00:00`).getTime() || 0));
+        const bLatest = Math.max(...b.records.map((record) => new Date(`${record.incidentDate}T12:00:00`).getTime() || 0));
+        return bLatest - aLatest || b.records.length - a.records.length || a.name.localeCompare(b.name);
+      });
+    }
+    return rows.sort((a, b) => b.records.length - a.records.length || a.name.localeCompare(b.name));
+  }, [filteredAttendanceRecords, players, attendanceSort]);
+
+  const attendanceMaxIssueCount = useMemo(
+    () => attendanceOverview.reduce((max, row) => Math.max(max, row.records.length), 0),
+    [attendanceOverview],
+  );
+
+  const attendancePlayerMatches = useMemo(() => {
+    const needle = attendancePlayerSearch.trim().toLocaleLowerCase();
+    return [...players]
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .filter((player) => !needle || player.name.toLocaleLowerCase().includes(needle) || player.aka?.toLocaleLowerCase().includes(needle))
+      .slice(0, 24);
+  }, [attendancePlayerSearch, players]);
 
   const resetAttendanceEditor = () => {
     setAttendanceEditingId(null);
     setAttendancePlayerId("");
+    setAttendancePlayerSearch("");
     setAttendanceIssueType("tardy");
     setAttendanceDate(todayIsoDate());
     setAttendanceNote("");
@@ -2022,6 +2076,7 @@ export function ClubTab({
     const matched = resolveAttendancePlayer(record);
     setAttendanceEditingId(record.id);
     setAttendancePlayerId(matched?.id || record.playerId);
+    setAttendancePlayerSearch(matched?.name || record.playerName || "");
     setAttendanceIssueType(record.issueType);
     setAttendanceDate(record.incidentDate);
     setAttendanceNote(record.note || "");
@@ -2475,6 +2530,9 @@ export function ClubTab({
           isSharedRoster={isSharedRoster}
           user={clubUser}
           eligibleVoterCount={isSharedRoster ? Math.max(1, sharedPeopleCount) : 1}
+          organizerPeople={actionBoardOrganizerPeople}
+          players={players}
+          equipmentItems={actionBoardEquipmentItems}
         />
       </div>
 
@@ -2764,7 +2822,7 @@ export function ClubTab({
       </Dialog>
 
       <Dialog open={attendanceBoardOpen} onOpenChange={(open) => { setAttendanceBoardOpen(open); if (!open) setAttendanceHistoryPlayerId(null); }}>
-        <DialogContent className="max-h-[88dvh] max-w-md overflow-y-auto rounded-3xl p-0" onOpenAutoFocus={(event) => event.preventDefault()}>
+        <DialogContent className="max-h-[88dvh] max-w-md overflow-hidden rounded-3xl p-0" onOpenAutoFocus={(event) => event.preventDefault()}>
           <DialogHeader className="border-b border-slate-100 px-4 py-3 text-left">
             <DialogTitle className="flex items-center gap-2 text-base font-black text-[#102A43]">
               {attendanceHistoryPlayerId && <button type="button" className="-ml-1 rounded-full p-1 text-slate-500 hover:bg-slate-100" onClick={() => setAttendanceHistoryPlayerId(null)} aria-label="Back to attendance overview"><ChevronLeft className="h-5 w-5" /></button>}
@@ -2772,21 +2830,43 @@ export function ClubTab({
               {attendanceHistoryPlayerId ? (attendanceOverview.find((row) => row.playerId === attendanceHistoryPlayerId)?.name || "Attendance history") : "Club attendance"}
             </DialogTitle>
           </DialogHeader>
-          <div className="grid gap-3 p-4">
-            {!attendanceHistoryPlayerId ? <>
-              <div className="grid grid-cols-4 rounded-2xl bg-slate-100 p-1">
-                {([["3m","3 months"],["6m","6 months"],["12m","12 months"],["all","All"]] as Array<[AttendanceRange,string]>).map(([value,label]) => <button key={value} type="button" onClick={() => setAttendanceRange(value)} className={`rounded-xl px-1 py-2 text-[10px] font-black ${attendanceRange === value ? "bg-white text-[#102A43] shadow-sm" : "text-slate-500"}`}>{label}</button>)}
+          {!attendanceHistoryPlayerId ? (
+            <div className="flex min-h-0 flex-col gap-3 p-4">
+              <div className="grid grid-cols-2 gap-2">
+                <label className="grid gap-1 text-[10px] font-black uppercase tracking-wide text-slate-400">
+                  Period
+                  <select value={attendanceRange} onChange={(event) => setAttendanceRange(event.target.value as AttendanceRange)} className="h-9 rounded-xl border border-slate-200 bg-white px-2 text-xs font-bold normal-case tracking-normal text-[#102A43]">
+                    <option value="3m">3 months</option>
+                    <option value="6m">6 months</option>
+                    <option value="12m">12 months</option>
+                    <option value="all">All</option>
+                  </select>
+                </label>
+                <label className="grid gap-1 text-[10px] font-black uppercase tracking-wide text-slate-400">
+                  Sort
+                  <select value={attendanceSort} onChange={(event) => setAttendanceSort(event.target.value as AttendanceSort)} className="h-9 rounded-xl border border-slate-200 bg-white px-2 text-xs font-bold normal-case tracking-normal text-[#102A43]">
+                    <option value="issues">Most issues</option>
+                    <option value="recent">Most recent</option>
+                  </select>
+                </label>
               </div>
-              <Button type="button" className="h-10 rounded-2xl bg-[#102A43] text-sm font-black text-white hover:bg-[#0b2036]" disabled={!attendanceEnabled || players.length === 0} onClick={openNewAttendanceIssue}><Plus className="mr-1.5 h-4 w-4" />Record attendance issue</Button>
-              {attendanceError && <div className="rounded-2xl border border-amber-100 bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-800">{attendanceError}</div>}
-              {attendanceLoading ? <div className="rounded-2xl bg-slate-50 px-3 py-3 text-sm font-bold text-slate-500">Loading attendance…</div> : attendanceOverview.length === 0 ? <div className="rounded-2xl bg-slate-50 px-3 py-4 text-center text-sm font-bold text-slate-500">No attendance issues recorded.</div> : <div className="grid gap-2">{attendanceOverview.map((row) => {
-                const counts = { tardy: 0, lateCancellation: 0, noShow: 0, conduct: 0 };
-                row.records.forEach((record) => { if (record.issueType === "tardy") counts.tardy += 1; if (record.issueType === "late-cancellation") counts.lateCancellation += 1; if (record.issueType === "no-show") counts.noShow += 1; if (record.issueType === "conduct") counts.conduct += 1; });
-                const parts = [counts.tardy ? `Tardy ${counts.tardy}` : "", counts.lateCancellation ? `Late cancel ${counts.lateCancellation}` : "", counts.noShow ? `No-show ${counts.noShow}` : "", counts.conduct ? `Conduct ${counts.conduct}` : ""].filter(Boolean);
-                return <button key={row.playerId} type="button" className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white px-3 py-3 text-left shadow-sm active:scale-[0.99]" onClick={() => setAttendanceHistoryPlayerId(row.playerId)}><span className="min-w-0"><span className="block truncate text-sm font-black text-[#102A43]">{row.name}</span><span className="block truncate text-[11px] font-semibold text-slate-500">{parts.join(" · ")}</span></span><span className="rounded-full bg-violet-50 px-2 py-1 text-[10px] font-black text-violet-700">{row.records.length}</span></button>;
-              })}</div>}
-            </> : <div className="grid gap-2">{(attendanceOverview.find((row) => row.playerId === attendanceHistoryPlayerId)?.records || []).map((record) => <button key={record.id} type="button" className="rounded-2xl border border-slate-100 bg-white px-3 py-3 text-left shadow-sm active:scale-[0.99]" onClick={() => openAttendanceRecord(record)}><div className="flex items-start justify-between gap-2"><span className="text-sm font-black text-[#102A43]">{attendanceIssueLabel(record.issueType)}</span><span className="text-[10px] font-black text-slate-400">{formatAttendanceDate(record.incidentDate)}</span></div>{record.note && <div className="mt-1 text-[11px] font-semibold leading-snug text-slate-600">{record.note}</div>}{(record.createdByName || record.createdByEmail) && <div className="mt-1.5 text-[10px] font-semibold text-slate-400">Recorded by {record.createdByName || record.createdByEmail}</div>}</button>)}</div>}
-          </div>
+              <Button type="button" className="h-10 shrink-0 rounded-2xl bg-[#102A43] text-sm font-black text-white hover:bg-[#0b2036]" disabled={!attendanceEnabled} onClick={openNewAttendanceIssue}><Plus className="mr-1.5 h-4 w-4" />Record attendance issue</Button>
+              {attendanceError && <div className="shrink-0 rounded-2xl border border-amber-100 bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-800">{attendanceError}</div>}
+              <div className="min-h-0 max-h-[52dvh] overflow-y-auto pr-1" style={{ WebkitOverflowScrolling: "touch" }}>
+                {attendanceLoading ? <div className="rounded-2xl bg-slate-50 px-3 py-3 text-sm font-bold text-slate-500">Loading attendance…</div> : attendanceOverview.length === 0 ? <div className="rounded-2xl bg-slate-50 px-3 py-4 text-center text-sm font-bold text-slate-500">No attendance issues recorded.</div> : <div className="grid gap-2">{attendanceOverview.map((row) => {
+                  const counts = { tardy: 0, lateCancellation: 0, noShow: 0, conduct: 0 };
+                  row.records.forEach((record) => { if (record.issueType === "tardy") counts.tardy += 1; if (record.issueType === "late-cancellation") counts.lateCancellation += 1; if (record.issueType === "no-show") counts.noShow += 1; if (record.issueType === "conduct") counts.conduct += 1; });
+                  const parts = [counts.noShow ? `${counts.noShow} No-show` : "", counts.lateCancellation ? `${counts.lateCancellation} Last-minute` : "", counts.tardy ? `${counts.tardy} Tardy` : "", counts.conduct ? `${counts.conduct} Conduct` : ""].filter(Boolean);
+                  const isHighest = attendanceMaxIssueCount > 1 && row.records.length === attendanceMaxIssueCount;
+                  return <button key={row.playerId} type="button" className={`flex items-center justify-between gap-3 rounded-2xl border px-3 py-3 text-left shadow-sm active:scale-[0.99] ${isHighest ? "border-rose-200 bg-rose-50/60" : "border-slate-100 bg-white"}`} onClick={() => setAttendanceHistoryPlayerId(row.playerId)}><span className="min-w-0"><span className="block truncate text-sm font-black text-[#102A43]">{row.name}</span><span className="block truncate text-[11px] font-semibold text-slate-500">{parts.join(" · ")}</span></span><span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-black ${isHighest ? "bg-rose-100 text-rose-700" : "bg-violet-50 text-violet-700"}`}>{row.records.length}</span></button>;
+                })}</div>}
+              </div>
+            </div>
+          ) : (
+            <div className="max-h-[68dvh] overflow-y-auto p-4" style={{ WebkitOverflowScrolling: "touch" }}>
+              <div className="grid gap-2">{(attendanceOverview.find((row) => row.playerId === attendanceHistoryPlayerId)?.records || []).map((record) => <button key={record.id} type="button" className="rounded-2xl border border-slate-100 bg-white px-3 py-3 text-left shadow-sm active:scale-[0.99]" onClick={() => openAttendanceRecord(record)}><div className="flex items-start justify-between gap-2"><span className="text-sm font-black text-[#102A43]">{attendanceIssueLabel(record.issueType)}</span><span className="text-[10px] font-black text-slate-400">{formatAttendanceDate(record.incidentDate)}</span></div>{record.note && <div className="mt-1 text-[11px] font-semibold leading-snug text-slate-600">{record.note}</div>}{(record.createdByName || record.createdByEmail) && <div className="mt-1.5 text-[10px] font-semibold text-slate-400">Recorded by {record.createdByName || record.createdByEmail}</div>}</button>)}</div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
@@ -2794,7 +2874,46 @@ export function ClubTab({
         <DialogContent className="max-h-[88dvh] max-w-md overflow-y-auto rounded-3xl p-0" onOpenAutoFocus={(event) => event.preventDefault()}>
           <DialogHeader className="border-b border-slate-100 px-4 py-3 text-left"><DialogTitle className="flex items-center gap-2 text-base font-black text-[#102A43]"><Clock3 className="h-5 w-5 text-violet-600" />{attendanceEditingId ? "Edit attendance record" : "Record attendance issue"}</DialogTitle></DialogHeader>
           <div className="grid gap-3 p-4" onPointerDown={(event) => { const target = event.target as HTMLElement; if (!target.closest("input,button,select,textarea")) blurActiveField(); }}>
-            <div className="grid gap-1.5"><Label className="text-xs font-black uppercase tracking-wide text-slate-500">Player</Label><select value={attendancePlayerId} onChange={(event) => { setAttendancePlayerId(event.target.value); setAttendanceDuplicate(null); }} className="h-10 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm font-semibold text-[#102A43]" disabled={attendanceSaving}><option value="">Choose player…</option>{[...players].sort((a,b) => a.name.localeCompare(b.name)).map((player) => <option key={player.id} value={player.id}>{player.name}{player.aka ? ` (${player.aka})` : ""}</option>)}</select></div>
+            <div className="grid gap-1.5">
+              <Label className="text-xs font-black uppercase tracking-wide text-slate-500">Player</Label>
+              <div className="rounded-2xl border border-slate-200 bg-white p-2">
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <Input
+                    value={attendancePlayerSearch}
+                    onChange={(event) => {
+                      setAttendancePlayerSearch(event.target.value);
+                      if (attendancePlayerId) setAttendancePlayerId("");
+                      setAttendanceDuplicate(null);
+                    }}
+                    placeholder="Search roster…"
+                    className="h-10 rounded-xl border-slate-200 pl-9 text-sm font-semibold"
+                    enterKeyHint="search"
+                    disabled={attendanceSaving}
+                  />
+                </div>
+                <div className="mt-1.5 max-h-40 overflow-y-auto" style={{ WebkitOverflowScrolling: "touch" }}>
+                  {attendancePlayerMatches.length > 0 ? attendancePlayerMatches.map((player) => {
+                    const selected = attendancePlayerId === player.id;
+                    return <button key={player.id} type="button" disabled={attendanceSaving} onClick={() => { setAttendancePlayerId(player.id); setAttendancePlayerSearch(player.name); setAttendanceDuplicate(null); }} className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left ${selected ? "bg-violet-50 text-violet-800" : "text-[#102A43] hover:bg-slate-50"}`}><span className="min-w-0"><span className="block truncate text-sm font-black">{player.name}</span>{player.aka && <span className="block truncate text-[10px] font-semibold text-slate-400">{player.aka}</span>}</span>{selected && <span className="text-[10px] font-black uppercase tracking-wide">Selected</span>}</button>;
+                  }) : <div className="px-3 py-3 text-center text-xs font-semibold text-slate-400">No roster match</div>}
+                </div>
+                <button
+                  type="button"
+                  disabled={attendanceSaving || !onRequestAddPlayer}
+                  onClick={() => {
+                    const suggestedName = attendancePlayerSearch.trim();
+                    setAttendanceEditorOpen(false);
+                    setAttendanceDuplicate(null);
+                    onRequestAddPlayer?.(suggestedName || undefined);
+                  }}
+                  className="mt-1.5 flex w-full items-center gap-2 rounded-xl border border-dashed border-slate-200 px-3 py-2 text-left text-xs font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Plus className="h-4 w-4" />
+                  {attendancePlayerSearch.trim() ? `Add “${attendancePlayerSearch.trim()}” to roster` : "Add player to roster"}
+                </button>
+              </div>
+            </div>
             <div className="grid gap-1.5"><Label className="text-xs font-black uppercase tracking-wide text-slate-500">Issue</Label><div className="grid grid-cols-2 gap-2">{ATTENDANCE_ISSUE_OPTIONS.map((option) => <button key={option.value} type="button" className={`min-h-10 rounded-2xl border px-2 py-2 text-[11px] font-black ${attendanceIssueType === option.value ? "border-violet-300 bg-violet-50 text-violet-800" : "border-slate-200 bg-white text-slate-600"}`} onClick={() => { setAttendanceIssueType(option.value); setAttendanceDuplicate(null); }}>{option.label}</button>)}</div></div>
             <div className="grid gap-1.5"><Label className="text-xs font-black uppercase tracking-wide text-slate-500">Date</Label><Input type="date" value={attendanceDate} onChange={(event) => { setAttendanceDate(event.target.value); setAttendanceDuplicate(null); }} max={todayIsoDate()} className="h-10 rounded-2xl border-slate-200 text-sm font-semibold" /></div>
             {attendanceIssueType === "conduct" && <div className="grid gap-1.5"><Label className="text-xs font-black uppercase tracking-wide text-slate-500">What happened? <span className="normal-case text-slate-400">optional</span></Label><Input value={attendanceNote} onChange={(event) => setAttendanceNote(event.target.value.slice(0,240))} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } }} enterKeyHint="done" maxLength={240} placeholder="Short organizer note" className="h-10 rounded-2xl border-slate-200 text-sm font-semibold" /></div>}

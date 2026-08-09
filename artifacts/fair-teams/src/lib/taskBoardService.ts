@@ -50,7 +50,14 @@ export type TaskBoardActivity = {
   toColumnName?: string;
 };
 
-export type TaskBoardVoteKind = "yes-no-abstain" | "choose-one" | "multi-select";
+export type TaskBoardVoteKind = "yes-no-abstain" | "choose-one" | "multi-select" | "schedule";
+
+export type TaskBoardDecisionType = "vote" | "schedule" | "players" | "equipment";
+
+export type TaskBoardPerson = {
+  name: string;
+  email?: string;
+};
 
 export type TaskBoardVoteOption = {
   id: string;
@@ -74,8 +81,12 @@ export type TaskBoardVote = {
   id?: string;
   mode?: "vote" | "recorded";
   kind?: TaskBoardVoteKind;
+  decisionType?: TaskBoardDecisionType;
   question: string;
   outcome?: string;
+  participantEmails?: string[];
+  participantNames?: string[];
+  sourcePlayerIds?: string[];
   options: TaskBoardVoteOption[];
   anonymous: boolean;
   hideParticipationUntilClosed: boolean;
@@ -104,6 +115,8 @@ export type TaskBoardActionItem = {
   id: string;
   text: string;
   status: "open" | "done";
+  assignees?: TaskBoardPerson[];
+  // Legacy single-assignee mirrors retained for older clients.
   assignee?: string;
   assigneeEmail?: string;
   createdAt: number;
@@ -118,6 +131,8 @@ export type TaskBoardCard = {
   title: string;
   note?: string;
   columnId: string;
+  people?: TaskBoardPerson[];
+  gifUrl?: string;
   position: number;
   links?: TaskBoardLink[];
   decisions?: TaskBoardVote[];
@@ -144,6 +159,7 @@ export type TaskBoardCard = {
 
 export type TaskBoardMeta = {
   name: string;
+  customName?: string;
   createdAt?: number;
   updatedAt?: number;
   updatedByName?: string;
@@ -202,6 +218,7 @@ function parseMeta(data?: DocumentData): TaskBoardMeta | null {
   if (!data) return null;
   return {
     name: String(data.name || "Action Board"),
+    customName: data.customName ? String(data.customName) : undefined,
     createdAt: toMillis(data.createdAt) || toMillis(data.createdAtIso),
     updatedAt: toMillis(data.updatedAt) || toMillis(data.updatedAtIso),
     updatedByName: data.updatedByName ? String(data.updatedByName) : undefined,
@@ -267,9 +284,13 @@ function parseVote(value: unknown, fallbackId = "decision"): TaskBoardVote | und
     ? "yes-no-abstain"
     : "choose-one";
   const rawKind = String(row.kind || "");
-  const kind: TaskBoardVoteKind = rawKind === "multi-select" || rawKind === "choose-one" || rawKind === "yes-no-abstain"
+  const kind: TaskBoardVoteKind = rawKind === "schedule" || rawKind === "multi-select" || rawKind === "choose-one" || rawKind === "yes-no-abstain"
     ? rawKind
     : inferredKind;
+  const rawDecisionType = String(row.decisionType || "");
+  const decisionType: TaskBoardDecisionType = rawDecisionType === "schedule" || rawDecisionType === "players" || rawDecisionType === "equipment" || rawDecisionType === "vote"
+    ? rawDecisionType
+    : kind === "schedule" ? "schedule" : "vote";
   const ballots = Array.isArray(row.ballots)
     ? row.ballots.map((item) => {
       const ballot = (item || {}) as Record<string, unknown>;
@@ -285,8 +306,12 @@ function parseVote(value: unknown, fallbackId = "decision"): TaskBoardVote | und
     id: String(row.id || fallbackId),
     mode,
     kind,
+    decisionType,
     question,
     outcome,
+    participantEmails: Array.isArray(row.participantEmails) ? row.participantEmails.map(String).filter(Boolean) : undefined,
+    participantNames: Array.isArray(row.participantNames) ? row.participantNames.map(String).filter(Boolean) : undefined,
+    sourcePlayerIds: Array.isArray(row.sourcePlayerIds) ? row.sourcePlayerIds.map(String).filter(Boolean) : undefined,
     options,
     anonymous: row.anonymous !== false,
     hideParticipationUntilClosed: Boolean(row.hideParticipationUntilClosed),
@@ -325,12 +350,24 @@ function parseActions(value: unknown): TaskBoardActionItem[] {
   if (!Array.isArray(value)) return [];
   return value.map((item, index) => {
     const row = (item || {}) as Record<string, unknown>;
+    const assignees = Array.isArray(row.assignees)
+      ? row.assignees.map((item) => {
+        const person = (item || {}) as Record<string, unknown>;
+        return {
+          name: String(person.name || "").trim(),
+          email: person.email ? String(person.email).trim() : undefined,
+        };
+      }).filter((person) => person.name)
+      : [];
+    const legacyAssignee = row.assignee ? String(row.assignee) : undefined;
+    const legacyAssigneeEmail = row.assigneeEmail ? String(row.assigneeEmail) : undefined;
     return {
       id: String(row.id || `action-${index}`),
       text: String(row.text || "").trim(),
       status: (row.status === "done" ? "done" : "open") as TaskBoardActionItem["status"],
-      assignee: row.assignee ? String(row.assignee) : undefined,
-      assigneeEmail: row.assigneeEmail ? String(row.assigneeEmail) : undefined,
+      assignees: assignees.length ? assignees : legacyAssignee ? [{ name: legacyAssignee, email: legacyAssigneeEmail }] : [],
+      assignee: legacyAssignee || assignees[0]?.name,
+      assigneeEmail: legacyAssigneeEmail || assignees[0]?.email,
       createdAt: toMillis(row.createdAt) || Date.now(),
       createdByName: row.createdByName ? String(row.createdByName) : undefined,
       completedAt: toMillis(row.completedAt),
@@ -353,6 +390,7 @@ function parseCard(id: string, data: DocumentData): TaskBoardCard {
       id: "legacy-action",
       text: String(data.actionText),
       status: completedAt ? "done" : "open",
+      assignees: data.assignee ? [{ name: String(data.assignee), email: data.assigneeEmail ? String(data.assigneeEmail) : undefined }] : [],
       assignee: data.assignee ? String(data.assignee) : undefined,
       assigneeEmail: data.assigneeEmail ? String(data.assigneeEmail) : undefined,
       createdAt: toMillis(data.lastMovedAt) || toMillis(data.createdAt) || now,
@@ -367,6 +405,11 @@ function parseCard(id: string, data: DocumentData): TaskBoardCard {
     id,
     title: String(data.title || "Untitled topic"),
     note: data.note ? String(data.note) : undefined,
+    people: Array.isArray(data.people) ? data.people.map((item: unknown) => {
+      const person = (item || {}) as Record<string, unknown>;
+      return { name: String(person.name || "").trim(), email: person.email ? String(person.email).trim() : undefined };
+    }).filter((person: TaskBoardPerson) => person.name) : [],
+    gifUrl: data.gifUrl ? String(data.gifUrl) : undefined,
     columnId: String(data.columnId || ""),
     position: Number.isFinite(Number(data.position)) ? Number(data.position) : 1000,
     links: parseLinks(data.links),
@@ -420,7 +463,7 @@ export async function saveTaskBoardMeta(scopeId: string, meta: TaskBoardMeta): P
   const user = actor();
   const now = new Date();
   await setDoc(rootDoc(scopeId), {
-    app: "Fair Teams", schemaVersion: 4, name: meta.name.trim() || "Action Board",
+    app: "Fair Teams", schemaVersion: 5, name: meta.name.trim() || "Action Board", customName: meta.customName?.trim() || null,
     updatedByUid: user.uid, updatedByEmail: user.email || null, updatedByName: user.name,
     updatedAt: serverTimestamp(), updatedAtIso: now.toISOString(),
     ...(meta.createdAt ? {} : { createdAt: serverTimestamp(), createdAtIso: now.toISOString() }),
@@ -466,8 +509,12 @@ function votePayload(vote?: TaskBoardVote) {
     id: vote.id || null,
     mode: vote.mode || "vote",
     kind: vote.kind || "yes-no-abstain",
+    decisionType: vote.decisionType || (vote.kind === "schedule" ? "schedule" : "vote"),
     question: vote.question.trim(),
     outcome: vote.outcome?.trim() || null,
+    participantEmails: vote.participantEmails || [],
+    participantNames: vote.participantNames || [],
+    sourcePlayerIds: vote.sourcePlayerIds || [],
     anonymous: vote.anonymous,
     hideParticipationUntilClosed: vote.hideParticipationUntilClosed,
     showResultsWhileOpen: vote.showResultsWhileOpen,
@@ -504,8 +551,9 @@ function actionPayload(action: TaskBoardActionItem) {
     id: action.id,
     text: action.text.trim(),
     status: action.status,
-    assignee: action.assignee?.trim() || null,
-    assigneeEmail: action.assigneeEmail?.trim() || null,
+    assignees: (action.assignees || []).map((person) => ({ name: person.name.trim(), email: person.email?.trim() || null })).filter((person) => person.name),
+    assignee: action.assignees?.[0]?.name?.trim() || action.assignee?.trim() || null,
+    assigneeEmail: action.assignees?.[0]?.email?.trim() || action.assigneeEmail?.trim() || null,
     createdAt: action.createdAt,
     createdByName: action.createdByName || null,
     completedAt: action.completedAt || null,
@@ -522,8 +570,10 @@ export async function saveTaskBoardCard(scopeId: string, card: TaskBoardCard): P
   const latestDecision = decisions[decisions.length - 1];
   const latestOpenAction = [...actions].reverse().find((action) => action.status === "open");
   await setDoc(doc(cardsCollection(scopeId), card.id), {
-    app: "Fair Teams", schemaVersion: 4,
+    app: "Fair Teams", schemaVersion: 5,
     title: card.title.trim() || "Untitled topic", note: card.note?.trim() || null,
+    people: (card.people || []).map((person) => ({ name: person.name.trim(), email: person.email?.trim() || null })).filter((person) => person.name),
+    gifUrl: card.gifUrl?.trim() || null,
     columnId: card.columnId, position: card.position,
     links: (card.links || []).map(linkPayload),
     decisions: decisions.map((decision) => votePayload(decision)),
@@ -566,7 +616,7 @@ export async function castTaskBoardVote(
   voterName: string,
   optionIds: string[],
 ): Promise<void> {
-  requireUser();
+  const signedInUser = requireUser();
   const reference = doc(cardsCollection(scopeId), cardId);
   await runTransaction(getFairTeamsFirestore(), async (transaction) => {
     const snapshot = await transaction.get(reference);
@@ -577,9 +627,16 @@ export async function castTaskBoardVote(
     if (decisionIndex < 0) throw new Error("This decision no longer exists.");
     const decision = decisions[decisionIndex];
     if (decision.mode === "recorded" || decision.status !== "open") throw new Error("This vote is closed.");
+    if (decision.participantEmails?.length) {
+      const email = signedInUser.email?.trim().toLowerCase() || "";
+      const allowed = decision.participantEmails.some((value) => value.trim().toLowerCase() === email);
+      if (!allowed) throw new Error("This decision is only asking selected organizers.");
+    }
 
     const uniqueOptionIds = [...new Set(optionIds)].filter((optionId) => decision.options.some((option) => option.id === optionId));
-    const maxSelections = decision.kind === "multi-select" ? Math.max(1, decision.maxSelections || decision.options.length) : 1;
+    const maxSelections = decision.kind === "multi-select" || decision.kind === "schedule"
+      ? Math.max(1, decision.maxSelections || decision.options.length)
+      : 1;
     if (!uniqueOptionIds.length) throw new Error("Choose an option.");
     if (uniqueOptionIds.length > maxSelections) throw new Error(`Choose up to ${maxSelections}.`);
 

@@ -1629,6 +1629,7 @@ export function PlayersTab({
   onReviewNext,
   onReviewDone,
   openPairingRulesToken = 0,
+  openAddPlayerRequest = null,
   isSharedRoster = false,
   sharedRosterId,
   sharedOrganizerCount = 1,
@@ -1648,6 +1649,7 @@ export function PlayersTab({
   onReviewNext?: () => void;
   onReviewDone?: () => void;
   openPairingRulesToken?: number;
+  openAddPlayerRequest?: { token: number; name?: string } | null;
   isSharedRoster?: boolean;
   sharedRosterId?: string;
   sharedOrganizerCount?: number;
@@ -1697,6 +1699,7 @@ export function PlayersTab({
   const [sharedRosterAuthReady, setSharedRosterAuthReady] = useState(false);
   const [sharedRosterUserUid, setSharedRosterUserUid] = useState<string | null>(null);
   const lastOpenPairingRulesTokenRef = useRef(0);
+  const lastExternalAddPlayerTokenRef = useRef(0);
 
   useEffect(() => {
     if (!openPairingRulesToken || openPairingRulesToken === lastOpenPairingRulesTokenRef.current) return;
@@ -1819,6 +1822,15 @@ export function PlayersTab({
     setSharedDuplicateOverride(false);
     setSharedDuplicateNotice("");
   };
+
+  useEffect(() => {
+    if (!openAddPlayerRequest?.token || openAddPlayerRequest.token === lastExternalAddPlayerTokenRef.current) return;
+    lastExternalAddPlayerTokenRef.current = openAddPlayerRequest.token;
+    resetAddPlayerForm();
+    setName(openAddPlayerRequest.name?.trim() || "");
+    setAddOptionsOpen(false);
+    setAddPlayerOpen(true);
+  }, [openAddPlayerRequest]);
 
   const openManualAddPlayer = () => {
     resetAddPlayerForm();

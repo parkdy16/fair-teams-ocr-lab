@@ -33,6 +33,7 @@ import type { SharedRosterUser } from "@/lib/sharedRosterService";
 import {
   enablePhoneNotifications,
   getPhoneNotificationStatus,
+  reregisterPhoneNotifications,
   sendActionBoardNotification,
   syncPhoneNotificationsIfEnabled,
   type ActionBoardNotificationStepKind,
@@ -909,6 +910,21 @@ export function TaskBoard({
       setPhoneStatus("enabled");
     } catch (nextError) {
       setNotifyError(nextError instanceof Error ? nextError.message : "Could not enable phone notifications.");
+      setPhoneStatus(await getPhoneNotificationStatus());
+    } finally {
+      setPhoneEnabling(false);
+    }
+  };
+
+  const reregisterPhone = async () => {
+    if (phoneEnabling) return;
+    setPhoneEnabling(true);
+    setNotifyError("");
+    try {
+      await reregisterPhoneNotifications();
+      setPhoneStatus("enabled");
+    } catch (nextError) {
+      setNotifyError(nextError instanceof Error ? nextError.message : "Could not re-register phone notifications.");
       setPhoneStatus(await getPhoneNotificationStatus());
     } finally {
       setPhoneEnabling(false);
@@ -2264,7 +2280,10 @@ export function TaskBoard({
                   </div>
                 </div>
                 {phoneStatus === "available" && <button type="button" className="shrink-0 rounded-xl bg-white px-3 py-2 text-[11px] font-black text-sky-700 ring-1 ring-sky-100" disabled={phoneEnabling} onClick={() => void enablePhone()}>{phoneEnabling ? "Enabling…" : "Enable"}</button>}
-                {phoneStatus === "enabled" && <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-black text-emerald-700"><Check className="h-3 w-3" />On</span>}
+                {phoneStatus === "enabled" && <div className="flex shrink-0 items-center gap-1.5">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-black text-emerald-700"><Check className="h-3 w-3" />On</span>
+                  <button type="button" className="rounded-xl bg-white px-2.5 py-1.5 text-[10px] font-black text-sky-700 ring-1 ring-sky-100" disabled={phoneEnabling} onClick={() => void reregisterPhone()}>{phoneEnabling ? "Registering…" : "Re-register"}</button>
+                </div>}
               </div>
             </div>
             {notifyError && <div className="rounded-xl bg-red-50 px-3 py-2 text-[11px] font-bold text-red-700">{notifyError}</div>}

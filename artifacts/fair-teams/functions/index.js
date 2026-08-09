@@ -409,14 +409,22 @@ exports.notifyActionBoardStep = onCall({ region: REGION, timeoutSeconds: 60, sec
     }
 
     let pushTargetCount = 0;
+    let pushStaleCount = 0;
     if (push && !recipientUids.length && !email) {
       throw new HttpsError("failed-precondition", "None of the selected organizers has a push-capable Stripes account yet.");
     }
     if (push && recipientUids.length) {
       const userSnaps = await Promise.all(recipientUids.map((uid) => db.collection(USER_COLLECTION).doc(uid).get()));
-      const fids = Array.from(new Set(userSnaps.flatMap((snap) => {
+      const fidOwnerUids = new Map();
+      const fids = Array.from(new Set(userSnaps.flatMap((snap, index) => {
         const data = snap.exists ? snap.data() || {} : {};
-        return Array.isArray(data.pushFids) ? data.pushFids.map(String).filter(Boolean) : [];
+        const userFids = Array.isArray(data.pushFids) ? data.pushFids.map(String).filter(Boolean) : [];
+        const ownerUid = String(recipientUids[index] || "");
+        userFids.forEach((fid) => {
+          if (!fidOwnerUids.has(fid)) fidOwnerUids.set(fid, new Set());
+          if (ownerUid) fidOwnerUids.get(fid).add(ownerUid);
+        });
+        return userFids;
       })));
       if (!fids.length && !email) {
         throw new HttpsError("failed-precondition", "None of the selected organizers has phone notifications enabled yet.");
@@ -424,11 +432,54 @@ exports.notifyActionBoardStep = onCall({ region: REGION, timeoutSeconds: 60, sec
       if (fids.length) {
         const pushBody = customMessage || `${senderName} needs your attention: ${step.text}`;
         const result = await getMessaging().sendEachForMulticast({
-          fids,
+          tokens: fids,
           notification: { title: `Stripes · ${step.topicTitle}`, body: pushBody.slice(0, 180) },
           data: { topicId: String(cardId), stepKind, stepId: String(stepId || "") },
           webpush: appUrl ? { fcmOptions: { link: appUrl } } : undefined,
         });
+        if (result.failureCount) {
+          const staleFids = [];
+          result.responses.forEach((response, index) => {
+            if (!response.success) {
+              const failedFid = String(fids[index] || "");
+              const code = response.error?.code || "";
+              const message = response.error?.message || "";
+              console.error("Stripes push failed", {
+                index,
+                fidSuffix: failedFid.slice(-8),
+                code,
+                message,
+              });
+              if (failedFid && (code === "messaging/registration-token-not-registered" || message === "NotRegistered")) {
+                staleFids.push(failedFid);
+              }
+            }
+          });
+
+          if (staleFids.length) {
+            pushStaleCount = staleFids.length;
+            const staleByUid = new Map();
+            staleFids.forEach((fid) => {
+              const ownerUids = fidOwnerUids.get(fid) || new Set();
+              ownerUids.forEach((uid) => {
+                if (!staleByUid.has(uid)) staleByUid.set(uid, new Set());
+                staleByUid.get(uid).add(fid);
+              });
+            });
+
+            const cleanup = db.batch();
+            staleByUid.forEach((uidFids, uid) => {
+              cleanup.set(db.collection(USER_COLLECTION).doc(uid), {
+                pushFids: FieldValue.arrayRemove(...Array.from(uidFids)),
+                pushUpdatedAt: FieldValue.serverTimestamp(),
+              }, { merge: true });
+            });
+            staleFids.forEach((fid) => {
+              cleanup.delete(db.collection(PUSH_INSTALLATION_COLLECTION).doc(messageIdPart(fid)));
+            });
+            await cleanup.commit();
+          }
+        }
         pushTargetCount = result.successCount;
       }
     }
@@ -436,7 +487,10 @@ exports.notifyActionBoardStep = onCall({ region: REGION, timeoutSeconds: 60, sec
     const requestedChannelSuccesses = emailQueuedCount + pushTargetCount;
     if (!requestedChannelSuccesses) {
       const firstEmailError = emailFailures[0]?.message;
-      throw new HttpsError("unavailable", firstEmailError || "Notification could not be delivered.");
+      const pushError = pushStaleCount
+        ? "This organizer’s phone registration expired. Ask them to open Board settings and tap Re-register."
+        : "";
+      throw new HttpsError("unavailable", firstEmailError || pushError || "Notification could not be delivered.");
     }
 
     const sentAt = Date.now();

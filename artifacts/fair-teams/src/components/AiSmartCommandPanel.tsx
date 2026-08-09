@@ -610,7 +610,7 @@ function actionPrimaryVerb(action: AiSmartCommandAction) {
   return "Apply";
 }
 
-const AI_ASSISTANT_VERSION_LABEL = "Help beta · v1.58.5 Action Board create polish";
+const AI_ASSISTANT_VERSION_LABEL = "Help beta · v1.58.6 Action Board web readability";
 
 type AiRosterMatch = {
   player: AiSmartCommandRosterPlayer;

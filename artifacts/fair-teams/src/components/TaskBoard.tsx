@@ -1412,9 +1412,9 @@ export function TaskBoard({
           <button type="button" className="w-full rounded-xl bg-white/80 px-3 py-2.5 text-left ring-1 ring-slate-200/80 transition hover:bg-white" onClick={() => toggleHistoryExpanded(entryKey)}>
             <div className="flex items-start gap-2">
               <div className="min-w-0 flex-1">
-                <div className="text-[9px] font-black uppercase tracking-wide text-slate-400">{decisionTypeLabel(decision)} · {decision.mode === "recorded" ? "recorded" : decision.status}</div>
-                <div className="mt-0.5 whitespace-normal break-words text-[12px] font-black leading-snug text-[#102A43]">{heading}</div>
-                <div className="mt-1 text-[9px] font-bold text-slate-400">{decisionHistoryMeta(decision)} · {historyExpanded ? "Hide details" : open ? "Open details" : "View result"}</div>
+                <div className="text-[9px] font-black uppercase tracking-wide text-slate-400 lg:text-[10px]">{decisionTypeLabel(decision)} · {decision.mode === "recorded" ? "recorded" : decision.status}</div>
+                <div className="mt-0.5 whitespace-normal break-words text-[12px] font-black leading-snug text-[#102A43] lg:text-[14px]">{heading}</div>
+                <div className="mt-1 text-[9px] font-bold text-slate-400 lg:text-[10px]">{decisionHistoryMeta(decision)} · {historyExpanded ? "Hide details" : open ? "Open details" : "View result"}</div>
               </div>
               {historyExpanded ? <ChevronUp className="mt-1 h-4 w-4 shrink-0 text-slate-400" /> : <ChevronDown className="mt-1 h-4 w-4 shrink-0 text-slate-400" />}
             </div>
@@ -1448,8 +1448,8 @@ export function TaskBoard({
           {open ? <Gavel className="h-3.5 w-3.5" /> : <Check className="h-3.5 w-3.5" />}
         </div>
         <div className={`rounded-2xl border p-3 ${open ? "border-violet-200 bg-violet-50/65" : "border-emerald-100 bg-white"}`}>
-          <div className="text-[9px] font-black uppercase tracking-wide text-slate-400">{currentLabel}</div>
-          <div className="mt-1 whitespace-normal break-words text-sm font-black leading-snug text-[#102A43]">{heading}</div>
+          <div className="text-[9px] font-black uppercase tracking-wide text-slate-400 lg:text-[10px]">{currentLabel}</div>
+          <div className="mt-1 whitespace-normal break-words text-sm font-black leading-snug text-[#102A43] lg:text-base">{heading}</div>
           {decision.hostName && <div className="mt-1 text-[10px] font-bold text-slate-500">Host: <span className="font-black text-slate-700">{decision.hostName}</span></div>}
           {decision.participantNames?.length ? <div className="mt-1 text-[10px] font-bold text-slate-500"><Users className="mr-1 inline h-3 w-3" />{personSummary(decision.participantNames.map((name) => ({ name })))}</div> : null}
 
@@ -1487,8 +1487,8 @@ export function TaskBoard({
             {open ? <Hand className="h-3.5 w-3.5" /> : <Check className="h-3.5 w-3.5" />}
           </div>
           <div className="rounded-xl bg-white/80 px-3 py-2.5 ring-1 ring-slate-200/80">
-            <div className="text-[9px] font-black uppercase tracking-wide text-slate-400">Action · {open ? waitingOnDecision ? "waiting on decision" : "open" : "done"}</div>
-            <div className="mt-0.5 whitespace-normal break-words text-[12px] font-black leading-snug text-[#102A43]">{action.text}</div>
+            <div className="text-[9px] font-black uppercase tracking-wide text-slate-400 lg:text-[10px]">Action · {open ? waitingOnDecision ? "waiting on decision" : "open" : "done"}</div>
+            <div className="mt-0.5 whitespace-normal break-words text-[12px] font-black leading-snug text-[#102A43] lg:text-[14px]">{action.text}</div>
             {assignees.length > 0 && <div className="mt-1 text-[9px] font-bold text-slate-500"><Users className="mr-1 inline h-3 w-3" />{personSummary(assignees)}</div>}
             {!open && <div className="mt-1 text-[9px] font-bold text-emerald-700">Completed{action.completedByName ? ` by ${action.completedByName}` : ""}</div>}
           </div>
@@ -1502,8 +1502,8 @@ export function TaskBoard({
           {open ? <Hand className="h-3.5 w-3.5" /> : <Check className="h-3.5 w-3.5" />}
         </div>
         <div className={`rounded-2xl border p-3 ${open ? "border-sky-200 bg-sky-50/65" : "border-emerald-100 bg-white"}`}>
-          <div className="text-[9px] font-black uppercase tracking-wide text-slate-400">{open ? resumed ? "Current action · resumed" : "Current action" : "Action complete"}</div>
-          <div className="mt-1 whitespace-normal break-words text-sm font-black leading-snug text-[#102A43]">{action.text}</div>
+          <div className="text-[9px] font-black uppercase tracking-wide text-slate-400 lg:text-[10px]">{open ? resumed ? "Current action · resumed" : "Current action" : "Action complete"}</div>
+          <div className="mt-1 whitespace-normal break-words text-sm font-black leading-snug text-[#102A43] lg:text-base">{action.text}</div>
           {assignees.length > 0 && <div className="mt-1 text-[10px] font-black text-sky-800"><Users className="mr-1 inline h-3 w-3" />{personSummary(assignees)}</div>}
           {open ? (
             <div className="mt-3 flex flex-wrap gap-2">
@@ -1566,18 +1566,18 @@ export function TaskBoard({
           <div className="flex items-start gap-2">
             <button type="button" className="min-w-0 flex-1 text-left" onClick={() => toggleExpanded(card.id)}>
               <div className="flex flex-wrap items-center gap-1.5">
-                {card.category && <span className={`rounded-full px-2 py-0.5 text-[9px] font-black ring-1 ${tagTone(card.category)}`}>{card.category}</span>}
-                {displayPeople?.length ? <span className="inline-flex max-w-full items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-black text-slate-600"><Users className="h-3 w-3 shrink-0" /><span className="truncate">{personSummary(displayPeople)}</span></span> : null}
-                {card.dueDate && <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-black ${isOverdue(card.dueDate) && stage !== "done" ? "bg-red-50 text-red-700" : "bg-slate-100 text-slate-600"}`}><CalendarDays className="h-3 w-3" />{dueText(card.dueDate)}</span>}
+                {card.category && <span className={`rounded-full px-2 py-0.5 text-[9px] font-black ring-1 lg:px-2.5 lg:py-1 lg:text-[10px] ${tagTone(card.category)}`}>{card.category}</span>}
+                {displayPeople?.length ? <span className="inline-flex max-w-full items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-black text-slate-600 lg:px-2.5 lg:py-1 lg:text-[10px]"><Users className="h-3 w-3 shrink-0" /><span className="truncate">{personSummary(displayPeople)}</span></span> : null}
+                {card.dueDate && <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-black lg:px-2.5 lg:py-1 lg:text-[10px] ${isOverdue(card.dueDate) && stage !== "done" ? "bg-red-50 text-red-700" : "bg-slate-100 text-slate-600"}`}><CalendarDays className="h-3 w-3" />{dueText(card.dueDate)}</span>}
               </div>
-              <h3 className="mt-2 whitespace-normal break-words text-[14px] font-black leading-snug text-[#102A43] lg:text-[15px]">{card.title}</h3>
-              {need && !expanded && <div className={`mt-2 whitespace-normal break-words text-[11px] font-black leading-snug ${stage === "deciding" ? "text-violet-700" : stage === "action" ? "text-sky-800" : stage === "done" ? "text-slate-500" : "text-slate-600"}`}>
+              <h3 className="mt-2 whitespace-normal break-words text-[14px] font-black leading-snug text-[#102A43] lg:text-[17px] lg:leading-snug">{card.title}</h3>
+              {need && !expanded && <div className={`mt-2 whitespace-normal break-words text-[11px] font-black leading-snug lg:text-[13px] ${stage === "deciding" ? "text-violet-700" : stage === "action" ? "text-sky-800" : stage === "done" ? "text-slate-500" : "text-slate-600"}`}>
                 {stage === "deciding" && <Gavel className="mr-1 inline h-3.5 w-3.5" />}
                 {stage === "action" && <Hand className="mr-1 inline h-3.5 w-3.5" />}
                 {stage === "done" && <Check className="mr-1 inline h-3.5 w-3.5" />}
                 {need}
               </div>}
-              {openDecision && !expanded && <div className="mt-1 text-[9px] font-bold text-slate-400">{voteTotal(openDecision)}{openDecision.eligibleCount ? ` of ${openDecision.eligibleCount}` : ""} responded</div>}
+              {openDecision && !expanded && <div className="mt-1 text-[9px] font-bold text-slate-400 lg:text-[11px]">{voteTotal(openDecision)}{openDecision.eligibleCount ? ` of ${openDecision.eligibleCount}` : ""} responded</div>}
             </button>
             <div className="flex shrink-0 flex-col items-center gap-0.5">
               <button type="button" className="rounded-full p-1.5 text-slate-400 hover:bg-slate-50" onClick={() => openEditCard(card)} aria-label={`Edit ${card.title}`}><Pencil className="h-3.5 w-3.5" /></button>
@@ -1587,17 +1587,17 @@ export function TaskBoard({
         </div>
 
         {expanded && <div className="border-t border-slate-100 bg-slate-50/35 px-3 pb-3 pt-3">
-          {card.note?.trim() && <p className="mb-3 whitespace-pre-wrap break-words text-xs font-semibold leading-relaxed text-slate-500">{card.note.trim()}</p>}
+          {card.note?.trim() && <p className="mb-3 whitespace-pre-wrap break-words text-xs font-semibold leading-relaxed text-slate-500 lg:text-sm">{card.note.trim()}</p>}
 
           <div className="mb-3 flex flex-wrap items-center gap-1.5">
-            {card.links?.map((link) => <div key={link.id} className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full bg-white px-2.5 py-1.5 ring-1 ring-slate-200"><a href={link.url} target="_blank" rel="noreferrer" className="inline-flex min-w-0 max-w-[15rem] items-center gap-1.5 text-[10px] font-black text-slate-600"><Link2 className="h-3 w-3 shrink-0 text-slate-400" /><span className="truncate">{link.label}</span><ExternalLink className="h-3 w-3 shrink-0 text-slate-400" /></a><button type="button" className="rounded-full p-0.5 text-slate-300 hover:text-red-600" onClick={() => void removeLink(card, link.id)} aria-label={`Remove ${link.label}`}><Trash2 className="h-3 w-3" /></button></div>)}
-            {stage !== "done" && (card.links?.length || 0) < 5 && <button type="button" className="inline-flex items-center gap-1 rounded-full px-2 py-1.5 text-[10px] font-black text-slate-400 hover:bg-white hover:text-slate-600" onClick={() => openAddLink(card)}><Link2 className="h-3 w-3" />+ Link</button>}
+            {card.links?.map((link) => <div key={link.id} className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full bg-white px-2.5 py-1.5 ring-1 ring-slate-200"><a href={link.url} target="_blank" rel="noreferrer" className="inline-flex min-w-0 max-w-[15rem] items-center gap-1.5 text-[10px] font-black text-slate-600 lg:text-xs"><Link2 className="h-3 w-3 shrink-0 text-slate-400" /><span className="truncate">{link.label}</span><ExternalLink className="h-3 w-3 shrink-0 text-slate-400" /></a><button type="button" className="rounded-full p-0.5 text-slate-300 hover:text-red-600" onClick={() => void removeLink(card, link.id)} aria-label={`Remove ${link.label}`}><Trash2 className="h-3 w-3" /></button></div>)}
+            {stage !== "done" && (card.links?.length || 0) < 5 && <button type="button" className="inline-flex items-center gap-1 rounded-full px-2 py-1.5 text-[10px] font-black text-slate-400 lg:text-xs hover:bg-white hover:text-slate-600" onClick={() => openAddLink(card)}><Link2 className="h-3 w-3" />+ Link</button>}
           </div>
 
           {(decisions.length > 0 || actions.length > 0) ? renderTimeline(card) : (
             <div className="rounded-2xl border border-dashed border-slate-200 bg-white/50 px-3 py-5 text-center">
-              <div className="text-xs font-black text-[#102A43]">What does this need?</div>
-              <div className="mt-1 text-[10px] font-semibold text-slate-400">Start a decision or add an action when the topic is ready.</div>
+              <div className="text-xs font-black text-[#102A43] lg:text-sm">What does this need?</div>
+              <div className="mt-1 text-[10px] font-semibold text-slate-400 lg:text-xs">Start a decision or add an action when the topic is ready.</div>
             </div>
           )}
 
@@ -1627,10 +1627,10 @@ export function TaskBoard({
 
   const boardColumn = (stage: TopicStage, title: string, Icon: React.ComponentType<{ className?: string }>) => (
     <section className={`min-w-0 rounded-[1.35rem] border p-2.5 ${stage === "deciding" ? "border-violet-200 bg-violet-50/35" : stage === "action" ? "border-sky-200 bg-sky-50/35" : stage === "done" ? "border-slate-200 bg-slate-100/50" : "border-slate-200 bg-white/55"}`}>
-      <div className={`mb-2 flex items-center gap-1.5 px-1 text-xs font-black ${stage === "deciding" ? "text-violet-700" : stage === "action" ? "text-sky-800" : stage === "done" ? "text-slate-500" : "text-slate-700"}`}><Icon className="h-4 w-4" /><span>{title}</span><span className="ml-0.5 rounded-full bg-white/80 px-1.5 py-0.5 text-[9px] font-black text-slate-500 ring-1 ring-slate-200/70">{cardsByStage[stage].length}</span></div>
+      <div className={`mb-2 flex items-center gap-1.5 px-1 text-xs font-black lg:text-[14px] ${stage === "deciding" ? "text-violet-700" : stage === "action" ? "text-sky-800" : stage === "done" ? "text-slate-500" : "text-slate-700"}`}><Icon className="h-4 w-4 lg:h-[18px] lg:w-[18px]" /><span>{title}</span><span className="ml-0.5 rounded-full bg-white/80 px-1.5 py-0.5 text-[9px] lg:px-2 lg:text-[10px] font-black text-slate-500 ring-1 ring-slate-200/70">{cardsByStage[stage].length}</span></div>
       <div className="space-y-2">
         {cardsByStage[stage].map((card) => renderCard(card, true))}
-        {cardsByStage[stage].length === 0 && <div className="rounded-2xl border border-dashed border-slate-200 bg-white/40 px-2 py-5 text-center text-[10px] font-bold text-slate-400">Nothing here</div>}
+        {cardsByStage[stage].length === 0 && <div className="rounded-2xl border border-dashed border-slate-200 bg-white/40 px-2 py-5 text-center text-[10px] font-bold text-slate-400 lg:text-xs">Nothing here</div>}
       </div>
     </section>
   );
@@ -1727,23 +1727,23 @@ export function TaskBoard({
       </Dialog>
 
       <Dialog open={newTopicOpen} onOpenChange={(open) => { setNewTopicOpen(open); if (!open) resetNewTopic(); }}>
-        <DialogContent className="fixed bottom-2 left-2 right-2 top-auto max-h-[88dvh] w-auto max-w-none translate-x-0 translate-y-0 overflow-y-auto rounded-[2rem] p-4 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-md sm:-translate-x-1/2" onOpenAutoFocus={(event) => event.preventDefault()}>
-          <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43]">{newTopicKind ? (newTopicKind === "idea" ? "New idea" : newTopicKind === "decide" ? "New decision" : "New action") : "Create"}</DialogTitle></DialogHeader>
+        <DialogContent className="fixed bottom-2 left-2 right-2 top-auto max-h-[88dvh] w-auto max-w-none translate-x-0 translate-y-0 overflow-y-auto rounded-[2rem] p-4 sm:bottom-auto sm:left-1/2 sm:right-auto sm:top-1/2 sm:w-full sm:max-w-md sm:-translate-x-1/2 sm:-translate-y-1/2 lg:max-w-xl lg:p-6" onOpenAutoFocus={(event) => event.preventDefault()}>
+          <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43] lg:text-xl">{newTopicKind ? (newTopicKind === "idea" ? "New idea" : newTopicKind === "decide" ? "New decision" : "New action") : "Create"}</DialogTitle></DialogHeader>
           {!newTopicKind ? (
-            <div className="grid gap-2.5">
-              <button type="button" className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 text-left transition hover:bg-slate-50" onClick={() => setNewTopicKind("idea")}>
-                <div className="flex items-start gap-3"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-700"><Lightbulb className="h-5 w-5" /></div><div><div className="text-sm font-black text-[#102A43]">Idea</div><div className="mt-0.5 text-[11px] font-semibold leading-relaxed text-slate-500">Save something worth thinking about later.</div><div className="mt-1 text-[10px] font-bold text-slate-400">Example: Club jerseys</div></div></div>
+            <div className="grid gap-2.5 lg:gap-3.5">
+              <button type="button" className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 text-left transition hover:bg-slate-50 lg:p-5" onClick={() => setNewTopicKind("idea")}>
+                <div className="flex items-start gap-3 lg:gap-4"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-700 lg:h-12 lg:w-12 lg:rounded-2xl"><Lightbulb className="h-5 w-5 lg:h-6 lg:w-6" /></div><div><div className="text-sm font-black text-[#102A43] lg:text-base">Idea</div><div className="mt-0.5 text-[11px] font-semibold leading-relaxed text-slate-500 lg:text-sm">Save something worth thinking about later.</div><div className="mt-1 text-[10px] font-bold text-slate-400 lg:text-xs">Example: Club jerseys</div></div></div>
               </button>
-              <button type="button" className="rounded-2xl border border-violet-100 bg-violet-50/60 p-4 text-left transition hover:bg-violet-50" onClick={() => setNewTopicKind("decide")}>
-                <div className="flex items-start gap-3"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-violet-700 ring-1 ring-violet-100"><Gavel className="h-5 w-5" /></div><div><div className="text-sm font-black text-[#102A43]">Decide</div><div className="mt-0.5 text-[11px] font-semibold leading-relaxed text-slate-500">Ask people to choose, schedule or agree on something.</div><div className="mt-1 text-[10px] font-bold text-slate-400">Example: Which players become members?</div></div></div>
+              <button type="button" className="rounded-2xl border border-violet-100 bg-violet-50/60 p-4 text-left transition hover:bg-violet-50 lg:p-5" onClick={() => setNewTopicKind("decide")}>
+                <div className="flex items-start gap-3 lg:gap-4"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-violet-700 ring-1 ring-violet-100 lg:h-12 lg:w-12 lg:rounded-2xl"><Gavel className="h-5 w-5 lg:h-6 lg:w-6" /></div><div><div className="text-sm font-black text-[#102A43] lg:text-base">Decide</div><div className="mt-0.5 text-[11px] font-semibold leading-relaxed text-slate-500 lg:text-sm">Ask people to choose, schedule or agree on something.</div><div className="mt-1 text-[10px] font-bold text-slate-400 lg:text-xs">Example: Which players become members?</div></div></div>
               </button>
-              <button type="button" className="rounded-2xl border border-sky-100 bg-sky-50/60 p-4 text-left transition hover:bg-sky-50" onClick={() => setNewTopicKind("action")}>
-                <div className="flex items-start gap-3"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-sky-800 ring-1 ring-sky-100"><Hand className="h-5 w-5" /></div><div><div className="text-sm font-black text-[#102A43]">Action</div><div className="mt-0.5 text-[11px] font-semibold leading-relaxed text-slate-500">Something important needs to get done.</div><div className="mt-1 text-[10px] font-bold text-slate-400">Example: Contact the new members</div></div></div>
+              <button type="button" className="rounded-2xl border border-sky-100 bg-sky-50/60 p-4 text-left transition hover:bg-sky-50 lg:p-5" onClick={() => setNewTopicKind("action")}>
+                <div className="flex items-start gap-3 lg:gap-4"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-sky-800 ring-1 ring-sky-100 lg:h-12 lg:w-12 lg:rounded-2xl"><Hand className="h-5 w-5 lg:h-6 lg:w-6" /></div><div><div className="text-sm font-black text-[#102A43] lg:text-base">Action</div><div className="mt-0.5 text-[11px] font-semibold leading-relaxed text-slate-500 lg:text-sm">Something important needs to get done.</div><div className="mt-1 text-[10px] font-bold text-slate-400 lg:text-xs">Example: Contact the new members</div></div></div>
               </button>
             </div>
           ) : (
             <div className="grid gap-3">
-              <button type="button" className="w-fit text-[11px] font-black text-slate-500" onClick={() => setNewTopicKind(null)}>← Back</button>
+              <button type="button" className="w-fit text-[11px] font-black text-slate-500 lg:text-sm" onClick={() => setNewTopicKind(null)}>← Back</button>
               <div>
                 <Label htmlFor="topic-title">{newTopicKind === "idea" ? "What’s the idea?" : newTopicKind === "decide" ? "What are you deciding?" : "What needs to happen?"}</Label>
                 <Textarea id="topic-title" value={newTitle} onChange={(event) => setNewTitle(event.target.value)} rows={2} maxLength={220} placeholder={newTopicKind === "idea" ? "Club jerseys" : newTopicKind === "decide" ? "New club members" : "Contact the new members"} />
@@ -1753,20 +1753,20 @@ export function TaskBoard({
                 <div><Label htmlFor="topic-due"><CalendarDays className="mr-1 inline h-3.5 w-3.5" />Due</Label><Input id="topic-due" type="date" value={newDueDate} onChange={(event) => setNewDueDate(event.target.value)} /></div>
               </div>
               {renderPeoplePicker(newPeopleKeys, setNewPeopleKeys)}
-              <Button type="button" className="h-11 rounded-2xl font-black text-white" style={{ backgroundColor: accent }} disabled={!newTitle.trim() || saving} onClick={() => void createTopic()}>{saving ? "Saving…" : newTopicKind === "idea" ? "Save idea" : newTopicKind === "decide" ? "Continue to decision" : "Create action"}</Button>
+              <Button type="button" className="h-11 rounded-2xl font-black text-white lg:h-12 lg:text-base" style={{ backgroundColor: accent }} disabled={!newTitle.trim() || saving} onClick={() => void createTopic()}>{saving ? "Saving…" : newTopicKind === "idea" ? "Save idea" : newTopicKind === "decide" ? "Continue to decision" : "Create action"}</Button>
             </div>
           )}
         </DialogContent>
       </Dialog>
       <Dialog open={Boolean(decisionCardId)} onOpenChange={(open) => { if (!open) { setDecisionCardId(null); setDecisionStep(null); } }}>
-        <DialogContent className="fixed bottom-2 left-2 right-2 top-auto max-h-[90dvh] w-auto max-w-none translate-x-0 translate-y-0 overflow-y-auto rounded-[2rem] p-4 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-lg sm:-translate-x-1/2" onOpenAutoFocus={(event) => event.preventDefault()}>
-          <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43]">{decisionStep ? "Set up decision" : "What kind of decision?"}</DialogTitle></DialogHeader>
+        <DialogContent className="fixed bottom-2 left-2 right-2 top-auto max-h-[90dvh] w-auto max-w-none translate-x-0 translate-y-0 overflow-y-auto rounded-[2rem] p-4 sm:bottom-auto sm:left-1/2 sm:right-auto sm:top-1/2 sm:w-full sm:max-w-lg sm:-translate-x-1/2 sm:-translate-y-1/2 lg:max-w-2xl lg:p-6" onOpenAutoFocus={(event) => event.preventDefault()}>
+          <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43] lg:text-xl">{decisionStep ? "Set up decision" : "What kind of decision?"}</DialogTitle></DialogHeader>
           {!decisionStep ? (
             <div className="grid grid-cols-2 gap-2">
-              <button type="button" className="rounded-2xl border border-violet-100 bg-violet-50/60 p-4 text-left" onClick={() => chooseDecisionType("vote")}><Vote className="h-5 w-5 text-violet-700" /><div className="mt-2 text-sm font-black text-[#102A43]">Vote</div><div className="mt-1 text-[11px] font-semibold text-slate-500">One or more questions</div></button>
-              <button type="button" className="rounded-2xl border border-sky-100 bg-sky-50/60 p-4 text-left" onClick={() => chooseDecisionType("schedule")}><CalendarDays className="h-5 w-5 text-sky-700" /><div className="mt-2 text-sm font-black text-[#102A43]">Schedule</div><div className="mt-1 text-[11px] font-semibold text-slate-500">Find a time together</div></button>
-              <button type="button" className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4 text-left" onClick={() => chooseDecisionType("players")}><Users className="h-5 w-5 text-emerald-700" /><div className="mt-2 text-sm font-black text-[#102A43]">Players</div><div className="mt-1 text-[11px] font-semibold text-slate-500">Choose from roster</div></button>
-              <button type="button" className="rounded-2xl border border-amber-100 bg-amber-50/60 p-4 text-left" onClick={() => chooseDecisionType("equipment")}><ClipboardList className="h-5 w-5 text-amber-700" /><div className="mt-2 text-sm font-black text-[#102A43]">Equipment</div><div className="mt-1 text-[11px] font-semibold text-slate-500">Compare options</div></button>
+              <button type="button" className="rounded-2xl border border-violet-100 bg-violet-50/60 p-4 text-left lg:p-5" onClick={() => chooseDecisionType("vote")}><Vote className="h-5 w-5 text-violet-700" /><div className="mt-2 text-sm font-black text-[#102A43] lg:text-base">Vote</div><div className="mt-1 text-[11px] font-semibold text-slate-500 lg:text-sm">One or more questions</div></button>
+              <button type="button" className="rounded-2xl border border-sky-100 bg-sky-50/60 p-4 text-left lg:p-5" onClick={() => chooseDecisionType("schedule")}><CalendarDays className="h-5 w-5 text-sky-700" /><div className="mt-2 text-sm font-black text-[#102A43] lg:text-base">Schedule</div><div className="mt-1 text-[11px] font-semibold text-slate-500 lg:text-sm">Find a time together</div></button>
+              <button type="button" className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4 text-left lg:p-5" onClick={() => chooseDecisionType("players")}><Users className="h-5 w-5 text-emerald-700" /><div className="mt-2 text-sm font-black text-[#102A43] lg:text-base">Players</div><div className="mt-1 text-[11px] font-semibold text-slate-500 lg:text-sm">Choose from roster</div></button>
+              <button type="button" className="rounded-2xl border border-amber-100 bg-amber-50/60 p-4 text-left lg:p-5" onClick={() => chooseDecisionType("equipment")}><ClipboardList className="h-5 w-5 text-amber-700" /><div className="mt-2 text-sm font-black text-[#102A43] lg:text-base">Equipment</div><div className="mt-1 text-[11px] font-semibold text-slate-500 lg:text-sm">Compare options</div></button>
             </div>
           ) : (
             <div className="grid gap-3">

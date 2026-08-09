@@ -38,12 +38,14 @@ import {
   type TaskBoardCard,
   type TaskBoardColumn,
   type TaskBoardColumnKind,
+  type TaskBoardDecisionQuestion,
   type TaskBoardDecisionType,
   type TaskBoardLink,
   type TaskBoardMeta,
   type TaskBoardPerson,
   type TaskBoardSnapshot,
   type TaskBoardVote,
+  type TaskBoardVoteAnswer,
   type TaskBoardVoteKind,
 } from "@/lib/taskBoardService";
 
@@ -65,6 +67,14 @@ type MobileFilter = "ideas" | "deciding" | "action" | "done";
 type DecisionMode = "vote" | "recorded";
 type TopicStage = MobileFilter;
 type DecisionSetupStep = TaskBoardDecisionType | null;
+type DraftQuestion = {
+  id: string;
+  text: string;
+  kind: Exclude<TaskBoardVoteKind, "schedule">;
+  options: string;
+  maxSelections: string;
+};
+type ScheduleDateGroup = { id: string; date: string; times: string[] };
 
 const WORKFLOW: Array<{ kind: TaskBoardColumnKind; name: string }> = [
   { kind: "ideas", name: "Ideas" },
@@ -78,6 +88,20 @@ const TAGS = ["Administration", "Sports", "Equipment", "Event", "Finance", "Memb
 function id(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
+
+function newDraftQuestion(text = ""): DraftQuestion {
+  return { id: id("draft-question"), text, kind: "yes-no-abstain", options: "", maxSelections: "3" };
+}
+
+function newScheduleDateGroup(): ScheduleDateGroup {
+  return { id: id("schedule-date"), date: "", times: [""] };
+}
+
+const TIME_CHOICES = Array.from({ length: 96 }, (_, index) => {
+  const hour = Math.floor(index / 4);
+  const minute = (index % 4) * 15;
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+});
 
 function safeColor(value?: string) {
   return /^#[0-9a-f]{6}$/i.test(value || "") ? value! : "#0f766e";
@@ -207,18 +231,18 @@ function latestOpenDecision(card: TaskBoardCard) {
   return [...(card.decisions || [])].reverse().find((decision) => decision.mode !== "recorded" && decision.status === "open");
 }
 
-function latestDecisionNeedingOutcome(card: TaskBoardCard) {
-  return [...(card.decisions || [])].reverse().find((decision) => decision.mode !== "recorded" && decision.status === "closed" && !decision.outcome?.trim());
-}
-
 function latestOpenAction(card: TaskBoardCard) {
   return [...(card.actions || [])].reverse().find((action) => action.status === "open");
 }
 
 function topicStage(card: TaskBoardCard): TopicStage {
   if (card.completedAt) return "done";
-  if (latestOpenDecision(card) || latestDecisionNeedingOutcome(card)) return "deciding";
+  if (latestOpenDecision(card)) return "deciding";
   if (latestOpenAction(card)) return "action";
+  const latestDecision = [...(card.decisions || [])].sort((a, b) => b.createdAt - a.createdAt)[0];
+  const latestAction = [...(card.actions || [])].sort((a, b) => b.createdAt - a.createdAt)[0];
+  if (latestDecision && (!latestAction || latestDecision.createdAt >= latestAction.createdAt)) return "deciding";
+  if (latestAction) return "action";
   return "ideas";
 }
 
@@ -334,6 +358,25 @@ function scheduleLabel(value: string) {
   }).format(date);
 }
 
+function scheduleSlotValues(groups: ScheduleDateGroup[]) {
+  return [...new Set(groups.flatMap((group) => group.date
+    ? group.times.filter(Boolean).map((time) => `${group.date}T${time}`)
+    : []))];
+}
+
+function decisionQuestions(decision: TaskBoardVote): TaskBoardDecisionQuestion[] {
+  if (decision.questions?.length) return decision.questions;
+  if (decision.mode === "recorded" || decision.options.length < 2) return [];
+  return [{
+    id: "question-1",
+    text: decision.question,
+    kind: decision.kind === "schedule" ? "multi-select" : (decision.kind || "choose-one") as Exclude<TaskBoardVoteKind, "schedule">,
+    options: decision.options,
+    maxSelections: decision.maxSelections,
+    sourcePlayerIds: decision.sourcePlayerIds,
+  }];
+}
+
 function actionPeople(action?: TaskBoardActionItem) {
   if (!action) return [];
   return normalizePeople(action.assignees?.length ? action.assignees : action.assignee ? [{ name: action.assignee, email: action.assigneeEmail }] : []);
@@ -349,17 +392,22 @@ function personSummary(people: TaskBoardPerson[] = []) {
 function currentNeed(card: TaskBoardCard) {
   const openDecision = latestOpenDecision(card);
   if (openDecision) {
+    if (openDecision.title?.trim()) return openDecision.title.trim();
     if (openDecision.decisionType === "schedule" || openDecision.kind === "schedule") return "Find a time";
-    if (openDecision.decisionType === "players") return openDecision.question || "Choose players";
-    if (openDecision.decisionType === "equipment") return openDecision.question || "Choose equipment";
-    return openDecision.question;
+    const questions = decisionQuestions(openDecision);
+    if (questions.length > 1) return `${questions[0].text} +${questions.length - 1} more`;
+    if (openDecision.decisionType === "players") return questions[0]?.text || "Choose players";
+    if (openDecision.decisionType === "equipment") return questions[0]?.text || "Choose equipment";
+    return questions[0]?.text || openDecision.question;
   }
-  if (latestDecisionNeedingOutcome(card)) return "Record the decision";
   const action = latestOpenAction(card);
   if (action) return action.text;
-  const latestOutcome = [...(card.decisions || [])].reverse().find((decision) => decision.outcome?.trim())?.outcome;
-  if (card.completedAt) return latestOutcome || "Completed";
-  return latestOutcome || "";
+  if (card.completedAt) return "Completed";
+  const latestDecision = [...(card.decisions || [])].sort((a, b) => b.createdAt - a.createdAt)[0];
+  if (latestDecision) return latestDecision.title?.trim() || (latestDecision.mode === "recorded" ? "Decision recorded · choose next step" : "Vote closed · choose next step");
+  const latestAction = [...(card.actions || [])].sort((a, b) => b.createdAt - a.createdAt)[0];
+  if (latestAction?.status === "done") return "Action done · choose next step";
+  return latestAction?.text || "";
 }
 
 function decisionTypeLabel(decision: TaskBoardVote) {
@@ -428,7 +476,9 @@ export function TaskBoard({
   const [decisionCardId, setDecisionCardId] = useState<string | null>(null);
   const [decisionStep, setDecisionStep] = useState<DecisionSetupStep>(null);
   const [decisionMode, setDecisionMode] = useState<DecisionMode>("vote");
+  const [decisionTitle, setDecisionTitle] = useState("");
   const [decisionQuestion, setDecisionQuestion] = useState("");
+  const [decisionQuestionsDraft, setDecisionQuestionsDraft] = useState<DraftQuestion[]>([newDraftQuestion()]);
   const [decisionOutcome, setDecisionOutcome] = useState("");
   const [decisionKind, setDecisionKind] = useState<TaskBoardVoteKind>("yes-no-abstain");
   const [decisionOptions, setDecisionOptions] = useState("");
@@ -436,7 +486,8 @@ export function TaskBoard({
   const [decisionPeopleKeys, setDecisionPeopleKeys] = useState<string[]>([]);
   const [playerSearch, setPlayerSearch] = useState("");
   const [selectedPlayerIds, setSelectedPlayerIds] = useState<string[]>([]);
-  const [scheduleSlots, setScheduleSlots] = useState<string[]>([""]);
+  const [scheduleHostName, setScheduleHostName] = useState("");
+  const [scheduleDates, setScheduleDates] = useState<ScheduleDateGroup[]>([newScheduleDateGroup()]);
 
   const [linkCardId, setLinkCardId] = useState<string | null>(null);
   const [linkUrl, setLinkUrl] = useState("");
@@ -448,7 +499,7 @@ export function TaskBoard({
 
   const [votingCardId, setVotingCardId] = useState<string | null>(null);
   const [votingDecisionId, setVotingDecisionId] = useState<string | null>(null);
-  const [selectedVoteOptionIds, setSelectedVoteOptionIds] = useState<string[]>([]);
+  const [selectedVoteAnswers, setSelectedVoteAnswers] = useState<Record<string, string[]>>({});
   const [voteSubmitting, setVoteSubmitting] = useState(false);
 
   const [outcomeCardId, setOutcomeCardId] = useState<string | null>(null);
@@ -680,11 +731,13 @@ export function TaskBoard({
   };
 
   const startDecision = (card: TaskBoardCard) => {
-    if (latestOpenDecision(card) || latestDecisionNeedingOutcome(card)) return;
+    if (latestOpenDecision(card)) return;
     setDecisionCardId(card.id);
     setDecisionStep(null);
     setDecisionMode("vote");
-    setDecisionQuestion(card.title);
+    setDecisionTitle("");
+    setDecisionQuestion("");
+    setDecisionQuestionsDraft([newDraftQuestion("")]);
     setDecisionOutcome("");
     setDecisionKind("yes-no-abstain");
     setDecisionOptions("");
@@ -692,7 +745,8 @@ export function TaskBoard({
     setDecisionPeopleKeys((card.people || []).map(personKey));
     setSelectedPlayerIds([]);
     setPlayerSearch("");
-    setScheduleSlots([""]);
+    setScheduleHostName(currentActor.name);
+    setScheduleDates([newScheduleDateGroup()]);
   };
 
   const chooseDecisionType = (kind: TaskBoardDecisionType) => {
@@ -701,10 +755,12 @@ export function TaskBoard({
     setDecisionStep(kind);
     setDecisionMode("vote");
     setDecisionOutcome("");
+    setDecisionTitle("");
     if (kind === "schedule") {
       setDecisionKind("schedule");
-      setDecisionQuestion(`Find a time for ${card.title}`);
-      setScheduleSlots([""]);
+      setDecisionQuestion("");
+      setScheduleHostName(currentActor.name);
+      setScheduleDates([newScheduleDateGroup()]);
     } else if (kind === "players") {
       setDecisionKind("multi-select");
       setDecisionQuestion("Who should be selected?");
@@ -715,7 +771,7 @@ export function TaskBoard({
       setDecisionOptions("");
     } else {
       setDecisionKind("yes-no-abstain");
-      setDecisionQuestion(card.title);
+      setDecisionQuestionsDraft([newDraftQuestion("")]);
     }
   };
 
@@ -723,6 +779,8 @@ export function TaskBoard({
     const card = board.cards.find((item) => item.id === decisionCardId);
     if (!card || !decisionStep) return;
     const now = Date.now();
+    const phaseNameRequired = Boolean((card.decisions?.length || 0) + (card.actions?.length || 0));
+    if (phaseNameRequired && !decisionTitle.trim()) return;
     let decision: TaskBoardVote;
     let activity: TaskBoardActivity;
 
@@ -733,9 +791,11 @@ export function TaskBoard({
         mode: "recorded",
         kind: "choose-one",
         decisionType: decisionStep,
-        question: decisionOutcome.trim(),
+        title: decisionTitle.trim() || undefined,
+        question: decisionTitle.trim() || decisionOutcome.trim(),
         outcome: decisionOutcome.trim(),
         options: [],
+        questions: [],
         anonymous: true,
         hideParticipationUntilClosed: false,
         showResultsWhileOpen: false,
@@ -749,33 +809,79 @@ export function TaskBoard({
       };
       activity = nowActivity("decision_recorded", currentActor.name, currentActor.email);
     } else {
-      let labels: string[] = [];
+      const selectedPeople = peopleFromKeys(decisionPeopleKeys);
+      let questions: TaskBoardDecisionQuestion[] = [];
       let sourcePlayerIds: string[] | undefined;
+      let rootKind: TaskBoardVoteKind = decisionKind;
+
       if (decisionStep === "schedule") {
-        labels = scheduleSlots.map(scheduleLabel).filter(Boolean);
+        const values = scheduleSlotValues(scheduleDates);
+        const labels = values.map(scheduleLabel).filter(Boolean);
+        if (!scheduleHostName.trim() || labels.length < 2) return;
+        questions = [{
+          id: id("question"),
+          text: decisionTitle.trim() || card.title,
+          kind: "multi-select",
+          options: labels.map((label) => ({ id: id("option"), label, count: 0 })),
+          maxSelections: labels.length,
+        }];
+        rootKind = "schedule";
       } else if (decisionStep === "players") {
         const selected = players.filter((player) => selectedPlayerIds.includes(player.id));
-        labels = selected.map((player) => player.name.trim()).filter(Boolean);
+        const labels = selected.map((player) => player.name.trim()).filter(Boolean);
         sourcePlayerIds = selected.map((player) => player.id);
+        if (!decisionQuestion.trim() || labels.length < 2) return;
+        const max = Math.max(1, Math.min(labels.length, Number(decisionMaxSelections) || labels.length));
+        questions = [{
+          id: id("question"),
+          text: decisionQuestion.trim(),
+          kind: "multi-select",
+          options: labels.map((label) => ({ id: id("option"), label, count: 0 })),
+          maxSelections: max,
+          sourcePlayerIds,
+        }];
+        rootKind = "multi-select";
+      } else if (decisionStep === "equipment") {
+        const labels = voteOptionLabels("choose-one", decisionOptions);
+        if (!decisionQuestion.trim() || labels.length < 2) return;
+        questions = [{
+          id: id("question"),
+          text: decisionQuestion.trim(),
+          kind: "choose-one",
+          options: labels.map((label) => ({ id: id("option"), label, count: 0 })),
+        }];
+        rootKind = "choose-one";
       } else {
-        labels = voteOptionLabels(decisionKind, decisionOptions);
+        const validDrafts = decisionQuestionsDraft.map((draft) => {
+          const labels = voteOptionLabels(draft.kind, draft.options);
+          const max = draft.kind === "multi-select"
+            ? Math.max(1, Math.min(labels.length, Number(draft.maxSelections) || labels.length))
+            : undefined;
+          return { draft, labels, max };
+        });
+        if (!validDrafts.length || validDrafts.some(({ draft, labels }) => !draft.text.trim() || labels.length < 2)) return;
+        questions = validDrafts.map(({ draft, labels, max }) => ({
+          id: id("question"),
+          text: draft.text.trim(),
+          kind: draft.kind,
+          options: labels.map((label) => ({ id: id("option"), label, count: 0 })),
+          maxSelections: max,
+        }));
+        rootKind = questions.length === 1 ? questions[0].kind : "choose-one";
       }
-      if (!decisionQuestion.trim() || labels.length < 2) return;
-      const multiple = decisionKind === "multi-select" || decisionKind === "schedule";
-      const max = decisionKind === "schedule"
-        ? labels.length
-        : multiple
-          ? Math.max(1, Math.min(labels.length, Number(decisionMaxSelections) || labels.length))
-          : undefined;
-      const selectedPeople = peopleFromKeys(decisionPeopleKeys);
+
+      const primaryQuestion = questions[0];
       decision = {
         id: id("decision"),
         mode: "vote",
-        kind: decisionKind,
+        kind: rootKind,
         decisionType: decisionStep,
-        question: decisionQuestion.trim(),
-        options: labels.map((label) => ({ id: id("option"), label, count: 0 })),
-        anonymous: true,
+        title: decisionTitle.trim() || undefined,
+        question: decisionTitle.trim() || primaryQuestion.text,
+        hostName: decisionStep === "schedule" ? scheduleHostName.trim() : undefined,
+        questions,
+        options: primaryQuestion.options,
+        anonymous: decisionStep !== "schedule",
         hideParticipationUntilClosed: false,
         showResultsWhileOpen: false,
         status: "open",
@@ -783,7 +889,7 @@ export function TaskBoard({
         participantEmails: selectedPeople.map((person) => person.email).filter((email): email is string => Boolean(email)),
         participantNames: selectedPeople.map((person) => person.name),
         sourcePlayerIds,
-        maxSelections: max,
+        maxSelections: primaryQuestion.maxSelections,
         voterHashes: [],
         ballots: [],
         createdAt: now,
@@ -839,9 +945,9 @@ export function TaskBoard({
 
   const saveOutcome = async () => {
     const card = board.cards.find((item) => item.id === outcomeCardId);
-    if (!card || !outcomeDecisionId || !outcomeText.trim()) return;
+    if (!card || !outcomeDecisionId) return;
     const nextDecisions = (card.decisions || []).map((decision) =>
-      decision.id === outcomeDecisionId ? { ...decision, outcome: outcomeText.trim() } : decision,
+      decision.id === outcomeDecisionId ? { ...decision, outcome: outcomeText.trim() || undefined } : decision,
     );
     const next: TaskBoardCard = {
       ...card,
@@ -901,9 +1007,10 @@ export function TaskBoard({
   };
 
   const openAddAction = (card: TaskBoardCard) => {
-    if (latestOpenDecision(card) || latestDecisionNeedingOutcome(card)) return;
+    if (latestOpenDecision(card)) return;
     setActionCardId(card.id);
-    setActionText(card.title);
+    const hasHistory = Boolean((card.decisions?.length || 0) + (card.actions?.length || 0));
+    setActionText(hasHistory ? "" : card.title);
     setActionPeopleKeys((card.people || []).map(personKey));
   };
 
@@ -997,7 +1104,7 @@ export function TaskBoard({
   }, "completed");
 
   const finishTopic = async (card: TaskBoardCard) => {
-    if (latestOpenAction(card) || latestOpenDecision(card) || latestDecisionNeedingOutcome(card)) return;
+    if (latestOpenAction(card) || latestOpenDecision(card)) return;
     const next: TaskBoardCard = {
       ...card,
       completedAt: Date.now(),
@@ -1035,49 +1142,71 @@ export function TaskBoard({
     setVotingCardId(card.id);
     setVotingDecisionId(decision.id || "");
     const existing = decision.ballots?.find((ballot) => ballot.voterHash === currentVoterHash);
-    setSelectedVoteOptionIds(existing?.optionIds || []);
+    const questions = decisionQuestions(decision);
+    const existingAnswers = existing?.answers?.length
+      ? existing.answers
+      : existing?.optionIds?.length && questions[0]
+        ? [{ questionId: questions[0].id, optionIds: existing.optionIds }]
+        : [];
+    setSelectedVoteAnswers(Object.fromEntries(existingAnswers.map((answer) => [answer.questionId, answer.optionIds])));
   };
 
   const votingCard = board.cards.find((card) => card.id === votingCardId);
   const votingDecision = votingCard?.decisions?.find((decision) => decision.id === votingDecisionId);
 
-  const toggleVoteOption = (optionId: string) => {
-    if (!votingDecision) return;
-    if (votingDecision.kind !== "multi-select" && votingDecision.kind !== "schedule") {
-      setSelectedVoteOptionIds([optionId]);
-      return;
-    }
-    setSelectedVoteOptionIds((current) => {
-      if (current.includes(optionId)) return current.filter((idValue) => idValue !== optionId);
-      const max = votingDecision.maxSelections || votingDecision.options.length;
-      if (current.length >= max) return current;
-      return [...current, optionId];
+  const toggleVoteOption = (question: TaskBoardDecisionQuestion, optionId: string) => {
+    setSelectedVoteAnswers((current) => {
+      const selected = current[question.id] || [];
+      if (question.kind !== "multi-select") return { ...current, [question.id]: [optionId] };
+      if (selected.includes(optionId)) return { ...current, [question.id]: selected.filter((idValue) => idValue !== optionId) };
+      const max = question.maxSelections || question.options.length;
+      if (selected.length >= max) return current;
+      return { ...current, [question.id]: [...selected, optionId] };
     });
   };
 
   const submitVote = async () => {
-    if (!votingCard || !votingDecision || !votingDecisionId || !selectedVoteOptionIds.length || !currentVoterHash) return;
+    if (!votingCard || !votingDecision || !votingDecisionId || !currentVoterHash) return;
+    const questions = decisionQuestions(votingDecision);
+    const answers: TaskBoardVoteAnswer[] = questions.map((question) => ({
+      questionId: question.id,
+      optionIds: selectedVoteAnswers[question.id] || [],
+    }));
+    if (!questions.length || answers.some((answer) => !answer.optionIds.length)) return;
     setVoteSubmitting(true); setError("");
     try {
       if (online) {
-        await castTaskBoardVote(scopeId!, votingCard.id, votingDecisionId, currentVoterHash, currentActor.name, selectedVoteOptionIds);
+        await castTaskBoardVote(scopeId!, votingCard.id, votingDecisionId, currentVoterHash, currentActor.name, answers);
       } else {
         const ballots = [...(votingDecision.ballots || [])];
         const existingIndex = ballots.findIndex((ballot) => ballot.voterHash === currentVoterHash);
-        const previousIds = existingIndex >= 0 ? ballots[existingIndex].optionIds : [];
-        const nextOptions = votingDecision.options.map((option) => ({
-          ...option,
-          count: Math.max(0, option.count - (previousIds.includes(option.id) ? 1 : 0)) + (selectedVoteOptionIds.includes(option.id) ? 1 : 0),
-        }));
-        const nextBallot = { voterHash: currentVoterHash, optionIds: selectedVoteOptionIds };
+        const previousAnswers = existingIndex >= 0
+          ? ballots[existingIndex].answers?.length
+            ? ballots[existingIndex].answers!
+            : [{ questionId: questions[0].id, optionIds: ballots[existingIndex].optionIds }]
+          : [];
+        const nextQuestions = questions.map((question) => {
+          const previousIds = previousAnswers.find((answer) => answer.questionId === question.id)?.optionIds || [];
+          const nextIds = answers.find((answer) => answer.questionId === question.id)?.optionIds || [];
+          return {
+            ...question,
+            options: question.options.map((option) => ({
+              ...option,
+              count: Math.max(0, option.count - (previousIds.includes(option.id) ? 1 : 0)) + (nextIds.includes(option.id) ? 1 : 0),
+            })),
+          };
+        });
+        const nextBallot = { voterHash: currentVoterHash, optionIds: answers[0]?.optionIds || [], answers };
         if (existingIndex >= 0) ballots[existingIndex] = nextBallot;
         else ballots.push(nextBallot);
         const nextDecisions = (votingCard.decisions || []).map((decision) =>
-          decision.id === votingDecisionId ? { ...decision, options: nextOptions, ballots, voterHashes: ballots.map((ballot) => ballot.voterHash) } : decision,
+          decision.id === votingDecisionId
+            ? { ...decision, questions: nextQuestions, options: nextQuestions[0]?.options || decision.options, ballots, voterHashes: ballots.map((ballot) => ballot.voterHash) }
+            : decision,
         );
         await persistCard({ ...votingCard, decisions: nextDecisions, vote: nextDecisions[nextDecisions.length - 1], updatedAt: Date.now() });
       }
-      setVotingCardId(null); setVotingDecisionId(null); setSelectedVoteOptionIds([]);
+      setVotingCardId(null); setVotingDecisionId(null); setSelectedVoteAnswers({});
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Could not record vote.");
     } finally { setVoteSubmitting(false); }
@@ -1104,6 +1233,14 @@ export function TaskBoard({
       .filter((player) => !needle || player.name.toLowerCase().includes(needle))
       .slice(0, 40);
   }, [playerSearch, players]);
+
+  const updateDraftQuestion = (questionId: string, patch: Partial<DraftQuestion>) => {
+    setDecisionQuestionsDraft((current) => current.map((question) => question.id === questionId ? { ...question, ...patch } : question));
+  };
+
+  const updateScheduleDate = (groupId: string, patch: Partial<ScheduleDateGroup>) => {
+    setScheduleDates((current) => current.map((group) => group.id === groupId ? { ...group, ...patch } : group));
+  };
 
   const renderPeoplePicker = (
     selectedKeys: string[],
@@ -1136,13 +1273,16 @@ export function TaskBoard({
     const open = decision.status === "open" && decision.mode !== "recorded";
     const totalVoters = voteTotal(decision);
     const canVote = open && canCurrentUserVote(decision);
+    const questions = decisionQuestions(decision);
+    const heading = decision.title?.trim() || (questions.length === 1 ? questions[0].text : "Multiple questions");
     return (
       <div key={decision.id || index} className={`rounded-2xl border p-3 ${open ? "border-violet-200 bg-violet-50/55" : "border-slate-200 bg-white"}`}>
         <div className="flex items-start gap-2">
           <div className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-xl ${open ? "bg-violet-100 text-violet-700" : "bg-slate-100 text-slate-500"}`}><Gavel className="h-3.5 w-3.5" /></div>
           <div className="min-w-0 flex-1">
-            <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">{decisionTypeLabel(decision)}{open ? " · open" : ""}</div>
-            <div className="mt-1 whitespace-normal break-words text-sm font-black leading-snug text-[#102A43]">{decision.question}</div>
+            <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">{decisionTypeLabel(decision)} {index + 1}{open ? " · open" : " · closed"}</div>
+            <div className="mt-1 whitespace-normal break-words text-sm font-black leading-snug text-[#102A43]">{heading}</div>
+            {decision.hostName && <div className="mt-1 text-[10px] font-bold text-slate-500">Host: <span className="font-black text-slate-700">{decision.hostName}</span></div>}
             {decision.participantNames?.length ? <div className="mt-1 text-[10px] font-bold text-slate-500"><Users className="mr-1 inline h-3 w-3" />{personSummary(decision.participantNames.map((name) => ({ name })))}</div> : null}
           </div>
         </div>
@@ -1150,34 +1290,48 @@ export function TaskBoard({
         {decision.mode === "recorded" ? (
           <div className="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800"><Check className="mr-1 inline h-3.5 w-3.5" />{decision.outcome}</div>
         ) : open ? (
-          <div className="mt-3 flex items-center justify-between gap-2">
-            <span className="text-[10px] font-bold text-slate-500">{totalVoters}{decision.eligibleCount ? ` of ${decision.eligibleCount}` : ""} responded</span>
-            {canVote
-              ? <button type="button" className="rounded-xl bg-violet-600 px-3 py-2 text-xs font-black text-white" onClick={() => openVoteDialog(card, decision)}>{decision.kind === "schedule" ? "Availability" : "Vote"}</button>
-              : <span className="text-[10px] font-black text-slate-400">Not asking you</span>}
-            <button type="button" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600" onClick={() => void closeVote(card, decision)}>Close</button>
+          <div className="mt-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] font-bold text-slate-500">{totalVoters}{decision.eligibleCount ? ` of ${decision.eligibleCount}` : ""} responded</span>
+              {canVote
+                ? <button type="button" className="rounded-xl bg-violet-600 px-3 py-2 text-xs font-black text-white" onClick={() => openVoteDialog(card, decision)}>{decision.kind === "schedule" ? "Availability" : "Vote"}</button>
+                : <span className="text-[10px] font-black text-slate-400">Not asking you</span>}
+              <button type="button" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600" onClick={() => void closeVote(card, decision)}>Close</button>
+            </div>
           </div>
         ) : (
-          <div className="mt-3">
-            <div className="grid gap-1.5">
-              {decision.options.map((option) => {
-                const denominator = decision.kind === "multi-select" || decision.kind === "schedule"
-                  ? Math.max(1, totalVoters)
-                  : Math.max(1, totalSelections(decision));
-                const percent = Math.round((option.count / denominator) * 100);
-                return (
-                  <div key={option.id} className="flex items-center gap-2 text-xs font-bold text-slate-600">
-                    <span className="min-w-0 flex-1 break-words">{option.label}</span>
-                    <span className="shrink-0 rounded-full bg-slate-50 px-2 py-0.5 font-black text-[#102A43] ring-1 ring-slate-200">{option.count}</span>
-                    {decision.kind !== "multi-select" && decision.kind !== "schedule" && <span className="w-8 text-right text-[10px] text-slate-400">{percent}%</span>}
-                  </div>
-                );
-              })}
-            </div>
+          <div className="mt-3 space-y-3">
+            {questions.map((question, questionIndex) => (
+              <div key={question.id} className={questions.length > 1 ? "rounded-xl bg-slate-50 p-2.5" : ""}>
+                {questions.length > 1 && <div className="mb-2 text-xs font-black leading-snug text-[#102A43]">{questionIndex + 1}. {question.text}</div>}
+                <div className="grid gap-1.5">
+                  {question.options.map((option) => {
+                    const denominator = question.kind === "multi-select" ? Math.max(1, totalVoters) : Math.max(1, question.options.reduce((sum, item) => sum + item.count, 0));
+                    const percent = Math.round((option.count / denominator) * 100);
+                    const responderNames = decision.kind === "schedule"
+                      ? (decision.ballots || []).filter((ballot) => {
+                        const answer = ballot.answers?.find((item) => item.questionId === question.id);
+                        return (answer?.optionIds || ballot.optionIds || []).includes(option.id);
+                      }).map((ballot) => ballot.voterName).filter(Boolean) as string[]
+                      : [];
+                    return (
+                      <div key={option.id} className="rounded-xl bg-white px-2 py-1.5 ring-1 ring-slate-100">
+                        <div className="flex items-center gap-2 text-xs font-bold text-slate-600">
+                          <span className="min-w-0 flex-1 break-words">{option.label}</span>
+                          <span className="shrink-0 rounded-full bg-slate-50 px-2 py-0.5 font-black text-[#102A43] ring-1 ring-slate-200">{option.count}</span>
+                          {question.kind !== "multi-select" && <span className="w-8 text-right text-[10px] text-slate-400">{percent}%</span>}
+                        </div>
+                        {responderNames.length > 0 && <div className="mt-1 text-[10px] font-bold text-sky-700">{responderNames.join(" · ")}</div>}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
             {decision.outcome ? (
-              <button type="button" className="mt-3 w-full rounded-xl bg-emerald-50 px-3 py-2 text-left text-xs font-bold text-emerald-800 ring-1 ring-emerald-100" onClick={() => openOutcome(card, decision)}><span className="font-black">Outcome:</span> {decision.outcome}</button>
+              <button type="button" className="w-full rounded-xl bg-emerald-50 px-3 py-2 text-left text-xs font-bold text-emerald-800 ring-1 ring-emerald-100" onClick={() => openOutcome(card, decision)}><span className="font-black">Note:</span> {decision.outcome}</button>
             ) : (
-              <button type="button" className="mt-3 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600" onClick={() => openOutcome(card, decision)}>Record outcome</button>
+              <button type="button" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-500" onClick={() => openOutcome(card, decision)}>+ Add decision note</button>
             )}
           </div>
         )}
@@ -1215,7 +1369,6 @@ export function TaskBoard({
     const stage = topicStage(card);
     const expanded = expandedIds.has(card.id);
     const openDecision = latestOpenDecision(card);
-    const pendingOutcome = latestDecisionNeedingOutcome(card);
     const openAction = latestOpenAction(card);
     const decisions = card.decisions || [];
     const actions = card.actions || [];
@@ -1247,7 +1400,6 @@ export function TaskBoard({
                 {need}
               </div>}
               {openDecision && <div className="mt-1 text-[9px] font-bold text-slate-400">{voteTotal(openDecision)}{openDecision.eligibleCount ? ` of ${openDecision.eligibleCount}` : ""} responded</div>}
-              {pendingOutcome && <div className="mt-1 text-[9px] font-bold text-slate-400">Vote closed · outcome not recorded</div>}
             </button>
             <div className="flex shrink-0 flex-col items-center gap-0.5">
               <button type="button" className="rounded-full p-1.5 text-slate-400 hover:bg-slate-50" onClick={() => openEditCard(card)} aria-label={`Edit ${card.title}`}><Pencil className="h-3.5 w-3.5" /></button>
@@ -1273,10 +1425,10 @@ export function TaskBoard({
           </div>}
 
           <div className="flex flex-wrap gap-1.5 border-t border-slate-200 pt-3">
-            {stage !== "done" && !openDecision && !pendingOutcome && <button type="button" className="rounded-xl bg-violet-50 px-3 py-2 text-[11px] font-black text-violet-700 ring-1 ring-violet-100" onClick={() => startDecision(card)}><Gavel className="mr-1 inline h-3.5 w-3.5" />{openAction ? "Needs decision" : "Decide"}</button>}
-            {stage !== "done" && !openDecision && !pendingOutcome && !openAction && <button type="button" className="rounded-xl bg-sky-50 px-3 py-2 text-[11px] font-black text-sky-800 ring-1 ring-sky-100" onClick={() => openAddAction(card)}><Hand className="mr-1 inline h-3.5 w-3.5" />Action</button>}
+            {stage !== "done" && !openDecision && <button type="button" className="rounded-xl bg-violet-50 px-3 py-2 text-[11px] font-black text-violet-700 ring-1 ring-violet-100" onClick={() => startDecision(card)}><Gavel className="mr-1 inline h-3.5 w-3.5" />{openAction ? "Needs decision" : decisions.length ? "+ Decision" : "Decide"}</button>}
+            {stage !== "done" && !openDecision && !openAction && <button type="button" className="rounded-xl bg-sky-50 px-3 py-2 text-[11px] font-black text-sky-800 ring-1 ring-sky-100" onClick={() => openAddAction(card)}><Hand className="mr-1 inline h-3.5 w-3.5" />+ Action</button>}
             {stage !== "done" && (card.links?.length || 0) < 5 && <button type="button" className="rounded-xl bg-white px-3 py-2 text-[11px] font-black text-slate-600 ring-1 ring-slate-200" onClick={() => openAddLink(card)}><Link2 className="mr-1 inline h-3.5 w-3.5" />Link</button>}
-            {stage !== "done" && !openDecision && !pendingOutcome && !openAction && (decisions.length > 0 || actions.length > 0) && <button type="button" className="ml-auto rounded-xl bg-emerald-600 px-3 py-2 text-[11px] font-black text-white" onClick={() => void finishTopic(card)}><Check className="mr-1 inline h-3.5 w-3.5" />Done</button>}
+            {stage !== "done" && !openDecision && !openAction && (decisions.length > 0 || actions.length > 0) && <button type="button" className="ml-auto rounded-xl bg-emerald-600 px-3 py-2 text-[11px] font-black text-white" onClick={() => void finishTopic(card)}><Check className="mr-1 inline h-3.5 w-3.5" />Done</button>}
             {stage === "done" && <button type="button" className="rounded-xl bg-white px-3 py-2 text-[11px] font-black text-slate-600 ring-1 ring-slate-200" onClick={() => void reopenTopic(card)}><RotateCcw className="mr-1 inline h-3.5 w-3.5" />Reopen</button>}
           </div>
         </div>}
@@ -1295,6 +1447,25 @@ export function TaskBoard({
   );
 
   const customBoardName = board.meta?.customName?.trim();
+  const decisionSetupCard = board.cards.find((card) => card.id === decisionCardId);
+  const decisionPhaseNameRequired = Boolean(decisionSetupCard && ((decisionSetupCard.decisions?.length || 0) + (decisionSetupCard.actions?.length || 0)));
+  const decisionPhaseNameValid = !decisionPhaseNameRequired || Boolean(decisionTitle.trim());
+  const genericQuestionsValid = decisionQuestionsDraft.length > 0 && decisionQuestionsDraft.every((draft) => {
+    const labels = voteOptionLabels(draft.kind, draft.options);
+    return Boolean(draft.text.trim()) && labels.length >= 2;
+  });
+  const scheduleOptionsCount = scheduleSlotValues(scheduleDates).length;
+  const decisionSetupValid = decisionMode === "recorded"
+    ? decisionPhaseNameValid && Boolean(decisionOutcome.trim())
+    : decisionStep === "schedule"
+      ? decisionPhaseNameValid && Boolean(scheduleHostName.trim()) && decisionPeopleKeys.length > 0 && scheduleOptionsCount >= 2
+      : decisionStep === "players"
+        ? decisionPhaseNameValid && Boolean(decisionQuestion.trim()) && selectedPlayerIds.length >= 2
+        : decisionStep === "equipment"
+          ? decisionPhaseNameValid && Boolean(decisionQuestion.trim()) && voteOptionLabels("choose-one", decisionOptions).length >= 2
+          : decisionStep === "vote"
+            ? decisionPhaseNameValid && genericQuestionsValid
+            : false;
 
   return (
     <>
@@ -1382,14 +1553,14 @@ export function TaskBoard({
       </Dialog>
 
       <Dialog open={Boolean(decisionCardId)} onOpenChange={(open) => { if (!open) { setDecisionCardId(null); setDecisionStep(null); } }}>
-        <DialogContent className="fixed bottom-2 left-2 right-2 top-auto max-h-[88dvh] w-auto max-w-none translate-x-0 translate-y-0 overflow-y-auto rounded-[2rem] p-4 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-lg sm:-translate-x-1/2" onOpenAutoFocus={(event) => event.preventDefault()}>
-          <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43]">{decisionStep ? "Set up decision" : "What are you deciding?"}</DialogTitle></DialogHeader>
+        <DialogContent className="fixed bottom-2 left-2 right-2 top-auto max-h-[90dvh] w-auto max-w-none translate-x-0 translate-y-0 overflow-y-auto rounded-[2rem] p-4 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-lg sm:-translate-x-1/2" onOpenAutoFocus={(event) => event.preventDefault()}>
+          <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43]">{decisionStep ? "Set up decision" : "What kind of decision?"}</DialogTitle></DialogHeader>
           {!decisionStep ? (
             <div className="grid grid-cols-2 gap-2">
-              <button type="button" className="rounded-2xl border border-violet-100 bg-violet-50/60 p-4 text-left" onClick={() => chooseDecisionType("vote")}><Vote className="h-5 w-5 text-violet-700" /><div className="mt-2 text-sm font-black text-[#102A43]">Vote</div><div className="mt-1 text-[11px] font-semibold text-slate-500">Yes/no or choices</div></button>
+              <button type="button" className="rounded-2xl border border-violet-100 bg-violet-50/60 p-4 text-left" onClick={() => chooseDecisionType("vote")}><Vote className="h-5 w-5 text-violet-700" /><div className="mt-2 text-sm font-black text-[#102A43]">Vote</div><div className="mt-1 text-[11px] font-semibold text-slate-500">One or more questions</div></button>
               <button type="button" className="rounded-2xl border border-sky-100 bg-sky-50/60 p-4 text-left" onClick={() => chooseDecisionType("schedule")}><CalendarDays className="h-5 w-5 text-sky-700" /><div className="mt-2 text-sm font-black text-[#102A43]">Schedule</div><div className="mt-1 text-[11px] font-semibold text-slate-500">Find a time together</div></button>
               <button type="button" className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4 text-left" onClick={() => chooseDecisionType("players")}><Users className="h-5 w-5 text-emerald-700" /><div className="mt-2 text-sm font-black text-[#102A43]">Players</div><div className="mt-1 text-[11px] font-semibold text-slate-500">Choose from roster</div></button>
-              <button type="button" className="rounded-2xl border border-amber-100 bg-amber-50/60 p-4 text-left" onClick={() => chooseDecisionType("equipment")}><ClipboardList className="h-5 w-5 text-amber-700" /><div className="mt-2 text-sm font-black text-[#102A43]">Equipment</div><div className="mt-1 text-[11px] font-semibold text-slate-500">Compare purchase options</div></button>
+              <button type="button" className="rounded-2xl border border-amber-100 bg-amber-50/60 p-4 text-left" onClick={() => chooseDecisionType("equipment")}><ClipboardList className="h-5 w-5 text-amber-700" /><div className="mt-2 text-sm font-black text-[#102A43]">Equipment</div><div className="mt-1 text-[11px] font-semibold text-slate-500">Compare options</div></button>
             </div>
           ) : (
             <div className="grid gap-3">
@@ -1401,56 +1572,91 @@ export function TaskBoard({
               </div>}
 
               {decisionMode === "recorded" ? (
-                <div><Label htmlFor="decision-outcome">What was decided?</Label><Textarea id="decision-outcome" value={decisionOutcome} onChange={(event) => setDecisionOutcome(event.target.value)} rows={3} maxLength={300} placeholder="We will buy the Select Brillant ball." /></div>
+                <>
+                  {decisionPhaseNameRequired && <div><Label htmlFor="decision-recorded-name">Decision name</Label><Input id="decision-recorded-name" value={decisionTitle} onChange={(event) => setDecisionTitle(event.target.value)} maxLength={120} placeholder="What is this next decision about?" /></div>}
+                  <div><Label htmlFor="decision-outcome">What was decided?</Label><Textarea id="decision-outcome" value={decisionOutcome} onChange={(event) => setDecisionOutcome(event.target.value)} rows={3} maxLength={300} placeholder="We will buy the Select Brillant ball." /></div>
+                </>
               ) : (
                 <>
-                  <div><Label htmlFor="decision-question">{decisionStep === "schedule" ? "What are you scheduling?" : "Question"}</Label><Textarea id="decision-question" value={decisionQuestion} onChange={(event) => setDecisionQuestion(event.target.value)} rows={2} maxLength={220} /></div>
-
-                  {decisionStep === "vote" && <>
-                    <div className="flex rounded-2xl bg-violet-50 p-1">
-                      <button type="button" className={`flex-1 rounded-xl px-2 py-2 text-[10px] font-black ${decisionKind === "yes-no-abstain" ? "bg-white text-violet-700 shadow-sm" : "text-violet-500"}`} onClick={() => setDecisionKind("yes-no-abstain")}>Yes / No</button>
-                      <button type="button" className={`flex-1 rounded-xl px-2 py-2 text-[10px] font-black ${decisionKind === "choose-one" ? "bg-white text-violet-700 shadow-sm" : "text-violet-500"}`} onClick={() => setDecisionKind("choose-one")}>Choose one</button>
-                      <button type="button" className={`flex-1 rounded-xl px-2 py-2 text-[10px] font-black ${decisionKind === "multi-select" ? "bg-white text-violet-700 shadow-sm" : "text-violet-500"}`} onClick={() => setDecisionKind("multi-select")}>Choose several</button>
+                  {decisionStep === "schedule" ? <>
+                    <div>
+                      <Label htmlFor="schedule-title">What are you scheduling? <span className="font-semibold text-slate-400">{decisionPhaseNameRequired ? "" : "optional"}</span></Label>
+                      <Input id="schedule-title" value={decisionTitle} onChange={(event) => setDecisionTitle(event.target.value)} maxLength={120} placeholder={decisionSetupCard?.title || "e.g. Club desk tutorial"} />
+                      {!decisionPhaseNameRequired && <div className="mt-1 text-[10px] font-semibold text-slate-400">Leave blank to use the topic name.</div>}
                     </div>
-                    {decisionKind !== "yes-no-abstain" && <div><Label htmlFor="decision-options">Choices — one per line</Label><Textarea id="decision-options" value={decisionOptions} onChange={(event) => setDecisionOptions(event.target.value)} rows={4} maxLength={700} placeholder="Mauerpark\nTempelhofer Feld" /></div>}
-                  </>}
-
-                  {decisionStep === "schedule" && <>
-                    <div><Label>Times</Label><div className="mt-1.5 grid gap-2">{scheduleSlots.map((slot, index) => <div key={index} className="flex gap-2"><Input type="datetime-local" value={slot} onChange={(event) => setScheduleSlots((current) => current.map((item, itemIndex) => itemIndex === index ? event.target.value : item))} /><button type="button" className="rounded-xl border border-slate-200 px-2 text-slate-400" onClick={() => setScheduleSlots((current) => current.filter((_, itemIndex) => itemIndex !== index))} disabled={scheduleSlots.length <= 1}><Trash2 className="h-4 w-4" /></button></div>)}</div><button type="button" className="mt-2 rounded-xl bg-slate-100 px-3 py-2 text-[11px] font-black text-slate-600" onClick={() => setScheduleSlots((current) => [...current, ""])}>+ Add time</button></div>
+                    <div><Label htmlFor="schedule-host">Host</Label><Input id="schedule-host" value={scheduleHostName} onChange={(event) => setScheduleHostName(event.target.value)} maxLength={80} placeholder="e.g. Tanja" /></div>
                     {renderPeoplePicker(decisionPeopleKeys, setDecisionPeopleKeys, "Who needs to respond?")}
-                  </>}
+                    <div>
+                      <Label>Possible dates & times</Label>
+                      <div className="mt-1.5 grid gap-2">
+                        {scheduleDates.map((group) => <div key={group.id} className="rounded-2xl border border-slate-200 bg-white p-2.5">
+                          <div className="flex items-center gap-2">
+                            <Input type="date" value={group.date} onChange={(event) => updateScheduleDate(group.id, { date: event.target.value })} />
+                            <button type="button" className="rounded-xl border border-slate-200 p-2 text-slate-400" onClick={() => setScheduleDates((current) => current.filter((item) => item.id !== group.id))} disabled={scheduleDates.length <= 1} aria-label="Remove date"><Trash2 className="h-4 w-4" /></button>
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {group.times.map((time, timeIndex) => <div key={`${group.id}-${timeIndex}`} className="flex items-center gap-1">
+                              <select className="h-10 rounded-xl border border-slate-200 bg-white px-2 text-sm font-bold text-[#102A43]" value={time} onChange={(event) => updateScheduleDate(group.id, { times: group.times.map((item, index) => index === timeIndex ? event.target.value : item) })}>
+                                <option value="">Time</option>
+                                {TIME_CHOICES.map((value) => <option key={value} value={value}>{value}</option>)}
+                              </select>
+                              <button type="button" className="rounded-lg p-2 text-slate-400" onClick={() => updateScheduleDate(group.id, { times: group.times.filter((_, index) => index !== timeIndex) })} disabled={group.times.length <= 1} aria-label="Remove time"><Trash2 className="h-3.5 w-3.5" /></button>
+                            </div>)}
+                            <button type="button" className="rounded-xl bg-slate-100 px-3 py-2 text-[11px] font-black text-slate-600" onClick={() => updateScheduleDate(group.id, { times: [...group.times, ""] })}>+ Time</button>
+                          </div>
+                        </div>)}
+                      </div>
+                      <button type="button" className="mt-2 rounded-xl bg-slate-100 px-3 py-2 text-[11px] font-black text-slate-600" onClick={() => setScheduleDates((current) => [...current, newScheduleDateGroup()])}>+ Date</button>
+                    </div>
+                  </> : <>
+                    {decisionPhaseNameRequired && <div><Label htmlFor="decision-name">Decision name</Label><Input id="decision-name" value={decisionTitle} onChange={(event) => setDecisionTitle(event.target.value)} maxLength={120} placeholder="What is this next decision about?" /></div>}
 
-                  {decisionStep === "players" && <>
-                    <div><Label htmlFor="player-search">Players</Label><Input id="player-search" value={playerSearch} onChange={(event) => setPlayerSearch(event.target.value)} placeholder="Search roster…" /><div className="mt-2 max-h-48 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-1.5">{filteredPlayers.map((player) => {
-                      const selected = selectedPlayerIds.includes(player.id);
-                      return <button key={player.id} type="button" className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-black ${selected ? "bg-emerald-50 text-emerald-800" : "text-slate-600 hover:bg-slate-50"}`} onClick={() => setSelectedPlayerIds((current) => current.includes(player.id) ? current.filter((value) => value !== player.id) : [...current, player.id])}><span className="truncate">{player.name}</span>{selected && <Check className="h-4 w-4" />}</button>;
-                    })}{filteredPlayers.length === 0 && <div className="px-3 py-6 text-center text-xs font-semibold text-slate-400">No matching players.</div>}</div></div>
-                    <div><Label htmlFor="decision-max">Maximum choices</Label><Input id="decision-max" type="number" min="1" max={Math.max(1, selectedPlayerIds.length)} value={decisionMaxSelections} onChange={(event) => setDecisionMaxSelections(event.target.value)} inputMode="numeric" /></div>
-                    {renderPeoplePicker(decisionPeopleKeys, setDecisionPeopleKeys, "Who votes?")}
-                  </>}
+                    {decisionStep === "vote" && <>
+                      <div className="grid gap-2">
+                        {decisionQuestionsDraft.map((draft, questionIndex) => <div key={draft.id} className="rounded-2xl border border-slate-200 bg-white p-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <Label htmlFor={`decision-question-${draft.id}`}>Question {questionIndex + 1}</Label>
+                            {decisionQuestionsDraft.length > 1 && <button type="button" className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600" onClick={() => setDecisionQuestionsDraft((current) => current.filter((item) => item.id !== draft.id))} aria-label={`Remove question ${questionIndex + 1}`}><Trash2 className="h-3.5 w-3.5" /></button>}
+                          </div>
+                          <Textarea id={`decision-question-${draft.id}`} className="mt-1" value={draft.text} onChange={(event) => updateDraftQuestion(draft.id, { text: event.target.value })} rows={2} maxLength={220} placeholder="What should people answer?" />
+                          <div className="mt-2 flex rounded-2xl bg-violet-50 p-1">
+                            <button type="button" className={`flex-1 rounded-xl px-2 py-2 text-[10px] font-black ${draft.kind === "yes-no-abstain" ? "bg-white text-violet-700 shadow-sm" : "text-violet-500"}`} onClick={() => updateDraftQuestion(draft.id, { kind: "yes-no-abstain" })}>Yes / No</button>
+                            <button type="button" className={`flex-1 rounded-xl px-2 py-2 text-[10px] font-black ${draft.kind === "choose-one" ? "bg-white text-violet-700 shadow-sm" : "text-violet-500"}`} onClick={() => updateDraftQuestion(draft.id, { kind: "choose-one" })}>Choose one</button>
+                            <button type="button" className={`flex-1 rounded-xl px-2 py-2 text-[10px] font-black ${draft.kind === "multi-select" ? "bg-white text-violet-700 shadow-sm" : "text-violet-500"}`} onClick={() => updateDraftQuestion(draft.id, { kind: "multi-select" })}>Choose several</button>
+                          </div>
+                          {draft.kind !== "yes-no-abstain" && <div className="mt-2"><Label htmlFor={`decision-options-${draft.id}`}>Choices — one per line</Label><Textarea id={`decision-options-${draft.id}`} className="mt-1" value={draft.options} onChange={(event) => updateDraftQuestion(draft.id, { options: event.target.value })} rows={3} maxLength={700} placeholder="Mauerpark\nTempelhofer Feld" /></div>}
+                          {draft.kind === "multi-select" && <div className="mt-2"><Label htmlFor={`decision-max-${draft.id}`}>Maximum choices</Label><Input id={`decision-max-${draft.id}`} type="number" min="1" max="16" value={draft.maxSelections} onChange={(event) => updateDraftQuestion(draft.id, { maxSelections: event.target.value })} inputMode="numeric" /></div>}
+                        </div>)}
+                      </div>
+                      <button type="button" className="w-fit rounded-xl bg-violet-50 px-3 py-2 text-[11px] font-black text-violet-700 ring-1 ring-violet-100" onClick={() => setDecisionQuestionsDraft((current) => [...current, newDraftQuestion("")])}>+ Add question</button>
+                      {renderPeoplePicker(decisionPeopleKeys, setDecisionPeopleKeys, "Who votes?")}
+                    </>}
 
-                  {decisionStep === "equipment" && <>
-                    {equipmentItems.length > 0 && <div className="rounded-2xl bg-amber-50/70 px-3 py-2 text-[11px] font-semibold text-amber-800"><span className="font-black">Club inventory:</span> {equipmentItems.slice(0, 4).join(" · ")}{equipmentItems.length > 4 ? "…" : ""}</div>}
-                    <div><Label htmlFor="equipment-options">Options — one per line</Label><Textarea id="equipment-options" value={decisionOptions} onChange={(event) => setDecisionOptions(event.target.value)} rows={4} maxLength={700} placeholder="Select Brillant\nAdidas Tiro\nDerbystar" /></div>
-                    <div className="text-[10px] font-semibold text-slate-500">Add product or document links to the topic so everyone can compare before voting.</div>
-                    {renderPeoplePicker(decisionPeopleKeys, setDecisionPeopleKeys, "Who votes?")}
-                  </>}
+                    {decisionStep === "players" && <>
+                      <div><Label htmlFor="decision-player-question">Question</Label><Textarea id="decision-player-question" value={decisionQuestion} onChange={(event) => setDecisionQuestion(event.target.value)} rows={2} maxLength={220} /></div>
+                      <div><Label htmlFor="player-search">Players</Label><Input id="player-search" value={playerSearch} onChange={(event) => setPlayerSearch(event.target.value)} placeholder="Search roster…" /><div className="mt-2 max-h-48 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-1.5">{filteredPlayers.map((player) => {
+                        const selected = selectedPlayerIds.includes(player.id);
+                        return <button key={player.id} type="button" className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-black ${selected ? "bg-emerald-50 text-emerald-800" : "text-slate-600 hover:bg-slate-50"}`} onClick={() => setSelectedPlayerIds((current) => current.includes(player.id) ? current.filter((value) => value !== player.id) : [...current, player.id])}><span className="truncate">{player.name}</span>{selected && <Check className="h-4 w-4" />}</button>;
+                      })}{filteredPlayers.length === 0 && <div className="px-3 py-6 text-center text-xs font-semibold text-slate-400">No matching players.</div>}</div></div>
+                      <div><Label htmlFor="decision-max">Maximum choices</Label><Input id="decision-max" type="number" min="1" max={Math.max(1, selectedPlayerIds.length)} value={decisionMaxSelections} onChange={(event) => setDecisionMaxSelections(event.target.value)} inputMode="numeric" /></div>
+                      {renderPeoplePicker(decisionPeopleKeys, setDecisionPeopleKeys, "Who votes?")}
+                    </>}
 
-                  {decisionStep === "vote" && decisionKind === "multi-select" && <div><Label htmlFor="decision-max-generic">Maximum choices</Label><Input id="decision-max-generic" type="number" min="1" max="16" value={decisionMaxSelections} onChange={(event) => setDecisionMaxSelections(event.target.value)} inputMode="numeric" /></div>}
-                  {decisionStep === "vote" && renderPeoplePicker(decisionPeopleKeys, setDecisionPeopleKeys, "Who votes?")}
+                    {decisionStep === "equipment" && <>
+                      {equipmentItems.length > 0 && <div className="rounded-2xl bg-amber-50/70 px-3 py-2 text-[11px] font-semibold text-amber-800"><span className="font-black">Club inventory:</span> {equipmentItems.slice(0, 4).join(" · ")}{equipmentItems.length > 4 ? "…" : ""}</div>}
+                      <div><Label htmlFor="decision-equipment-question">Question</Label><Textarea id="decision-equipment-question" value={decisionQuestion} onChange={(event) => setDecisionQuestion(event.target.value)} rows={2} maxLength={220} /></div>
+                      <div><Label htmlFor="equipment-options">Options — one per line</Label><Textarea id="equipment-options" value={decisionOptions} onChange={(event) => setDecisionOptions(event.target.value)} rows={4} maxLength={700} placeholder="Select Brillant\nAdidas Tiro\nDerbystar" /></div>
+                      <div className="text-[10px] font-semibold text-slate-500">Product and document links stay attached to the topic for comparison.</div>
+                      {renderPeoplePicker(decisionPeopleKeys, setDecisionPeopleKeys, "Who votes?")}
+                    </>}
+                  </>}
                 </>
               )}
 
               <Button
                 type="button"
                 className={`h-11 rounded-2xl font-black text-white ${decisionMode === "recorded" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-violet-600 hover:bg-violet-700"}`}
-                disabled={saving || (decisionMode === "recorded"
-                  ? !decisionOutcome.trim()
-                  : decisionStep === "schedule"
-                    ? scheduleSlots.filter(Boolean).length < 2
-                    : decisionStep === "players"
-                      ? selectedPlayerIds.length < 2
-                      : !decisionQuestion.trim() || voteOptionLabels(decisionKind, decisionOptions).length < 2)}
+                disabled={saving || !decisionSetupValid}
                 onClick={() => void addDecision()}
               >
                 {saving ? "Saving…" : decisionMode === "recorded" ? "Record decision" : decisionStep === "schedule" ? "Open availability" : "Open vote"}
@@ -1475,35 +1681,42 @@ export function TaskBoard({
         <DialogContent className="fixed bottom-2 left-2 right-2 top-auto w-auto max-w-none translate-x-0 translate-y-0 rounded-[2rem] p-4 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-md sm:-translate-x-1/2" onOpenAutoFocus={(event) => event.preventDefault()}>
           <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43]">Add action</DialogTitle></DialogHeader>
           <div className="grid gap-3">
-            <div><Label htmlFor="action-text">What needs to happen?</Label><Textarea id="action-text" value={actionText} onChange={(event) => setActionText(event.target.value)} rows={2} maxLength={220} /></div>
+            <div><Label htmlFor="action-text">What needs to happen next?</Label><Textarea id="action-text" value={actionText} onChange={(event) => setActionText(event.target.value)} rows={2} maxLength={220} /></div>
             {renderPeoplePicker(actionPeopleKeys, setActionPeopleKeys, "Who handles this?")}
             <Button type="button" className="h-11 rounded-2xl bg-sky-700 font-black text-white hover:bg-sky-800" disabled={!actionText.trim() || saving} onClick={() => void addAction()}>{saving ? "Saving…" : "Add action"}</Button>
           </div>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={Boolean(votingCard && votingDecision)} onOpenChange={(open) => { if (!open) { setVotingCardId(null); setVotingDecisionId(null); setSelectedVoteOptionIds([]); } }}>
-        <DialogContent className="fixed bottom-2 left-2 right-2 top-auto max-h-[88dvh] w-auto max-w-none translate-x-0 translate-y-0 overflow-y-auto rounded-[2rem] p-4 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-sm sm:-translate-x-1/2">
+      <Dialog open={Boolean(votingCard && votingDecision)} onOpenChange={(open) => { if (!open) { setVotingCardId(null); setVotingDecisionId(null); setSelectedVoteAnswers({}); } }}>
+        <DialogContent className="fixed bottom-2 left-2 right-2 top-auto max-h-[90dvh] w-auto max-w-none translate-x-0 translate-y-0 overflow-y-auto rounded-[2rem] p-4 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-md sm:-translate-x-1/2">
           <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43]">{votingDecision?.kind === "schedule" ? "Your availability" : "Vote on FT"}</DialogTitle></DialogHeader>
           {votingDecision && <div className="grid gap-3">
-            <div className="whitespace-normal break-words text-sm font-black leading-snug text-[#102A43]">{votingDecision.question}</div>
-            {(votingDecision.kind === "multi-select" || votingDecision.kind === "schedule") && <div className="text-[10px] font-bold text-slate-500">{votingDecision.kind === "schedule" ? "Choose every time that works for you." : `Choose up to ${votingDecision.maxSelections || votingDecision.options.length}.`}</div>}
-            <div className="grid gap-2">{votingDecision.options.map((option) => {
-              const selected = selectedVoteOptionIds.includes(option.id);
-              return <button key={option.id} type="button" className={`rounded-2xl border px-3 py-3 text-left text-sm font-black ${selected ? "border-violet-500 bg-violet-50 text-violet-800" : "border-slate-200 bg-white text-[#102A43]"}`} onClick={() => toggleVoteOption(option.id)}>{selected && <Check className="mr-1 inline h-4 w-4" />}{option.label}</button>;
+            {votingDecision.title?.trim() && <div className="whitespace-normal break-words text-sm font-black leading-snug text-[#102A43]">{votingDecision.title}</div>}
+            {votingDecision.hostName && <div className="rounded-xl bg-sky-50 px-3 py-2 text-[11px] font-bold text-sky-800">Host: <span className="font-black">{votingDecision.hostName}</span></div>}
+            <div className="grid gap-3">{decisionQuestions(votingDecision).map((question, questionIndex) => {
+              const selectedIds = selectedVoteAnswers[question.id] || [];
+              return <div key={question.id} className={decisionQuestions(votingDecision).length > 1 ? "rounded-2xl border border-slate-200 bg-white p-3" : ""}>
+                <div className="whitespace-normal break-words text-sm font-black leading-snug text-[#102A43]">{decisionQuestions(votingDecision).length > 1 ? `${questionIndex + 1}. ` : ""}{question.text}</div>
+                {question.kind === "multi-select" && <div className="mt-1 text-[10px] font-bold text-slate-500">{votingDecision.kind === "schedule" ? "Choose every time that works for you." : `Choose up to ${question.maxSelections || question.options.length}.`}</div>}
+                <div className="mt-2 grid gap-2">{question.options.map((option) => {
+                  const selected = selectedIds.includes(option.id);
+                  return <button key={option.id} type="button" className={`rounded-2xl border px-3 py-3 text-left text-sm font-black ${selected ? "border-violet-500 bg-violet-50 text-violet-800" : "border-slate-200 bg-white text-[#102A43]"}`} onClick={() => toggleVoteOption(question, option.id)}>{selected && <Check className="mr-1 inline h-4 w-4" />}{option.label}</button>;
+                })}</div>
+              </div>;
             })}</div>
-            <div className="text-[10px] font-semibold leading-snug text-slate-500">Anonymous. You can change your answer while it remains open.</div>
-            <Button type="button" className="h-11 rounded-2xl bg-violet-600 font-black text-white" disabled={!selectedVoteOptionIds.length || voteSubmitting} onClick={() => void submitVote()}>{voteSubmitting ? "Recording…" : votingDecision.ballots?.some((ballot) => ballot.voterHash === currentVoterHash) ? "Update" : "Submit"}</Button>
+            <div className="text-[10px] font-semibold leading-snug text-slate-500">{votingDecision.kind === "schedule" ? "Your availability is visible to the organizers in this schedule." : "Anonymous. You can change your answer while it remains open."}</div>
+            <Button type="button" className="h-11 rounded-2xl bg-violet-600 font-black text-white" disabled={decisionQuestions(votingDecision).some((question) => !(selectedVoteAnswers[question.id] || []).length) || voteSubmitting} onClick={() => void submitVote()}>{voteSubmitting ? "Recording…" : votingDecision.ballots?.some((ballot) => ballot.voterHash === currentVoterHash) ? "Update" : "Submit"}</Button>
           </div>}
         </DialogContent>
       </Dialog>
 
       <Dialog open={Boolean(outcomeCardId && outcomeDecisionId)} onOpenChange={(open) => { if (!open) { setOutcomeCardId(null); setOutcomeDecisionId(null); } }}>
         <DialogContent className="fixed bottom-2 left-2 right-2 top-auto w-auto max-w-none translate-x-0 translate-y-0 rounded-[2rem] p-4 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-md sm:-translate-x-1/2" onOpenAutoFocus={(event) => event.preventDefault()}>
-          <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43]">Record outcome</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43]">Decision note</DialogTitle></DialogHeader>
           <div className="grid gap-3">
-            <div><Label htmlFor="outcome-text">What was decided?</Label><Textarea id="outcome-text" value={outcomeText} onChange={(event) => setOutcomeText(event.target.value)} rows={3} maxLength={300} placeholder="Anna, Chris and Emma become club members." /></div>
-            <Button type="button" className="h-11 rounded-2xl bg-emerald-600 font-black text-white" disabled={!outcomeText.trim() || saving} onClick={() => void saveOutcome()}>{saving ? "Saving…" : "Save outcome"}</Button>
+            <div><Label htmlFor="outcome-text">Optional note</Label><Textarea id="outcome-text" value={outcomeText} onChange={(event) => setOutcomeText(event.target.value)} rows={3} maxLength={300} placeholder="Add context only if the result needs explanation." /></div>
+            <Button type="button" className="h-11 rounded-2xl bg-emerald-600 font-black text-white" disabled={saving} onClick={() => void saveOutcome()}>{saving ? "Saving…" : outcomeText.trim() ? "Save note" : "Remove note"}</Button>
           </div>
         </DialogContent>
       </Dialog>

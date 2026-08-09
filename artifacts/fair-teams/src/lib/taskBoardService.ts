@@ -54,6 +54,20 @@ export type TaskBoardVoteKind = "yes-no-abstain" | "choose-one" | "multi-select"
 
 export type TaskBoardDecisionType = "vote" | "schedule" | "players" | "equipment";
 
+export type TaskBoardDecisionQuestion = {
+  id: string;
+  text: string;
+  kind: Exclude<TaskBoardVoteKind, "schedule">;
+  options: TaskBoardVoteOption[];
+  maxSelections?: number;
+  sourcePlayerIds?: string[];
+};
+
+export type TaskBoardVoteAnswer = {
+  questionId: string;
+  optionIds: string[];
+};
+
 export type TaskBoardPerson = {
   name: string;
   email?: string;
@@ -69,6 +83,7 @@ export type TaskBoardVoteBallot = {
   voterHash: string;
   voterName?: string;
   optionIds: string[];
+  answers?: TaskBoardVoteAnswer[];
 };
 
 export type TaskBoardNamedVote = {
@@ -82,8 +97,11 @@ export type TaskBoardVote = {
   mode?: "vote" | "recorded";
   kind?: TaskBoardVoteKind;
   decisionType?: TaskBoardDecisionType;
+  title?: string;
   question: string;
   outcome?: string;
+  hostName?: string;
+  questions?: TaskBoardDecisionQuestion[];
   participantEmails?: string[];
   participantNames?: string[];
   sourcePlayerIds?: string[];
@@ -261,8 +279,10 @@ function parseVote(value: unknown, fallbackId = "decision"): TaskBoardVote | und
   if (!value || typeof value !== "object") return undefined;
   const row = value as Record<string, unknown>;
   const mode = row.mode === "recorded" ? "recorded" : "vote";
-  const question = String(row.question || row.outcome || "").trim();
+  const question = String(row.question || row.outcome || row.title || "").trim();
+  const title = row.title ? String(row.title).trim() : undefined;
   const outcome = row.outcome ? String(row.outcome).trim() : undefined;
+  const hostName = row.hostName ? String(row.hostName).trim() : undefined;
   const rawOptions = Array.isArray(row.options) ? row.options : [];
   const options = rawOptions.map((item, index) => {
     const option = (item || {}) as Record<string, unknown>;
@@ -274,7 +294,6 @@ function parseVote(value: unknown, fallbackId = "decision"): TaskBoardVote | und
   }).filter((option) => option.label.trim());
 
   if (!question) return undefined;
-  if (mode === "vote" && options.length < 2) return undefined;
 
   const normalizedLabels = options.map((option) => option.label.trim().toLowerCase());
   const inferredKind: TaskBoardVoteKind = normalizedLabels.length === 3
@@ -291,15 +310,69 @@ function parseVote(value: unknown, fallbackId = "decision"): TaskBoardVote | und
   const decisionType: TaskBoardDecisionType = rawDecisionType === "schedule" || rawDecisionType === "players" || rawDecisionType === "equipment" || rawDecisionType === "vote"
     ? rawDecisionType
     : kind === "schedule" ? "schedule" : "vote";
+
+  const parsedQuestions: TaskBoardDecisionQuestion[] = Array.isArray(row.questions)
+    ? row.questions.map((item, questionIndex) => {
+      const q = (item || {}) as Record<string, unknown>;
+      const rawQuestionOptions = Array.isArray(q.options) ? q.options : [];
+      const questionOptions = rawQuestionOptions.map((optionItem, optionIndex) => {
+        const option = (optionItem || {}) as Record<string, unknown>;
+        return {
+          id: String(option.id || `q${questionIndex}-option-${optionIndex}`),
+          label: String(option.label || `Option ${optionIndex + 1}`),
+          count: Number(option.count || 0),
+        };
+      }).filter((option) => option.label.trim());
+      const rawQuestionKind = String(q.kind || "");
+      const questionKind: Exclude<TaskBoardVoteKind, "schedule"> = rawQuestionKind === "multi-select" || rawQuestionKind === "choose-one" || rawQuestionKind === "yes-no-abstain"
+        ? rawQuestionKind
+        : "choose-one";
+      return {
+        id: String(q.id || `question-${questionIndex}`),
+        text: String(q.text || q.question || "").trim(),
+        kind: questionKind,
+        options: questionOptions,
+        maxSelections: Number(q.maxSelections || 0) || undefined,
+        sourcePlayerIds: Array.isArray(q.sourcePlayerIds) ? q.sourcePlayerIds.map(String).filter(Boolean) : undefined,
+      };
+    }).filter((q) => q.text && q.options.length >= 2)
+    : [];
+
+  const questions = parsedQuestions.length
+    ? parsedQuestions
+    : mode === "vote" && options.length >= 2
+      ? [{
+        id: "question-1",
+        text: question,
+        kind: kind === "schedule" ? "multi-select" : kind as Exclude<TaskBoardVoteKind, "schedule">,
+        options,
+        maxSelections: Number(row.maxSelections || 0) || undefined,
+        sourcePlayerIds: Array.isArray(row.sourcePlayerIds) ? row.sourcePlayerIds.map(String).filter(Boolean) : undefined,
+      }]
+      : [];
+
+  if (mode === "vote" && questions.length === 0) return undefined;
+
   const ballots = Array.isArray(row.ballots)
     ? row.ballots.map((item) => {
       const ballot = (item || {}) as Record<string, unknown>;
+      const answers = Array.isArray(ballot.answers)
+        ? ballot.answers.map((answerItem) => {
+          const answer = (answerItem || {}) as Record<string, unknown>;
+          return {
+            questionId: String(answer.questionId || ""),
+            optionIds: Array.isArray(answer.optionIds) ? answer.optionIds.map(String).filter(Boolean) : [],
+          };
+        }).filter((answer) => answer.questionId && answer.optionIds.length)
+        : undefined;
+      const optionIds = Array.isArray(ballot.optionIds) ? ballot.optionIds.map(String).filter(Boolean) : [];
       return {
         voterHash: String(ballot.voterHash || ""),
         voterName: ballot.voterName ? String(ballot.voterName) : undefined,
-        optionIds: Array.isArray(ballot.optionIds) ? ballot.optionIds.map(String).filter(Boolean) : [],
+        optionIds: optionIds.length ? optionIds : answers?.[0]?.optionIds || [],
+        answers,
       };
-    }).filter((ballot) => ballot.voterHash && ballot.optionIds.length)
+    }).filter((ballot) => ballot.voterHash && (ballot.optionIds.length || ballot.answers?.length))
     : undefined;
 
   return {
@@ -307,18 +380,21 @@ function parseVote(value: unknown, fallbackId = "decision"): TaskBoardVote | und
     mode,
     kind,
     decisionType,
+    title,
     question,
     outcome,
+    hostName,
+    questions,
     participantEmails: Array.isArray(row.participantEmails) ? row.participantEmails.map(String).filter(Boolean) : undefined,
     participantNames: Array.isArray(row.participantNames) ? row.participantNames.map(String).filter(Boolean) : undefined,
     sourcePlayerIds: Array.isArray(row.sourcePlayerIds) ? row.sourcePlayerIds.map(String).filter(Boolean) : undefined,
-    options,
+    options: questions[0]?.options || options,
     anonymous: row.anonymous !== false,
     hideParticipationUntilClosed: Boolean(row.hideParticipationUntilClosed),
     showResultsWhileOpen: Boolean(row.showResultsWhileOpen),
     status: row.status === "closed" || mode === "recorded" ? "closed" : "open",
     eligibleCount: Number(row.eligibleCount || 0) || undefined,
-    maxSelections: Number(row.maxSelections || 0) || undefined,
+    maxSelections: Number(row.maxSelections || 0) || questions[0]?.maxSelections,
     voterHashes: Array.isArray(row.voterHashes) ? row.voterHashes.map(String) : (ballots || []).map((ballot) => ballot.voterHash),
     ballots,
     namedVotes: Array.isArray(row.namedVotes) ? row.namedVotes.map((item) => {
@@ -463,7 +539,7 @@ export async function saveTaskBoardMeta(scopeId: string, meta: TaskBoardMeta): P
   const user = actor();
   const now = new Date();
   await setDoc(rootDoc(scopeId), {
-    app: "Fair Teams", schemaVersion: 5, name: meta.name.trim() || "Action Board", customName: meta.customName?.trim() || null,
+    app: "Fair Teams", schemaVersion: 6, name: meta.name.trim() || "Action Board", customName: meta.customName?.trim() || null,
     updatedByUid: user.uid, updatedByEmail: user.email || null, updatedByName: user.name,
     updatedAt: serverTimestamp(), updatedAtIso: now.toISOString(),
     ...(meta.createdAt ? {} : { createdAt: serverTimestamp(), createdAtIso: now.toISOString() }),
@@ -505,16 +581,38 @@ function activityPayload(activity: TaskBoardActivity) {
 
 function votePayload(vote?: TaskBoardVote) {
   if (!vote) return null;
+  const questions = vote.questions?.length
+    ? vote.questions
+    : vote.mode !== "recorded" && vote.options.length >= 2
+      ? [{
+        id: "question-1",
+        text: vote.question,
+        kind: vote.kind === "schedule" ? "multi-select" as const : (vote.kind || "choose-one") as Exclude<TaskBoardVoteKind, "schedule">,
+        options: vote.options,
+        maxSelections: vote.maxSelections,
+        sourcePlayerIds: vote.sourcePlayerIds,
+      }]
+      : [];
   return {
     id: vote.id || null,
     mode: vote.mode || "vote",
     kind: vote.kind || "yes-no-abstain",
     decisionType: vote.decisionType || (vote.kind === "schedule" ? "schedule" : "vote"),
+    title: vote.title?.trim() || null,
     question: vote.question.trim(),
     outcome: vote.outcome?.trim() || null,
+    hostName: vote.hostName?.trim() || null,
     participantEmails: vote.participantEmails || [],
     participantNames: vote.participantNames || [],
     sourcePlayerIds: vote.sourcePlayerIds || [],
+    questions: questions.map((question) => ({
+      id: question.id,
+      text: question.text.trim(),
+      kind: question.kind,
+      maxSelections: question.maxSelections || null,
+      sourcePlayerIds: question.sourcePlayerIds || [],
+      options: question.options.map((option) => ({ id: option.id, label: option.label.trim(), count: option.count || 0 })),
+    })),
     anonymous: vote.anonymous,
     hideParticipationUntilClosed: vote.hideParticipationUntilClosed,
     showResultsWhileOpen: vote.showResultsWhileOpen,
@@ -526,13 +624,14 @@ function votePayload(vote?: TaskBoardVote) {
       voterHash: ballot.voterHash,
       voterName: ballot.voterName || null,
       optionIds: ballot.optionIds,
+      answers: ballot.answers || [],
     })),
     namedVotes: vote.namedVotes || [],
     createdAt: vote.createdAt,
     closedAt: vote.closedAt || null,
     createdByName: vote.createdByName || null,
     closedByName: vote.closedByName || null,
-    options: vote.options.map((option) => ({ id: option.id, label: option.label.trim(), count: option.count || 0 })),
+    options: (questions[0]?.options || vote.options).map((option) => ({ id: option.id, label: option.label.trim(), count: option.count || 0 })),
   };
 }
 
@@ -570,7 +669,7 @@ export async function saveTaskBoardCard(scopeId: string, card: TaskBoardCard): P
   const latestDecision = decisions[decisions.length - 1];
   const latestOpenAction = [...actions].reverse().find((action) => action.status === "open");
   await setDoc(doc(cardsCollection(scopeId), card.id), {
-    app: "Fair Teams", schemaVersion: 5,
+    app: "Fair Teams", schemaVersion: 6,
     title: card.title.trim() || "Untitled topic", note: card.note?.trim() || null,
     people: (card.people || []).map((person) => ({ name: person.name.trim(), email: person.email?.trim() || null })).filter((person) => person.name),
     gifUrl: card.gifUrl?.trim() || null,
@@ -614,7 +713,7 @@ export async function castTaskBoardVote(
   decisionId: string,
   voterHash: string,
   voterName: string,
-  optionIds: string[],
+  answers: TaskBoardVoteAnswer[],
 ): Promise<void> {
   const signedInUser = requireUser();
   const reference = doc(cardsCollection(scopeId), cardId);
@@ -633,36 +732,64 @@ export async function castTaskBoardVote(
       if (!allowed) throw new Error("This decision is only asking selected organizers.");
     }
 
-    const uniqueOptionIds = [...new Set(optionIds)].filter((optionId) => decision.options.some((option) => option.id === optionId));
-    const maxSelections = decision.kind === "multi-select" || decision.kind === "schedule"
-      ? Math.max(1, decision.maxSelections || decision.options.length)
-      : 1;
-    if (!uniqueOptionIds.length) throw new Error("Choose an option.");
-    if (uniqueOptionIds.length > maxSelections) throw new Error(`Choose up to ${maxSelections}.`);
+    const questions = decision.questions?.length
+      ? decision.questions
+      : [{
+        id: "question-1",
+        text: decision.question,
+        kind: decision.kind === "schedule" ? "multi-select" as const : (decision.kind || "choose-one") as Exclude<TaskBoardVoteKind, "schedule">,
+        options: decision.options,
+        maxSelections: decision.maxSelections,
+      }];
+    const cleanAnswers: TaskBoardVoteAnswer[] = [];
+    for (const question of questions) {
+      const incoming = answers.find((answer) => answer.questionId === question.id);
+      const uniqueOptionIds = [...new Set(incoming?.optionIds || [])].filter((optionId) => question.options.some((option) => option.id === optionId));
+      const maxSelections = question.kind === "multi-select"
+        ? Math.max(1, question.maxSelections || question.options.length)
+        : 1;
+      if (!uniqueOptionIds.length) throw new Error("Answer every question.");
+      if (uniqueOptionIds.length > maxSelections) throw new Error(`Choose up to ${maxSelections}.`);
+      cleanAnswers.push({ questionId: question.id, optionIds: uniqueOptionIds });
+    }
 
     const ballots = [...(decision.ballots || [])];
     const existingBallotIndex = ballots.findIndex((ballot) => ballot.voterHash === voterHash);
     if (existingBallotIndex < 0 && decision.voterHashes.includes(voterHash) && !decision.ballots?.length) {
       throw new Error("Your earlier vote is already recorded on this legacy poll.");
     }
-    const previousIds = existingBallotIndex >= 0 ? ballots[existingBallotIndex].optionIds : [];
-    const nextOptions = decision.options.map((option) => {
-      let count = option.count || 0;
-      if (previousIds.includes(option.id)) count = Math.max(0, count - 1);
-      if (uniqueOptionIds.includes(option.id)) count += 1;
-      return { ...option, count };
+    const previousAnswers = existingBallotIndex >= 0
+      ? ballots[existingBallotIndex].answers?.length
+        ? ballots[existingBallotIndex].answers!
+        : [{ questionId: questions[0].id, optionIds: ballots[existingBallotIndex].optionIds }]
+      : [];
+
+    const nextQuestions = questions.map((question) => {
+      const previousIds = previousAnswers.find((answer) => answer.questionId === question.id)?.optionIds || [];
+      const nextIds = cleanAnswers.find((answer) => answer.questionId === question.id)?.optionIds || [];
+      return {
+        ...question,
+        options: question.options.map((option) => {
+          let count = option.count || 0;
+          if (previousIds.includes(option.id)) count = Math.max(0, count - 1);
+          if (nextIds.includes(option.id)) count += 1;
+          return { ...option, count };
+        }),
+      };
     });
     const nextBallot: TaskBoardVoteBallot = {
       voterHash,
       voterName: decision.anonymous ? undefined : voterName,
-      optionIds: uniqueOptionIds,
+      optionIds: cleanAnswers[0]?.optionIds || [],
+      answers: cleanAnswers,
     };
     if (existingBallotIndex >= 0) ballots[existingBallotIndex] = nextBallot;
     else ballots.push(nextBallot);
 
     const nextDecision: TaskBoardVote = {
       ...decision,
-      options: nextOptions,
+      questions: nextQuestions,
+      options: nextQuestions[0]?.options || decision.options,
       ballots,
       voterHashes: ballots.map((ballot) => ballot.voterHash),
     };
@@ -675,3 +802,4 @@ export async function castTaskBoardVote(
     });
   });
 }
+

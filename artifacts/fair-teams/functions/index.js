@@ -1,7 +1,6 @@
 const crypto = require("crypto");
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { defineSecret } = require("firebase-functions/params");
-const nodemailer = require("nodemailer");
 const { initializeApp } = require("firebase-admin/app");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const { getMessaging } = require("firebase-admin/messaging");
@@ -12,7 +11,7 @@ const REGION = process.env.FAIRTEAMS_FUNCTIONS_REGION || "europe-west1";
 const THREAD_COLLECTION = "actionBoardNotificationThreads";
 const USER_COLLECTION = "fairTeamsUsers";
 const PUSH_INSTALLATION_COLLECTION = "fairTeamsPushInstallations";
-const SMTP_CONFIG = defineSecret("FAIRTEAMS_SMTP_CONFIG");
+const RESEND_API_KEY = defineSecret("RESEND_API_KEY");
 
 function cleanEmail(value) {
   return String(value || "").trim().toLowerCase();
@@ -152,43 +151,73 @@ function validOrigin(value) {
   }
 }
 
-function smtpSettings() {
-  let raw = {};
-  try {
-    raw = JSON.parse(SMTP_CONFIG.value() || "{}");
-  } catch {
-    throw new HttpsError("failed-precondition", "Fair Teams SMTP secret must be valid JSON.");
+function resendSettings() {
+  const apiKey = String(RESEND_API_KEY.value() || "").trim();
+  if (!apiKey) {
+    throw new HttpsError("failed-precondition", "Stripes email is not configured yet.");
   }
-  const host = cleanText(raw.host, 180);
-  const user = cleanText(raw.user, 220);
-  const password = String(raw.password || "");
-  const from = cleanText(raw.from, 260);
-  const replyTo = cleanText(raw.replyTo, 260);
-  const port = Number(raw.port || 465);
-  const secure = raw.secure === undefined ? port === 465 : Boolean(raw.secure);
-  if (!host || !Number.isFinite(port) || port <= 0 || !from) {
-    throw new HttpsError("failed-precondition", "Fair Teams email is not configured yet.");
-  }
-  return { host, port, secure, user, password, from, replyTo };
+  return {
+    apiKey,
+    from: "Stripes <notifications@stripes.work>",
+  };
 }
 
-function mailTransport() {
-  const config = smtpSettings();
-  return {
-    config,
-    transporter: nodemailer.createTransport({
-      host: config.host,
-      port: config.port,
-      secure: config.secure,
-      auth: config.user ? { user: config.user, pass: config.password } : undefined,
-    }),
+async function sendResendEmail({
+  to,
+  subject,
+  text,
+  html,
+  messageId,
+  inReplyTo,
+  references,
+  topicId,
+}) {
+  const { apiKey, from } = resendSettings();
+
+  const headers = {
+    "X-Fair-Teams-Topic": String(topicId),
   };
+
+  if (messageId) headers["Message-ID"] = messageId;
+  if (inReplyTo) headers["In-Reply-To"] = inReplyTo;
+  if (references) {
+    headers.References = Array.isArray(references)
+      ? references.join(" ")
+      : String(references);
+  }
+
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+      "User-Agent": "Stripes/1.0",
+    },
+    body: JSON.stringify({
+      from,
+      to: [to],
+      subject,
+      text,
+      html,
+      headers,
+    }),
+  });
+
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(
+      cleanText(payload?.message || `Resend email failed (${response.status})`, 180)
+    );
+  }
+
+  return payload;
 }
 
 function emailBodies({ senderName, step, topicContext, customMessage, appUrl }) {
   const contextLines = [`Topic: ${step.topicTitle}`, ...topicContext];
   const text = [
-    `Fair Teams · ${step.topicTitle}`,
+    `Stripes · ${step.topicTitle}`,
     "",
     `${step.label}: ${step.text}`,
     customMessage ? `Message from ${senderName}: ${customMessage}` : `Sent by ${senderName}`,
@@ -196,7 +225,7 @@ function emailBodies({ senderName, step, topicContext, customMessage, appUrl }) 
     "Topic so far",
     ...contextLines.map((line) => `- ${line}`),
     "",
-    appUrl ? `Open Fair Teams: ${appUrl}` : "Open Fair Teams to respond or continue the topic.",
+    appUrl ? `Open Stripes: ${appUrl}` : "Open Stripes to respond or continue the topic.",
   ].join("\n");
 
   const contextHtml = contextLines.map((line) => `<li style="margin:4px 0">${escapeHtml(line)}</li>`).join("");
@@ -204,11 +233,11 @@ function emailBodies({ senderName, step, topicContext, customMessage, appUrl }) 
     ? `<div style="margin:16px 0;padding:12px 14px;background:#f8fafc;border-radius:12px"><strong>${escapeHtml(senderName)}:</strong> ${escapeHtml(customMessage)}</div>`
     : `<p style="color:#64748b">Sent by ${escapeHtml(senderName)}</p>`;
   const button = appUrl
-    ? `<p style="margin-top:22px"><a href="${escapeHtml(appUrl)}" style="display:inline-block;background:#102A43;color:white;text-decoration:none;padding:10px 16px;border-radius:12px;font-weight:700">Open in Fair Teams</a></p>`
+    ? `<p style="margin-top:22px"><a href="${escapeHtml(appUrl)}" style="display:inline-block;background:#102A43;color:white;text-decoration:none;padding:10px 16px;border-radius:12px;font-weight:700">Open in Stripes</a></p>`
     : "";
   const html = `
     <div style="font-family:Arial,sans-serif;max-width:620px;margin:0 auto;color:#102A43;line-height:1.5">
-      <div style="font-size:13px;font-weight:700;color:#64748b;margin-bottom:8px">Fair Teams · ${escapeHtml(step.topicTitle)}</div>
+      <div style="font-size:13px;font-weight:700;color:#64748b;margin-bottom:8px">Stripes · ${escapeHtml(step.topicTitle)}</div>
       <div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:#7c3aed">${escapeHtml(step.label)}</div>
       <h2 style="font-size:20px;line-height:1.25;margin:6px 0 10px">${escapeHtml(step.text)}</h2>
       ${messageHtml}
@@ -217,7 +246,7 @@ function emailBodies({ senderName, step, topicContext, customMessage, appUrl }) 
         <ul style="padding-left:20px;margin:8px 0 0">${contextHtml}</ul>
       </div>
       ${button}
-      <p style="margin-top:24px;font-size:11px;color:#94a3b8">This notification was sent manually by an organizer. Fair Teams does not automatically email board activity.</p>
+      <p style="margin-top:24px;font-size:11px;color:#94a3b8">This notification was sent manually by an organizer. Stripes does not automatically email board activity.</p>
     </div>`;
   return { text, html };
 }
@@ -266,7 +295,7 @@ exports.registerPushInstallation = onCall({ region: REGION }, async (request) =>
   return { ok: true };
 });
 
-exports.notifyActionBoardStep = onCall({ region: REGION, timeoutSeconds: 60, secrets: [SMTP_CONFIG] }, async (request) => {
+exports.notifyActionBoardStep = onCall({ region: REGION, timeoutSeconds: 60, secrets: [RESEND_API_KEY] }, async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Sign in first.");
   const db = getFirestore();
   const { scopeId, cardId, stepKind, stepId, email, push } = request.data || {};
@@ -341,7 +370,6 @@ exports.notifyActionBoardStep = onCall({ region: REGION, timeoutSeconds: 60, sec
     let emailQueuedCount = 0;
     const emailFailures = [];
     if (email) {
-      const { config: smtp, transporter } = mailTransport();
       for (const recipientEmail of requestedEmails) {
         try {
           const thread = await emailThreadFor(db, scope, cardId, recipientEmail);
@@ -350,17 +378,17 @@ exports.notifyActionBoardStep = onCall({ region: REGION, timeoutSeconds: 60, sec
             ? thread.rootMessageId
             : `<ft-${messageIdPart(`${requestId}|${recipientEmail}`)}@${thread.domain}>`;
           const bodies = emailBodies({ senderName, step, topicContext, customMessage, appUrl });
-          await transporter.sendMail({
-            from: smtp.from,
-            replyTo: smtp.replyTo || undefined,
+          await sendResendEmail({
             to: recipientEmail,
-            subject: `Fair Teams · ${step.topicTitle}`,
+            subject: isFirst
+              ? `Stripes · ${step.topicTitle}`
+              : `Re: Stripes · ${step.topicTitle}`,
             text: bodies.text,
             html: bodies.html,
             messageId: currentMessageId,
             inReplyTo: isFirst ? undefined : thread.rootMessageId,
             references: isFirst ? undefined : [thread.rootMessageId],
-            headers: { "X-Fair-Teams-Topic": String(cardId) },
+            topicId: cardId,
           });
           const threadPayload = {
             scopeKind: scope.kind,
@@ -382,7 +410,7 @@ exports.notifyActionBoardStep = onCall({ region: REGION, timeoutSeconds: 60, sec
 
     let pushTargetCount = 0;
     if (push && !recipientUids.length && !email) {
-      throw new HttpsError("failed-precondition", "None of the selected organizers has a push-capable Fair Teams account yet.");
+      throw new HttpsError("failed-precondition", "None of the selected organizers has a push-capable Stripes account yet.");
     }
     if (push && recipientUids.length) {
       const userSnaps = await Promise.all(recipientUids.map((uid) => db.collection(USER_COLLECTION).doc(uid).get()));
@@ -397,7 +425,7 @@ exports.notifyActionBoardStep = onCall({ region: REGION, timeoutSeconds: 60, sec
         const pushBody = customMessage || `${senderName} needs your attention: ${step.text}`;
         const result = await getMessaging().sendEachForMulticast({
           fids,
-          notification: { title: `Fair Teams · ${step.topicTitle}`, body: pushBody.slice(0, 180) },
+          notification: { title: `Stripes · ${step.topicTitle}`, body: pushBody.slice(0, 180) },
           data: { topicId: String(cardId), stepKind, stepId: String(stepId || "") },
           webpush: appUrl ? { fcmOptions: { link: appUrl } } : undefined,
         });

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Bell,
   CalendarDays,
@@ -33,7 +33,6 @@ import type { SharedRosterUser } from "@/lib/sharedRosterService";
 import {
   enablePhoneNotifications,
   getPhoneNotificationStatus,
-  reregisterPhoneNotifications,
   sendActionBoardNotification,
   syncPhoneNotificationsIfEnabled,
   type ActionBoardNotificationStepKind,
@@ -661,6 +660,7 @@ export function TaskBoard({
 
   const [boardSettingsOpen, setBoardSettingsOpen] = useState(false);
   const [boardNameDraft, setBoardNameDraft] = useState("");
+  const boardNameSaveTimerRef = useRef<number | null>(null);
 
   const [notifyCardId, setNotifyCardId] = useState<string | null>(null);
   const [notifyTarget, setNotifyTarget] = useState<NotifyTarget | null>(null);
@@ -916,22 +916,7 @@ export function TaskBoard({
     }
   };
 
-  const reregisterPhone = async () => {
-    if (phoneEnabling) return;
-    setPhoneEnabling(true);
-    setNotifyError("");
-    try {
-      await reregisterPhoneNotifications();
-      setPhoneStatus("enabled");
-    } catch (nextError) {
-      setNotifyError(nextError instanceof Error ? nextError.message : "Could not re-register phone notifications.");
-      setPhoneStatus(await getPhoneNotificationStatus());
-    } finally {
-      setPhoneEnabling(false);
-    }
-  };
-
-  const togglePersonKey = (key: string, setter: React.Dispatch<React.SetStateAction<string[]>>) => {
+const togglePersonKey = (key: string, setter: React.Dispatch<React.SetStateAction<string[]>>) => {
     setter((current) => current.includes(key) ? current.filter((item) => item !== key) : [...current, key]);
   };
 
@@ -1513,19 +1498,32 @@ export function TaskBoard({
     } finally { setVoteSubmitting(false); }
   };
 
-  const saveBoardName = async () => {
+  const saveBoardNameValue = async (value: string) => {
     const current = board.meta || { name: rosterName };
+    const customName = value.trim() || undefined;
+    if ((current.customName?.trim() || undefined) === customName) return;
     const next: TaskBoardMeta = {
       ...current,
       name: current.name || rosterName,
-      customName: boardNameDraft.trim() || undefined,
+      customName,
       updatedAt: Date.now(),
       updatedByName: currentActor.name,
     };
-    setSaving(true); setError("");
-    try { await persistMeta(next); setBoardSettingsOpen(false); }
-    catch (nextError) { setError(nextError instanceof Error ? nextError.message : "Could not rename board."); }
-    finally { setSaving(false); }
+    try {
+      await persistMeta(next);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Could not rename board.");
+    }
+  };
+
+  const changeBoardName = (value: string) => {
+    setBoardNameDraft(value);
+    setError("");
+    if (boardNameSaveTimerRef.current !== null) window.clearTimeout(boardNameSaveTimerRef.current);
+    boardNameSaveTimerRef.current = window.setTimeout(() => {
+      boardNameSaveTimerRef.current = null;
+      void saveBoardNameValue(value);
+    }, 500);
   };
 
   const filteredPlayers = useMemo(() => {
@@ -2267,7 +2265,7 @@ export function TaskBoard({
         <DialogContent className="max-w-sm rounded-3xl" onOpenAutoFocus={(event) => event.preventDefault()}>
           <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43]">Board settings</DialogTitle></DialogHeader>
           <div className="grid gap-4">
-            <div><Label htmlFor="board-name">Custom name <span className="font-semibold text-slate-400">optional</span></Label><Input id="board-name" value={boardNameDraft} onChange={(event) => setBoardNameDraft(event.target.value)} maxLength={80} placeholder="e.g. Club decisions" /></div>
+            <div><Label htmlFor="board-name">Custom name <span className="font-semibold text-slate-400">optional · saves automatically</span></Label><Input id="board-name" value={boardNameDraft} onChange={(event) => changeBoardName(event.target.value)} maxLength={80} placeholder="e.g. Club decisions" /></div>
             <div className="rounded-2xl bg-slate-50 p-3 ring-1 ring-slate-100">
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
@@ -2280,14 +2278,10 @@ export function TaskBoard({
                   </div>
                 </div>
                 {phoneStatus === "available" && <button type="button" className="shrink-0 rounded-xl bg-white px-3 py-2 text-[11px] font-black text-sky-700 ring-1 ring-sky-100" disabled={phoneEnabling} onClick={() => void enablePhone()}>{phoneEnabling ? "Enabling…" : "Enable"}</button>}
-                {phoneStatus === "enabled" && <div className="flex shrink-0 items-center gap-1.5">
-                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-black text-emerald-700"><Check className="h-3 w-3" />On</span>
-                  <button type="button" className="rounded-xl bg-white px-2.5 py-1.5 text-[10px] font-black text-sky-700 ring-1 ring-sky-100" disabled={phoneEnabling} onClick={() => void reregisterPhone()}>{phoneEnabling ? "Registering…" : "Re-register"}</button>
-                </div>}
+                {phoneStatus === "enabled" && <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-black text-emerald-700"><Check className="h-3 w-3" />On</span>}
               </div>
             </div>
             {notifyError && <div className="rounded-xl bg-red-50 px-3 py-2 text-[11px] font-bold text-red-700">{notifyError}</div>}
-            <Button type="button" className="h-11 rounded-2xl font-black text-white" style={{ backgroundColor: accent }} disabled={saving} onClick={() => void saveBoardName()}>{saving ? "Saving…" : "Save name"}</Button>
           </div>
         </DialogContent>
       </Dialog>

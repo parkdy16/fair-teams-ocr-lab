@@ -432,7 +432,7 @@ exports.notifyActionBoardStep = onCall({ region: REGION, timeoutSeconds: 60, sec
       if (fids.length) {
         const pushBody = customMessage || `${senderName} needs your attention: ${step.text}`;
         const result = await getMessaging().sendEachForMulticast({
-          tokens: fids,
+          fids,
           notification: { title: `Stripes · ${step.topicTitle}`, body: pushBody.slice(0, 180) },
           data: { topicId: String(cardId), stepKind, stepId: String(stepId || "") },
           webpush: appUrl ? { fcmOptions: { link: appUrl } } : undefined,
@@ -488,7 +488,7 @@ exports.notifyActionBoardStep = onCall({ region: REGION, timeoutSeconds: 60, sec
     if (!requestedChannelSuccesses) {
       const firstEmailError = emailFailures[0]?.message;
       const pushError = pushStaleCount
-        ? "This organizer’s phone registration expired. Ask them to open Board settings and tap Re-register."
+        ? "Couldn’t reach one or more organizers by phone."
         : "";
       throw new HttpsError("unavailable", firstEmailError || pushError || "Notification could not be delivered.");
     }

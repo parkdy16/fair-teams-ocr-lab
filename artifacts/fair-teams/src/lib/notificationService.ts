@@ -1,5 +1,5 @@
 import { getFunctions, httpsCallable } from "firebase/functions";
-import { getMessaging, isSupported, onRegistered, register, unregister } from "firebase/messaging";
+import { getMessaging, isSupported, onRegistered, register } from "firebase/messaging";
 import { getFairTeamsAuth, getFairTeamsFirebaseApp } from "@/lib/firebaseClient";
 
 export type ActionBoardNotificationStepKind = "topic" | "decision" | "action";
@@ -132,24 +132,13 @@ export async function enablePhoneNotifications(): Promise<void> {
   await registerCurrentInstallation(true);
 }
 
-export async function reregisterPhoneNotifications(): Promise<void> {
-  const user = getFairTeamsAuth().currentUser;
-  if (!user?.email) throw new Error("Sign in before re-registering phone notifications.");
-  if (!(await supportedMessaging())) throw new Error("Phone notifications are not supported in this browser.");
-  if (Notification.permission !== "granted") throw new Error("Allow notifications in this browser first.");
-
-  const messaging = getMessaging(getFairTeamsFirebaseApp());
-  const localKey = `fairteams-push-enabled:${user.uid}`;
-  if (typeof window !== "undefined") window.localStorage.removeItem(localKey);
-
-  await unregister(messaging).catch(() => undefined);
-  await registerCurrentInstallation(true);
-}
-
 export async function syncPhoneNotificationsIfEnabled(): Promise<void> {
   const user = getFairTeamsAuth().currentUser;
   if (!user || typeof window === "undefined") return;
-  if (window.localStorage.getItem(`fairteams-push-enabled:${user.uid}`) !== "1") return;
   if (!(await supportedMessaging()) || Notification.permission !== "granted") return;
-  await registerCurrentInstallation(false);
+
+  // Once browser permission has been granted, quietly refresh the FCM registration
+  // whenever Stripes starts. Firebase recommends register() on startup so FID
+  // changes and refreshed registrations are uploaded to the app server.
+  await registerCurrentInstallation(true);
 }

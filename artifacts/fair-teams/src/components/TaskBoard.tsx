@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
+  Bell,
   CalendarDays,
   Check,
   CheckCircle2,
@@ -11,9 +12,11 @@ import {
   Hand,
   Lightbulb,
   Link2,
+  Mail,
   Pencil,
   Plus,
   RotateCcw,
+  Smartphone,
   Tag,
   Trash2,
   Users,
@@ -26,6 +29,14 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import type { RoomPlayer } from "@/lib/localRoster";
 import type { SharedRosterUser } from "@/lib/sharedRosterService";
+import {
+  enablePhoneNotifications,
+  getPhoneNotificationStatus,
+  sendActionBoardNotification,
+  syncPhoneNotificationsIfEnabled,
+  type ActionBoardNotificationStepKind,
+  type PhoneNotificationStatus,
+} from "@/lib/notificationService";
 import {
   castTaskBoardVote,
   deleteTaskBoardCard,
@@ -42,6 +53,7 @@ import {
   type TaskBoardDecisionType,
   type TaskBoardLink,
   type TaskBoardMeta,
+  type TaskBoardNotificationState,
   type TaskBoardPerson,
   type TaskBoardSnapshot,
   type TaskBoardVote,
@@ -79,6 +91,16 @@ type ScheduleDateGroup = { id: string; date: string; times: string[] };
 type TimelineEntry =
   | { key: string; kind: "decision"; createdAt: number; decision: TaskBoardVote; index: number }
   | { key: string; kind: "action"; createdAt: number; action: TaskBoardActionItem; index: number };
+
+type NotifyTarget = {
+  kind: ActionBoardNotificationStepKind;
+  id?: string;
+  label: string;
+  text: string;
+  notification?: TaskBoardNotificationState;
+  suggestedEmails?: string[];
+  topicAlreadyNotified?: boolean;
+};
 
 const WORKFLOW: Array<{ kind: TaskBoardColumnKind; name: string }> = [
   { kind: "ideas", name: "Ideas" },
@@ -461,6 +483,79 @@ function currentTimelineKey(card: TaskBoardCard) {
   return entries[entries.length - 1]?.key || null;
 }
 
+function currentNotifyTarget(card: TaskBoardCard): NotifyTarget | null {
+  if (card.completedAt) return null;
+  const topicAlreadyNotified = card.topicNotification?.status === "sent"
+    || (card.decisions || []).some((decision) => decision.notification?.status === "sent")
+    || (card.actions || []).some((action) => action.notification?.status === "sent");
+  const openDecision = latestOpenDecision(card);
+  if (openDecision) {
+    const questions = decisionQuestions(openDecision);
+    return {
+      kind: "decision",
+      id: openDecision.id,
+      label: openDecision.kind === "schedule" || openDecision.decisionType === "schedule" ? "Schedule" : "Decision",
+      text: openDecision.title?.trim() || (questions.length === 1 ? questions[0].text : openDecision.question || "Decision"),
+      notification: openDecision.notification,
+      suggestedEmails: openDecision.participantEmails,
+      topicAlreadyNotified,
+    };
+  }
+  const openAction = latestOpenAction(card);
+  if (openAction) {
+    return {
+      kind: "action",
+      id: openAction.id,
+      label: "Action",
+      text: openAction.text,
+      notification: openAction.notification,
+      suggestedEmails: actionPeople(openAction).map((person) => person.email || "").filter(Boolean),
+      topicAlreadyNotified,
+    };
+  }
+  const latestEntry = timelineEntries(card).at(-1);
+  if (latestEntry?.kind === "decision") {
+    const decision = latestEntry.decision;
+    const questions = decisionQuestions(decision);
+    return {
+      kind: "decision",
+      id: decision.id,
+      label: decision.kind === "schedule" || decision.decisionType === "schedule" ? "Schedule result" : "Decision result",
+      text: decision.title?.trim() || (questions.length === 1 ? questions[0].text : decision.question || "Decision"),
+      notification: decision.notification,
+      suggestedEmails: decision.participantEmails,
+      topicAlreadyNotified,
+    };
+  }
+  if (latestEntry?.kind === "action") {
+    const action = latestEntry.action;
+    return {
+      kind: "action",
+      id: action.id,
+      label: action.status === "done" ? "Action complete" : "Action",
+      text: action.text,
+      notification: action.notification,
+      suggestedEmails: actionPeople(action).map((person) => person.email || "").filter(Boolean),
+      topicAlreadyNotified,
+    };
+  }
+  return {
+    kind: "topic",
+    label: "Idea",
+    text: card.title,
+    notification: card.topicNotification,
+    suggestedEmails: card.people?.map((person) => person.email || "").filter(Boolean),
+    topicAlreadyNotified,
+  };
+}
+
+function notificationSummary(notification?: TaskBoardNotificationState) {
+  if (!notification || notification.status !== "sent") return "";
+  const recipients = notification.recipientEmails?.length || 0;
+  const channels = (notification.channels || []).map((channel) => channel === "email" ? "email" : "phone").join(" + ");
+  return `Notified${notification.sentByName ? ` by ${notification.sentByName}` : ""}${notification.sentAt ? ` · ${formatTime(notification.sentAt)}` : ""}${recipients ? ` · ${recipients} organizer${recipients === 1 ? "" : "s"}` : ""}${channels ? ` · ${channels}` : ""}`;
+}
+
 function decisionHistoryMeta(decision: TaskBoardVote) {
   if (decision.mode === "recorded") return "Recorded";
   const responses = voteTotal(decision);
@@ -565,6 +660,18 @@ export function TaskBoard({
   const [boardSettingsOpen, setBoardSettingsOpen] = useState(false);
   const [boardNameDraft, setBoardNameDraft] = useState("");
 
+  const [notifyCardId, setNotifyCardId] = useState<string | null>(null);
+  const [notifyTarget, setNotifyTarget] = useState<NotifyTarget | null>(null);
+  const [notifyRecipientMode, setNotifyRecipientMode] = useState<"all" | "selected">("all");
+  const [notifyRecipientEmails, setNotifyRecipientEmails] = useState<string[]>([]);
+  const [notifyByEmail, setNotifyByEmail] = useState(true);
+  const [notifyByPush, setNotifyByPush] = useState(false);
+  const [notifyMessage, setNotifyMessage] = useState("");
+  const [notifySending, setNotifySending] = useState(false);
+  const [notifyError, setNotifyError] = useState("");
+  const [phoneStatus, setPhoneStatus] = useState<PhoneNotificationStatus>("available");
+  const [phoneEnabling, setPhoneEnabling] = useState(false);
+
   const activeColumns = useMemo(() => orderedActiveColumns(board), [board.columns]);
   const columnByKind = useMemo(() => {
     const map = new Map<TaskBoardColumnKind, TaskBoardColumn>();
@@ -626,6 +733,11 @@ export function TaskBoard({
     voterHashFor(user, workspaceKey).then((value) => { if (!cancelled) setCurrentVoterHash(value); });
     return () => { cancelled = true; };
   }, [user, workspaceKey]);
+
+  useEffect(() => {
+    if (!online) return;
+    void syncPhoneNotificationsIfEnabled().catch(() => undefined);
+  }, [online, user?.uid]);
 
   useEffect(() => {
     setLastSeenActivityAt(readActivitySeen(workspaceKey));
@@ -715,6 +827,89 @@ export function TaskBoard({
   };
 
   const peopleFromKeys = (keys: string[]) => availablePeople.filter((person) => keys.includes(personKey(person)));
+
+  const otherOrganizerPeople = useMemo(
+    () => availablePeople.filter((person) => person.email && person.email.toLowerCase() !== currentActor.email?.toLowerCase()),
+    [availablePeople, currentActor.email],
+  );
+
+  const openNotify = (card: TaskBoardCard) => {
+    const target = currentNotifyTarget(card);
+    if (!online || !target || target.notification?.status === "sent" || target.notification?.status === "queued") return;
+    const allEmails = otherOrganizerPeople.map((person) => person.email!).filter(Boolean);
+    const suggested = Array.from(new Set((target.suggestedEmails || []).map((email) => email.trim().toLowerCase()).filter((email) => allEmails.includes(email))));
+    setNotifyCardId(card.id);
+    setNotifyTarget(target);
+    setNotifyRecipientMode(suggested.length && suggested.length < allEmails.length ? "selected" : "all");
+    setNotifyRecipientEmails(suggested.length ? suggested : allEmails);
+    setNotifyByEmail(true);
+    setNotifyByPush(false);
+    setNotifyMessage("");
+    setNotifyError("");
+    void getPhoneNotificationStatus().then(setPhoneStatus);
+  };
+
+  const closeNotify = () => {
+    if (notifySending) return;
+    setNotifyCardId(null);
+    setNotifyTarget(null);
+    setNotifyError("");
+  };
+
+  const notifyEmailsToSend = notifyRecipientMode === "all"
+    ? otherOrganizerPeople.map((person) => person.email!).filter(Boolean)
+    : notifyRecipientEmails;
+
+  const toggleNotifyEmail = (email: string) => {
+    setNotifyRecipientEmails((current) => current.includes(email) ? current.filter((item) => item !== email) : [...current, email]);
+  };
+
+  const sendNotification = async () => {
+    if (!scopeId || !notifyCardId || !notifyTarget || notifySending) return;
+    if (!notifyEmailsToSend.length) {
+      setNotifyError("Choose at least one organizer.");
+      return;
+    }
+    if (!notifyByEmail && !notifyByPush) {
+      setNotifyError("Choose email or phone notification.");
+      return;
+    }
+    setNotifySending(true);
+    setNotifyError("");
+    try {
+      await sendActionBoardNotification({
+        scopeId,
+        cardId: notifyCardId,
+        stepKind: notifyTarget.kind,
+        stepId: notifyTarget.id,
+        recipientEmails: notifyEmailsToSend,
+        email: notifyByEmail,
+        push: notifyByPush,
+        message: notifyMessage,
+      });
+      setNotifyCardId(null);
+      setNotifyTarget(null);
+    } catch (nextError) {
+      setNotifyError(nextError instanceof Error ? nextError.message : "Could not notify organizers.");
+    } finally {
+      setNotifySending(false);
+    }
+  };
+
+  const enablePhone = async () => {
+    if (phoneEnabling) return;
+    setPhoneEnabling(true);
+    setNotifyError("");
+    try {
+      await enablePhoneNotifications();
+      setPhoneStatus("enabled");
+    } catch (nextError) {
+      setNotifyError(nextError instanceof Error ? nextError.message : "Could not enable phone notifications.");
+      setPhoneStatus(await getPhoneNotificationStatus());
+    } finally {
+      setPhoneEnabling(false);
+    }
+  };
 
   const togglePersonKey = (key: string, setter: React.Dispatch<React.SetStateAction<string[]>>) => {
     setter((current) => current.includes(key) ? current.filter((item) => item !== key) : [...current, key]);
@@ -1412,7 +1607,7 @@ export function TaskBoard({
           <button type="button" className="w-full rounded-xl bg-white/80 px-3 py-2.5 text-left ring-1 ring-slate-200/80 transition hover:bg-white" onClick={() => toggleHistoryExpanded(entryKey)}>
             <div className="flex items-start gap-2">
               <div className="min-w-0 flex-1">
-                <div className="text-[9px] font-black uppercase tracking-wide text-slate-400 lg:text-[10px]">{decisionTypeLabel(decision)} · {decision.mode === "recorded" ? "recorded" : decision.status}</div>
+                <div className="flex items-center gap-1 text-[9px] font-black uppercase tracking-wide text-slate-400 lg:text-[10px]"><span>{decisionTypeLabel(decision)} · {decision.mode === "recorded" ? "recorded" : decision.status}</span>{decision.notification?.status === "sent" && <span className="inline-flex items-center gap-0.5 text-emerald-600" title={notificationSummary(decision.notification)}><Bell className="h-2.5 w-2.5 fill-emerald-100" /><Check className="h-2.5 w-2.5" /></span>}</div>
                 <div className="mt-0.5 whitespace-normal break-words text-[12px] font-black leading-snug text-[#102A43] lg:text-[14px]">{heading}</div>
                 <div className="mt-1 text-[9px] font-bold text-slate-400 lg:text-[10px]">{decisionHistoryMeta(decision)} · {historyExpanded ? "Hide details" : open ? "Open details" : "View result"}</div>
               </div>
@@ -1448,7 +1643,7 @@ export function TaskBoard({
           {open ? <Gavel className="h-3.5 w-3.5" /> : <Check className="h-3.5 w-3.5" />}
         </div>
         <div className={`rounded-2xl border p-3 ${open ? "border-violet-200 bg-violet-50/65" : "border-emerald-100 bg-white"}`}>
-          <div className="text-[9px] font-black uppercase tracking-wide text-slate-400 lg:text-[10px]">{currentLabel}</div>
+          <div className="flex items-center gap-1 text-[9px] font-black uppercase tracking-wide text-slate-400 lg:text-[10px]"><span>{currentLabel}</span>{decision.notification?.status === "sent" && <span className="inline-flex items-center gap-0.5 text-emerald-600" title={notificationSummary(decision.notification)}><Bell className="h-2.5 w-2.5 fill-emerald-100" /><Check className="h-2.5 w-2.5" /></span>}</div>
           <div className="mt-1 whitespace-normal break-words text-sm font-black leading-snug text-[#102A43] lg:text-base">{heading}</div>
           {decision.hostName && <div className="mt-1 text-[10px] font-bold text-slate-500">Host: <span className="font-black text-slate-700">{decision.hostName}</span></div>}
           {decision.participantNames?.length ? <div className="mt-1 text-[10px] font-bold text-slate-500"><Users className="mr-1 inline h-3 w-3" />{personSummary(decision.participantNames.map((name) => ({ name })))}</div> : null}
@@ -1487,7 +1682,7 @@ export function TaskBoard({
             {open ? <Hand className="h-3.5 w-3.5" /> : <Check className="h-3.5 w-3.5" />}
           </div>
           <div className="rounded-xl bg-white/80 px-3 py-2.5 ring-1 ring-slate-200/80">
-            <div className="text-[9px] font-black uppercase tracking-wide text-slate-400 lg:text-[10px]">Action · {open ? waitingOnDecision ? "waiting on decision" : "open" : "done"}</div>
+            <div className="flex items-center gap-1 text-[9px] font-black uppercase tracking-wide text-slate-400 lg:text-[10px]"><span>Action · {open ? waitingOnDecision ? "waiting on decision" : "open" : "done"}</span>{action.notification?.status === "sent" && <span className="inline-flex items-center gap-0.5 text-emerald-600" title={notificationSummary(action.notification)}><Bell className="h-2.5 w-2.5 fill-emerald-100" /><Check className="h-2.5 w-2.5" /></span>}</div>
             <div className="mt-0.5 whitespace-normal break-words text-[12px] font-black leading-snug text-[#102A43] lg:text-[14px]">{action.text}</div>
             {assignees.length > 0 && <div className="mt-1 text-[9px] font-bold text-slate-500"><Users className="mr-1 inline h-3 w-3" />{personSummary(assignees)}</div>}
             {!open && <div className="mt-1 text-[9px] font-bold text-emerald-700">Completed{action.completedByName ? ` by ${action.completedByName}` : ""}</div>}
@@ -1502,7 +1697,7 @@ export function TaskBoard({
           {open ? <Hand className="h-3.5 w-3.5" /> : <Check className="h-3.5 w-3.5" />}
         </div>
         <div className={`rounded-2xl border p-3 ${open ? "border-sky-200 bg-sky-50/65" : "border-emerald-100 bg-white"}`}>
-          <div className="text-[9px] font-black uppercase tracking-wide text-slate-400 lg:text-[10px]">{open ? resumed ? "Current action · resumed" : "Current action" : "Action complete"}</div>
+          <div className="flex items-center gap-1 text-[9px] font-black uppercase tracking-wide text-slate-400 lg:text-[10px]"><span>{open ? resumed ? "Current action · resumed" : "Current action" : "Action complete"}</span>{action.notification?.status === "sent" && <span className="inline-flex items-center gap-0.5 text-emerald-600" title={notificationSummary(action.notification)}><Bell className="h-2.5 w-2.5 fill-emerald-100" /><Check className="h-2.5 w-2.5" /></span>}</div>
           <div className="mt-1 whitespace-normal break-words text-sm font-black leading-snug text-[#102A43] lg:text-base">{action.text}</div>
           {assignees.length > 0 && <div className="mt-1 text-[10px] font-black text-sky-800"><Users className="mr-1 inline h-3 w-3" />{personSummary(assignees)}</div>}
           {open ? (
@@ -1552,6 +1747,10 @@ export function TaskBoard({
     const actions = card.actions || [];
     const need = currentNeed(card);
     const displayPeople = card.people?.length ? card.people : actionPeople(openAction);
+    const cardNotifyTarget = currentNotifyTarget(card);
+    const cardNotification = cardNotifyTarget?.notification;
+    const cardNotificationSent = cardNotification?.status === "sent";
+    const cardNotificationQueued = cardNotification?.status === "queued";
     const stageStyle = stage === "deciding"
       ? "border-violet-200"
       : stage === "action"
@@ -1580,6 +1779,29 @@ export function TaskBoard({
               {openDecision && !expanded && <div className="mt-1 text-[9px] font-bold text-slate-400 lg:text-[11px]">{voteTotal(openDecision)}{openDecision.eligibleCount ? ` of ${openDecision.eligibleCount}` : ""} responded</div>}
             </button>
             <div className="flex shrink-0 flex-col items-center gap-0.5">
+              {online && cardNotifyTarget && (
+                cardNotificationSent ? (
+                  <span
+                    className="relative rounded-full bg-emerald-50 p-1.5 text-emerald-700"
+                    title={notificationSummary(cardNotification)}
+                    aria-label={notificationSummary(cardNotification) || "Notified"}
+                  >
+                    <Bell className="h-3.5 w-3.5 fill-emerald-100" />
+                    <span className="absolute -right-0.5 -top-0.5 flex h-3 w-3 items-center justify-center rounded-full bg-emerald-600 text-white"><Check className="h-2 w-2" /></span>
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    className={`rounded-full p-1.5 ${cardNotificationQueued ? "cursor-wait bg-amber-50 text-amber-600" : "text-slate-400 hover:bg-amber-50 hover:text-amber-700"}`}
+                    onClick={() => openNotify(card)}
+                    disabled={cardNotificationQueued}
+                    aria-label={cardNotificationQueued ? "Notification is being sent" : `Notify organizers about ${cardNotifyTarget.label.toLowerCase()}`}
+                    title={cardNotificationQueued ? "Sending notification…" : "Notify organizers"}
+                  >
+                    <Bell className={`h-3.5 w-3.5 ${cardNotificationQueued ? "animate-pulse" : ""}`} />
+                  </button>
+                )
+              )}
               <button type="button" className="rounded-full p-1.5 text-slate-400 hover:bg-slate-50" onClick={() => openEditCard(card)} aria-label={`Edit ${card.title}`}><Pencil className="h-3.5 w-3.5" /></button>
               <button type="button" className="rounded-full p-1.5 text-slate-400 hover:bg-slate-50" onClick={() => toggleExpanded(card.id)} aria-label={expanded ? "Collapse topic" : "Expand topic"}>{expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}</button>
             </div>
@@ -1684,7 +1906,7 @@ export function TaskBoard({
                 {customBoardName && <p className="mt-0.5 truncate text-[11px] font-black text-slate-600 lg:text-[13px]">{customBoardName}</p>}
               </div>
               <div className="flex shrink-0 gap-1.5">
-                <Button type="button" variant="outline" className="h-9 w-9 rounded-2xl bg-white/80 p-0 lg:h-11 lg:w-11" onClick={() => { setBoardNameDraft(customBoardName || ""); setBoardSettingsOpen(true); }} aria-label="Board name"><Pencil className="h-4 w-4 lg:h-[18px] lg:w-[18px]" /></Button>
+                <Button type="button" variant="outline" className="h-9 w-9 rounded-2xl bg-white/80 p-0 lg:h-11 lg:w-11" onClick={() => { setNotifyError(""); setBoardNameDraft(customBoardName || ""); setBoardSettingsOpen(true); void getPhoneNotificationStatus().then(setPhoneStatus); }} aria-label="Board settings"><Pencil className="h-4 w-4 lg:h-[18px] lg:w-[18px]" /></Button>
                 <Button type="button" className="h-9 w-9 rounded-2xl p-0 font-black text-white lg:h-11 lg:w-11" style={{ backgroundColor: accent }} onClick={() => { resetNewTopic(); setNewTopicOpen(true); }} aria-label="New topic"><Plus className="h-4 w-4 lg:h-5 lg:w-5" /></Button>
               </div>
             </div>
@@ -1927,6 +2149,71 @@ export function TaskBoard({
         </DialogContent>
       </Dialog>
 
+      <Dialog open={Boolean(notifyCardId && notifyTarget)} onOpenChange={(open) => { if (!open) closeNotify(); }}>
+        <DialogContent className="fixed bottom-2 left-2 right-2 top-auto max-h-[90dvh] w-auto max-w-none translate-x-0 translate-y-0 overflow-y-auto rounded-[2rem] p-4 sm:bottom-auto sm:left-1/2 sm:right-auto sm:top-1/2 sm:w-full sm:max-w-md sm:-translate-x-1/2 sm:-translate-y-1/2 lg:max-w-lg lg:p-6" onOpenAutoFocus={(event) => event.preventDefault()}>
+          <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43] lg:text-xl">Notify organizers</DialogTitle></DialogHeader>
+          {notifyTarget && <div className="grid gap-4">
+            <div className="rounded-2xl bg-slate-50 px-3 py-3 ring-1 ring-slate-100">
+              <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">{notifyTarget.label}</div>
+              <div className="mt-1 whitespace-normal break-words text-sm font-black leading-snug text-[#102A43] lg:text-base">{notifyTarget.text}</div>
+              <div className="mt-1 text-[10px] font-semibold text-slate-500">One notification for this step. A future Decision or Action gets a new Bell.</div>
+            </div>
+
+            <div>
+              <Label>Who should be notified?</Label>
+              <div className="mt-1.5 flex rounded-2xl bg-slate-100 p-1">
+                <button type="button" className={`flex-1 rounded-xl px-3 py-2 text-xs font-black ${notifyRecipientMode === "all" ? "bg-white text-[#102A43] shadow-sm" : "text-slate-500"}`} onClick={() => setNotifyRecipientMode("all")}>All organizers</button>
+                <button type="button" className={`flex-1 rounded-xl px-3 py-2 text-xs font-black ${notifyRecipientMode === "selected" ? "bg-white text-[#102A43] shadow-sm" : "text-slate-500"}`} onClick={() => setNotifyRecipientMode("selected")}>Selected</button>
+              </div>
+              {notifyRecipientMode === "selected" && <div className="mt-2 flex flex-wrap gap-1.5">
+                {otherOrganizerPeople.map((person) => {
+                  const email = person.email!;
+                  const selected = notifyRecipientEmails.includes(email);
+                  return <button key={email} type="button" className={`rounded-full px-2.5 py-1.5 text-[11px] font-black ring-1 ${selected ? "bg-sky-50 text-sky-800 ring-sky-200" : "bg-white text-slate-500 ring-slate-200"}`} onClick={() => toggleNotifyEmail(email)}>{selected && <Check className="mr-1 inline h-3 w-3" />}{person.name}</button>;
+                })}
+              </div>}
+              {!otherOrganizerPeople.length && <div className="mt-2 text-[11px] font-semibold text-amber-700">No other signed-in organizers are available yet.</div>}
+            </div>
+
+            <div>
+              <Label>Send by</Label>
+              <div className="mt-1.5 grid grid-cols-2 gap-2">
+                <button type="button" className={`rounded-2xl border px-3 py-3 text-left transition ${notifyByEmail ? "border-violet-200 bg-violet-50 text-violet-800" : "border-slate-200 bg-white text-slate-500"}`} onClick={() => setNotifyByEmail((value) => !value)}>
+                  <Mail className="h-4 w-4" />
+                  <div className="mt-1 text-xs font-black">Email {notifyByEmail && <Check className="ml-1 inline h-3.5 w-3.5" />}</div>
+                  <div className="mt-0.5 text-[9px] font-semibold opacity-75">{notifyTarget.topicAlreadyNotified ? "Continues this topic’s email thread" : "Default · starts one thread for this topic"}</div>
+                </button>
+                <button type="button" className={`rounded-2xl border px-3 py-3 text-left transition ${notifyByPush ? "border-sky-200 bg-sky-50 text-sky-800" : "border-slate-200 bg-white text-slate-500"}`} onClick={() => setNotifyByPush((value) => !value)}>
+                  <Smartphone className="h-4 w-4" />
+                  <div className="mt-1 text-xs font-black">Phone {notifyByPush && <Check className="ml-1 inline h-3.5 w-3.5" />}</div>
+                  <div className="mt-0.5 text-[9px] font-semibold opacity-75">Only devices that opted in</div>
+                </button>
+              </div>
+              <div className="mt-2 flex items-center justify-between gap-2 rounded-xl bg-slate-50 px-2.5 py-2 text-[10px] font-bold text-slate-500">
+                <span>
+                  {phoneStatus === "enabled" ? "Phone alerts are enabled on this device."
+                    : phoneStatus === "blocked" ? "Phone alerts are blocked in this browser."
+                      : phoneStatus === "unsupported" ? "Phone alerts are not supported on this device/browser."
+                        : "Phone alerts are not enabled on this device yet."}
+                </span>
+                {phoneStatus === "available" && <button type="button" className="shrink-0 rounded-lg bg-white px-2 py-1 font-black text-sky-700 ring-1 ring-sky-100" disabled={phoneEnabling} onClick={() => void enablePhone()}>{phoneEnabling ? "Enabling…" : "Enable"}</button>}
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="notify-message">Message <span className="font-semibold text-slate-400">optional</span></Label>
+              <Textarea id="notify-message" value={notifyMessage} onChange={(event) => setNotifyMessage(event.target.value)} rows={2} maxLength={500} placeholder="Add a short note, or leave this blank." />
+            </div>
+
+            {notifyError && <div className="rounded-xl bg-red-50 px-3 py-2 text-[11px] font-bold text-red-700">{notifyError}</div>}
+
+            <Button type="button" className="h-11 rounded-2xl bg-[#102A43] font-black text-white lg:h-12 lg:text-base" disabled={notifySending || !notifyEmailsToSend.length || (!notifyByEmail && !notifyByPush)} onClick={() => void sendNotification()}>
+              <Bell className="mr-1.5 h-4 w-4" />{notifySending ? "Notifying…" : `Notify ${notifyEmailsToSend.length} organizer${notifyEmailsToSend.length === 1 ? "" : "s"}`}
+            </Button>
+          </div>}
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="fixed inset-x-2 bottom-2 top-auto w-auto max-w-none translate-x-0 translate-y-0 rounded-[2rem] p-4 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-md sm:-translate-x-1/2" onOpenAutoFocus={(event) => event.preventDefault()}>
           <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43]">Edit topic</DialogTitle></DialogHeader>
@@ -1944,10 +2231,26 @@ export function TaskBoard({
 
       <Dialog open={boardSettingsOpen} onOpenChange={setBoardSettingsOpen}>
         <DialogContent className="max-w-sm rounded-3xl" onOpenAutoFocus={(event) => event.preventDefault()}>
-          <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43]">Board name</DialogTitle></DialogHeader>
-          <div className="grid gap-3">
+          <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43]">Board settings</DialogTitle></DialogHeader>
+          <div className="grid gap-4">
             <div><Label htmlFor="board-name">Custom name <span className="font-semibold text-slate-400">optional</span></Label><Input id="board-name" value={boardNameDraft} onChange={(event) => setBoardNameDraft(event.target.value)} maxLength={80} placeholder="e.g. Club decisions" /></div>
-            <Button type="button" className="h-11 rounded-2xl font-black text-white" style={{ backgroundColor: accent }} disabled={saving} onClick={() => void saveBoardName()}>{saving ? "Saving…" : "Save"}</Button>
+            <div className="rounded-2xl bg-slate-50 p-3 ring-1 ring-slate-100">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 text-xs font-black text-[#102A43]"><Smartphone className="h-4 w-4 text-sky-700" />Phone notifications</div>
+                  <div className="mt-1 text-[10px] font-semibold leading-relaxed text-slate-500">
+                    {phoneStatus === "enabled" ? "Enabled on this device."
+                      : phoneStatus === "blocked" ? "Blocked in this browser's notification settings."
+                        : phoneStatus === "unsupported" ? "Not supported on this device/browser."
+                          : "Optional. Enable this device to receive organizer pings."}
+                  </div>
+                </div>
+                {phoneStatus === "available" && <button type="button" className="shrink-0 rounded-xl bg-white px-3 py-2 text-[11px] font-black text-sky-700 ring-1 ring-sky-100" disabled={phoneEnabling} onClick={() => void enablePhone()}>{phoneEnabling ? "Enabling…" : "Enable"}</button>}
+                {phoneStatus === "enabled" && <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-black text-emerald-700"><Check className="h-3 w-3" />On</span>}
+              </div>
+            </div>
+            {notifyError && <div className="rounded-xl bg-red-50 px-3 py-2 text-[11px] font-bold text-red-700">{notifyError}</div>}
+            <Button type="button" className="h-11 rounded-2xl font-black text-white" style={{ backgroundColor: accent }} disabled={saving} onClick={() => void saveBoardName()}>{saving ? "Saving…" : "Save name"}</Button>
           </div>
         </DialogContent>
       </Dialog>

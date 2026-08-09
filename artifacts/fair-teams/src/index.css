@@ -139,6 +139,13 @@
   body {
     @apply font-sans antialiased bg-background text-foreground;
   }
+
+  /* Example/placeholder copy helps before typing, then disappears as soon as the field is focused. */
+  input:focus::placeholder,
+  textarea:focus::placeholder {
+    color: transparent;
+    opacity: 0;
+  }
 }
 
 

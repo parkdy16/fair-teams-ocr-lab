@@ -73,6 +73,19 @@ export type TaskBoardPerson = {
   email?: string;
 };
 
+export type TaskBoardNotificationState = {
+  status: "queued" | "sent" | "failed";
+  requestId?: string;
+  sentAt?: number;
+  sentByName?: string;
+  sentByEmail?: string;
+  recipientEmails?: string[];
+  channels?: Array<"email" | "push">;
+  emailQueuedCount?: number;
+  pushTargetCount?: number;
+  message?: string;
+};
+
 export type TaskBoardVoteOption = {
   id: string;
   label: string;
@@ -119,6 +132,7 @@ export type TaskBoardVote = {
   closedAt?: number;
   createdByName?: string;
   closedByName?: string;
+  notification?: TaskBoardNotificationState;
 };
 
 export type TaskBoardLink = {
@@ -142,6 +156,7 @@ export type TaskBoardActionItem = {
   completedAt?: number;
   completedByName?: string;
   completedByEmail?: string;
+  notification?: TaskBoardNotificationState;
 };
 
 export type TaskBoardCard = {
@@ -173,6 +188,7 @@ export type TaskBoardCard = {
   lastMovedByName?: string;
   activities: TaskBoardActivity[];
   vote?: TaskBoardVote;
+  topicNotification?: TaskBoardNotificationState;
 };
 
 export type TaskBoardMeta = {
@@ -273,6 +289,28 @@ function parseActivities(value: unknown): TaskBoardActivity[] {
       toColumnName: row.toColumnName ? String(row.toColumnName) : undefined,
     };
   });
+}
+
+function parseNotification(value: unknown): TaskBoardNotificationState | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const row = value as Record<string, unknown>;
+  const rawStatus = String(row.status || "");
+  if (!["queued", "sent", "failed"].includes(rawStatus)) return undefined;
+  const channels = Array.isArray(row.channels)
+    ? row.channels.map(String).filter((channel): channel is "email" | "push" => channel === "email" || channel === "push")
+    : [];
+  return {
+    status: rawStatus as TaskBoardNotificationState["status"],
+    requestId: row.requestId ? String(row.requestId) : undefined,
+    sentAt: toMillis(row.sentAt) || toMillis(row.sentAtIso),
+    sentByName: row.sentByName ? String(row.sentByName) : undefined,
+    sentByEmail: row.sentByEmail ? String(row.sentByEmail) : undefined,
+    recipientEmails: Array.isArray(row.recipientEmails) ? row.recipientEmails.map(String).filter(Boolean) : undefined,
+    channels,
+    emailQueuedCount: Number(row.emailQueuedCount || 0) || undefined,
+    pushTargetCount: Number(row.pushTargetCount || 0) || undefined,
+    message: row.message ? String(row.message) : undefined,
+  };
 }
 
 function parseVote(value: unknown, fallbackId = "decision"): TaskBoardVote | undefined {
@@ -405,6 +443,7 @@ function parseVote(value: unknown, fallbackId = "decision"): TaskBoardVote | und
     closedAt: toMillis(row.closedAt),
     createdByName: row.createdByName ? String(row.createdByName) : undefined,
     closedByName: row.closedByName ? String(row.closedByName) : undefined,
+    notification: parseNotification(row.notification),
   };
 }
 
@@ -449,6 +488,7 @@ function parseActions(value: unknown): TaskBoardActionItem[] {
       completedAt: toMillis(row.completedAt),
       completedByName: row.completedByName ? String(row.completedByName) : undefined,
       completedByEmail: row.completedByEmail ? String(row.completedByEmail) : undefined,
+      notification: parseNotification(row.notification),
     };
   }).filter((action) => action.text);
 }
@@ -508,6 +548,7 @@ function parseCard(id: string, data: DocumentData): TaskBoardCard {
     lastMovedByName: data.lastMovedByName ? String(data.lastMovedByName) : undefined,
     activities: parseActivities(data.activities),
     vote: latestDecision,
+    topicNotification: parseNotification(data.topicNotification),
   };
 }
 
@@ -579,6 +620,23 @@ function activityPayload(activity: TaskBoardActivity) {
   };
 }
 
+function notificationPayload(notification?: TaskBoardNotificationState) {
+  if (!notification) return null;
+  return {
+    status: notification.status,
+    requestId: notification.requestId || null,
+    sentAt: notification.sentAt || null,
+    sentAtIso: notification.sentAt ? new Date(notification.sentAt).toISOString() : null,
+    sentByName: notification.sentByName || null,
+    sentByEmail: notification.sentByEmail || null,
+    recipientEmails: notification.recipientEmails || [],
+    channels: notification.channels || [],
+    emailQueuedCount: notification.emailQueuedCount || 0,
+    pushTargetCount: notification.pushTargetCount || 0,
+    message: notification.message?.trim() || null,
+  };
+}
+
 function votePayload(vote?: TaskBoardVote) {
   if (!vote) return null;
   const questions = vote.questions?.length
@@ -631,6 +689,7 @@ function votePayload(vote?: TaskBoardVote) {
     closedAt: vote.closedAt || null,
     createdByName: vote.createdByName || null,
     closedByName: vote.closedByName || null,
+    notification: notificationPayload(vote.notification),
     options: (questions[0]?.options || vote.options).map((option) => ({ id: option.id, label: option.label.trim(), count: option.count || 0 })),
   };
 }
@@ -658,6 +717,7 @@ function actionPayload(action: TaskBoardActionItem) {
     completedAt: action.completedAt || null,
     completedByName: action.completedByName || null,
     completedByEmail: action.completedByEmail || null,
+    notification: notificationPayload(action.notification),
   };
 }
 
@@ -694,6 +754,7 @@ export async function saveTaskBoardCard(scopeId: string, card: TaskBoardCard): P
     lastMovedAtIso: card.lastMovedAt ? new Date(card.lastMovedAt).toISOString() : null,
     lastMovedByName: card.lastMovedByName || null,
     activities: card.activities.slice(-30).map(activityPayload),
+    topicNotification: notificationPayload(card.topicNotification),
   }, { merge: true });
 }
 

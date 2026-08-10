@@ -62,6 +62,8 @@ export type TaskBoardDecisionQuestion = {
   maxSelections?: number;
   sourcePlayerIds?: string[];
   scheduleRole?: "time" | "location";
+  itemPrice?: string;
+  itemUrl?: string;
 };
 
 export type TaskBoardVoteAnswer = {
@@ -91,6 +93,8 @@ export type TaskBoardVoteOption = {
   id: string;
   label: string;
   count: number;
+  price?: string;
+  url?: string;
 };
 
 export type TaskBoardVoteBallot = {
@@ -123,6 +127,9 @@ export type TaskBoardVote = {
   scheduleTimeValues?: string[];
   scheduleLocationOptions?: string[];
   scheduleParticipantMode?: "all" | "selected";
+  participantMode?: "all" | "selected";
+  equipmentIntent?: "buy" | "replace";
+  equipmentVoteMode?: "rate" | "choose";
   finalizedTime?: string;
   finalizedLocation?: string;
   meetingUrl?: string;
@@ -352,6 +359,8 @@ function parseVote(value: unknown, fallbackId = "decision"): TaskBoardVote | und
       id: String(option.id || `option-${index}`),
       label: String(option.label || `Option ${index + 1}`),
       count: Number(option.count || 0),
+      price: option.price ? String(option.price).trim() : undefined,
+      url: option.url ? String(option.url).trim() : undefined,
     };
   }).filter((option) => option.label.trim());
 
@@ -383,6 +392,8 @@ function parseVote(value: unknown, fallbackId = "decision"): TaskBoardVote | und
           id: String(option.id || `q${questionIndex}-option-${optionIndex}`),
           label: String(option.label || `Option ${optionIndex + 1}`),
           count: Number(option.count || 0),
+          price: option.price ? String(option.price).trim() : undefined,
+          url: option.url ? String(option.url).trim() : undefined,
         };
       }).filter((option) => option.label.trim());
       const rawQuestionKind = String(q.kind || "");
@@ -397,6 +408,8 @@ function parseVote(value: unknown, fallbackId = "decision"): TaskBoardVote | und
         maxSelections: Number(q.maxSelections || 0) || undefined,
         sourcePlayerIds: Array.isArray(q.sourcePlayerIds) ? q.sourcePlayerIds.map(String).filter(Boolean) : undefined,
         scheduleRole: q.scheduleRole === "time" || q.scheduleRole === "location" ? q.scheduleRole as TaskBoardDecisionQuestion["scheduleRole"] : undefined,
+        itemPrice: q.itemPrice ? String(q.itemPrice).trim() : undefined,
+        itemUrl: q.itemUrl ? String(q.itemUrl).trim() : undefined,
       };
     }).filter((q) => q.text && q.options.length >= 2)
     : [];
@@ -455,6 +468,9 @@ function parseVote(value: unknown, fallbackId = "decision"): TaskBoardVote | und
     scheduleTimeValues: Array.isArray(row.scheduleTimeValues) ? row.scheduleTimeValues.map(String).filter(Boolean) : undefined,
     scheduleLocationOptions: Array.isArray(row.scheduleLocationOptions) ? row.scheduleLocationOptions.map(String).filter(Boolean) : undefined,
     scheduleParticipantMode: row.scheduleParticipantMode === "all" || row.scheduleParticipantMode === "selected" ? row.scheduleParticipantMode : undefined,
+    participantMode: row.participantMode === "all" || row.participantMode === "selected" ? row.participantMode : undefined,
+    equipmentIntent: row.equipmentIntent === "buy" || row.equipmentIntent === "replace" ? row.equipmentIntent : undefined,
+    equipmentVoteMode: row.equipmentVoteMode === "rate" || row.equipmentVoteMode === "choose" ? row.equipmentVoteMode : undefined,
     finalizedTime: row.finalizedTime ? String(row.finalizedTime) : undefined,
     finalizedLocation: row.finalizedLocation ? String(row.finalizedLocation) : undefined,
     meetingUrl: row.meetingUrl ? String(row.meetingUrl) : undefined,
@@ -722,6 +738,9 @@ function votePayload(vote?: TaskBoardVote) {
     scheduleTimeValues: vote.scheduleTimeValues || [],
     scheduleLocationOptions: vote.scheduleLocationOptions || [],
     scheduleParticipantMode: vote.scheduleParticipantMode || null,
+    participantMode: vote.participantMode || null,
+    equipmentIntent: vote.equipmentIntent || null,
+    equipmentVoteMode: vote.equipmentVoteMode || null,
     finalizedTime: vote.finalizedTime || null,
     finalizedLocation: vote.finalizedLocation || null,
     meetingUrl: vote.meetingUrl?.trim() || null,
@@ -737,7 +756,15 @@ function votePayload(vote?: TaskBoardVote) {
       maxSelections: question.maxSelections || null,
       sourcePlayerIds: question.sourcePlayerIds || [],
       scheduleRole: question.scheduleRole || null,
-      options: question.options.map((option) => ({ id: option.id, label: option.label.trim(), count: option.count || 0 })),
+      itemPrice: question.itemPrice?.trim() || null,
+      itemUrl: question.itemUrl?.trim() || null,
+      options: question.options.map((option) => ({
+        id: option.id,
+        label: option.label.trim(),
+        count: option.count || 0,
+        price: option.price?.trim() || null,
+        url: option.url?.trim() || null,
+      })),
     })),
     anonymous: vote.anonymous,
     hideParticipationUntilClosed: vote.hideParticipationUntilClosed,

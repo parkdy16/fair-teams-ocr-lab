@@ -361,7 +361,7 @@ function formatTodayStartDateLabel(date = new Date()) {
   return `${weekday} · ${month} ${day}`;
 }
 
-const APP_TAB_VALUES = ["players", "today", "teams", "club"] as const;
+const APP_TAB_VALUES = ["players", "teams", "club"] as const;
 type AppTab = (typeof APP_TAB_VALUES)[number];
 
 function isAppTab(value: string): value is AppTab {
@@ -417,7 +417,8 @@ function App() {
     };
   }, [showSplash]);
 
-  const [activeTab, setActiveTab] = useState<AppTab>("today");
+  const [activeTab, setActiveTab] = useState<AppTab>("teams");
+  const [teamsWorkspaceView, setTeamsWorkspaceView] = useState<"setup" | "result">("setup");
   const [sessionTeamCount, setSessionTeamCount] = useState(2);
   const [tutorialStep, setTutorialStep] = useState<string | null>(null);
   const [tutorialPlayerId, setTutorialPlayerId] = useState<string | null>(null);
@@ -436,10 +437,9 @@ function App() {
     "advanced-edit": { title: "Advanced Edit", body: "Open Advanced Edit. It is optional, but useful when you know a player well." },
     "save-edit": { title: "Save the profile", body: "You have seen the detailed controls. Save the player profile." },
     "flip-card": { title: "See the other side", body: "Tap Heung-min’s card to flip it and see more player information." },
-    "today-tab": { title: "Session", body: "Open Session to choose who is playing." },
+    "today-tab": { title: "Teams", body: "Open Teams to choose who is playing today." },
     "select-today": { title: "Who is playing?", body: "Select Heung-min for this Session." },
-    "teams-tab": { title: "Make teams", body: "Open the Teams tab." },
-    "field-size": { title: "Choose the pitch", body: "Open Field Size and choose any size." },
+
     "generate": { title: "Create the teams", body: "Tap Generate. Stripes will balance the selected players." },
     "magic-wait": { title: "Balancing the session…", body: "Stripes is comparing the selected players and building even teams." },
     "magic-reveal": { title: "That’s the magic", body: "Each stripe is a team — balanced and ready to play." },
@@ -457,7 +457,7 @@ function App() {
   const [clubBackTargetOpen, setClubBackTargetOpen] = useState(false);
   const [openPairingRulesToken, setOpenPairingRulesToken] = useState(0);
   const [externalAddPlayerRequest, setExternalAddPlayerRequest] = useState<{ token: number; name?: string } | null>(null);
-  const activeTabRef = useRef<AppTab>("today");
+  const activeTabRef = useRef<AppTab>("teams");
   const tabHistoryRef = useRef<AppTab[]>(["today"]);
   const restoringTabFromBackRef = useRef(false);
   const fairTeamsBackTrapArmedRef = useRef(false);
@@ -1180,7 +1180,7 @@ function App() {
   };
 
   const shouldShowTodayStartHeader =
-    activeTab === "today" && rosters.length > 0 && !todayRosterChosen;
+    activeTab === "teams" && teamsWorkspaceView === "setup" && rosters.length > 0 && !todayRosterChosen;
   const headerDisplayName = shouldShowTodayStartHeader
     ? formatTodayStartDateLabel()
     : activeRosterName || "Stripes";
@@ -1252,6 +1252,8 @@ function App() {
 
   const prepareTeamsFromAi = (teamCount: number, options: { autoGenerate?: boolean; shuffleEquals?: boolean } = {}) => {
     const safeTeamCount = Math.min(6, Math.max(2, Math.round(teamCount)));
+    setSessionTeamCount(safeTeamCount);
+    setTeamsWorkspaceView(options.autoGenerate ? "result" : "setup");
     setAiTeamSetup({
       token: Date.now(),
       teamCount: safeTeamCount,
@@ -1503,18 +1505,17 @@ function App() {
       const rawArea = String(action.targetArea || "").trim().toLowerCase();
       const targetTab = rawArea.includes("roster") || rawArea.includes("player")
         ? "players"
-        : rawArea.includes("today") || rawArea.includes("session") || rawArea.includes("attendance")
-          ? "today"
-          : rawArea.includes("team")
-            ? "teams"
-            : rawArea.includes("club") || rawArea.includes("organizer") || rawArea.includes("equipment") || rawArea.includes("note")
-              ? "club"
-              : null;
+        : rawArea.includes("today") || rawArea.includes("session") || rawArea.includes("attendance") || rawArea.includes("team")
+          ? "teams"
+          : rawArea.includes("club") || rawArea.includes("organizer") || rawArea.includes("equipment") || rawArea.includes("note")
+            ? "club"
+            : null;
       if (!targetTab || !isAppTab(targetTab)) {
         throw new Error("I understood an open-area request, but I could not tell which Stripes tab to open.");
       }
+      if (targetTab === "teams" && (rawArea.includes("today") || rawArea.includes("session") || rawArea.includes("attendance"))) setTeamsWorkspaceView("setup");
       setActiveTab(targetTab);
-      return `Opened ${targetTab === "players" ? "Roster" : targetTab === "today" ? "Session" : targetTab.charAt(0).toUpperCase() + targetTab.slice(1)}.`;
+      return `Opened ${targetTab === "players" ? "Roster" : targetTab === "teams" ? "Teams" : "Club"}.`;
     }
 
     throw new Error("Stripes understands this, but it is not wired to apply yet.");
@@ -1840,7 +1841,8 @@ function App() {
         return { rosters: remaining, activeRosterId: remaining[0]?.id || current.activeRosterId };
       });
       setLeaveSharedConfirmOpen(false);
-      setActiveTab("today");
+      setTeamsWorkspaceView("setup");
+      setActiveTab("teams");
       setTodayRosterChosen(false);
       showRosterToolsNotice(
         "Left shared roster",
@@ -3364,7 +3366,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
     rosterFilesOpen ||
     clubBackTargetOpen ||
     tabHistoryRef.current.length > 1 ||
-    activeTab !== "today";
+    activeTab !== "teams";
 
   useEffect(() => {
     activeTabRef.current = activeTab;
@@ -3514,7 +3516,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
   const handleTutorialBack = () => {
     if (!tutorialStep) return;
     if (tutorialStep === "today-tab") { setActiveTab("players"); setTutorialStep("flip-card"); return; }
-    if (tutorialStep === "teams-tab") { setActiveTab("today"); setTutorialStep("select-today"); return; }
+    if (tutorialStep === "generate") { setTeamsWorkspaceView("setup"); setActiveTab("teams"); setTutorialStep("select-today"); return; }
     if (tutorialStep === "club-tab") { setActiveTab("teams"); setTutorialStep("magic-reveal"); return; }
     if (tutorialStep === "club-intro") { setTutorialStep("club-tab"); return; }
     if (tutorialStep === "roster-return") { setActiveTab("club"); setTutorialStep("help-question"); return; }
@@ -3522,7 +3524,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
     if (tutorialStep === "create-roster") { setRosterFilesOpen(false); setTutorialStep("settings-button"); return; }
   };
 
-  const tutorialCanGoBack = ["today-tab", "teams-tab", "club-tab", "club-intro", "roster-return", "settings-button", "create-roster"].includes(tutorialStep || "");
+  const tutorialCanGoBack = ["today-tab", "generate", "club-tab", "club-intro", "roster-return", "settings-button", "create-roster"].includes(tutorialStep || "");
 
   const handleTutorialAction = (action: string, playerId?: string) => {
     if (!tutorialStep) return;
@@ -3533,8 +3535,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
     else if (action === "advanced-opened" && tutorialStep === "advanced-edit") setTutorialStep("save-edit");
     else if (action === "edit-saved" && tutorialStep === "save-edit") setTutorialStep("flip-card");
     else if (action === "card-flipped" && tutorialStep === "flip-card") setTutorialStep("today-tab");
-    else if (action === "today-selected" && tutorialStep === "select-today") setTutorialStep("teams-tab");
-    else if (action === "field-size-changed" && tutorialStep === "field-size") setTutorialStep("generate");
+    else if (action === "today-selected" && tutorialStep === "select-today") setTutorialStep("generate");
     else if (action === "generated" && tutorialStep === "generate") {
       setTutorialStep("magic-wait");
       window.setTimeout(() => setTutorialStep("magic-reveal"), 1450);
@@ -3573,8 +3574,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
         value={activeTab}
         onValueChange={(value) => {
           if (!isAppTab(value)) return;
-          if (tutorialStep === "today-tab" && value === "today") { setActiveTab("today"); setTutorialStep("select-today"); return; }
-          if (tutorialStep === "teams-tab" && value === "teams") { setActiveTab("teams"); setTutorialStep("field-size"); return; }
+          if (tutorialStep === "today-tab" && value === "teams") { setTeamsWorkspaceView("setup"); setActiveTab("teams"); setTutorialStep("select-today"); return; }
           if (tutorialStep === "club-tab" && value === "club") {
             setActiveTab("club");
             replacePlayers([]);
@@ -3616,14 +3616,13 @@ They will no longer be able to open or edit this shared roster unless it is shar
             <TabsList className="mt-6 flex h-auto w-full flex-col gap-1.5 rounded-none border-0 bg-transparent p-0 shadow-none">
               {([
                 ["players", "Roster", Users],
-                ["today", "Session", Check],
                 ["teams", "Teams", RefreshCw],
                 ["club", "Club", Building2],
               ] as const).map(([value, label, Icon]) => (
                 <TabsTrigger
                   key={value}
                   value={value}
-                  className={`fairteams-tab-trigger fairteams-desktop-nav-trigger flex h-[3.25rem] w-full justify-start gap-3.5 rounded-xl border border-transparent px-3.5 text-[16px] font-black text-slate-500 shadow-none transition-colors hover:bg-slate-50 data-[state=active]:border-slate-200 data-[state=active]:bg-slate-50 data-[state=active]:text-[#102A43] data-[state=active]:shadow-none ${(tutorialStep === "today-tab" && value === "today") || (tutorialStep === "teams-tab" && value === "teams") || (tutorialStep === "club-tab" && value === "club") || (tutorialStep === "roster-return" && value === "players") ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
+                  className={`fairteams-tab-trigger fairteams-desktop-nav-trigger flex h-[3.25rem] w-full justify-start gap-3.5 rounded-xl border border-transparent px-3.5 text-[16px] font-black text-slate-500 shadow-none transition-colors hover:bg-slate-50 data-[state=active]:border-slate-200 data-[state=active]:bg-slate-50 data-[state=active]:text-[#102A43] data-[state=active]:shadow-none ${(tutorialStep === "today-tab" && value === "teams") || (tutorialStep === "club-tab" && value === "club") || (tutorialStep === "roster-return" && value === "players") ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
                 >
                   {value === "teams" ? (
                     <TeamStripesIcon className="h-6 w-6 shrink-0" />
@@ -3650,7 +3649,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                     </span>
                   )}
                 </div>
-                <div className="mt-0.5 text-xs font-bold text-slate-400">{activeTab === "players" ? "Roster" : activeTab === "today" ? "Session" : activeTab === "teams" ? "Teams" : "Club"}</div>
+                <div className="mt-0.5 text-xs font-bold text-slate-400">{activeTab === "players" ? "Roster" : activeTab === "teams" ? "Teams" : "Club"}</div>
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-2">
@@ -3845,8 +3844,8 @@ They will no longer be able to open or edit this shared roster unless it is shar
           </div>
         )}
 
-        <div className={`flex-1 overflow-y-auto p-4 md:p-5 lg:px-7 lg:py-6 ${shouldShowTodayStartHeader ? "pb-6 md:pb-6" : activeTab === "today" && !tutorialActive ? "pb-36 md:pb-36 lg:pb-6" : "pb-20 md:pb-20 lg:pb-6"}`} style={{ WebkitOverflowScrolling: "touch" }}>
-          <div className={`mx-auto flex min-h-[calc(100dvh-116px)] w-full flex-col ${shouldShowTodayStartHeader ? "lg:max-w-6xl lg:justify-center" : activeTab === "players" ? "lg:max-w-5xl" : activeTab === "today" ? "lg:max-w-6xl" : activeTab === "teams" ? "lg:max-w-none" : "lg:mx-0 lg:max-w-none"}`}>
+        <div className={`flex-1 overflow-y-auto p-4 md:p-5 lg:px-7 lg:py-6 ${shouldShowTodayStartHeader ? "pb-6 md:pb-6" : activeTab === "teams" && teamsWorkspaceView === "setup" ? "pb-36 md:pb-36 lg:pb-6" : "pb-20 md:pb-20 lg:pb-6"}`} style={{ WebkitOverflowScrolling: "touch" }}>
+          <div className={`mx-auto flex min-h-[calc(100dvh-116px)] w-full flex-col ${shouldShowTodayStartHeader ? "lg:max-w-6xl lg:justify-center" : activeTab === "players" ? "lg:max-w-5xl" : activeTab === "teams" && teamsWorkspaceView === "setup" ? "lg:max-w-6xl" : activeTab === "teams" ? "lg:max-w-none" : "lg:mx-0 lg:max-w-none"}`}>
             <TabsContent
               value="players"
               className="fairteams-tab-panel m-0 data-[state=active]:animate-in data-[state=active]:fade-in-50"
@@ -3858,7 +3857,8 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 setPairingRules={replacePairingRules}
                 onScreenshotImport={() => {
                   setOcrImportContext("roster");
-                  setActiveTab("today");
+                  setTeamsWorkspaceView("setup");
+                  setActiveTab("teams");
                   setTodayOcrOpenToken((token) => token + 1);
                 }}
                 reviewPlayerId={reviewAutoOpenPlayerId}
@@ -3878,52 +3878,53 @@ They will no longer be able to open or edit this shared roster unless it is shar
               />
             </TabsContent>
             <TabsContent
-              value="today"
-              className="fairteams-tab-panel m-0 data-[state=active]:animate-in data-[state=active]:fade-in-50"
-            >
-              <TodayTab
-                players={players}
-                setPlayers={replacePlayers}
-                themeColor={headerColor}
-                rosterChoices={rosters}
-                activeRosterId={activeRosterId}
-                onChooseRoster={switchRoster}
-                todayRosterChosen={todayRosterChosen}
-                onTodayRosterChosen={() => setTodayRosterChosen(true)}
-                onChooseEmptyRoster={() => setActiveTab("players")}
-                onOpenRosterPicker={() => setRosterPickerOpen(true)}
-                tutorialTargetPlayerId={tutorialStep === "select-today" ? tutorialPlayerId : null}
-                onTutorialSelected={(playerId) => handleTutorialAction("today-selected", playerId)}
-                openOcrToken={todayOcrOpenToken}
-                ocrImportContext={ocrImportContext}
-                onOcrImportContextChange={setOcrImportContext}
-                onOcrOpenHandled={() => setTodayOcrOpenToken(0)}
-                onAddPlayerManually={() => setActiveTab("players")}
-                onReviewNewPlayers={(playerIds) => {
-                  if (!playerIds.length) return;
-                  setActiveTab("players");
-                  startReviewPlayerQueue(playerIds);
-                }}
-              />
-            </TabsContent>
-            <TabsContent
               value="teams"
-              className="fairteams-tab-panel m-0 data-[state=active]:animate-in data-[state=active]:fade-in-50"
+              forceMount
+              className={`fairteams-tab-panel m-0 ${activeTab === "teams" ? "block" : "hidden"}`}
             >
-              <TeamsTab
-                players={players}
-                pairingRules={pairingRules}
-                isSharedRoster={activeRosterIsFirebaseShared}
-                sharedRosterId={activeFirebaseSource?.firebaseRosterId}
-                onOpenClubRatings={() => setActiveTab("club")}
-                aiTeamSetupToken={aiTeamSetup.token}
-                aiTeamCount={aiTeamSetup.teamCount}
-                aiAutoGenerate={Boolean(aiTeamSetup.autoGenerate)}
-                aiShuffleEquals={Boolean(aiTeamSetup.shuffleEquals)}
-                onAiTeamStateChange={setAiTeamsState}
-                tutorialStep={tutorialStep}
-                onTutorialAction={handleTutorialAction}
-              />
+              <div className={teamsWorkspaceView === "setup" ? "block" : "hidden"}>
+                <TodayTab
+                  players={players}
+                  setPlayers={replacePlayers}
+                  themeColor={headerColor}
+                  rosterChoices={rosters}
+                  activeRosterId={activeRosterId}
+                  onChooseRoster={switchRoster}
+                  todayRosterChosen={todayRosterChosen}
+                  onTodayRosterChosen={() => setTodayRosterChosen(true)}
+                  onChooseEmptyRoster={() => setActiveTab("players")}
+                  onOpenRosterPicker={() => setRosterPickerOpen(true)}
+                  tutorialTargetPlayerId={tutorialStep === "select-today" ? tutorialPlayerId : null}
+                  onTutorialSelected={(playerId) => handleTutorialAction("today-selected", playerId)}
+                  openOcrToken={todayOcrOpenToken}
+                  ocrImportContext={ocrImportContext}
+                  onOcrImportContextChange={setOcrImportContext}
+                  onOcrOpenHandled={() => setTodayOcrOpenToken(0)}
+                  onAddPlayerManually={() => setActiveTab("players")}
+                  onReviewNewPlayers={(playerIds) => {
+                    if (!playerIds.length) return;
+                    setActiveTab("players");
+                    startReviewPlayerQueue(playerIds);
+                  }}
+                />
+              </div>
+              <div className={teamsWorkspaceView === "result" ? "block" : "hidden"}>
+                <TeamsTab
+                  players={players}
+                  pairingRules={pairingRules}
+                  isSharedRoster={activeRosterIsFirebaseShared}
+                  sharedRosterId={activeFirebaseSource?.firebaseRosterId}
+                  onOpenClubRatings={() => setActiveTab("club")}
+                  onEditPlayers={() => setTeamsWorkspaceView("setup")}
+                  aiTeamSetupToken={aiTeamSetup.token}
+                  aiTeamCount={aiTeamSetup.teamCount}
+                  aiAutoGenerate={Boolean(aiTeamSetup.autoGenerate)}
+                  aiShuffleEquals={Boolean(aiTeamSetup.shuffleEquals)}
+                  onAiTeamStateChange={setAiTeamsState}
+                  tutorialStep={tutorialStep}
+                  onTutorialAction={handleTutorialAction}
+                />
+              </div>
             </TabsContent>
             <TabsContent
               value="club"
@@ -3957,7 +3958,8 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 onApplyAiSmartCommandAction={applyAiSmartCommandActionFromApp}
                 onOpenTodayFromAi={() => {
                   setTodayRosterChosen(true);
-                  setActiveTab("today");
+                  setTeamsWorkspaceView("setup");
+                  setActiveTab("teams");
                 }}
                 tutorialStep={tutorialStep}
                 onTutorialAction={handleTutorialAction}
@@ -3989,15 +3991,15 @@ They will no longer be able to open or edit this shared roster unless it is shar
 
         {!shouldShowTodayStartHeader && (
           <div className="fixed inset-x-0 bottom-0 z-40 mx-auto w-full max-w-md animate-in fade-in-0 slide-in-from-bottom-2 duration-200 border-t border-slate-200 bg-white/95 px-4 pb-[max(0.65rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-4px_14px_rgba(15,23,42,0.035)] backdrop-blur md:max-w-3xl lg:hidden">
-            {activeTab === "today" && !tutorialActive && (
-              <div className="mx-auto mb-2 flex w-full max-w-md items-stretch gap-2">
+            {activeTab === "teams" && teamsWorkspaceView === "setup" && (
+              <div className="stripes-generate-dock mx-auto mb-2 flex w-full max-w-md items-stretch gap-2 rounded-2xl p-1">
                 <label className="relative block h-12 w-[68px] shrink-0" title="Number of teams">
                   <span className="pointer-events-none absolute left-0 right-0 top-1 text-center text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">Teams</span>
                   <select
                     aria-label="Number of teams"
                     value={sessionTeamCount}
                     onChange={(event) => setSessionTeamCount(Number(event.target.value))}
-                    className="h-12 w-full rounded-xl border border-slate-200 bg-white px-2 pb-0.5 pt-3 text-center text-[19px] font-black leading-none text-[#102A43] shadow-sm outline-none transition active:scale-[0.98] focus:border-slate-300 focus:ring-2 focus:ring-slate-200"
+                    className="stripes-team-count h-12 w-full rounded-xl border border-slate-200 bg-white px-2 pb-0.5 pt-3 text-center text-[19px] font-black leading-none text-[#102A43] shadow-sm outline-none transition active:scale-[0.98] focus:border-slate-300 focus:ring-2 focus:ring-slate-200"
                     data-testid="session-team-count"
                   >
                     {[2, 3, 4, 5, 6].map((count) => (
@@ -4007,9 +4009,9 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 </label>
                 <button
                   type="button"
-                  onClick={() => prepareTeamsFromAi(sessionTeamCount, { autoGenerate: true })}
+                  onClick={() => { prepareTeamsFromAi(sessionTeamCount, { autoGenerate: true }); if (tutorialStep === "generate") handleTutorialAction("generated"); }}
                   disabled={players.filter((player) => player.attending).length < 2}
-                  className="flex h-12 min-w-0 flex-1 items-center justify-center rounded-xl bg-[#102A43] px-4 text-[14px] font-black text-white shadow-sm transition active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+                  className={`stripes-generate-button flex h-12 min-w-0 flex-1 items-center justify-center rounded-xl px-4 text-[14px] font-black text-white transition active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 ${tutorialStep === "generate" ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
                   title={players.filter((player) => player.attending).length < 2 ? "Select at least 2 players" : `Generate ${sessionTeamCount} teams`}
                   data-testid="session-generate-teams"
                 >
@@ -4017,7 +4019,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 </button>
               </div>
             )}
-            <TabsList className="mx-auto grid h-[50px] w-full max-w-md grid-cols-4 gap-1 rounded-2xl border border-slate-200/70 bg-white p-1.5 shadow-sm">
+            <TabsList className="mx-auto grid h-[50px] w-full max-w-md grid-cols-3 gap-1 rounded-2xl border border-slate-200/70 bg-white p-1.5 shadow-sm">
               <TabsTrigger
                 value="players"
                 className={`fairteams-tab-trigger ${tutorialStep === "roster-return" ? "fairteams-tutorial-pulse relative z-[82]" : ""} fairteams-footer-text-tab flex h-full items-center justify-center rounded-xl text-slate-500 transition-all`}
@@ -4025,14 +4027,8 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 <span className="text-[12px] font-semibold leading-none tracking-tight">Roster</span>
               </TabsTrigger>
               <TabsTrigger
-                value="today"
-                className={`fairteams-tab-trigger ${tutorialStep === "today-tab" ? "fairteams-tutorial-pulse relative z-[82]" : ""} fairteams-footer-text-tab flex h-full items-center justify-center rounded-xl text-slate-500 transition-all`}
-              >
-                <span className="text-[12px] font-semibold leading-none tracking-tight">Session</span>
-              </TabsTrigger>
-              <TabsTrigger
                 value="teams"
-                className={`fairteams-tab-trigger ${tutorialStep === "teams-tab" ? "fairteams-tutorial-pulse relative z-[82]" : ""} fairteams-footer-text-tab flex h-full items-center justify-center rounded-xl text-slate-500 transition-all`}
+                className={`fairteams-tab-trigger ${tutorialStep === "today-tab" ? "fairteams-tutorial-pulse relative z-[82]" : ""} fairteams-footer-text-tab flex h-full items-center justify-center rounded-xl text-slate-500 transition-all`}
               >
                 <span className="inline-flex items-center gap-1 text-[12px] font-semibold leading-none tracking-tight"><TeamStripesIcon className="h-3.5 w-3.5" /> Teams</span>
               </TabsTrigger>
@@ -4058,20 +4054,18 @@ They will no longer be able to open or edit this shared roster unless it is shar
           "flip-card": 7,
           "today-tab": 8,
           "select-today": 9,
-          "teams-tab": 10,
-          "field-size": 11,
-          "generate": 12,
-          "magic-wait": 13,
-          "magic-reveal": 13,
-          "club-tab": 14,
-          "club-intro": 15,
-          "help-question": 16,
-          "roster-return": 17,
-          "settings-button": 18,
-          "create-roster": 19,
-          "recap": 19,
+          "generate": 10,
+          "magic-wait": 11,
+          "magic-reveal": 11,
+          "club-tab": 12,
+          "club-intro": 13,
+          "help-question": 14,
+          "roster-return": 15,
+          "settings-button": 16,
+          "create-roster": 17,
+          "recap": 18,
         };
-        const tutorialTotal = 19;
+        const tutorialTotal = 18;
         const currentNumber = tutorialProgress[tutorialStep] ?? 1;
         const largeStep = ["magic-wait", "magic-reveal", "club-intro", "recap"].includes(tutorialStep);
         const coachPlacement: Record<string, string> = {
@@ -4084,9 +4078,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
           "flip-card": "top-[12.75rem]",
           "today-tab": "bottom-[calc(6.4rem+env(safe-area-inset-bottom))]",
           "select-today": "bottom-[calc(6.4rem+env(safe-area-inset-bottom))]",
-          "teams-tab": "bottom-[calc(6.4rem+env(safe-area-inset-bottom))]",
-          "field-size": "top-[48dvh]",
-          "generate": "top-[48dvh]",
+          "generate": "bottom-[9rem]",
           "club-tab": "bottom-[calc(5.6rem+env(safe-area-inset-bottom))]",
           "help-question": "top-[0.75rem]",
           "roster-return": "bottom-[calc(6.4rem+env(safe-area-inset-bottom))]",
@@ -4162,8 +4154,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
               <div className="mt-4 space-y-2.5">
                 {[
                   ["Roster", "Your full player list"],
-                  ["Session", "Who is playing now"],
-                  ["Teams", "Build and present teams"],
+                  ["Teams", "Choose players, build, and present teams"],
                   ["Club", "Shared-roster tools"],
                 ].map(([label, detail]) => (
                   <div

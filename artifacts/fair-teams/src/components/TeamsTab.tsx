@@ -8,8 +8,7 @@ import { listenToClubRatingSummaries, listenToMyClubRatings, type ClubMyRating, 
 import { profileFromAveragedAttributes } from "@/lib/playerStyleProfile";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Label } from "@/components/ui/label";
-import { Shuffle, ArrowLeftRight, Download, HelpCircle, Clock, Palette, BarChart3, List, Maximize2, X, Volume2, Square, Sparkles } from "lucide-react";
+import { Shuffle, ArrowLeftRight, Download, HelpCircle, Clock, Palette, BarChart3, List, Maximize2, X, Volume2, Square, Undo2, Redo2 } from "lucide-react";
 
 const PRESENT_TEAMS_SCROLL_FIX_VERSION = "present-fullscreen-portal-v1";
 
@@ -190,6 +189,7 @@ type TeamsTabProps = {
   isSharedRoster?: boolean;
   sharedRosterId?: string;
   onOpenClubRatings?: () => void;
+  onEditPlayers?: () => void;
   aiTeamSetupToken?: number;
   aiTeamCount?: number | null;
   aiAutoGenerate?: boolean;
@@ -417,11 +417,13 @@ function drawTextBadge(
 }
 
 
-export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, sharedRosterId, onOpenClubRatings, aiTeamSetupToken = 0, aiTeamCount = null, aiAutoGenerate = false, aiShuffleEquals = false, onAiTeamStateChange, tutorialStep, onTutorialAction }: TeamsTabProps) {
+export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, sharedRosterId, onOpenClubRatings, onEditPlayers, aiTeamSetupToken = 0, aiTeamCount = null, aiAutoGenerate = false, aiShuffleEquals = false, onAiTeamStateChange, tutorialStep, onTutorialAction }: TeamsTabProps) {
   const [numTeams, setNumTeams] = useState<number>(2);
   const [fieldSize, setFieldSize] = useState<FieldSize>(() => loadFieldSize());
   const [showFieldHelp, setShowFieldHelp] = useState(false);
   const [teams, setTeams] = useState<Team[]>([]);
+  const [undoStack, setUndoStack] = useState<Array<{ teams: Team[]; fieldSize: FieldSize; numTeams: number }>>([]);
+  const [redoStack, setRedoStack] = useState<Array<{ teams: Team[]; fieldSize: FieldSize; numTeams: number }>>([]);
   const [teamStatsOpen, setTeamStatsOpen] = useState<Record<string, boolean>>({});
   const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
   const [editingTeamName, setEditingTeamName] = useState("");
@@ -637,9 +639,63 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
     </div>
   ) : null;
 
+  const cloneTeams = (value: Team[]) => value.map((team) => ({
+    ...team,
+    players: team.players.map((player) => ({ ...player })),
+  }));
+
+  const arrangementSnapshot = () => ({
+    teams: cloneTeams(teams),
+    fieldSize,
+    numTeams,
+  });
+
+  const samePlayersAsCurrentSession = () => {
+    const currentIds = teams.flatMap((team) => team.players.map((player) => player.id)).sort();
+    const attendingIds = attendingPlayers.map((player) => player.id).sort();
+    return currentIds.length === attendingIds.length && currentIds.every((id, index) => id === attendingIds[index]);
+  };
+
+  const recordArrangementForUndo = () => {
+    if (!teams.length) return;
+    const snapshot = arrangementSnapshot();
+    setUndoStack((current) => [...current, snapshot].slice(-20));
+    setRedoStack([]);
+  };
+
+  const handleUndo = () => {
+    if (!undoStack.length || isGenerating) return;
+    const previous = undoStack[undoStack.length - 1]!;
+    setRedoStack((current) => [...current, arrangementSnapshot()].slice(-20));
+    setUndoStack((current) => current.slice(0, -1));
+    setTeams(cloneTeams(previous.teams));
+    setFieldSize(previous.fieldSize);
+    setNumTeams(previous.numTeams);
+    setSwap(null);
+    setTeamStatsOpen({});
+  };
+
+  const handleRedo = () => {
+    if (!redoStack.length || isGenerating) return;
+    const next = redoStack[redoStack.length - 1]!;
+    setUndoStack((current) => [...current, arrangementSnapshot()].slice(-20));
+    setRedoStack((current) => current.slice(0, -1));
+    setTeams(cloneTeams(next.teams));
+    setFieldSize(next.fieldSize);
+    setNumTeams(next.numTeams);
+    setSwap(null);
+    setTeamStatsOpen({});
+  };
+
   const startTeamGeneration = (teamCount: number, shuffleEquals = false) => {
     if (attendingPlayers.length < 2 || isGenerating) return;
     const safeTeamCount = Math.min(6, Math.max(2, Math.round(teamCount)));
+    if (teams.length > 0 && samePlayersAsCurrentSession()) {
+      recordArrangementForUndo();
+    } else {
+      setUndoStack([]);
+      setRedoStack([]);
+    }
     setNumTeams(safeTeamCount);
     setSwap(null);
     setTeamStatsOpen({});
@@ -715,6 +771,7 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
 
   const swapPlayers = (fromTeamId: string, fromPlayerId: string, toTeamId: string, toPlayerId: string) => {
     if (fromTeamId === toTeamId && fromPlayerId === toPlayerId) return;
+    recordArrangementForUndo();
     setTeams(prev => {
       const next = prev.map(t => ({ ...t, players: [...t.players] }));
       const fromTeam = next.find(t => t.id === fromTeamId);
@@ -733,6 +790,7 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
 
   const movePlayerToTeam = (fromTeamId: string, playerId: string, toTeamId: string) => {
     if (toTeamId === fromTeamId) return;
+    recordArrangementForUndo();
     setTeams(prev => {
       const next = prev.map(t => ({ ...t, players: [...t.players] }));
       const fromTeam = next.find(t => t.id === fromTeamId);
@@ -811,8 +869,13 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
       <div className="flex min-h-[calc(100vh-220px)] flex-col gap-3">
         <div className="flex flex-1 flex-col items-center justify-center px-8 text-center">
           <p className="max-w-xs text-sm font-semibold leading-relaxed text-muted-foreground">
-            Choose at least 2 players in Session, then come back here to create balanced teams.
+            Choose at least 2 players to make teams.
           </p>
+          {onEditPlayers && (
+            <Button type="button" variant="outline" onClick={onEditPlayers} className="mt-4 rounded-xl font-black">
+              Edit players
+            </Button>
+          )}
         </div>
         {historyPanel && <div className="mt-auto">{historyPanel}</div>}
       </div>
@@ -831,58 +894,82 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
           </div>
         )}
 
-        <div className={teams.length > 0 ? "grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 items-end" : "grid grid-cols-2 gap-2 md:grid-cols-[1fr_1fr_auto] lg:items-end"}>
-          <div className="flex flex-col gap-1 min-w-0">
-            <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground lg:text-xs">Teams</Label>
-            <Select value={numTeams.toString()} onValueChange={v => setNumTeams(parseInt(v))}>
-              <SelectTrigger className="h-10 px-2 py-0 font-bold text-[13px] leading-normal [&>span]:leading-normal" data-testid="select-num-teams">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {[2, 3, 4, 5, 6].map(n => (
-                  <SelectItem key={n} value={n.toString()} data-testid={`option-teams-${n}`}>{n} Teams</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="flex flex-col gap-1 min-w-0">
-            <div className="flex items-center gap-1">
-              <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground lg:text-xs">Field Size</Label>
-              <button type="button" onClick={() => setShowFieldHelp(v => !v)} className="text-muted-foreground hover:text-primary" title="What does Field Size mean?" data-testid="button-field-help">
-                <HelpCircle className="h-3.5 w-3.5 lg:h-4 lg:w-4" />
-              </button>
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">Current teams</div>
+            <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-black text-[#102A43]">
+              <span>{numTeams} teams</span>
+              <span className="text-slate-300">·</span>
+              <span>{attendingPlayers.length} players</span>
             </div>
-            <Select value={fieldSize} onValueChange={v => setFieldSize(v as FieldSize)}>
-              <SelectTrigger className={`h-10 px-2 py-0 font-bold text-[13px] leading-normal [&>span]:leading-normal ${tutorialStep === "field-size" ? "fairteams-tutorial-pulse relative z-[82]" : ""}`} data-testid="select-field-size">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="small" onClick={() => onTutorialAction?.("field-size-changed")}>Small</SelectItem>
-                <SelectItem value="medium" onClick={() => onTutorialAction?.("field-size-changed")}>Medium</SelectItem>
-                <SelectItem value="large" onClick={() => onTutorialAction?.("field-size-changed")}>Large</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
-
-          <Button
-            variant={teams.length > 0 ? "outline" : undefined}
-            className={teams.length > 0
-              ? `h-10 px-3 rounded-xl border-2 text-[12px] font-black tracking-tight shadow-sm transition-all lg:h-11 lg:min-w-[9.5rem] lg:px-5 lg:text-sm ${isGenerating ? "ring-4 ring-slate-200/70" : ""}`
-              : `col-span-2 h-10 w-full px-4 font-black uppercase tracking-wide text-[13px] shadow-sm md:col-span-1 lg:h-11 lg:min-w-[10.5rem] lg:px-6 lg:text-sm bg-[#102A43] text-white hover:bg-[#173B5E] transition-all ${isGenerating ? "ring-4 ring-slate-300/45 shadow-lg shadow-slate-400/20" : ""} ${tutorialStep === "generate" ? "fairteams-tutorial-pulse relative z-[82]" : ""}`
-            }
-            onClick={() => { handleGenerate(teams.length > 0); if (teams.length === 0) onTutorialAction?.("generated"); }}
-            disabled={isGenerating}
-            title={teams.length > 0 ? "Shuffle teams" : "Generate teams"}
-            data-testid={teams.length > 0 ? "button-shuffle" : "button-generate"}
-          >
-            <span className="inline-flex items-center justify-center gap-1.5">
-              {isGenerating ? <Shuffle className="h-3.5 w-3.5 animate-spin lg:h-4 lg:w-4" /> : teams.length > 0 ? <Shuffle className="h-3.5 w-3.5 lg:h-4 lg:w-4" /> : <Sparkles className="h-3.5 w-3.5 lg:h-4 lg:w-4" />}
-              {isGenerating ? "Balancing" : teams.length > 0 ? "Shuffle" : "Generate"}
-            </span>
-          </Button>
+          {onEditPlayers && (
+            <button
+              type="button"
+              onClick={onEditPlayers}
+              className="shrink-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-black text-[#102A43] shadow-sm transition hover:bg-slate-50 active:scale-[0.98]"
+              data-testid="button-edit-team-players"
+            >
+              Edit players
+            </button>
+          )}
         </div>
 
+        <div className="flex items-center gap-2 rounded-xl bg-slate-50/80 p-2">
+          <span className="shrink-0 text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">Field</span>
+          <Select value={fieldSize} onValueChange={v => setFieldSize(v as FieldSize)}>
+            <SelectTrigger className="h-8 min-w-[112px] flex-1 rounded-lg border-slate-200 bg-white px-2 text-[12px] font-black capitalize shadow-none" data-testid="select-field-size">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="small">Small field</SelectItem>
+              <SelectItem value="medium">Medium field</SelectItem>
+              <SelectItem value="large">Large field</SelectItem>
+            </SelectContent>
+          </Select>
+          <button type="button" onClick={() => setShowFieldHelp(v => !v)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-white hover:text-[#102A43]" title="What does Field Size mean?" data-testid="button-field-help">
+            <HelpCircle className="h-3.5 w-3.5" />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-[44px_minmax(0,1fr)_44px] items-center gap-2">
+          <button
+            type="button"
+            onClick={handleUndo}
+            disabled={!undoStack.length || isGenerating}
+            className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-[#102A43] shadow-sm transition hover:bg-slate-50 active:scale-[0.96] disabled:cursor-default disabled:bg-slate-50 disabled:text-slate-300 disabled:shadow-none"
+            title="Undo last team change"
+            aria-label="Undo last team change"
+            data-testid="button-team-undo"
+          >
+            <Undo2 className="h-4 w-4" />
+          </button>
+
+          <Button
+            className={`stripes-shuffle-button h-11 min-w-0 rounded-xl px-4 text-[13px] font-black text-white transition-all lg:h-12 lg:text-sm ${isGenerating ? "ring-4 ring-slate-300/35" : ""}`}
+            onClick={() => handleGenerate(true)}
+            disabled={isGenerating}
+            title="Shuffle teams"
+            data-testid="button-shuffle"
+          >
+            <span className="inline-flex items-center justify-center gap-2">
+              <Shuffle className={`h-4 w-4 ${isGenerating ? "animate-spin" : ""}`} />
+              {isGenerating ? "Balancing" : "Shuffle teams"}
+            </span>
+          </Button>
+
+          <button
+            type="button"
+            onClick={handleRedo}
+            disabled={!redoStack.length || isGenerating}
+            className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-[#102A43] shadow-sm transition hover:bg-slate-50 active:scale-[0.96] disabled:cursor-default disabled:bg-slate-50 disabled:text-slate-300 disabled:shadow-none"
+            title="Redo team change"
+            aria-label="Redo team change"
+            data-testid="button-team-redo"
+          >
+            <Redo2 className="h-4 w-4" />
+          </button>
+        </div>
 
         {isGenerating && (
           <div className="rounded-lg border border-emerald-300/35 bg-emerald-50/80 px-3 py-2 text-[11px] font-black text-emerald-700 shadow-inner">

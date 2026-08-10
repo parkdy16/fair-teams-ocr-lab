@@ -5718,7 +5718,8 @@ export function TodayTab({
 
       {todayRosterReady && (
         <>
-      <div className="relative">
+      <div className="stripes-sticky-search sticky top-0 z-20 -mx-1 bg-background/94 px-1 py-2 backdrop-blur">
+        <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
           <Input
             placeholder="Search players…"
@@ -5736,6 +5737,7 @@ export function TodayTab({
             </button>
           )}
         </div>
+      </div>
   
         {filtered.length === 0 ? (
           <div className="text-center py-8 bg-muted/50 rounded-xl border border-dashed border-border">

@@ -2987,24 +2987,36 @@ export function PlayersTab({
 
       <div className="space-y-3">
         {players.length > 0 && (
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-            <Input
-              placeholder="Search roster…"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="h-10 pl-9 pr-9 text-sm"
-              data-testid="input-search"
-            />
-            {search && (
-              <button
-                onClick={() => setSearch("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                data-testid="button-clear-search"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            )}
+          <div className="stripes-sticky-search sticky top-0 z-20 -mx-1 flex items-center gap-2 bg-background/94 px-1 py-2 backdrop-blur">
+            <div className="relative min-w-0 flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+              <Input
+                placeholder="Search roster…"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                className="h-10 pl-9 pr-9 text-sm"
+                data-testid="input-search"
+              />
+              {search && (
+                <button
+                  onClick={() => setSearch("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  data-testid="button-clear-search"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setAddOptionsOpen(true)}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-[#102A43] shadow-sm transition hover:bg-slate-50 active:scale-[0.96]"
+              title="Add player"
+              aria-label="Add player"
+              data-testid="button-sticky-add-player"
+            >
+              <Plus className="h-4 w-4" />
+            </button>
           </div>
         )}
 

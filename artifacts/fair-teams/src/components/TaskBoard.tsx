@@ -271,6 +271,32 @@ function latestOpenAction(card: TaskBoardCard) {
   return [...(card.actions || [])].reverse().find((action) => action.status === "open");
 }
 
+function currentStageEnteredAt(card: TaskBoardCard) {
+  return card.lastMovedAt || card.createdAt || 0;
+}
+
+function latestDecisionInCurrentStage(card: TaskBoardCard) {
+  const enteredAt = currentStageEnteredAt(card);
+  return [...(card.decisions || [])]
+    .filter((decision) => decision.createdAt >= enteredAt)
+    .sort((a, b) => b.createdAt - a.createdAt)[0];
+}
+
+function latestActionInCurrentStage(card: TaskBoardCard) {
+  const enteredAt = currentStageEnteredAt(card);
+  return [...(card.actions || [])]
+    .filter((action) => action.createdAt >= enteredAt)
+    .sort((a, b) => b.createdAt - a.createdAt)[0];
+}
+
+function repeatDecisionLabel(decision?: TaskBoardVote) {
+  if (!decision) return null;
+  if (decision.decisionType === "schedule" || decision.kind === "schedule") return "Another schedule";
+  if (decision.decisionType === "players") return "Another player decision";
+  if (decision.decisionType === "equipment") return "Another equipment decision";
+  return null;
+}
+
 function topicStage(card: TaskBoardCard): TopicStage {
   if (card.completedAt) return "done";
   if (latestOpenDecision(card)) return "deciding";
@@ -1264,10 +1290,10 @@ export function TaskBoard({
     }
   };
 
-  const startDecision = (card: TaskBoardCard) => {
+  const startDecision = (card: TaskBoardCard, preset?: TaskBoardDecisionType) => {
     if (latestOpenDecision(card)) return;
     setDecisionCardId(card.id);
-    setDecisionStep(null);
+    setDecisionStep(preset || null);
     setDecisionMode("vote");
     setDecisionTitle("");
     setDecisionQuestion("");
@@ -1281,6 +1307,18 @@ export function TaskBoard({
     setPlayerSearch("");
     setScheduleHostName(currentActor.name);
     setScheduleDates([newScheduleDateGroup()]);
+
+    if (preset === "schedule") {
+      setDecisionKind("schedule");
+      setScheduleHostName(currentActor.name);
+    } else if (preset === "players") {
+      setDecisionKind("multi-select");
+      setDecisionQuestion("Who should be selected?");
+      setDecisionMaxSelections("3");
+    } else if (preset === "equipment") {
+      setDecisionKind("choose-one");
+      setDecisionQuestion("Which option should we choose?");
+    }
   };
 
   const chooseDecisionType = (kind: TaskBoardDecisionType) => {
@@ -1630,6 +1668,51 @@ export function TaskBoard({
     }, "released");
   };
 
+  const completeActionRound = async (card: TaskBoardCard, action?: TaskBoardActionItem) => {
+    const now = Date.now();
+    let nextActions = card.actions || [];
+
+    if (action) {
+      nextActions = nextActions.map((item) => item.id === action.id ? {
+        ...item,
+        status: "done" as const,
+        completedAt: now,
+        completedByName: currentActor.name,
+        completedByEmail: currentActor.email,
+      } : item);
+    } else {
+      const completedAction: TaskBoardActionItem = {
+        id: id("action"),
+        text: card.title,
+        status: "done",
+        assignees: [],
+        createdAt: now,
+        createdByName: currentActor.name,
+        completedAt: now,
+        completedByName: currentActor.name,
+        completedByEmail: currentActor.email,
+      };
+      nextActions = [...nextActions, completedAction];
+    }
+
+    const next: TaskBoardCard = {
+      ...card,
+      actions: nextActions,
+      actionText: undefined,
+      assignee: undefined,
+      assigneeEmail: undefined,
+      updatedAt: now,
+      updatedByName: currentActor.name,
+      activities: [...card.activities, nowActivity("completed", currentActor.name, currentActor.email)].slice(-30),
+    };
+
+    setSaving(true);
+    setError("");
+    try { await persistCard(next); }
+    catch (nextError) { setError(nextError instanceof Error ? nextError.message : "Could not complete action."); }
+    finally { setSaving(false); }
+  };
+
   const finishTopic = async (card: TaskBoardCard) => {
     const now = Date.now();
     const nextActions = (card.actions || []).map((action) =>
@@ -1958,6 +2041,7 @@ export function TaskBoard({
               {!mine && <button type="button" className="rounded-xl border border-sky-200 bg-white px-3 py-2 text-xs font-semibold text-sky-800" onClick={() => void joinAction(card, action)}><Hand className="mr-1 inline h-3.5 w-3.5" />{assignees.length ? "Join task" : "Take task"}</button>}
               {mine && assignees.length > 1 && <button type="button" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-500" onClick={() => void releaseAction(card, action)}><RotateCcw className="mr-1 inline h-3.5 w-3.5" />Leave task</button>}
               {!assignees.length && <span className="text-[10px] font-medium text-slate-400">Unassigned is okay.</span>}
+              <button type="button" className="ml-auto rounded-xl bg-sky-700 px-3 py-2 text-xs font-semibold text-white hover:bg-sky-800" onClick={() => void completeActionRound(card, action)}><Check className="mr-1 inline h-3.5 w-3.5" />Mark complete</button>
             </div>
           ) : <div className="mt-2 text-xs font-semibold text-sky-700"><CheckCircle2 className="mr-1 inline h-3.5 w-3.5" />Completed{action.completedByName ? ` by ${action.completedByName}` : ""}</div>}
         </div>
@@ -1993,18 +2077,52 @@ export function TaskBoard({
   const renderStageTools = (card: TaskBoardCard, stage: TopicStage) => {
     const openDecision = latestOpenDecision(card);
     const openAction = latestOpenAction(card);
-    if (stage === "deciding" && !openDecision) {
+    const currentDecision = latestDecisionInCurrentStage(card);
+    const currentAction = latestActionInCurrentStage(card);
+
+    if (stage === "deciding") {
+      if (openDecision) return null;
+      if (!currentDecision) {
+        return (
+          <button type="button" className="mt-3 w-full rounded-2xl border border-amber-200 bg-amber-50/70 px-3 py-2.5 text-xs font-semibold text-amber-900" onClick={() => startDecision(card)}>
+            Start decision
+          </button>
+        );
+      }
+
+      const repeatLabel = repeatDecisionLabel(currentDecision);
       return (
-        <button type="button" className="mt-3 w-full rounded-2xl border border-amber-200 bg-amber-50/70 px-3 py-2.5 text-xs font-semibold text-amber-900" onClick={() => startDecision(card)}>
-          {(card.decisions?.length || 0) ? "Start another decision" : "Start decision"}
-        </button>
+        <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50/55 p-3">
+          <div className="flex items-center gap-2 text-xs font-semibold text-amber-900"><CheckCircle2 className="h-4 w-4" />Decision complete</div>
+          <div className="mt-1 text-[10px] font-medium leading-relaxed text-amber-800/75">{repeatLabel ? "Continue here if this topic needs another round, or move the card when you are ready." : "This decision is finished. Move the card when you are ready."}</div>
+          <div className={`mt-3 grid gap-2 ${repeatLabel ? "grid-cols-2" : "grid-cols-1"}`}>
+            {repeatLabel && <button type="button" className="h-10 rounded-xl border border-amber-200 bg-white px-3 text-[11px] font-semibold text-amber-900" onClick={() => startDecision(card, currentDecision.decisionType || (currentDecision.kind === "schedule" ? "schedule" : "vote"))}>{repeatLabel}</button>}
+            <button type="button" className="h-10 rounded-xl bg-[#102A43] px-3 text-[11px] font-semibold text-white" onClick={() => openMoveCard(card)}>Move card</button>
+          </div>
+        </div>
       );
     }
-    if (stage === "action" && !openAction) {
+
+    if (stage === "action") {
+      if (openAction) return null;
+      if (!currentAction || currentAction.status !== "done") {
+        return (
+          <div className="mt-3 grid grid-cols-[1fr_auto] gap-2">
+            <button type="button" className="h-11 rounded-2xl bg-sky-700 px-3 text-xs font-semibold text-white hover:bg-sky-800" onClick={() => void completeActionRound(card)}>Mark action complete</button>
+            <button type="button" className="h-11 rounded-2xl border border-sky-200 bg-white px-3 text-xs font-semibold text-sky-800" onClick={() => openAddAction(card)}>Details</button>
+          </div>
+        );
+      }
+
       return (
-        <button type="button" className="mt-3 w-full rounded-2xl border border-sky-200 bg-sky-50/60 px-3 py-2.5 text-xs font-semibold text-sky-900" onClick={() => openAddAction(card)}>
-          {(card.actions?.length || 0) ? "Add another action" : "Add action details (optional)"}
-        </button>
+        <div className="mt-3 rounded-2xl border border-sky-200 bg-sky-50/55 p-3">
+          <div className="flex items-center gap-2 text-xs font-semibold text-sky-900"><CheckCircle2 className="h-4 w-4" />Action complete</div>
+          <div className="mt-1 text-[10px] font-medium leading-relaxed text-sky-800/75">Is there another action for this card, or is it ready to move?</div>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <button type="button" className="h-10 rounded-xl border border-sky-200 bg-white px-3 text-[11px] font-semibold text-sky-900" onClick={() => openAddAction(card)}>Another action</button>
+            <button type="button" className="h-10 rounded-xl bg-[#102A43] px-3 text-[11px] font-semibold text-white" onClick={() => openMoveCard(card)}>Move card</button>
+          </div>
+        </div>
       );
     }
     return null;
@@ -2017,13 +2135,17 @@ export function TaskBoard({
     const openAction = latestOpenAction(card);
     const decisions = card.decisions || [];
     const actions = card.actions || [];
+    const currentDecision = latestDecisionInCurrentStage(card);
+    const currentAction = latestActionInCurrentStage(card);
+    const decisionComplete = stage === "deciding" && !openDecision && Boolean(currentDecision);
+    const actionComplete = stage === "action" && !openAction && currentAction?.status === "done";
     const need = stage === "done"
-      ? "Completed"
+      ? ""
       : stage === "action"
-        ? (openAction?.text && openAction.text.trim() !== card.title.trim() ? openAction.text : "Ready to do")
+        ? (openAction?.text && openAction.text.trim() !== card.title.trim() ? openAction.text : "")
         : stage === "deciding"
-          ? (openDecision ? currentNeed(card) : decisions.length ? "Decision complete" : "Needs a decision")
-          : "Idea";
+          ? (openDecision ? currentNeed(card) : "")
+          : "";
     const displayPeople = card.people?.length ? card.people : actionPeople(openAction);
     const cardNotifyTarget = currentNotifyTarget(card);
     const cardNotification = cardNotifyTarget?.notification;
@@ -2056,6 +2178,8 @@ export function TaskBoard({
             <button type="button" className="min-w-0 flex-1 text-left" onClick={() => { if (!suppressCardOpenRef.current) openCardDetail(card); }}>
               <div className="flex flex-wrap items-center gap-1.5">
                 {card.category && <span className={`rounded-full px-2 py-0.5 text-[9px] font-black ring-1 lg:px-2.5 lg:py-1 lg:text-[10px] ${tagTone(card.category)}`}>{card.category}</span>}
+                {stage === "deciding" && <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-semibold ring-1 lg:px-2.5 lg:py-1 lg:text-[10px] ${decisionComplete ? "bg-amber-100 text-amber-900 ring-amber-200" : "bg-amber-50 text-amber-800 ring-amber-200"}`}>{decisionComplete ? <Check className="h-3 w-3" /> : <Gavel className="h-3 w-3" />}{decisionComplete ? "Decision complete" : "Needs decision"}</span>}
+                {stage === "action" && <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-semibold ring-1 lg:px-2.5 lg:py-1 lg:text-[10px] ${actionComplete ? "bg-sky-100 text-sky-900 ring-sky-200" : "bg-sky-50 text-sky-800 ring-sky-200"}`}>{actionComplete ? <Check className="h-3 w-3" /> : <Hand className="h-3 w-3" />}{actionComplete ? "Action complete" : "Needs action"}</span>}
                 {displayPeople?.length ? <span className="inline-flex max-w-full items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-black text-slate-600 lg:px-2.5 lg:py-1 lg:text-[10px]"><Users className="h-3 w-3 shrink-0" /><span className="truncate">{personSummary(displayPeople)}</span></span> : null}
                 {card.dueDate && <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-black lg:px-2.5 lg:py-1 lg:text-[10px] ${isOverdue(card.dueDate) && stage !== "done" ? "bg-red-50 text-red-700" : "bg-slate-100 text-slate-600"}`}><CalendarDays className="h-3 w-3" />{dueText(card.dueDate)}</span>}
               </div>
@@ -2125,7 +2249,7 @@ export function TaskBoard({
           )}
 
           {renderStageTools(card, stage)}
-          <button type="button" className="mt-3 inline-flex h-10 w-full items-center justify-center rounded-2xl border border-slate-200 bg-white text-xs font-semibold text-slate-600" onClick={() => openMoveCard(card)}>Move card</button>
+          {!((stage === "deciding" && !openDecision && Boolean(currentDecision)) || (stage === "action" && !openAction && currentAction?.status === "done")) && <button type="button" className="mt-3 inline-flex h-10 w-full items-center justify-center rounded-2xl border border-slate-200 bg-white text-xs font-semibold text-slate-600" onClick={() => openMoveCard(card)}>Move card</button>}
         </div>}
       </article>
     );

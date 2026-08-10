@@ -2836,6 +2836,7 @@ export function ClubTab({
           players={players}
           equipmentItems={actionBoardEquipmentItems}
           equipmentSnapshot={actionBoardEquipmentSnapshot}
+          onOpenEquipmentInventory={() => setEquipmentInventoryOpen(true)}
         />
       </div>
 

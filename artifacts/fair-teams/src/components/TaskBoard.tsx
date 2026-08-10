@@ -97,6 +97,7 @@ type Props = {
   players?: RoomPlayer[];
   equipmentItems?: string[];
   equipmentSnapshot?: EquipmentSnapshot;
+  onOpenEquipmentInventory?: () => void;
 };
 
 type LocalBoard = TaskBoardSnapshot;
@@ -762,6 +763,7 @@ export function TaskBoard({
   players = [],
   equipmentItems = [],
   equipmentSnapshot,
+  onOpenEquipmentInventory,
 }: Props) {
   const online = Boolean(scopeId && user?.email);
   // Action Board has a fixed semantic blue identity. Roster color is intentionally ignored
@@ -828,6 +830,8 @@ export function TaskBoard({
   const [playerAnswerOptions, setPlayerAnswerOptions] = useState("Yes\nNo\nMaybe");
   const [equipmentVoteMode, setEquipmentVoteMode] = useState<EquipmentVoteMode>("rate");
   const [equipmentAnswerOptions, setEquipmentAnswerOptions] = useState("Yes\nNo\nMaybe");
+  const [equipmentAnswersOpen, setEquipmentAnswersOpen] = useState(false);
+  const [equipmentAnswerOptionsDraft, setEquipmentAnswerOptionsDraft] = useState("Yes\nNo\nMaybe");
   const [equipmentMaxSelections, setEquipmentMaxSelections] = useState("2");
   const [equipmentDraftItems, setEquipmentDraftItems] = useState<EquipmentDraftItem[]>([newEquipmentDraftItem()]);
   const [equipmentPendingSubject, setEquipmentPendingSubject] = useState("");
@@ -3107,7 +3111,7 @@ export function TaskBoard({
         </DialogContent>
       </Dialog>
       <Dialog open={Boolean(decisionCardId)} onOpenChange={(open) => { if (!open) { setDecisionCardId(null); setDecisionStep(null); setDecisionEditingDecisionId(null); } }}>
-        <DialogContent className="fixed bottom-2 left-2 right-2 top-auto max-h-[90dvh] w-auto max-w-none translate-x-0 translate-y-0 overflow-y-auto rounded-[2rem] p-4 sm:bottom-auto sm:left-1/2 sm:right-auto sm:top-1/2 sm:w-full sm:max-w-lg sm:-translate-x-1/2 sm:-translate-y-1/2 lg:max-w-2xl lg:p-6" onOpenAutoFocus={(event) => event.preventDefault()}>
+        <DialogContent className="fixed bottom-2 left-2 right-2 top-auto max-h-[90dvh] w-auto max-w-none translate-x-0 translate-y-0 overflow-x-hidden overflow-y-auto rounded-[2rem] p-4 sm:bottom-auto sm:left-1/2 sm:right-auto sm:top-1/2 sm:w-full sm:max-w-lg sm:-translate-x-1/2 sm:-translate-y-1/2 lg:max-w-2xl lg:p-6" onOpenAutoFocus={(event) => event.preventDefault()}>
           <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43] lg:text-xl">{decisionStep === "schedule" ? (decisionEditingDecisionId ? "Set up schedule" : "Schedule") : decisionStep ? "Set up decision" : "What kind of decision?"}</DialogTitle></DialogHeader>
           {!decisionStep ? (
             <div className="grid grid-cols-2 gap-2">
@@ -3281,45 +3285,21 @@ export function TaskBoard({
                         <div className="mt-1 text-[10px] font-normal text-slate-400">Editing this updates the card title when the vote opens.</div>
                       </div>
 
-                      <details className="group rounded-2xl border border-slate-200 bg-slate-50/70">
-                        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2.5 marker:hidden">
-                          <div className="min-w-0">
-                            <div className="text-xs font-semibold text-[#102A43]">Club equipment</div>
-                            <div className="mt-0.5 truncate text-[10px] font-medium text-slate-400">
-                              {(equipmentSnapshot?.bags.length || 0)} bag{(equipmentSnapshot?.bags.length || 0) === 1 ? "" : "s"}
-                              {equipmentSnapshot?.totals.length ? ` · ${equipmentSnapshot.totals.slice(0, 3).map((item) => `${item.label} ${item.quantity}`).join(" · ")}` : ""}
-                            </div>
+                      <button
+                        type="button"
+                        className="flex w-full items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50/70 px-3 py-2.5 text-left transition hover:bg-slate-50"
+                        onClick={() => onOpenEquipmentInventory?.()}
+                        disabled={!onOpenEquipmentInventory}
+                      >
+                        <div className="min-w-0">
+                          <div className="text-xs font-semibold text-[#102A43]">Club inventory</div>
+                          <div className="mt-0.5 truncate text-[10px] font-medium text-slate-400">
+                            {(equipmentSnapshot?.bags.length || 0)} bag{(equipmentSnapshot?.bags.length || 0) === 1 ? "" : "s"}
+                            {equipmentSnapshot?.totals.length ? ` · ${equipmentSnapshot.totals.slice(0, 3).map((item) => `${item.label} ${item.quantity}`).join(" · ")}` : ""}
                           </div>
-                          <ChevronDown className="h-4 w-4 shrink-0 text-slate-400 transition group-open:rotate-180" />
-                        </summary>
-                        <div className="border-t border-slate-200 px-3 pb-3 pt-2">
-                          {equipmentSnapshot?.bags.length ? (
-                            <div className="grid max-h-48 gap-1.5 overflow-y-auto pr-0.5">
-                              {equipmentSnapshot.bags.map((bag) => (
-                                <div key={bag.id} className="rounded-xl bg-white px-2.5 py-2 ring-1 ring-slate-200/80">
-                                  <div className="flex items-center gap-2">
-                                    <span className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-black/10" style={{ backgroundColor: bag.color || "#64748b" }} />
-                                    <div className="min-w-0 flex-1 truncate text-[11px] font-semibold text-[#102A43]">{bag.name}</div>
-                                    <div className="max-w-[42%] truncate text-[10px] font-medium text-slate-500">{bag.holder}</div>
-                                  </div>
-                                  <div className="mt-1 pl-[18px] text-[10px] font-normal leading-relaxed text-slate-500">{bag.items.length ? bag.items.map((item) => `${item.label} × ${item.quantity}`).join(" · ") : "No contents recorded"}</div>
-                                </div>
-                              ))}
-                            </div>
-                          ) : equipmentItems.length > 0 ? (
-                            <div className="text-[10px] font-medium leading-relaxed text-slate-500">{equipmentItems.join(" · ")}</div>
-                          ) : (
-                            <div className="rounded-xl border border-dashed border-slate-200 bg-white/60 px-3 py-3 text-center text-[10px] font-medium text-slate-400">No equipment recorded yet. Add bags in Club → Equipment.</div>
-                          )}
-
-                          {equipmentSnapshot?.totals.length ? (
-                            <div className="mt-2 border-t border-slate-200 pt-2">
-                              <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-wide text-slate-400">Total inventory · tap an item to add</div>
-                              <div className="flex flex-wrap gap-1.5">{equipmentSnapshot.totals.map((item) => <button key={`${item.label}-${item.quantity}`} type="button" className="rounded-full bg-white px-2 py-1 text-[10px] font-medium text-slate-600 ring-1 ring-slate-200 transition hover:bg-amber-50 hover:text-amber-800 hover:ring-amber-200" onClick={() => setEquipmentPendingSubject(item.label)}>{item.label} · {item.quantity}</button>)}</div>
-                            </div>
-                          ) : null}
                         </div>
-                      </details>
+                        <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" />
+                      </button>
 
                       <div>
                         <Label>Voting style</Label>
@@ -3331,27 +3311,44 @@ export function TaskBoard({
 
                       <div>
                         <div className="mb-1 flex items-center justify-between gap-2"><Label>Items</Label><span className="text-[10px] font-medium text-slate-400">Qty starts at 1 · price optional</span></div>
-                        <div className="grid gap-1.5">{equipmentDraftItems.map((item, index) => {
+                        <div className="grid gap-2">{equipmentDraftItems.map((item, index) => {
                           const subtotal = equipmentSubtotal(item.price, item.quantity);
-                          return <div key={item.id} className="rounded-xl border border-slate-200 bg-white px-2.5 py-2">
-                            <div className="grid grid-cols-[minmax(0,1fr)_4.25rem_5.5rem_auto_auto] items-center gap-1.5">
-                              <Input value={item.name} onChange={(event) => updateEquipmentDraftItem(item.id, { name: event.target.value })} maxLength={120} placeholder={`Item ${index + 1}`} className="h-9 min-w-0 px-2.5" />
-                              <Input type="number" min="0" inputMode="numeric" value={item.quantity} onChange={(event) => updateEquipmentDraftItem(item.id, { quantity: event.target.value })} onBlur={() => { if (!item.quantity.trim()) updateEquipmentDraftItem(item.id, { quantity: "1" }); }} aria-label={`Quantity for item ${index + 1}`} placeholder="Qty" className="h-9 px-2" />
-                              <Input value={item.price} onChange={(event) => updateEquipmentDraftItem(item.id, { price: event.target.value })} maxLength={32} inputMode="decimal" placeholder="Price" aria-label={`Price for item ${index + 1}`} className="h-9 px-2" />
+                          const quantity = normalizedEquipmentQuantity(item.quantity);
+                          return <div key={item.id} className="min-w-0 rounded-2xl border border-slate-200 bg-white p-2.5">
+                            <Input
+                              value={item.name}
+                              onChange={(event) => updateEquipmentDraftItem(item.id, { name: event.target.value })}
+                              maxLength={120}
+                              placeholder={`Item ${index + 1}`}
+                              className="h-10 w-full min-w-0 px-3"
+                            />
+                            <div className="mt-2 grid min-w-0 grid-cols-[6.5rem_minmax(0,1fr)_2.5rem_2.25rem] items-center gap-1.5">
+                              <div className="grid h-9 grid-cols-[2rem_minmax(0,1fr)_2rem] overflow-hidden rounded-xl border border-slate-200 bg-white" aria-label={`Quantity for item ${index + 1}`}>
+                                <button type="button" className="flex items-center justify-center text-base font-medium text-slate-500 hover:bg-slate-50" onClick={() => updateEquipmentDraftItem(item.id, { quantity: String(Math.max(0, quantity - 1)) })} aria-label={`Decrease quantity for item ${index + 1}`}>−</button>
+                                <input type="number" min="0" inputMode="numeric" value={item.quantity} onChange={(event) => updateEquipmentDraftItem(item.id, { quantity: event.target.value })} onBlur={() => { if (!item.quantity.trim()) updateEquipmentDraftItem(item.id, { quantity: "1" }); }} className="min-w-0 border-x border-slate-200 bg-transparent px-0 text-center text-sm font-semibold text-[#102A43] outline-none" aria-label={`Quantity value for item ${index + 1}`} />
+                                <button type="button" className="flex items-center justify-center text-base font-medium text-slate-500 hover:bg-slate-50" onClick={() => updateEquipmentDraftItem(item.id, { quantity: String(quantity + 1) })} aria-label={`Increase quantity for item ${index + 1}`}>+</button>
+                              </div>
+                              <Input value={item.price} onChange={(event) => updateEquipmentDraftItem(item.id, { price: event.target.value })} maxLength={32} inputMode="decimal" placeholder="Price" aria-label={`Price for item ${index + 1}`} className="h-9 min-w-0 px-2.5" />
                               <button type="button" className={`relative flex h-9 w-9 items-center justify-center rounded-xl border ${item.url.trim() && validHttpUrl(item.url) ? "border-sky-200 bg-sky-50 text-sky-700" : "border-slate-200 bg-white text-slate-500"}`} onClick={() => { setEquipmentLinkItemId(item.id); setEquipmentLinkDraft(item.url); }} aria-label={`Product link for item ${index + 1}`} title={item.url ? "Edit product link" : "Add product link"}><Link2 className="h-4 w-4" />{item.url.trim() && validHttpUrl(item.url) && <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-sky-700 text-white"><Check className="h-2.5 w-2.5" /></span>}</button>
                               <button type="button" className="flex h-9 w-8 items-center justify-center rounded-xl text-slate-400 hover:bg-red-50 hover:text-red-600" onClick={() => removeEquipmentDraftItem(item.id)} aria-label={`Remove item ${index + 1}`}><Trash2 className="h-3.5 w-3.5" /></button>
                             </div>
-                            {subtotal && <div className="mt-1 pl-0.5 text-[9px] font-medium text-slate-400">Subtotal · {subtotal}</div>}
+                            {subtotal && <div className="mt-1.5 text-[9px] font-medium text-slate-400">Subtotal · {subtotal}</div>}
                           </div>;
                         })}</div>
-                        <button type="button" className="mt-2 w-fit rounded-xl bg-slate-100 px-3 py-2 text-[11px] font-semibold text-slate-600" onClick={() => setEquipmentDraftItems((current) => [...current, newEquipmentDraftItem()])}><Plus className="mr-1 inline h-3.5 w-3.5" />Add item</button>
+                        <button type="button" className="mt-2 w-fit rounded-xl bg-slate-100 px-3 py-2 text-[11px] font-semibold text-slate-600" onClick={() => setEquipmentPendingSubject("__blank__")}><Plus className="mr-1 inline h-3.5 w-3.5" />Add item</button>
                       </div>
 
-                      {equipmentVoteMode === "rate" ? <div>
-                        <div className="flex items-center justify-between gap-2"><Label htmlFor="equipment-answer-options">Answer choices</Label><button type="button" className="text-[10px] font-medium text-amber-700" onClick={() => setEquipmentAnswerOptions("Yes\nNo\nMaybe")}>Reset default</button></div>
-                        <Textarea id="equipment-answer-options" value={equipmentAnswerOptions} onChange={(event) => setEquipmentAnswerOptions(event.target.value)} rows={3} maxLength={180} placeholder={"Yes\nNo\nMaybe"} />
-                        <div className="mt-1 text-[10px] font-normal text-slate-400">Each item gets these same answer choices.</div>
-                      </div> : <div>
+                      {equipmentVoteMode === "rate" ? <button
+                        type="button"
+                        className="flex w-full items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-left"
+                        onClick={() => { setEquipmentAnswerOptionsDraft(equipmentAnswerOptions); setEquipmentAnswersOpen(true); }}
+                      >
+                        <div className="min-w-0">
+                          <div className="text-xs font-semibold text-[#102A43]">Answer choices</div>
+                          <div className="mt-0.5 truncate text-[10px] font-medium text-slate-400">{answerLabels(equipmentAnswerOptions).join(" · ")}</div>
+                        </div>
+                        <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" />
+                      </button> : <div>
                         <Label htmlFor="equipment-max-selections">Maximum items each person can choose</Label>
                         <Input id="equipment-max-selections" type="number" min="1" max="16" value={equipmentMaxSelections} onChange={(event) => setEquipmentMaxSelections(event.target.value)} inputMode="numeric" />
                       </div>}
@@ -3377,11 +3374,11 @@ export function TaskBoard({
 
       <Dialog open={Boolean(equipmentPendingSubject)} onOpenChange={(open) => { if (!open) setEquipmentPendingSubject(""); }}>
         <DialogContent className="w-[calc(100%-2rem)] max-w-sm rounded-[1.75rem] p-4" onOpenAutoFocus={(event) => event.preventDefault()}>
-          <DialogHeader><DialogTitle className="text-left text-base font-semibold text-[#102A43]">Add equipment item?</DialogTitle></DialogHeader>
-          <div className="text-sm font-normal leading-relaxed text-slate-600">Add <span className="font-semibold text-[#102A43]">{equipmentPendingSubject}</span> to the voting list?</div>
+          <DialogHeader><DialogTitle className="text-left text-base font-semibold text-[#102A43]">{equipmentPendingSubject === "__blank__" ? "Add another item?" : "Add equipment item?"}</DialogTitle></DialogHeader>
+          <div className="text-sm font-normal leading-relaxed text-slate-600">{equipmentPendingSubject === "__blank__" ? "Add a new item to this voting list?" : <>Add <span className="font-semibold text-[#102A43]">{equipmentPendingSubject}</span> to the voting list?</>}</div>
           <div className="mt-3 flex gap-2">
             <Button type="button" variant="outline" className="h-10 flex-1 rounded-xl" onClick={() => setEquipmentPendingSubject("")}>Cancel</Button>
-            <Button type="button" className="h-10 flex-1 rounded-xl bg-amber-600 font-semibold text-white hover:bg-amber-700" onClick={() => { chooseEquipmentSubject(equipmentPendingSubject); setEquipmentPendingSubject(""); }}>Add item</Button>
+            <Button type="button" className="h-10 flex-1 rounded-xl bg-amber-600 font-semibold text-white hover:bg-amber-700" onClick={() => { if (equipmentPendingSubject === "__blank__") setEquipmentDraftItems((current) => [...current, newEquipmentDraftItem()]); else chooseEquipmentSubject(equipmentPendingSubject); setEquipmentPendingSubject(""); }}>Add item</Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -3441,22 +3438,36 @@ export function TaskBoard({
         </DialogContent>
       </Dialog>
 
+      <Dialog open={equipmentAnswersOpen} onOpenChange={(open) => setEquipmentAnswersOpen(open)}>
+        <DialogContent className="w-[calc(100%-2rem)] max-w-sm rounded-[1.75rem] p-4" onOpenAutoFocus={(event) => event.preventDefault()}>
+          <DialogHeader><DialogTitle className="text-left text-base font-semibold text-[#102A43]">Answer choices</DialogTitle></DialogHeader>
+          <div className="grid gap-3">
+            <Textarea value={equipmentAnswerOptionsDraft} onChange={(event) => setEquipmentAnswerOptionsDraft(event.target.value)} rows={4} maxLength={180} placeholder={"Yes\nNo\nMaybe"} />
+            <div className="text-[10px] font-normal text-slate-400">One answer per line. Every item gets the same choices.</div>
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" className="h-10 rounded-xl" onClick={() => setEquipmentAnswerOptionsDraft("Yes\nNo\nMaybe")}>Reset</Button>
+              <Button type="button" className="h-10 flex-1 rounded-xl bg-amber-600 font-semibold text-white hover:bg-amber-700" disabled={answerLabels(equipmentAnswerOptionsDraft).length < 2} onClick={() => { setEquipmentAnswerOptions(equipmentAnswerOptionsDraft); setEquipmentAnswersOpen(false); }}>Save</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={Boolean(votingCard && votingDecision)} onOpenChange={(open) => { if (!open) { setVotingCardId(null); setVotingDecisionId(null); setSelectedVoteAnswers({}); } }}>
-        <DialogContent className="fixed bottom-2 left-2 right-2 top-auto max-h-[90dvh] w-auto max-w-none translate-x-0 translate-y-0 overflow-y-auto rounded-[2rem] p-4 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-md sm:-translate-x-1/2">
+        <DialogContent className="fixed bottom-2 left-2 right-2 top-auto max-h-[90dvh] w-auto max-w-none translate-x-0 translate-y-0 overflow-x-hidden overflow-y-auto rounded-[2rem] p-4 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-md sm:-translate-x-1/2">
           <DialogHeader><DialogTitle className="text-left text-base font-semibold text-[#102A43]">{votingDecision?.kind === "schedule" ? "Schedule response" : votingDecision?.decisionType === "players" ? "Player decision" : "Vote in Stripes"}</DialogTitle></DialogHeader>
           {votingDecision && <div className="grid gap-3">
             {votingDecision.title?.trim() && <div className="whitespace-normal break-words text-sm font-semibold leading-relaxed text-[#102A43]">{votingDecision.title}</div>}
             {votingDecision.decisionType === "players" && <div className="rounded-2xl bg-amber-50 px-3 py-2.5 text-sm font-medium leading-relaxed text-amber-950">{votingDecision.question}</div>}
             {votingDecision.hostName && <div className="rounded-xl bg-sky-50 px-3 py-2 text-[11px] font-bold text-sky-800">Host: <span className="font-semibold">{votingDecision.hostName}</span></div>}
-            {votingDecision.decisionType === "equipment" && <details className="group rounded-2xl border border-slate-200 bg-slate-50/70">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2.5 marker:hidden">
-                <div className="min-w-0"><div className="text-xs font-semibold text-[#102A43]">Club equipment</div><div className="mt-0.5 truncate text-[10px] font-medium text-slate-400">{equipmentSnapshot?.bags.length || 0} bag{(equipmentSnapshot?.bags.length || 0) === 1 ? "" : "s"}{equipmentSnapshot?.totals.length ? ` · ${equipmentSnapshot.totals.slice(0, 3).map((item) => `${item.label} ${item.quantity}`).join(" · ")}` : ""}</div></div>
-                <ChevronDown className="h-4 w-4 shrink-0 text-slate-400 transition group-open:rotate-180" />
-              </summary>
-              <div className="border-t border-slate-200 px-3 pb-3 pt-2">
-                {equipmentSnapshot?.bags.length ? <div className="grid max-h-44 gap-1.5 overflow-y-auto">{equipmentSnapshot.bags.map((bag) => <div key={bag.id} className="rounded-xl bg-white px-2.5 py-2 ring-1 ring-slate-200/80"><div className="flex items-center gap-2"><span className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-black/10" style={{ backgroundColor: bag.color || "#64748b" }} /><div className="min-w-0 flex-1 truncate text-[11px] font-semibold text-[#102A43]">{bag.name}</div><div className="max-w-[42%] truncate text-[10px] font-medium text-slate-500">{bag.holder}</div></div><div className="mt-1 pl-[18px] text-[10px] font-normal text-slate-500">{bag.items.length ? bag.items.map((item) => `${item.label} × ${item.quantity}`).join(" · ") : "No contents recorded"}</div></div>)}</div> : <div className="text-[10px] font-medium text-slate-400">No club equipment recorded.</div>}
-              </div>
-            </details>}
+            {votingDecision.decisionType === "equipment" && <button
+              type="button"
+              className="flex w-full items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50/70 px-3 py-2.5 text-left"
+              onClick={() => onOpenEquipmentInventory?.()}
+              disabled={!onOpenEquipmentInventory}
+            >
+              <div className="min-w-0"><div className="text-xs font-semibold text-[#102A43]">Club inventory</div><div className="mt-0.5 truncate text-[10px] font-medium text-slate-400">{equipmentSnapshot?.bags.length || 0} bag{(equipmentSnapshot?.bags.length || 0) === 1 ? "" : "s"}{equipmentSnapshot?.totals.length ? ` · ${equipmentSnapshot.totals.slice(0, 3).map((item) => `${item.label} ${item.quantity}`).join(" · ")}` : ""}</div></div>
+              <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" />
+            </button>}
             {(votingDecision.decisionType === "players" || (votingDecision.decisionType === "equipment" && votingDecision.equipmentVoteMode === "rate")) ? (
               <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
                 {decisionQuestions(votingDecision).map((question, questionIndex) => {

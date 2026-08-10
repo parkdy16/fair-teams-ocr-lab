@@ -15,6 +15,7 @@ import {
   Lightbulb,
   Link2,
   Mail,
+  MapPin,
   Pencil,
   Plus,
   RotateCcw,
@@ -37,6 +38,7 @@ import {
 } from "@/lib/notificationService";
 import {
   castTaskBoardVote,
+  claimTaskBoardScheduleHost,
   deleteTaskBoardCard,
   listenToTaskBoard,
   saveTaskBoardCard,
@@ -98,6 +100,8 @@ type NewTopicKind = "idea" | "decide" | "action";
 type TopicStage = MobileFilter;
 type DecisionSetupStep = TaskBoardDecisionType | null;
 type EquipmentDecisionIntent = "buy" | "replace" | null;
+type ScheduleHostChoice = "me" | "person" | "group" | null;
+type ScheduleParticipantMode = "all" | "selected";
 type DraftQuestion = {
   id: string;
   text: string;
@@ -438,6 +442,42 @@ function scheduleSlotValues(groups: ScheduleDateGroup[]) {
     : []))];
 }
 
+function scheduleGroupsFromValues(values: string[] = []): ScheduleDateGroup[] {
+  const byDate = new Map<string, string[]>();
+  values.forEach((value) => {
+    const [date, time] = value.split("T");
+    if (!date || !time) return;
+    byDate.set(date, [...(byDate.get(date) || []), time.slice(0, 5)]);
+  });
+  const groups = [...byDate.entries()].map(([date, times]) => ({ id: id("schedule-date"), date, times: [...new Set(times)] }));
+  return groups.length ? groups : [newScheduleDateGroup()];
+}
+
+function scheduleLocationValues(raw: string) {
+  return [...new Set(raw.split(/\n/).map((value) => value.trim()).filter(Boolean))].slice(0, 8);
+}
+
+function scheduleIsHost(decision: TaskBoardVote, person: TaskBoardPerson) {
+  if (decision.hostEmail && person.email) return decision.hostEmail.toLowerCase() === person.email.toLowerCase();
+  return Boolean(decision.hostName && decision.hostName.trim().toLowerCase() === person.name.trim().toLowerCase());
+}
+
+function googleCalendarUrl(card: TaskBoardCard, decision: TaskBoardVote) {
+  if (!decision.finalizedTime) return "";
+  const start = new Date(decision.finalizedTime);
+  if (Number.isNaN(start.getTime())) return "";
+  const end = new Date(start.getTime() + 60 * 60 * 1000);
+  const stamp = (date: Date) => date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
+  const params = new URLSearchParams({
+    action: "TEMPLATE",
+    text: decision.title?.trim() || card.title,
+    dates: `${stamp(start)}/${stamp(end)}`,
+    details: decision.meetingUrl ? `Meeting link: ${decision.meetingUrl}` : "Created in Stripes",
+    location: decision.finalizedLocation || "",
+  });
+  return `https://calendar.google.com/calendar/render?${params.toString()}`;
+}
+
 function decisionQuestions(decision: TaskBoardVote): TaskBoardDecisionQuestion[] {
   if (decision.questions?.length) return decision.questions;
   if (decision.mode === "recorded" || decision.options.length < 2) return [];
@@ -466,8 +506,12 @@ function personSummary(people: TaskBoardPerson[] = []) {
 function currentNeed(card: TaskBoardCard) {
   const openDecision = latestOpenDecision(card);
   if (openDecision) {
+    if (openDecision.decisionType === "schedule" || openDecision.kind === "schedule") {
+      if (openDecision.scheduleState === "waiting-host") return "Waiting for host";
+      if (openDecision.scheduleState === "setup") return "Host selected · set up schedule";
+      return openDecision.title?.trim() || "Find a time";
+    }
     if (openDecision.title?.trim()) return openDecision.title.trim();
-    if (openDecision.decisionType === "schedule" || openDecision.kind === "schedule") return "Find a time";
     const questions = decisionQuestions(openDecision);
     if (questions.length > 1) return `${questions[0].text} +${questions.length - 1} more`;
     if (openDecision.decisionType === "players") return questions[0]?.text || "Choose players";
@@ -526,11 +570,12 @@ function currentNotifyTarget(card: TaskBoardCard): NotifyTarget | null {
     || (card.actions || []).some((action) => action.notification?.status === "sent");
   const openDecision = latestOpenDecision(card);
   if (openDecision) {
+    if (openDecision.decisionType === "schedule" || openDecision.kind === "schedule") return null;
     const questions = decisionQuestions(openDecision);
     return {
       kind: "decision",
       id: openDecision.id,
-      label: openDecision.kind === "schedule" || openDecision.decisionType === "schedule" ? "Schedule" : "Decision",
+      label: "Decision",
       text: openDecision.title?.trim() || (questions.length === 1 ? questions[0].text : openDecision.question || "Decision"),
       notification: openDecision.notification,
       suggestedEmails: openDecision.participantEmails,
@@ -682,7 +727,17 @@ export function TaskBoard({
   const [selectedPlayerIds, setSelectedPlayerIds] = useState<string[]>([]);
   const [equipmentDecisionIntent, setEquipmentDecisionIntent] = useState<EquipmentDecisionIntent>(null);
   const [scheduleHostName, setScheduleHostName] = useState("");
+  const [scheduleHostChoice, setScheduleHostChoice] = useState<ScheduleHostChoice>(null);
+  const [scheduleRequestedHostKey, setScheduleRequestedHostKey] = useState("");
+  const [scheduleParticipantMode, setScheduleParticipantMode] = useState<ScheduleParticipantMode>("all");
   const [scheduleDates, setScheduleDates] = useState<ScheduleDateGroup[]>([newScheduleDateGroup()]);
+  const [scheduleLocations, setScheduleLocations] = useState("");
+  const [decisionEditingDecisionId, setDecisionEditingDecisionId] = useState<string | null>(null);
+  const [finalizeScheduleCardId, setFinalizeScheduleCardId] = useState<string | null>(null);
+  const [finalizeScheduleDecisionId, setFinalizeScheduleDecisionId] = useState<string | null>(null);
+  const [finalScheduleTime, setFinalScheduleTime] = useState("");
+  const [finalScheduleLocation, setFinalScheduleLocation] = useState("");
+  const [finalScheduleMeetingUrl, setFinalScheduleMeetingUrl] = useState("");
 
   const [linkCardId, setLinkCardId] = useState<string | null>(null);
   const [linkUrl, setLinkUrl] = useState("");
@@ -1328,12 +1383,16 @@ export function TaskBoard({
     setSelectedPlayerIds([]);
     setPlayerSearch("");
     setEquipmentDecisionIntent(null);
-    setScheduleHostName(currentActor.name);
+    setDecisionEditingDecisionId(null);
+    setScheduleHostName("");
+    setScheduleHostChoice(null);
+    setScheduleRequestedHostKey("");
+    setScheduleParticipantMode("all");
     setScheduleDates([newScheduleDateGroup()]);
+    setScheduleLocations("");
 
     if (preset === "schedule") {
       setDecisionKind("schedule");
-      setScheduleHostName(currentActor.name);
     } else if (preset === "players") {
       setDecisionKind("multi-select");
       setDecisionQuestion("Who should be selected?");
@@ -1356,8 +1415,13 @@ export function TaskBoard({
     if (kind === "schedule") {
       setDecisionKind("schedule");
       setDecisionQuestion("");
-      setScheduleHostName(currentActor.name);
+      setDecisionEditingDecisionId(null);
+      setScheduleHostName("");
+      setScheduleHostChoice(null);
+      setScheduleRequestedHostKey("");
+      setScheduleParticipantMode("all");
       setScheduleDates([newScheduleDateGroup()]);
+      setScheduleLocations("");
     } else if (kind === "players") {
       setDecisionKind("choose-one");
       setDecisionQuestion("Who should be selected?");
@@ -1391,6 +1455,210 @@ export function TaskBoard({
       setDecisionTitle(`Replace ${cleanLabel}`);
       setDecisionQuestion(`Which replacement should we choose for ${lower}?`);
     }
+  };
+
+  const scheduleHostPeople = () => availablePeople.filter((person) => person.email || personKey(person) === personKey(currentActor));
+
+  const openScheduleSetup = (card: TaskBoardCard, decision: TaskBoardVote) => {
+    setDecisionCardId(card.id);
+    setDecisionStep("schedule");
+    setDecisionMode("vote");
+    setDecisionEditingDecisionId(decision.id || null);
+    setDecisionTitle(decision.title || "");
+    setScheduleHostName(decision.hostName || currentActor.name);
+    setScheduleHostChoice("me");
+    setScheduleRequestedHostKey("");
+    setScheduleParticipantMode(decision.scheduleParticipantMode || ((decision.participantEmails?.length || decision.participantNames?.length) ? "selected" : "all"));
+    const selectedKeys = availablePeople
+      .filter((person) => (decision.participantEmails || []).some((email) => person.email?.toLowerCase() === email.toLowerCase()) || (decision.participantNames || []).includes(person.name))
+      .map(personKey);
+    setDecisionPeopleKeys(selectedKeys);
+    setScheduleDates(scheduleGroupsFromValues(decision.scheduleTimeValues || []));
+    setScheduleLocations((decision.scheduleLocationOptions || []).join("\n"));
+  };
+
+  const createScheduleForHost = async (card: TaskBoardCard, host: TaskBoardPerson, requestDecisionId?: string) => {
+    const now = Date.now();
+    const hostRequest = requestDecisionId ? (card.decisions || []).find((item) => item.id === requestDecisionId) : undefined;
+    const scheduleDecision: TaskBoardVote = {
+      id: id("decision"),
+      mode: "vote",
+      kind: "schedule",
+      decisionType: "schedule",
+      title: hostRequest?.title?.trim() || decisionTitle.trim() || card.title,
+      question: "Set up schedule",
+      hostName: host.name,
+      hostEmail: host.email,
+      scheduleState: "setup",
+      scheduleParticipantMode: "all",
+      questions: [],
+      options: [],
+      anonymous: false,
+      hideParticipationUntilClosed: false,
+      showResultsWhileOpen: true,
+      status: "open",
+      voterHashes: [],
+      ballots: [],
+      createdAt: now,
+      createdByName: currentActor.name,
+    };
+    const previous = (card.decisions || []).map((item) => requestDecisionId && item.id === requestDecisionId
+      ? { ...item, status: "closed" as const, closedAt: now, closedByName: currentActor.name, outcome: `Hosted by ${host.name}` }
+      : item);
+    const next: TaskBoardCard = {
+      ...card,
+      decisions: [...previous, scheduleDecision],
+      vote: scheduleDecision,
+      updatedAt: now,
+      updatedByName: currentActor.name,
+      activities: [...card.activities, nowActivity("vote_started", currentActor.name, currentActor.email)].slice(-30),
+    };
+    setSaving(true); setError("");
+    try {
+      if (online && scopeId && requestDecisionId) {
+        const claimed = await claimTaskBoardScheduleHost(scopeId, card.id, requestDecisionId, scheduleDecision);
+        if (!claimed) {
+          setError("Someone else has already taken this host request.");
+          return;
+        }
+        updateBoardCard(next);
+      } else {
+        await persistCard(next);
+      }
+      openScheduleSetup(next, scheduleDecision);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Could not start schedule.");
+    } finally { setSaving(false); }
+  };
+
+  const requestScheduleHost = async (mode: "person" | "group") => {
+    const card = board.cards.find((item) => item.id === decisionCardId);
+    if (!card) return;
+    const requested = mode === "person" ? availablePeople.find((person) => personKey(person) === scheduleRequestedHostKey) : undefined;
+    if (mode === "person" && !requested) return;
+    const recipients = mode === "person"
+      ? requested?.email ? [requested.email] : []
+      : otherOrganizerPeople.map((person) => person.email!).filter(Boolean);
+    const now = Date.now();
+    const requestDecision: TaskBoardVote = {
+      id: id("decision"),
+      mode: "vote",
+      kind: "schedule",
+      decisionType: "schedule",
+      title: decisionTitle.trim() || card.title,
+      question: "Who will host this?",
+      scheduleState: "waiting-host",
+      hostRequestMode: mode,
+      requestedHostName: requested?.name,
+      requestedHostEmail: requested?.email,
+      questions: [],
+      options: [],
+      anonymous: false,
+      hideParticipationUntilClosed: false,
+      showResultsWhileOpen: true,
+      status: "open",
+      voterHashes: [],
+      ballots: [],
+      createdAt: now,
+      createdByName: currentActor.name,
+    };
+    const next: TaskBoardCard = {
+      ...card,
+      decisions: [...(card.decisions || []), requestDecision],
+      vote: requestDecision,
+      updatedAt: now,
+      updatedByName: currentActor.name,
+      activities: [...card.activities, nowActivity("vote_started", currentActor.name, currentActor.email)].slice(-30),
+    };
+    setSaving(true); setError("");
+    try {
+      await persistCard(next);
+      setDecisionCardId(null); setDecisionStep(null); setDecisionEditingDecisionId(null);
+      if (online && scopeId && recipients.length) {
+        try {
+          await sendActionBoardNotification({
+            scopeId,
+            cardId: card.id,
+            stepKind: "decision",
+            stepId: requestDecision.id,
+            recipientEmails: recipients,
+            email: true,
+            push: false,
+            message: mode === "person" ? `${currentActor.name} asked you to host this.` : `${currentActor.name} is looking for someone to host this. Open Stripes and tap “I’ll host”.`,
+          });
+        } catch { setError("Host request saved, but the email notification could not be sent."); }
+      }
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Could not request a host.");
+    } finally { setSaving(false); }
+  };
+
+  const claimScheduleHost = async (card: TaskBoardCard, requestDecision: TaskBoardVote) => {
+    const canClaim = requestDecision.hostRequestMode === "group"
+      || (requestDecision.requestedHostEmail && currentActor.email && requestDecision.requestedHostEmail.toLowerCase() === currentActor.email.toLowerCase())
+      || (!requestDecision.requestedHostEmail && requestDecision.requestedHostName?.toLowerCase() === currentActor.name.toLowerCase());
+    if (!canClaim) return;
+    await createScheduleForHost(card, currentActor, requestDecision.id);
+  };
+
+  const declineScheduleHost = async (card: TaskBoardCard, requestDecision: TaskBoardVote) => {
+    const now = Date.now();
+    const nextDecisions = (card.decisions || []).map((item) => item.id === requestDecision.id ? {
+      ...item,
+      status: "closed" as const,
+      scheduleState: "host-declined" as const,
+      outcome: `${currentActor.name} declined hosting`,
+      closedAt: now,
+      closedByName: currentActor.name,
+    } : item);
+    setSaving(true); setError("");
+    try { await persistCard({ ...card, decisions: nextDecisions, vote: nextDecisions[nextDecisions.length - 1], updatedAt: now, updatedByName: currentActor.name }); }
+    catch (nextError) { setError(nextError instanceof Error ? nextError.message : "Could not decline host request."); }
+    finally { setSaving(false); }
+  };
+
+  const openFinalizeSchedule = (card: TaskBoardCard, decision: TaskBoardVote) => {
+    if (!scheduleIsHost(decision, currentActor)) return;
+    setFinalizeScheduleCardId(card.id);
+    setFinalizeScheduleDecisionId(decision.id || null);
+    setFinalScheduleTime(decision.finalizedTime || decision.scheduleTimeValues?.[0] || "");
+    setFinalScheduleLocation(decision.finalizedLocation || decision.scheduleLocationOptions?.[0] || "");
+    setFinalScheduleMeetingUrl(decision.meetingUrl || "");
+  };
+
+  const finalizeSchedule = async () => {
+    const card = board.cards.find((item) => item.id === finalizeScheduleCardId);
+    const decision = card?.decisions?.find((item) => item.id === finalizeScheduleDecisionId);
+    if (!card || !decision || !finalScheduleTime || !finalScheduleLocation || !scheduleIsHost(decision, currentActor)) return;
+    const now = Date.now();
+    const nextDecisions = (card.decisions || []).map((item) => item.id === decision.id ? {
+      ...item,
+      status: "closed" as const,
+      scheduleState: "finalized" as const,
+      finalizedTime: finalScheduleTime,
+      finalizedLocation: finalScheduleLocation,
+      meetingUrl: finalScheduleMeetingUrl.trim() || undefined,
+      finalizedAt: now,
+      finalizedByName: currentActor.name,
+      closedAt: now,
+      closedByName: currentActor.name,
+      outcome: `${scheduleLabel(finalScheduleTime)} · ${finalScheduleLocation}`,
+    } : item);
+    const next: TaskBoardCard = {
+      ...card,
+      decisions: nextDecisions,
+      vote: nextDecisions[nextDecisions.length - 1],
+      updatedAt: now,
+      updatedByName: currentActor.name,
+      activities: [...card.activities, nowActivity("vote_closed", currentActor.name, currentActor.email)].slice(-30),
+    };
+    setSaving(true); setError("");
+    try {
+      await persistCard(next);
+      setFinalizeScheduleCardId(null); setFinalizeScheduleDecisionId(null);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Could not finalize schedule.");
+    } finally { setSaving(false); }
   };
 
   const addDecision = async () => {
@@ -1428,21 +1696,46 @@ export function TaskBoard({
       activity = nowActivity("decision_recorded", currentActor.name, currentActor.email);
     } else {
       const selectedPeople = peopleFromKeys(decisionPeopleKeys);
+      let decisionParticipants = selectedPeople;
       let questions: TaskBoardDecisionQuestion[] = [];
       let sourcePlayerIds: string[] | undefined;
       let rootKind: TaskBoardVoteKind = decisionKind;
 
       if (decisionStep === "schedule") {
+        const existingSchedule = (card.decisions || []).find((item) => item.id === decisionEditingDecisionId);
         const values = scheduleSlotValues(scheduleDates);
-        const labels = values.map(scheduleLabel).filter(Boolean);
-        if (!scheduleHostName.trim() || labels.length < 2) return;
-        questions = [{
-          id: id("question"),
-          text: decisionTitle.trim() || card.title,
-          kind: "multi-select",
-          options: labels.map((label) => ({ id: id("option"), label, count: 0 })),
-          maxSelections: labels.length,
-        }];
+        const locations = scheduleLocationValues(scheduleLocations);
+        const hostName = existingSchedule?.hostName || scheduleHostName.trim();
+        const hostEmail = existingSchedule?.hostEmail || (hostName.toLowerCase() === currentActor.name.toLowerCase() ? currentActor.email : undefined);
+        const allParticipants = availablePeople.filter((person) => {
+          if (hostEmail && person.email) return person.email.toLowerCase() !== hostEmail.toLowerCase();
+          return person.name.toLowerCase() !== hostName.toLowerCase();
+        });
+        decisionParticipants = scheduleParticipantMode === "all" ? allParticipants : selectedPeople.filter((person) => {
+          if (hostEmail && person.email) return person.email.toLowerCase() !== hostEmail.toLowerCase();
+          return person.name.toLowerCase() !== hostName.toLowerCase();
+        });
+        if (!hostName || values.length < 1 || locations.length < 1 || decisionParticipants.length < 1) return;
+        if (values.length > 1) {
+          const labels = values.map(scheduleLabel).filter(Boolean);
+          questions.push({
+            id: id("question"),
+            text: "When can you make it?",
+            kind: "multi-select",
+            scheduleRole: "time",
+            options: [...labels.map((label) => ({ id: id("option"), label, count: 0 })), { id: id("option"), label: "None of these work for me", count: 0 }],
+            maxSelections: labels.length + 1,
+          });
+        }
+        if (locations.length > 1) {
+          questions.push({
+            id: id("question"),
+            text: "Where should we meet?",
+            kind: "choose-one",
+            scheduleRole: "location",
+            options: locations.map((label) => ({ id: id("option"), label, count: 0 })),
+          });
+        }
         rootKind = "schedule";
       } else if (decisionStep === "players") {
         const selected = players.filter((player) => selectedPlayerIds.includes(player.id));
@@ -1486,29 +1779,38 @@ export function TaskBoard({
       }
 
       const primaryQuestion = questions[0];
+      const existingSchedule = decisionStep === "schedule" ? (card.decisions || []).find((item) => item.id === decisionEditingDecisionId) : undefined;
+      const scheduleValues = decisionStep === "schedule" ? scheduleSlotValues(scheduleDates) : undefined;
+      const scheduleLocationOptions = decisionStep === "schedule" ? scheduleLocationValues(scheduleLocations) : undefined;
       decision = {
-        id: id("decision"),
+        ...(existingSchedule || {}),
+        id: existingSchedule?.id || id("decision"),
         mode: "vote",
         kind: rootKind,
         decisionType: decisionStep,
         title: decisionTitle.trim() || undefined,
-        question: decisionStep === "players" ? decisionQuestion.trim() : decisionTitle.trim() || primaryQuestion.text,
-        hostName: decisionStep === "schedule" ? scheduleHostName.trim() : undefined,
+        question: decisionStep === "players" ? decisionQuestion.trim() : decisionStep === "schedule" ? (decisionTitle.trim() || card.title) : decisionTitle.trim() || primaryQuestion?.text || card.title,
+        hostName: decisionStep === "schedule" ? (existingSchedule?.hostName || scheduleHostName.trim()) : undefined,
+        hostEmail: decisionStep === "schedule" ? (existingSchedule?.hostEmail || (scheduleHostName.trim().toLowerCase() === currentActor.name.toLowerCase() ? currentActor.email : undefined)) : undefined,
+        scheduleState: decisionStep === "schedule" ? "collecting" : undefined,
+        scheduleTimeValues: scheduleValues,
+        scheduleLocationOptions,
+        scheduleParticipantMode: decisionStep === "schedule" ? scheduleParticipantMode : undefined,
         questions,
-        options: primaryQuestion.options,
+        options: primaryQuestion?.options || [],
         anonymous: decisionStep !== "schedule",
         hideParticipationUntilClosed: false,
-        showResultsWhileOpen: false,
+        showResultsWhileOpen: decisionStep === "schedule",
         status: "open",
-        eligibleCount: selectedPeople.length || Math.max(1, eligibleVoterCount),
-        participantEmails: selectedPeople.map((person) => person.email).filter((email): email is string => Boolean(email)),
-        participantNames: selectedPeople.map((person) => person.name),
+        eligibleCount: decisionParticipants.length || Math.max(1, eligibleVoterCount),
+        participantEmails: decisionParticipants.map((person) => person.email).filter((email): email is string => Boolean(email)),
+        participantNames: decisionParticipants.map((person) => person.name),
         sourcePlayerIds,
-        maxSelections: primaryQuestion.maxSelections,
+        maxSelections: primaryQuestion?.maxSelections,
         voterHashes: [],
         ballots: [],
-        createdAt: now,
-        createdByName: currentActor.name,
+        createdAt: existingSchedule?.createdAt || now,
+        createdByName: existingSchedule?.createdByName || currentActor.name,
       };
       activity = nowActivity("vote_started", currentActor.name, currentActor.email);
     }
@@ -1520,14 +1822,16 @@ export function TaskBoard({
       completedAt: undefined,
       completedByName: undefined,
       completedByEmail: undefined,
-      decisions: [...(card.decisions || []), decision],
+      decisions: decisionEditingDecisionId
+        ? (card.decisions || []).map((item) => item.id === decisionEditingDecisionId ? decision : item)
+        : [...(card.decisions || []), decision],
       vote: decision,
       updatedAt: now,
       updatedByName: currentActor.name,
       activities: [...card.activities, activity].slice(-30),
     };
     setSaving(true); setError("");
-    try { await persistCard(next); setDecisionCardId(null); setDecisionStep(null); setMobileFilter("deciding"); }
+    try { await persistCard(next); setDecisionCardId(null); setDecisionStep(null); setDecisionEditingDecisionId(null); setMobileFilter("deciding"); }
     catch (nextError) { setError(nextError instanceof Error ? nextError.message : "Could not add decision."); }
     finally { setSaving(false); }
   };
@@ -1805,10 +2109,15 @@ export function TaskBoard({
     setSelectedVoteAnswers((current) => {
       const selected = current[question.id] || [];
       if (question.kind !== "multi-select") return { ...current, [question.id]: [optionId] };
-      if (selected.includes(optionId)) return { ...current, [question.id]: selected.filter((idValue) => idValue !== optionId) };
+      const noneOption = question.scheduleRole === "time"
+        ? question.options.find((option) => option.label === "None of these work for me")
+        : undefined;
+      if (noneOption?.id === optionId) return { ...current, [question.id]: selected.includes(optionId) ? [] : [optionId] };
+      const withoutNone = noneOption ? selected.filter((idValue) => idValue !== noneOption.id) : selected;
+      if (withoutNone.includes(optionId)) return { ...current, [question.id]: withoutNone.filter((idValue) => idValue !== optionId) };
       const max = question.maxSelections || question.options.length;
-      if (selected.length >= max) return current;
-      return { ...current, [question.id]: [...selected, optionId] };
+      if (withoutNone.length >= max) return current;
+      return { ...current, [question.id]: [...withoutNone, optionId] };
     });
   };
 
@@ -1906,11 +2215,12 @@ export function TaskBoard({
     selectedKeys: string[],
     setter: React.Dispatch<React.SetStateAction<string[]>>,
     label = "People",
+    excludeNames: string[] = [],
   ) => (
     <div>
       <Label>{label}</Label>
       <div className="mt-1.5 flex flex-wrap gap-1.5">
-        {availablePeople.map((person) => {
+        {availablePeople.filter((person) => !excludeNames.some((name) => name.trim().toLowerCase() === person.name.trim().toLowerCase())).map((person) => {
           const key = personKey(person);
           const selected = selectedKeys.includes(key);
           return (
@@ -1990,6 +2300,84 @@ export function TaskBoard({
         {!decision.outcome && !open && <button type="button" className="px-1 text-[10px] font-medium text-slate-400 hover:text-slate-600" onClick={() => openOutcome(card, decision)}>+ Add note</button>}
       </div>
     );
+
+    const isScheduleDecision = decision.decisionType === "schedule" || decision.kind === "schedule";
+    if (isCurrent && isScheduleDecision) {
+      const scheduleState = decision.scheduleState || (open ? "collecting" : "finalized");
+      const isHost = scheduleIsHost(decision, currentActor);
+      const requestedForMe = Boolean(
+        decision.requestedHostEmail && currentActor.email && decision.requestedHostEmail.toLowerCase() === currentActor.email.toLowerCase()
+        || (!decision.requestedHostEmail && decision.requestedHostName?.toLowerCase() === currentActor.name.toLowerCase())
+      );
+      const calendarUrl = scheduleState === "finalized" ? googleCalendarUrl(card, decision) : "";
+      return (
+        <div key={entryKey} className="relative pl-8">
+          <div className={`absolute left-0 top-3 flex h-7 w-7 items-center justify-center rounded-full border-2 bg-white ${scheduleState === "finalized" ? "border-amber-400 text-amber-700" : "border-amber-500 text-amber-700"}`}>
+            {scheduleState === "finalized" ? <Check className="h-3.5 w-3.5" /> : <CalendarDays className="h-3.5 w-3.5" />}
+          </div>
+          <div className="rounded-2xl border border-amber-200 bg-amber-50/55 p-3">
+            <div className="text-[9px] font-semibold uppercase tracking-wide text-amber-700">Schedule</div>
+            <div className="mt-1 whitespace-normal break-words text-sm font-semibold leading-relaxed text-[#102A43] lg:text-base">{decision.title?.trim() || card.title}</div>
+
+            {scheduleState === "waiting-host" && <>
+              <div className="mt-3 rounded-xl bg-white px-3 py-3 ring-1 ring-amber-100">
+                <div className="text-xs font-semibold text-[#102A43]">Waiting for host</div>
+                <div className="mt-1 text-[11px] font-normal text-slate-500">{decision.hostRequestMode === "person" ? `${decision.requestedHostName || "An organizer"} has been asked to host.` : "The organizers have been asked who can host."}</div>
+              </div>
+              {(decision.hostRequestMode === "group" || requestedForMe) && <div className="mt-3 flex gap-2">
+                <Button type="button" className="h-10 flex-1 rounded-xl bg-sky-700 text-xs font-semibold text-white hover:bg-sky-800" disabled={saving} onClick={() => void claimScheduleHost(card, decision)}>I’ll host</Button>
+                {requestedForMe && <button type="button" className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-500" disabled={saving} onClick={() => void declineScheduleHost(card, decision)}>Decline</button>}
+              </div>}
+            </>}
+
+            {scheduleState === "host-declined" && <>
+              <div className="mt-3 rounded-xl bg-white px-3 py-3 ring-1 ring-amber-100">
+                <div className="text-xs font-semibold text-[#102A43]">Host request declined</div>
+                <div className="mt-1 text-[11px] font-normal text-slate-500">Choose Schedule again when you’re ready to ask someone else.</div>
+              </div>
+            </>}
+
+            {scheduleState === "setup" && <>
+              <div className="mt-3 rounded-xl bg-white px-3 py-3 ring-1 ring-sky-100">
+                <div className="text-[10px] font-medium text-slate-400">Host</div>
+                <div className="mt-0.5 text-sm font-semibold text-[#102A43]">{decision.hostName}</div>
+              </div>
+              {isHost ? <Button type="button" className="mt-3 h-10 w-full rounded-xl bg-sky-700 text-xs font-semibold text-white hover:bg-sky-800" onClick={() => openScheduleSetup(card, decision)}>Set up schedule</Button> : <div className="mt-3 text-[11px] font-normal text-slate-500">Waiting for {decision.hostName || "the host"} to propose times and locations.</div>}
+            </>}
+
+            {scheduleState === "collecting" && <>
+              <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] font-medium text-slate-500">
+                {decision.hostName && <span className="rounded-full bg-white px-2 py-1 ring-1 ring-slate-200">Host · {decision.hostName}</span>}
+                {decision.participantNames?.length ? <span className="rounded-full bg-white px-2 py-1 ring-1 ring-slate-200">{decision.participantNames.length} participant{decision.participantNames.length === 1 ? "" : "s"}</span> : null}
+              </div>
+              {decision.scheduleTimeValues?.length === 1 && <div className="mt-3 rounded-xl bg-white px-3 py-2.5 ring-1 ring-slate-100"><div className="text-[10px] font-medium text-slate-400">Proposed time</div><div className="mt-0.5 text-sm font-semibold text-[#102A43]">{scheduleLabel(decision.scheduleTimeValues[0])}</div></div>}
+              {decision.scheduleLocationOptions?.length === 1 && <div className="mt-2 rounded-xl bg-white px-3 py-2.5 ring-1 ring-slate-100"><div className="text-[10px] font-medium text-slate-400">Proposed location</div><div className="mt-0.5 text-sm font-semibold text-[#102A43]">{decision.scheduleLocationOptions[0]}</div></div>}
+              {questions.length > 0 && <div className="mt-3">{results}</div>}
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                {questions.length > 0 && <span className="mr-auto text-[10px] font-medium text-slate-500">{totalVoters}{decision.eligibleCount ? ` of ${decision.eligibleCount}` : ""} responded</span>}
+                {questions.length > 0 && canVote && <button type="button" className="rounded-xl bg-amber-600 px-3 py-2 text-xs font-semibold text-white" onClick={() => openVoteDialog(card, decision)}>Respond</button>}
+                {isHost && totalVoters === 0 && <button type="button" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600" onClick={() => openScheduleSetup(card, decision)}>Edit</button>}
+                {isHost && <button type="button" className="rounded-xl bg-sky-700 px-3 py-2 text-xs font-semibold text-white" onClick={() => openFinalizeSchedule(card, decision)}>Finalize</button>}
+              </div>
+            </>}
+
+            {scheduleState === "finalized" && <>
+              <div className="mt-3 rounded-2xl bg-white p-3 ring-1 ring-amber-100">
+                <div className="text-[10px] font-medium uppercase tracking-wide text-slate-400">Confirmed</div>
+                <div className="mt-1 text-base font-semibold text-[#102A43]">{decision.finalizedTime ? scheduleLabel(decision.finalizedTime) : "Time confirmed"}</div>
+                {decision.finalizedLocation && <div className="mt-1 flex items-center gap-1.5 text-sm font-medium text-slate-600"><MapPin className="h-3.5 w-3.5" />{decision.finalizedLocation}</div>}
+                {decision.hostName && <div className="mt-1 text-[11px] font-normal text-slate-500">Host · {decision.hostName}</div>}
+                {decision.meetingUrl && <a href={decision.meetingUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-sky-700"><ExternalLink className="h-3.5 w-3.5" />Open meeting link</a>}
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {calendarUrl && <a href={calendarUrl} target="_blank" rel="noreferrer" className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700"><CalendarDays className="h-4 w-4" />Add to Google Calendar</a>}
+                {online && currentNotifyTarget(card)?.notification?.status !== "sent" && <button type="button" className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-amber-200 bg-white px-3 text-xs font-semibold text-amber-800" onClick={() => openNotify(card)}><Bell className="h-4 w-4" />Notify</button>}
+              </div>
+            </>}
+          </div>
+        </div>
+      );
+    }
 
     if (!isCurrent) {
       return (
@@ -2374,10 +2762,15 @@ export function TaskBoard({
     return Boolean(draft.text.trim()) && labels.length >= 2;
   });
   const scheduleOptionsCount = scheduleSlotValues(scheduleDates).length;
+  const scheduleLocationCount = scheduleLocationValues(scheduleLocations).length;
+  const scheduleHostParticipantCount = scheduleParticipantMode === "all"
+    ? availablePeople.filter((person) => person.name.toLowerCase() !== scheduleHostName.toLowerCase()).length
+    : peopleFromKeys(decisionPeopleKeys).filter((person) => person.name.toLowerCase() !== scheduleHostName.toLowerCase()).length;
+  const scheduleNeedsPoll = scheduleOptionsCount > 1 || scheduleLocationCount > 1;
   const decisionSetupValid = decisionMode === "recorded"
     ? decisionPhaseNameValid && Boolean(decisionOutcome.trim())
     : decisionStep === "schedule"
-      ? decisionPhaseNameValid && Boolean(scheduleHostName.trim()) && decisionPeopleKeys.length > 0 && scheduleOptionsCount >= 2
+      ? Boolean(decisionEditingDecisionId) && Boolean(scheduleHostName.trim()) && scheduleHostParticipantCount > 0 && scheduleOptionsCount >= 1 && scheduleLocationCount >= 1
       : decisionStep === "players"
         ? decisionPhaseNameValid && Boolean(decisionQuestion.trim()) && selectedPlayerIds.length >= 1
         : decisionStep === "equipment"
@@ -2385,6 +2778,9 @@ export function TaskBoard({
           : decisionStep === "vote"
             ? decisionPhaseNameValid && genericQuestionsValid
             : false;
+
+  const finalizeScheduleCard = board.cards.find((card) => card.id === finalizeScheduleCardId);
+  const finalizeScheduleDecision = finalizeScheduleCard?.decisions?.find((decision) => decision.id === finalizeScheduleDecisionId);
 
   return (
     <>
@@ -2543,9 +2939,9 @@ export function TaskBoard({
           )}
         </DialogContent>
       </Dialog>
-      <Dialog open={Boolean(decisionCardId)} onOpenChange={(open) => { if (!open) { setDecisionCardId(null); setDecisionStep(null); } }}>
+      <Dialog open={Boolean(decisionCardId)} onOpenChange={(open) => { if (!open) { setDecisionCardId(null); setDecisionStep(null); setDecisionEditingDecisionId(null); } }}>
         <DialogContent className="fixed bottom-2 left-2 right-2 top-auto max-h-[90dvh] w-auto max-w-none translate-x-0 translate-y-0 overflow-y-auto rounded-[2rem] p-4 sm:bottom-auto sm:left-1/2 sm:right-auto sm:top-1/2 sm:w-full sm:max-w-lg sm:-translate-x-1/2 sm:-translate-y-1/2 lg:max-w-2xl lg:p-6" onOpenAutoFocus={(event) => event.preventDefault()}>
-          <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43] lg:text-xl">{decisionStep ? "Set up decision" : "What kind of decision?"}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43] lg:text-xl">{decisionStep === "schedule" ? (decisionEditingDecisionId ? "Set up schedule" : "Schedule") : decisionStep ? "Set up decision" : "What kind of decision?"}</DialogTitle></DialogHeader>
           {!decisionStep ? (
             <div className="grid grid-cols-2 gap-2">
               <button type="button" className="rounded-2xl border border-amber-100 bg-amber-50/60 p-4 text-left lg:p-5" onClick={() => chooseDecisionType("vote")}><Vote className="h-5 w-5 text-amber-700" /><div className="mt-2 text-sm font-black text-[#102A43] lg:text-base">Vote</div><div className="mt-1 text-[11px] font-semibold text-slate-500 lg:text-sm">One or more questions</div></button>
@@ -2570,35 +2966,76 @@ export function TaskBoard({
               ) : (
                 <>
                   {decisionStep === "schedule" ? <>
-                    <div>
-                      <Label htmlFor="schedule-title">What are you scheduling? <span className="font-semibold text-slate-400">{decisionPhaseNameRequired ? "" : "optional"}</span></Label>
-                      <Input id="schedule-title" value={decisionTitle} onChange={(event) => setDecisionTitle(event.target.value)} maxLength={120} placeholder={decisionSetupCard?.title || "e.g. Club desk tutorial"} />
-                      {!decisionPhaseNameRequired && <div className="mt-1 text-[10px] font-semibold text-slate-400">Leave blank to use the topic name.</div>}
-                    </div>
-                    <div><Label htmlFor="schedule-host">Host</Label><Input id="schedule-host" value={scheduleHostName} onChange={(event) => setScheduleHostName(event.target.value)} maxLength={80} placeholder="e.g. Tanja" /></div>
-                    {renderPeoplePicker(decisionPeopleKeys, setDecisionPeopleKeys, "Who needs to respond?")}
-                    <div>
-                      <Label>Possible dates & times</Label>
-                      <div className="mt-1.5 grid gap-2">
-                        {scheduleDates.map((group) => <div key={group.id} className="rounded-2xl border border-slate-200 bg-white p-2.5">
-                          <div className="flex items-center gap-2">
-                            <Input type="date" value={group.date} onChange={(event) => updateScheduleDate(group.id, { date: event.target.value })} />
-                            <button type="button" className="rounded-xl border border-slate-200 p-2 text-slate-400" onClick={() => setScheduleDates((current) => current.filter((item) => item.id !== group.id))} disabled={scheduleDates.length <= 1} aria-label="Remove date"><Trash2 className="h-4 w-4" /></button>
+                    {!decisionEditingDecisionId ? (
+                      <div className="grid gap-3">
+                        <div>
+                          <div className="text-sm font-semibold text-[#102A43]">Who will host this?</div>
+                          <div className="mt-1 text-[11px] font-normal text-slate-500">Choose the person who will own the time, place and final confirmation.</div>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2">
+                          <button type="button" className="rounded-2xl border border-sky-200 bg-sky-50 px-2 py-3 text-center text-xs font-semibold text-sky-900" disabled={saving || !decisionSetupCard} onClick={() => { if (decisionSetupCard) void createScheduleForHost(decisionSetupCard, currentActor); }}>Me</button>
+                          <button type="button" className={`rounded-2xl border px-2 py-3 text-center text-xs font-semibold ${scheduleHostChoice === "person" ? "border-amber-300 bg-amber-50 text-amber-900" : "border-slate-200 bg-white text-slate-700"}`} onClick={() => setScheduleHostChoice("person")}>Someone else</button>
+                          <button type="button" className="rounded-2xl border border-slate-200 bg-white px-2 py-3 text-center text-xs font-semibold text-slate-700" disabled={saving || otherOrganizerPeople.length === 0} onClick={() => void requestScheduleHost("group")}>Ask group</button>
+                        </div>
+                        {scheduleHostChoice === "person" && <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
+                          <Label>Choose host</Label>
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            {scheduleHostPeople().filter((person) => personKey(person) !== personKey(currentActor)).map((person) => {
+                              const key = personKey(person);
+                              const selected = scheduleRequestedHostKey === key;
+                              return <button key={key} type="button" className={`rounded-full px-2.5 py-1.5 text-[11px] font-semibold ring-1 ${selected ? "bg-amber-50 text-amber-900 ring-amber-200" : "bg-white text-slate-600 ring-slate-200"}`} onClick={() => setScheduleRequestedHostKey(key)}>{selected && <Check className="mr-1 inline h-3 w-3" />}{person.name}</button>;
+                            })}
                           </div>
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            {group.times.map((time, timeIndex) => <div key={`${group.id}-${timeIndex}`} className="flex items-center gap-1">
-                              <select className="h-10 rounded-xl border border-slate-200 bg-white px-2 text-sm font-bold text-[#102A43]" value={time} onChange={(event) => updateScheduleDate(group.id, { times: group.times.map((item, index) => index === timeIndex ? event.target.value : item) })}>
-                                <option value="">Time</option>
-                                {TIME_CHOICES.map((value) => <option key={value} value={value}>{value}</option>)}
-                              </select>
-                              <button type="button" className="rounded-lg p-2 text-slate-400" onClick={() => updateScheduleDate(group.id, { times: group.times.filter((_, index) => index !== timeIndex) })} disabled={group.times.length <= 1} aria-label="Remove time"><Trash2 className="h-3.5 w-3.5" /></button>
-                            </div>)}
-                            <button type="button" className="rounded-xl bg-slate-100 px-3 py-2 text-[11px] font-black text-slate-600" onClick={() => updateScheduleDate(group.id, { times: [...group.times, ""] })}>+ Time</button>
-                          </div>
-                        </div>)}
+                          <Button type="button" className="mt-3 h-10 w-full rounded-xl bg-amber-600 text-xs font-semibold text-white hover:bg-amber-700" disabled={!scheduleRequestedHostKey || saving} onClick={() => void requestScheduleHost("person")}>Ask them to host</Button>
+                        </div>}
+                        <div className="text-[10px] font-normal leading-relaxed text-slate-400">Someone else gets a host request. Ask group pings the other organizers and the first person to take it becomes host.</div>
                       </div>
-                      <button type="button" className="mt-2 rounded-xl bg-slate-100 px-3 py-2 text-[11px] font-black text-slate-600" onClick={() => setScheduleDates((current) => [...current, newScheduleDateGroup()])}>+ Date</button>
-                    </div>
+                    ) : (
+                      <>
+                        <div>
+                          <Label htmlFor="schedule-title">What are you scheduling? <span className="font-normal text-slate-400">optional</span></Label>
+                          <Input id="schedule-title" value={decisionTitle} onChange={(event) => setDecisionTitle(event.target.value)} maxLength={120} placeholder={decisionSetupCard?.title || "Board meeting"} />
+                        </div>
+                        <div className="rounded-2xl bg-sky-50 px-3 py-2.5 text-xs text-sky-900"><span className="font-semibold">Host:</span> {scheduleHostName}</div>
+                        <div>
+                          <Label>Participants</Label>
+                          <div className="mt-1.5 flex rounded-2xl bg-slate-100 p-1">
+                            <button type="button" className={`flex-1 rounded-xl px-3 py-2 text-xs font-semibold ${scheduleParticipantMode === "all" ? "bg-white text-[#102A43] shadow-sm" : "text-slate-500"}`} onClick={() => setScheduleParticipantMode("all")}>All</button>
+                            <button type="button" className={`flex-1 rounded-xl px-3 py-2 text-xs font-semibold ${scheduleParticipantMode === "selected" ? "bg-white text-[#102A43] shadow-sm" : "text-slate-500"}`} onClick={() => setScheduleParticipantMode("selected")}>Choose</button>
+                          </div>
+                          {scheduleParticipantMode === "selected" && <div className="mt-2">{renderPeoplePicker(decisionPeopleKeys, setDecisionPeopleKeys, "Who should respond?", [scheduleHostName])}</div>}
+                          {scheduleParticipantMode === "all" && <div className="mt-1 text-[10px] font-normal text-slate-400">All other organizers will be asked.</div>}
+                        </div>
+                        <div>
+                          <Label>Possible dates & times</Label>
+                          <div className="mt-1 text-[10px] font-normal text-slate-400">One option is simply proposed. Two or more automatically become an availability poll, including “None of these work for me”.</div>
+                          <div className="mt-1.5 grid gap-2">
+                            {scheduleDates.map((group) => <div key={group.id} className="rounded-2xl border border-slate-200 bg-white p-2.5">
+                              <div className="flex items-center gap-2">
+                                <Input type="date" value={group.date} onChange={(event) => updateScheduleDate(group.id, { date: event.target.value })} />
+                                <button type="button" className="rounded-xl border border-slate-200 p-2 text-slate-400" onClick={() => setScheduleDates((current) => current.filter((item) => item.id !== group.id))} disabled={scheduleDates.length <= 1} aria-label="Remove date"><Trash2 className="h-4 w-4" /></button>
+                              </div>
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                {group.times.map((time, timeIndex) => <div key={`${group.id}-${timeIndex}`} className="flex items-center gap-1">
+                                  <select className="h-10 rounded-xl border border-slate-200 bg-white px-2 text-sm font-medium text-[#102A43]" value={time} onChange={(event) => updateScheduleDate(group.id, { times: group.times.map((item, index) => index === timeIndex ? event.target.value : item) })}>
+                                    <option value="">Time</option>
+                                    {TIME_CHOICES.map((value) => <option key={value} value={value}>{value}</option>)}
+                                  </select>
+                                  <button type="button" className="rounded-lg p-2 text-slate-400" onClick={() => updateScheduleDate(group.id, { times: group.times.filter((_, index) => index !== timeIndex) })} disabled={group.times.length <= 1} aria-label="Remove time"><Trash2 className="h-3.5 w-3.5" /></button>
+                                </div>)}
+                                <button type="button" className="rounded-xl bg-slate-100 px-3 py-2 text-[11px] font-medium text-slate-600" onClick={() => updateScheduleDate(group.id, { times: [...group.times, ""] })}>+ Time</button>
+                              </div>
+                            </div>)}
+                          </div>
+                          <button type="button" className="mt-2 rounded-xl bg-slate-100 px-3 py-2 text-[11px] font-medium text-slate-600" onClick={() => setScheduleDates((current) => [...current, newScheduleDateGroup()])}>+ Date</button>
+                        </div>
+                        <div>
+                          <Label htmlFor="schedule-locations">Location / online options — one per line</Label>
+                          <Textarea id="schedule-locations" value={scheduleLocations} onChange={(event) => setScheduleLocations(event.target.value)} rows={3} maxLength={500} placeholder={"Clubhouse\nZoom"} />
+                          <div className="mt-1 text-[10px] font-normal text-slate-400">One location is simply proposed. More than one becomes a location vote.</div>
+                        </div>
+                      </>
+                    )}
                   </> : <>
                     {decisionPhaseNameRequired && decisionStep !== "equipment" && <div><Label htmlFor="decision-name">Decision name</Label><Input id="decision-name" value={decisionTitle} onChange={(event) => setDecisionTitle(event.target.value)} maxLength={120} placeholder="What is this next decision about?" /></div>}
 
@@ -2737,14 +3174,14 @@ export function TaskBoard({
                 </>
               )}
 
-              <Button
+              {!(decisionStep === "schedule" && !decisionEditingDecisionId) && <Button
                 type="button"
                 className={`h-11 rounded-2xl font-black text-white ${decisionMode === "recorded" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-amber-600 hover:bg-amber-700"}`}
                 disabled={saving || !decisionSetupValid}
                 onClick={() => void addDecision()}
               >
-                {saving ? "Saving…" : decisionMode === "recorded" ? "Record decision" : decisionStep === "schedule" ? "Open availability" : "Open vote"}
-              </Button>
+                {saving ? "Saving…" : decisionMode === "recorded" ? "Record decision" : decisionStep === "schedule" ? (scheduleNeedsPoll ? "Open availability" : "Save schedule") : "Open vote"}
+              </Button>}
             </div>
           )}
         </DialogContent>
@@ -2793,7 +3230,7 @@ export function TaskBoard({
 
       <Dialog open={Boolean(votingCard && votingDecision)} onOpenChange={(open) => { if (!open) { setVotingCardId(null); setVotingDecisionId(null); setSelectedVoteAnswers({}); } }}>
         <DialogContent className="fixed bottom-2 left-2 right-2 top-auto max-h-[90dvh] w-auto max-w-none translate-x-0 translate-y-0 overflow-y-auto rounded-[2rem] p-4 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-md sm:-translate-x-1/2">
-          <DialogHeader><DialogTitle className="text-left text-base font-semibold text-[#102A43]">{votingDecision?.kind === "schedule" ? "Your availability" : votingDecision?.decisionType === "players" ? "Player decision" : "Vote in Stripes"}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle className="text-left text-base font-semibold text-[#102A43]">{votingDecision?.kind === "schedule" ? "Schedule response" : votingDecision?.decisionType === "players" ? "Player decision" : "Vote in Stripes"}</DialogTitle></DialogHeader>
           {votingDecision && <div className="grid gap-3">
             {votingDecision.title?.trim() && <div className="whitespace-normal break-words text-sm font-semibold leading-relaxed text-[#102A43]">{votingDecision.title}</div>}
             {votingDecision.decisionType === "players" && <div className="rounded-2xl bg-amber-50 px-3 py-2.5 text-sm font-medium leading-relaxed text-amber-950">{votingDecision.question}</div>}
@@ -2802,15 +3239,45 @@ export function TaskBoard({
               const selectedIds = selectedVoteAnswers[question.id] || [];
               return <div key={question.id} className={decisionQuestions(votingDecision).length > 1 ? "rounded-2xl border border-slate-200 bg-white p-3" : ""}>
                 <div className="whitespace-normal break-words text-sm font-medium leading-relaxed text-[#102A43]">{votingDecision.decisionType === "players" ? question.text : `${decisionQuestions(votingDecision).length > 1 ? `${questionIndex + 1}. ` : ""}${question.text}`}</div>
-                {question.kind === "multi-select" && <div className="mt-1 text-[10px] font-medium text-slate-500">{votingDecision.kind === "schedule" ? "Choose every time that works for you." : `Choose up to ${question.maxSelections || question.options.length}.`}</div>}
+                {votingDecision.kind === "schedule" && question.scheduleRole === "time" && <div className="mt-1 text-[10px] font-normal text-slate-500">Choose every time that works. If none work, choose “None of these work for me”.</div>}
+                {votingDecision.kind === "schedule" && question.scheduleRole === "location" && <div className="mt-1 text-[10px] font-normal text-slate-500">Choose the location you prefer.</div>}
+                {votingDecision.kind !== "schedule" && question.kind === "multi-select" && <div className="mt-1 text-[10px] font-medium text-slate-500">Choose up to ${question.maxSelections || question.options.length}.</div>}
                 <div className="mt-2 grid gap-2">{question.options.map((option) => {
                   const selected = selectedIds.includes(option.id);
                   return <button key={option.id} type="button" className={`rounded-2xl border px-3 py-3 text-left text-sm font-medium ${selected ? "border-amber-500 bg-amber-50 text-amber-800" : "border-slate-200 bg-white text-[#102A43]"}`} onClick={() => toggleVoteOption(question, option.id)}>{selected && <Check className="mr-1 inline h-4 w-4" />}{option.label}</button>;
                 })}</div>
               </div>;
             })}</div>
-            <div className="text-[10px] font-medium leading-snug text-slate-500">{votingDecision.kind === "schedule" ? "Your availability is visible to the organizers in this schedule." : votingDecision.decisionType === "players" ? "Answer Yes, No, or Maybe for each player. Your ballot is anonymous and can be updated while the decision remains open." : "Anonymous. You can change your answer while it remains open."}</div>
+            <div className="text-[10px] font-normal leading-snug text-slate-500">{votingDecision.kind === "schedule" ? "Your schedule response is visible to the host so they can find the best overlap." : votingDecision.decisionType === "players" ? "Answer Yes, No, or Maybe for each player. Your ballot is anonymous and can be updated while the decision remains open." : "Anonymous. You can change your answer while it remains open."}</div>
             <Button type="button" className="h-11 rounded-2xl bg-amber-600 font-semibold text-white" disabled={decisionQuestions(votingDecision).some((question) => !(selectedVoteAnswers[question.id] || []).length) || voteSubmitting} onClick={() => void submitVote()}>{voteSubmitting ? "Recording…" : votingDecision.ballots?.some((ballot) => ballot.voterHash === currentVoterHash) ? "Update" : "Submit"}</Button>
+          </div>}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(finalizeScheduleCard && finalizeScheduleDecision)} onOpenChange={(open) => { if (!open) { setFinalizeScheduleCardId(null); setFinalizeScheduleDecisionId(null); } }}>
+        <DialogContent className="fixed bottom-2 left-2 right-2 top-auto max-h-[90dvh] w-auto max-w-none translate-x-0 translate-y-0 overflow-y-auto rounded-[2rem] p-4 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-md sm:-translate-x-1/2" onOpenAutoFocus={(event) => event.preventDefault()}>
+          <DialogHeader><DialogTitle className="text-left text-base font-semibold text-[#102A43]">Finalize schedule</DialogTitle></DialogHeader>
+          {finalizeScheduleDecision && <div className="grid gap-3">
+            <div className="rounded-2xl bg-sky-50 px-3 py-2.5 text-[11px] font-normal text-sky-900">You can finalize before everyone responds. The host makes the final call.</div>
+            <div>
+              <Label htmlFor="final-schedule-time">Date & time</Label>
+              <select id="final-schedule-time" className="mt-1 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-[#102A43]" value={finalScheduleTime} onChange={(event) => setFinalScheduleTime(event.target.value)}>
+                <option value="">Choose final time</option>
+                {(finalizeScheduleDecision.scheduleTimeValues || []).map((value) => <option key={value} value={value}>{scheduleLabel(value)}</option>)}
+              </select>
+            </div>
+            <div>
+              <Label htmlFor="final-schedule-location">Location</Label>
+              <select id="final-schedule-location" className="mt-1 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-[#102A43]" value={finalScheduleLocation} onChange={(event) => setFinalScheduleLocation(event.target.value)}>
+                <option value="">Choose final location</option>
+                {(finalizeScheduleDecision.scheduleLocationOptions || []).map((value) => <option key={value} value={value}>{value}</option>)}
+              </select>
+            </div>
+            <div>
+              <Label htmlFor="final-schedule-link">Video / meeting link <span className="font-normal text-slate-400">optional</span></Label>
+              <Input id="final-schedule-link" type="url" inputMode="url" value={finalScheduleMeetingUrl} onChange={(event) => setFinalScheduleMeetingUrl(event.target.value)} placeholder="https://zoom.us/…" />
+            </div>
+            <Button type="button" className="h-11 rounded-2xl bg-sky-700 font-semibold text-white hover:bg-sky-800" disabled={saving || !finalScheduleTime || !finalScheduleLocation || (Boolean(finalScheduleMeetingUrl.trim()) && !validHttpUrl(finalScheduleMeetingUrl))} onClick={() => void finalizeSchedule()}>{saving ? "Saving…" : "Confirm schedule"}</Button>
           </div>}
         </DialogContent>
       </Dialog>

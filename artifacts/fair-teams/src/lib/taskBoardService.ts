@@ -61,6 +61,7 @@ export type TaskBoardDecisionQuestion = {
   options: TaskBoardVoteOption[];
   maxSelections?: number;
   sourcePlayerIds?: string[];
+  scheduleRole?: "time" | "location";
 };
 
 export type TaskBoardVoteAnswer = {
@@ -114,6 +115,19 @@ export type TaskBoardVote = {
   question: string;
   outcome?: string;
   hostName?: string;
+  hostEmail?: string;
+  scheduleState?: "waiting-host" | "setup" | "collecting" | "finalized" | "host-declined";
+  hostRequestMode?: "person" | "group";
+  requestedHostName?: string;
+  requestedHostEmail?: string;
+  scheduleTimeValues?: string[];
+  scheduleLocationOptions?: string[];
+  scheduleParticipantMode?: "all" | "selected";
+  finalizedTime?: string;
+  finalizedLocation?: string;
+  meetingUrl?: string;
+  finalizedAt?: number;
+  finalizedByName?: string;
   questions?: TaskBoardDecisionQuestion[];
   participantEmails?: string[];
   participantNames?: string[];
@@ -372,6 +386,7 @@ function parseVote(value: unknown, fallbackId = "decision"): TaskBoardVote | und
         options: questionOptions,
         maxSelections: Number(q.maxSelections || 0) || undefined,
         sourcePlayerIds: Array.isArray(q.sourcePlayerIds) ? q.sourcePlayerIds.map(String).filter(Boolean) : undefined,
+        scheduleRole: q.scheduleRole === "time" || q.scheduleRole === "location" ? q.scheduleRole as TaskBoardDecisionQuestion["scheduleRole"] : undefined,
       };
     }).filter((q) => q.text && q.options.length >= 2)
     : [];
@@ -389,7 +404,7 @@ function parseVote(value: unknown, fallbackId = "decision"): TaskBoardVote | und
       }]
       : [];
 
-  if (mode === "vote" && questions.length === 0) return undefined;
+  if (mode === "vote" && questions.length === 0 && decisionType !== "schedule") return undefined;
 
   const ballots = Array.isArray(row.ballots)
     ? row.ballots.map((item) => {
@@ -422,6 +437,19 @@ function parseVote(value: unknown, fallbackId = "decision"): TaskBoardVote | und
     question,
     outcome,
     hostName,
+    hostEmail: row.hostEmail ? String(row.hostEmail).trim() : undefined,
+    scheduleState: ["waiting-host", "setup", "collecting", "finalized", "host-declined"].includes(String(row.scheduleState)) ? String(row.scheduleState) as TaskBoardVote["scheduleState"] : undefined,
+    hostRequestMode: row.hostRequestMode === "person" || row.hostRequestMode === "group" ? row.hostRequestMode : undefined,
+    requestedHostName: row.requestedHostName ? String(row.requestedHostName).trim() : undefined,
+    requestedHostEmail: row.requestedHostEmail ? String(row.requestedHostEmail).trim() : undefined,
+    scheduleTimeValues: Array.isArray(row.scheduleTimeValues) ? row.scheduleTimeValues.map(String).filter(Boolean) : undefined,
+    scheduleLocationOptions: Array.isArray(row.scheduleLocationOptions) ? row.scheduleLocationOptions.map(String).filter(Boolean) : undefined,
+    scheduleParticipantMode: row.scheduleParticipantMode === "all" || row.scheduleParticipantMode === "selected" ? row.scheduleParticipantMode : undefined,
+    finalizedTime: row.finalizedTime ? String(row.finalizedTime) : undefined,
+    finalizedLocation: row.finalizedLocation ? String(row.finalizedLocation) : undefined,
+    meetingUrl: row.meetingUrl ? String(row.meetingUrl) : undefined,
+    finalizedAt: toMillis(row.finalizedAt),
+    finalizedByName: row.finalizedByName ? String(row.finalizedByName) : undefined,
     questions,
     participantEmails: Array.isArray(row.participantEmails) ? row.participantEmails.map(String).filter(Boolean) : undefined,
     participantNames: Array.isArray(row.participantNames) ? row.participantNames.map(String).filter(Boolean) : undefined,
@@ -580,7 +608,7 @@ export async function saveTaskBoardMeta(scopeId: string, meta: TaskBoardMeta): P
   const user = actor();
   const now = new Date();
   await setDoc(rootDoc(scopeId), {
-    app: "Stripes", schemaVersion: 6, name: meta.name.trim() || "Action Board", customName: meta.customName?.trim() || null,
+    app: "Fair Teams", schemaVersion: 7, name: meta.name.trim() || "Action Board", customName: meta.customName?.trim() || null,
     updatedByUid: user.uid, updatedByEmail: user.email || null, updatedByName: user.name,
     updatedAt: serverTimestamp(), updatedAtIso: now.toISOString(),
     ...(meta.createdAt ? {} : { createdAt: serverTimestamp(), createdAtIso: now.toISOString() }),
@@ -591,7 +619,7 @@ export async function saveTaskBoardColumn(scopeId: string, column: TaskBoardColu
   const user = actor();
   const now = new Date();
   await setDoc(doc(columnsCollection(scopeId), column.id), {
-    app: "Stripes", schemaVersion: 4, name: column.name.trim() || "Column", kind: column.kind || null, position: column.position,
+    app: "Fair Teams", schemaVersion: 4, name: column.name.trim() || "Column", kind: column.kind || null, position: column.position,
     archived: Boolean(column.archived), updatedByUid: user.uid, updatedByName: user.name,
     updatedAt: serverTimestamp(), updatedAtIso: now.toISOString(),
     ...(column.createdAt ? {} : { createdAt: serverTimestamp(), createdAtIso: now.toISOString() }),
@@ -660,6 +688,19 @@ function votePayload(vote?: TaskBoardVote) {
     question: vote.question.trim(),
     outcome: vote.outcome?.trim() || null,
     hostName: vote.hostName?.trim() || null,
+    hostEmail: vote.hostEmail?.trim() || null,
+    scheduleState: vote.scheduleState || null,
+    hostRequestMode: vote.hostRequestMode || null,
+    requestedHostName: vote.requestedHostName?.trim() || null,
+    requestedHostEmail: vote.requestedHostEmail?.trim() || null,
+    scheduleTimeValues: vote.scheduleTimeValues || [],
+    scheduleLocationOptions: vote.scheduleLocationOptions || [],
+    scheduleParticipantMode: vote.scheduleParticipantMode || null,
+    finalizedTime: vote.finalizedTime || null,
+    finalizedLocation: vote.finalizedLocation || null,
+    meetingUrl: vote.meetingUrl?.trim() || null,
+    finalizedAt: vote.finalizedAt || null,
+    finalizedByName: vote.finalizedByName || null,
     participantEmails: vote.participantEmails || [],
     participantNames: vote.participantNames || [],
     sourcePlayerIds: vote.sourcePlayerIds || [],
@@ -669,6 +710,7 @@ function votePayload(vote?: TaskBoardVote) {
       kind: question.kind,
       maxSelections: question.maxSelections || null,
       sourcePlayerIds: question.sourcePlayerIds || [],
+      scheduleRole: question.scheduleRole || null,
       options: question.options.map((option) => ({ id: option.id, label: option.label.trim(), count: option.count || 0 })),
     })),
     anonymous: vote.anonymous,
@@ -729,7 +771,7 @@ export async function saveTaskBoardCard(scopeId: string, card: TaskBoardCard): P
   const latestDecision = decisions[decisions.length - 1];
   const latestOpenAction = [...actions].reverse().find((action) => action.status === "open");
   await setDoc(doc(cardsCollection(scopeId), card.id), {
-    app: "Stripes", schemaVersion: 6,
+    app: "Fair Teams", schemaVersion: 7,
     title: card.title.trim() || "Untitled topic", note: card.note?.trim() || null,
     people: (card.people || []).map((person) => ({ name: person.name.trim(), email: person.email?.trim() || null })).filter((person) => person.name),
     gifUrl: card.gifUrl?.trim() || null,
@@ -756,6 +798,62 @@ export async function saveTaskBoardCard(scopeId: string, card: TaskBoardCard): P
     activities: card.activities.slice(-30).map(activityPayload),
     topicNotification: notificationPayload(card.topicNotification),
   }, { merge: true });
+}
+
+export async function claimTaskBoardScheduleHost(
+  scopeId: string,
+  cardId: string,
+  requestDecisionId: string,
+  scheduleDecision: TaskBoardVote,
+): Promise<boolean> {
+  const signed = actor();
+  const reference = doc(cardsCollection(scopeId), cardId);
+  return runTransaction(getFairTeamsFirestore(), async (transaction) => {
+    const snapshot = await transaction.get(reference);
+    if (!snapshot.exists()) throw new Error("This topic no longer exists.");
+    const card = parseCard(snapshot.id, snapshot.data());
+    const decisions = card.decisions || [];
+    const requestIndex = decisions.findIndex((decision) => decision.id === requestDecisionId);
+    if (requestIndex < 0) return false;
+    const request = decisions[requestIndex];
+    if (request.status !== "open" || request.scheduleState !== "waiting-host") return false;
+    const signedEmail = signed.email?.trim().toLowerCase() || "";
+    if (request.requestedHostEmail && request.requestedHostEmail.trim().toLowerCase() !== signedEmail) {
+      throw new Error("This host request is for another organizer.");
+    }
+    const now = Date.now();
+    const nextRequest: TaskBoardVote = {
+      ...request,
+      status: "closed",
+      closedAt: now,
+      closedByName: signed.name,
+      outcome: `Hosted by ${scheduleDecision.hostName || signed.name}`,
+    };
+    const nextSchedule: TaskBoardVote = {
+      ...scheduleDecision,
+      hostName: scheduleDecision.hostName || signed.name,
+      hostEmail: scheduleDecision.hostEmail || signed.email,
+      createdAt: scheduleDecision.createdAt || now,
+      createdByName: scheduleDecision.createdByName || signed.name,
+    };
+    const nextDecisions = decisions.map((decision, index) => index === requestIndex ? nextRequest : decision);
+    nextDecisions.push(nextSchedule);
+    const activity: TaskBoardActivity = {
+      id: `schedule-claim-${now}-${Math.random().toString(36).slice(2, 7)}`,
+      action: "claimed",
+      actorName: signed.name,
+      actorEmail: signed.email,
+      at: now,
+    };
+    transaction.update(reference, {
+      decisions: nextDecisions.map((decision) => votePayload(decision)),
+      vote: votePayload(nextSchedule),
+      activities: [...card.activities, activity].slice(-30).map(activityPayload),
+      updatedAt: serverTimestamp(),
+      updatedAtIso: new Date(now).toISOString(),
+    });
+    return true;
+  });
 }
 
 export async function deleteTaskBoardCard(scopeId: string, cardId: string): Promise<void> {

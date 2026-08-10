@@ -381,18 +381,10 @@ function TeamStripesIcon({ className = "h-5 w-5" }: { className?: string }) {
 
 function App() {
   const [showSplash, setShowSplash] = useState(true);
-  const [splashVisible, setSplashVisible] = useState(false);
 
   useEffect(() => {
-    const fadeIn = window.setTimeout(() => setSplashVisible(true), 30);
-    const fadeOut = window.setTimeout(() => setSplashVisible(false), 1550);
     const finish = window.setTimeout(() => setShowSplash(false), 1750);
-
-    return () => {
-      window.clearTimeout(fadeIn);
-      window.clearTimeout(fadeOut);
-      window.clearTimeout(finish);
-    };
+    return () => window.clearTimeout(finish);
   }, []);
 
   useEffect(() => {
@@ -3554,17 +3546,12 @@ They will no longer be able to open or edit this shared roster unless it is shar
 
   if (showSplash) {
     return (
-      <div className={`min-h-[100dvh] flex flex-col items-center justify-center bg-white text-[#102A43] stripes-splash-shell ${splashVisible ? "is-visible" : ""}`}>
-        <div className="stripes-splash-symbol" aria-label="Stripes">
-          <div className="stripes-splash-ribbons" aria-hidden="true">
-            <span style={{ backgroundColor: "#3B82F6" }} />
-            <span style={{ backgroundColor: "#84CC16" }} />
-            <span style={{ backgroundColor: "#F59E0B" }} />
-            <span style={{ backgroundColor: "#EF4444" }} />
-            <span style={{ backgroundColor: "#7C3AED" }} />
-          </div>
-          <img src={stripesLogo} alt="" aria-hidden="true" className="stripes-splash-logo" />
-        </div>
+      <div className="min-h-[100dvh] flex flex-col items-center justify-center bg-white text-[#102A43] fairteams-splash-fade">
+        <img
+          src={stripesLogo}
+          alt="Stripes"
+          className="h-28 w-28 object-contain"
+        />
         <h1 className="stripes-display mt-3 text-[42px] font-semibold tracking-[-0.035em] leading-none text-[#102A43]">
           Stripes
         </h1>

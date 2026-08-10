@@ -9,7 +9,7 @@ import { profileFromAveragedAttributes } from "@/lib/playerStyleProfile";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Shuffle, ArrowLeftRight, Download, HelpCircle, Clock, Palette, BarChart3, List, Maximize2, X, Volume2, Square } from "lucide-react";
+import { Shuffle, ArrowLeftRight, Download, HelpCircle, Clock, Palette, BarChart3, List, Maximize2, X, Volume2, Square, Sparkles } from "lucide-react";
 
 const PRESENT_TEAMS_SCROLL_FIX_VERSION = "present-fullscreen-portal-v1";
 
@@ -25,32 +25,6 @@ const COLOR_OPTIONS: { value: TeamColor; label: string; hex: string; textHex: st
 
 function colorFor(color: TeamColor) {
   return COLOR_OPTIONS.find(c => c.value === color) ?? COLOR_OPTIONS[0]!;
-}
-
-const DEFAULT_STRIPE_COLORS: TeamColor[] = ["red", "blue", "lime", "yellow", "orange", "black"];
-
-function TeamStripesGlyph({ className = "h-4 w-4" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
-      <rect x="4" y="4" width="14" height="3" rx="1.5" fill="#3B82F6" transform="rotate(-8 11 5.5)" />
-      <rect x="5" y="9" width="15" height="3" rx="1.5" fill="#84CC16" transform="rotate(-8 12.5 10.5)" />
-      <rect x="3" y="14" width="14" height="3" rx="1.5" fill="#F59E0B" transform="rotate(-8 10 15.5)" />
-      <rect x="6" y="19" width="13" height="2.5" rx="1.25" fill="#EF4444" transform="rotate(-8 12.5 20.25)" />
-    </svg>
-  );
-}
-
-function TeamFormingStripes({ count }: { count: number }) {
-  const colors = DEFAULT_STRIPE_COLORS.slice(0, Math.max(2, Math.min(6, count))).map((color) => colorFor(color).hex);
-  return (
-    <div className="stripes-generation-mark" aria-hidden="true">
-      {colors.map((hex, index) => (
-        <div key={`${hex}-${index}`} className="stripes-generation-lane">
-          <span className="stripes-generation-ribbon" style={{ backgroundColor: hex, animationDelay: `${index * 45}ms` }} />
-        </div>
-      ))}
-    </div>
-  );
 }
 
 function GKBadge() {
@@ -339,16 +313,12 @@ async function exportTeamsAsJpg(teams: Team[], fieldSize: FieldSize) {
     ctx.fill();
     ctx.restore();
 
-    ctx.strokeStyle = "#E2E8F0";
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = exportAccent;
+    ctx.lineWidth = 2;
     roundRect(ctx, x, y, CARD_W, h, 10);
     ctx.stroke();
 
-    ctx.fillStyle = exportAccent;
-    roundRect(ctx, x, y, CARD_W, 6, 3);
-    ctx.fill();
-
-    // Team header: restrained stripe identity.
+    // Team header: team color is carried by the card outline.
     ctx.fillStyle = "#102A43";
     ctx.font = `900 16px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
     ctx.fillText(team.name, x + CARD_PAD_X, y + 23);
@@ -661,11 +631,6 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
             <p className="text-[11px] font-black text-foreground truncate">{shortDateTime(entry.createdAt)}</p>
             <p className="text-[10px] font-bold text-muted-foreground capitalize">{entry.fieldSize} · {entry.numTeams} teams</p>
             <p className="text-[10px] text-muted-foreground">{entry.totalPlayers} players</p>
-            <div className="mt-2 flex h-1.5 overflow-hidden rounded-full bg-slate-100" aria-hidden="true">
-              {entry.teams.map((team) => (
-                <span key={team.id} className="min-w-0 flex-1" style={{ backgroundColor: colorFor(team.color).hex }} />
-              ))}
-            </div>
           </button>
         ))}
       </div>
@@ -868,7 +833,7 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
 
         <div className={teams.length > 0 ? "grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 items-end" : "grid grid-cols-2 gap-2 md:grid-cols-[1fr_1fr_auto] lg:items-end"}>
           <div className="flex flex-col gap-1 min-w-0">
-            <Label className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground lg:text-xs"><TeamStripesGlyph className="h-3.5 w-3.5" /> Teams</Label>
+            <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground lg:text-xs">Teams</Label>
             <Select value={numTeams.toString()} onValueChange={v => setNumTeams(parseInt(v))}>
               <SelectTrigger className="h-10 px-2 py-0 font-bold text-[13px] leading-normal [&>span]:leading-normal" data-testid="select-num-teams">
                 <SelectValue />
@@ -904,7 +869,7 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
             variant={teams.length > 0 ? "outline" : undefined}
             className={teams.length > 0
               ? `h-10 px-3 rounded-xl border-2 text-[12px] font-black tracking-tight shadow-sm transition-all lg:h-11 lg:min-w-[9.5rem] lg:px-5 lg:text-sm ${isGenerating ? "ring-4 ring-slate-200/70" : ""}`
-              : `col-span-2 h-10 w-full px-4 font-black uppercase tracking-wide text-[13px] shadow-sm md:col-span-1 lg:h-11 lg:min-w-[10.5rem] lg:px-6 lg:text-sm bg-[#22C55E] text-white hover:bg-[#16A34A] transition-all ${isGenerating ? "ring-4 ring-emerald-300/45 shadow-lg shadow-emerald-400/25" : ""} ${tutorialStep === "generate" ? "fairteams-tutorial-pulse relative z-[82]" : ""}`
+              : `col-span-2 h-10 w-full px-4 font-black uppercase tracking-wide text-[13px] shadow-sm md:col-span-1 lg:h-11 lg:min-w-[10.5rem] lg:px-6 lg:text-sm bg-[#102A43] text-white hover:bg-[#173B5E] transition-all ${isGenerating ? "ring-4 ring-slate-300/45 shadow-lg shadow-slate-400/20" : ""} ${tutorialStep === "generate" ? "fairteams-tutorial-pulse relative z-[82]" : ""}`
             }
             onClick={() => { handleGenerate(teams.length > 0); if (teams.length === 0) onTutorialAction?.("generated"); }}
             disabled={isGenerating}
@@ -912,7 +877,7 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
             data-testid={teams.length > 0 ? "button-shuffle" : "button-generate"}
           >
             <span className="inline-flex items-center justify-center gap-1.5">
-              {isGenerating ? <Shuffle className="h-3.5 w-3.5 animate-spin lg:h-4 lg:w-4" /> : teams.length > 0 ? <Shuffle className="h-3.5 w-3.5 lg:h-4 lg:w-4" /> : <TeamStripesGlyph className="h-4 w-4 lg:h-[18px] lg:w-[18px]" />}
+              {isGenerating ? <Shuffle className="h-3.5 w-3.5 animate-spin lg:h-4 lg:w-4" /> : teams.length > 0 ? <Shuffle className="h-3.5 w-3.5 lg:h-4 lg:w-4" /> : <Sparkles className="h-3.5 w-3.5 lg:h-4 lg:w-4" />}
               {isGenerating ? "Balancing" : teams.length > 0 ? "Shuffle" : "Generate"}
             </span>
           </Button>
@@ -920,13 +885,13 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
 
 
         {isGenerating && (
-          <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-inner">
-            <div className="grid grid-cols-[88px_1fr] items-center gap-3">
-              <TeamFormingStripes count={numTeams} />
-              <div className="min-w-0">
-                <p className="text-[11px] font-black text-[#102A43]">{TEAM_DRAW_STEPS[drawStep]}</p>
-                <p className="mt-0.5 text-[9px] font-semibold text-slate-400">One stripe, one team.</p>
-              </div>
+          <div className="rounded-lg border border-emerald-300/35 bg-emerald-50/80 px-3 py-2 text-[11px] font-black text-emerald-700 shadow-inner">
+            <div className="flex items-center gap-2">
+              <Shuffle className="w-3.5 h-3.5 animate-spin" />
+              <span>{TEAM_DRAW_STEPS[drawStep]}</span>
+            </div>
+            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-emerald-100">
+              <div className="h-full w-2/3 rounded-full bg-emerald-500 animate-pulse" />
             </div>
           </div>
         )}
@@ -969,10 +934,11 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
             return (
               <div
                 key={team.id}
-                className={`relative rounded-xl overflow-hidden border border-slate-200 bg-card shadow-sm transition-all duration-300 ${justGenerated ? "stripes-team-card-enter" : ""} ${desktopDropTarget?.teamId === team.id && !desktopDropTarget.playerId ? "ring-4 ring-primary/25" : ""}`}
+                className={`relative rounded-xl overflow-hidden border-2 bg-card shadow-sm transition-all duration-300 ${justGenerated ? "animate-in fade-in zoom-in-95" : ""} ${desktopDropTarget?.teamId === team.id && !desktopDropTarget.playerId ? "ring-4 ring-primary/25" : ""}`}
                 style={{
-                  animationDelay: justGenerated ? `${index * 70}ms` : undefined,
-                  boxShadow: justGenerated ? `0 8px 22px ${accentColor}16` : undefined,
+                  borderColor: team.color === "white" ? "hsl(var(--border))" : `${col.hex}${isSwapDest ? "cc" : "88"}`,
+                  animationDelay: justGenerated ? `${index * 90}ms` : undefined,
+                  boxShadow: justGenerated ? `0 0 0 1px ${accentColor}33, 0 10px 24px ${accentColor}18` : undefined,
                 }}
                 data-team-drop-id={team.id}
                 onDragOver={(event) => {
@@ -988,7 +954,6 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
                 onDrop={(event) => dropDesktopPlayerOnTeam(event, team.id)}
                 data-testid={`card-team-${team.id}`}
               >
-                <div className="h-1.5 w-full" style={{ backgroundColor: accentColor }} aria-hidden="true" />
                 {/* Header */}
                 <div className="bg-card px-3 pt-2 pb-1.5">
                   <div className="flex items-start justify-between gap-2 mb-1">
@@ -1140,9 +1105,6 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
                             {isSelected && (
                               <ArrowLeftRight className="absolute left-1 top-1/2 w-2.5 h-2.5 -translate-y-1/2" style={{ color: accentColor }} />
                             )}
-                            {!isSelected && (
-                              <span className="h-4 w-1 shrink-0 rounded-full opacity-75" style={{ backgroundColor: accentColor }} aria-hidden="true" />
-                            )}
                             <div className={`min-w-0 flex-1 ${isSelected ? "pl-3" : ""}`}>
                               <div className="font-bold text-xs truncate text-left lg:text-[15px]">{displayName(player)}</div>
                               {(player.isNew || player.isGoalkeeper || player.isOrganizer || isNotHereYet(player)) && (
@@ -1228,10 +1190,10 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
                   return (
                     <div
                       key={team.id}
-                      className="overflow-hidden rounded-xl border border-white/15 bg-white text-[#102A43] shadow-xl"
+                      className="overflow-hidden rounded-xl border-2 bg-white text-[#102A43] shadow-xl"
+                      style={{ borderColor }}
                     >
-                      <div className="h-1.5 w-full" style={{ backgroundColor: borderColor }} aria-hidden="true" />
-                      <div className="flex items-center justify-between gap-1.5 border-b border-slate-100 px-2 py-1.5">
+                      <div className="flex items-center justify-between gap-1.5 px-2 py-1.5" style={{ borderBottom: `2px solid ${borderColor}` }}>
                         <div className="min-w-0 truncate text-[15px] font-black leading-tight sm:text-[17px]">{team.name}</div>
                         <div className="shrink-0 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-black text-slate-500">
                           {team.players.length}

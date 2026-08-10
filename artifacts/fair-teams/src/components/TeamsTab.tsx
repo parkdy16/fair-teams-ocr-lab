@@ -811,7 +811,7 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
       <div className="flex min-h-[calc(100vh-220px)] flex-col gap-3">
         <div className="flex flex-1 flex-col items-center justify-center px-8 text-center">
           <p className="max-w-xs text-sm font-semibold leading-relaxed text-muted-foreground">
-            Select at least 2 players in the Session tab to generate teams.
+            Choose at least 2 players in Session, then come back here to create balanced teams.
           </p>
         </div>
         {historyPanel && <div className="mt-auto">{historyPanel}</div>}
@@ -1166,7 +1166,7 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
             <div className="relative z-[92] flex shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-slate-950/95 px-3 py-2 pt-[max(0.5rem,env(safe-area-inset-top))]">
               <div className="min-w-0">
                 <p className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-300">Stripes</p>
-                <h2 className="truncate text-lg font-black tracking-tight">Session's Teams</h2>
+                <h2 className="truncate text-lg font-black tracking-tight">Session teams</h2>
               </div>
               <button
                 type="button"

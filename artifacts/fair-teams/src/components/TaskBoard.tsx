@@ -18,7 +18,6 @@ import {
   Plus,
   RotateCcw,
   Settings,
-  Smartphone,
   Tag,
   Trash2,
   Users,
@@ -32,12 +31,8 @@ import { Textarea } from "@/components/ui/textarea";
 import type { RoomPlayer } from "@/lib/localRoster";
 import type { SharedRosterUser } from "@/lib/sharedRosterService";
 import {
-  enablePhoneNotifications,
-  getPhoneNotificationStatus,
   sendActionBoardNotification,
-  syncPhoneNotificationsIfEnabled,
   type ActionBoardNotificationStepKind,
-  type PhoneNotificationStatus,
 } from "@/lib/notificationService";
 import {
   castTaskBoardVote,
@@ -572,8 +567,8 @@ function EmptyActionBoard({ onCreate }: { onCreate: () => void }) {
   return (
     <div className="mx-auto flex max-w-3xl flex-col items-center px-4 py-10 text-center">
       <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-violet-600 shadow-sm ring-1 ring-slate-200"><Gavel className="h-6 w-6" /></div>
-      <h3 className="mt-4 text-lg font-black text-[#102A43]">Keep decisions from getting lost in chat</h3>
-      <p className="mt-1 max-w-md text-sm font-semibold leading-relaxed text-slate-500">A topic can collect links, decisions, scheduling and follow-through while the board stays easy to scan.</p>
+      <h3 className="mt-4 text-lg font-black text-[#102A43]">Keep the things that matter out of the chat scroll</h3>
+      <p className="mt-1 max-w-md text-sm font-semibold leading-relaxed text-slate-500">Use a topic when something needs a decision, an owner, or a clear next step. Chat can stay chat.</p>
       <Button type="button" className="mt-5 h-11 w-11 rounded-2xl p-0 font-black text-white" onClick={onCreate} aria-label="New topic"><Plus className="h-5 w-5" /></Button>
     </div>
   );
@@ -670,12 +665,9 @@ export function TaskBoard({
   const [notifyRecipientMode, setNotifyRecipientMode] = useState<"all" | "selected">("all");
   const [notifyRecipientEmails, setNotifyRecipientEmails] = useState<string[]>([]);
   const [notifyByEmail, setNotifyByEmail] = useState(true);
-  const [notifyByPush, setNotifyByPush] = useState(false);
   const [notifyMessage, setNotifyMessage] = useState("");
   const [notifySending, setNotifySending] = useState(false);
   const [notifyError, setNotifyError] = useState("");
-  const [phoneStatus, setPhoneStatus] = useState<PhoneNotificationStatus>("available");
-  const [phoneEnabling, setPhoneEnabling] = useState(false);
 
   const activeColumns = useMemo(() => orderedActiveColumns(board), [board.columns]);
   const columnByKind = useMemo(() => {
@@ -738,11 +730,6 @@ export function TaskBoard({
     voterHashFor(user, workspaceKey).then((value) => { if (!cancelled) setCurrentVoterHash(value); });
     return () => { cancelled = true; };
   }, [user, workspaceKey]);
-
-  useEffect(() => {
-    if (!online) return;
-    void syncPhoneNotificationsIfEnabled().catch(() => undefined);
-  }, [online, user?.uid]);
 
   useEffect(() => {
     setLastSeenActivityAt(readActivitySeen(workspaceKey));
@@ -848,13 +835,8 @@ export function TaskBoard({
     setNotifyRecipientMode(suggested.length && suggested.length < allEmails.length ? "selected" : "all");
     setNotifyRecipientEmails(suggested.length ? suggested : allEmails);
     setNotifyByEmail(true);
-    setNotifyByPush(phoneStatus === "enabled");
     setNotifyMessage("");
     setNotifyError("");
-    void getPhoneNotificationStatus().then((status) => {
-      setPhoneStatus(status);
-      if (status === "enabled") setNotifyByPush(true);
-    });
   };
 
   const closeNotify = () => {
@@ -878,10 +860,6 @@ export function TaskBoard({
       setNotifyError("Choose at least one organizer.");
       return;
     }
-    if (!notifyByEmail && !notifyByPush) {
-      setNotifyError("Choose email or phone notification.");
-      return;
-    }
     setNotifySending(true);
     setNotifyError("");
     try {
@@ -891,8 +869,8 @@ export function TaskBoard({
         stepKind: notifyTarget.kind,
         stepId: notifyTarget.id,
         recipientEmails: notifyEmailsToSend,
-        email: notifyByEmail,
-        push: notifyByPush,
+        email: true,
+        push: false,
         message: notifyMessage,
       });
       setNotifyCardId(null);
@@ -904,22 +882,7 @@ export function TaskBoard({
     }
   };
 
-  const enablePhone = async () => {
-    if (phoneEnabling) return;
-    setPhoneEnabling(true);
-    setNotifyError("");
-    try {
-      await enablePhoneNotifications();
-      setPhoneStatus("enabled");
-    } catch (nextError) {
-      setNotifyError(nextError instanceof Error ? nextError.message : "Could not enable phone notifications.");
-      setPhoneStatus(await getPhoneNotificationStatus());
-    } finally {
-      setPhoneEnabling(false);
-    }
-  };
-
-const togglePersonKey = (key: string, setter: React.Dispatch<React.SetStateAction<string[]>>) => {
+  const togglePersonKey = (key: string, setter: React.Dispatch<React.SetStateAction<string[]>>) => {
     setter((current) => current.includes(key) ? current.filter((item) => item !== key) : [...current, key]);
   };
 
@@ -1873,7 +1836,7 @@ const togglePersonKey = (key: string, setter: React.Dispatch<React.SetStateActio
       <div className={`mb-2 flex items-center gap-1.5 px-1 text-xs font-black lg:text-[14px] ${stage === "deciding" ? "text-violet-700" : stage === "action" ? "text-sky-800" : stage === "done" ? "text-slate-500" : "text-slate-700"}`}><Icon className="h-4 w-4 lg:h-[18px] lg:w-[18px]" /><span>{title}</span><span className="ml-0.5 rounded-full bg-white/80 px-1.5 py-0.5 text-[9px] lg:px-2 lg:text-[10px] font-black text-slate-500 ring-1 ring-slate-200/70">{cardsByStage[stage].length}</span></div>
       <div className="space-y-2">
         {cardsByStage[stage].map((card) => renderCard(card, true))}
-        {cardsByStage[stage].length === 0 && <div className="rounded-2xl border border-dashed border-slate-200 bg-white/40 px-2 py-5 text-center text-[10px] font-bold text-slate-400 lg:text-xs">Nothing here</div>}
+        {cardsByStage[stage].length === 0 && <div className="rounded-2xl border border-dashed border-slate-200 bg-white/40 px-2 py-5 text-center text-[10px] font-bold text-slate-400 lg:text-xs">{stage === "ideas" ? "No ideas yet" : stage === "deciding" ? "No decisions waiting" : stage === "action" ? "No actions in progress" : "Nothing completed yet"}</div>}
       </div>
     </section>
   );
@@ -1943,7 +1906,6 @@ const togglePersonKey = (key: string, setter: React.Dispatch<React.SetStateActio
                     setNotifyError("");
                     setBoardNameDraft(customBoardName || "");
                     setBoardSettingsOpen(true);
-                    void getPhoneNotificationStatus().then(setPhoneStatus);
                   }}
                   aria-label="Board settings"
                   title="Board settings"
@@ -1977,7 +1939,7 @@ const togglePersonKey = (key: string, setter: React.Dispatch<React.SetStateActio
               <>
                 <div className="px-3 py-3 pb-20 lg:hidden">
                   <div className="space-y-2">{cardsByStage[mobileFilter].map((card) => renderCard(card))}</div>
-                  {cardsByStage[mobileFilter].length === 0 && <div className="rounded-3xl border border-dashed border-slate-300 bg-white/50 px-4 py-10 text-center text-sm font-bold text-slate-400">Nothing here right now.</div>}
+                  {cardsByStage[mobileFilter].length === 0 && <div className="rounded-3xl border border-dashed border-slate-300 bg-white/50 px-4 py-10 text-center text-sm font-bold text-slate-400">{mobileFilter === "ideas" ? "No ideas yet." : mobileFilter === "deciding" ? "No decisions waiting." : mobileFilter === "action" ? "No actions in progress." : "Nothing completed yet."}</div>}
                 </div>
                 <div className="hidden w-full grid-cols-4 gap-3 p-4 pb-16 lg:grid xl:gap-4 xl:p-5">
                   {boardColumn("ideas", "Ideas", Lightbulb)}
@@ -2199,7 +2161,7 @@ const togglePersonKey = (key: string, setter: React.Dispatch<React.SetStateActio
             <div className="rounded-2xl bg-slate-50 px-3 py-3 ring-1 ring-slate-100">
               <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">{notifyTarget.label}</div>
               <div className="mt-1 whitespace-normal break-words text-sm font-black leading-snug text-[#102A43] lg:text-base">{notifyTarget.text}</div>
-              <div className="mt-1 text-[10px] font-semibold text-slate-500">One notification for this step. A future Decision or Action gets a new Bell.</div>
+              <div className="mt-1 text-[10px] font-semibold text-slate-500">One organizer email for this step. A future Decision or Action gets a new Bell.</div>
             </div>
 
             <div>
@@ -2219,27 +2181,11 @@ const togglePersonKey = (key: string, setter: React.Dispatch<React.SetStateActio
             </div>
 
             <div>
-              <Label>Send by</Label>
-              <div className="mt-1.5 grid grid-cols-2 gap-2">
-                <button type="button" className={`rounded-2xl border px-3 py-3 text-left transition ${notifyByEmail ? "border-violet-200 bg-violet-50 text-violet-800" : "border-slate-200 bg-white text-slate-500"}`} onClick={() => setNotifyByEmail((value) => !value)}>
-                  <Mail className="h-4 w-4" />
-                  <div className="mt-1 text-xs font-black">Email {notifyByEmail && <Check className="ml-1 inline h-3.5 w-3.5" />}</div>
-                  <div className="mt-0.5 text-[9px] font-semibold opacity-75">{notifyTarget.topicAlreadyNotified ? "Continues this topic’s email thread" : "Default · starts one thread for this topic"}</div>
-                </button>
-                <button type="button" className={`rounded-2xl border px-3 py-3 text-left transition ${notifyByPush ? "border-sky-200 bg-sky-50 text-sky-800" : "border-slate-200 bg-white text-slate-500"}`} onClick={() => setNotifyByPush((value) => !value)}>
-                  <Smartphone className="h-4 w-4" />
-                  <div className="mt-1 text-xs font-black">Phone {notifyByPush && <Check className="ml-1 inline h-3.5 w-3.5" />}</div>
-                  <div className="mt-0.5 text-[9px] font-semibold opacity-75">Only devices that opted in</div>
-                </button>
-              </div>
-              <div className="mt-2 flex items-center justify-between gap-2 rounded-xl bg-slate-50 px-2.5 py-2 text-[10px] font-bold text-slate-500">
-                <span>
-                  {phoneStatus === "enabled" ? "Phone alerts are enabled on this device."
-                    : phoneStatus === "blocked" ? "Phone alerts are blocked in this browser."
-                      : phoneStatus === "unsupported" ? "Phone alerts are not supported on this device/browser."
-                        : "Phone alerts are not enabled on this device yet."}
-                </span>
-                {phoneStatus === "available" && <button type="button" className="shrink-0 rounded-lg bg-white px-2 py-1 font-black text-sky-700 ring-1 ring-sky-100" disabled={phoneEnabling} onClick={() => void enablePhone()}>{phoneEnabling ? "Enabling…" : "Enable"}</button>}
+              <Label>Delivery</Label>
+              <div className="mt-1.5 rounded-2xl border border-violet-200 bg-violet-50 px-3 py-3 text-violet-800">
+                <Mail className="h-4 w-4" />
+                <div className="mt-1 text-xs font-black">Email <Check className="ml-1 inline h-3.5 w-3.5" /></div>
+                <div className="mt-0.5 text-[9px] font-semibold opacity-75">{notifyTarget.topicAlreadyNotified ? "Continues this topic’s email thread" : "Starts one email thread for this topic"}</div>
               </div>
             </div>
 
@@ -2250,7 +2196,7 @@ const togglePersonKey = (key: string, setter: React.Dispatch<React.SetStateActio
 
             {notifyError && <div className="rounded-xl bg-red-50 px-3 py-2 text-[11px] font-bold text-red-700">{notifyError}</div>}
 
-            <Button type="button" className="h-11 rounded-2xl bg-[#102A43] font-black text-white lg:h-12 lg:text-base" disabled={notifySending || !notifyEmailsToSend.length || (!notifyByEmail && !notifyByPush)} onClick={() => void sendNotification()}>
+            <Button type="button" className="h-11 rounded-2xl bg-[#102A43] font-black text-white lg:h-12 lg:text-base" disabled={notifySending || !notifyEmailsToSend.length} onClick={() => void sendNotification()}>
               <Bell className="mr-1.5 h-4 w-4" />{notifySending ? "Notifying…" : `Notify ${notifyEmailsToSend.length} organizer${notifyEmailsToSend.length === 1 ? "" : "s"}`}
             </Button>
           </div>}
@@ -2277,20 +2223,8 @@ const togglePersonKey = (key: string, setter: React.Dispatch<React.SetStateActio
           <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43]">Board settings</DialogTitle></DialogHeader>
           <div className="grid gap-4">
             <div><Label htmlFor="board-name">Custom name <span className="font-semibold text-slate-400">optional · saves automatically</span></Label><Input id="board-name" value={boardNameDraft} onChange={(event) => changeBoardName(event.target.value)} maxLength={80} placeholder="e.g. Club decisions" /></div>
-            <div className="rounded-2xl bg-slate-50 p-3 ring-1 ring-slate-100">
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-1.5 text-xs font-black text-[#102A43]"><Smartphone className="h-4 w-4 text-sky-700" />Phone notifications</div>
-                  <div className="mt-1 text-[10px] font-semibold leading-relaxed text-slate-500">
-                    {phoneStatus === "enabled" ? "Enabled on this device."
-                      : phoneStatus === "blocked" ? "Blocked in this browser's notification settings."
-                        : phoneStatus === "unsupported" ? "Not supported on this device/browser."
-                          : "Optional. Enable this device to receive organizer pings."}
-                  </div>
-                </div>
-                {phoneStatus === "available" && <button type="button" className="shrink-0 rounded-xl bg-white px-3 py-2 text-[11px] font-black text-sky-700 ring-1 ring-sky-100" disabled={phoneEnabling} onClick={() => void enablePhone()}>{phoneEnabling ? "Enabling…" : "Enable"}</button>}
-                {phoneStatus === "enabled" && <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-black text-emerald-700"><Check className="h-3 w-3" />On</span>}
-              </div>
+            <div className="rounded-2xl bg-slate-50 p-3 text-[10px] font-semibold leading-relaxed text-slate-500 ring-1 ring-slate-100">
+              Bell notifications are deliberate organizer emails. Stripes does not send automatic activity spam.
             </div>
             {notifyError && <div className="rounded-xl bg-red-50 px-3 py-2 text-[11px] font-bold text-red-700">{notifyError}</div>}
           </div>

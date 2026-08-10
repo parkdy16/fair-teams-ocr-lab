@@ -428,7 +428,7 @@ function App() {
   const tutorialActive = Boolean(tutorialStep);
 
   const tutorialCopy: Record<string, { title: string; body: string }> = {
-    "open-add": { title: "Build the squad", body: "Tap the glowing Add Player button." },
+    "open-add": { title: "Build your roster", body: "Tap the glowing Add Player button." },
     "add-manual": { title: "Add the player", body: "Choose Add manually. We filled in the practice player for you." },
     "submit-player": { title: "Add the player", body: "Tap Add Player to add Heung-min to the practice roster." },
     "open-edit": { title: "Edit the player", body: "Open Heung-min’s edit button." },
@@ -436,13 +436,13 @@ function App() {
     "save-edit": { title: "Save the profile", body: "You have seen the detailed controls. Save the player profile." },
     "flip-card": { title: "See the other side", body: "Tap Heung-min’s card to flip it and see more player information." },
     "today-tab": { title: "Session", body: "Open Session to choose who is playing." },
-    "select-today": { title: "Complete the lineup", body: "Select Heung-min on the attendance screen." },
+    "select-today": { title: "Who is playing?", body: "Select Heung-min for this Session." },
     "teams-tab": { title: "Make teams", body: "Open the Teams tab." },
     "field-size": { title: "Choose the pitch", body: "Open Field Size and choose any size." },
-    "generate": { title: "The magic moment", body: "Tap Generate. Stripes will build the teams." },
-    "magic-wait": { title: "Wait for it…", body: "Reading the lineup and balancing every strength." },
+    "generate": { title: "Create the teams", body: "Tap Generate. Stripes will balance the selected players." },
+    "magic-wait": { title: "Balancing the session…", body: "Stripes is comparing the selected players and building even teams." },
     "magic-reveal": { title: "That’s the magic", body: "Each stripe is a team — balanced and ready to play." },
-    "club-tab": { title: "Shared team tools", body: "Open Club to see how groups can work on one roster together." },
+    "club-tab": { title: "Organize together", body: "Open Club to see the tools shared by co-organizers." },
     "club-intro": { title: "Club is for shared rosters", body: "Use Club when several organizers work on one roster together. If you use local rosters, you can skip this tab." },
     "help-question": { title: "Ask Stripes Help", body: "The question is ready. Tap Ask to see how in-app help works." },
     "roster-return": { title: "Back to your roster", body: "Return to Roster for the final setup step." },
@@ -3709,7 +3709,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                     <img
                       src={groupLogo || stripesLogo}
                       alt=""
-                      className="h-full w-full object-cover"
+                      className="h-[88%] w-[88%] object-contain"
                     />
                   </span>
                 )}
@@ -4215,7 +4215,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                     <img
                       src={draftGroupLogo || stripesLogo}
                       alt="Roster logo preview"
-                      className="h-full w-full object-cover"
+                      className="h-[90%] w-[90%] object-contain"
                     />
                   </div>
                   <div className="flex flex-wrap gap-2">

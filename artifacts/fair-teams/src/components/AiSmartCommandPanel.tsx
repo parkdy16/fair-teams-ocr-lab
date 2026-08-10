@@ -212,7 +212,7 @@ function buildActionBoardHelpAnswer(commandText: string): AiSmartCommandResponse
     ok: true,
     detectedLanguage: "unknown",
     normalizedIntent: text.slice(0, 300),
-    assistantSummary: "Action Board is the Club workspace for things chat handles poorly: durable topics, decisions, ownership, and follow-through. A topic can move through Ideas, Decide, Action, and Done while keeping its history. Organizers can run anonymous votes, record decisions, find a meeting time, choose players or equipment, assign one or more people to an action, add due dates and links, and mark work complete. The bell is a deliberate one-time organizer notification, not an automatic chat feed. Action Board is not meant to replace Signal or other group chat.",
+    assistantSummary: "Action Board is the Club workspace for things chat handles poorly: durable topics, decisions, ownership, and follow-through. A topic can move through Ideas, Decide, Action, and Done while keeping its history. Organizers can run anonymous votes, record decisions, find a meeting time, choose players or equipment, assign one or more people to an action, add due dates and links, and mark work complete. The Bell sends a deliberate one-time organizer email for the current step; Stripes does not send automatic activity spam. Action Board is not meant to replace Signal or other group chat.",
     confidence: 0.99,
     actions: [],
     confirmations: [],
@@ -232,7 +232,7 @@ function buildClubAttendanceHelpAnswer(commandText: string): AiSmartCommandRespo
     ok: true,
     detectedLanguage: "unknown",
     normalizedIntent: text.slice(0, 300),
-    assistantSummary: "Club attendance is an organizer memory for Tardy, Last-minute cancellation, No-show, and Conduct issue records. It is separate from Session selection and team generation. Organizers can review a player's history by period, edit or delete records, and use shared Club warning templates for last-minute cancellation, no-show, or dismissal. Templates are editable by collaborators and are copied for a human to review or send — Stripes never sends a warning automatically.",
+    assistantSummary: "Club Attendance is an organizer memory for Tardy, Last-minute cancellation, No-show, and Conduct issue records. It is separate from Session selection and team generation. Player Management also has a Warnings shortcut that shows a quick attendance-based overview for every player. From there an organizer can open a player, choose a shared Club template, review the wording, and copy it. Last-minute cancellation and no-show templates can include the actual issue dates; repeated tardy warnings can use a period and count. Stripes never decides to warn or dismiss someone and never sends a warning automatically.",
     confidence: 0.99,
     actions: [],
     confirmations: [],
@@ -1574,7 +1574,7 @@ export function AiSmartCommandPanel({
   const [helpExpanded, setHelpExpanded] = useState(Boolean(tutorialActive));
 
   const placeholder = useMemo(() => {
-    return "Ask a question… e.g. How do ratings work?";
+    return "Ask Stripes… e.g. How does Action Board work?";
   }, []);
 
   useEffect(() => {

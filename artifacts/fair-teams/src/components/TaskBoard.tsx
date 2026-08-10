@@ -12,6 +12,7 @@ import {
   ExternalLink,
   Gavel,
   Hand,
+  History,
   Lightbulb,
   Link2,
   Mail,
@@ -647,6 +648,32 @@ function decisionHistoryMeta(decision: TaskBoardVote) {
   return `Closed · ${responseText}`;
 }
 
+function decisionEvolutionResult(decision: TaskBoardVote) {
+  if (decision.decisionType === "schedule" || decision.kind === "schedule") {
+    if (decision.scheduleState === "finalized" || decision.finalizedTime) {
+      const parts = [decision.finalizedTime ? scheduleLabel(decision.finalizedTime) : "Time confirmed", decision.finalizedLocation].filter(Boolean);
+      return parts.join(" · ");
+    }
+    if (decision.scheduleState === "waiting-host") return "Waiting for host";
+    if (decision.scheduleState === "setup") return decision.hostName ? `Host · ${decision.hostName}` : "Host chosen";
+    const responses = voteTotal(decision);
+    return decision.status === "open" ? `${responses} response${responses === 1 ? "" : "s"}` : "Schedule closed";
+  }
+  if (decision.mode === "recorded") return decision.outcome || "Decision recorded";
+  if (decision.outcome) return decision.outcome;
+  const summaries = decisionQuestions(decision).map((question) => {
+    const max = Math.max(0, ...question.options.map((option) => option.count || 0));
+    if (!max) return null;
+    const winners = question.options.filter((option) => (option.count || 0) === max).map((option) => option.label);
+    return winners.length ? `${question.text}: ${winners.join(" / ")}` : null;
+  }).filter((value): value is string => Boolean(value));
+  return summaries.join(" · ") || decisionHistoryMeta(decision);
+}
+
+function evolutionStepCount(card: TaskBoardCard) {
+  return 1 + timelineEntries(card).length + (card.completedAt ? 1 : 0);
+}
+
 function EmptyActionBoard({ onCreate }: { onCreate: () => void }) {
   return (
     <div className="mx-auto flex max-w-3xl flex-col items-center px-4 py-10 text-center">
@@ -686,6 +713,7 @@ export function TaskBoard({
   const [board, setBoard] = useState<LocalBoard>(() => readLocalBoard(workspaceKey, rosterName));
   const [boardOpen, setBoardOpen] = useState(false);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
+  const [evolutionCardId, setEvolutionCardId] = useState<string | null>(null);
   const [mobileFilter, setMobileFilter] = useState<MobileFilter>("deciding");
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [expandedHistoryIds, setExpandedHistoryIds] = useState<Set<string>>(new Set());
@@ -2494,26 +2522,68 @@ export function TaskBoard({
     );
   };
 
-  const renderTimeline = (card: TaskBoardCard) => {
+  const renderCurrentChapter = (card: TaskBoardCard) => {
+    const stage = stageForCard(card);
+    if (stage === "deciding") {
+      const decision = latestDecisionInCurrentStage(card) || latestOpenDecision(card);
+      if (!decision) return null;
+      const index = (card.decisions || []).findIndex((item) => item.id === decision.id);
+      return <div className="relative"><div className="absolute bottom-4 left-[13px] top-4 w-px bg-amber-100" aria-hidden="true" />{renderDecision(card, decision, Math.max(0, index), true, `decision:${decision.id || index}`)}</div>;
+    }
+    if (stage === "action") {
+      const action = latestActionInCurrentStage(card) || latestOpenAction(card);
+      if (!action) return null;
+      const index = (card.actions || []).findIndex((item) => item.id === action.id);
+      return <div className="relative"><div className="absolute bottom-4 left-[13px] top-4 w-px bg-sky-100" aria-hidden="true" />{renderAction(card, action, Math.max(0, index), true, `action:${action.id || index}`)}</div>;
+    }
+    if (stage === "done") {
+      return <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-3 py-3"><div className="flex items-center gap-2 text-xs font-semibold text-slate-700"><CheckCircle2 className="h-4 w-4" />Completed</div><div className="mt-1 text-[10px] font-normal text-slate-500">Previous decisions and actions are preserved in Evolution.</div></div>;
+    }
+    return null;
+  };
+
+  const renderEvolution = (card: TaskBoardCard) => {
     const entries = timelineEntries(card);
-    const currentKey = currentTimelineKey(card);
-    const currentEntry = currentKey ? entries.find((entry) => entry.key === currentKey) : undefined;
-    const historyEntries = currentEntry ? entries.filter((entry) => entry.key !== currentEntry.key) : entries;
-    const currentIsDecision = currentEntry?.kind === "decision";
-    const currentActionResumed = currentEntry?.kind === "action" && historyEntries.some((entry) => entry.createdAt > currentEntry.createdAt);
-
-    if (!entries.length) return null;
-
+    const stage = stageForCard(card);
+    const stageLabel = stage === "deciding" ? "Decide" : stage === "action" ? "Action" : stage === "done" ? "Done" : "Ideas";
+    const stageTone = stage === "deciding" ? "text-amber-800 bg-amber-50 ring-amber-100" : stage === "action" ? "text-sky-800 bg-sky-50 ring-sky-100" : "text-slate-600 bg-slate-50 ring-slate-200";
     return (
-      <div className="relative">
-        <div className="absolute bottom-4 left-[13px] top-4 w-px bg-slate-200" aria-hidden="true" />
-        <div className="relative space-y-2">
-          {historyEntries.map((entry) => entry.kind === "decision"
-            ? renderDecision(card, entry.decision, entry.index, false, entry.key)
-            : renderAction(card, entry.action, entry.index, false, entry.key, false, Boolean(currentIsDecision && entry.action.status === "open")))}
-          {currentEntry && (currentEntry.kind === "decision"
-            ? renderDecision(card, currentEntry.decision, currentEntry.index, true, currentEntry.key)
-            : renderAction(card, currentEntry.action, currentEntry.index, true, currentEntry.key, currentActionResumed))}
+      <div className="relative mx-auto w-full max-w-2xl px-4 py-5 lg:px-6 lg:py-6">
+        <div className="absolute bottom-10 left-[29px] top-10 w-px bg-slate-200 lg:left-[37px]" aria-hidden="true" />
+        <div className="relative space-y-4">
+          <div className="relative pl-10 lg:pl-12">
+            <div className="absolute left-0 top-0.5 flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500"><Lightbulb className="h-3.5 w-3.5" /></div>
+            <div className="rounded-2xl border border-slate-200 bg-white px-3 py-3">
+              <div className="text-[10px] font-medium uppercase tracking-wide text-slate-400">Created · {formatTime(card.createdAt)}</div>
+              <div className="mt-1 text-sm font-semibold text-[#102A43]">{card.title}</div>
+              <div className="mt-1 text-[11px] font-normal text-slate-500">{card.createdByName ? `Added by ${card.createdByName}` : "Card created"}</div>
+            </div>
+          </div>
+          {entries.map((entry) => entry.kind === "decision" ? (
+            <div key={entry.key} className="relative pl-10 lg:pl-12">
+              <div className="absolute left-0 top-0.5 flex h-7 w-7 items-center justify-center rounded-full border border-amber-200 bg-white text-amber-700">{entry.decision.status === "open" ? <Gavel className="h-3.5 w-3.5" /> : <Check className="h-3.5 w-3.5" />}</div>
+              <div className="rounded-2xl border border-amber-100 bg-amber-50/35 px-3 py-3">
+                <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-amber-700"><span>{decisionTypeLabel(entry.decision)}</span><span className="text-amber-400">·</span><span>{formatTime(entry.createdAt)}</span></div>
+                <div className="mt-1 text-sm font-semibold leading-snug text-[#102A43]">{entry.decision.title?.trim() || entry.decision.question || "Decision"}</div>
+                <div className="mt-1.5 text-[11px] font-normal leading-relaxed text-slate-600">{decisionEvolutionResult(entry.decision)}</div>
+                {entry.decision.hostName && <div className="mt-1 text-[10px] font-medium text-slate-500">Host · {entry.decision.hostName}</div>}
+              </div>
+            </div>
+          ) : (
+            <div key={entry.key} className="relative pl-10 lg:pl-12">
+              <div className="absolute left-0 top-0.5 flex h-7 w-7 items-center justify-center rounded-full border border-sky-200 bg-white text-sky-700">{entry.action.status === "done" ? <Check className="h-3.5 w-3.5" /> : <Hand className="h-3.5 w-3.5" />}</div>
+              <div className="rounded-2xl border border-sky-100 bg-sky-50/35 px-3 py-3">
+                <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-sky-700"><span>Action</span><span className="text-sky-400">·</span><span>{formatTime(entry.createdAt)}</span></div>
+                <div className="mt-1 text-sm font-semibold leading-snug text-[#102A43]">{entry.action.text}</div>
+                {actionPeople(entry.action).length > 0 && <div className="mt-1 text-[10px] font-medium text-slate-500"><Users className="mr-1 inline h-3 w-3" />{personSummary(actionPeople(entry.action))}</div>}
+                <div className="mt-1.5 text-[11px] font-normal text-slate-600">{entry.action.status === "done" ? `Completed${entry.action.completedByName ? ` by ${entry.action.completedByName}` : ""}` : "Open"}</div>
+              </div>
+            </div>
+          ))}
+          <div className="relative pl-10 lg:pl-12">
+            <div className="absolute left-0 top-0.5 flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white text-[#102A43]"><ChevronRight className="h-3.5 w-3.5" /></div>
+            <div className={`rounded-2xl px-3 py-3 ring-1 ${stageTone}`}><div className="text-[10px] font-medium uppercase tracking-wide opacity-70">Now</div><div className="mt-1 text-sm font-semibold">{stageLabel}</div></div>
+          </div>
         </div>
       </div>
     );
@@ -2676,20 +2746,11 @@ export function TaskBoard({
             {stage !== "done" && (card.links?.length || 0) < 5 && <button type="button" className="inline-flex items-center gap-1 rounded-full px-2 py-1.5 text-[10px] font-black text-slate-400 lg:text-xs hover:bg-white hover:text-slate-600" onClick={() => openAddLink(card)}><Link2 className="h-3 w-3" />+ Link</button>}
           </div>
 
-          {(decisions.length > 0 || actions.length > 0) ? renderTimeline(card) : (
+          {(decisions.length > 0 || actions.length > 0) && <div className="mb-3 flex justify-end"><button type="button" className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-[11px] font-medium text-slate-600 hover:bg-slate-50" onClick={() => setEvolutionCardId(card.id)}><History className="h-3.5 w-3.5" />Evolution · {evolutionStepCount(card)}</button></div>}
+          {renderCurrentChapter(card) || (
             <div className="rounded-2xl border border-dashed border-slate-200 bg-white/50 px-3 py-5 text-center">
-              <div className="text-xs font-black text-[#102A43] lg:text-sm">
-                {stage === "action" ? "Simple to-do" : stage === "deciding" ? "Simple decision" : stage === "done" ? "Completed" : "Keep it simple"}
-              </div>
-              <div className="mt-1 text-[10px] font-semibold text-slate-400 lg:text-xs">
-                {stage === "action"
-                  ? "A straightforward task can stay simple."
-                  : stage === "deciding"
-                    ? "This stage is for something that needs an answer."
-                    : stage === "done"
-                      ? "This card stays here as club history."
-                      : "A simple thought is enough for now."}
-              </div>
+              <div className="text-xs font-semibold text-[#102A43] lg:text-sm">{stage === "action" ? "Simple to-do" : stage === "deciding" ? "Simple decision" : stage === "done" ? "Completed" : "Keep it simple"}</div>
+              <div className="mt-1 text-[10px] font-normal text-slate-400 lg:text-xs">{stage === "action" ? "A straightforward task can stay simple." : stage === "deciding" ? "This stage is for something that needs an answer." : stage === "done" ? "This card stays here as club history." : "A simple thought is enough for now."}</div>
             </div>
           )}
 
@@ -2781,6 +2842,7 @@ export function TaskBoard({
 
   const finalizeScheduleCard = board.cards.find((card) => card.id === finalizeScheduleCardId);
   const finalizeScheduleDecision = finalizeScheduleCard?.decisions?.find((decision) => decision.id === finalizeScheduleDecisionId);
+  const evolutionCard = board.cards.find((card) => card.id === evolutionCardId);
 
   return (
     <>
@@ -2904,6 +2966,15 @@ export function TaskBoard({
               </div>
             );
           })()}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(evolutionCardId)} onOpenChange={(open) => { if (!open) setEvolutionCardId(null); }}>
+        <DialogContent className="fixed inset-0 flex h-[100dvh] max-h-none w-full max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-0 bg-white p-0 shadow-none sm:inset-3 sm:h-[calc(100dvh-1.5rem)] sm:w-auto sm:rounded-[2rem] sm:border sm:border-slate-200 sm:shadow-2xl lg:left-1/2 lg:right-auto lg:top-1/2 lg:h-[min(86dvh,52rem)] lg:w-[min(46rem,calc(100vw-3rem))] lg:-translate-x-1/2 lg:-translate-y-1/2">
+          <DialogHeader className="shrink-0 border-b border-slate-200 bg-white px-3 py-3 pr-12 text-left lg:px-5 lg:py-4">
+            <div className="flex items-center gap-2"><button type="button" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-[#102A43] hover:bg-slate-100" onClick={() => setEvolutionCardId(null)} aria-label="Back to card"><ArrowLeft className="h-5 w-5" /></button><div className="min-w-0"><DialogTitle className="flex items-center gap-2 text-base font-semibold text-[#102A43] lg:text-xl"><History className="h-4 w-4 text-slate-500 lg:h-5 lg:w-5" />Evolution</DialogTitle>{evolutionCard && <p className="mt-0.5 truncate text-[11px] font-normal text-slate-500 lg:text-sm">{evolutionCard.title}</p>}</div></div>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50/50">{evolutionCard ? renderEvolution(evolutionCard) : <div className="p-8 text-center text-sm text-slate-500">Card history is unavailable.</div>}</div>
         </DialogContent>
       </Dialog>
 

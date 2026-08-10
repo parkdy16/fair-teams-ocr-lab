@@ -149,6 +149,7 @@ function formatAttendanceDate(value: string) {
 const ATTENDANCE_WARNING_TEMPLATE_OPTIONS: Array<{ value: AttendanceWarningTemplateKind; label: string }> = [
   { value: "late-cancellation", label: "Last-minute cancellation" },
   { value: "no-show", label: "No-show" },
+  { value: "tardy", label: "Tardy / repeated lateness" },
   { value: "dismissal", label: "Dismissal from group" },
 ];
 
@@ -163,6 +164,15 @@ function countPhrase(count: number, singular: string, plural: string) {
   return `${count} ${count === 1 ? singular : plural}`;
 }
 
+function formatAttendanceDateList(dates: string[]) {
+  const unique = Array.from(new Set(dates)).sort();
+  if (!unique.length) return "the recorded dates";
+  const formatted = unique.map(formatAttendanceDate);
+  if (formatted.length === 1) return formatted[0];
+  if (formatted.length === 2) return `${formatted[0]} and ${formatted[1]}`;
+  return `${formatted.slice(0, -1).join(", ")}, and ${formatted[formatted.length - 1]}`;
+}
+
 function fillAttendanceWarningTemplate(
   template: string,
   context: {
@@ -172,6 +182,8 @@ function fillAttendanceWarningTemplate(
     lateCancellationCount: number;
     noShowCount: number;
     tardyCount: number;
+    lateCancellationDates: string[];
+    noShowDates: string[];
   },
 ) {
   const attendanceIssueCount = context.lateCancellationCount + context.noShowCount + context.tardyCount;
@@ -187,6 +199,8 @@ function fillAttendanceWarningTemplate(
     "{no_show_count}": String(context.noShowCount),
     "{tardy_count}": String(context.tardyCount),
     "{attendance_issue_count}": String(attendanceIssueCount),
+    "{last_minute_dates}": formatAttendanceDateList(context.lateCancellationDates),
+    "{no_show_dates}": formatAttendanceDateList(context.noShowDates),
   };
   return Object.entries(replacements).reduce((text, [key, value]) => text.split(key).join(value), template);
 }
@@ -873,6 +887,8 @@ export function ClubTab({
   const [attendanceWarningTemplateDraft, setAttendanceWarningTemplateDraft] = useState(DEFAULT_ATTENDANCE_WARNING_TEMPLATES["late-cancellation"]);
   const [attendanceWarningTemplateSaving, setAttendanceWarningTemplateSaving] = useState(false);
   const [attendanceWarningTemplateNotice, setAttendanceWarningTemplateNotice] = useState("");
+  const [attendanceWarningBoardOpen, setAttendanceWarningBoardOpen] = useState(false);
+  const [attendanceWarningPlayerSearch, setAttendanceWarningPlayerSearch] = useState("");
   const [attendanceWarningComposerOpen, setAttendanceWarningComposerOpen] = useState(false);
   const [attendanceWarningComposerKind, setAttendanceWarningComposerKind] = useState<AttendanceWarningTemplateKind>("late-cancellation");
   const [attendanceWarningComposerDraft, setAttendanceWarningComposerDraft] = useState("");
@@ -932,6 +948,7 @@ export function ClubTab({
     attendanceBoardOpen: false,
     attendanceEditorOpen: false,
     attendanceWarningTemplatesOpen: false,
+    attendanceWarningBoardOpen: false,
     attendanceWarningComposerOpen: false,
   });
   const [authReady, setAuthReady] = useState(false);
@@ -2172,24 +2189,46 @@ export function ClubTab({
     [attendanceHistoryPlayerId, attendanceOverview],
   );
 
-  const buildAttendanceWarning = (kind: AttendanceWarningTemplateKind) => {
-    if (!attendanceHistoryRow) return "";
+  const attendanceWarningOverview = useMemo(() => {
+    const needle = attendanceWarningPlayerSearch.trim().toLocaleLowerCase();
+    return attendanceOverview.filter((row) => !needle || row.name.toLocaleLowerCase().includes(needle));
+  }, [attendanceOverview, attendanceWarningPlayerSearch]);
+
+  const buildAttendanceWarningForRow = (
+    row: { playerId: string; name: string; records: AttendanceIssueRecord[] },
+    kind: AttendanceWarningTemplateKind,
+  ) => {
     let lateCancellationCount = 0;
     let noShowCount = 0;
     let tardyCount = 0;
-    attendanceHistoryRow.records.forEach((record) => {
-      if (record.issueType === "late-cancellation") lateCancellationCount += 1;
-      if (record.issueType === "no-show") noShowCount += 1;
+    const lateCancellationDates: string[] = [];
+    const noShowDates: string[] = [];
+    row.records.forEach((record) => {
+      if (record.issueType === "late-cancellation") {
+        lateCancellationCount += 1;
+        lateCancellationDates.push(record.incidentDate);
+      }
+      if (record.issueType === "no-show") {
+        noShowCount += 1;
+        noShowDates.push(record.incidentDate);
+      }
       if (record.issueType === "tardy") tardyCount += 1;
     });
     return fillAttendanceWarningTemplate(attendanceWarningTemplates[kind], {
-      player: attendanceHistoryRow.name,
+      player: row.name,
       group: activeRosterName.trim() || "the group",
       period: attendanceRangeText(attendanceRange),
       lateCancellationCount,
       noShowCount,
       tardyCount,
+      lateCancellationDates,
+      noShowDates,
     });
+  };
+
+  const buildAttendanceWarning = (kind: AttendanceWarningTemplateKind) => {
+    if (!attendanceHistoryRow) return "";
+    return buildAttendanceWarningForRow(attendanceHistoryRow, kind);
   };
 
   const openAttendanceWarningTemplates = (kind: AttendanceWarningTemplateKind = "late-cancellation") => {
@@ -2221,14 +2260,24 @@ export function ClubTab({
     }
   };
 
-  const openAttendanceWarningComposer = (kind?: AttendanceWarningTemplateKind) => {
-    if (!attendanceHistoryRow) return;
-    const hasNoShow = attendanceHistoryRow.records.some((record) => record.issueType === "no-show");
-    const initialKind = kind || (hasNoShow ? "no-show" : "late-cancellation");
+  const openAttendanceWarningComposerForRow = (
+    row: { playerId: string; name: string; records: AttendanceIssueRecord[] },
+    kind?: AttendanceWarningTemplateKind,
+  ) => {
+    const hasNoShow = row.records.some((record) => record.issueType === "no-show");
+    const hasLateCancellation = row.records.some((record) => record.issueType === "late-cancellation");
+    const hasTardy = row.records.some((record) => record.issueType === "tardy");
+    const initialKind = kind || (hasNoShow ? "no-show" : hasLateCancellation ? "late-cancellation" : hasTardy ? "tardy" : "dismissal");
+    setAttendanceHistoryPlayerId(row.playerId);
     setAttendanceWarningComposerKind(initialKind);
-    setAttendanceWarningComposerDraft(buildAttendanceWarning(initialKind));
+    setAttendanceWarningComposerDraft(buildAttendanceWarningForRow(row, initialKind));
     setAttendanceWarningCopyNotice("");
     setAttendanceWarningComposerOpen(true);
+  };
+
+  const openAttendanceWarningComposer = (kind?: AttendanceWarningTemplateKind) => {
+    if (!attendanceHistoryRow) return;
+    openAttendanceWarningComposerForRow(attendanceHistoryRow, kind);
   };
 
   const selectAttendanceWarningComposerKind = (kind: AttendanceWarningTemplateKind) => {
@@ -2345,6 +2394,7 @@ export function ClubTab({
     ratingBoardOpen ||
     attendanceEditorOpen ||
     attendanceWarningTemplatesOpen ||
+    attendanceWarningBoardOpen ||
     attendanceWarningComposerOpen ||
     attendanceBoardOpen ||
     accountDialogOpen,
@@ -2364,6 +2414,7 @@ export function ClubTab({
       attendanceBoardOpen,
       attendanceEditorOpen,
       attendanceWarningTemplatesOpen,
+      attendanceWarningBoardOpen,
       attendanceWarningComposerOpen,
     };
   }, [
@@ -2379,6 +2430,7 @@ export function ClubTab({
     attendanceBoardOpen,
     attendanceEditorOpen,
     attendanceWarningTemplatesOpen,
+    attendanceWarningBoardOpen,
     attendanceWarningComposerOpen,
   ]);
 
@@ -2438,6 +2490,12 @@ export function ClubTab({
         blurActiveField();
         setAttendanceWarningTemplatesOpen(false);
         setAttendanceWarningTemplateNotice("");
+        return;
+      }
+      if (state.attendanceWarningBoardOpen) {
+        event.preventDefault();
+        setAttendanceWarningBoardOpen(false);
+        setAttendanceWarningPlayerSearch("");
         return;
       }
       if (state.attendanceEditorOpen) {
@@ -2543,7 +2601,7 @@ export function ClubTab({
             </div>
             <span className="min-w-0">
               <span className="block text-[17px] font-black leading-tight text-[#102A43] lg:text-[20px]">Player Management</span>
-              <span className="mt-0.5 block text-[10px] font-bold text-[#52746d] lg:text-[12px]">Ratings · Attendance · Rules</span>
+              <span className="mt-0.5 block text-[10px] font-bold text-[#52746d] lg:text-[12px]">Ratings · Attendance · Rules · Warnings</span>
             </span>
           </button>
           <button
@@ -2602,6 +2660,22 @@ export function ClubTab({
                   <span className="block text-[12px] font-black text-[#102A43] lg:text-sm">Rules</span>
                   <span className="block truncate text-[10px] font-bold text-slate-500 lg:text-[11px]">
                     {cleanPairingRuleCount > 0 ? `${cleanPairingRuleCount} pairing rule${cleanPairingRuleCount === 1 ? "" : "s"}` : "No pairing rules"}
+                  </span>
+                </span>
+                <ChevronRight className="h-4 w-4 shrink-0 text-slate-300" />
+              </button>
+
+              <button
+                type="button"
+                className="flex min-h-[3.25rem] w-full items-center gap-2.5 border-t border-slate-100 px-3 py-2 text-left transition hover:bg-[#f4f9f7] active:bg-[#eaf4f1] disabled:opacity-45"
+                disabled={!attendanceEnabled}
+                onClick={() => { setAttendanceWarningPlayerSearch(""); setAttendanceWarningBoardOpen(true); }}
+              >
+                <AlertTriangle className="h-4 w-4 shrink-0 text-[#3f756b] lg:h-5 lg:w-5" />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[12px] font-black text-[#102A43] lg:text-sm">Warnings</span>
+                  <span className="block truncate text-[10px] font-bold text-slate-500 lg:text-[11px]">
+                    {attendanceEnabled ? `${attendanceOverview.length} player${attendanceOverview.length === 1 ? "" : "s"} with recorded issues` : isSharedRoster ? "Sign in to use warnings" : "Shared rosters only"}
                   </span>
                 </span>
                 <ChevronRight className="h-4 w-4 shrink-0 text-slate-300" />
@@ -3107,6 +3181,67 @@ export function ClubTab({
         </DialogContent>
       </Dialog>
 
+      <Dialog open={attendanceWarningBoardOpen} onOpenChange={(open) => { setAttendanceWarningBoardOpen(open); if (!open) { blurActiveField(); setAttendanceWarningPlayerSearch(""); } }}>
+        <DialogContent className="max-h-[90dvh] max-w-md overflow-hidden rounded-3xl p-0" onOpenAutoFocus={(event) => event.preventDefault()}>
+          <DialogHeader className="border-b border-slate-100 px-4 py-3 text-left">
+            <DialogTitle className="flex items-center gap-2 text-base font-black text-[#102A43]"><AlertTriangle className="h-5 w-5 text-[#3f756b]" />Warnings</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-3 border-b border-slate-100 p-4 pb-3">
+            <div className="flex items-center gap-2">
+              <div className="relative min-w-0 flex-1">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-300" />
+                <Input value={attendanceWarningPlayerSearch} onChange={(event) => setAttendanceWarningPlayerSearch(event.target.value)} placeholder="Find a player" className="h-10 rounded-2xl border-slate-200 pl-9 text-sm font-semibold" />
+              </div>
+              <Button type="button" variant="outline" className="h-10 shrink-0 rounded-2xl border-slate-200 px-3 text-xs font-black text-[#102A43]" onClick={() => openAttendanceWarningTemplates()}><ClipboardList className="mr-1.5 h-4 w-4" />Templates</Button>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[11px] font-semibold text-slate-500">Attendance overview</span>
+              <select value={attendanceRange} onChange={(event) => setAttendanceRange(event.target.value as AttendanceRange)} className="h-9 rounded-xl border border-slate-200 bg-white px-2 text-xs font-bold text-[#102A43]">
+                <option value="3m">Last 3 months</option>
+                <option value="6m">Last 6 months</option>
+                <option value="12m">Last 12 months</option>
+                <option value="all">All</option>
+              </select>
+            </div>
+          </div>
+          <div className="max-h-[64dvh] overflow-y-auto p-4" style={{ WebkitOverflowScrolling: "touch" }}>
+            {attendanceLoading ? (
+              <div className="py-8 text-center text-sm font-semibold text-slate-400">Loading attendance…</div>
+            ) : attendanceWarningOverview.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-8 text-center text-sm font-semibold text-slate-400">No recorded attendance issues in this period.</div>
+            ) : (
+              <div className="grid gap-2">
+                {attendanceWarningOverview.map((row) => {
+                  const counts = { noShow: 0, lateCancellation: 0, tardy: 0, conduct: 0 };
+                  row.records.forEach((record) => {
+                    if (record.issueType === "no-show") counts.noShow += 1;
+                    if (record.issueType === "late-cancellation") counts.lateCancellation += 1;
+                    if (record.issueType === "tardy") counts.tardy += 1;
+                    if (record.issueType === "conduct") counts.conduct += 1;
+                  });
+                  const latest = [...row.records].sort((a, b) => b.incidentDate.localeCompare(a.incidentDate))[0];
+                  const parts = [counts.noShow ? `${counts.noShow} no-show` : "", counts.lateCancellation ? `${counts.lateCancellation} last-minute` : "", counts.tardy ? `${counts.tardy} tardy` : "", counts.conduct ? `${counts.conduct} conduct` : ""].filter(Boolean);
+                  return (
+                    <button key={row.playerId} type="button" className="flex w-full items-center gap-3 rounded-2xl border border-slate-100 bg-white px-3 py-3 text-left shadow-sm transition active:scale-[0.99]" onClick={() => { setAttendanceWarningBoardOpen(false); openAttendanceWarningComposerForRow(row); }}>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-black text-[#102A43]">{row.name}</span>
+                        <span className="mt-0.5 block truncate text-[11px] font-semibold text-slate-500">{parts.join(" · ")}</span>
+                        {latest && <span className="mt-1 block text-[10px] font-semibold text-slate-400">Latest · {formatAttendanceDate(latest.incidentDate)} · {attendanceIssueLabel(latest.issueType)}</span>}
+                      </span>
+                      <span className="shrink-0 text-right">
+                        <span className="block text-[11px] font-black text-[#102A43]">{row.records.length}</span>
+                        <span className="block text-[9px] font-bold uppercase tracking-wide text-slate-400">issues</span>
+                      </span>
+                      <ChevronRight className="h-4 w-4 shrink-0 text-slate-300" />
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={attendanceWarningTemplatesOpen} onOpenChange={(open) => { setAttendanceWarningTemplatesOpen(open); if (!open) { blurActiveField(); setAttendanceWarningTemplateNotice(""); } }}>
         <DialogContent className="max-h-[88dvh] max-w-md overflow-y-auto rounded-3xl p-0" onOpenAutoFocus={(event) => event.preventDefault()}>
           <DialogHeader className="border-b border-slate-100 px-4 py-3 text-left">
@@ -3123,7 +3258,7 @@ export function ClubTab({
             <div className="grid gap-1.5">
               <Label className="text-[10px] font-black uppercase tracking-wide text-slate-400">Saved wording</Label>
               <Textarea value={attendanceWarningTemplateDraft} onChange={(event) => { setAttendanceWarningTemplateDraft(event.target.value.slice(0, 2400)); setAttendanceWarningTemplateNotice(""); }} className="min-h-48 resize-none rounded-2xl border-slate-200 text-sm font-semibold leading-relaxed" />
-              <div className="text-[10px] font-semibold leading-relaxed text-slate-400">Placeholders: {'{player}'} · {'{group}'} · {'{period}'} · {'{last_minute}'} · {'{no_shows}'} · {'{tardies}'} · {'{attendance_issues}'}</div>
+              <div className="text-[10px] font-semibold leading-relaxed text-slate-400">Placeholders: {'{player}'} · {'{group}'} · {'{period}'} · {'{last_minute}'} · {'{last_minute_dates}'} · {'{no_shows}'} · {'{no_show_dates}'} · {'{tardies}'} · {'{attendance_issues}'}</div>
             </div>
             {attendanceWarningTemplatesLoading && <div className="text-[11px] font-semibold text-slate-400">Syncing Club templates…</div>}
             {attendanceWarningTemplatesError && <div className="rounded-2xl border border-amber-100 bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-800">{attendanceWarningTemplatesError}</div>}
@@ -3151,7 +3286,7 @@ export function ClubTab({
             <div className="grid gap-1.5">
               <Label className="text-[10px] font-black uppercase tracking-wide text-slate-400">Preview</Label>
               <Textarea value={attendanceWarningComposerDraft} onChange={(event) => { setAttendanceWarningComposerDraft(event.target.value); setAttendanceWarningCopyNotice(""); }} className="min-h-52 resize-none rounded-2xl border-slate-200 text-sm font-semibold leading-relaxed" />
-              <div className="text-[10px] font-semibold leading-relaxed text-slate-400">Counts use the attendance period currently selected. Conduct notes are never inserted automatically. You can edit this copy before copying it.</div>
+              <div className="text-[10px] font-semibold leading-relaxed text-slate-400">No-show and last-minute templates can cite the recorded dates. Tardy templates use the selected period and count. Conduct notes are never inserted automatically. You can edit this copy before copying it.</div>
             </div>
             {attendanceWarningCopyNotice && <div className={`rounded-2xl px-3 py-2 text-[11px] font-bold ${attendanceWarningCopyNotice === "Copied" ? "bg-emerald-50 text-emerald-700" : "border border-amber-100 bg-amber-50 text-amber-800"}`}>{attendanceWarningCopyNotice}</div>}
             <div className="grid grid-cols-[auto_1fr] gap-2">

@@ -592,7 +592,9 @@ export function TaskBoard({
   equipmentItems = [],
 }: Props) {
   const online = Boolean(scopeId && user?.email);
-  const accent = safeColor(themeColor);
+  // Action Board has a fixed semantic blue identity. Roster color is intentionally ignored
+  // so white or very light custom roster colors cannot erase board controls.
+  const accent = "#3b82f6";
   const background = mixHex(accent, "#ffffff", 0.93);
   const currentActor = actor(user);
 

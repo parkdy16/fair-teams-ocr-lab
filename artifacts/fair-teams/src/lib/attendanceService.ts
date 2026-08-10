@@ -38,15 +38,18 @@ export type AttendanceIssueRecord = {
 export type AttendanceWarningTemplateKind =
   | "late-cancellation"
   | "no-show"
+  | "tardy"
   | "dismissal";
 
 export type AttendanceWarningTemplates = Record<AttendanceWarningTemplateKind, string>;
 
 export const DEFAULT_ATTENDANCE_WARNING_TEMPLATES: AttendanceWarningTemplates = {
   "late-cancellation":
-    "Hi {player}, we wanted to check in about last-minute cancellations. In the {period}, we recorded {last_minute}. Late changes make it difficult to organize sessions and teams, so please let us know as early as possible if you cannot attend. Thanks for understanding.",
+    "Hi {player}, we wanted to check in about last-minute cancellations. We recorded {last_minute} on {last_minute_dates}. Late changes make it difficult to organize sessions and teams, so please let us know as early as possible if you cannot attend. Thanks for understanding.",
   "no-show":
-    "Hi {player}, we wanted to check in about attendance. In the {period}, we recorded {no_shows}. Please cancel as early as possible if you cannot attend, since unexpected absences make it difficult to organize sessions and teams. Thanks for understanding.",
+    "Hi {player}, we wanted to check in about attendance. We recorded {no_shows} on {no_show_dates}. Please cancel as early as possible if you cannot attend, since unexpected absences make it difficult to organize sessions and teams. Thanks for understanding.",
+  tardy:
+    "Hi {player}, we wanted to check in about punctuality. During the {period}, we recorded {tardies}. Repeated late arrivals make it harder to start sessions and organize teams on time, so please do your best to arrive by the agreed start time. Thanks for understanding.",
   dismissal:
     "Hi {player}, we’re writing regarding your participation in {group}. After discussion among the organizers, we’ve decided to remove you from the group. Thank you for the time you’ve spent with us, and we wish you all the best.",
 };
@@ -89,17 +92,12 @@ function attendanceCollection(rosterId: string) {
   );
 }
 
-function warningTemplatesCollection(rosterId: string) {
-  return collection(
-    getFairTeamsFirestore(),
-    "sharedRosters",
-    cleanRosterId(rosterId),
-    "attendanceWarningTemplates",
-  );
+function warningTemplateDoc(rosterId: string, kind: AttendanceWarningTemplateKind) {
+  return doc(attendanceCollection(rosterId), `_warning_template_${kind}`);
 }
 
 function isWarningTemplateKind(value: string): value is AttendanceWarningTemplateKind {
-  return value === "late-cancellation" || value === "no-show" || value === "dismissal";
+  return value === "late-cancellation" || value === "no-show" || value === "tardy" || value === "dismissal";
 }
 
 function toAttendanceRecord(id: string, data: DocumentData): AttendanceIssueRecord | null {
@@ -140,6 +138,7 @@ export function listenToAttendanceIssues(
     attendanceCollection(rosterId),
     (snapshot) => {
       const records = snapshot.docs
+        .filter((snapshotDoc) => !snapshotDoc.id.startsWith("_warning_template_"))
         .map((snapshotDoc) => toAttendanceRecord(snapshotDoc.id, snapshotDoc.data()))
         .filter((record): record is AttendanceIssueRecord => Boolean(record))
         .sort((a, b) => b.incidentDate.localeCompare(a.incidentDate) || b.createdAt - a.createdAt);
@@ -156,13 +155,16 @@ export function listenToAttendanceWarningTemplates(
 ): Unsubscribe {
   requireSignedInUser();
   return onSnapshot(
-    warningTemplatesCollection(rosterId),
+    attendanceCollection(rosterId),
     (snapshot) => {
       const next: AttendanceWarningTemplates = { ...DEFAULT_ATTENDANCE_WARNING_TEMPLATES };
       snapshot.docs.forEach((snapshotDoc) => {
-        if (!isWarningTemplateKind(snapshotDoc.id)) return;
+        const prefix = "_warning_template_";
+        if (!snapshotDoc.id.startsWith(prefix)) return;
+        const kind = snapshotDoc.id.slice(prefix.length);
+        if (!isWarningTemplateKind(kind)) return;
         const text = cleanString(snapshotDoc.data().text);
-        if (text) next[snapshotDoc.id] = text;
+        if (text) next[kind] = text;
       });
       callback(next);
     },
@@ -216,12 +218,24 @@ export async function saveAttendanceWarningTemplate(
   const now = new Date();
   const userName = user.displayName?.trim() || user.email || "Organizer";
   await setDoc(
-    doc(warningTemplatesCollection(rosterId), kind),
+    warningTemplateDoc(rosterId, kind),
     {
       app: "Stripes",
-      schemaVersion: 1,
+      schemaVersion: 2,
       kind,
       text: cleaned,
+      // Keep the document compatible with existing attendanceIssues security rules.
+      // The UI filters these reserved IDs out of the attendance log.
+      playerId: "__warning_template__",
+      playerName: "Stripes warning template",
+      issueType: "conduct",
+      incidentDate: "1970-01-01",
+      note: null,
+      createdByUid: user.uid,
+      createdByEmail: user.email,
+      createdByName: userName,
+      createdAt: serverTimestamp(),
+      createdAtIso: now.toISOString(),
       updatedByUid: user.uid,
       updatedByEmail: user.email,
       updatedByName: userName,

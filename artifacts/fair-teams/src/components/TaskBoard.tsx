@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ArrowLeft,
   Bell,
   CalendarDays,
   Check,
@@ -592,6 +593,7 @@ export function TaskBoard({
 
   const [board, setBoard] = useState<LocalBoard>(() => readLocalBoard(workspaceKey, rosterName));
   const [boardOpen, setBoardOpen] = useState(false);
+  const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [mobileFilter, setMobileFilter] = useState<MobileFilter>("deciding");
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [expandedHistoryIds, setExpandedHistoryIds] = useState<Set<string>>(new Set());
@@ -766,12 +768,50 @@ export function TaskBoard({
     && (!currentActor.email || !latestActivity.activity.actorEmail || latestActivity.activity.actorEmail.toLowerCase() !== currentActor.email.toLowerCase())
   );
 
+  const isMobileBoardViewport = () => typeof window !== "undefined" && window.matchMedia("(max-width: 1023px)").matches;
+
   const openBoard = () => {
     const seenAt = Date.now();
     setLastSeenActivityAt(seenAt);
-    if (typeof window !== "undefined") window.localStorage.setItem(activitySeenKey(workspaceKey), String(seenAt));
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(activitySeenKey(workspaceKey), String(seenAt));
+      if (isMobileBoardViewport() && !boardOpen) {
+        window.history.pushState({ ...(window.history.state || {}), stripesActionBoard: true }, "");
+      }
+    }
     setBoardOpen(true);
   };
+
+  const openCardDetail = (card: TaskBoardCard) => {
+    if (!isMobileBoardViewport()) {
+      toggleExpanded(card.id);
+      return;
+    }
+    if (typeof window !== "undefined") {
+      window.history.pushState({ ...(window.history.state || {}), stripesActionBoard: true, stripesActionBoardCard: card.id }, "");
+    }
+    setActiveCardId(card.id);
+  };
+
+  const closeCardDetail = () => {
+    if (typeof window !== "undefined" && window.history.state?.stripesActionBoardCard) {
+      window.history.back();
+      return;
+    }
+    setActiveCardId(null);
+  };
+
+  useEffect(() => {
+    const handlePopState = () => {
+      if (activeCardId) {
+        setActiveCardId(null);
+        return;
+      }
+      if (boardOpen) setBoardOpen(false);
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [activeCardId, boardOpen]);
 
   useEffect(() => {
     if (!boardOpen || !latestActivity?.activity.at) return;
@@ -1586,7 +1626,7 @@ export function TaskBoard({
       <div className="space-y-3">
         {questions.map((question, questionIndex) => (
           <div key={question.id} className={questions.length > 1 ? "rounded-xl bg-slate-50 p-2.5" : ""}>
-            {questions.length > 1 && <div className="mb-2 text-xs font-black leading-snug text-[#102A43]">{questionIndex + 1}. {question.text}</div>}
+            {questions.length > 1 && <div className="mb-2 text-xs font-semibold leading-relaxed text-[#102A43]">{questionIndex + 1}. {question.text}</div>}
             <div className="grid gap-1.5">
               {question.options.map((option) => {
                 const denominator = question.kind === "multi-select" ? Math.max(1, totalVoters) : Math.max(1, question.options.reduce((sum, item) => sum + item.count, 0));
@@ -1601,7 +1641,7 @@ export function TaskBoard({
                   <div key={option.id} className="rounded-xl bg-white px-2.5 py-2 ring-1 ring-slate-100">
                     <div className="flex items-center gap-2 text-xs font-bold text-slate-600">
                       <span className="min-w-0 flex-1 break-words">{option.label}</span>
-                      <span className="shrink-0 rounded-full bg-slate-50 px-2 py-0.5 font-black text-[#102A43] ring-1 ring-slate-200">{option.count}</span>
+                      <span className="shrink-0 rounded-full bg-slate-50 px-2 py-0.5 font-semibold text-[#102A43] ring-1 ring-slate-200">{option.count}</span>
                       {question.kind !== "multi-select" && <span className="w-8 text-right text-[10px] text-slate-400">{percent}%</span>}
                     </div>
                     {responderNames.length > 0 && <div className="mt-1 text-[10px] font-bold text-sky-700">{responderNames.join(" · ")}</div>}
@@ -1611,8 +1651,8 @@ export function TaskBoard({
             </div>
           </div>
         ))}
-        {decision.outcome && <button type="button" className="w-full rounded-xl bg-emerald-50 px-3 py-2 text-left text-[11px] font-bold text-emerald-800" onClick={() => openOutcome(card, decision)}><span className="font-black">Note:</span> {decision.outcome}</button>}
-        {!decision.outcome && !open && <button type="button" className="px-1 text-[10px] font-black text-slate-400 hover:text-slate-600" onClick={() => openOutcome(card, decision)}>+ Add note</button>}
+        {decision.outcome && <button type="button" className="w-full rounded-xl bg-emerald-50 px-3 py-2 text-left text-[11px] font-bold text-emerald-800" onClick={() => openOutcome(card, decision)}><span className="font-semibold">Note:</span> {decision.outcome}</button>}
+        {!decision.outcome && !open && <button type="button" className="px-1 text-[10px] font-medium text-slate-400 hover:text-slate-600" onClick={() => openOutcome(card, decision)}>+ Add note</button>}
       </div>
     );
 
@@ -1625,23 +1665,23 @@ export function TaskBoard({
           <button type="button" className="w-full rounded-xl bg-white/80 px-3 py-2.5 text-left ring-1 ring-slate-200/80 transition hover:bg-white" onClick={() => toggleHistoryExpanded(entryKey)}>
             <div className="flex items-start gap-2">
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1 text-[9px] font-black uppercase tracking-wide text-slate-400 lg:text-[10px]"><span>{decisionTypeLabel(decision)} · {decision.mode === "recorded" ? "recorded" : decision.status}</span>{decision.notification?.status === "sent" && <span className="inline-flex items-center gap-0.5 text-emerald-600" title={notificationSummary(decision.notification)}><Bell className="h-2.5 w-2.5 fill-emerald-100" /><Check className="h-2.5 w-2.5" /></span>}</div>
-                <div className="mt-0.5 whitespace-normal break-words text-[12px] font-black leading-snug text-[#102A43] lg:text-[14px]">{heading}</div>
+                <div className="flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wide text-slate-400 lg:text-[10px]"><span>{decisionTypeLabel(decision)} · {decision.mode === "recorded" ? "recorded" : decision.status}</span>{decision.notification?.status === "sent" && <span className="inline-flex items-center gap-0.5 text-emerald-600" title={notificationSummary(decision.notification)}><Bell className="h-2.5 w-2.5 fill-emerald-100" /><Check className="h-2.5 w-2.5" /></span>}</div>
+                <div className="mt-0.5 whitespace-normal break-words text-[12px] font-semibold leading-relaxed text-[#102A43] lg:text-[14px]">{heading}</div>
                 <div className="mt-1 text-[9px] font-bold text-slate-400 lg:text-[10px]">{decisionHistoryMeta(decision)} · {historyExpanded ? "Hide details" : open ? "Open details" : "View result"}</div>
               </div>
               {historyExpanded ? <ChevronUp className="mt-1 h-4 w-4 shrink-0 text-slate-400" /> : <ChevronDown className="mt-1 h-4 w-4 shrink-0 text-slate-400" />}
             </div>
           </button>
           {historyExpanded && <div className="mt-2 rounded-xl border border-slate-200 bg-white p-3">
-            {decision.hostName && <div className="mb-1 text-[10px] font-bold text-slate-500">Host: <span className="font-black text-slate-700">{decision.hostName}</span></div>}
+            {decision.hostName && <div className="mb-1 text-[10px] font-bold text-slate-500">Host: <span className="font-semibold text-slate-700">{decision.hostName}</span></div>}
             {decision.participantNames?.length ? <div className="mb-2 text-[10px] font-bold text-slate-500"><Users className="mr-1 inline h-3 w-3" />{personSummary(decision.participantNames.map((name) => ({ name })))}</div> : null}
             {decision.mode === "recorded" ? (
               <div className="rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800"><Check className="mr-1 inline h-3.5 w-3.5" />{decision.outcome}</div>
             ) : open ? (
               <div className="flex flex-wrap items-center gap-2">
                 <span className="mr-auto text-[10px] font-bold text-slate-500">{totalVoters}{decision.eligibleCount ? ` of ${decision.eligibleCount}` : ""} responded</span>
-                {canVote ? <button type="button" className="rounded-xl bg-violet-600 px-3 py-2 text-xs font-black text-white" onClick={() => openVoteDialog(card, decision)}>{decision.kind === "schedule" ? "Availability" : "Vote"}</button> : <span className="text-[10px] font-black text-slate-400">Not asking you</span>}
-                <button type="button" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-500" onClick={() => void closeVote(card, decision)}>Close</button>
+                {canVote ? <button type="button" className="rounded-xl bg-violet-600 px-3 py-2 text-xs font-semibold text-white" onClick={() => openVoteDialog(card, decision)}>{decision.kind === "schedule" ? "Availability" : "Vote"}</button> : <span className="text-[10px] font-medium text-slate-400">Not asking you</span>}
+                <button type="button" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-500" onClick={() => void closeVote(card, decision)}>Close</button>
               </div>
             ) : results}
           </div>}
@@ -1661,9 +1701,9 @@ export function TaskBoard({
           {open ? <Gavel className="h-3.5 w-3.5" /> : <Check className="h-3.5 w-3.5" />}
         </div>
         <div className={`rounded-2xl border p-3 ${open ? "border-violet-200 bg-violet-50/65" : "border-emerald-100 bg-white"}`}>
-          <div className="flex items-center gap-1 text-[9px] font-black uppercase tracking-wide text-slate-400 lg:text-[10px]"><span>{currentLabel}</span>{decision.notification?.status === "sent" && <span className="inline-flex items-center gap-0.5 text-emerald-600" title={notificationSummary(decision.notification)}><Bell className="h-2.5 w-2.5 fill-emerald-100" /><Check className="h-2.5 w-2.5" /></span>}</div>
-          <div className="mt-1 whitespace-normal break-words text-sm font-black leading-snug text-[#102A43] lg:text-base">{heading}</div>
-          {decision.hostName && <div className="mt-1 text-[10px] font-bold text-slate-500">Host: <span className="font-black text-slate-700">{decision.hostName}</span></div>}
+          <div className="flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wide text-slate-400 lg:text-[10px]"><span>{currentLabel}</span>{decision.notification?.status === "sent" && <span className="inline-flex items-center gap-0.5 text-emerald-600" title={notificationSummary(decision.notification)}><Bell className="h-2.5 w-2.5 fill-emerald-100" /><Check className="h-2.5 w-2.5" /></span>}</div>
+          <div className="mt-1 whitespace-normal break-words text-sm font-semibold leading-relaxed text-[#102A43] lg:text-base">{heading}</div>
+          {decision.hostName && <div className="mt-1 text-[10px] font-bold text-slate-500">Host: <span className="font-semibold text-slate-700">{decision.hostName}</span></div>}
           {decision.participantNames?.length ? <div className="mt-1 text-[10px] font-bold text-slate-500"><Users className="mr-1 inline h-3 w-3" />{personSummary(decision.participantNames.map((name) => ({ name })))}</div> : null}
 
           {decision.mode === "recorded" ? (
@@ -1671,8 +1711,8 @@ export function TaskBoard({
           ) : open ? (
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <span className="mr-auto text-[10px] font-bold text-slate-500">{totalVoters}{decision.eligibleCount ? ` of ${decision.eligibleCount}` : ""} responded</span>
-              {canVote ? <button type="button" className="rounded-xl bg-violet-600 px-3 py-2 text-xs font-black text-white" onClick={() => openVoteDialog(card, decision)}>{decision.kind === "schedule" ? "Availability" : "Vote"}</button> : <span className="text-[10px] font-black text-slate-400">Not asking you</span>}
-              <button type="button" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-500" onClick={() => void closeVote(card, decision)}>Close</button>
+              {canVote ? <button type="button" className="rounded-xl bg-violet-600 px-3 py-2 text-xs font-semibold text-white" onClick={() => openVoteDialog(card, decision)}>{decision.kind === "schedule" ? "Availability" : "Vote"}</button> : <span className="text-[10px] font-medium text-slate-400">Not asking you</span>}
+              <button type="button" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-500" onClick={() => void closeVote(card, decision)}>Close</button>
             </div>
           ) : <div className="mt-3">{results}</div>}
         </div>
@@ -1756,9 +1796,9 @@ export function TaskBoard({
     );
   };
 
-  const renderCard = (card: TaskBoardCard, compact = false) => {
+  const renderCard = (card: TaskBoardCard, compact = false, detail = false) => {
     const stage = stageForCard(card);
-    const expanded = expandedIds.has(card.id);
+    const expanded = detail || expandedIds.has(card.id);
     const openDecision = latestOpenDecision(card);
     const openAction = latestOpenAction(card);
     const decisions = card.decisions || [];
@@ -1778,10 +1818,10 @@ export function TaskBoard({
           : "border-slate-200";
 
     return (
-      <article key={card.id} className={`overflow-hidden rounded-2xl border bg-white shadow-sm ${stageStyle} ${compact ? "" : "lg:rounded-[1.35rem]"}`}>
-        <div className="p-3">
+      <article key={card.id} className={detail ? "min-h-full bg-white" : `overflow-hidden rounded-2xl border bg-white shadow-sm ${stageStyle} ${compact ? "" : "lg:rounded-[1.35rem]"}`}>
+        {!detail && <div className="p-3">
           <div className="flex items-start gap-2">
-            <button type="button" className="min-w-0 flex-1 text-left" onClick={() => toggleExpanded(card.id)}>
+            <button type="button" className="min-w-0 flex-1 text-left" onClick={() => openCardDetail(card)}>
               <div className="flex flex-wrap items-center gap-1.5">
                 {card.category && <span className={`rounded-full px-2 py-0.5 text-[9px] font-black ring-1 lg:px-2.5 lg:py-1 lg:text-[10px] ${tagTone(card.category)}`}>{card.category}</span>}
                 {displayPeople?.length ? <span className="inline-flex max-w-full items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-black text-slate-600 lg:px-2.5 lg:py-1 lg:text-[10px]"><Users className="h-3 w-3 shrink-0" /><span className="truncate">{personSummary(displayPeople)}</span></span> : null}
@@ -1821,33 +1861,13 @@ export function TaskBoard({
                 )
               )}
               <button type="button" className="rounded-full p-1.5 text-slate-400 hover:bg-slate-50" onClick={() => openEditCard(card)} aria-label={`Edit ${card.title}`}><Pencil className="h-3.5 w-3.5" /></button>
-              <button type="button" className="rounded-full p-1.5 text-slate-400 hover:bg-slate-50" onClick={() => toggleExpanded(card.id)} aria-label={expanded ? "Collapse topic" : "Expand topic"}>{expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}</button>
+              <button type="button" className="hidden rounded-full p-1.5 text-slate-400 hover:bg-slate-50 lg:block" onClick={() => toggleExpanded(card.id)} aria-label={expanded ? "Collapse topic" : "Expand topic"}>{expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}</button>
             </div>
           </div>
-        </div>
+        </div>}
 
-        {expanded && <div className="border-t border-slate-100 bg-slate-50/35 px-3 pb-3 pt-3">
+        {expanded && <div className={detail ? "bg-white px-4 pb-24 pt-4" : "border-t border-slate-100 bg-slate-50/35 px-3 pb-3 pt-3"}>
           {card.note?.trim() && <p className="mb-3 whitespace-pre-wrap break-words text-xs font-semibold leading-relaxed text-slate-500 lg:text-sm">{card.note.trim()}</p>}
-
-          <div className="mb-3 flex flex-wrap items-center gap-1.5 rounded-2xl bg-white/75 p-2 ring-1 ring-slate-200/80">
-            <span className="mr-1 text-[9px] font-black uppercase tracking-wide text-slate-400 lg:text-[10px]">Status</span>
-            {([
-              ["ideas", "Ideas"],
-              ["deciding", "Decide"],
-              ["action", "Action"],
-              ["done", "Done"],
-            ] as Array<[TopicStage, string]>).map(([itemStage, label]) => (
-              <button
-                key={itemStage}
-                type="button"
-                className={`rounded-xl px-2.5 py-1.5 text-[10px] font-black transition lg:text-[11px] ${stage === itemStage ? "bg-[#102A43] text-white shadow-sm" : "bg-slate-50 text-slate-500 hover:bg-slate-100"}`}
-                onClick={() => void moveCardToStage(card, itemStage)}
-                disabled={stage === itemStage || saving}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
 
           <div className="mb-3 flex flex-wrap items-center gap-1.5">
             {card.links?.map((link) => <div key={link.id} className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full bg-white px-2.5 py-1.5 ring-1 ring-slate-200"><a href={link.url} target="_blank" rel="noreferrer" className="inline-flex min-w-0 max-w-[15rem] items-center gap-1.5 text-[10px] font-black text-slate-600 lg:text-xs"><Link2 className="h-3 w-3 shrink-0 text-slate-400" /><span className="truncate">{link.label}</span><ExternalLink className="h-3 w-3 shrink-0 text-slate-400" /></a><button type="button" className="rounded-full p-0.5 text-slate-300 hover:text-red-600" onClick={() => void removeLink(card, link.id)} aria-label={`Remove ${link.label}`}><Trash2 className="h-3 w-3" /></button></div>)}
@@ -1861,32 +1881,16 @@ export function TaskBoard({
               </div>
               <div className="mt-1 text-[10px] font-semibold text-slate-400 lg:text-xs">
                 {stage === "action"
-                  ? "It can stay unassigned. Add structure only if it helps."
+                  ? "A straightforward task can stay simple."
                   : stage === "deciding"
-                    ? "A vote is optional. Add one only when the group needs to choose."
+                    ? "This stage is for something that needs an answer."
                     : stage === "done"
                       ? "This card stays here as club history."
-                      : "Add a decision or action only when the card needs one."}
+                      : "A simple thought is enough for now."}
               </div>
             </div>
           )}
 
-          <div className="mt-3 border-t border-slate-200 pt-3">
-            {stage === "done" ? (
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-[10px] font-bold text-slate-400">Move the card above when work starts again.</span>
-              </div>
-            ) : (
-              <div>
-                {(decisions.length > 0 || actions.length > 0) && <div className="mb-2 text-[9px] font-black uppercase tracking-wide text-slate-400">Add structure only when useful</div>}
-                <div className="flex flex-wrap gap-1.5">
-                  {!openDecision && <button type="button" className="rounded-xl bg-violet-50 px-3 py-2 text-[11px] font-black text-violet-700 ring-1 ring-violet-100" onClick={() => startDecision(card)}><Gavel className="mr-1 inline h-3.5 w-3.5" />{decisions.length || actions.length ? "+ Decision" : "Decide"}</button>}
-                  {!openAction && <button type="button" className="rounded-xl bg-sky-50 px-3 py-2 text-[11px] font-black text-sky-800 ring-1 ring-sky-100" onClick={() => openAddAction(card)}><Hand className="mr-1 inline h-3.5 w-3.5" />{decisions.length || actions.length ? "+ Action" : "Action"}</button>}
-                  <button type="button" className="ml-auto rounded-xl bg-emerald-600 px-3 py-2 text-[11px] font-black text-white" onClick={() => void finishTopic(card)}><Check className="mr-1 inline h-3.5 w-3.5" />Done</button>
-                </div>
-              </div>
-            )}
-          </div>
         </div>}
       </article>
     );
@@ -1950,8 +1954,8 @@ export function TaskBoard({
         {latestActivity && <div className="mt-2 hidden truncate text-[10px] font-bold text-slate-500 lg:block lg:text-xs">Last: “{latestActivity.card.title}” · {activityText(latestActivity.activity)}</div>}
       </section>
 
-      <Dialog open={boardOpen} onOpenChange={setBoardOpen}>
-        <DialogContent className="fixed inset-x-2 inset-y-3 flex h-[calc(100dvh-1.5rem)] max-h-none w-auto max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-[1.8rem] border border-white/70 bg-white p-0 shadow-2xl sm:inset-3 sm:h-[calc(100dvh-1.5rem)] sm:w-auto sm:rounded-[2rem] lg:inset-6 lg:h-[calc(100dvh-3rem)] lg:rounded-[2rem]">
+      <Dialog open={boardOpen} onOpenChange={(open) => { setBoardOpen(open); if (!open) setActiveCardId(null); }}>
+        <DialogContent className="fixed inset-0 flex h-[100dvh] max-h-none w-full max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-0 bg-white p-0 shadow-none sm:inset-3 sm:h-[calc(100dvh-1.5rem)] sm:w-auto sm:rounded-[2rem] sm:border sm:border-white/70 sm:shadow-2xl lg:inset-6 lg:h-[calc(100dvh-3rem)] lg:rounded-[2rem]">
           <DialogHeader className="shrink-0 border-b border-white/45 px-3 py-3 pr-12 text-left lg:px-5 lg:py-4 lg:pr-14" style={{ backgroundColor: mixHex(accent, "#ffffff", 0.7) }}>
             <div className="flex items-center justify-between gap-2">
               <div className="min-w-0">
@@ -2033,6 +2037,32 @@ export function TaskBoard({
               </>
             )}
           </div>
+
+          {activeCardId && (() => {
+            const activeCard = board.cards.find((card) => card.id === activeCardId);
+            if (!activeCard) return null;
+            const activeStage = stageForCard(activeCard);
+            const stageLabel = activeStage === "deciding" ? "Decide" : activeStage === "action" ? "Action" : activeStage === "done" ? "Done" : "Idea";
+            return (
+              <div className="absolute inset-0 z-40 flex flex-col bg-white lg:hidden">
+                <div className="sticky top-0 z-10 flex shrink-0 items-center gap-2 border-b border-slate-200 bg-white/95 px-2 py-2.5 backdrop-blur">
+                  <button type="button" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-[#102A43] active:bg-slate-100" onClick={closeCardDetail} aria-label="Back to Action Board">
+                    <ArrowLeft className="h-5 w-5" />
+                  </button>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[15px] font-semibold leading-tight text-[#102A43]">{activeCard.title}</div>
+                    <div className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">{stageLabel}</div>
+                  </div>
+                  <button type="button" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-slate-500 active:bg-slate-100" onClick={() => openEditCard(activeCard)} aria-label="Edit card">
+                    <Pencil className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-white">
+                  {renderCard(activeCard, false, true)}
+                </div>
+              </div>
+            );
+          })()}
         </DialogContent>
       </Dialog>
 
@@ -2083,8 +2113,8 @@ export function TaskBoard({
               <button type="button" className="w-fit text-[11px] font-black text-slate-500" onClick={() => setDecisionStep(null)}>← Change type</button>
 
               {decisionStep === "vote" && <div className="flex rounded-2xl bg-slate-100 p-1">
-                <button type="button" className={`flex-1 rounded-xl px-3 py-2 text-xs font-black ${decisionMode === "vote" ? "bg-white text-violet-700 shadow-sm" : "text-slate-500"}`} onClick={() => setDecisionMode("vote")}><Vote className="mr-1 inline h-3.5 w-3.5" />Vote together</button>
-                <button type="button" className={`flex-1 rounded-xl px-3 py-2 text-xs font-black ${decisionMode === "recorded" ? "bg-white text-emerald-700 shadow-sm" : "text-slate-500"}`} onClick={() => setDecisionMode("recorded")}><Check className="mr-1 inline h-3.5 w-3.5" />Record decision</button>
+                <button type="button" className={`flex-1 rounded-xl px-3 py-2 text-xs font-semibold ${decisionMode === "vote" ? "bg-white text-violet-700 shadow-sm" : "text-slate-500"}`} onClick={() => setDecisionMode("vote")}><Vote className="mr-1 inline h-3.5 w-3.5" />Vote together</button>
+                <button type="button" className={`flex-1 rounded-xl px-3 py-2 text-xs font-semibold ${decisionMode === "recorded" ? "bg-white text-emerald-700 shadow-sm" : "text-slate-500"}`} onClick={() => setDecisionMode("recorded")}><Check className="mr-1 inline h-3.5 w-3.5" />Record decision</button>
               </div>}
 
               {decisionMode === "recorded" ? (
@@ -2136,15 +2166,15 @@ export function TaskBoard({
                           </div>
                           <Textarea id={`decision-question-${draft.id}`} className="mt-1" value={draft.text} onChange={(event) => updateDraftQuestion(draft.id, { text: event.target.value })} rows={2} maxLength={220} placeholder="What should people answer?" />
                           <div className="mt-2 flex rounded-2xl bg-violet-50 p-1">
-                            <button type="button" className={`flex-1 rounded-xl px-2 py-2 text-[10px] font-black ${draft.kind === "yes-no-abstain" ? "bg-white text-violet-700 shadow-sm" : "text-violet-500"}`} onClick={() => updateDraftQuestion(draft.id, { kind: "yes-no-abstain" })}>Yes / No</button>
-                            <button type="button" className={`flex-1 rounded-xl px-2 py-2 text-[10px] font-black ${draft.kind === "choose-one" ? "bg-white text-violet-700 shadow-sm" : "text-violet-500"}`} onClick={() => updateDraftQuestion(draft.id, { kind: "choose-one" })}>Choose one</button>
-                            <button type="button" className={`flex-1 rounded-xl px-2 py-2 text-[10px] font-black ${draft.kind === "multi-select" ? "bg-white text-violet-700 shadow-sm" : "text-violet-500"}`} onClick={() => updateDraftQuestion(draft.id, { kind: "multi-select" })}>Choose several</button>
+                            <button type="button" className={`flex-1 rounded-xl px-2 py-2 text-[10px] font-semibold ${draft.kind === "yes-no-abstain" ? "bg-white text-violet-700 shadow-sm" : "text-violet-500"}`} onClick={() => updateDraftQuestion(draft.id, { kind: "yes-no-abstain" })}>Yes / No</button>
+                            <button type="button" className={`flex-1 rounded-xl px-2 py-2 text-[10px] font-semibold ${draft.kind === "choose-one" ? "bg-white text-violet-700 shadow-sm" : "text-violet-500"}`} onClick={() => updateDraftQuestion(draft.id, { kind: "choose-one" })}>Choose one</button>
+                            <button type="button" className={`flex-1 rounded-xl px-2 py-2 text-[10px] font-semibold ${draft.kind === "multi-select" ? "bg-white text-violet-700 shadow-sm" : "text-violet-500"}`} onClick={() => updateDraftQuestion(draft.id, { kind: "multi-select" })}>Choose several</button>
                           </div>
                           {draft.kind !== "yes-no-abstain" && <div className="mt-2"><Label htmlFor={`decision-options-${draft.id}`}>Choices — one per line</Label><Textarea id={`decision-options-${draft.id}`} className="mt-1" value={draft.options} onChange={(event) => updateDraftQuestion(draft.id, { options: event.target.value })} rows={3} maxLength={700} placeholder="Mauerpark\nTempelhofer Feld" /></div>}
                           {draft.kind === "multi-select" && <div className="mt-2"><Label htmlFor={`decision-max-${draft.id}`}>Maximum choices</Label><Input id={`decision-max-${draft.id}`} type="number" min="1" max="16" value={draft.maxSelections} onChange={(event) => updateDraftQuestion(draft.id, { maxSelections: event.target.value })} inputMode="numeric" /></div>}
                         </div>)}
                       </div>
-                      <button type="button" className="w-fit rounded-xl bg-violet-50 px-3 py-2 text-[11px] font-black text-violet-700 ring-1 ring-violet-100" onClick={() => setDecisionQuestionsDraft((current) => [...current, newDraftQuestion("")])}>+ Add question</button>
+                      <button type="button" className="w-fit rounded-xl bg-violet-50 px-3 py-2 text-[11px] font-semibold text-violet-700 ring-1 ring-violet-100" onClick={() => setDecisionQuestionsDraft((current) => [...current, newDraftQuestion("")])}>+ Add question</button>
                       {renderPeoplePicker(decisionPeopleKeys, setDecisionPeopleKeys, "Who votes?")}
                     </>}
 
@@ -2152,7 +2182,7 @@ export function TaskBoard({
                       <div><Label htmlFor="decision-player-question">Question</Label><Textarea id="decision-player-question" value={decisionQuestion} onChange={(event) => setDecisionQuestion(event.target.value)} rows={2} maxLength={220} /></div>
                       <div><Label htmlFor="player-search">Players</Label><Input id="player-search" value={playerSearch} onChange={(event) => setPlayerSearch(event.target.value)} placeholder="Search roster…" /><div className="mt-2 max-h-48 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-1.5">{filteredPlayers.map((player) => {
                         const selected = selectedPlayerIds.includes(player.id);
-                        return <button key={player.id} type="button" className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-black ${selected ? "bg-emerald-50 text-emerald-800" : "text-slate-600 hover:bg-slate-50"}`} onClick={() => setSelectedPlayerIds((current) => current.includes(player.id) ? current.filter((value) => value !== player.id) : [...current, player.id])}><span className="truncate">{player.name}</span>{selected && <Check className="h-4 w-4" />}</button>;
+                        return <button key={player.id} type="button" className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-medium ${selected ? "bg-emerald-50 text-emerald-800" : "text-slate-600 hover:bg-slate-50"}`} onClick={() => setSelectedPlayerIds((current) => current.includes(player.id) ? current.filter((value) => value !== player.id) : [...current, player.id])}><span className="truncate">{player.name}</span>{selected && <Check className="h-4 w-4" />}</button>;
                       })}{filteredPlayers.length === 0 && <div className="px-3 py-6 text-center text-xs font-semibold text-slate-400">No matching players.</div>}</div></div>
                       <div><Label htmlFor="decision-max">Maximum choices</Label><Input id="decision-max" type="number" min="1" max={Math.max(1, selectedPlayerIds.length)} value={decisionMaxSelections} onChange={(event) => setDecisionMaxSelections(event.target.value)} inputMode="numeric" /></div>
                       {renderPeoplePicker(decisionPeopleKeys, setDecisionPeopleKeys, "Who votes?")}
@@ -2206,23 +2236,23 @@ export function TaskBoard({
 
       <Dialog open={Boolean(votingCard && votingDecision)} onOpenChange={(open) => { if (!open) { setVotingCardId(null); setVotingDecisionId(null); setSelectedVoteAnswers({}); } }}>
         <DialogContent className="fixed bottom-2 left-2 right-2 top-auto max-h-[90dvh] w-auto max-w-none translate-x-0 translate-y-0 overflow-y-auto rounded-[2rem] p-4 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-md sm:-translate-x-1/2">
-          <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43]">{votingDecision?.kind === "schedule" ? "Your availability" : "Vote in Stripes"}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle className="text-left text-base font-semibold text-[#102A43]">{votingDecision?.kind === "schedule" ? "Your availability" : "Vote in Stripes"}</DialogTitle></DialogHeader>
           {votingDecision && <div className="grid gap-3">
-            {votingDecision.title?.trim() && <div className="whitespace-normal break-words text-sm font-black leading-snug text-[#102A43]">{votingDecision.title}</div>}
-            {votingDecision.hostName && <div className="rounded-xl bg-sky-50 px-3 py-2 text-[11px] font-bold text-sky-800">Host: <span className="font-black">{votingDecision.hostName}</span></div>}
+            {votingDecision.title?.trim() && <div className="whitespace-normal break-words text-sm font-semibold leading-relaxed text-[#102A43]">{votingDecision.title}</div>}
+            {votingDecision.hostName && <div className="rounded-xl bg-sky-50 px-3 py-2 text-[11px] font-bold text-sky-800">Host: <span className="font-semibold">{votingDecision.hostName}</span></div>}
             <div className="grid gap-3">{decisionQuestions(votingDecision).map((question, questionIndex) => {
               const selectedIds = selectedVoteAnswers[question.id] || [];
               return <div key={question.id} className={decisionQuestions(votingDecision).length > 1 ? "rounded-2xl border border-slate-200 bg-white p-3" : ""}>
-                <div className="whitespace-normal break-words text-sm font-black leading-snug text-[#102A43]">{decisionQuestions(votingDecision).length > 1 ? `${questionIndex + 1}. ` : ""}{question.text}</div>
+                <div className="whitespace-normal break-words text-sm font-semibold leading-relaxed text-[#102A43]">{decisionQuestions(votingDecision).length > 1 ? `${questionIndex + 1}. ` : ""}{question.text}</div>
                 {question.kind === "multi-select" && <div className="mt-1 text-[10px] font-bold text-slate-500">{votingDecision.kind === "schedule" ? "Choose every time that works for you." : `Choose up to ${question.maxSelections || question.options.length}.`}</div>}
                 <div className="mt-2 grid gap-2">{question.options.map((option) => {
                   const selected = selectedIds.includes(option.id);
-                  return <button key={option.id} type="button" className={`rounded-2xl border px-3 py-3 text-left text-sm font-black ${selected ? "border-violet-500 bg-violet-50 text-violet-800" : "border-slate-200 bg-white text-[#102A43]"}`} onClick={() => toggleVoteOption(question, option.id)}>{selected && <Check className="mr-1 inline h-4 w-4" />}{option.label}</button>;
+                  return <button key={option.id} type="button" className={`rounded-2xl border px-3 py-3 text-left text-sm font-medium ${selected ? "border-violet-500 bg-violet-50 text-violet-800" : "border-slate-200 bg-white text-[#102A43]"}`} onClick={() => toggleVoteOption(question, option.id)}>{selected && <Check className="mr-1 inline h-4 w-4" />}{option.label}</button>;
                 })}</div>
               </div>;
             })}</div>
             <div className="text-[10px] font-semibold leading-snug text-slate-500">{votingDecision.kind === "schedule" ? "Your availability is visible to the organizers in this schedule." : "Anonymous. You can change your answer while it remains open."}</div>
-            <Button type="button" className="h-11 rounded-2xl bg-violet-600 font-black text-white" disabled={decisionQuestions(votingDecision).some((question) => !(selectedVoteAnswers[question.id] || []).length) || voteSubmitting} onClick={() => void submitVote()}>{voteSubmitting ? "Recording…" : votingDecision.ballots?.some((ballot) => ballot.voterHash === currentVoterHash) ? "Update" : "Submit"}</Button>
+            <Button type="button" className="h-11 rounded-2xl bg-violet-600 font-semibold text-white" disabled={decisionQuestions(votingDecision).some((question) => !(selectedVoteAnswers[question.id] || []).length) || voteSubmitting} onClick={() => void submitVote()}>{voteSubmitting ? "Recording…" : votingDecision.ballots?.some((ballot) => ballot.voterHash === currentVoterHash) ? "Update" : "Submit"}</Button>
           </div>}
         </DialogContent>
       </Dialog>

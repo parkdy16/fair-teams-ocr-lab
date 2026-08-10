@@ -281,14 +281,6 @@ function topicStage(card: TaskBoardCard): TopicStage {
   return "ideas";
 }
 
-function stageColumnKind(card: TaskBoardCard): TaskBoardColumnKind {
-  const stage = topicStage(card);
-  if (stage === "done") return "done";
-  if (stage === "action") return "action";
-  if (stage === "deciding") return "vote";
-  return "ideas";
-}
-
 function formatTime(value?: number) {
   if (!value) return "";
   const date = new Date(value);
@@ -737,20 +729,21 @@ export function TaskBoard({
     setLastSeenActivityAt(readActivitySeen(workspaceKey));
   }, [workspaceKey]);
 
-  const withDerivedColumn = (card: TaskBoardCard) => {
-    const kind = stageColumnKind(card);
-    const column = columnByKind.get(kind);
-    return column && card.columnId !== column.id
-      ? { ...card, columnId: column.id, lastMovedAt: Date.now(), lastMovedByName: currentActor.name }
-      : card;
+  const stageForCard = (card: TaskBoardCard): TopicStage => {
+    if (columnByKind.get("done")?.id === card.columnId) return "done";
+    if (columnByKind.get("action")?.id === card.columnId) return "action";
+    if (columnByKind.get("vote")?.id === card.columnId) return "deciding";
+    if (columnByKind.get("ideas")?.id === card.columnId) return "ideas";
+    // Legacy cards created before v1.61 can still fall back to their old derived state
+    // until they are explicitly moved once.
+    return topicStage(card);
   };
 
   const updateBoardCard = (card: TaskBoardCard) => {
     setBoard((current) => ({ ...current, cards: [...current.cards.filter((item) => item.id !== card.id), card] }));
   };
 
-  const persistCard = async (rawCard: TaskBoardCard) => {
-    const card = withDerivedColumn(rawCard);
+  const persistCard = async (card: TaskBoardCard) => {
     updateBoardCard(card);
     if (online) await saveTaskBoardCard(scopeId!, card);
     return card;
@@ -789,12 +782,38 @@ export function TaskBoard({
 
   const cardsByStage = useMemo(() => {
     const result: Record<TopicStage, TaskBoardCard[]> = { ideas: [], deciding: [], action: [], done: [] };
-    board.cards.forEach((card) => result[topicStage(card)].push(card));
+    board.cards.forEach((card) => result[stageForCard(card)].push(card));
     (Object.keys(result) as TopicStage[]).forEach((stage) => {
       result[stage].sort((a, b) => b.updatedAt - a.updatedAt);
     });
     return result;
-  }, [board.cards]);
+  }, [board.cards, columnByKind]);
+
+  const moveCardToStage = async (card: TaskBoardCard, stage: TopicStage) => {
+    const kind: TaskBoardColumnKind = stage === "deciding" ? "vote" : stage;
+    const column = columnByKind.get(kind);
+    if (!column || card.columnId === column.id) return;
+    const now = Date.now();
+    const next: TaskBoardCard = {
+      ...card,
+      columnId: column.id,
+      completedAt: stage === "done" ? (card.completedAt || now) : undefined,
+      completedByName: stage === "done" ? (card.completedByName || currentActor.name) : undefined,
+      completedByEmail: stage === "done" ? (card.completedByEmail || currentActor.email) : undefined,
+      lastMovedAt: now,
+      lastMovedByName: currentActor.name,
+      updatedAt: now,
+      updatedByName: currentActor.name,
+      activities: [...card.activities, nowActivity(stage === "done" ? "completed" : card.completedAt ? "reopened" : "moved", currentActor.name, currentActor.email)].slice(-30),
+    };
+    setError("");
+    try {
+      await persistCard(next);
+      setMobileFilter(stage);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Could not move card.");
+    }
+  };
 
   const toggleExpanded = (cardId: string) => {
     setExpandedIds((current) => {
@@ -1397,34 +1416,7 @@ export function TaskBoard({
     completedByEmail: currentActor.email,
   }, "completed");
 
-  const finishTopic = async (card: TaskBoardCard) => {
-    if (latestOpenAction(card) || latestOpenDecision(card)) return;
-    const next: TaskBoardCard = {
-      ...card,
-      completedAt: Date.now(),
-      completedByName: currentActor.name,
-      completedByEmail: currentActor.email,
-      updatedAt: Date.now(),
-      updatedByName: currentActor.name,
-      activities: [...card.activities, nowActivity("completed", currentActor.name, currentActor.email)].slice(-30),
-    };
-    try { await persistCard(next); }
-    catch (nextError) { setError(nextError instanceof Error ? nextError.message : "Could not finish topic."); }
-  };
-
-  const reopenTopic = async (card: TaskBoardCard) => {
-    const next: TaskBoardCard = {
-      ...card,
-      completedAt: undefined,
-      completedByName: undefined,
-      completedByEmail: undefined,
-      updatedAt: Date.now(),
-      updatedByName: currentActor.name,
-      activities: [...card.activities, nowActivity("reopened", currentActor.name, currentActor.email)].slice(-30),
-    };
-    try { await persistCard(next); }
-    catch (nextError) { setError(nextError instanceof Error ? nextError.message : "Could not reopen topic."); }
-  };
+  const finishTopic = (card: TaskBoardCard) => moveCardToStage(card, "done");
 
   const canCurrentUserVote = (decision: TaskBoardVote) => {
     if (!decision.participantEmails?.length || !currentActor.email) return true;
@@ -1765,13 +1757,13 @@ export function TaskBoard({
   };
 
   const renderCard = (card: TaskBoardCard, compact = false) => {
-    const stage = topicStage(card);
+    const stage = stageForCard(card);
     const expanded = expandedIds.has(card.id);
     const openDecision = latestOpenDecision(card);
     const openAction = latestOpenAction(card);
     const decisions = card.decisions || [];
     const actions = card.actions || [];
-    const need = currentNeed(card);
+    const need = stage === "done" ? "Completed" : currentNeed(card);
     const displayPeople = card.people?.length ? card.people : actionPeople(openAction);
     const cardNotifyTarget = currentNotifyTarget(card);
     const cardNotification = cardNotifyTarget?.notification;
@@ -1837,6 +1829,26 @@ export function TaskBoard({
         {expanded && <div className="border-t border-slate-100 bg-slate-50/35 px-3 pb-3 pt-3">
           {card.note?.trim() && <p className="mb-3 whitespace-pre-wrap break-words text-xs font-semibold leading-relaxed text-slate-500 lg:text-sm">{card.note.trim()}</p>}
 
+          <div className="mb-3 flex flex-wrap items-center gap-1.5 rounded-2xl bg-white/75 p-2 ring-1 ring-slate-200/80">
+            <span className="mr-1 text-[9px] font-black uppercase tracking-wide text-slate-400 lg:text-[10px]">Status</span>
+            {([
+              ["ideas", "Ideas"],
+              ["deciding", "Decide"],
+              ["action", "Action"],
+              ["done", "Done"],
+            ] as Array<[TopicStage, string]>).map(([itemStage, label]) => (
+              <button
+                key={itemStage}
+                type="button"
+                className={`rounded-xl px-2.5 py-1.5 text-[10px] font-black transition lg:text-[11px] ${stage === itemStage ? "bg-[#102A43] text-white shadow-sm" : "bg-slate-50 text-slate-500 hover:bg-slate-100"}`}
+                onClick={() => void moveCardToStage(card, itemStage)}
+                disabled={stage === itemStage || saving}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
           <div className="mb-3 flex flex-wrap items-center gap-1.5">
             {card.links?.map((link) => <div key={link.id} className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full bg-white px-2.5 py-1.5 ring-1 ring-slate-200"><a href={link.url} target="_blank" rel="noreferrer" className="inline-flex min-w-0 max-w-[15rem] items-center gap-1.5 text-[10px] font-black text-slate-600 lg:text-xs"><Link2 className="h-3 w-3 shrink-0 text-slate-400" /><span className="truncate">{link.label}</span><ExternalLink className="h-3 w-3 shrink-0 text-slate-400" /></a><button type="button" className="rounded-full p-0.5 text-slate-300 hover:text-red-600" onClick={() => void removeLink(card, link.id)} aria-label={`Remove ${link.label}`}><Trash2 className="h-3 w-3" /></button></div>)}
             {stage !== "done" && (card.links?.length || 0) < 5 && <button type="button" className="inline-flex items-center gap-1 rounded-full px-2 py-1.5 text-[10px] font-black text-slate-400 lg:text-xs hover:bg-white hover:text-slate-600" onClick={() => openAddLink(card)}><Link2 className="h-3 w-3" />+ Link</button>}
@@ -1844,26 +1856,33 @@ export function TaskBoard({
 
           {(decisions.length > 0 || actions.length > 0) ? renderTimeline(card) : (
             <div className="rounded-2xl border border-dashed border-slate-200 bg-white/50 px-3 py-5 text-center">
-              <div className="text-xs font-black text-[#102A43] lg:text-sm">What does this need?</div>
-              <div className="mt-1 text-[10px] font-semibold text-slate-400 lg:text-xs">Start a decision or add an action when the topic is ready.</div>
+              <div className="text-xs font-black text-[#102A43] lg:text-sm">
+                {stage === "action" ? "Simple to-do" : stage === "deciding" ? "Simple decision" : stage === "done" ? "Completed" : "Keep it simple"}
+              </div>
+              <div className="mt-1 text-[10px] font-semibold text-slate-400 lg:text-xs">
+                {stage === "action"
+                  ? "It can stay unassigned. Add structure only if it helps."
+                  : stage === "deciding"
+                    ? "A vote is optional. Add one only when the group needs to choose."
+                    : stage === "done"
+                      ? "This card stays here as club history."
+                      : "Add a decision or action only when the card needs one."}
+              </div>
             </div>
           )}
 
           <div className="mt-3 border-t border-slate-200 pt-3">
             {stage === "done" ? (
-              <button type="button" className="rounded-xl bg-white px-3 py-2 text-[11px] font-black text-slate-600 ring-1 ring-slate-200" onClick={() => void reopenTopic(card)}><RotateCcw className="mr-1 inline h-3.5 w-3.5" />Reopen</button>
-            ) : openDecision ? null : openAction ? (
               <div className="flex flex-wrap items-center gap-1.5">
-                <span className="mr-1 text-[9px] font-black uppercase tracking-wide text-slate-400">Need a decision first?</span>
-                <button type="button" className="rounded-xl bg-white px-3 py-2 text-[11px] font-black text-violet-700 ring-1 ring-violet-100" onClick={() => startDecision(card)}><Gavel className="mr-1 inline h-3.5 w-3.5" />+ Decision</button>
+                <span className="text-[10px] font-bold text-slate-400">Move the card above when work starts again.</span>
               </div>
             ) : (
               <div>
-                {(decisions.length > 0 || actions.length > 0) && <div className="mb-2 text-[9px] font-black uppercase tracking-wide text-slate-400">What next?</div>}
+                {(decisions.length > 0 || actions.length > 0) && <div className="mb-2 text-[9px] font-black uppercase tracking-wide text-slate-400">Add structure only when useful</div>}
                 <div className="flex flex-wrap gap-1.5">
-                  <button type="button" className="rounded-xl bg-violet-50 px-3 py-2 text-[11px] font-black text-violet-700 ring-1 ring-violet-100" onClick={() => startDecision(card)}><Gavel className="mr-1 inline h-3.5 w-3.5" />{decisions.length || actions.length ? "+ Decision" : "Decide"}</button>
-                  <button type="button" className="rounded-xl bg-sky-50 px-3 py-2 text-[11px] font-black text-sky-800 ring-1 ring-sky-100" onClick={() => openAddAction(card)}><Hand className="mr-1 inline h-3.5 w-3.5" />{decisions.length || actions.length ? "+ Action" : "Action"}</button>
-                  {(decisions.length > 0 || actions.length > 0) && <button type="button" className="ml-auto rounded-xl bg-emerald-600 px-3 py-2 text-[11px] font-black text-white" onClick={() => void finishTopic(card)}><Check className="mr-1 inline h-3.5 w-3.5" />Done</button>}
+                  {!openDecision && <button type="button" className="rounded-xl bg-violet-50 px-3 py-2 text-[11px] font-black text-violet-700 ring-1 ring-violet-100" onClick={() => startDecision(card)}><Gavel className="mr-1 inline h-3.5 w-3.5" />{decisions.length || actions.length ? "+ Decision" : "Decide"}</button>}
+                  {!openAction && <button type="button" className="rounded-xl bg-sky-50 px-3 py-2 text-[11px] font-black text-sky-800 ring-1 ring-sky-100" onClick={() => openAddAction(card)}><Hand className="mr-1 inline h-3.5 w-3.5" />{decisions.length || actions.length ? "+ Action" : "Action"}</button>}
+                  <button type="button" className="ml-auto rounded-xl bg-emerald-600 px-3 py-2 text-[11px] font-black text-white" onClick={() => void finishTopic(card)}><Check className="mr-1 inline h-3.5 w-3.5" />Done</button>
                 </div>
               </div>
             )}
@@ -1878,7 +1897,7 @@ export function TaskBoard({
       <div className={`mb-2 flex items-center gap-1.5 px-1 text-xs font-black lg:text-[14px] ${stage === "deciding" ? "text-violet-700" : stage === "action" ? "text-sky-800" : stage === "done" ? "text-slate-500" : "text-slate-700"}`}><Icon className="h-4 w-4 lg:h-[18px] lg:w-[18px]" /><span>{title}</span><span className="ml-0.5 rounded-full bg-white/80 px-1.5 py-0.5 text-[9px] lg:px-2 lg:text-[10px] font-black text-slate-500 ring-1 ring-slate-200/70">{cardsByStage[stage].length}</span></div>
       <div className="space-y-2">
         {cardsByStage[stage].map((card) => renderCard(card, true))}
-        {cardsByStage[stage].length === 0 && <div className="rounded-2xl border border-dashed border-slate-200 bg-white/40 px-2 py-5 text-center text-[10px] font-bold text-slate-400 lg:text-xs">{stage === "ideas" ? "No ideas yet" : stage === "deciding" ? "No decisions waiting" : stage === "action" ? "No actions in progress" : "Nothing completed yet"}</div>}
+        {cardsByStage[stage].length === 0 && <div className="rounded-2xl border border-dashed border-slate-200 bg-white/40 px-2 py-5 text-center text-[10px] font-bold text-slate-400 lg:text-xs">{stage === "ideas" ? "No ideas yet" : stage === "deciding" ? "Nothing to decide yet" : stage === "action" ? "No to-dos here" : "Nothing completed yet"}</div>}
       </div>
     </section>
   );
@@ -2003,7 +2022,7 @@ export function TaskBoard({
               <>
                 <div className="px-3 py-3 pb-20 lg:hidden">
                   <div className="space-y-2">{cardsByStage[mobileFilter].map((card) => renderCard(card))}</div>
-                  {cardsByStage[mobileFilter].length === 0 && <div className="rounded-3xl border border-dashed border-slate-300 bg-white/50 px-4 py-10 text-center text-sm font-bold text-slate-400">{mobileFilter === "ideas" ? "No ideas yet." : mobileFilter === "deciding" ? "No decisions waiting." : mobileFilter === "action" ? "No actions in progress." : "Nothing completed yet."}</div>}
+                  {cardsByStage[mobileFilter].length === 0 && <div className="rounded-3xl border border-dashed border-slate-300 bg-white/50 px-4 py-10 text-center text-sm font-bold text-slate-400">{mobileFilter === "ideas" ? "No ideas yet." : mobileFilter === "deciding" ? "Nothing to decide yet." : mobileFilter === "action" ? "No to-dos here." : "Nothing completed yet."}</div>}
                 </div>
                 <div className="hidden w-full grid-cols-4 gap-3 p-4 pb-16 lg:grid xl:gap-4 xl:p-5">
                   {boardColumn("ideas", "Ideas", Lightbulb)}

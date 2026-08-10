@@ -3790,7 +3790,7 @@ export function TodayTab({
       ocrInputSource === "screenshot"
         ? screenshotImportMode
         : "voice-text";
-    const filename = `fair-teams-ocr-report-${mode}-${sanitizeReportFilenamePart(
+    const filename = `stripes-ocr-report-${mode}-${sanitizeReportFilenamePart(
       selectedScreenshotNames[0] || "names",
     )}-${new Date().toISOString().slice(0, 10)}.json`;
     downloadJsonFile(filename, report);

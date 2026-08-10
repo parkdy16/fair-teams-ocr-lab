@@ -368,14 +368,25 @@ function isAppTab(value: string): value is AppTab {
   return (APP_TAB_VALUES as readonly string[]).includes(value);
 }
 
+function TeamStripesIcon({ className = "h-5 w-5" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+      <rect x="4" y="4" width="14" height="3" rx="1.5" fill="#3B82F6" transform="rotate(-8 11 5.5)" />
+      <rect x="5" y="9" width="15" height="3" rx="1.5" fill="#84CC16" transform="rotate(-8 12.5 10.5)" />
+      <rect x="3" y="14" width="14" height="3" rx="1.5" fill="#F59E0B" transform="rotate(-8 10 15.5)" />
+      <rect x="6" y="19" width="13" height="2.5" rx="1.25" fill="#EF4444" transform="rotate(-8 12.5 20.25)" />
+    </svg>
+  );
+}
+
 function App() {
   const [showSplash, setShowSplash] = useState(true);
   const [splashVisible, setSplashVisible] = useState(false);
 
   useEffect(() => {
-    const fadeIn = window.setTimeout(() => setSplashVisible(true), 50);
-    const fadeOut = window.setTimeout(() => setSplashVisible(false), 2800);
-    const finish = window.setTimeout(() => setShowSplash(false), 3000);
+    const fadeIn = window.setTimeout(() => setSplashVisible(true), 30);
+    const fadeOut = window.setTimeout(() => setSplashVisible(false), 1550);
+    const finish = window.setTimeout(() => setShowSplash(false), 1750);
 
     return () => {
       window.clearTimeout(fadeIn);
@@ -438,7 +449,7 @@ function App() {
     "field-size": { title: "Choose the pitch", body: "Open Field Size and choose any size." },
     "generate": { title: "The magic moment", body: "Tap Generate. Stripes will build the teams." },
     "magic-wait": { title: "Wait for it…", body: "Reading the lineup and balancing every strength." },
-    "magic-reveal": { title: "That’s the magic", body: "Balanced teams, ready in seconds." },
+    "magic-reveal": { title: "That’s the magic", body: "Each stripe is a team — balanced and ready to play." },
     "club-tab": { title: "Shared team tools", body: "Open Club to see how groups can work on one roster together." },
     "club-intro": { title: "Club is for shared rosters", body: "Use Club when several organizers work on one roster together. If you use local rosters, you can skip this tab." },
     "help-question": { title: "Ask Stripes Help", body: "The question is ready. Tap Ask to see how in-app help works." },
@@ -3543,25 +3554,23 @@ They will no longer be able to open or edit this shared roster unless it is shar
 
   if (showSplash) {
     return (
-      <div className="min-h-[100dvh] flex flex-col items-center justify-center bg-white text-[#102A43] fairteams-splash-fade">
-        <img
-          src={stripesLogo}
-          alt="Stripes"
-          className="h-28 w-28 object-contain"
-        />
+      <div className={`min-h-[100dvh] flex flex-col items-center justify-center bg-white text-[#102A43] stripes-splash-shell ${splashVisible ? "is-visible" : ""}`}>
+        <div className="stripes-splash-symbol" aria-label="Stripes">
+          <div className="stripes-splash-ribbons" aria-hidden="true">
+            <span style={{ backgroundColor: "#3B82F6" }} />
+            <span style={{ backgroundColor: "#84CC16" }} />
+            <span style={{ backgroundColor: "#F59E0B" }} />
+            <span style={{ backgroundColor: "#EF4444" }} />
+            <span style={{ backgroundColor: "#7C3AED" }} />
+          </div>
+          <img src={stripesLogo} alt="" aria-hidden="true" className="stripes-splash-logo" />
+        </div>
         <h1 className="stripes-display mt-3 text-[42px] font-semibold tracking-[-0.035em] leading-none text-[#102A43]">
           Stripes
         </h1>
         <p className="mt-3 text-sm font-semibold tracking-[0.04em] text-slate-500">
           Organize. Decide. Play.
         </p>
-        <div className="mt-7 flex items-center gap-1.5" aria-hidden="true">
-          <span className="h-1.5 w-8 rounded-full bg-[#102A43]" />
-          <span className="h-1.5 w-5 rounded-full bg-[#2563EB]" />
-          <span className="h-1.5 w-5 rounded-full bg-[#14B8A6]" />
-          <span className="h-1.5 w-5 rounded-full bg-[#F59E0B]" />
-          <span className="h-1.5 w-5 rounded-full bg-[#EF4444]" />
-        </div>
       </div>
     );
   }
@@ -3629,7 +3638,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   className={`fairteams-tab-trigger fairteams-desktop-nav-trigger flex h-[3.25rem] w-full justify-start gap-3.5 rounded-xl border border-transparent px-3.5 text-[16px] font-black text-slate-500 shadow-none transition-colors hover:bg-slate-50 data-[state=active]:border-slate-200 data-[state=active]:bg-slate-50 data-[state=active]:text-[#102A43] data-[state=active]:shadow-none ${(tutorialStep === "today-tab" && value === "today") || (tutorialStep === "teams-tab" && value === "teams") || (tutorialStep === "club-tab" && value === "club") || (tutorialStep === "roster-return" && value === "players") ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
                 >
                   {value === "teams" ? (
-                    <img src={stripesLogo} alt="" aria-hidden="true" className="h-6 w-6 shrink-0 object-contain" />
+                    <TeamStripesIcon className="h-6 w-6 shrink-0" />
                   ) : (
                     <Icon className="h-5 w-5 shrink-0" strokeWidth={2.25} />
                   )}
@@ -4009,7 +4018,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 value="teams"
                 className={`fairteams-tab-trigger ${tutorialStep === "teams-tab" ? "fairteams-tutorial-pulse relative z-[82]" : ""} fairteams-footer-text-tab flex h-full items-center justify-center rounded-xl text-slate-500 transition-all`}
               >
-                <span className="text-[12px] font-semibold leading-none tracking-tight">Teams</span>
+                <span className="inline-flex items-center gap-1 text-[12px] font-semibold leading-none tracking-tight"><TeamStripesIcon className="h-3.5 w-3.5" /> Teams</span>
               </TabsTrigger>
               <TabsTrigger
                 value="club"

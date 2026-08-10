@@ -751,7 +751,7 @@ function parseAppKnowledgeQuestion(commandText: string): AiSmartCommandResponse 
     summary = "Session is where you mark who is playing now. You can select players manually, import a screenshot, use voice, or ask the assistant. Team generation uses the players selected in Session, so this tab is the bridge between your roster and the final teams.";
   } else if (/\b(teams tab|team generation|generate teams|5v5|6v6|fair teams)\b/.test(normalized)) {
     topic = "Teams";
-    summary = "Teams is where Stripes generates balanced teams from the players selected in Session. “5v5” means five players per team, so it normally needs 10 selected players. “Make 2 teams” means two total teams. You can reshuffle to get a different mix while keeping the same selected players.";
+    summary = "Teams is where Stripes generates balanced teams from the players selected in Session. Each generated team gets its own color stripe, so the same team identity stays easy to follow while presenting, swapping players, viewing history, or saving an image. “5v5” means five players per team, so it normally needs 10 selected players. “Make 2 teams” means two total teams. You can reshuffle to get a different mix while keeping the same selected players.";
   } else if (/\b(club tab|club|shared roster|organizer|organizers|equipment|notes)\b/.test(normalized)) {
     topic = "Club";
     summary = "Club is the organizer space. It can hold shared-roster tools, Club ratings, organizer notes, and equipment tracking. Local/private roster features stay focused on your own device; shared/Club features are for co-organizers working together.";

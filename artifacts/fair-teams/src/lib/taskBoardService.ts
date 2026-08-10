@@ -157,6 +157,15 @@ export type TaskBoardLink = {
   createdByName?: string;
 };
 
+export type TaskBoardComment = {
+  id: string;
+  text: string;
+  authorName: string;
+  authorEmail?: string;
+  createdAt: number;
+  updatedAt?: number;
+};
+
 export type TaskBoardActionItem = {
   id: string;
   text: string;
@@ -182,6 +191,7 @@ export type TaskBoardCard = {
   gifUrl?: string;
   position: number;
   links?: TaskBoardLink[];
+  comments?: TaskBoardComment[];
   decisions?: TaskBoardVote[];
   actions?: TaskBoardActionItem[];
   // Legacy mirrors retained for backwards compatibility with pre-thread cards.
@@ -489,6 +499,21 @@ function parseLinks(value: unknown): TaskBoardLink[] {
   }).filter((link) => /^https?:\/\//i.test(link.url));
 }
 
+function parseComments(value: unknown): TaskBoardComment[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((item, index) => {
+    const row = (item || {}) as Record<string, unknown>;
+    return {
+      id: String(row.id || `comment-${index}`),
+      text: String(row.text || "").trim(),
+      authorName: String(row.authorName || "Organizer").trim() || "Organizer",
+      authorEmail: row.authorEmail ? String(row.authorEmail).trim() : undefined,
+      createdAt: toMillis(row.createdAt) || Date.now(),
+      updatedAt: toMillis(row.updatedAt),
+    };
+  }).filter((comment) => comment.text).slice(-200);
+}
+
 function parseActions(value: unknown): TaskBoardActionItem[] {
   if (!Array.isArray(value)) return [];
   return value.map((item, index) => {
@@ -557,6 +582,7 @@ function parseCard(id: string, data: DocumentData): TaskBoardCard {
     columnId: String(data.columnId || ""),
     position: Number.isFinite(Number(data.position)) ? Number(data.position) : 1000,
     links: parseLinks(data.links),
+    comments: parseComments(data.comments),
     decisions,
     actions,
     assignee: latestOpenAction?.assignee || (data.assignee ? String(data.assignee) : undefined),
@@ -853,6 +879,100 @@ export async function claimTaskBoardScheduleHost(
       updatedAtIso: new Date(now).toISOString(),
     });
     return true;
+  });
+}
+
+function commentPayload(comment: TaskBoardComment) {
+  return {
+    id: comment.id,
+    text: comment.text.trim(),
+    authorName: comment.authorName || "Organizer",
+    authorEmail: comment.authorEmail?.trim() || null,
+    createdAt: comment.createdAt,
+    createdAtIso: new Date(comment.createdAt).toISOString(),
+    updatedAt: comment.updatedAt || null,
+    updatedAtIso: comment.updatedAt ? new Date(comment.updatedAt).toISOString() : null,
+  };
+}
+
+export async function addTaskBoardComment(scopeId: string, cardId: string, text: string): Promise<TaskBoardComment> {
+  const signed = actor();
+  const cleanText = text.trim();
+  if (!cleanText) throw new Error("Write a comment first.");
+  const reference = doc(cardsCollection(scopeId), cardId);
+  const now = Date.now();
+  const comment: TaskBoardComment = {
+    id: `comment-${now}-${Math.random().toString(36).slice(2, 8)}`,
+    text: cleanText.slice(0, 3000),
+    authorName: signed.name,
+    authorEmail: signed.email,
+    createdAt: now,
+  };
+  await runTransaction(getFairTeamsFirestore(), async (transaction) => {
+    const snapshot = await transaction.get(reference);
+    if (!snapshot.exists()) throw new Error("This card no longer exists.");
+    const current = parseComments(snapshot.data().comments);
+    const next = [...current, comment].slice(-200);
+    transaction.update(reference, {
+      comments: next.map(commentPayload),
+      updatedAt: serverTimestamp(),
+      updatedAtIso: new Date(now).toISOString(),
+      updatedByName: signed.name,
+      updatedByEmail: signed.email || null,
+    });
+  });
+  return comment;
+}
+
+export async function updateTaskBoardComment(scopeId: string, cardId: string, commentId: string, text: string): Promise<void> {
+  const signed = actor();
+  const cleanText = text.trim();
+  if (!cleanText) throw new Error("A comment cannot be empty.");
+  const reference = doc(cardsCollection(scopeId), cardId);
+  const now = Date.now();
+  await runTransaction(getFairTeamsFirestore(), async (transaction) => {
+    const snapshot = await transaction.get(reference);
+    if (!snapshot.exists()) throw new Error("This card no longer exists.");
+    const comments = parseComments(snapshot.data().comments);
+    const index = comments.findIndex((comment) => comment.id === commentId);
+    if (index < 0) throw new Error("This comment no longer exists.");
+    const comment = comments[index];
+    const signedEmail = signed.email?.trim().toLowerCase() || "";
+    const authorEmail = comment.authorEmail?.trim().toLowerCase() || "";
+    const ownsComment = authorEmail ? Boolean(signedEmail && authorEmail === signedEmail) : comment.authorName === signed.name;
+    if (!ownsComment) throw new Error("You can only edit your own comments.");
+    comments[index] = { ...comment, text: cleanText.slice(0, 3000), updatedAt: now };
+    transaction.update(reference, {
+      comments: comments.map(commentPayload),
+      updatedAt: serverTimestamp(),
+      updatedAtIso: new Date(now).toISOString(),
+      updatedByName: signed.name,
+      updatedByEmail: signed.email || null,
+    });
+  });
+}
+
+export async function deleteTaskBoardComment(scopeId: string, cardId: string, commentId: string): Promise<void> {
+  const signed = actor();
+  const reference = doc(cardsCollection(scopeId), cardId);
+  const now = Date.now();
+  await runTransaction(getFairTeamsFirestore(), async (transaction) => {
+    const snapshot = await transaction.get(reference);
+    if (!snapshot.exists()) throw new Error("This card no longer exists.");
+    const comments = parseComments(snapshot.data().comments);
+    const comment = comments.find((item) => item.id === commentId);
+    if (!comment) return;
+    const signedEmail = signed.email?.trim().toLowerCase() || "";
+    const authorEmail = comment.authorEmail?.trim().toLowerCase() || "";
+    const ownsComment = authorEmail ? Boolean(signedEmail && authorEmail === signedEmail) : comment.authorName === signed.name;
+    if (!ownsComment) throw new Error("You can only delete your own comments.");
+    transaction.update(reference, {
+      comments: comments.filter((item) => item.id !== commentId).map(commentPayload),
+      updatedAt: serverTimestamp(),
+      updatedAtIso: new Date(now).toISOString(),
+      updatedByName: signed.name,
+      updatedByEmail: signed.email || null,
+    });
   });
 }
 

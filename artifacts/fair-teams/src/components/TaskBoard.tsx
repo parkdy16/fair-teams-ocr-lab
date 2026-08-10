@@ -17,9 +17,11 @@ import {
   Link2,
   Mail,
   MapPin,
+  MessageCircle,
   Pencil,
   Plus,
   RotateCcw,
+  Send,
   Settings,
   Tag,
   Trash2,
@@ -38,18 +40,22 @@ import {
   type ActionBoardNotificationStepKind,
 } from "@/lib/notificationService";
 import {
+  addTaskBoardComment,
   castTaskBoardVote,
   claimTaskBoardScheduleHost,
   deleteTaskBoardCard,
+  deleteTaskBoardComment,
   listenToTaskBoard,
   saveTaskBoardCard,
   saveTaskBoardColumn,
   saveTaskBoardMeta,
+  updateTaskBoardComment,
   type TaskBoardActionItem,
   type TaskBoardActivity,
   type TaskBoardCard,
   type TaskBoardColumn,
   type TaskBoardColumnKind,
+  type TaskBoardComment,
   type TaskBoardDecisionQuestion,
   type TaskBoardDecisionType,
   type TaskBoardLink,
@@ -263,6 +269,7 @@ function normalizeLocalCard(card: TaskBoardCard): TaskBoardCard {
     decisions,
     actions,
     links: Array.isArray(card.links) ? card.links : [],
+    comments: Array.isArray(card.comments) ? card.comments : [],
   };
 }
 
@@ -339,6 +346,12 @@ function formatTime(value?: number) {
   const today = new Date();
   const sameDay = date.toDateString() === today.toDateString();
   return new Intl.DateTimeFormat(undefined, sameDay ? { hour: "2-digit", minute: "2-digit" } : { day: "numeric", month: "short" }).format(date);
+}
+
+function linkifyCommentText(text: string) {
+  return text.split(/(https?:\/\/[^\s]+)/gi).map((part, index) => /^https?:\/\//i.test(part)
+    ? <a key={`${part}-${index}`} href={part} target="_blank" rel="noreferrer" className="break-all text-blue-700 underline decoration-blue-200 underline-offset-2">{part}</a>
+    : <React.Fragment key={index}>{part}</React.Fragment>);
 }
 
 function dueText(value?: string) {
@@ -725,6 +738,10 @@ export function TaskBoard({
   const [quickAddTitle, setQuickAddTitle] = useState("");
   const [quickAddStage, setQuickAddStage] = useState<TopicStage | null>(null);
   const quickAddInputRefs = useRef<Partial<Record<TopicStage, HTMLInputElement | null>>>({});
+  const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
+  const [commentSavingCardId, setCommentSavingCardId] = useState<string | null>(null);
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editingCommentText, setEditingCommentText] = useState("");
 
   const [newTopicOpen, setNewTopicOpen] = useState(false);
   const [newTopicKind, setNewTopicKind] = useState<NewTopicKind | null>(null);
@@ -899,6 +916,80 @@ export function TaskBoard({
   const persistMeta = async (meta: TaskBoardMeta) => {
     setBoard((current) => ({ ...current, meta }));
     if (online) await saveTaskBoardMeta(scopeId!, meta);
+  };
+
+  const commentIsMine = (comment: TaskBoardComment) => {
+    const actorEmail = currentActor.email?.trim().toLowerCase();
+    const authorEmail = comment.authorEmail?.trim().toLowerCase();
+    if (actorEmail && authorEmail) return actorEmail === authorEmail;
+    return comment.authorName.trim().toLowerCase() === currentActor.name.trim().toLowerCase();
+  };
+
+  const submitComment = async (card: TaskBoardCard) => {
+    const text = (commentDrafts[card.id] || "").trim();
+    if (!text || commentSavingCardId) return;
+    setCommentSavingCardId(card.id);
+    setError("");
+    try {
+      if (online) {
+        await addTaskBoardComment(scopeId!, card.id, text);
+      } else {
+        const now = Date.now();
+        const comment: TaskBoardComment = { id: id("comment"), text: text.slice(0, 3000), authorName: currentActor.name, authorEmail: currentActor.email, createdAt: now };
+        await persistCard({ ...card, comments: [...(card.comments || []), comment].slice(-200), updatedAt: now, updatedByName: currentActor.name });
+      }
+      setCommentDrafts((current) => ({ ...current, [card.id]: "" }));
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Could not add comment.");
+    } finally {
+      setCommentSavingCardId(null);
+    }
+  };
+
+  const beginEditComment = (comment: TaskBoardComment) => {
+    setEditingCommentId(comment.id);
+    setEditingCommentText(comment.text);
+  };
+
+  const saveEditedComment = async (card: TaskBoardCard, comment: TaskBoardComment) => {
+    const text = editingCommentText.trim();
+    if (!text || commentSavingCardId) return;
+    setCommentSavingCardId(card.id);
+    setError("");
+    try {
+      if (online) {
+        await updateTaskBoardComment(scopeId!, card.id, comment.id, text);
+      } else {
+        const now = Date.now();
+        const nextComments = (card.comments || []).map((item) => item.id === comment.id ? { ...item, text: text.slice(0, 3000), updatedAt: now } : item);
+        await persistCard({ ...card, comments: nextComments, updatedAt: now, updatedByName: currentActor.name });
+      }
+      setEditingCommentId(null);
+      setEditingCommentText("");
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Could not edit comment.");
+    } finally {
+      setCommentSavingCardId(null);
+    }
+  };
+
+  const removeComment = async (card: TaskBoardCard, comment: TaskBoardComment) => {
+    if (!commentIsMine(comment) || commentSavingCardId) return;
+    setCommentSavingCardId(card.id);
+    setError("");
+    try {
+      if (online) {
+        await deleteTaskBoardComment(scopeId!, card.id, comment.id);
+      } else {
+        const now = Date.now();
+        await persistCard({ ...card, comments: (card.comments || []).filter((item) => item.id !== comment.id), updatedAt: now, updatedByName: currentActor.name });
+      }
+      if (editingCommentId === comment.id) { setEditingCommentId(null); setEditingCommentText(""); }
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Could not delete comment.");
+    } finally {
+      setCommentSavingCardId(null);
+    }
   };
 
   const latestActivity = useMemo(
@@ -2643,6 +2734,68 @@ export function TaskBoard({
     return null;
   };
 
+  const renderComments = (card: TaskBoardCard, detail = false) => {
+    const comments = [...(card.comments || [])].sort((a, b) => a.createdAt - b.createdAt);
+    const draft = commentDrafts[card.id] || "";
+    const busy = commentSavingCardId === card.id;
+    return (
+      <section className="mt-5 border-t border-slate-200 pt-4">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-sm font-semibold text-[#102A43]"><MessageCircle className="h-4 w-4 text-slate-500" />Comments{comments.length ? <span className="text-xs font-medium text-slate-400">· {comments.length}</span> : null}</div>
+          <div className="text-[10px] font-normal text-slate-400">Keep useful context with the card.</div>
+        </div>
+
+        <div className="space-y-3">
+          {comments.length === 0 && <div className="rounded-2xl bg-slate-50 px-3 py-4 text-center text-xs font-normal text-slate-400">No comments yet.</div>}
+          {comments.map((comment) => {
+            const mine = commentIsMine(comment);
+            const editing = editingCommentId === comment.id;
+            return (
+              <div key={comment.id} className="group rounded-2xl bg-slate-50/80 px-3 py-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                      <span className="truncate text-xs font-semibold text-[#102A43]">{comment.authorName}</span>
+                      <span className="text-[10px] font-normal text-slate-400">{formatTime(comment.createdAt)}{comment.updatedAt ? " · edited" : ""}</span>
+                    </div>
+                  </div>
+                  {mine && !editing && <div className="flex shrink-0 items-center gap-0.5 opacity-70 transition group-hover:opacity-100">
+                    <button type="button" className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:bg-white hover:text-slate-600" onClick={() => beginEditComment(comment)} aria-label="Edit comment"><Pencil className="h-3.5 w-3.5" /></button>
+                    <button type="button" className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:bg-white hover:text-red-600" onClick={() => void removeComment(card, comment)} aria-label="Delete comment"><Trash2 className="h-3.5 w-3.5" /></button>
+                  </div>}
+                </div>
+                {editing ? (
+                  <div className="mt-2">
+                    <Textarea value={editingCommentText} onChange={(event) => setEditingCommentText(event.target.value)} maxLength={3000} rows={3} className="min-h-[5rem] resize-none rounded-xl border-slate-200 bg-white text-sm font-normal leading-relaxed text-slate-700" />
+                    <div className="mt-2 flex items-center gap-2">
+                      <Button type="button" className="h-8 rounded-xl px-3 text-xs font-semibold text-white" style={{ backgroundColor: accent }} disabled={!editingCommentText.trim() || busy} onClick={() => void saveEditedComment(card, comment)}>Save</Button>
+                      <button type="button" className="h-8 rounded-xl px-2 text-xs font-medium text-slate-400 hover:bg-white hover:text-slate-600" onClick={() => { setEditingCommentId(null); setEditingCommentText(""); }}>Cancel</button>
+                    </div>
+                  </div>
+                ) : <div className="mt-1 whitespace-pre-wrap break-words text-sm font-normal leading-relaxed text-slate-700">{linkifyCommentText(comment.text)}</div>}
+              </div>
+            );
+          })}
+        </div>
+
+        <div className={`${detail ? "sticky bottom-0 z-[5] -mx-4 mt-4 border-t border-slate-200 bg-white/95 px-4 pb-[max(.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur" : "mt-4"}`}>
+          <div className="flex items-end gap-2">
+            <Textarea
+              value={draft}
+              onChange={(event) => setCommentDrafts((current) => ({ ...current, [card.id]: event.target.value }))}
+              maxLength={3000}
+              rows={2}
+              placeholder="Write a comment…"
+              aria-label={`Comment on ${card.title}`}
+              className="min-h-[3.25rem] flex-1 resize-none rounded-2xl border-slate-200 bg-slate-50/80 px-3 py-2.5 text-sm font-normal leading-relaxed text-slate-700 shadow-none focus-visible:ring-blue-100"
+            />
+            <button type="button" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#102A43] text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-40" disabled={!draft.trim() || busy} onClick={() => void submitComment(card)} aria-label="Post comment"><Send className="h-4 w-4" /></button>
+          </div>
+        </div>
+      </section>
+    );
+  };
+
   const renderCard = (card: TaskBoardCard, compact = false, detail = false) => {
     const stage = stageForCard(card);
     const expanded = detail || expandedIds.has(card.id);
@@ -2697,6 +2850,7 @@ export function TaskBoard({
                 {stage === "action" && <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-semibold ring-1 lg:px-2.5 lg:py-1 lg:text-[10px] ${actionComplete ? "bg-sky-100 text-sky-900 ring-sky-200" : "bg-sky-50 text-sky-800 ring-sky-200"}`}>{actionComplete ? <Check className="h-3 w-3" /> : <Hand className="h-3 w-3" />}{actionComplete ? "Action complete" : "Needs action"}</span>}
                 {displayPeople?.length ? <span className="inline-flex max-w-full items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-black text-slate-600 lg:px-2.5 lg:py-1 lg:text-[10px]"><Users className="h-3 w-3 shrink-0" /><span className="truncate">{personSummary(displayPeople)}</span></span> : null}
                 {card.dueDate && <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-black lg:px-2.5 lg:py-1 lg:text-[10px] ${isOverdue(card.dueDate) && stage !== "done" ? "bg-red-50 text-red-700" : "bg-slate-100 text-slate-600"}`}><CalendarDays className="h-3 w-3" />{dueText(card.dueDate)}</span>}
+                {(card.comments?.length || 0) > 0 && <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-medium text-slate-500 lg:px-2.5 lg:py-1 lg:text-[10px]"><MessageCircle className="h-3 w-3" />{card.comments!.length}</span>}
               </div>
               <h3 className="mt-2 whitespace-normal break-words text-[14px] font-semibold leading-snug text-[#102A43] lg:text-[17px] lg:leading-snug">{card.title}</h3>
               {need && !expanded && <div className={`mt-2 whitespace-normal break-words text-[11px] font-semibold leading-snug lg:text-[13px] ${stage === "deciding" ? "text-amber-800" : stage === "action" ? "text-sky-800" : stage === "done" ? "text-slate-500" : "text-slate-600"}`}>
@@ -2756,6 +2910,7 @@ export function TaskBoard({
 
           {renderStageTools(card, stage)}
           {!((stage === "deciding" && !openDecision && Boolean(currentDecision)) || (stage === "action" && !openAction && currentAction?.status === "done")) && <button type="button" className="mt-3 inline-flex h-10 w-full items-center justify-center rounded-2xl border border-slate-200 bg-white text-xs font-semibold text-slate-600" onClick={() => openMoveCard(card)}>Move card</button>}
+          {renderComments(card, detail)}
         </div>}
       </article>
     );

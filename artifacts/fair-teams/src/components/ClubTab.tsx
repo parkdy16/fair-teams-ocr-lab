@@ -2588,7 +2588,7 @@ export function ClubTab({
       />
       </div>
 
-      <section className="order-2 overflow-hidden rounded-[1.7rem] border border-[#d9e9e4] bg-[#f3f8f7] p-3 shadow-sm ring-1 ring-[#e7f1ee] lg:col-span-1 lg:col-start-1 lg:row-start-1 lg:h-full lg:p-4">
+      <section className="order-1 overflow-hidden rounded-[1.7rem] border border-[#d9e9e4] bg-[#f3f8f7] p-3 shadow-sm ring-1 ring-[#e7f1ee] lg:col-span-1 lg:col-start-1 lg:row-start-1 lg:h-full lg:p-4">
         <div className="flex items-start justify-between gap-3">
           <button
             type="button"
@@ -2751,7 +2751,7 @@ export function ClubTab({
         )}
       </section>
 
-      <section className="order-1 overflow-hidden rounded-[1.7rem] border border-violet-100 bg-[#f8f3ff] p-3 shadow-sm ring-1 ring-violet-50 lg:col-span-1 lg:col-start-1 lg:row-start-2 lg:h-full lg:p-4">
+      <section className="order-2 overflow-hidden rounded-[1.7rem] border border-violet-100 bg-[#f8f3ff] p-3 shadow-sm ring-1 ring-violet-50 lg:col-span-1 lg:col-start-1 lg:row-start-2 lg:h-full lg:p-4">
         <div className="flex items-start justify-between gap-3">
           <button
             type="button"
@@ -2763,8 +2763,9 @@ export function ClubTab({
             </div>
             <span className="min-w-0">
               <span className="block truncate text-[17px] font-black leading-tight text-[#102A43] lg:text-[20px]">Club Access</span>
-              <span className="mt-0.5 block truncate text-[10px] font-bold text-violet-700/75 lg:text-[12px]">
-                {clubUser ? `${clubGreetingName} · ${clubDeskSummary}` : clubDeskSummary}
+              <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[10px] font-bold text-violet-700/75 lg:text-[12px]">
+                {clubUser && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" aria-label="Online" />}
+                <span className="truncate">{clubUser ? `${clubGreetingName} · ${clubDeskSummary}` : clubDeskSummary}</span>
               </span>
             </span>
           </button>
@@ -2926,11 +2927,8 @@ export function ClubTab({
             <div className="mt-1 hidden text-xs font-semibold leading-snug text-slate-500 lg:block lg:text-[14px] lg:leading-relaxed">
               Drag bags between people and club storage, or select a bag for details.
             </div>
-            <div className="mt-1 flex items-center gap-1.5 text-[10px] font-black text-slate-400">
-              <span
-                className={`h-1.5 w-1.5 rounded-full ${equipmentCanSyncOnline && !equipmentError ? "bg-emerald-500" : equipmentWaitingForAccount || equipmentSharedConnecting ? "bg-amber-400" : "bg-slate-300"}`}
-              />
-              {equipmentStatusText}
+            <div className="mt-1 text-[10px] font-black text-slate-400 lg:hidden">
+              Bags · balls · cones · gear
             </div>
             </div>
           </button>

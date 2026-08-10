@@ -35,6 +35,22 @@ export type AttendanceIssueRecord = {
   updatedByName?: string;
 };
 
+export type AttendanceWarningTemplateKind =
+  | "late-cancellation"
+  | "no-show"
+  | "dismissal";
+
+export type AttendanceWarningTemplates = Record<AttendanceWarningTemplateKind, string>;
+
+export const DEFAULT_ATTENDANCE_WARNING_TEMPLATES: AttendanceWarningTemplates = {
+  "late-cancellation":
+    "Hi {player}, we wanted to check in about last-minute cancellations. In the {period}, we recorded {last_minute}. Late changes make it difficult to organize sessions and teams, so please let us know as early as possible if you cannot attend. Thanks for understanding.",
+  "no-show":
+    "Hi {player}, we wanted to check in about attendance. In the {period}, we recorded {no_shows}. Please cancel as early as possible if you cannot attend, since unexpected absences make it difficult to organize sessions and teams. Thanks for understanding.",
+  dismissal:
+    "Hi {player}, we’re writing regarding your participation in {group}. After discussion among the organizers, we’ve decided to remove you from the group. Thank you for the time you’ve spent with us, and we wish you all the best.",
+};
+
 function requireSignedInUser() {
   const user = getFairTeamsAuth().currentUser;
   if (!user || !user.email) throw new Error("Sign in to use Club attendance.");
@@ -71,6 +87,19 @@ function attendanceCollection(rosterId: string) {
     cleanRosterId(rosterId),
     "attendanceIssues",
   );
+}
+
+function warningTemplatesCollection(rosterId: string) {
+  return collection(
+    getFairTeamsFirestore(),
+    "sharedRosters",
+    cleanRosterId(rosterId),
+    "attendanceWarningTemplates",
+  );
+}
+
+function isWarningTemplateKind(value: string): value is AttendanceWarningTemplateKind {
+  return value === "late-cancellation" || value === "no-show" || value === "dismissal";
 }
 
 function toAttendanceRecord(id: string, data: DocumentData): AttendanceIssueRecord | null {
@@ -120,6 +149,27 @@ export function listenToAttendanceIssues(
   );
 }
 
+export function listenToAttendanceWarningTemplates(
+  rosterId: string,
+  callback: (templates: AttendanceWarningTemplates) => void,
+  onError?: (error: Error) => void,
+): Unsubscribe {
+  requireSignedInUser();
+  return onSnapshot(
+    warningTemplatesCollection(rosterId),
+    (snapshot) => {
+      const next: AttendanceWarningTemplates = { ...DEFAULT_ATTENDANCE_WARNING_TEMPLATES };
+      snapshot.docs.forEach((snapshotDoc) => {
+        if (!isWarningTemplateKind(snapshotDoc.id)) return;
+        const text = cleanString(snapshotDoc.data().text);
+        if (text) next[snapshotDoc.id] = text;
+      });
+      callback(next);
+    },
+    (error) => onError?.(error instanceof Error ? error : new Error("Could not load warning templates.")),
+  );
+}
+
 export async function saveAttendanceIssue(
   rosterId: string,
   record: Omit<AttendanceIssueRecord, "id" | "createdAt" | "updatedAt"> & { id?: string; createdAt?: number },
@@ -153,6 +203,33 @@ export async function saveAttendanceIssue(
   payload.createdAt = serverTimestamp();
   payload.createdAtIso = now.toISOString();
   await addDoc(attendanceCollection(rosterId), payload);
+}
+
+export async function saveAttendanceWarningTemplate(
+  rosterId: string,
+  kind: AttendanceWarningTemplateKind,
+  text: string,
+): Promise<void> {
+  const user = requireSignedInUser();
+  const cleaned = text.trim().slice(0, 2400);
+  if (!cleaned) throw new Error("Warning template cannot be empty.");
+  const now = new Date();
+  const userName = user.displayName?.trim() || user.email || "Organizer";
+  await setDoc(
+    doc(warningTemplatesCollection(rosterId), kind),
+    {
+      app: "Stripes",
+      schemaVersion: 1,
+      kind,
+      text: cleaned,
+      updatedByUid: user.uid,
+      updatedByEmail: user.email,
+      updatedByName: userName,
+      updatedAt: serverTimestamp(),
+      updatedAtIso: now.toISOString(),
+    },
+    { merge: true },
+  );
 }
 
 export async function deleteAttendanceIssue(rosterId: string, recordId: string): Promise<void> {

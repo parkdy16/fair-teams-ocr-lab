@@ -746,15 +746,21 @@ function parseAppKnowledgeQuestion(commandText: string): AiSmartCommandResponse 
   } else if (/\b(roster tab|roster|player list)\b/.test(normalized)) {
     topic = "Roster";
     summary = "Roster is your player list. It is where you add and edit players, ratings, aliases/AKA names, photos, categories, and player details. Session uses this roster to decide who is playing now, and Teams uses the selected Session players to make balanced teams.";
-  } else if (/\b(today tab|today|attendance|present players)\b/.test(normalized)) {
+  } else if (/\b(action board|task board|tasks and votes|tasks & votes|decision board)\b/.test(normalized)) {
+    topic = "Action Board";
+    summary = "Action Board is the Club workspace for things chat handles poorly: durable topics, decisions, ownership, and follow-through. A topic can move through Ideas, Decide, Action, and Done while keeping its history. Organizers can run anonymous votes, record decisions, find a meeting time, choose players or equipment, assign one or more people to an action, add due dates and links, and mark work complete. The bell is a deliberate one-time organizer notification, not an automatic chat feed. Action Board is not meant to replace Signal or other group chat.";
+  } else if (/\b(club attendance|attendance issue|attendance issues|no-show|no show|last-minute cancellation|last minute cancellation|warning template|warning templates|copy warning|dismissal from group|tardy record)\b/.test(normalized)) {
+    topic = "Club attendance";
+    summary = "Club attendance is an organizer memory for Tardy, Last-minute cancellation, No-show, and Conduct issue records. It is separate from Session selection and team generation. Organizers can review a player's history by period, edit or delete records, and use shared Club warning templates for last-minute cancellation, no-show, or dismissal. Templates are editable by collaborators, can include player and attendance placeholders, and are copied for a human to review or send — Stripes never sends a warning automatically.";
+  } else if (/\b(today tab|today|session|present players|who is playing)\b/.test(normalized)) {
     topic = "Session";
     summary = "Session is where you mark who is playing now. You can select players manually, import a screenshot, use voice, or ask the assistant. Team generation uses the players selected in Session, so this tab is the bridge between your roster and the final teams.";
   } else if (/\b(teams tab|team generation|generate teams|5v5|6v6|fair teams)\b/.test(normalized)) {
     topic = "Teams";
-    summary = "Teams is where Stripes generates balanced teams from the players selected in Session. Each generated team gets its own color stripe, so the same team identity stays easy to follow while presenting, swapping players, viewing history, or saving an image. “5v5” means five players per team, so it normally needs 10 selected players. “Make 2 teams” means two total teams. You can reshuffle to get a different mix while keeping the same selected players.";
+    summary = "Teams is where Stripes generates balanced teams from the players selected in Session. Each generated team gets a consistent team color, including the colored team-card outline, so the result stays easy to follow while presenting, swapping players, viewing history, or saving an image. “5v5” means five players per team, so it normally needs 10 selected players. “Make 2 teams” means two total teams. You can reshuffle to get a different mix while keeping the same selected players.";
   } else if (/\b(club tab|club|shared roster|organizer|organizers|equipment|notes)\b/.test(normalized)) {
     topic = "Club";
-    summary = "Club is the organizer space. It can hold shared-roster tools, Club ratings, organizer notes, and equipment tracking. Local/private roster features stay focused on your own device; shared/Club features are for co-organizers working together.";
+    summary = "Club is the shared organizer workspace. It includes Club Access, Player Management with ratings and attendance memory, Action Board for durable decisions and follow-through, Club Notes, shared equipment tracking, and Help. It is designed to complement group chat rather than recreate it. Local/private roster features stay focused on your own device; Club features are for co-organizers working together.";
   } else if (/\b(special abilities|special ability|traits|trait|playmaker|speedster|goalkeeper|gk)\b/.test(normalized)) {
     topic = "Special abilities";
     summary = "Special abilities are private/local player traits used by the local roster team generator. They nudge how a player contributes, for example playmaker-style passing or goalkeeper role handling. Shared/Club rosters use simpler Club average ratings instead, so private special abilities should not be treated as shared organizer ratings.";

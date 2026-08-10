@@ -202,6 +202,46 @@ function buildSharedRosterRatingHelpAnswer(
   } as any;
 }
 
+function buildActionBoardHelpAnswer(commandText: string): AiSmartCommandResponse | null {
+  const text = String(commandText || "").trim();
+  if (!text || !/\b(action board|task board|tasks and votes|tasks & votes|decision board)\b/i.test(text)) return null;
+  const isQuestion = /\?|\b(what|how|why|where|explain|help|can i|can we|does|do)\b/i.test(text);
+  if (!isQuestion) return null;
+  return {
+    schemaVersion: 1,
+    ok: true,
+    detectedLanguage: "unknown",
+    normalizedIntent: text.slice(0, 300),
+    assistantSummary: "Action Board is the Club workspace for things chat handles poorly: durable topics, decisions, ownership, and follow-through. A topic can move through Ideas, Decide, Action, and Done while keeping its history. Organizers can run anonymous votes, record decisions, find a meeting time, choose players or equipment, assign one or more people to an action, add due dates and links, and mark work complete. The bell is a deliberate one-time organizer notification, not an automatic chat feed. Action Board is not meant to replace Signal or other group chat.",
+    confidence: 0.99,
+    actions: [],
+    confirmations: [],
+    unresolved: [],
+    parseMode: "local_fallback" as any,
+    debugWarnings: ["Answered Action Board help from current in-app product knowledge before AI routing."],
+  } as any;
+}
+
+function buildClubAttendanceHelpAnswer(commandText: string): AiSmartCommandResponse | null {
+  const text = String(commandText || "").trim();
+  if (!text || !/\b(club attendance|attendance issue|attendance issues|no-show|no show|last-minute cancellation|last minute cancellation|warning template|warning templates|copy warning|dismissal from group|tardy record)\b/i.test(text)) return null;
+  const isQuestion = /\?|\b(what|how|why|where|explain|help|can i|can we|does|do)\b/i.test(text);
+  if (!isQuestion) return null;
+  return {
+    schemaVersion: 1,
+    ok: true,
+    detectedLanguage: "unknown",
+    normalizedIntent: text.slice(0, 300),
+    assistantSummary: "Club attendance is an organizer memory for Tardy, Last-minute cancellation, No-show, and Conduct issue records. It is separate from Session selection and team generation. Organizers can review a player's history by period, edit or delete records, and use shared Club warning templates for last-minute cancellation, no-show, or dismissal. Templates are editable by collaborators and are copied for a human to review or send — Stripes never sends a warning automatically.",
+    confidence: 0.99,
+    actions: [],
+    confirmations: [],
+    unresolved: [],
+    parseMode: "local_fallback" as any,
+    debugWarnings: ["Answered Club attendance help from current in-app product knowledge before AI routing."],
+  } as any;
+}
+
 function looksLikeBasicPlayerHelpQuestion(commandText: string) {
   const text = String(commandText || "").trim();
   if (!text) return null;
@@ -610,7 +650,7 @@ function actionPrimaryVerb(action: AiSmartCommandAction) {
   return "Apply";
 }
 
-const AI_ASSISTANT_VERSION_LABEL = "Help beta · v1.58.7 Action Board notifications";
+const AI_ASSISTANT_VERSION_LABEL = "Help beta";
 
 type AiRosterMatch = {
   player: AiSmartCommandRosterPlayer;
@@ -1688,7 +1728,9 @@ export function AiSmartCommandPanel({
         currentTeamsGenerated,
       });
 
-      const directBasicHelp = buildBasicPlayerHelpAnswer(trimmedCommand)
+      const directBasicHelp = buildActionBoardHelpAnswer(trimmedCommand)
+        || buildClubAttendanceHelpAnswer(trimmedCommand)
+        || buildBasicPlayerHelpAnswer(trimmedCommand)
         || buildPlayerRatingHowToHelpAnswer(trimmedCommand, rosterMode)
         || buildSharedRosterRatingHelpAnswer(trimmedCommand, rosterMode)
         || buildLocalRosterStatFallbackAnswer(trimmedCommand, players);

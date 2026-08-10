@@ -794,23 +794,29 @@ export function TaskBoard({
   };
 
   const closeCardDetail = () => {
-    if (typeof window !== "undefined" && window.history.state?.stripesActionBoardCard) {
-      window.history.back();
-      return;
-    }
     setActiveCardId(null);
+    if (typeof window !== "undefined" && window.history.state?.stripesActionBoardCard) {
+      const nextState = { ...(window.history.state || {}) };
+      delete nextState.stripesActionBoardCard;
+      window.history.replaceState({ ...nextState, stripesActionBoard: true }, "");
+    }
   };
 
   useEffect(() => {
-    const handlePopState = () => {
+    const handlePopState = (event: PopStateEvent) => {
       if (activeCardId) {
+        event.stopImmediatePropagation();
         setActiveCardId(null);
         return;
       }
-      if (boardOpen) setBoardOpen(false);
+      if (boardOpen) {
+        event.stopImmediatePropagation();
+        setBoardOpen(false);
+      }
     };
-    window.addEventListener("popstate", handlePopState);
-    return () => window.removeEventListener("popstate", handlePopState);
+    // Capture first so app-level Back handling cannot jump from a card to Roster.
+    window.addEventListener("popstate", handlePopState, true);
+    return () => window.removeEventListener("popstate", handlePopState, true);
   }, [activeCardId, boardOpen]);
 
   useEffect(() => {
@@ -832,7 +838,8 @@ export function TaskBoard({
   const moveCardToStage = async (card: TaskBoardCard, stage: TopicStage) => {
     const kind: TaskBoardColumnKind = stage === "deciding" ? "vote" : stage;
     const column = columnByKind.get(kind);
-    if (!column || card.columnId === column.id) return;
+    if (!column) return null;
+    if (card.columnId === column.id) return card;
     const now = Date.now();
     const next: TaskBoardCard = {
       ...card,
@@ -850,8 +857,10 @@ export function TaskBoard({
     try {
       await persistCard(next);
       setMobileFilter(stage);
+      return next;
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Could not move card.");
+      return null;
     }
   };
 
@@ -1449,14 +1458,28 @@ export function TaskBoard({
     }, "released");
   };
 
-  const completeAction = (card: TaskBoardCard, action: TaskBoardActionItem) => updateAction(card, action.id, {
-    status: "done",
-    completedAt: Date.now(),
-    completedByName: currentActor.name,
-    completedByEmail: currentActor.email,
-  }, "completed");
+  const finishTopic = async (card: TaskBoardCard) => {
+    const now = Date.now();
+    const nextActions = (card.actions || []).map((action) =>
+      action.status === "open"
+        ? { ...action, status: "done" as const, completedAt: now, completedByName: currentActor.name, completedByEmail: currentActor.email }
+        : action,
+    );
+    const nextCard = nextActions.some((action, index) => action !== (card.actions || [])[index])
+      ? { ...card, actions: nextActions }
+      : card;
+    await moveCardToStage(nextCard, "done");
+  };
 
-  const finishTopic = (card: TaskBoardCard) => moveCardToStage(card, "done");
+  const continueToDecide = async (card: TaskBoardCard) => {
+    const next = await moveCardToStage(card, "deciding");
+    if (next) startDecision(next);
+  };
+
+  const continueToAction = async (card: TaskBoardCard) => {
+    if (latestOpenDecision(card)) return;
+    await moveCardToStage(card, "action");
+  };
 
   const canCurrentUserVote = (decision: TaskBoardVote) => {
     if (!decision.participantEmails?.length || !currentActor.email) return true;
@@ -1757,15 +1780,14 @@ export function TaskBoard({
         <div className={`rounded-2xl border p-3 ${open ? "border-sky-200 bg-sky-50/65" : "border-emerald-100 bg-white"}`}>
           <div className="flex items-center gap-1 text-[9px] font-black uppercase tracking-wide text-slate-400 lg:text-[10px]"><span>{open ? resumed ? "Current action · resumed" : "Current action" : "Action complete"}</span>{action.notification?.status === "sent" && <span className="inline-flex items-center gap-0.5 text-emerald-600" title={notificationSummary(action.notification)}><Bell className="h-2.5 w-2.5 fill-emerald-100" /><Check className="h-2.5 w-2.5" /></span>}</div>
           <div className="mt-1 whitespace-normal break-words text-sm font-black leading-snug text-[#102A43] lg:text-base">{action.text}</div>
-          {assignees.length > 0 && <div className="mt-1 text-[10px] font-black text-sky-800"><Users className="mr-1 inline h-3 w-3" />{personSummary(assignees)}</div>}
+          {assignees.length > 0 && <div className="mt-1 text-[10px] font-semibold text-sky-800"><Users className="mr-1 inline h-3 w-3" />{personSummary(assignees)}</div>}
           {open ? (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {!mine && <button type="button" className="rounded-xl bg-sky-700 px-3 py-2 text-xs font-black text-white" onClick={() => void joinAction(card, action)}><Hand className="mr-1 inline h-3.5 w-3.5" />{assignees.length ? "Join" : "I’ll handle it"}</button>}
-              {mine && <button type="button" className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white" onClick={() => void completeAction(card, action)}><Check className="mr-1 inline h-3.5 w-3.5" />Done</button>}
-              {mine && assignees.length > 1 && <button type="button" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-500" onClick={() => void releaseAction(card, action)}><RotateCcw className="mr-1 inline h-3.5 w-3.5" />Leave</button>}
-              {!assignees.length && <button type="button" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600" onClick={() => void completeAction(card, action)}>Already done</button>}
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              {!mine && <button type="button" className="rounded-xl border border-sky-200 bg-white px-3 py-2 text-xs font-semibold text-sky-800" onClick={() => void joinAction(card, action)}><Hand className="mr-1 inline h-3.5 w-3.5" />{assignees.length ? "Join task" : "Take task"}</button>}
+              {mine && assignees.length > 1 && <button type="button" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-500" onClick={() => void releaseAction(card, action)}><RotateCcw className="mr-1 inline h-3.5 w-3.5" />Leave task</button>}
+              {!assignees.length && <span className="text-[10px] font-medium text-slate-400">Unassigned is okay.</span>}
             </div>
-          ) : <div className="mt-2 text-xs font-black text-emerald-700"><CheckCircle2 className="mr-1 inline h-3.5 w-3.5" />Completed{action.completedByName ? ` by ${action.completedByName}` : ""}</div>}
+          ) : <div className="mt-2 text-xs font-semibold text-emerald-700"><CheckCircle2 className="mr-1 inline h-3.5 w-3.5" />Completed{action.completedByName ? ` by ${action.completedByName}` : ""}</div>}
         </div>
       </div>
     );
@@ -1796,6 +1818,68 @@ export function TaskBoard({
     );
   };
 
+  const renderStageProgression = (card: TaskBoardCard, stage: TopicStage) => {
+    const openDecision = latestOpenDecision(card);
+    const hasDecisionHistory = Boolean(card.decisions?.length);
+
+    if (stage === "ideas") {
+      return (
+        <div className="mt-4 rounded-2xl border border-amber-100 bg-amber-50/45 p-3">
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-amber-700">Current stage · Idea</div>
+          <div className="mt-1 text-xs font-medium leading-relaxed text-slate-600">When this needs an answer, continue to Decide.</div>
+          <Button type="button" className="mt-3 h-11 w-full rounded-2xl bg-violet-600 font-semibold text-white" onClick={() => void continueToDecide(card)}>Continue to Decide <ChevronRight className="ml-1 h-4 w-4" /></Button>
+        </div>
+      );
+    }
+
+    if (stage === "deciding") {
+      if (openDecision) {
+        return <div className="mt-4 text-center text-[11px] font-medium text-slate-400">Finish the current decision before moving forward.</div>;
+      }
+      if (!hasDecisionHistory) {
+        return (
+          <div className="mt-4 rounded-2xl border border-violet-100 bg-violet-50/45 p-3">
+            <div className="text-[10px] font-semibold uppercase tracking-wide text-violet-700">Current stage · Decide</div>
+            <div className="mt-1 text-xs font-medium leading-relaxed text-slate-600">Set up the decision this card needs now.</div>
+            <Button type="button" className="mt-3 h-11 w-full rounded-2xl bg-violet-600 font-semibold text-white" onClick={() => startDecision(card)}>Set up decision</Button>
+            <button type="button" className="mt-2 w-full py-1 text-[11px] font-medium text-slate-400" onClick={() => void continueToAction(card)}>No decision needed · continue to Action</button>
+          </div>
+        );
+      }
+      return (
+        <div className="mt-4 rounded-2xl border border-sky-100 bg-sky-50/45 p-3">
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Decision complete</div>
+          <Button type="button" className="mt-2 h-11 w-full rounded-2xl bg-sky-700 font-semibold text-white" onClick={() => void continueToAction(card)}>Continue to Action <ChevronRight className="ml-1 h-4 w-4" /></Button>
+        </div>
+      );
+    }
+
+    if (stage === "action") {
+      if (openDecision) {
+        return (
+          <div className="mt-4 rounded-2xl border border-violet-100 bg-violet-50/45 p-3 text-center">
+            <div className="text-xs font-medium text-violet-800">This older card still has an open decision.</div>
+            <button type="button" className="mt-2 text-[11px] font-semibold text-violet-700" onClick={() => void moveCardToStage(card, "deciding")}>Return to Decide</button>
+          </div>
+        );
+      }
+      return (
+        <div className="mt-4 rounded-2xl border border-emerald-100 bg-emerald-50/45 p-3">
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-sky-800">Current stage · Action</div>
+          <div className="mt-1 text-xs font-medium leading-relaxed text-slate-600">Do the task. Assignment is optional.</div>
+          <Button type="button" className="mt-3 h-11 w-full rounded-2xl bg-emerald-600 font-semibold text-white" onClick={() => void finishTopic(card)}><Check className="mr-1 h-4 w-4" />Mark done</Button>
+        </div>
+      );
+    }
+
+    return (
+      <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-center">
+        <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Done</div>
+        <div className="mt-1 text-xs font-medium text-slate-500">This card is complete. Its evolution will remain available as club memory.</div>
+      </div>
+    );
+  };
+
   const renderCard = (card: TaskBoardCard, compact = false, detail = false) => {
     const stage = stageForCard(card);
     const expanded = detail || expandedIds.has(card.id);
@@ -1803,7 +1887,13 @@ export function TaskBoard({
     const openAction = latestOpenAction(card);
     const decisions = card.decisions || [];
     const actions = card.actions || [];
-    const need = stage === "done" ? "Completed" : currentNeed(card);
+    const need = stage === "done"
+      ? "Completed"
+      : stage === "action"
+        ? (openAction?.text && openAction.text.trim() !== card.title.trim() ? openAction.text : "Ready to do")
+        : stage === "deciding"
+          ? (openDecision ? currentNeed(card) : decisions.length ? "Decision complete" : "Needs a decision")
+          : "Idea";
     const displayPeople = card.people?.length ? card.people : actionPeople(openAction);
     const cardNotifyTarget = currentNotifyTarget(card);
     const cardNotification = cardNotifyTarget?.notification;
@@ -1827,8 +1917,8 @@ export function TaskBoard({
                 {displayPeople?.length ? <span className="inline-flex max-w-full items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-black text-slate-600 lg:px-2.5 lg:py-1 lg:text-[10px]"><Users className="h-3 w-3 shrink-0" /><span className="truncate">{personSummary(displayPeople)}</span></span> : null}
                 {card.dueDate && <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-black lg:px-2.5 lg:py-1 lg:text-[10px] ${isOverdue(card.dueDate) && stage !== "done" ? "bg-red-50 text-red-700" : "bg-slate-100 text-slate-600"}`}><CalendarDays className="h-3 w-3" />{dueText(card.dueDate)}</span>}
               </div>
-              <h3 className="mt-2 whitespace-normal break-words text-[14px] font-black leading-snug text-[#102A43] lg:text-[17px] lg:leading-snug">{card.title}</h3>
-              {need && !expanded && <div className={`mt-2 whitespace-normal break-words text-[11px] font-black leading-snug lg:text-[13px] ${stage === "deciding" ? "text-violet-700" : stage === "action" ? "text-sky-800" : stage === "done" ? "text-slate-500" : "text-slate-600"}`}>
+              <h3 className="mt-2 whitespace-normal break-words text-[14px] font-semibold leading-snug text-[#102A43] lg:text-[17px] lg:leading-snug">{card.title}</h3>
+              {need && !expanded && <div className={`mt-2 whitespace-normal break-words text-[11px] font-semibold leading-snug lg:text-[13px] ${stage === "deciding" ? "text-violet-700" : stage === "action" ? "text-sky-800" : stage === "done" ? "text-slate-500" : "text-slate-600"}`}>
                 {stage === "deciding" && <Gavel className="mr-1 inline h-3.5 w-3.5" />}
                 {stage === "action" && <Hand className="mr-1 inline h-3.5 w-3.5" />}
                 {stage === "done" && <Check className="mr-1 inline h-3.5 w-3.5" />}
@@ -1891,6 +1981,7 @@ export function TaskBoard({
             </div>
           )}
 
+          {renderStageProgression(card, stage)}
         </div>}
       </article>
     );

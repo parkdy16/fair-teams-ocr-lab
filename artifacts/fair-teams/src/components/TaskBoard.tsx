@@ -59,6 +59,24 @@ import {
   type TaskBoardVoteKind,
 } from "@/lib/taskBoardService";
 
+type EquipmentSnapshotItem = {
+  label: string;
+  quantity: number;
+};
+
+type EquipmentSnapshotBag = {
+  id: string;
+  name: string;
+  holder: string;
+  color?: string;
+  items: EquipmentSnapshotItem[];
+};
+
+type EquipmentSnapshot = {
+  bags: EquipmentSnapshotBag[];
+  totals: EquipmentSnapshotItem[];
+};
+
 type Props = {
   rosterName: string;
   workspaceKey: string;
@@ -70,6 +88,7 @@ type Props = {
   organizerPeople?: TaskBoardPerson[];
   players?: RoomPlayer[];
   equipmentItems?: string[];
+  equipmentSnapshot?: EquipmentSnapshot;
 };
 
 type LocalBoard = TaskBoardSnapshot;
@@ -78,6 +97,7 @@ type DecisionMode = "vote" | "recorded";
 type NewTopicKind = "idea" | "decide" | "action";
 type TopicStage = MobileFilter;
 type DecisionSetupStep = TaskBoardDecisionType | null;
+type EquipmentDecisionIntent = "buy" | "replace" | null;
 type DraftQuestion = {
   id: string;
   text: string;
@@ -604,6 +624,7 @@ export function TaskBoard({
   organizerPeople = [],
   players = [],
   equipmentItems = [],
+  equipmentSnapshot,
 }: Props) {
   const online = Boolean(scopeId && user?.email);
   // Action Board has a fixed semantic blue identity. Roster color is intentionally ignored
@@ -659,6 +680,7 @@ export function TaskBoard({
   const [decisionPeopleKeys, setDecisionPeopleKeys] = useState<string[]>([]);
   const [playerSearch, setPlayerSearch] = useState("");
   const [selectedPlayerIds, setSelectedPlayerIds] = useState<string[]>([]);
+  const [equipmentDecisionIntent, setEquipmentDecisionIntent] = useState<EquipmentDecisionIntent>(null);
   const [scheduleHostName, setScheduleHostName] = useState("");
   const [scheduleDates, setScheduleDates] = useState<ScheduleDateGroup[]>([newScheduleDateGroup()]);
 
@@ -1305,6 +1327,7 @@ export function TaskBoard({
     setDecisionPeopleKeys((card.people || []).map(personKey));
     setSelectedPlayerIds([]);
     setPlayerSearch("");
+    setEquipmentDecisionIntent(null);
     setScheduleHostName(currentActor.name);
     setScheduleDates([newScheduleDateGroup()]);
 
@@ -1317,7 +1340,9 @@ export function TaskBoard({
       setDecisionMaxSelections("3");
     } else if (preset === "equipment") {
       setDecisionKind("choose-one");
-      setDecisionQuestion("Which option should we choose?");
+      setDecisionQuestion("");
+      setDecisionOptions("");
+      setEquipmentDecisionIntent(null);
     }
   };
 
@@ -1339,11 +1364,32 @@ export function TaskBoard({
       setDecisionMaxSelections("");
     } else if (kind === "equipment") {
       setDecisionKind("choose-one");
-      setDecisionQuestion("Which option should we choose?");
+      setDecisionQuestion("");
       setDecisionOptions("");
+      setEquipmentDecisionIntent(null);
     } else {
       setDecisionKind("yes-no-abstain");
       setDecisionQuestionsDraft([newDraftQuestion("")]);
+    }
+  };
+
+  const chooseEquipmentIntent = (intent: Exclude<EquipmentDecisionIntent, null>) => {
+    setEquipmentDecisionIntent(intent);
+    setDecisionTitle(intent === "buy" ? "Buy equipment" : "Replace equipment");
+    setDecisionQuestion("");
+    setDecisionOptions("");
+  };
+
+  const chooseEquipmentSubject = (label: string) => {
+    const cleanLabel = label.trim();
+    if (!cleanLabel || !equipmentDecisionIntent) return;
+    const lower = cleanLabel.toLowerCase();
+    if (equipmentDecisionIntent === "buy") {
+      setDecisionTitle(`Buy ${cleanLabel}`);
+      setDecisionQuestion(`Which ${lower} should we buy?`);
+    } else {
+      setDecisionTitle(`Replace ${cleanLabel}`);
+      setDecisionQuestion(`Which replacement should we choose for ${lower}?`);
     }
   };
 
@@ -2335,7 +2381,7 @@ export function TaskBoard({
       : decisionStep === "players"
         ? decisionPhaseNameValid && Boolean(decisionQuestion.trim()) && selectedPlayerIds.length >= 1
         : decisionStep === "equipment"
-          ? decisionPhaseNameValid && Boolean(decisionQuestion.trim()) && voteOptionLabels("choose-one", decisionOptions).length >= 2
+          ? decisionPhaseNameValid && Boolean(equipmentDecisionIntent) && Boolean(decisionQuestion.trim()) && voteOptionLabels("choose-one", decisionOptions).length >= 2
           : decisionStep === "vote"
             ? decisionPhaseNameValid && genericQuestionsValid
             : false;
@@ -2505,7 +2551,7 @@ export function TaskBoard({
               <button type="button" className="rounded-2xl border border-amber-100 bg-amber-50/60 p-4 text-left lg:p-5" onClick={() => chooseDecisionType("vote")}><Vote className="h-5 w-5 text-amber-700" /><div className="mt-2 text-sm font-black text-[#102A43] lg:text-base">Vote</div><div className="mt-1 text-[11px] font-semibold text-slate-500 lg:text-sm">One or more questions</div></button>
               <button type="button" className="rounded-2xl border border-sky-100 bg-sky-50/60 p-4 text-left lg:p-5" onClick={() => chooseDecisionType("schedule")}><CalendarDays className="h-5 w-5 text-sky-700" /><div className="mt-2 text-sm font-black text-[#102A43] lg:text-base">Schedule</div><div className="mt-1 text-[11px] font-semibold text-slate-500 lg:text-sm">Find a time together</div></button>
               <button type="button" className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4 text-left lg:p-5" onClick={() => chooseDecisionType("players")}><Users className="h-5 w-5 text-emerald-700" /><div className="mt-2 text-sm font-black text-[#102A43] lg:text-base">Players</div><div className="mt-1 text-[11px] font-semibold text-slate-500 lg:text-sm">Choose from roster</div></button>
-              <button type="button" className="rounded-2xl border border-amber-100 bg-amber-50/60 p-4 text-left lg:p-5" onClick={() => chooseDecisionType("equipment")}><ClipboardList className="h-5 w-5 text-amber-700" /><div className="mt-2 text-sm font-black text-[#102A43] lg:text-base">Equipment</div><div className="mt-1 text-[11px] font-semibold text-slate-500 lg:text-sm">Compare options</div></button>
+              <button type="button" className="rounded-2xl border border-amber-100 bg-amber-50/60 p-4 text-left lg:p-5" onClick={() => chooseDecisionType("equipment")}><ClipboardList className="h-5 w-5 text-amber-700" /><div className="mt-2 text-sm font-black text-[#102A43] lg:text-base">Equipment</div><div className="mt-1 text-[11px] font-semibold text-slate-500 lg:text-sm">Inventory · buy · replace</div></button>
             </div>
           ) : (
             <div className="grid gap-3">
@@ -2554,7 +2600,7 @@ export function TaskBoard({
                       <button type="button" className="mt-2 rounded-xl bg-slate-100 px-3 py-2 text-[11px] font-black text-slate-600" onClick={() => setScheduleDates((current) => [...current, newScheduleDateGroup()])}>+ Date</button>
                     </div>
                   </> : <>
-                    {decisionPhaseNameRequired && <div><Label htmlFor="decision-name">Decision name</Label><Input id="decision-name" value={decisionTitle} onChange={(event) => setDecisionTitle(event.target.value)} maxLength={120} placeholder="What is this next decision about?" /></div>}
+                    {decisionPhaseNameRequired && decisionStep !== "equipment" && <div><Label htmlFor="decision-name">Decision name</Label><Input id="decision-name" value={decisionTitle} onChange={(event) => setDecisionTitle(event.target.value)} maxLength={120} placeholder="What is this next decision about?" /></div>}
 
                     {decisionStep === "vote" && <>
                       <div className="grid gap-2">
@@ -2602,11 +2648,90 @@ export function TaskBoard({
                     </>}
 
                     {decisionStep === "equipment" && <>
-                      {equipmentItems.length > 0 && <div className="rounded-2xl bg-amber-50/70 px-3 py-2 text-[11px] font-semibold text-amber-800"><span className="font-black">Club inventory:</span> {equipmentItems.slice(0, 4).join(" · ")}{equipmentItems.length > 4 ? "…" : ""}</div>}
-                      <div><Label htmlFor="decision-equipment-question">Question</Label><Textarea id="decision-equipment-question" value={decisionQuestion} onChange={(event) => setDecisionQuestion(event.target.value)} rows={2} maxLength={220} /></div>
-                      <div><Label htmlFor="equipment-options">Options — one per line</Label><Textarea id="equipment-options" value={decisionOptions} onChange={(event) => setDecisionOptions(event.target.value)} rows={4} maxLength={700} placeholder="Select Brillant\nAdidas Tiro\nDerbystar" /></div>
-                      <div className="text-[10px] font-semibold text-slate-500">Product and document links stay attached to the topic for comparison.</div>
-                      {renderPeoplePicker(decisionPeopleKeys, setDecisionPeopleKeys, "Who votes?")}
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <div>
+                            <div className="text-xs font-semibold text-[#102A43]">Club equipment now</div>
+                            <div className="mt-0.5 text-[10px] font-medium text-slate-400">Who has each bag and what is inside.</div>
+                          </div>
+                          <span className="rounded-full bg-white px-2 py-1 text-[10px] font-medium text-slate-500 ring-1 ring-slate-200">{equipmentSnapshot?.bags.length || 0} bag{(equipmentSnapshot?.bags.length || 0) === 1 ? "" : "s"}</span>
+                        </div>
+
+                        {equipmentSnapshot?.bags.length ? (
+                          <div className="mt-2 grid max-h-52 gap-1.5 overflow-y-auto pr-0.5">
+                            {equipmentSnapshot.bags.map((bag) => (
+                              <div key={bag.id} className="rounded-xl bg-white px-2.5 py-2 ring-1 ring-slate-200/80">
+                                <div className="flex items-center gap-2">
+                                  <span className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-black/10" style={{ backgroundColor: bag.color || "#64748b" }} />
+                                  <div className="min-w-0 flex-1 truncate text-[11px] font-semibold text-[#102A43]">{bag.name}</div>
+                                  <div className="max-w-[42%] truncate text-[10px] font-medium text-slate-500">{bag.holder}</div>
+                                </div>
+                                <div className="mt-1 pl-[18px] text-[10px] font-normal leading-relaxed text-slate-500">
+                                  {bag.items.length ? bag.items.map((item) => `${item.label} × ${item.quantity}`).join(" · ") : "No contents recorded"}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : equipmentItems.length > 0 ? (
+                          <div className="mt-2 text-[10px] font-medium leading-relaxed text-slate-500">{equipmentItems.join(" · ")}</div>
+                        ) : (
+                          <div className="mt-2 rounded-xl border border-dashed border-slate-200 bg-white/60 px-3 py-3 text-center text-[10px] font-medium text-slate-400">No equipment recorded yet. Add bags in Club → Equipment.</div>
+                        )}
+
+                        {equipmentSnapshot?.totals.length ? (
+                          <div className="mt-2 border-t border-slate-200 pt-2">
+                            <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-wide text-slate-400">Total inventory · tap an item to use it</div>
+                            <div className="flex flex-wrap gap-1.5">
+                              {equipmentSnapshot.totals.map((item) => (
+                                <button
+                                  key={`${item.label}-${item.quantity}`}
+                                  type="button"
+                                  disabled={!equipmentDecisionIntent}
+                                  className={`rounded-full px-2 py-1 text-[10px] font-medium ring-1 transition ${equipmentDecisionIntent ? "bg-white text-slate-600 ring-slate-200 hover:bg-amber-50 hover:text-amber-800 hover:ring-amber-200" : "bg-slate-100 text-slate-400 ring-slate-200"}`}
+                                  onClick={() => chooseEquipmentSubject(item.label)}
+                                >
+                                  {item.label} · {item.quantity}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+
+                      <div>
+                        <Label>What needs to happen?</Label>
+                        <div className="mt-1.5 grid grid-cols-2 gap-2">
+                          <button type="button" className={`rounded-2xl border px-3 py-3 text-left transition ${equipmentDecisionIntent === "buy" ? "border-amber-300 bg-amber-50 text-amber-900" : "border-slate-200 bg-white text-slate-600"}`} onClick={() => chooseEquipmentIntent("buy")}>
+                            <div className="text-sm font-semibold">Buy</div>
+                            <div className="mt-0.5 text-[10px] font-normal opacity-70">Choose what to purchase</div>
+                          </button>
+                          <button type="button" className={`rounded-2xl border px-3 py-3 text-left transition ${equipmentDecisionIntent === "replace" ? "border-amber-300 bg-amber-50 text-amber-900" : "border-slate-200 bg-white text-slate-600"}`} onClick={() => chooseEquipmentIntent("replace")}>
+                            <div className="text-sm font-semibold">Replace</div>
+                            <div className="mt-0.5 text-[10px] font-normal opacity-70">Replace something worn or broken</div>
+                          </button>
+                        </div>
+                      </div>
+
+                      {equipmentDecisionIntent && <>
+                        <div>
+                          <Label htmlFor="decision-equipment-question">What are people choosing?</Label>
+                          <Textarea
+                            id="decision-equipment-question"
+                            value={decisionQuestion}
+                            onChange={(event) => setDecisionQuestion(event.target.value)}
+                            rows={2}
+                            maxLength={220}
+                            placeholder={equipmentDecisionIntent === "buy" ? "Which balls should we buy?" : "Which replacement should we choose for the match balls?"}
+                          />
+                          {equipmentSnapshot?.totals.length ? <div className="mt-1 text-[10px] font-normal text-slate-400">Tip: tap an inventory total above to fill this quickly.</div> : null}
+                        </div>
+                        <div>
+                          <Label htmlFor="equipment-options">Items to compare — one per line</Label>
+                          <Textarea id="equipment-options" value={decisionOptions} onChange={(event) => setDecisionOptions(event.target.value)} rows={4} maxLength={700} placeholder="Molten V5M5000\nMikasa V200W\nSelect Brillant" />
+                        </div>
+                        <div className="text-[10px] font-normal leading-relaxed text-slate-400">Add product links to the card if people need to compare details before voting.</div>
+                        {renderPeoplePicker(decisionPeopleKeys, setDecisionPeopleKeys, "Who votes?")}
+                      </>}
                     </>}
                   </>}
                 </>

@@ -1680,6 +1680,22 @@ export function ClubTab({
       return aOrder - bOrder || a.label.localeCompare(b.label);
     });
   }, [equipmentKits]);
+  const actionBoardEquipmentSnapshot = useMemo(() => ({
+    bags: equipmentKits.map((kit) => ({
+      id: kit.id,
+      name: kit.name || "Equipment bag",
+      holder: equipmentHolderLabelById[normalizeEquipmentHolderId(kit.holderId)] || "Club storage",
+      color: kit.color,
+      items: equipmentItemsForKit(kit).map((item) => ({
+        label: equipmentItemDisplayLabel(item),
+        quantity: item.quantity,
+      })),
+    })),
+    totals: equipmentInventoryTotals.map((item) => ({
+      label: equipmentItemDisplayLabel(item),
+      quantity: item.quantity,
+    })),
+  }), [equipmentHolderLabelById, equipmentInventoryTotals, equipmentKits]);
   const addEquipmentPreset = (preset: (typeof EQUIPMENT_PRESETS)[number]) => {
     setKitItems((current) => {
       const existing = current.find((item) =>
@@ -2819,6 +2835,7 @@ export function ClubTab({
           organizerPeople={actionBoardOrganizerPeople}
           players={players}
           equipmentItems={actionBoardEquipmentItems}
+          equipmentSnapshot={actionBoardEquipmentSnapshot}
         />
       </div>
 

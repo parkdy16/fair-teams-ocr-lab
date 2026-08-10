@@ -93,7 +93,7 @@ const EMPTY_ROSTER_NAME = "New roster";
 const ROSTERS_STORAGE_KEY = "fair-teams-rosters-v1";
 const DRIVE_RECIPIENTS_STORAGE_KEY = "fair-teams-drive-backup-recipients-v1";
 const DRIVE_ACTIVE_BACKUP_STORAGE_KEY = "fair-teams-drive-active-backup-v1";
-const APP_VERSION = "1.65.0";
+const APP_VERSION = "1.66.0";
 
 function hasSavedRosterState() {
   try {

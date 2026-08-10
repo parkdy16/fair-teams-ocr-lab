@@ -646,8 +646,13 @@ export function TaskBoard({
   const [moveCardId, setMoveCardId] = useState<string | null>(null);
   const [draggingCardId, setDraggingCardId] = useState<string | null>(null);
   const [dragOverStage, setDragOverStage] = useState<TopicStage | null>(null);
+  const [mobileDragPoint, setMobileDragPoint] = useState<{ x: number; y: number } | null>(null);
+  const mobileBoardRef = useRef<HTMLDivElement | null>(null);
+  const mobileColumnRefs = useRef<Partial<Record<TopicStage, HTMLElement | null>>>({});
+  const dragAutoScrollFrameRef = useRef<number | null>(null);
+  const dragClientPointRef = useRef<{ x: number; y: number } | null>(null);
   const longPressTimerRef = useRef<number | null>(null);
-  const longPressStartRef = useRef<{ x: number; y: number; cardId: string } | null>(null);
+  const longPressStartRef = useRef<{ x: number; y: number; cardId: string; pointerId: number; target: HTMLElement } | null>(null);
   const longPressDraggingRef = useRef(false);
   const suppressCardOpenRef = useRef(false);
 
@@ -843,6 +848,13 @@ export function TaskBoard({
     return result;
   }, [board.cards, columnByKind]);
 
+  const centerMobileStage = (stage: TopicStage, behavior: ScrollBehavior = "smooth") => {
+    if (!isMobileBoardViewport()) return;
+    window.requestAnimationFrame(() => {
+      mobileColumnRefs.current[stage]?.scrollIntoView({ behavior, block: "nearest", inline: "center" });
+    });
+  };
+
   const moveCardToStage = async (card: TaskBoardCard, stage: TopicStage) => {
     const kind: TaskBoardColumnKind = stage === "deciding" ? "vote" : stage;
     const column = columnByKind.get(kind);
@@ -865,6 +877,7 @@ export function TaskBoard({
     try {
       await persistCard(next);
       setMobileFilter(stage);
+      centerMobileStage(stage);
       return next;
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Could not move card.");
@@ -881,6 +894,50 @@ export function TaskBoard({
     await moveCardToStage(card, stage);
   };
 
+  const stopDragAutoScroll = () => {
+    if (dragAutoScrollFrameRef.current !== null) {
+      window.cancelAnimationFrame(dragAutoScrollFrameRef.current);
+      dragAutoScrollFrameRef.current = null;
+    }
+  };
+
+  const stageAtPoint = (x: number, y: number) => {
+    const element = document.elementFromPoint(x, y) as HTMLElement | null;
+    const stageElement = element?.closest?.("[data-board-stage]") as HTMLElement | null;
+    return (stageElement?.dataset.boardStage as TopicStage | undefined) || null;
+  };
+
+  const updateDragTarget = (x: number, y: number) => {
+    const stage = stageAtPoint(x, y);
+    setDragOverStage(stage);
+  };
+
+  const runDragAutoScroll = () => {
+    stopDragAutoScroll();
+    const tick = () => {
+      const boardElement = mobileBoardRef.current;
+      const point = dragClientPointRef.current;
+      if (!longPressDraggingRef.current || !boardElement || !point) {
+        dragAutoScrollFrameRef.current = null;
+        return;
+      }
+      const rect = boardElement.getBoundingClientRect();
+      const edge = Math.min(76, Math.max(54, rect.width * 0.18));
+      let delta = 0;
+      if (point.x < rect.left + edge) {
+        const strength = Math.min(1, (rect.left + edge - point.x) / edge);
+        delta = -Math.max(3, 15 * strength);
+      } else if (point.x > rect.right - edge) {
+        const strength = Math.min(1, (point.x - (rect.right - edge)) / edge);
+        delta = Math.max(3, 15 * strength);
+      }
+      if (delta) boardElement.scrollLeft += delta;
+      updateDragTarget(point.x, point.y);
+      dragAutoScrollFrameRef.current = window.requestAnimationFrame(tick);
+    };
+    dragAutoScrollFrameRef.current = window.requestAnimationFrame(tick);
+  };
+
   const clearLongPress = () => {
     if (longPressTimerRef.current !== null) {
       window.clearTimeout(longPressTimerRef.current);
@@ -888,47 +945,68 @@ export function TaskBoard({
     }
   };
 
+  const resetMobileDrag = () => {
+    clearLongPress();
+    stopDragAutoScroll();
+    longPressStartRef.current = null;
+    dragClientPointRef.current = null;
+    longPressDraggingRef.current = false;
+    setDraggingCardId(null);
+    setDragOverStage(null);
+    setMobileDragPoint(null);
+  };
+
   const startCardLongPress = (event: React.PointerEvent, card: TaskBoardCard) => {
     if (!isMobileBoardViewport() || event.pointerType === "mouse") return;
     clearLongPress();
     longPressDraggingRef.current = false;
-    longPressStartRef.current = { x: event.clientX, y: event.clientY, cardId: card.id };
+    const target = event.currentTarget as HTMLElement;
+    longPressStartRef.current = { x: event.clientX, y: event.clientY, cardId: card.id, pointerId: event.pointerId, target };
+    dragClientPointRef.current = { x: event.clientX, y: event.clientY };
     longPressTimerRef.current = window.setTimeout(() => {
+      const start = longPressStartRef.current;
+      if (!start || start.cardId !== card.id) return;
       longPressDraggingRef.current = true;
       suppressCardOpenRef.current = true;
       setDraggingCardId(card.id);
-      if (navigator.vibrate) navigator.vibrate(18);
-    }, 430);
+      setMobileDragPoint({ x: start.x, y: start.y });
+      try { start.target.setPointerCapture(start.pointerId); } catch { /* pointer may already be captured by browser */ }
+      if (navigator.vibrate) navigator.vibrate(16);
+      updateDragTarget(start.x, start.y);
+      runDragAutoScroll();
+    }, 360);
   };
 
   const moveCardLongPress = (event: React.PointerEvent) => {
     const start = longPressStartRef.current;
     if (!start) return;
     if (!longPressDraggingRef.current) {
-      if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > 9) {
+      if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > 10) {
         clearLongPress();
         longPressStartRef.current = null;
       }
       return;
     }
     event.preventDefault();
-    const element = document.elementFromPoint(event.clientX, event.clientY) as HTMLElement | null;
-    const stageElement = element?.closest?.("[data-board-stage]") as HTMLElement | null;
-    const stage = stageElement?.dataset.boardStage as TopicStage | undefined;
-    setDragOverStage(stage || null);
+    dragClientPointRef.current = { x: event.clientX, y: event.clientY };
+    setMobileDragPoint({ x: event.clientX, y: event.clientY });
+    updateDragTarget(event.clientX, event.clientY);
   };
 
   const finishCardLongPress = async (event: React.PointerEvent, card: TaskBoardCard) => {
     clearLongPress();
-    longPressStartRef.current = null;
-    if (!longPressDraggingRef.current) return;
+    const start = longPressStartRef.current;
+    if (!longPressDraggingRef.current) {
+      longPressStartRef.current = null;
+      return;
+    }
     event.preventDefault();
-    longPressDraggingRef.current = false;
-    const destination = dragOverStage;
-    setDraggingCardId(null);
-    setDragOverStage(null);
-    window.setTimeout(() => { suppressCardOpenRef.current = false; }, 80);
+    const destination = dragOverStage || stageAtPoint(event.clientX, event.clientY);
+    try { if (start?.target.hasPointerCapture(start.pointerId)) start.target.releasePointerCapture(start.pointerId); } catch { /* already released */ }
+    resetMobileDrag();
+    window.setTimeout(() => { suppressCardOpenRef.current = false; }, 100);
     if (destination && destination !== stageForCard(card)) await moveCardToStage(card, destination);
+    else centerMobileStage(stageForCard(card));
   };
 
   const toggleExpanded = (cardId: string) => {
@@ -1935,14 +2013,16 @@ export function TaskBoard({
     return (
       <article
         key={card.id}
-        draggable={!detail}
+        draggable={!detail && !isMobileBoardViewport()}
         onDragStart={(event) => { if (detail) return; setDraggingCardId(card.id); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", card.id); }}
         onDragEnd={() => { setDraggingCardId(null); setDragOverStage(null); }}
+        onContextMenu={(event) => { if (!detail && isMobileBoardViewport()) event.preventDefault(); }}
         onPointerDown={(event) => { if (!detail) startCardLongPress(event, card); }}
         onPointerMove={(event) => { if (!detail) moveCardLongPress(event); }}
         onPointerUp={(event) => { if (!detail) void finishCardLongPress(event, card); }}
-        onPointerCancel={() => { clearLongPress(); longPressStartRef.current = null; longPressDraggingRef.current = false; setDraggingCardId(null); setDragOverStage(null); }}
-        className={detail ? "min-h-full bg-white" : `overflow-hidden rounded-2xl border bg-white shadow-sm transition ${stageStyle} ${compact ? "" : "lg:rounded-[1.35rem]"} ${draggingCardId === card.id ? "opacity-55 ring-2 ring-slate-300" : ""}`}
+        onPointerCancel={() => { resetMobileDrag(); window.setTimeout(() => { suppressCardOpenRef.current = false; }, 100); }}
+        className={detail ? "min-h-full bg-white" : `overflow-hidden rounded-2xl border bg-white shadow-sm transition ${stageStyle} ${compact ? "" : "lg:rounded-[1.35rem]"} ${draggingCardId === card.id ? "opacity-25 ring-2 ring-slate-300" : ""}`}
+        style={!detail ? ({ WebkitTouchCallout: "none", WebkitUserSelect: "none", userSelect: "none" } as React.CSSProperties) : undefined}
       >
         {!detail && <div className="p-3">
           <div className="flex items-start gap-2">
@@ -2026,6 +2106,7 @@ export function TaskBoard({
 
   const boardColumn = (stage: TopicStage, title: string, Icon: React.ComponentType<{ className?: string }>, mobile = false) => (
     <section
+      ref={mobile ? (element) => { mobileColumnRefs.current[stage] = element; } : undefined}
       data-board-stage={stage}
       onDragOver={(event) => { event.preventDefault(); setDragOverStage(stage); }}
       onDragLeave={() => { if (dragOverStage === stage) setDragOverStage(null); }}
@@ -2156,7 +2237,7 @@ export function TaskBoard({
               <EmptyActionBoard onCreate={focusQuickAdd} />
             ) : (
               <>
-                <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain px-[9vw] py-3 pb-20 lg:hidden" style={{ WebkitOverflowScrolling: "touch" }}>
+                <div ref={mobileBoardRef} className={`flex snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain px-[9vw] py-3 pb-20 scroll-smooth lg:hidden ${draggingCardId ? "snap-none" : ""}`} style={{ WebkitOverflowScrolling: "touch", touchAction: draggingCardId ? "none" : "pan-x pan-y" }}>
                   {boardColumn("ideas", "Ideas", Lightbulb, true)}
                   {boardColumn("deciding", "Decide", Gavel, true)}
                   {boardColumn("action", "Action", Hand, true)}
@@ -2171,6 +2252,21 @@ export function TaskBoard({
               </>
             )}
           </div>
+
+          {draggingCardId && mobileDragPoint && (() => {
+            const dragCard = board.cards.find((card) => card.id === draggingCardId);
+            if (!dragCard) return null;
+            return (
+              <div
+                className="pointer-events-none fixed z-[90] w-[72vw] max-w-[19rem] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-slate-300 bg-white px-3 py-3 shadow-xl lg:hidden"
+                style={{ left: mobileDragPoint.x, top: mobileDragPoint.y }}
+                aria-hidden="true"
+              >
+                <div className="line-clamp-3 text-[14px] font-semibold leading-snug text-[#102A43]">{dragCard.title}</div>
+                <div className="mt-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Release to move</div>
+              </div>
+            );
+          })()}
 
           {activeCardId && (() => {
             const activeCard = board.cards.find((card) => card.id === activeCardId);

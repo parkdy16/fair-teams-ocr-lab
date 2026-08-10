@@ -1334,9 +1334,9 @@ export function TaskBoard({
       setScheduleHostName(currentActor.name);
       setScheduleDates([newScheduleDateGroup()]);
     } else if (kind === "players") {
-      setDecisionKind("multi-select");
+      setDecisionKind("choose-one");
       setDecisionQuestion("Who should be selected?");
-      setDecisionMaxSelections("3");
+      setDecisionMaxSelections("");
     } else if (kind === "equipment") {
       setDecisionKind("choose-one");
       setDecisionQuestion("Which option should we choose?");
@@ -1400,19 +1400,16 @@ export function TaskBoard({
         rootKind = "schedule";
       } else if (decisionStep === "players") {
         const selected = players.filter((player) => selectedPlayerIds.includes(player.id));
-        const labels = selected.map((player) => player.name.trim()).filter(Boolean);
         sourcePlayerIds = selected.map((player) => player.id);
-        if (!decisionQuestion.trim() || labels.length < 2) return;
-        const max = Math.max(1, Math.min(labels.length, Number(decisionMaxSelections) || labels.length));
-        questions = [{
+        if (!decisionQuestion.trim() || selected.length < 1) return;
+        questions = selected.map((player) => ({
           id: id("question"),
-          text: decisionQuestion.trim(),
-          kind: "multi-select",
-          options: labels.map((label) => ({ id: id("option"), label, count: 0 })),
-          maxSelections: max,
-          sourcePlayerIds,
-        }];
-        rootKind = "multi-select";
+          text: player.name.trim(),
+          kind: "choose-one" as const,
+          options: ["Yes", "No", "Maybe"].map((label) => ({ id: id("option"), label, count: 0 })),
+          sourcePlayerIds: [player.id],
+        }));
+        rootKind = "choose-one";
       } else if (decisionStep === "equipment") {
         const labels = voteOptionLabels("choose-one", decisionOptions);
         if (!decisionQuestion.trim() || labels.length < 2) return;
@@ -1449,7 +1446,7 @@ export function TaskBoard({
         kind: rootKind,
         decisionType: decisionStep,
         title: decisionTitle.trim() || undefined,
-        question: decisionTitle.trim() || primaryQuestion.text,
+        question: decisionStep === "players" ? decisionQuestion.trim() : decisionTitle.trim() || primaryQuestion.text,
         hostName: decisionStep === "schedule" ? scheduleHostName.trim() : undefined,
         questions,
         options: primaryQuestion.options,
@@ -1897,12 +1894,26 @@ export function TaskBoard({
     const totalVoters = voteTotal(decision);
     const canVote = open && canCurrentUserVote(decision);
     const questions = decisionQuestions(decision);
-    const heading = decision.title?.trim() || (questions.length === 1 ? questions[0].text : "Multiple questions");
+    const heading = decision.title?.trim() || (decision.decisionType === "players" ? decision.question : questions.length === 1 ? questions[0].text : "Multiple questions");
     const historyExpanded = expandedHistoryIds.has(entryKey);
 
     const results = (
       <div className="space-y-3">
-        {questions.map((question, questionIndex) => (
+        {decision.decisionType === "players" ? (
+          <div className="grid gap-2">
+            {questions.map((question) => {
+              const answerCount = (label: string) => question.options.find((option) => option.label.toLowerCase() === label)?.count || 0;
+              return <div key={question.id} className="rounded-xl bg-white px-3 py-2.5 ring-1 ring-slate-100">
+                <div className="text-sm font-medium text-[#102A43]">{question.text}</div>
+                <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] font-medium">
+                  <span className="rounded-full bg-emerald-50 px-2 py-1 text-emerald-700">Yes {answerCount("yes")}</span>
+                  <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-600">No {answerCount("no")}</span>
+                  <span className="rounded-full bg-amber-50 px-2 py-1 text-amber-700">Maybe {answerCount("maybe")}</span>
+                </div>
+              </div>;
+            })}
+          </div>
+        ) : questions.map((question, questionIndex) => (
           <div key={question.id} className={questions.length > 1 ? "rounded-xl bg-slate-50 p-2.5" : ""}>
             {questions.length > 1 && <div className="mb-2 text-xs font-semibold leading-relaxed text-[#102A43]">{questionIndex + 1}. {question.text}</div>}
             <div className="grid gap-1.5">
@@ -1917,12 +1928,12 @@ export function TaskBoard({
                   : [];
                 return (
                   <div key={option.id} className="rounded-xl bg-white px-2.5 py-2 ring-1 ring-slate-100">
-                    <div className="flex items-center gap-2 text-xs font-bold text-slate-600">
+                    <div className="flex items-center gap-2 text-xs font-medium text-slate-600">
                       <span className="min-w-0 flex-1 break-words">{option.label}</span>
-                      <span className="shrink-0 rounded-full bg-slate-50 px-2 py-0.5 font-semibold text-[#102A43] ring-1 ring-slate-200">{option.count}</span>
+                      <span className="shrink-0 rounded-full bg-slate-50 px-2 py-0.5 font-medium text-[#102A43] ring-1 ring-slate-200">{option.count}</span>
                       {question.kind !== "multi-select" && <span className="w-8 text-right text-[10px] text-slate-400">{percent}%</span>}
                     </div>
-                    {responderNames.length > 0 && <div className="mt-1 text-[10px] font-bold text-sky-700">{responderNames.join(" · ")}</div>}
+                    {responderNames.length > 0 && <div className="mt-1 text-[10px] font-medium text-sky-700">{responderNames.join(" · ")}</div>}
                   </div>
                 );
               })}
@@ -2322,7 +2333,7 @@ export function TaskBoard({
     : decisionStep === "schedule"
       ? decisionPhaseNameValid && Boolean(scheduleHostName.trim()) && decisionPeopleKeys.length > 0 && scheduleOptionsCount >= 2
       : decisionStep === "players"
-        ? decisionPhaseNameValid && Boolean(decisionQuestion.trim()) && selectedPlayerIds.length >= 2
+        ? decisionPhaseNameValid && Boolean(decisionQuestion.trim()) && selectedPlayerIds.length >= 1
         : decisionStep === "equipment"
           ? decisionPhaseNameValid && Boolean(decisionQuestion.trim()) && voteOptionLabels("choose-one", decisionOptions).length >= 2
           : decisionStep === "vote"
@@ -2567,12 +2578,26 @@ export function TaskBoard({
                     </>}
 
                     {decisionStep === "players" && <>
-                      <div><Label htmlFor="decision-player-question">Question</Label><Textarea id="decision-player-question" value={decisionQuestion} onChange={(event) => setDecisionQuestion(event.target.value)} rows={2} maxLength={220} /></div>
-                      <div><Label htmlFor="player-search">Players</Label><Input id="player-search" value={playerSearch} onChange={(event) => setPlayerSearch(event.target.value)} placeholder="Search roster…" /><div className="mt-2 max-h-48 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-1.5">{filteredPlayers.map((player) => {
-                        const selected = selectedPlayerIds.includes(player.id);
-                        return <button key={player.id} type="button" className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-medium ${selected ? "bg-emerald-50 text-emerald-800" : "text-slate-600 hover:bg-slate-50"}`} onClick={() => setSelectedPlayerIds((current) => current.includes(player.id) ? current.filter((value) => value !== player.id) : [...current, player.id])}><span className="truncate">{player.name}</span>{selected && <Check className="h-4 w-4" />}</button>;
-                      })}{filteredPlayers.length === 0 && <div className="px-3 py-6 text-center text-xs font-semibold text-slate-400">No matching players.</div>}</div></div>
-                      <div><Label htmlFor="decision-max">Maximum choices</Label><Input id="decision-max" type="number" min="1" max={Math.max(1, selectedPlayerIds.length)} value={decisionMaxSelections} onChange={(event) => setDecisionMaxSelections(event.target.value)} inputMode="numeric" /></div>
+                      <div>
+                        <Label htmlFor="decision-player-question">Question</Label>
+                        <Textarea id="decision-player-question" value={decisionQuestion} onChange={(event) => setDecisionQuestion(event.target.value)} rows={2} maxLength={220} placeholder="Who should play in the tournament?" />
+                        <div className="mt-1 text-[10px] font-medium text-slate-400">Each selected player will get a Yes / No / Maybe answer.</div>
+                      </div>
+                      <div>
+                        <div className="mb-1 flex items-center justify-between gap-2">
+                          <Label htmlFor="player-search">Players</Label>
+                          <div className="flex items-center gap-2 text-[10px] font-medium text-slate-500">
+                            <span>{selectedPlayerIds.length} selected</span>
+                            {selectedPlayerIds.length > 0 && <button type="button" className="text-slate-400 hover:text-slate-600" onClick={() => setSelectedPlayerIds([])}>Clear</button>}
+                          </div>
+                        </div>
+                        <Input id="player-search" value={playerSearch} onChange={(event) => setPlayerSearch(event.target.value)} placeholder="Search roster…" />
+                        <div className="mt-2 max-h-56 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-1.5">{filteredPlayers.map((player) => {
+                          const selected = selectedPlayerIds.includes(player.id);
+                          return <button key={player.id} type="button" className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm font-medium ${selected ? "bg-amber-50 text-amber-900" : "text-slate-600 hover:bg-slate-50"}`} onClick={() => setSelectedPlayerIds((current) => current.includes(player.id) ? current.filter((value) => value !== player.id) : [...current, player.id])}><span className="truncate">{player.name}</span>{selected && <Check className="h-4 w-4 text-amber-700" />}</button>;
+                        })}{filteredPlayers.length === 0 && <div className="px-3 py-6 text-center text-xs font-medium text-slate-400">No matching players.</div>}</div>
+                      </div>
+                      {selectedPlayerIds.length > 0 && <div className="rounded-2xl bg-slate-50 px-3 py-2 text-[11px] font-medium leading-relaxed text-slate-500">Voters answer <span className="font-semibold text-slate-700">Yes / No / Maybe</span> for all {selectedPlayerIds.length} selected player{selectedPlayerIds.length === 1 ? "" : "s"} in one vote.</div>}
                       {renderPeoplePicker(decisionPeopleKeys, setDecisionPeopleKeys, "Who votes?")}
                     </>}
 
@@ -2643,22 +2668,23 @@ export function TaskBoard({
 
       <Dialog open={Boolean(votingCard && votingDecision)} onOpenChange={(open) => { if (!open) { setVotingCardId(null); setVotingDecisionId(null); setSelectedVoteAnswers({}); } }}>
         <DialogContent className="fixed bottom-2 left-2 right-2 top-auto max-h-[90dvh] w-auto max-w-none translate-x-0 translate-y-0 overflow-y-auto rounded-[2rem] p-4 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-md sm:-translate-x-1/2">
-          <DialogHeader><DialogTitle className="text-left text-base font-semibold text-[#102A43]">{votingDecision?.kind === "schedule" ? "Your availability" : "Vote in Stripes"}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle className="text-left text-base font-semibold text-[#102A43]">{votingDecision?.kind === "schedule" ? "Your availability" : votingDecision?.decisionType === "players" ? "Player decision" : "Vote in Stripes"}</DialogTitle></DialogHeader>
           {votingDecision && <div className="grid gap-3">
             {votingDecision.title?.trim() && <div className="whitespace-normal break-words text-sm font-semibold leading-relaxed text-[#102A43]">{votingDecision.title}</div>}
+            {votingDecision.decisionType === "players" && <div className="rounded-2xl bg-amber-50 px-3 py-2.5 text-sm font-medium leading-relaxed text-amber-950">{votingDecision.question}</div>}
             {votingDecision.hostName && <div className="rounded-xl bg-sky-50 px-3 py-2 text-[11px] font-bold text-sky-800">Host: <span className="font-semibold">{votingDecision.hostName}</span></div>}
             <div className="grid gap-3">{decisionQuestions(votingDecision).map((question, questionIndex) => {
               const selectedIds = selectedVoteAnswers[question.id] || [];
               return <div key={question.id} className={decisionQuestions(votingDecision).length > 1 ? "rounded-2xl border border-slate-200 bg-white p-3" : ""}>
-                <div className="whitespace-normal break-words text-sm font-semibold leading-relaxed text-[#102A43]">{decisionQuestions(votingDecision).length > 1 ? `${questionIndex + 1}. ` : ""}{question.text}</div>
-                {question.kind === "multi-select" && <div className="mt-1 text-[10px] font-bold text-slate-500">{votingDecision.kind === "schedule" ? "Choose every time that works for you." : `Choose up to ${question.maxSelections || question.options.length}.`}</div>}
+                <div className="whitespace-normal break-words text-sm font-medium leading-relaxed text-[#102A43]">{votingDecision.decisionType === "players" ? question.text : `${decisionQuestions(votingDecision).length > 1 ? `${questionIndex + 1}. ` : ""}${question.text}`}</div>
+                {question.kind === "multi-select" && <div className="mt-1 text-[10px] font-medium text-slate-500">{votingDecision.kind === "schedule" ? "Choose every time that works for you." : `Choose up to ${question.maxSelections || question.options.length}.`}</div>}
                 <div className="mt-2 grid gap-2">{question.options.map((option) => {
                   const selected = selectedIds.includes(option.id);
                   return <button key={option.id} type="button" className={`rounded-2xl border px-3 py-3 text-left text-sm font-medium ${selected ? "border-amber-500 bg-amber-50 text-amber-800" : "border-slate-200 bg-white text-[#102A43]"}`} onClick={() => toggleVoteOption(question, option.id)}>{selected && <Check className="mr-1 inline h-4 w-4" />}{option.label}</button>;
                 })}</div>
               </div>;
             })}</div>
-            <div className="text-[10px] font-semibold leading-snug text-slate-500">{votingDecision.kind === "schedule" ? "Your availability is visible to the organizers in this schedule." : "Anonymous. You can change your answer while it remains open."}</div>
+            <div className="text-[10px] font-medium leading-snug text-slate-500">{votingDecision.kind === "schedule" ? "Your availability is visible to the organizers in this schedule." : votingDecision.decisionType === "players" ? "Answer Yes, No, or Maybe for each player. Your ballot is anonymous and can be updated while the decision remains open." : "Anonymous. You can change your answer while it remains open."}</div>
             <Button type="button" className="h-11 rounded-2xl bg-amber-600 font-semibold text-white" disabled={decisionQuestions(votingDecision).some((question) => !(selectedVoteAnswers[question.id] || []).length) || voteSubmitting} onClick={() => void submitVote()}>{voteSubmitting ? "Recording…" : votingDecision.ballots?.some((ballot) => ballot.voterHash === currentVoterHash) ? "Update" : "Submit"}</Button>
           </div>}
         </DialogContent>

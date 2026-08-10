@@ -20,7 +20,6 @@ import {
   MessageCircle,
   Pencil,
   Plus,
-  RotateCcw,
   Send,
   Settings,
   Tag,
@@ -109,6 +108,7 @@ type DecisionSetupStep = TaskBoardDecisionType | null;
 type EquipmentDecisionIntent = "buy" | "replace" | null;
 type ScheduleHostChoice = "me" | "person" | "group" | null;
 type ScheduleParticipantMode = "all" | "selected";
+type EditSection = "all" | "note" | "assignees" | "due";
 type DraftQuestion = {
   id: string;
   text: string;
@@ -134,7 +134,7 @@ type NotifyTarget = {
 const WORKFLOW: Array<{ kind: TaskBoardColumnKind; name: string }> = [
   { kind: "ideas", name: "Ideas" },
   { kind: "vote", name: "Decide" },
-  { kind: "action", name: "Action" },
+  { kind: "action", name: "To-do" },
   { kind: "done", name: "Done" },
 ];
 
@@ -163,12 +163,6 @@ function newDraftQuestion(text = ""): DraftQuestion {
 function newScheduleDateGroup(): ScheduleDateGroup {
   return { id: id("schedule-date"), date: "", times: [""] };
 }
-
-const TIME_CHOICES = Array.from({ length: 96 }, (_, index) => {
-  const hour = Math.floor(index / 4);
-  const minute = (index % 4) * 15;
-  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
-});
 
 function safeColor(value?: string) {
   return /^#[0-9a-f]{6}$/i.test(value || "") ? value! : "#0f766e";
@@ -372,9 +366,9 @@ function activityText(activity: TaskBoardActivity) {
   if (activity.action === "vote_started") return `${activity.actorName} opened a decision`;
   if (activity.action === "vote_closed") return `${activity.actorName} closed a vote`;
   if (activity.action === "decision_recorded") return `${activity.actorName} recorded a decision`;
-  if (activity.action === "action_defined") return `${activity.actorName} added an action`;
-  if (activity.action === "claimed") return `${activity.actorName} joined an action`;
-  if (activity.action === "released") return `${activity.actorName} left an action`;
+  if (activity.action === "action_defined") return `${activity.actorName} added to-do details`;
+  if (activity.action === "claimed") return `${activity.actorName} was added to a to-do`;
+  if (activity.action === "released") return `${activity.actorName} was removed from a to-do`;
   if (activity.action === "completed") return `${activity.actorName} completed something`;
   if (activity.action === "link_added") return `${activity.actorName} added a link`;
   if (activity.action === "reopened") return `${activity.actorName} reopened the topic`;
@@ -450,9 +444,31 @@ function scheduleLabel(value: string) {
   }).format(date);
 }
 
+function normalizeTypedTime(value: string) {
+  const raw = value.trim().replace(".", ":");
+  let hour = -1;
+  let minute = -1;
+  if (/^\d{1,2}$/.test(raw)) {
+    hour = Number(raw);
+    minute = 0;
+  } else if (/^\d{3,4}$/.test(raw)) {
+    const digits = raw.padStart(4, "0");
+    hour = Number(digits.slice(0, 2));
+    minute = Number(digits.slice(2));
+  } else {
+    const match = raw.match(/^(\d{1,2}):(\d{1,2})$/);
+    if (match) {
+      hour = Number(match[1]);
+      minute = Number(match[2]);
+    }
+  }
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return "";
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
 function scheduleSlotValues(groups: ScheduleDateGroup[]) {
   return [...new Set(groups.flatMap((group) => group.date
-    ? group.times.filter(Boolean).map((time) => `${group.date}T${time}`)
+    ? group.times.map(normalizeTypedTime).filter(Boolean).map((time) => `${group.date}T${time}`)
     : []))];
 }
 
@@ -538,7 +554,7 @@ function currentNeed(card: TaskBoardCard) {
   const latestDecision = [...(card.decisions || [])].sort((a, b) => b.createdAt - a.createdAt)[0];
   if (latestDecision) return latestDecision.title?.trim() || (latestDecision.mode === "recorded" ? "Decision recorded · choose next step" : "Vote closed · choose next step");
   const latestAction = [...(card.actions || [])].sort((a, b) => b.createdAt - a.createdAt)[0];
-  if (latestAction?.status === "done") return "Action done · choose next step";
+  if (latestAction?.status === "done") return "To-do complete · choose next step";
   return latestAction?.text || "";
 }
 
@@ -601,7 +617,7 @@ function currentNotifyTarget(card: TaskBoardCard): NotifyTarget | null {
     return {
       kind: "action",
       id: openAction.id,
-      label: "Action",
+      label: "To-do",
       text: openAction.text,
       notification: openAction.notification,
       suggestedEmails: actionPeople(openAction).map((person) => person.email || "").filter(Boolean),
@@ -627,7 +643,7 @@ function currentNotifyTarget(card: TaskBoardCard): NotifyTarget | null {
     return {
       kind: "action",
       id: action.id,
-      label: action.status === "done" ? "Action complete" : "Action",
+      label: action.status === "done" ? "To-do complete" : "To-do",
       text: action.text,
       notification: action.notification,
       suggestedEmails: actionPeople(action).map((person) => person.email || "").filter(Boolean),
@@ -692,7 +708,7 @@ function EmptyActionBoard({ onCreate }: { onCreate: () => void }) {
     <div className="mx-auto flex max-w-3xl flex-col items-center px-4 py-10 text-center">
       <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-amber-600 shadow-sm ring-1 ring-slate-200"><Gavel className="h-6 w-6" /></div>
       <h3 className="mt-4 text-lg font-black text-[#102A43]">Start with one line</h3>
-      <p className="mt-1 max-w-md text-sm font-semibold leading-relaxed text-slate-500">Capture it now. Add decisions, actions and other structure only when the card needs them.</p>
+      <p className="mt-1 max-w-md text-sm font-semibold leading-relaxed text-slate-500">Capture it now. Add decisions, to-dos and other structure only when the card needs them.</p>
       <Button type="button" className="mt-5 h-11 rounded-2xl px-4 font-black text-white" onClick={onCreate}><Plus className="mr-1.5 h-4 w-4" />Add a card</Button>
     </div>
   );
@@ -752,7 +768,9 @@ export function TaskBoard({
 
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
+  const [editSection, setEditSection] = useState<EditSection>("all");
   const [editTitle, setEditTitle] = useState("");
+  const [editNote, setEditNote] = useState("");
   const [editCategory, setEditCategory] = useState("");
   const [editDueDate, setEditDueDate] = useState("");
   const [editPeopleKeys, setEditPeopleKeys] = useState<string[]>([]);
@@ -795,15 +813,7 @@ export function TaskBoard({
   const [moveCardId, setMoveCardId] = useState<string | null>(null);
   const [draggingCardId, setDraggingCardId] = useState<string | null>(null);
   const [dragOverStage, setDragOverStage] = useState<TopicStage | null>(null);
-  const [mobileDragPoint, setMobileDragPoint] = useState<{ x: number; y: number } | null>(null);
-  const mobileBoardRef = useRef<HTMLDivElement | null>(null);
   const mobileColumnRefs = useRef<Partial<Record<TopicStage, HTMLElement | null>>>({});
-  const dragAutoScrollFrameRef = useRef<number | null>(null);
-  const dragClientPointRef = useRef<{ x: number; y: number } | null>(null);
-  const longPressTimerRef = useRef<number | null>(null);
-  const longPressStartRef = useRef<{ x: number; y: number; cardId: string; pointerId: number; target: HTMLElement } | null>(null);
-  const longPressDraggingRef = useRef(false);
-  const suppressCardOpenRef = useRef(false);
 
   const [votingCardId, setVotingCardId] = useState<string | null>(null);
   const [votingDecisionId, setVotingDecisionId] = useState<string | null>(null);
@@ -1084,9 +1094,22 @@ export function TaskBoard({
     if (!column) return null;
     if (card.columnId === column.id) return card;
     const now = Date.now();
+    const nextActions = stage === "done"
+      ? (card.actions || []).map((action) => action.status === "open" ? {
+          ...action,
+          status: "done" as const,
+          completedAt: now,
+          completedByName: currentActor.name,
+          completedByEmail: currentActor.email,
+        } : action)
+      : (card.actions || []);
     const next: TaskBoardCard = {
       ...card,
       columnId: column.id,
+      actions: nextActions,
+      actionText: stage === "done" ? undefined : card.actionText,
+      assignee: stage === "done" ? undefined : card.assignee,
+      assigneeEmail: stage === "done" ? undefined : card.assigneeEmail,
       completedAt: stage === "done" ? (card.completedAt || now) : undefined,
       completedByName: stage === "done" ? (card.completedByName || currentActor.name) : undefined,
       completedByEmail: stage === "done" ? (card.completedByEmail || currentActor.email) : undefined,
@@ -1115,121 +1138,6 @@ export function TaskBoard({
     setMoveCardId(null);
     if (!card) return;
     await moveCardToStage(card, stage);
-  };
-
-  const stopDragAutoScroll = () => {
-    if (dragAutoScrollFrameRef.current !== null) {
-      window.cancelAnimationFrame(dragAutoScrollFrameRef.current);
-      dragAutoScrollFrameRef.current = null;
-    }
-  };
-
-  const stageAtPoint = (x: number, y: number) => {
-    const element = document.elementFromPoint(x, y) as HTMLElement | null;
-    const stageElement = element?.closest?.("[data-board-stage]") as HTMLElement | null;
-    return (stageElement?.dataset.boardStage as TopicStage | undefined) || null;
-  };
-
-  const updateDragTarget = (x: number, y: number) => {
-    const stage = stageAtPoint(x, y);
-    setDragOverStage(stage);
-  };
-
-  const runDragAutoScroll = () => {
-    stopDragAutoScroll();
-    const tick = () => {
-      const boardElement = mobileBoardRef.current;
-      const point = dragClientPointRef.current;
-      if (!longPressDraggingRef.current || !boardElement || !point) {
-        dragAutoScrollFrameRef.current = null;
-        return;
-      }
-      const rect = boardElement.getBoundingClientRect();
-      const edge = Math.min(76, Math.max(54, rect.width * 0.18));
-      let delta = 0;
-      if (point.x < rect.left + edge) {
-        const strength = Math.min(1, (rect.left + edge - point.x) / edge);
-        delta = -Math.max(3, 15 * strength);
-      } else if (point.x > rect.right - edge) {
-        const strength = Math.min(1, (point.x - (rect.right - edge)) / edge);
-        delta = Math.max(3, 15 * strength);
-      }
-      if (delta) boardElement.scrollLeft += delta;
-      updateDragTarget(point.x, point.y);
-      dragAutoScrollFrameRef.current = window.requestAnimationFrame(tick);
-    };
-    dragAutoScrollFrameRef.current = window.requestAnimationFrame(tick);
-  };
-
-  const clearLongPress = () => {
-    if (longPressTimerRef.current !== null) {
-      window.clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-    }
-  };
-
-  const resetMobileDrag = () => {
-    clearLongPress();
-    stopDragAutoScroll();
-    longPressStartRef.current = null;
-    dragClientPointRef.current = null;
-    longPressDraggingRef.current = false;
-    setDraggingCardId(null);
-    setDragOverStage(null);
-    setMobileDragPoint(null);
-  };
-
-  const startCardLongPress = (event: React.PointerEvent, card: TaskBoardCard) => {
-    if (!isMobileBoardViewport() || event.pointerType === "mouse") return;
-    clearLongPress();
-    longPressDraggingRef.current = false;
-    const target = event.currentTarget as HTMLElement;
-    longPressStartRef.current = { x: event.clientX, y: event.clientY, cardId: card.id, pointerId: event.pointerId, target };
-    dragClientPointRef.current = { x: event.clientX, y: event.clientY };
-    longPressTimerRef.current = window.setTimeout(() => {
-      const start = longPressStartRef.current;
-      if (!start || start.cardId !== card.id) return;
-      longPressDraggingRef.current = true;
-      suppressCardOpenRef.current = true;
-      setDraggingCardId(card.id);
-      setMobileDragPoint({ x: start.x, y: start.y });
-      try { start.target.setPointerCapture(start.pointerId); } catch { /* pointer may already be captured by browser */ }
-      if (navigator.vibrate) navigator.vibrate(16);
-      updateDragTarget(start.x, start.y);
-      runDragAutoScroll();
-    }, 360);
-  };
-
-  const moveCardLongPress = (event: React.PointerEvent) => {
-    const start = longPressStartRef.current;
-    if (!start) return;
-    if (!longPressDraggingRef.current) {
-      if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > 10) {
-        clearLongPress();
-        longPressStartRef.current = null;
-      }
-      return;
-    }
-    event.preventDefault();
-    dragClientPointRef.current = { x: event.clientX, y: event.clientY };
-    setMobileDragPoint({ x: event.clientX, y: event.clientY });
-    updateDragTarget(event.clientX, event.clientY);
-  };
-
-  const finishCardLongPress = async (event: React.PointerEvent, card: TaskBoardCard) => {
-    clearLongPress();
-    const start = longPressStartRef.current;
-    if (!longPressDraggingRef.current) {
-      longPressStartRef.current = null;
-      return;
-    }
-    event.preventDefault();
-    const destination = dragOverStage || stageAtPoint(event.clientX, event.clientY);
-    try { if (start?.target.hasPointerCapture(start.pointerId)) start.target.releasePointerCapture(start.pointerId); } catch { /* already released */ }
-    resetMobileDrag();
-    window.setTimeout(() => { suppressCardOpenRef.current = false; }, 100);
-    if (destination && destination !== stageForCard(card)) await moveCardToStage(card, destination);
-    else centerMobileStage(stageForCard(card));
   };
 
   const toggleExpanded = (cardId: string) => {
@@ -1445,9 +1353,11 @@ export function TaskBoard({
     } finally { setSaving(false); }
   };
 
-  const openEditCard = (card: TaskBoardCard) => {
+  const openEditCard = (card: TaskBoardCard, section: EditSection = "all") => {
     setEditingCardId(card.id);
+    setEditSection(section);
     setEditTitle(card.title);
+    setEditNote(card.note || "");
     setEditCategory(card.category || "");
     setEditDueDate(card.dueDate || "");
     setEditPeopleKeys((card.people || []).map(personKey));
@@ -1460,6 +1370,7 @@ export function TaskBoard({
     const next: TaskBoardCard = {
       ...existing,
       title: editTitle.trim(),
+      note: editNote.trim() || undefined,
       category: editCategory || undefined,
       dueDate: editDueDate || undefined,
       people: peopleFromKeys(editPeopleKeys),
@@ -2082,7 +1993,7 @@ export function TaskBoard({
     };
     setSaving(true); setError("");
     try { await persistCard(next); setActionCardId(null); }
-    catch (nextError) { setError(nextError instanceof Error ? nextError.message : "Could not add action."); }
+    catch (nextError) { setError(nextError instanceof Error ? nextError.message : "Could not save to-do details."); }
     finally { setSaving(false); }
   };
 
@@ -2571,43 +2482,18 @@ export function TaskBoard({
     resumed = false,
     waitingOnDecision = false,
   ) => {
-    const open = action.status === "open";
-    const mine = isMine(action);
-    const assignees = actionPeople(action);
-
-    if (!isCurrent) {
-      return (
-        <div key={entryKey} className="relative pl-8">
-          <div className={`absolute left-0 top-2.5 flex h-7 w-7 items-center justify-center rounded-full border bg-white ${open ? "border-sky-200 text-sky-600" : "border-slate-200 text-slate-400"}`}>
-            {open ? <Hand className="h-3.5 w-3.5" /> : <Check className="h-3.5 w-3.5" />}
-          </div>
-          <div className="rounded-xl bg-white/80 px-3 py-2.5 ring-1 ring-slate-200/80">
-            <div className="flex items-center gap-1 text-[9px] font-black uppercase tracking-wide text-slate-400 lg:text-[10px]"><span>Action · {open ? waitingOnDecision ? "waiting on decision" : "open" : "done"}</span>{action.notification?.status === "sent" && <span className="inline-flex items-center gap-0.5 text-emerald-600" title={notificationSummary(action.notification)}><Bell className="h-2.5 w-2.5 fill-emerald-100" /><Check className="h-2.5 w-2.5" /></span>}</div>
-            <div className="mt-0.5 whitespace-normal break-words text-[12px] font-black leading-snug text-[#102A43] lg:text-[14px]">{action.text}</div>
-            {assignees.length > 0 && <div className="mt-1 text-[9px] font-bold text-slate-500"><Users className="mr-1 inline h-3 w-3" />{personSummary(assignees)}</div>}
-            {!open && <div className="mt-1 text-[9px] font-bold text-sky-700">Completed{action.completedByName ? ` by ${action.completedByName}` : ""}</div>}
-          </div>
-        </div>
-      );
-    }
+    const assignees = card.people?.length ? normalizePeople(card.people) : actionPeople(action);
+    const textDiffersFromCard = action.text.trim() && action.text.trim() !== card.title.trim();
 
     return (
       <div key={entryKey} className="relative pl-8">
-        <div className={`absolute left-0 top-3 flex h-7 w-7 items-center justify-center rounded-full border-2 bg-white ${open ? "border-sky-500 text-sky-700" : "border-sky-400 text-sky-700"}`}>
-          {open ? <Hand className="h-3.5 w-3.5" /> : <Check className="h-3.5 w-3.5" />}
+        <div className="absolute left-0 top-3 flex h-7 w-7 items-center justify-center rounded-full border-2 border-sky-400 bg-white text-sky-700">
+          <ClipboardList className="h-3.5 w-3.5" />
         </div>
-        <div className={`rounded-2xl border p-3 ${open ? "border-sky-200 bg-sky-50/65" : "border-sky-100 bg-sky-50/30"}`}>
-          <div className="flex items-center gap-1 text-[9px] font-black uppercase tracking-wide text-slate-400 lg:text-[10px]"><span>{open ? resumed ? "Current action · resumed" : "Current action" : "Action complete"}</span>{action.notification?.status === "sent" && <span className="inline-flex items-center gap-0.5 text-emerald-600" title={notificationSummary(action.notification)}><Bell className="h-2.5 w-2.5 fill-emerald-100" /><Check className="h-2.5 w-2.5" /></span>}</div>
-          <div className="mt-1 whitespace-normal break-words text-sm font-black leading-snug text-[#102A43] lg:text-base">{action.text}</div>
-          {assignees.length > 0 && <div className="mt-1 text-[10px] font-semibold text-sky-800"><Users className="mr-1 inline h-3 w-3" />{personSummary(assignees)}</div>}
-          {open ? (
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              {!mine && <button type="button" className="rounded-xl border border-sky-200 bg-white px-3 py-2 text-xs font-semibold text-sky-800" onClick={() => void joinAction(card, action)}><Hand className="mr-1 inline h-3.5 w-3.5" />{assignees.length ? "Join task" : "Take task"}</button>}
-              {mine && assignees.length > 1 && <button type="button" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-500" onClick={() => void releaseAction(card, action)}><RotateCcw className="mr-1 inline h-3.5 w-3.5" />Leave task</button>}
-              {!assignees.length && <span className="text-[10px] font-medium text-slate-400">Unassigned is okay.</span>}
-              <button type="button" className="ml-auto rounded-xl bg-sky-700 px-3 py-2 text-xs font-semibold text-white hover:bg-sky-800" onClick={() => void completeActionRound(card, action)}><Check className="mr-1 inline h-3.5 w-3.5" />Mark complete</button>
-            </div>
-          ) : <div className="mt-2 text-xs font-semibold text-sky-700"><CheckCircle2 className="mr-1 inline h-3.5 w-3.5" />Completed{action.completedByName ? ` by ${action.completedByName}` : ""}</div>}
+        <div className="rounded-2xl border border-sky-100 bg-sky-50/35 p-3">
+          <div className="text-[9px] font-semibold uppercase tracking-wide text-sky-700">To-do details</div>
+          {textDiffersFromCard && <div className="mt-1 whitespace-normal break-words text-sm font-medium leading-snug text-[#102A43] lg:text-base">{action.text}</div>}
+          {assignees.length > 0 ? <div className="mt-1 text-[10px] font-medium text-sky-800"><Users className="mr-1 inline h-3 w-3" />Assigned to {personSummary(assignees)}</div> : <div className="mt-1 text-[10px] font-normal text-slate-400">No assignee yet.</div>}
         </div>
       </div>
     );
@@ -2622,13 +2508,13 @@ export function TaskBoard({
       return <div className="relative"><div className="absolute bottom-4 left-[13px] top-4 w-px bg-amber-100" aria-hidden="true" />{renderDecision(card, decision, Math.max(0, index), true, `decision:${decision.id || index}`)}</div>;
     }
     if (stage === "action") {
-      const action = latestActionInCurrentStage(card) || latestOpenAction(card);
+      const action = latestOpenAction(card);
       if (!action) return null;
       const index = (card.actions || []).findIndex((item) => item.id === action.id);
       return <div className="relative"><div className="absolute bottom-4 left-[13px] top-4 w-px bg-sky-100" aria-hidden="true" />{renderAction(card, action, Math.max(0, index), true, `action:${action.id || index}`)}</div>;
     }
     if (stage === "done") {
-      return <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-3 py-3"><div className="flex items-center gap-2 text-xs font-semibold text-slate-700"><CheckCircle2 className="h-4 w-4" />Completed</div><div className="mt-1 text-[10px] font-normal text-slate-500">Previous decisions and actions are preserved in Evolution.</div></div>;
+      return <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-3 py-3"><div className="flex items-center gap-2 text-xs font-semibold text-slate-700"><CheckCircle2 className="h-4 w-4" />Completed</div><div className="mt-1 text-[10px] font-normal text-slate-500">Previous decisions and to-do history are preserved in Evolution.</div></div>;
     }
     return null;
   };
@@ -2636,7 +2522,7 @@ export function TaskBoard({
   const renderEvolution = (card: TaskBoardCard) => {
     const entries = timelineEntries(card);
     const stage = stageForCard(card);
-    const stageLabel = stage === "deciding" ? "Decide" : stage === "action" ? "Action" : stage === "done" ? "Done" : "Ideas";
+    const stageLabel = stage === "deciding" ? "Decide" : stage === "action" ? "To-do" : stage === "done" ? "Done" : "Ideas";
     const stageTone = stage === "deciding" ? "text-amber-800 bg-amber-50 ring-amber-100" : stage === "action" ? "text-sky-800 bg-sky-50 ring-sky-100" : "text-slate-600 bg-slate-50 ring-slate-200";
     return (
       <div className="relative mx-auto w-full max-w-2xl px-4 py-5 lg:px-6 lg:py-6">
@@ -2664,7 +2550,7 @@ export function TaskBoard({
             <div key={entry.key} className="relative pl-10 lg:pl-12">
               <div className="absolute left-0 top-0.5 flex h-7 w-7 items-center justify-center rounded-full border border-sky-200 bg-white text-sky-700">{entry.action.status === "done" ? <Check className="h-3.5 w-3.5" /> : <Hand className="h-3.5 w-3.5" />}</div>
               <div className="rounded-2xl border border-sky-100 bg-sky-50/35 px-3 py-3">
-                <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-sky-700"><span>Action</span><span className="text-sky-400">·</span><span>{formatTime(entry.createdAt)}</span></div>
+                <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-sky-700"><span>To-do</span><span className="text-sky-400">·</span><span>{formatTime(entry.createdAt)}</span></div>
                 <div className="mt-1 text-sm font-semibold leading-snug text-[#102A43]">{entry.action.text}</div>
                 {actionPeople(entry.action).length > 0 && <div className="mt-1 text-[10px] font-medium text-slate-500"><Users className="mr-1 inline h-3 w-3" />{personSummary(actionPeople(entry.action))}</div>}
                 <div className="mt-1.5 text-[11px] font-normal text-slate-600">{entry.action.status === "done" ? `Completed${entry.action.completedByName ? ` by ${entry.action.completedByName}` : ""}` : "Open"}</div>
@@ -2682,9 +2568,7 @@ export function TaskBoard({
 
   const renderStageTools = (card: TaskBoardCard, stage: TopicStage) => {
     const openDecision = latestOpenDecision(card);
-    const openAction = latestOpenAction(card);
     const currentDecision = latestDecisionInCurrentStage(card);
-    const currentAction = latestActionInCurrentStage(card);
 
     if (stage === "deciding") {
       if (openDecision) return null;
@@ -2710,26 +2594,9 @@ export function TaskBoard({
     }
 
     if (stage === "action") {
-      if (openAction) return null;
-      if (!currentAction || currentAction.status !== "done") {
-        return (
-          <div className="mt-3 grid grid-cols-[1fr_auto] gap-2">
-            <button type="button" className="h-11 rounded-2xl bg-sky-700 px-3 text-xs font-semibold text-white hover:bg-sky-800" onClick={() => void completeActionRound(card)}>Mark action complete</button>
-            <button type="button" className="h-11 rounded-2xl border border-sky-200 bg-white px-3 text-xs font-semibold text-sky-800" onClick={() => openAddAction(card)}>Details</button>
-          </div>
-        );
-      }
-
-      return (
-        <div className="mt-3 rounded-2xl border border-sky-200 bg-sky-50/55 p-3">
-          <div className="flex items-center gap-2 text-xs font-semibold text-sky-900"><CheckCircle2 className="h-4 w-4" />Action complete</div>
-          <div className="mt-1 text-[10px] font-medium leading-relaxed text-sky-800/75">Is there another action for this card, or is it ready to move?</div>
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            <button type="button" className="h-10 rounded-xl border border-sky-200 bg-white px-3 text-[11px] font-semibold text-sky-900" onClick={() => openAddAction(card)}>Another action</button>
-            <button type="button" className="h-10 rounded-xl bg-[#102A43] px-3 text-[11px] font-semibold text-white" onClick={() => openMoveCard(card)}>Move card</button>
-          </div>
-        </div>
-      );
+      // To-do completion is intentionally handled by moving the card to Done.
+      // Assignees, due date, note and links are optional card metadata, not a separate action workflow.
+      return null;
     }
     return null;
   };
@@ -2800,21 +2667,12 @@ export function TaskBoard({
     const stage = stageForCard(card);
     const expanded = detail || expandedIds.has(card.id);
     const openDecision = latestOpenDecision(card);
-    const openAction = latestOpenAction(card);
     const decisions = card.decisions || [];
     const actions = card.actions || [];
     const currentDecision = latestDecisionInCurrentStage(card);
-    const currentAction = latestActionInCurrentStage(card);
     const decisionComplete = stage === "deciding" && !openDecision && Boolean(currentDecision);
-    const actionComplete = stage === "action" && !openAction && currentAction?.status === "done";
-    const need = stage === "done"
-      ? ""
-      : stage === "action"
-        ? (openAction?.text && openAction.text.trim() !== card.title.trim() ? openAction.text : "")
-        : stage === "deciding"
-          ? (openDecision ? currentNeed(card) : "")
-          : "";
-    const displayPeople = card.people?.length ? card.people : actionPeople(openAction);
+    const need = stage === "deciding" && openDecision ? currentNeed(card) : "";
+    const displayPeople = card.people || [];
     const cardNotifyTarget = currentNotifyTarget(card);
     const cardNotification = cardNotifyTarget?.notification;
     const cardNotificationSent = cardNotification?.status === "sent";
@@ -2833,32 +2691,20 @@ export function TaskBoard({
         draggable={!detail && !isMobileBoardViewport()}
         onDragStart={(event) => { if (detail) return; setDraggingCardId(card.id); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", card.id); }}
         onDragEnd={() => { setDraggingCardId(null); setDragOverStage(null); }}
-        onContextMenu={(event) => { if (!detail && isMobileBoardViewport()) event.preventDefault(); }}
-        onPointerDown={(event) => { if (!detail) startCardLongPress(event, card); }}
-        onPointerMove={(event) => { if (!detail) moveCardLongPress(event); }}
-        onPointerUp={(event) => { if (!detail) void finishCardLongPress(event, card); }}
-        onPointerCancel={() => { resetMobileDrag(); window.setTimeout(() => { suppressCardOpenRef.current = false; }, 100); }}
         className={detail ? "min-h-full bg-white" : `overflow-hidden rounded-2xl border bg-white shadow-sm transition ${stageStyle} ${compact ? "" : "lg:rounded-[1.35rem]"} ${draggingCardId === card.id ? "opacity-25 ring-2 ring-slate-300" : ""}`}
-        style={!detail ? ({ WebkitTouchCallout: "none", WebkitUserSelect: "none", userSelect: "none" } as React.CSSProperties) : undefined}
       >
         {!detail && <div className="p-3">
           <div className="flex items-start gap-2">
-            <button type="button" className="min-w-0 flex-1 text-left" onClick={() => { if (!suppressCardOpenRef.current) openCardDetail(card); }}>
+            <button type="button" className="min-w-0 flex-1 text-left" onClick={() => openCardDetail(card)}>
               <div className="flex flex-wrap items-center gap-1.5">
                 {card.category && <span className={`rounded-full px-2 py-0.5 text-[9px] font-black ring-1 lg:px-2.5 lg:py-1 lg:text-[10px] ${tagTone(card.category)}`}>{card.category}</span>}
                 {stage === "deciding" && <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-semibold ring-1 lg:px-2.5 lg:py-1 lg:text-[10px] ${decisionComplete ? "bg-amber-100 text-amber-900 ring-amber-200" : "bg-amber-50 text-amber-800 ring-amber-200"}`}>{decisionComplete ? <Check className="h-3 w-3" /> : <Gavel className="h-3 w-3" />}{decisionComplete ? "Decision complete" : "Needs decision"}</span>}
-                {stage === "action" && <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-semibold ring-1 lg:px-2.5 lg:py-1 lg:text-[10px] ${actionComplete ? "bg-sky-100 text-sky-900 ring-sky-200" : "bg-sky-50 text-sky-800 ring-sky-200"}`}>{actionComplete ? <Check className="h-3 w-3" /> : <Hand className="h-3 w-3" />}{actionComplete ? "Action complete" : "Needs action"}</span>}
                 {displayPeople?.length ? <span className="inline-flex max-w-full items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-black text-slate-600 lg:px-2.5 lg:py-1 lg:text-[10px]"><Users className="h-3 w-3 shrink-0" /><span className="truncate">{personSummary(displayPeople)}</span></span> : null}
                 {card.dueDate && <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-black lg:px-2.5 lg:py-1 lg:text-[10px] ${isOverdue(card.dueDate) && stage !== "done" ? "bg-red-50 text-red-700" : "bg-slate-100 text-slate-600"}`}><CalendarDays className="h-3 w-3" />{dueText(card.dueDate)}</span>}
-                {(card.comments?.length || 0) > 0 && <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-medium text-slate-500 lg:px-2.5 lg:py-1 lg:text-[10px]"><MessageCircle className="h-3 w-3" />{card.comments!.length}</span>}
+                {(card.comments?.length || 0) > 0 && <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-semibold text-slate-600 lg:px-2.5 lg:py-1 lg:text-[10px]" title={`${card.comments!.length} comment${card.comments!.length === 1 ? "" : "s"}`}><MessageCircle className="h-3 w-3" />{card.comments!.length}</span>}
               </div>
               <h3 className="mt-2 whitespace-normal break-words text-[14px] font-semibold leading-snug text-[#102A43] lg:text-[17px] lg:leading-snug">{card.title}</h3>
-              {need && !expanded && <div className={`mt-2 whitespace-normal break-words text-[11px] font-semibold leading-snug lg:text-[13px] ${stage === "deciding" ? "text-amber-800" : stage === "action" ? "text-sky-800" : stage === "done" ? "text-slate-500" : "text-slate-600"}`}>
-                {stage === "deciding" && <Gavel className="mr-1 inline h-3.5 w-3.5" />}
-                {stage === "action" && <Hand className="mr-1 inline h-3.5 w-3.5" />}
-                {stage === "done" && <Check className="mr-1 inline h-3.5 w-3.5" />}
-                {need}
-              </div>}
+              {need && !expanded && <div className="mt-2 whitespace-normal break-words text-[11px] font-medium leading-snug text-amber-800 lg:text-[13px]"><Gavel className="mr-1 inline h-3.5 w-3.5" />{need}</div>}
               {openDecision && !expanded && <div className="mt-1 text-[9px] font-bold text-slate-400 lg:text-[11px]">{voteTotal(openDecision)}{openDecision.eligibleCount ? ` of ${openDecision.eligibleCount}` : ""} responded</div>}
             </button>
             <div className="flex shrink-0 flex-col items-center gap-0.5">
@@ -2892,24 +2738,33 @@ export function TaskBoard({
           </div>
         </div>}
 
-        {expanded && <div className={detail ? "bg-white px-4 pb-24 pt-4" : "border-t border-slate-100 bg-slate-50/35 px-3 pb-3 pt-3"}>
-          {card.note?.trim() && <p className="mb-3 whitespace-pre-wrap break-words text-xs font-semibold leading-relaxed text-slate-500 lg:text-sm">{card.note.trim()}</p>}
+        {expanded && <div className={detail ? "bg-white px-4 pb-24 pt-5" : "border-t border-slate-100 bg-slate-50/35 px-3 pb-3 pt-3"}>
+          {detail && <div className="mb-4">
+            <div className="flex flex-wrap items-center gap-1.5">
+              {card.category && <span className={`rounded-full px-2 py-0.5 text-[9px] font-semibold ring-1 ${tagTone(card.category)}`}>{card.category}</span>}
+              {stage === "deciding" && <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-semibold ring-1 ${decisionComplete ? "bg-amber-100 text-amber-900 ring-amber-200" : "bg-amber-50 text-amber-800 ring-amber-200"}`}>{decisionComplete ? <Check className="h-3 w-3" /> : <Gavel className="h-3 w-3" />}{decisionComplete ? "Decision complete" : "Needs decision"}</span>}
+              {stage === "done" && <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-semibold text-slate-600 ring-1 ring-slate-200"><Check className="h-3 w-3" />Done</span>}
+            </div>
+            <h2 className="mt-2 whitespace-normal break-words text-[24px] font-semibold leading-tight tracking-[-0.02em] text-[#102A43]">{card.title}</h2>
+          </div>}
 
-          <div className="mb-3 flex flex-wrap items-center gap-1.5">
-            {card.links?.map((link) => <div key={link.id} className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full bg-white px-2.5 py-1.5 ring-1 ring-slate-200"><a href={link.url} target="_blank" rel="noreferrer" className="inline-flex min-w-0 max-w-[15rem] items-center gap-1.5 text-[10px] font-black text-slate-600 lg:text-xs"><Link2 className="h-3 w-3 shrink-0 text-slate-400" /><span className="truncate">{link.label}</span><ExternalLink className="h-3 w-3 shrink-0 text-slate-400" /></a><button type="button" className="rounded-full p-0.5 text-slate-300 hover:text-red-600" onClick={() => void removeLink(card, link.id)} aria-label={`Remove ${link.label}`}><Trash2 className="h-3 w-3" /></button></div>)}
-            {stage !== "done" && (card.links?.length || 0) < 5 && <button type="button" className="inline-flex items-center gap-1 rounded-full px-2 py-1.5 text-[10px] font-black text-slate-400 lg:text-xs hover:bg-white hover:text-slate-600" onClick={() => openAddLink(card)}><Link2 className="h-3 w-3" />+ Link</button>}
-          </div>
+          {card.note?.trim() && <div className="mb-3 rounded-2xl bg-slate-50 px-3 py-3"><div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Note</div><p className="mt-1 whitespace-pre-wrap break-words text-sm font-normal leading-relaxed text-slate-700">{card.note.trim()}</p></div>}
+
+          {stage !== "done" && <div className="mb-3 flex flex-wrap gap-1.5">
+            <button type="button" className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 text-[11px] font-medium text-slate-600 hover:bg-slate-50" onClick={() => openEditCard(card, "note")}><Pencil className="h-3.5 w-3.5" />{card.note?.trim() ? "Edit note" : "Note"}</button>
+            <button type="button" className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 text-[11px] font-medium text-slate-600 hover:bg-slate-50" onClick={() => openEditCard(card, "assignees")}><Users className="h-3.5 w-3.5" />{displayPeople.length ? `Assignees · ${displayPeople.length}` : "Assignees"}</button>
+            <button type="button" className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 text-[11px] font-medium text-slate-600 hover:bg-slate-50" onClick={() => openEditCard(card, "due")}><CalendarDays className="h-3.5 w-3.5" />{card.dueDate ? dueText(card.dueDate) : "Due date"}</button>
+            {(card.links?.length || 0) < 5 && <button type="button" className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 text-[11px] font-medium text-slate-600 hover:bg-slate-50" onClick={() => openAddLink(card)}><Link2 className="h-3.5 w-3.5" />Link</button>}
+          </div>}
+
+          {(card.links?.length || 0) > 0 && <div className="mb-3 grid gap-1.5">
+            {card.links?.map((link) => <div key={link.id} className="flex min-w-0 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2"><a href={link.url} target="_blank" rel="noreferrer" className="inline-flex min-w-0 flex-1 items-center gap-2 text-xs font-medium text-slate-700"><Link2 className="h-3.5 w-3.5 shrink-0 text-slate-400" /><span className="truncate">{link.label}</span><ExternalLink className="h-3 w-3 shrink-0 text-slate-400" /></a>{stage !== "done" && <button type="button" className="rounded-lg p-1 text-slate-300 hover:bg-red-50 hover:text-red-600" onClick={() => void removeLink(card, link.id)} aria-label={`Remove ${link.label}`}><Trash2 className="h-3.5 w-3.5" /></button>}</div>)}
+          </div>}
 
           {(decisions.length > 0 || actions.length > 0) && <div className="mb-3 flex justify-end"><button type="button" className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-[11px] font-medium text-slate-600 hover:bg-slate-50" onClick={() => setEvolutionCardId(card.id)}><History className="h-3.5 w-3.5" />Evolution · {evolutionStepCount(card)}</button></div>}
-          {renderCurrentChapter(card) || (
-            <div className="rounded-2xl border border-dashed border-slate-200 bg-white/50 px-3 py-5 text-center">
-              <div className="text-xs font-semibold text-[#102A43] lg:text-sm">{stage === "action" ? "Simple to-do" : stage === "deciding" ? "Simple decision" : stage === "done" ? "Completed" : "Keep it simple"}</div>
-              <div className="mt-1 text-[10px] font-normal text-slate-400 lg:text-xs">{stage === "action" ? "A straightforward task can stay simple." : stage === "deciding" ? "This stage is for something that needs an answer." : stage === "done" ? "This card stays here as club history." : "A simple thought is enough for now."}</div>
-            </div>
-          )}
-
+          {renderCurrentChapter(card)}
           {renderStageTools(card, stage)}
-          {!((stage === "deciding" && !openDecision && Boolean(currentDecision)) || (stage === "action" && !openAction && currentAction?.status === "done")) && <button type="button" className="mt-3 inline-flex h-10 w-full items-center justify-center rounded-2xl border border-slate-200 bg-white text-xs font-semibold text-slate-600" onClick={() => openMoveCard(card)}>Move card</button>}
+          {!(stage === "deciding" && !openDecision && Boolean(currentDecision)) && <button type="button" className="mt-3 inline-flex h-10 w-full items-center justify-center rounded-2xl border border-slate-200 bg-white text-xs font-semibold text-slate-600" onClick={() => openMoveCard(card)}>Move card</button>}
           {renderComments(card, detail)}
         </div>}
       </article>
@@ -3055,7 +2910,8 @@ export function TaskBoard({
           </DialogHeader>
 
           <div className="shrink-0 border-b border-slate-200/70 bg-white/90 px-3 py-2 text-[11px] font-medium text-slate-500 lg:px-5 lg:text-xs">
-            Move cards by dragging &amp; dropping, or tap <span className="font-semibold text-slate-700">Move</span>.
+            <span className="lg:hidden">Tap <span className="font-semibold text-slate-700">Move</span> to change a card’s column.</span>
+            <span className="hidden lg:inline">Drag cards between columns, or use <span className="font-semibold text-slate-700">Move</span>.</span>
           </div>
 
 
@@ -3065,42 +2921,29 @@ export function TaskBoard({
           <div className="min-h-0 flex-1 overflow-y-auto" style={{ backgroundColor: background }}>
             {loading ? <div className="p-8 text-center text-sm font-semibold text-slate-500">Loading Action Board…</div> : (
               <>
-                <div ref={mobileBoardRef} className={`flex snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain px-[9vw] py-3 pb-20 scroll-smooth lg:hidden ${draggingCardId ? "snap-none" : ""}`} style={{ WebkitOverflowScrolling: "touch", touchAction: draggingCardId ? "none" : "pan-x pan-y" }}>
+                <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain px-[9vw] py-3 pb-20 scroll-smooth lg:hidden" style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-x pan-y" }}>
                   {boardColumn("ideas", "Ideas", Lightbulb, true)}
                   {boardColumn("deciding", "Decide", Gavel, true)}
-                  {boardColumn("action", "Action", Hand, true)}
+                  {boardColumn("action", "To-do", ClipboardList, true)}
                   {boardColumn("done", "Done", Check, true)}
                 </div>
                 <div className="hidden w-full grid-cols-4 gap-3 p-4 pb-16 lg:grid xl:gap-4 xl:p-5">
                   {boardColumn("ideas", "Ideas", Lightbulb)}
                   {boardColumn("deciding", "Decide", Gavel)}
-                  {boardColumn("action", "Action", Hand)}
+                  {boardColumn("action", "To-do", ClipboardList)}
                   {boardColumn("done", "Done", Check)}
                 </div>
               </>
             )}
           </div>
 
-          {draggingCardId && mobileDragPoint && (() => {
-            const dragCard = board.cards.find((card) => card.id === draggingCardId);
-            if (!dragCard) return null;
-            return (
-              <div
-                className="pointer-events-none fixed z-[90] w-[72vw] max-w-[19rem] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-slate-300 bg-white px-3 py-3 shadow-xl lg:hidden"
-                style={{ left: mobileDragPoint.x, top: mobileDragPoint.y }}
-                aria-hidden="true"
-              >
-                <div className="line-clamp-3 text-[14px] font-semibold leading-snug text-[#102A43]">{dragCard.title}</div>
-                <div className="mt-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Release to move</div>
-              </div>
-            );
-          })()}
+
 
           {activeCardId && (() => {
             const activeCard = board.cards.find((card) => card.id === activeCardId);
             if (!activeCard) return null;
             const activeStage = stageForCard(activeCard);
-            const stageLabel = activeStage === "deciding" ? "Decide" : activeStage === "action" ? "Action" : activeStage === "done" ? "Done" : "Idea";
+            const stageLabel = activeStage === "deciding" ? "Decide" : activeStage === "action" ? "To-do" : activeStage === "done" ? "Done" : "Idea";
             return (
               <div className="absolute inset-0 z-40 flex flex-col bg-white lg:hidden">
                 <div className="sticky top-0 z-10 flex shrink-0 items-center gap-2 border-b border-slate-200 bg-white/95 px-2 py-2.5 backdrop-blur">
@@ -3108,8 +2951,7 @@ export function TaskBoard({
                     <ArrowLeft className="h-5 w-5" />
                   </button>
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-[15px] font-semibold leading-tight text-[#102A43]">{activeCard.title}</div>
-                    <div className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">{stageLabel}</div>
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{stageLabel}</div>
                   </div>
                   <button type="button" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-slate-500 active:bg-slate-100" onClick={() => openEditCard(activeCard)} aria-label="Edit card">
                     <Pencil className="h-4 w-4" />
@@ -3135,7 +2977,7 @@ export function TaskBoard({
 
       <Dialog open={newTopicOpen} onOpenChange={(open) => { setNewTopicOpen(open); if (!open) resetNewTopic(); }}>
         <DialogContent className="fixed bottom-2 left-2 right-2 top-auto max-h-[88dvh] w-auto max-w-none translate-x-0 translate-y-0 overflow-y-auto rounded-[2rem] p-4 sm:bottom-auto sm:left-1/2 sm:right-auto sm:top-1/2 sm:w-full sm:max-w-md sm:-translate-x-1/2 sm:-translate-y-1/2 lg:max-w-xl lg:p-6" onOpenAutoFocus={(event) => event.preventDefault()}>
-          <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43] lg:text-xl">{newTopicKind ? (newTopicKind === "idea" ? "New idea" : newTopicKind === "decide" ? "New decision" : "New action") : "Create"}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43] lg:text-xl">{newTopicKind ? (newTopicKind === "idea" ? "New idea" : newTopicKind === "decide" ? "New decision" : "New to-do") : "Create"}</DialogTitle></DialogHeader>
           {!newTopicKind ? (
             <div className="grid gap-2.5 lg:gap-3.5">
               <button type="button" className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 text-left transition hover:bg-slate-50 lg:p-5" onClick={() => setNewTopicKind("idea")}>
@@ -3145,7 +2987,7 @@ export function TaskBoard({
                 <div className="flex items-start gap-3 lg:gap-4"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-amber-700 ring-1 ring-amber-100 lg:h-12 lg:w-12 lg:rounded-2xl"><Gavel className="h-5 w-5 lg:h-6 lg:w-6" /></div><div><div className="text-sm font-black text-[#102A43] lg:text-base">Decide</div><div className="mt-0.5 text-[11px] font-semibold leading-relaxed text-slate-500 lg:text-sm">Ask people to choose, schedule or agree on something.</div><div className="mt-1 text-[10px] font-bold text-slate-400 lg:text-xs">Example: Which players become members?</div></div></div>
               </button>
               <button type="button" className="rounded-2xl border border-sky-100 bg-sky-50/60 p-4 text-left transition hover:bg-sky-50 lg:p-5" onClick={() => setNewTopicKind("action")}>
-                <div className="flex items-start gap-3 lg:gap-4"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-sky-800 ring-1 ring-sky-100 lg:h-12 lg:w-12 lg:rounded-2xl"><Hand className="h-5 w-5 lg:h-6 lg:w-6" /></div><div><div className="text-sm font-black text-[#102A43] lg:text-base">Action</div><div className="mt-0.5 text-[11px] font-semibold leading-relaxed text-slate-500 lg:text-sm">Something important needs to get done.</div><div className="mt-1 text-[10px] font-bold text-slate-400 lg:text-xs">Example: Contact the new members</div></div></div>
+                <div className="flex items-start gap-3 lg:gap-4"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-sky-800 ring-1 ring-sky-100 lg:h-12 lg:w-12 lg:rounded-2xl"><Hand className="h-5 w-5 lg:h-6 lg:w-6" /></div><div><div className="text-sm font-black text-[#102A43] lg:text-base">To-do</div><div className="mt-0.5 text-[11px] font-semibold leading-relaxed text-slate-500 lg:text-sm">Something important needs to get done.</div><div className="mt-1 text-[10px] font-bold text-slate-400 lg:text-xs">Example: Contact the new members</div></div></div>
               </button>
             </div>
           ) : (
@@ -3160,7 +3002,7 @@ export function TaskBoard({
                 <div><Label htmlFor="topic-due"><CalendarDays className="mr-1 inline h-3.5 w-3.5" />Due</Label><Input id="topic-due" type="date" value={newDueDate} onChange={(event) => setNewDueDate(event.target.value)} /></div>
               </div>
               {renderPeoplePicker(newPeopleKeys, setNewPeopleKeys)}
-              <Button type="button" className="h-11 rounded-2xl font-black text-white lg:h-12 lg:text-base" style={{ backgroundColor: accent }} disabled={!newTitle.trim() || saving} onClick={() => void createTopic()}>{saving ? "Saving…" : newTopicKind === "idea" ? "Save idea" : newTopicKind === "decide" ? "Continue to decision" : "Create action"}</Button>
+              <Button type="button" className="h-11 rounded-2xl font-black text-white lg:h-12 lg:text-base" style={{ backgroundColor: accent }} disabled={!newTitle.trim() || saving} onClick={() => void createTopic()}>{saving ? "Saving…" : newTopicKind === "idea" ? "Save idea" : newTopicKind === "decide" ? "Continue to decision" : "Create to-do"}</Button>
             </div>
           )}
         </DialogContent>
@@ -3243,10 +3085,16 @@ export function TaskBoard({
                               </div>
                               <div className="mt-2 flex flex-wrap gap-2">
                                 {group.times.map((time, timeIndex) => <div key={`${group.id}-${timeIndex}`} className="flex items-center gap-1">
-                                  <select className="h-10 rounded-xl border border-slate-200 bg-white px-2 text-sm font-medium text-[#102A43]" value={time} onChange={(event) => updateScheduleDate(group.id, { times: group.times.map((item, index) => index === timeIndex ? event.target.value : item) })}>
-                                    <option value="">Time</option>
-                                    {TIME_CHOICES.map((value) => <option key={value} value={value}>{value}</option>)}
-                                  </select>
+                                  <Input
+                                    value={time}
+                                    onChange={(event) => updateScheduleDate(group.id, { times: group.times.map((item, index) => index === timeIndex ? event.target.value : item) })}
+                                    onBlur={(event) => { const normalized = normalizeTypedTime(event.target.value); if (normalized) updateScheduleDate(group.id, { times: group.times.map((item, index) => index === timeIndex ? normalized : item) }); }}
+                                    inputMode="numeric"
+                                    maxLength={5}
+                                    placeholder="19:30"
+                                    aria-label="Preferred time"
+                                    className="h-10 w-[5.75rem] rounded-xl border-slate-200 bg-white px-2 text-center text-sm font-medium text-[#102A43]"
+                                  />
                                   <button type="button" className="rounded-lg p-2 text-slate-400" onClick={() => updateScheduleDate(group.id, { times: group.times.filter((_, index) => index !== timeIndex) })} disabled={group.times.length <= 1} aria-label="Remove time"><Trash2 className="h-3.5 w-3.5" /></button>
                                 </div>)}
                                 <button type="button" className="rounded-xl bg-slate-100 px-3 py-2 text-[11px] font-medium text-slate-600" onClick={() => updateScheduleDate(group.id, { times: [...group.times, ""] })}>+ Time</button>
@@ -3432,7 +3280,7 @@ export function TaskBoard({
             {([
               ["ideas", "Ideas", Lightbulb],
               ["deciding", "Decide", Gavel],
-              ["action", "Action", Hand],
+              ["action", "To-do", ClipboardList],
               ["done", "Done", Check],
             ] as Array<[TopicStage, string, React.ComponentType<{ className?: string }>]>).map(([stage, label, Icon]) => {
               const card = board.cards.find((item) => item.id === moveCardId);
@@ -3445,11 +3293,11 @@ export function TaskBoard({
 
       <Dialog open={Boolean(actionCardId)} onOpenChange={(open) => { if (!open) setActionCardId(null); }}>
         <DialogContent className="fixed bottom-2 left-2 right-2 top-auto w-auto max-w-none translate-x-0 translate-y-0 rounded-[2rem] p-4 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-md sm:-translate-x-1/2" onOpenAutoFocus={(event) => event.preventDefault()}>
-          <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43]">Add action</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle className="text-left text-base font-semibold text-[#102A43]">To-do details</DialogTitle></DialogHeader>
           <div className="grid gap-3">
             <div><Label htmlFor="action-text">What needs to happen next?</Label><Textarea id="action-text" value={actionText} onChange={(event) => setActionText(event.target.value)} rows={2} maxLength={220} /></div>
             {renderPeoplePicker(actionPeopleKeys, setActionPeopleKeys, "Who handles this?")}
-            <Button type="button" className="h-11 rounded-2xl bg-sky-700 font-black text-white hover:bg-sky-800" disabled={!actionText.trim() || saving} onClick={() => void addAction()}>{saving ? "Saving…" : "Add action"}</Button>
+            <Button type="button" className="h-11 rounded-2xl bg-sky-700 font-black text-white hover:bg-sky-800" disabled={!actionText.trim() || saving} onClick={() => void addAction()}>{saving ? "Saving…" : "Save details"}</Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -3525,7 +3373,7 @@ export function TaskBoard({
             <div className="rounded-2xl bg-slate-50 px-3 py-3 ring-1 ring-slate-100">
               <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">{notifyTarget.label}</div>
               <div className="mt-1 whitespace-normal break-words text-sm font-black leading-snug text-[#102A43] lg:text-base">{notifyTarget.text}</div>
-              <div className="mt-1 text-[10px] font-semibold text-slate-500">One organizer email for this step. A future Decision or Action gets a new Bell.</div>
+              <div className="mt-1 text-[10px] font-semibold text-slate-500">One organizer email for this step. A future Decision or To-do step gets a new Bell.</div>
             </div>
 
             <div>
@@ -3569,15 +3417,21 @@ export function TaskBoard({
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="fixed inset-x-2 bottom-2 top-auto w-auto max-w-none translate-x-0 translate-y-0 rounded-[2rem] p-4 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-md sm:-translate-x-1/2" onOpenAutoFocus={(event) => event.preventDefault()}>
-          <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43]">Edit topic</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle className="text-left text-base font-semibold text-[#102A43]">{editSection === "note" ? "Note" : editSection === "assignees" ? "Assignees" : editSection === "due" ? "Due date" : "Edit card"}</DialogTitle></DialogHeader>
           <div className="grid gap-3">
-            <div><Label htmlFor="edit-title">Topic</Label><Textarea id="edit-title" value={editTitle} onChange={(event) => setEditTitle(event.target.value)} rows={2} maxLength={220} /></div>
-            <div className="grid grid-cols-2 gap-2">
+            {editSection === "all" && <div><Label htmlFor="edit-title">Title</Label><Textarea id="edit-title" value={editTitle} onChange={(event) => setEditTitle(event.target.value)} rows={2} maxLength={220} /></div>}
+            {(editSection === "all" || editSection === "note") && <div><Label htmlFor="edit-note">Note <span className="font-normal text-slate-400">optional</span></Label><Textarea id="edit-note" value={editNote} onChange={(event) => setEditNote(event.target.value)} rows={4} maxLength={1200} placeholder="Useful context, details or a short update." /></div>}
+            {editSection === "all" && <div className="grid grid-cols-2 gap-2">
               <div><Label htmlFor="edit-tag">Tag</Label><select id="edit-tag" className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={editCategory} onChange={(event) => setEditCategory(event.target.value)}><option value="">None</option>{TAGS.map((item) => <option key={item}>{item}</option>)}</select></div>
               <div><Label htmlFor="edit-due">Due</Label><Input id="edit-due" type="date" value={editDueDate} onChange={(event) => setEditDueDate(event.target.value)} /></div>
+            </div>}
+            {editSection === "due" && <div><Label htmlFor="edit-due-only">Due date <span className="font-normal text-slate-400">optional</span></Label><Input id="edit-due-only" type="date" value={editDueDate} onChange={(event) => setEditDueDate(event.target.value)} /></div>}
+            {(editSection === "all" || editSection === "assignees") && renderPeoplePicker(editPeopleKeys, setEditPeopleKeys, "Assignees")}
+            <div className="flex gap-2">
+              {editSection === "all" && <Button type="button" variant="outline" className="h-11 rounded-2xl text-red-700" onClick={() => void removeCard()}><Trash2 className="mr-1 h-4 w-4" />Delete</Button>}
+              {editSection !== "all" && <Button type="button" variant="outline" className="h-11 rounded-2xl" onClick={() => setEditOpen(false)}>Cancel</Button>}
+              <Button type="button" className="h-11 flex-1 rounded-2xl font-semibold text-white" style={{ backgroundColor: accent }} disabled={!editTitle.trim() || saving} onClick={() => void saveEditedCard()}>{saving ? "Saving…" : "Save"}</Button>
             </div>
-            {renderPeoplePicker(editPeopleKeys, setEditPeopleKeys)}
-            <div className="flex gap-2"><Button type="button" variant="outline" className="h-11 rounded-2xl text-red-700" onClick={() => void removeCard()}><Trash2 className="mr-1 h-4 w-4" />Delete</Button><Button type="button" className="h-11 flex-1 rounded-2xl font-black text-white" style={{ backgroundColor: accent }} disabled={!editTitle.trim() || saving} onClick={() => void saveEditedCard()}>{saving ? "Saving…" : "Save"}</Button></div>
           </div>
         </DialogContent>
       </Dialog>

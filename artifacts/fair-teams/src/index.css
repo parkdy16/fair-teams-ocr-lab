@@ -476,9 +476,10 @@
 
 .stripes-splash-final {
   opacity: 0;
-  filter: blur(10px);
-  transform: scale(.975);
-  animation: stripes-splash-logo-in 820ms cubic-bezier(.2,.8,.2,1) 120ms forwards;
+  filter: blur(3.5px);
+  transform: translateZ(0) scale(.985);
+  will-change: opacity, transform, filter;
+  animation: stripes-splash-logo-in 720ms cubic-bezier(.2,.8,.2,1) 120ms forwards;
 }
 
 .stripes-splash-copy {
@@ -489,10 +490,8 @@
 }
 
 @keyframes stripes-splash-logo-in {
-  0%   { opacity: 0; filter: blur(10px); transform: scale(.975); }
-  35%  { opacity: .72; filter: blur(5px); transform: scale(.985); }
-  72%  { opacity: 1; filter: blur(1.2px); transform: scale(1); }
-  100% { opacity: 1; filter: blur(0); transform: scale(1); }
+  from { opacity: .18; filter: blur(3.5px); transform: translateZ(0) scale(.985); }
+  to   { opacity: 1; filter: blur(0); transform: translateZ(0) scale(1); }
 }
 
 @keyframes stripes-splash-copy-in {

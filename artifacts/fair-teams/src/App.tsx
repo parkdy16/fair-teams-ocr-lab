@@ -418,6 +418,7 @@ function App() {
   }, [showSplash]);
 
   const [activeTab, setActiveTab] = useState<AppTab>("today");
+  const [sessionTeamCount, setSessionTeamCount] = useState(2);
   const [tutorialStep, setTutorialStep] = useState<string | null>(null);
   const [tutorialPlayerId, setTutorialPlayerId] = useState<string | null>(null);
   const [onboardingReady, setOnboardingReady] = useState(false);
@@ -3844,7 +3845,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
           </div>
         )}
 
-        <div className={`flex-1 overflow-y-auto p-4 md:p-5 lg:px-7 lg:py-6 ${shouldShowTodayStartHeader ? "pb-6 md:pb-6" : "pb-20 md:pb-20 lg:pb-6"}`} style={{ WebkitOverflowScrolling: "touch" }}>
+        <div className={`flex-1 overflow-y-auto p-4 md:p-5 lg:px-7 lg:py-6 ${shouldShowTodayStartHeader ? "pb-6 md:pb-6" : activeTab === "today" && !tutorialActive ? "pb-36 md:pb-36 lg:pb-6" : "pb-20 md:pb-20 lg:pb-6"}`} style={{ WebkitOverflowScrolling: "touch" }}>
           <div className={`mx-auto flex min-h-[calc(100dvh-116px)] w-full flex-col ${shouldShowTodayStartHeader ? "lg:max-w-6xl lg:justify-center" : activeTab === "players" ? "lg:max-w-5xl" : activeTab === "today" ? "lg:max-w-6xl" : activeTab === "teams" ? "lg:max-w-none" : "lg:mx-0 lg:max-w-none"}`}>
             <TabsContent
               value="players"
@@ -3988,6 +3989,34 @@ They will no longer be able to open or edit this shared roster unless it is shar
 
         {!shouldShowTodayStartHeader && (
           <div className="fixed inset-x-0 bottom-0 z-40 mx-auto w-full max-w-md animate-in fade-in-0 slide-in-from-bottom-2 duration-200 border-t border-slate-200 bg-white/95 px-4 pb-[max(0.65rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-4px_14px_rgba(15,23,42,0.035)] backdrop-blur md:max-w-3xl lg:hidden">
+            {activeTab === "today" && !tutorialActive && (
+              <div className="mx-auto mb-2 flex w-full max-w-md items-stretch gap-2">
+                <label className="relative block h-12 w-[68px] shrink-0" title="Number of teams">
+                  <span className="pointer-events-none absolute left-0 right-0 top-1 text-center text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">Teams</span>
+                  <select
+                    aria-label="Number of teams"
+                    value={sessionTeamCount}
+                    onChange={(event) => setSessionTeamCount(Number(event.target.value))}
+                    className="h-12 w-full rounded-xl border border-slate-200 bg-white px-2 pb-0.5 pt-3 text-center text-[19px] font-black leading-none text-[#102A43] shadow-sm outline-none transition active:scale-[0.98] focus:border-slate-300 focus:ring-2 focus:ring-slate-200"
+                    data-testid="session-team-count"
+                  >
+                    {[2, 3, 4, 5, 6].map((count) => (
+                      <option key={count} value={count}>{count}</option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => prepareTeamsFromAi(sessionTeamCount, { autoGenerate: true })}
+                  disabled={players.filter((player) => player.attending).length < 2}
+                  className="flex h-12 min-w-0 flex-1 items-center justify-center rounded-xl bg-[#102A43] px-4 text-[14px] font-black text-white shadow-sm transition active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+                  title={players.filter((player) => player.attending).length < 2 ? "Select at least 2 players" : `Generate ${sessionTeamCount} teams`}
+                  data-testid="session-generate-teams"
+                >
+                  Generate teams
+                </button>
+              </div>
+            )}
             <TabsList className="mx-auto grid h-[50px] w-full max-w-md grid-cols-4 gap-1 rounded-2xl border border-slate-200/70 bg-white p-1.5 shadow-sm">
               <TabsTrigger
                 value="players"

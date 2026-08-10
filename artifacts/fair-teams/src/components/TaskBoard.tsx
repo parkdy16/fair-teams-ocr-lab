@@ -559,7 +559,7 @@ function decisionHistoryMeta(decision: TaskBoardVote) {
 function EmptyActionBoard({ onCreate }: { onCreate: () => void }) {
   return (
     <div className="mx-auto flex max-w-3xl flex-col items-center px-4 py-10 text-center">
-      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-violet-600 shadow-sm ring-1 ring-slate-200"><Gavel className="h-6 w-6" /></div>
+      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-amber-600 shadow-sm ring-1 ring-slate-200"><Gavel className="h-6 w-6" /></div>
       <h3 className="mt-4 text-lg font-black text-[#102A43]">Start with one line</h3>
       <p className="mt-1 max-w-md text-sm font-semibold leading-relaxed text-slate-500">Capture it now. Add decisions, actions and other structure only when the card needs them.</p>
       <Button type="button" className="mt-5 h-11 rounded-2xl px-4 font-black text-white" onClick={onCreate}><Plus className="mr-1.5 h-4 w-4" />Add a card</Button>
@@ -603,7 +603,8 @@ export function TaskBoard({
   const [error, setError] = useState("");
   const [currentVoterHash, setCurrentVoterHash] = useState("");
   const [quickAddTitle, setQuickAddTitle] = useState("");
-  const quickAddInputRef = useRef<HTMLInputElement>(null);
+  const [quickAddStage, setQuickAddStage] = useState<TopicStage | null>(null);
+  const quickAddInputRefs = useRef<Partial<Record<TopicStage, HTMLInputElement | null>>>({});
 
   const [newTopicOpen, setNewTopicOpen] = useState(false);
   const [newTopicKind, setNewTopicKind] = useState<NewTopicKind | null>(null);
@@ -1101,16 +1102,44 @@ export function TaskBoard({
     setter((current) => current.includes(key) ? current.filter((item) => item !== key) : [...current, key]);
   };
 
-  const createQuickTopic = async () => {
+  const currentVisibleMobileStage = (): TopicStage => {
+    if (!isMobileBoardViewport()) return "ideas";
+    const viewportCenter = window.innerWidth / 2;
+    let bestStage: TopicStage = "ideas";
+    let bestDistance = Number.POSITIVE_INFINITY;
+    (["ideas", "deciding", "action", "done"] as TopicStage[]).forEach((stage) => {
+      const element = mobileColumnRefs.current[stage];
+      if (!element) return;
+      const rect = element.getBoundingClientRect();
+      const distance = Math.abs((rect.left + rect.right) / 2 - viewportCenter);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestStage = stage;
+      }
+    });
+    return bestStage;
+  };
+
+  const focusQuickAdd = (requestedStage?: TopicStage) => {
+    let stage = requestedStage || currentVisibleMobileStage();
+    if (stage === "done") stage = "action";
+    setQuickAddStage(stage);
+    setMobileFilter(stage);
+    centerMobileStage(stage);
+    window.setTimeout(() => quickAddInputRefs.current[stage]?.focus(), 80);
+  };
+
+  const createQuickTopic = async (stage: TopicStage) => {
     const title = quickAddTitle.trim();
-    if (!title || saving) return;
-    const ideasColumn = columnByKind.get("ideas") || activeColumns[0];
-    if (!ideasColumn) return;
+    if (!title || saving || stage === "done") return;
+    const kind: TaskBoardColumnKind = stage === "deciding" ? "vote" : stage;
+    const column = columnByKind.get(kind);
+    if (!column) return;
     const now = Date.now();
     const card: TaskBoardCard = {
       id: id("topic"),
       title,
-      columnId: ideasColumn.id,
+      columnId: column.id,
       position: now,
       people: [],
       links: [],
@@ -1128,17 +1157,15 @@ export function TaskBoard({
     try {
       await persistCard(card);
       setQuickAddTitle("");
-      setMobileFilter("ideas");
-      window.setTimeout(() => quickAddInputRef.current?.focus(), 0);
+      setQuickAddStage(stage);
+      setMobileFilter(stage);
+      centerMobileStage(stage);
+      window.setTimeout(() => quickAddInputRefs.current[stage]?.focus(), 80);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Could not add card.");
     } finally {
       setSaving(false);
     }
-  };
-
-  const focusQuickAdd = () => {
-    window.setTimeout(() => quickAddInputRef.current?.focus(), 0);
   };
 
   const createTopic = async () => {
@@ -1827,7 +1854,7 @@ export function TaskBoard({
     if (!isCurrent) {
       return (
         <div key={entryKey} className="relative pl-8">
-          <div className={`absolute left-0 top-2.5 flex h-7 w-7 items-center justify-center rounded-full border bg-white ${open ? "border-violet-200 text-violet-600" : "border-slate-200 text-slate-400"}`}>
+          <div className={`absolute left-0 top-2.5 flex h-7 w-7 items-center justify-center rounded-full border bg-white ${open ? "border-amber-200 text-amber-600" : "border-slate-200 text-slate-400"}`}>
             {open ? <Gavel className="h-3.5 w-3.5" /> : <Check className="h-3.5 w-3.5" />}
           </div>
           <button type="button" className="w-full rounded-xl bg-white/80 px-3 py-2.5 text-left ring-1 ring-slate-200/80 transition hover:bg-white" onClick={() => toggleHistoryExpanded(entryKey)}>
@@ -1848,7 +1875,7 @@ export function TaskBoard({
             ) : open ? (
               <div className="flex flex-wrap items-center gap-2">
                 <span className="mr-auto text-[10px] font-bold text-slate-500">{totalVoters}{decision.eligibleCount ? ` of ${decision.eligibleCount}` : ""} responded</span>
-                {canVote ? <button type="button" className="rounded-xl bg-violet-600 px-3 py-2 text-xs font-semibold text-white" onClick={() => openVoteDialog(card, decision)}>{decision.kind === "schedule" ? "Availability" : "Vote"}</button> : <span className="text-[10px] font-medium text-slate-400">Not asking you</span>}
+                {canVote ? <button type="button" className="rounded-xl bg-amber-600 px-3 py-2 text-xs font-semibold text-white" onClick={() => openVoteDialog(card, decision)}>{decision.kind === "schedule" ? "Availability" : "Vote"}</button> : <span className="text-[10px] font-medium text-slate-400">Not asking you</span>}
                 <button type="button" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-500" onClick={() => void closeVote(card, decision)}>Close</button>
               </div>
             ) : results}
@@ -1865,10 +1892,10 @@ export function TaskBoard({
 
     return (
       <div key={entryKey} className="relative pl-8">
-        <div className={`absolute left-0 top-3 flex h-7 w-7 items-center justify-center rounded-full border-2 bg-white ${open ? "border-violet-500 text-violet-700" : "border-emerald-400 text-emerald-700"}`}>
+        <div className={`absolute left-0 top-3 flex h-7 w-7 items-center justify-center rounded-full border-2 bg-white ${open ? "border-amber-500 text-amber-700" : "border-amber-400 text-amber-700"}`}>
           {open ? <Gavel className="h-3.5 w-3.5" /> : <Check className="h-3.5 w-3.5" />}
         </div>
-        <div className={`rounded-2xl border p-3 ${open ? "border-violet-200 bg-violet-50/65" : "border-emerald-100 bg-white"}`}>
+        <div className={`rounded-2xl border p-3 ${open ? "border-amber-200 bg-amber-50/65" : "border-amber-100 bg-amber-50/30"}`}>
           <div className="flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wide text-slate-400 lg:text-[10px]"><span>{currentLabel}</span>{decision.notification?.status === "sent" && <span className="inline-flex items-center gap-0.5 text-emerald-600" title={notificationSummary(decision.notification)}><Bell className="h-2.5 w-2.5 fill-emerald-100" /><Check className="h-2.5 w-2.5" /></span>}</div>
           <div className="mt-1 whitespace-normal break-words text-sm font-semibold leading-relaxed text-[#102A43] lg:text-base">{heading}</div>
           {decision.hostName && <div className="mt-1 text-[10px] font-bold text-slate-500">Host: <span className="font-semibold text-slate-700">{decision.hostName}</span></div>}
@@ -1879,7 +1906,7 @@ export function TaskBoard({
           ) : open ? (
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <span className="mr-auto text-[10px] font-bold text-slate-500">{totalVoters}{decision.eligibleCount ? ` of ${decision.eligibleCount}` : ""} responded</span>
-              {canVote ? <button type="button" className="rounded-xl bg-violet-600 px-3 py-2 text-xs font-semibold text-white" onClick={() => openVoteDialog(card, decision)}>{decision.kind === "schedule" ? "Availability" : "Vote"}</button> : <span className="text-[10px] font-medium text-slate-400">Not asking you</span>}
+              {canVote ? <button type="button" className="rounded-xl bg-amber-600 px-3 py-2 text-xs font-semibold text-white" onClick={() => openVoteDialog(card, decision)}>{decision.kind === "schedule" ? "Availability" : "Vote"}</button> : <span className="text-[10px] font-medium text-slate-400">Not asking you</span>}
               <button type="button" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-500" onClick={() => void closeVote(card, decision)}>Close</button>
             </div>
           ) : <div className="mt-3">{results}</div>}
@@ -1911,7 +1938,7 @@ export function TaskBoard({
             <div className="flex items-center gap-1 text-[9px] font-black uppercase tracking-wide text-slate-400 lg:text-[10px]"><span>Action · {open ? waitingOnDecision ? "waiting on decision" : "open" : "done"}</span>{action.notification?.status === "sent" && <span className="inline-flex items-center gap-0.5 text-emerald-600" title={notificationSummary(action.notification)}><Bell className="h-2.5 w-2.5 fill-emerald-100" /><Check className="h-2.5 w-2.5" /></span>}</div>
             <div className="mt-0.5 whitespace-normal break-words text-[12px] font-black leading-snug text-[#102A43] lg:text-[14px]">{action.text}</div>
             {assignees.length > 0 && <div className="mt-1 text-[9px] font-bold text-slate-500"><Users className="mr-1 inline h-3 w-3" />{personSummary(assignees)}</div>}
-            {!open && <div className="mt-1 text-[9px] font-bold text-emerald-700">Completed{action.completedByName ? ` by ${action.completedByName}` : ""}</div>}
+            {!open && <div className="mt-1 text-[9px] font-bold text-sky-700">Completed{action.completedByName ? ` by ${action.completedByName}` : ""}</div>}
           </div>
         </div>
       );
@@ -1919,10 +1946,10 @@ export function TaskBoard({
 
     return (
       <div key={entryKey} className="relative pl-8">
-        <div className={`absolute left-0 top-3 flex h-7 w-7 items-center justify-center rounded-full border-2 bg-white ${open ? "border-sky-500 text-sky-700" : "border-emerald-400 text-emerald-700"}`}>
+        <div className={`absolute left-0 top-3 flex h-7 w-7 items-center justify-center rounded-full border-2 bg-white ${open ? "border-sky-500 text-sky-700" : "border-sky-400 text-sky-700"}`}>
           {open ? <Hand className="h-3.5 w-3.5" /> : <Check className="h-3.5 w-3.5" />}
         </div>
-        <div className={`rounded-2xl border p-3 ${open ? "border-sky-200 bg-sky-50/65" : "border-emerald-100 bg-white"}`}>
+        <div className={`rounded-2xl border p-3 ${open ? "border-sky-200 bg-sky-50/65" : "border-sky-100 bg-sky-50/30"}`}>
           <div className="flex items-center gap-1 text-[9px] font-black uppercase tracking-wide text-slate-400 lg:text-[10px]"><span>{open ? resumed ? "Current action · resumed" : "Current action" : "Action complete"}</span>{action.notification?.status === "sent" && <span className="inline-flex items-center gap-0.5 text-emerald-600" title={notificationSummary(action.notification)}><Bell className="h-2.5 w-2.5 fill-emerald-100" /><Check className="h-2.5 w-2.5" /></span>}</div>
           <div className="mt-1 whitespace-normal break-words text-sm font-black leading-snug text-[#102A43] lg:text-base">{action.text}</div>
           {assignees.length > 0 && <div className="mt-1 text-[10px] font-semibold text-sky-800"><Users className="mr-1 inline h-3 w-3" />{personSummary(assignees)}</div>}
@@ -1932,7 +1959,7 @@ export function TaskBoard({
               {mine && assignees.length > 1 && <button type="button" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-500" onClick={() => void releaseAction(card, action)}><RotateCcw className="mr-1 inline h-3.5 w-3.5" />Leave task</button>}
               {!assignees.length && <span className="text-[10px] font-medium text-slate-400">Unassigned is okay.</span>}
             </div>
-          ) : <div className="mt-2 text-xs font-semibold text-emerald-700"><CheckCircle2 className="mr-1 inline h-3.5 w-3.5" />Completed{action.completedByName ? ` by ${action.completedByName}` : ""}</div>}
+          ) : <div className="mt-2 text-xs font-semibold text-sky-700"><CheckCircle2 className="mr-1 inline h-3.5 w-3.5" />Completed{action.completedByName ? ` by ${action.completedByName}` : ""}</div>}
         </div>
       </div>
     );
@@ -2003,7 +2030,7 @@ export function TaskBoard({
     const cardNotificationSent = cardNotification?.status === "sent";
     const cardNotificationQueued = cardNotification?.status === "queued";
     const stageStyle = stage === "deciding"
-      ? "border-violet-200"
+      ? "border-amber-200"
       : stage === "action"
         ? "border-sky-200"
         : stage === "done"
@@ -2033,7 +2060,7 @@ export function TaskBoard({
                 {card.dueDate && <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-black lg:px-2.5 lg:py-1 lg:text-[10px] ${isOverdue(card.dueDate) && stage !== "done" ? "bg-red-50 text-red-700" : "bg-slate-100 text-slate-600"}`}><CalendarDays className="h-3 w-3" />{dueText(card.dueDate)}</span>}
               </div>
               <h3 className="mt-2 whitespace-normal break-words text-[14px] font-semibold leading-snug text-[#102A43] lg:text-[17px] lg:leading-snug">{card.title}</h3>
-              {need && !expanded && <div className={`mt-2 whitespace-normal break-words text-[11px] font-semibold leading-snug lg:text-[13px] ${stage === "deciding" ? "text-violet-700" : stage === "action" ? "text-sky-800" : stage === "done" ? "text-slate-500" : "text-slate-600"}`}>
+              {need && !expanded && <div className={`mt-2 whitespace-normal break-words text-[11px] font-semibold leading-snug lg:text-[13px] ${stage === "deciding" ? "text-amber-800" : stage === "action" ? "text-sky-800" : stage === "done" ? "text-slate-500" : "text-slate-600"}`}>
                 {stage === "deciding" && <Gavel className="mr-1 inline h-3.5 w-3.5" />}
                 {stage === "action" && <Hand className="mr-1 inline h-3.5 w-3.5" />}
                 {stage === "done" && <Check className="mr-1 inline h-3.5 w-3.5" />}
@@ -2104,29 +2131,58 @@ export function TaskBoard({
     );
   };
 
-  const boardColumn = (stage: TopicStage, title: string, Icon: React.ComponentType<{ className?: string }>, mobile = false) => (
-    <section
-      ref={mobile ? (element) => { mobileColumnRefs.current[stage] = element; } : undefined}
-      data-board-stage={stage}
-      onDragOver={(event) => { event.preventDefault(); setDragOverStage(stage); }}
-      onDragLeave={() => { if (dragOverStage === stage) setDragOverStage(null); }}
-      onDrop={(event) => {
-        event.preventDefault();
-        const cardId = event.dataTransfer.getData("text/plain") || draggingCardId;
-        const card = board.cards.find((item) => item.id === cardId);
-        setDraggingCardId(null);
-        setDragOverStage(null);
-        if (card && stageForCard(card) !== stage) void moveCardToStage(card, stage);
-      }}
-      className={`${mobile ? "w-[82vw] max-w-[22rem] shrink-0 snap-center" : "min-w-0"} rounded-[1.35rem] border p-2.5 transition ${dragOverStage === stage ? "ring-2 ring-slate-300" : ""} ${stage === "deciding" ? "border-amber-200 bg-amber-50/35" : stage === "action" ? "border-sky-200 bg-sky-50/35" : stage === "done" ? "border-slate-200 bg-slate-100/50" : "border-slate-200 bg-white/55"}`}
-    >
-      <div className={`mb-2 flex items-center gap-1.5 px-1 text-xs font-semibold lg:text-[14px] ${stage === "deciding" ? "text-amber-800" : stage === "action" ? "text-sky-800" : stage === "done" ? "text-slate-500" : "text-slate-700"}`}><Icon className="h-4 w-4 lg:h-[18px] lg:w-[18px]" /><span>{title}</span><span className="ml-0.5 rounded-full bg-white/80 px-1.5 py-0.5 text-[9px] lg:px-2 lg:text-[10px] font-semibold text-slate-500 ring-1 ring-slate-200/70">{cardsByStage[stage].length}</span></div>
-      <div className="space-y-2">
-        {cardsByStage[stage].map((card) => renderCard(card, true))}
-        {cardsByStage[stage].length === 0 && <div className="rounded-2xl border border-dashed border-slate-200 bg-white/40 px-2 py-5 text-center text-[10px] font-medium text-slate-400 lg:text-xs">{stage === "ideas" ? "No ideas yet" : stage === "deciding" ? "Nothing to decide yet" : stage === "action" ? "No to-dos here" : "Nothing completed yet"}</div>}
-      </div>
-    </section>
-  );
+  const boardColumn = (stage: TopicStage, title: string, Icon: React.ComponentType<{ className?: string }>, mobile = false) => {
+    const canAdd = stage !== "done";
+    const addPlaceholder = stage === "ideas"
+      ? "Add an idea…"
+      : stage === "deciding"
+        ? "What needs a decision?"
+        : "What needs doing?";
+
+    return (
+      <section
+        ref={mobile ? (element) => { mobileColumnRefs.current[stage] = element; } : undefined}
+        data-board-stage={stage}
+        onDragOver={(event) => { event.preventDefault(); setDragOverStage(stage); }}
+        onDragLeave={() => { if (dragOverStage === stage) setDragOverStage(null); }}
+        onDrop={(event) => {
+          event.preventDefault();
+          const cardId = event.dataTransfer.getData("text/plain") || draggingCardId;
+          const card = board.cards.find((item) => item.id === cardId);
+          setDraggingCardId(null);
+          setDragOverStage(null);
+          if (card && stageForCard(card) !== stage) void moveCardToStage(card, stage);
+        }}
+        className={`${mobile ? "w-[82vw] max-w-[22rem] shrink-0 snap-center" : "min-w-0"} rounded-[1.35rem] border p-2.5 transition ${dragOverStage === stage ? "ring-2 ring-slate-300" : ""} ${stage === "deciding" ? "border-amber-200 bg-amber-50/35" : stage === "action" ? "border-sky-200 bg-sky-50/35" : stage === "done" ? "border-slate-200 bg-slate-100/50" : "border-slate-200 bg-white/55"}`}
+      >
+        <div className={`mb-2 flex items-center gap-1.5 px-1 text-xs font-semibold lg:text-[14px] ${stage === "deciding" ? "text-amber-800" : stage === "action" ? "text-sky-800" : stage === "done" ? "text-slate-500" : "text-slate-700"}`}><Icon className="h-4 w-4 lg:h-[18px] lg:w-[18px]" /><span>{title}</span><span className="ml-0.5 rounded-full bg-white/80 px-1.5 py-0.5 text-[9px] lg:px-2 lg:text-[10px] font-semibold text-slate-500 ring-1 ring-slate-200/70">{cardsByStage[stage].length}</span></div>
+        <div className="space-y-2">
+          {cardsByStage[stage].map((card) => renderCard(card, true))}
+          {cardsByStage[stage].length === 0 && <div className="rounded-2xl border border-dashed border-slate-200 bg-white/40 px-2 py-5 text-center text-[10px] font-medium text-slate-400 lg:text-xs">{stage === "ideas" ? "No ideas yet" : stage === "deciding" ? "Nothing to decide yet" : stage === "action" ? "No to-dos here" : "Nothing completed yet"}</div>}
+
+          {canAdd && (quickAddStage === stage ? (
+            <form className="rounded-2xl border border-slate-200 bg-white p-2 shadow-sm" onSubmit={(event) => { event.preventDefault(); void createQuickTopic(stage); }}>
+              <Input
+                ref={(element) => { quickAddInputRefs.current[stage] = element; }}
+                value={quickAddTitle}
+                onChange={(event) => setQuickAddTitle(event.target.value)}
+                maxLength={220}
+                placeholder={addPlaceholder}
+                aria-label={`Add card to ${title}`}
+                className="h-9 rounded-xl border-slate-200 bg-slate-50/70 px-2.5 text-sm font-medium text-[#102A43] shadow-none focus-visible:ring-blue-100"
+              />
+              <div className="mt-2 flex items-center gap-2">
+                <Button type="submit" className="h-8 rounded-xl px-3 text-xs font-semibold text-white" style={{ backgroundColor: accent }} disabled={!quickAddTitle.trim() || saving}>{saving ? "Adding…" : "Add"}</Button>
+                <button type="button" className="h-8 rounded-xl px-2 text-xs font-medium text-slate-400 hover:bg-slate-50 hover:text-slate-600" onClick={() => { setQuickAddStage(null); setQuickAddTitle(""); }}>Cancel</button>
+              </div>
+            </form>
+          ) : (
+            <button type="button" className="flex h-9 w-full items-center gap-1.5 rounded-xl px-2 text-left text-xs font-medium text-slate-500 transition hover:bg-white/80 hover:text-slate-700" onClick={() => focusQuickAdd(stage)}><Plus className="h-3.5 w-3.5" />Add card</button>
+          ))}
+        </div>
+      </section>
+    );
+  };
 
   const customBoardName = board.meta?.customName?.trim();
   const decisionSetupCard = board.cards.find((card) => card.id === decisionCardId);
@@ -2208,34 +2264,12 @@ export function TaskBoard({
             Move cards by dragging &amp; dropping, or tap <span className="font-semibold text-slate-700">Move</span>.
           </div>
 
-          <div className="shrink-0 border-b border-slate-200/70 bg-white/95 px-3 py-2.5 lg:px-5 lg:py-3">
-            <form className="mx-auto flex w-full max-w-3xl items-center gap-2" onSubmit={(event) => { event.preventDefault(); void createQuickTopic(); }}>
-              <Input
-                ref={quickAddInputRef}
-                value={quickAddTitle}
-                onChange={(event) => setQuickAddTitle(event.target.value)}
-                maxLength={220}
-                placeholder="Add something…"
-                aria-label="Add a card"
-                className="h-10 rounded-2xl border-slate-200 bg-slate-50/80 px-3 text-sm font-semibold text-[#102A43] shadow-none focus-visible:ring-blue-100 lg:h-11 lg:text-[15px]"
-              />
-              <Button
-                type="submit"
-                className="h-10 shrink-0 rounded-2xl px-4 text-xs font-black text-white lg:h-11 lg:px-5 lg:text-sm"
-                style={{ backgroundColor: accent }}
-                disabled={!quickAddTitle.trim() || saving}
-              >
-                {saving ? "Adding…" : "Add"}
-              </Button>
-            </form>
-          </div>
+
 
           {error && <div className="mx-3 mt-2 rounded-xl bg-red-50 px-3 py-2 text-[11px] font-bold text-red-700 lg:mx-5">{error}</div>}
 
           <div className="min-h-0 flex-1 overflow-y-auto" style={{ backgroundColor: background }}>
-            {loading ? <div className="p-8 text-center text-sm font-black text-slate-500">Loading Action Board…</div> : board.cards.length === 0 ? (
-              <EmptyActionBoard onCreate={focusQuickAdd} />
-            ) : (
+            {loading ? <div className="p-8 text-center text-sm font-semibold text-slate-500">Loading Action Board…</div> : (
               <>
                 <div ref={mobileBoardRef} className={`flex snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain px-[9vw] py-3 pb-20 scroll-smooth lg:hidden ${draggingCardId ? "snap-none" : ""}`} style={{ WebkitOverflowScrolling: "touch", touchAction: draggingCardId ? "none" : "pan-x pan-y" }}>
                   {boardColumn("ideas", "Ideas", Lightbulb, true)}
@@ -2304,8 +2338,8 @@ export function TaskBoard({
               <button type="button" className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 text-left transition hover:bg-slate-50 lg:p-5" onClick={() => setNewTopicKind("idea")}>
                 <div className="flex items-start gap-3 lg:gap-4"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-700 lg:h-12 lg:w-12 lg:rounded-2xl"><Lightbulb className="h-5 w-5 lg:h-6 lg:w-6" /></div><div><div className="text-sm font-black text-[#102A43] lg:text-base">Idea</div><div className="mt-0.5 text-[11px] font-semibold leading-relaxed text-slate-500 lg:text-sm">Save something worth thinking about later.</div><div className="mt-1 text-[10px] font-bold text-slate-400 lg:text-xs">Example: Club jerseys</div></div></div>
               </button>
-              <button type="button" className="rounded-2xl border border-violet-100 bg-violet-50/60 p-4 text-left transition hover:bg-violet-50 lg:p-5" onClick={() => setNewTopicKind("decide")}>
-                <div className="flex items-start gap-3 lg:gap-4"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-violet-700 ring-1 ring-violet-100 lg:h-12 lg:w-12 lg:rounded-2xl"><Gavel className="h-5 w-5 lg:h-6 lg:w-6" /></div><div><div className="text-sm font-black text-[#102A43] lg:text-base">Decide</div><div className="mt-0.5 text-[11px] font-semibold leading-relaxed text-slate-500 lg:text-sm">Ask people to choose, schedule or agree on something.</div><div className="mt-1 text-[10px] font-bold text-slate-400 lg:text-xs">Example: Which players become members?</div></div></div>
+              <button type="button" className="rounded-2xl border border-amber-100 bg-amber-50/60 p-4 text-left transition hover:bg-amber-50 lg:p-5" onClick={() => setNewTopicKind("decide")}>
+                <div className="flex items-start gap-3 lg:gap-4"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-amber-700 ring-1 ring-amber-100 lg:h-12 lg:w-12 lg:rounded-2xl"><Gavel className="h-5 w-5 lg:h-6 lg:w-6" /></div><div><div className="text-sm font-black text-[#102A43] lg:text-base">Decide</div><div className="mt-0.5 text-[11px] font-semibold leading-relaxed text-slate-500 lg:text-sm">Ask people to choose, schedule or agree on something.</div><div className="mt-1 text-[10px] font-bold text-slate-400 lg:text-xs">Example: Which players become members?</div></div></div>
               </button>
               <button type="button" className="rounded-2xl border border-sky-100 bg-sky-50/60 p-4 text-left transition hover:bg-sky-50 lg:p-5" onClick={() => setNewTopicKind("action")}>
                 <div className="flex items-start gap-3 lg:gap-4"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-sky-800 ring-1 ring-sky-100 lg:h-12 lg:w-12 lg:rounded-2xl"><Hand className="h-5 w-5 lg:h-6 lg:w-6" /></div><div><div className="text-sm font-black text-[#102A43] lg:text-base">Action</div><div className="mt-0.5 text-[11px] font-semibold leading-relaxed text-slate-500 lg:text-sm">Something important needs to get done.</div><div className="mt-1 text-[10px] font-bold text-slate-400 lg:text-xs">Example: Contact the new members</div></div></div>
@@ -2333,7 +2367,7 @@ export function TaskBoard({
           <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43] lg:text-xl">{decisionStep ? "Set up decision" : "What kind of decision?"}</DialogTitle></DialogHeader>
           {!decisionStep ? (
             <div className="grid grid-cols-2 gap-2">
-              <button type="button" className="rounded-2xl border border-violet-100 bg-violet-50/60 p-4 text-left lg:p-5" onClick={() => chooseDecisionType("vote")}><Vote className="h-5 w-5 text-violet-700" /><div className="mt-2 text-sm font-black text-[#102A43] lg:text-base">Vote</div><div className="mt-1 text-[11px] font-semibold text-slate-500 lg:text-sm">One or more questions</div></button>
+              <button type="button" className="rounded-2xl border border-amber-100 bg-amber-50/60 p-4 text-left lg:p-5" onClick={() => chooseDecisionType("vote")}><Vote className="h-5 w-5 text-amber-700" /><div className="mt-2 text-sm font-black text-[#102A43] lg:text-base">Vote</div><div className="mt-1 text-[11px] font-semibold text-slate-500 lg:text-sm">One or more questions</div></button>
               <button type="button" className="rounded-2xl border border-sky-100 bg-sky-50/60 p-4 text-left lg:p-5" onClick={() => chooseDecisionType("schedule")}><CalendarDays className="h-5 w-5 text-sky-700" /><div className="mt-2 text-sm font-black text-[#102A43] lg:text-base">Schedule</div><div className="mt-1 text-[11px] font-semibold text-slate-500 lg:text-sm">Find a time together</div></button>
               <button type="button" className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4 text-left lg:p-5" onClick={() => chooseDecisionType("players")}><Users className="h-5 w-5 text-emerald-700" /><div className="mt-2 text-sm font-black text-[#102A43] lg:text-base">Players</div><div className="mt-1 text-[11px] font-semibold text-slate-500 lg:text-sm">Choose from roster</div></button>
               <button type="button" className="rounded-2xl border border-amber-100 bg-amber-50/60 p-4 text-left lg:p-5" onClick={() => chooseDecisionType("equipment")}><ClipboardList className="h-5 w-5 text-amber-700" /><div className="mt-2 text-sm font-black text-[#102A43] lg:text-base">Equipment</div><div className="mt-1 text-[11px] font-semibold text-slate-500 lg:text-sm">Compare options</div></button>
@@ -2343,7 +2377,7 @@ export function TaskBoard({
               <button type="button" className="w-fit text-[11px] font-black text-slate-500" onClick={() => setDecisionStep(null)}>← Change type</button>
 
               {decisionStep === "vote" && <div className="flex rounded-2xl bg-slate-100 p-1">
-                <button type="button" className={`flex-1 rounded-xl px-3 py-2 text-xs font-semibold ${decisionMode === "vote" ? "bg-white text-violet-700 shadow-sm" : "text-slate-500"}`} onClick={() => setDecisionMode("vote")}><Vote className="mr-1 inline h-3.5 w-3.5" />Vote together</button>
+                <button type="button" className={`flex-1 rounded-xl px-3 py-2 text-xs font-semibold ${decisionMode === "vote" ? "bg-white text-amber-700 shadow-sm" : "text-slate-500"}`} onClick={() => setDecisionMode("vote")}><Vote className="mr-1 inline h-3.5 w-3.5" />Vote together</button>
                 <button type="button" className={`flex-1 rounded-xl px-3 py-2 text-xs font-semibold ${decisionMode === "recorded" ? "bg-white text-emerald-700 shadow-sm" : "text-slate-500"}`} onClick={() => setDecisionMode("recorded")}><Check className="mr-1 inline h-3.5 w-3.5" />Record decision</button>
               </div>}
 
@@ -2395,16 +2429,16 @@ export function TaskBoard({
                             {decisionQuestionsDraft.length > 1 && <button type="button" className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600" onClick={() => setDecisionQuestionsDraft((current) => current.filter((item) => item.id !== draft.id))} aria-label={`Remove question ${questionIndex + 1}`}><Trash2 className="h-3.5 w-3.5" /></button>}
                           </div>
                           <Textarea id={`decision-question-${draft.id}`} className="mt-1" value={draft.text} onChange={(event) => updateDraftQuestion(draft.id, { text: event.target.value })} rows={2} maxLength={220} placeholder="What should people answer?" />
-                          <div className="mt-2 flex rounded-2xl bg-violet-50 p-1">
-                            <button type="button" className={`flex-1 rounded-xl px-2 py-2 text-[10px] font-semibold ${draft.kind === "yes-no-abstain" ? "bg-white text-violet-700 shadow-sm" : "text-violet-500"}`} onClick={() => updateDraftQuestion(draft.id, { kind: "yes-no-abstain" })}>Yes / No</button>
-                            <button type="button" className={`flex-1 rounded-xl px-2 py-2 text-[10px] font-semibold ${draft.kind === "choose-one" ? "bg-white text-violet-700 shadow-sm" : "text-violet-500"}`} onClick={() => updateDraftQuestion(draft.id, { kind: "choose-one" })}>Choose one</button>
-                            <button type="button" className={`flex-1 rounded-xl px-2 py-2 text-[10px] font-semibold ${draft.kind === "multi-select" ? "bg-white text-violet-700 shadow-sm" : "text-violet-500"}`} onClick={() => updateDraftQuestion(draft.id, { kind: "multi-select" })}>Choose several</button>
+                          <div className="mt-2 flex rounded-2xl bg-amber-50 p-1">
+                            <button type="button" className={`flex-1 rounded-xl px-2 py-2 text-[10px] font-semibold ${draft.kind === "yes-no-abstain" ? "bg-white text-amber-700 shadow-sm" : "text-amber-500"}`} onClick={() => updateDraftQuestion(draft.id, { kind: "yes-no-abstain" })}>Yes / No</button>
+                            <button type="button" className={`flex-1 rounded-xl px-2 py-2 text-[10px] font-semibold ${draft.kind === "choose-one" ? "bg-white text-amber-700 shadow-sm" : "text-amber-500"}`} onClick={() => updateDraftQuestion(draft.id, { kind: "choose-one" })}>Choose one</button>
+                            <button type="button" className={`flex-1 rounded-xl px-2 py-2 text-[10px] font-semibold ${draft.kind === "multi-select" ? "bg-white text-amber-700 shadow-sm" : "text-amber-500"}`} onClick={() => updateDraftQuestion(draft.id, { kind: "multi-select" })}>Choose several</button>
                           </div>
                           {draft.kind !== "yes-no-abstain" && <div className="mt-2"><Label htmlFor={`decision-options-${draft.id}`}>Choices — one per line</Label><Textarea id={`decision-options-${draft.id}`} className="mt-1" value={draft.options} onChange={(event) => updateDraftQuestion(draft.id, { options: event.target.value })} rows={3} maxLength={700} placeholder="Mauerpark\nTempelhofer Feld" /></div>}
                           {draft.kind === "multi-select" && <div className="mt-2"><Label htmlFor={`decision-max-${draft.id}`}>Maximum choices</Label><Input id={`decision-max-${draft.id}`} type="number" min="1" max="16" value={draft.maxSelections} onChange={(event) => updateDraftQuestion(draft.id, { maxSelections: event.target.value })} inputMode="numeric" /></div>}
                         </div>)}
                       </div>
-                      <button type="button" className="w-fit rounded-xl bg-violet-50 px-3 py-2 text-[11px] font-semibold text-violet-700 ring-1 ring-violet-100" onClick={() => setDecisionQuestionsDraft((current) => [...current, newDraftQuestion("")])}>+ Add question</button>
+                      <button type="button" className="w-fit rounded-xl bg-amber-50 px-3 py-2 text-[11px] font-semibold text-amber-700 ring-1 ring-amber-100" onClick={() => setDecisionQuestionsDraft((current) => [...current, newDraftQuestion("")])}>+ Add question</button>
                       {renderPeoplePicker(decisionPeopleKeys, setDecisionPeopleKeys, "Who votes?")}
                     </>}
 
@@ -2431,7 +2465,7 @@ export function TaskBoard({
 
               <Button
                 type="button"
-                className={`h-11 rounded-2xl font-black text-white ${decisionMode === "recorded" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-violet-600 hover:bg-violet-700"}`}
+                className={`h-11 rounded-2xl font-black text-white ${decisionMode === "recorded" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-amber-600 hover:bg-amber-700"}`}
                 disabled={saving || !decisionSetupValid}
                 onClick={() => void addDecision()}
               >
@@ -2496,12 +2530,12 @@ export function TaskBoard({
                 {question.kind === "multi-select" && <div className="mt-1 text-[10px] font-bold text-slate-500">{votingDecision.kind === "schedule" ? "Choose every time that works for you." : `Choose up to ${question.maxSelections || question.options.length}.`}</div>}
                 <div className="mt-2 grid gap-2">{question.options.map((option) => {
                   const selected = selectedIds.includes(option.id);
-                  return <button key={option.id} type="button" className={`rounded-2xl border px-3 py-3 text-left text-sm font-medium ${selected ? "border-violet-500 bg-violet-50 text-violet-800" : "border-slate-200 bg-white text-[#102A43]"}`} onClick={() => toggleVoteOption(question, option.id)}>{selected && <Check className="mr-1 inline h-4 w-4" />}{option.label}</button>;
+                  return <button key={option.id} type="button" className={`rounded-2xl border px-3 py-3 text-left text-sm font-medium ${selected ? "border-amber-500 bg-amber-50 text-amber-800" : "border-slate-200 bg-white text-[#102A43]"}`} onClick={() => toggleVoteOption(question, option.id)}>{selected && <Check className="mr-1 inline h-4 w-4" />}{option.label}</button>;
                 })}</div>
               </div>;
             })}</div>
             <div className="text-[10px] font-semibold leading-snug text-slate-500">{votingDecision.kind === "schedule" ? "Your availability is visible to the organizers in this schedule." : "Anonymous. You can change your answer while it remains open."}</div>
-            <Button type="button" className="h-11 rounded-2xl bg-violet-600 font-semibold text-white" disabled={decisionQuestions(votingDecision).some((question) => !(selectedVoteAnswers[question.id] || []).length) || voteSubmitting} onClick={() => void submitVote()}>{voteSubmitting ? "Recording…" : votingDecision.ballots?.some((ballot) => ballot.voterHash === currentVoterHash) ? "Update" : "Submit"}</Button>
+            <Button type="button" className="h-11 rounded-2xl bg-amber-600 font-semibold text-white" disabled={decisionQuestions(votingDecision).some((question) => !(selectedVoteAnswers[question.id] || []).length) || voteSubmitting} onClick={() => void submitVote()}>{voteSubmitting ? "Recording…" : votingDecision.ballots?.some((ballot) => ballot.voterHash === currentVoterHash) ? "Update" : "Submit"}</Button>
           </div>}
         </DialogContent>
       </Dialog>
@@ -2544,7 +2578,7 @@ export function TaskBoard({
 
             <div>
               <Label>Delivery</Label>
-              <div className="mt-1.5 rounded-2xl border border-violet-200 bg-violet-50 px-3 py-3 text-violet-800">
+              <div className="mt-1.5 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-3 text-amber-800">
                 <Mail className="h-4 w-4" />
                 <div className="mt-1 text-xs font-black">Email <Check className="ml-1 inline h-3.5 w-3.5" /></div>
                 <div className="mt-0.5 text-[9px] font-semibold opacity-75">{notifyTarget.topicAlreadyNotified ? "Continues this topic’s email thread" : "Starts one email thread for this topic"}</div>

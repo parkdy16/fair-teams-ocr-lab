@@ -1944,7 +1944,7 @@ export function TaskBoard({
       activity = nowActivity("vote_started", currentActor.name, currentActor.email);
     }
 
-    const category = card.category || (decisionStep === "players" ? "Membership" : decisionStep === "equipment" ? "Equipment" : undefined);
+    const category = card.category || undefined;
     const next: TaskBoardCard = {
       ...card,
       title: decisionStep === "equipment" && decisionTitle.trim() ? decisionTitle.trim() : card.title,
@@ -2375,17 +2375,17 @@ export function TaskBoard({
   const renderVoterScope = () => (
     <div>
       <Label>Who votes?</Label>
-      <div className="mt-1.5 grid grid-cols-2 gap-2">
+      <div className="mt-1.5 grid w-full min-w-0 grid-cols-2 gap-2">
         <button
           type="button"
-          className={`rounded-xl border px-3 py-2 text-xs font-semibold ${decisionVoterMode === "all" ? "border-amber-300 bg-amber-50 text-amber-900" : "border-slate-200 bg-white text-slate-500"}`}
+          className={`min-w-0 whitespace-normal rounded-xl border px-2 py-2 text-xs font-semibold ${decisionVoterMode === "all" ? "border-amber-300 bg-amber-50 text-amber-900" : "border-slate-200 bg-white text-slate-500"}`}
           onClick={() => { setDecisionVoterMode("all"); setDecisionPeopleKeys([]); }}
         >
           All organizers
         </button>
         <button
           type="button"
-          className={`rounded-xl border px-3 py-2 text-xs font-semibold ${decisionVoterMode === "selected" ? "border-amber-300 bg-amber-50 text-amber-900" : "border-slate-200 bg-white text-slate-500"}`}
+          className={`min-w-0 whitespace-normal rounded-xl border px-2 py-2 text-xs font-semibold ${decisionVoterMode === "selected" ? "border-amber-300 bg-amber-50 text-amber-900" : "border-slate-200 bg-white text-slate-500"}`}
           onClick={() => setDecisionVoterMode("selected")}
         >
           Choose
@@ -2469,14 +2469,8 @@ export function TaskBoard({
       );
       const calendarUrl = scheduleState === "finalized" ? googleCalendarUrl(card, decision) : "";
       return (
-        <div key={entryKey} className="relative pl-8">
-          <div className={`absolute left-0 top-3 flex h-7 w-7 items-center justify-center rounded-full border-2 bg-white ${scheduleState === "finalized" ? "border-amber-400 text-amber-700" : "border-amber-500 text-amber-700"}`}>
-            {scheduleState === "finalized" ? <Check className="h-3.5 w-3.5" /> : <CalendarDays className="h-3.5 w-3.5" />}
-          </div>
-          <div className="rounded-2xl border border-amber-200 bg-amber-50/55 p-3">
-            <div className="text-[9px] font-semibold uppercase tracking-wide text-amber-700">Schedule</div>
-            <div className="mt-1 whitespace-normal break-words text-sm font-semibold leading-relaxed text-[#102A43] lg:text-base">{decision.title?.trim() || card.title}</div>
-
+        <div key={entryKey} className="mt-1">
+          <div className="rounded-2xl border border-amber-100 bg-amber-50/35 p-3">
             {scheduleState === "waiting-host" && <>
               <div className="mt-3 rounded-xl bg-white px-3 py-3 ring-1 ring-amber-100">
                 <div className="text-xs font-semibold text-[#102A43]">Waiting for host</div>
@@ -2570,33 +2564,17 @@ export function TaskBoard({
       );
     }
 
-    const currentLabel = decision.mode === "recorded"
-      ? "Decision recorded"
-      : open
-        ? decision.decisionType === "schedule" || decision.kind === "schedule" ? "Current schedule" : "Current decision"
-        : "Decision complete";
-
     return (
-      <div key={entryKey} className="relative pl-8">
-        <div className={`absolute left-0 top-3 flex h-7 w-7 items-center justify-center rounded-full border-2 bg-white ${open ? "border-amber-500 text-amber-700" : "border-amber-400 text-amber-700"}`}>
-          {open ? <Gavel className="h-3.5 w-3.5" /> : <Check className="h-3.5 w-3.5" />}
-        </div>
-        <div className={`rounded-2xl border p-3 ${open ? "border-amber-200 bg-amber-50/65" : "border-amber-100 bg-amber-50/30"}`}>
-          <div className="flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wide text-slate-400 lg:text-[10px]"><span>{currentLabel}</span>{decision.notification?.status === "sent" && <span className="inline-flex items-center gap-0.5 text-emerald-600" title={notificationSummary(decision.notification)}><Bell className="h-2.5 w-2.5 fill-emerald-100" /><Check className="h-2.5 w-2.5" /></span>}</div>
-          <div className="mt-1 whitespace-normal break-words text-sm font-semibold leading-relaxed text-[#102A43] lg:text-base">{heading}</div>
-          {decision.hostName && <div className="mt-1 text-[10px] font-bold text-slate-500">Host: <span className="font-semibold text-slate-700">{decision.hostName}</span></div>}
-          {decision.participantNames?.length ? <div className="mt-1 text-[10px] font-bold text-slate-500"><Users className="mr-1 inline h-3 w-3" />{personSummary(decision.participantNames.map((name) => ({ name })))}</div> : null}
-
-          {decision.mode === "recorded" ? (
-            <div className="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800"><Check className="mr-1 inline h-3.5 w-3.5" />{decision.outcome}</div>
-          ) : open ? (
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <span className="mr-auto text-[10px] font-bold text-slate-500">{totalVoters}{decision.eligibleCount ? ` of ${decision.eligibleCount}` : ""} responded</span>
-              {canVote ? <button type="button" className="rounded-xl bg-amber-600 px-3 py-2 text-xs font-semibold text-white" onClick={() => openVoteDialog(card, decision)}>{decision.kind === "schedule" ? "Availability" : "Vote"}</button> : <span className="text-[10px] font-medium text-slate-400">Not asking you</span>}
-              <button type="button" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-500" onClick={() => void closeVote(card, decision)}>Close</button>
-            </div>
-          ) : <div className="mt-3">{results}</div>}
-        </div>
+      <div key={entryKey} className="mt-1">
+        {decision.mode === "recorded" ? (
+          <div className="rounded-xl bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-800"><Check className="mr-1 inline h-3.5 w-3.5" />{decision.outcome}</div>
+        ) : open ? (
+          <div className="flex flex-wrap items-center gap-2 border-y border-slate-100 py-2.5">
+            <span className="mr-auto text-[11px] font-medium text-slate-500">{totalVoters}{decision.eligibleCount ? ` of ${decision.eligibleCount}` : ""} responded</span>
+            {canVote ? <button type="button" className="rounded-xl bg-amber-600 px-3 py-2 text-xs font-semibold text-white" onClick={() => openVoteDialog(card, decision)}>Vote</button> : null}
+            <button type="button" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-500" onClick={() => void closeVote(card, decision)}>Close</button>
+          </div>
+        ) : <div className="mt-2">{results}</div>}
       </div>
     );
   };
@@ -2633,14 +2611,9 @@ export function TaskBoard({
       const decision = latestDecisionInCurrentStage(card) || latestOpenDecision(card);
       if (!decision) return null;
       const index = (card.decisions || []).findIndex((item) => item.id === decision.id);
-      return <div className="relative"><div className="absolute bottom-4 left-[13px] top-4 w-px bg-amber-100" aria-hidden="true" />{renderDecision(card, decision, Math.max(0, index), true, `decision:${decision.id || index}`)}</div>;
+      return renderDecision(card, decision, Math.max(0, index), true, `decision:${decision.id || index}`);
     }
-    if (stage === "action") {
-      const action = latestOpenAction(card);
-      if (!action) return null;
-      const index = (card.actions || []).findIndex((item) => item.id === action.id);
-      return <div className="relative"><div className="absolute bottom-4 left-[13px] top-4 w-px bg-sky-100" aria-hidden="true" />{renderAction(card, action, Math.max(0, index), true, `action:${action.id || index}`)}</div>;
-    }
+    if (stage === "action") return null;
     if (stage === "done") {
       return <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-3 py-3"><div className="flex items-center gap-2 text-xs font-semibold text-slate-700"><CheckCircle2 className="h-4 w-4" />Completed</div><div className="mt-1 text-[10px] font-normal text-slate-500">Previous decisions and to-do history are preserved in Evolution.</div></div>;
     }
@@ -2799,8 +2772,12 @@ export function TaskBoard({
     const actions = card.actions || [];
     const currentDecision = latestDecisionInCurrentStage(card);
     const decisionComplete = stage === "deciding" && !openDecision && Boolean(currentDecision);
-    const need = stage === "deciding" && openDecision ? currentNeed(card) : "";
     const displayPeople = card.people || [];
+    const alreadyVoted = Boolean(openDecision && currentVoterHash && (
+      openDecision.ballots?.some((ballot) => ballot.voterHash === currentVoterHash)
+      || openDecision.voterHashes?.includes(currentVoterHash)
+    ));
+    const needsYourVote = Boolean(openDecision && currentVoterHash && canCurrentUserVote(openDecision) && !alreadyVoted);
     const cardNotifyTarget = currentNotifyTarget(card);
     const cardNotification = cardNotifyTarget?.notification;
     const cardNotificationSent = cardNotification?.status === "sent";
@@ -2825,17 +2802,15 @@ export function TaskBoard({
           <div className="flex items-start gap-2">
             <button type="button" className="min-w-0 flex-1 text-left" onClick={() => openCardDetail(card)}>
               <h3 className="whitespace-normal break-words text-[14px] font-semibold leading-snug text-[#102A43] lg:text-[17px] lg:leading-snug">{card.title}</h3>
-              {(card.category || card.dueDate) && <div className="mt-1.5 flex min-w-0 items-center gap-1.5">
-                {card.category && <span className={`max-w-[60%] truncate rounded-full px-2 py-0.5 text-[9px] font-medium ring-1 lg:text-[10px] ${tagTone(card.category)}`}>{card.category}</span>}
-                {card.dueDate && <span className={`ml-auto inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-medium lg:text-[10px] ${isOverdue(card.dueDate) && stage !== "done" ? "bg-red-50 text-red-700" : "bg-slate-100 text-slate-600"}`}><CalendarDays className="h-3 w-3" />{dueText(card.dueDate)}</span>}
+              {(card.category || card.dueDate || displayPeople.length > 0 || (card.comments?.length || 0) > 0 || decisionComplete || needsYourVote || openDecision) && <div className="mt-1.5 flex min-w-0 items-center gap-1 overflow-hidden whitespace-nowrap">
+                {card.category && <span className={`max-w-[28%] shrink truncate rounded-full px-1.5 py-0.5 text-[9px] font-medium ring-1 lg:text-[10px] ${tagTone(card.category)}`}>{card.category}</span>}
+                {card.dueDate && <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-medium lg:text-[10px] ${isOverdue(card.dueDate) && stage !== "done" ? "bg-red-50 text-red-700" : "bg-slate-100 text-slate-600"}`}><CalendarDays className="h-3 w-3" />{dueText(card.dueDate)}</span>}
+                {displayPeople.length > 0 && <span className="inline-flex min-w-0 max-w-[30%] shrink items-center gap-1 rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] font-medium text-slate-600 lg:text-[10px]"><Users className="h-3 w-3 shrink-0" /><span className="truncate">{personSummary(displayPeople)}</span></span>}
+                {(card.comments?.length || 0) > 0 && <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] font-medium text-slate-600 lg:text-[10px]" title={`${card.comments!.length} comment${card.comments!.length === 1 ? "" : "s"}`}><MessageCircle className="h-3 w-3" />{card.comments!.length}</span>}
+                {needsYourVote && <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-semibold text-amber-900 ring-1 ring-amber-200 lg:text-[10px]"><span className="h-1.5 w-1.5 rounded-full bg-amber-600" />Your vote</span>}
+                {decisionComplete && <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-50 px-1.5 py-0.5 text-[9px] font-medium text-amber-800 ring-1 ring-amber-200 lg:text-[10px]"><Check className="h-3 w-3" />Complete</span>}
+                {openDecision && <span className="ml-auto shrink-0 text-[9px] font-medium text-slate-400 lg:text-[10px]">{voteTotal(openDecision)}{openDecision.eligibleCount ? `/${openDecision.eligibleCount}` : ""} responded</span>}
               </div>}
-              {(stage === "deciding" || displayPeople.length > 0 || (card.comments?.length || 0) > 0) && <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-1.5">
-                {stage === "deciding" && <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-medium ring-1 lg:text-[10px] ${decisionComplete ? "bg-amber-100 text-amber-900 ring-amber-200" : "bg-amber-50 text-amber-800 ring-amber-200"}`}>{decisionComplete ? <Check className="h-3 w-3" /> : <Gavel className="h-3 w-3" />}{decisionComplete ? "Decision complete" : "Needs decision"}</span>}
-                {displayPeople.length > 0 && <span className="inline-flex min-w-0 max-w-[65%] items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-medium text-slate-600 lg:text-[10px]"><Users className="h-3 w-3 shrink-0" /><span className="truncate">{personSummary(displayPeople)}</span></span>}
-                {(card.comments?.length || 0) > 0 && <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-medium text-slate-600 lg:text-[10px]" title={`${card.comments!.length} comment${card.comments!.length === 1 ? "" : "s"}`}><MessageCircle className="h-3 w-3" />{card.comments!.length}</span>}
-              </div>}
-              {need && !expanded && <div className="mt-1.5 whitespace-normal break-words text-[10px] font-medium leading-snug text-amber-800 lg:text-[12px]"><Gavel className="mr-1 inline h-3 w-3" />{need}</div>}
-              {openDecision && !expanded && <div className="mt-0.5 text-[9px] font-medium text-slate-400 lg:text-[10px]">{voteTotal(openDecision)}{openDecision.eligibleCount ? ` of ${openDecision.eligibleCount}` : ""} responded</div>}
             </button>
             <div className="flex shrink-0 flex-col items-center gap-0.5">
               {online && cardNotifyTarget && (
@@ -2855,12 +2830,7 @@ export function TaskBoard({
 
         {expanded && <div className={detail ? "bg-white px-4 pb-24 pt-5" : "border-t border-slate-100 bg-slate-50/35 px-3 pb-3 pt-3"}>
           {detail && <div className="mb-4">
-            <div className="flex flex-wrap items-center gap-1.5">
-              {card.category && <span className={`rounded-full px-2 py-0.5 text-[9px] font-semibold ring-1 ${tagTone(card.category)}`}>{card.category}</span>}
-              {stage === "deciding" && <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-semibold ring-1 ${decisionComplete ? "bg-amber-100 text-amber-900 ring-amber-200" : "bg-amber-50 text-amber-800 ring-amber-200"}`}>{decisionComplete ? <Check className="h-3 w-3" /> : <Gavel className="h-3 w-3" />}{decisionComplete ? "Decision complete" : "Needs decision"}</span>}
-              {stage === "done" && <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-semibold text-slate-600 ring-1 ring-slate-200"><Check className="h-3 w-3" />Done</span>}
-            </div>
-            <h2 className="mt-2 whitespace-normal break-words text-[24px] font-semibold leading-tight tracking-[-0.02em] text-[#102A43]">{card.title}</h2>
+            <h2 className="whitespace-normal break-words text-[24px] font-semibold leading-tight tracking-[-0.02em] text-[#102A43]">{card.title}</h2>
           </div>}
 
           {card.note?.trim() && <div className="mb-3 rounded-2xl bg-slate-50 px-3 py-3"><div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Note</div><p className="mt-1 whitespace-pre-wrap break-words text-sm font-normal leading-relaxed text-slate-700">{card.note.trim()}</p></div>}
@@ -3089,7 +3059,7 @@ export function TaskBoard({
               <button type="button" className="rounded-2xl border border-amber-100 bg-amber-50/60 p-4 text-left transition hover:bg-amber-50 lg:p-5" onClick={() => setNewTopicKind("decide")}>
                 <div className="flex items-start gap-3 lg:gap-4"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-amber-700 ring-1 ring-amber-100 lg:h-12 lg:w-12 lg:rounded-2xl"><Gavel className="h-5 w-5 lg:h-6 lg:w-6" /></div><div><div className="text-sm font-black text-[#102A43] lg:text-base">Decide</div><div className="mt-0.5 text-[11px] font-semibold leading-relaxed text-slate-500 lg:text-sm">Ask people to choose, schedule or agree on something.</div><div className="mt-1 text-[10px] font-bold text-slate-400 lg:text-xs">Example: Which players become members?</div></div></div>
               </button>
-              <button type="button" className="rounded-2xl border border-sky-100 bg-sky-50/60 p-4 text-left transition hover:bg-sky-50 lg:p-5" onClick={() => setNewTopicKind("action")}>
+              <button type="button" className="min-w-0 rounded-2xl border border-sky-100 bg-sky-50/60 p-4 text-left transition hover:bg-sky-50 lg:p-5" onClick={() => setNewTopicKind("action")}>
                 <div className="flex items-start gap-3 lg:gap-4"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-sky-800 ring-1 ring-sky-100 lg:h-12 lg:w-12 lg:rounded-2xl"><Hand className="h-5 w-5 lg:h-6 lg:w-6" /></div><div><div className="text-sm font-black text-[#102A43] lg:text-base">To-do</div><div className="mt-0.5 text-[11px] font-semibold leading-relaxed text-slate-500 lg:text-sm">Something important needs to get done.</div><div className="mt-1 text-[10px] font-bold text-slate-400 lg:text-xs">Example: Contact the new members</div></div></div>
               </button>
             </div>
@@ -3111,22 +3081,22 @@ export function TaskBoard({
         </DialogContent>
       </Dialog>
       <Dialog open={Boolean(decisionCardId)} onOpenChange={(open) => { if (!open) { setDecisionCardId(null); setDecisionStep(null); setDecisionEditingDecisionId(null); } }}>
-        <DialogContent className="fixed bottom-2 left-2 right-2 top-auto max-h-[90dvh] w-auto max-w-none translate-x-0 translate-y-0 overflow-x-hidden overflow-y-auto rounded-[2rem] p-4 sm:bottom-auto sm:left-1/2 sm:right-auto sm:top-1/2 sm:w-full sm:max-w-lg sm:-translate-x-1/2 sm:-translate-y-1/2 lg:max-w-2xl lg:p-6" onOpenAutoFocus={(event) => event.preventDefault()}>
+        <DialogContent className="fixed bottom-2 left-2 right-2 top-auto box-border min-w-0 max-h-[90dvh] w-auto max-w-[calc(100vw-1rem)] translate-x-0 translate-y-0 overflow-x-hidden overflow-y-auto rounded-[2rem] p-4 sm:bottom-auto sm:left-1/2 sm:right-auto sm:top-1/2 sm:w-[calc(100vw-2rem)] sm:max-w-lg sm:-translate-x-1/2 sm:-translate-y-1/2 lg:max-w-2xl lg:p-6" onOpenAutoFocus={(event) => event.preventDefault()}>
           <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43] lg:text-xl">{decisionStep === "schedule" ? (decisionEditingDecisionId ? "Set up schedule" : "Schedule") : decisionStep ? "Set up decision" : "What kind of decision?"}</DialogTitle></DialogHeader>
           {!decisionStep ? (
-            <div className="grid grid-cols-2 gap-2">
-              <button type="button" className="rounded-2xl border border-amber-100 bg-amber-50/60 p-4 text-left lg:p-5" onClick={() => chooseDecisionType("vote")}><Vote className="h-5 w-5 text-amber-700" /><div className="mt-2 text-sm font-black text-[#102A43] lg:text-base">Vote</div><div className="mt-1 text-[11px] font-semibold text-slate-500 lg:text-sm">One or more questions</div></button>
+            <div className="grid min-w-0 grid-cols-2 gap-2">
+              <button type="button" className="min-w-0 rounded-2xl border border-amber-100 bg-amber-50/60 p-4 text-left lg:p-5" onClick={() => chooseDecisionType("vote")}><Vote className="h-5 w-5 text-amber-700" /><div className="mt-2 text-sm font-black text-[#102A43] lg:text-base">Vote</div><div className="mt-1 text-[11px] font-semibold text-slate-500 lg:text-sm">One or more questions</div></button>
               <button type="button" className="rounded-2xl border border-sky-100 bg-sky-50/60 p-4 text-left lg:p-5" onClick={() => chooseDecisionType("schedule")}><CalendarDays className="h-5 w-5 text-sky-700" /><div className="mt-2 text-sm font-black text-[#102A43] lg:text-base">Schedule</div><div className="mt-1 text-[11px] font-semibold text-slate-500 lg:text-sm">Find a time together</div></button>
-              <button type="button" className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4 text-left lg:p-5" onClick={() => chooseDecisionType("players")}><Users className="h-5 w-5 text-emerald-700" /><div className="mt-2 text-sm font-black text-[#102A43] lg:text-base">Players</div><div className="mt-1 text-[11px] font-semibold text-slate-500 lg:text-sm">Choose from roster</div></button>
-              <button type="button" className="rounded-2xl border border-amber-100 bg-amber-50/60 p-4 text-left lg:p-5" onClick={() => chooseDecisionType("equipment")}><ClipboardList className="h-5 w-5 text-amber-700" /><div className="mt-2 text-sm font-black text-[#102A43] lg:text-base">Equipment</div><div className="mt-1 text-[11px] font-semibold text-slate-500 lg:text-sm">Inventory · compare · choose</div></button>
+              <button type="button" className="min-w-0 rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4 text-left lg:p-5" onClick={() => chooseDecisionType("players")}><Users className="h-5 w-5 text-emerald-700" /><div className="mt-2 text-sm font-black text-[#102A43] lg:text-base">Players</div><div className="mt-1 text-[11px] font-semibold text-slate-500 lg:text-sm">Choose from roster</div></button>
+              <button type="button" className="min-w-0 rounded-2xl border border-amber-100 bg-amber-50/60 p-4 text-left lg:p-5" onClick={() => chooseDecisionType("equipment")}><ClipboardList className="h-5 w-5 text-amber-700" /><div className="mt-2 text-sm font-black text-[#102A43] lg:text-base">Equipment</div><div className="mt-1 text-[11px] font-semibold text-slate-500 lg:text-sm">Inventory · compare · choose</div></button>
             </div>
           ) : (
-            <div className="grid gap-3">
-              <button type="button" className="w-fit text-[11px] font-black text-slate-500" onClick={() => setDecisionStep(null)}>← Change type</button>
+            <div className="grid w-full max-w-full min-w-0 gap-3 overflow-x-hidden [&>*]:min-w-0">
+              <button type="button" className="w-fit max-w-full text-[11px] font-black text-slate-500" onClick={() => setDecisionStep(null)}>← Change type</button>
 
-              {decisionStep === "vote" && <div className="flex rounded-2xl bg-slate-100 p-1">
-                <button type="button" className={`flex-1 rounded-xl px-3 py-2 text-xs font-semibold ${decisionMode === "vote" ? "bg-white text-amber-700 shadow-sm" : "text-slate-500"}`} onClick={() => setDecisionMode("vote")}><Vote className="mr-1 inline h-3.5 w-3.5" />Vote together</button>
-                <button type="button" className={`flex-1 rounded-xl px-3 py-2 text-xs font-semibold ${decisionMode === "recorded" ? "bg-white text-emerald-700 shadow-sm" : "text-slate-500"}`} onClick={() => setDecisionMode("recorded")}><Check className="mr-1 inline h-3.5 w-3.5" />Record decision</button>
+              {decisionStep === "vote" && <div className="grid w-full min-w-0 grid-cols-2 rounded-2xl bg-slate-100 p-1">
+                <button type="button" className={`min-w-0 whitespace-normal rounded-xl px-2 py-2 text-xs font-semibold ${decisionMode === "vote" ? "bg-white text-amber-700 shadow-sm" : "text-slate-500"}`} onClick={() => setDecisionMode("vote")}><Vote className="mr-1 inline h-3.5 w-3.5" />Vote together</button>
+                <button type="button" className={`min-w-0 whitespace-normal rounded-xl px-2 py-2 text-xs font-semibold ${decisionMode === "recorded" ? "bg-white text-emerald-700 shadow-sm" : "text-slate-500"}`} onClick={() => setDecisionMode("recorded")}><Check className="mr-1 inline h-3.5 w-3.5" />Record decision</button>
               </div>}
 
               {decisionMode === "recorded" ? (
@@ -3143,10 +3113,10 @@ export function TaskBoard({
                           <div className="text-sm font-semibold text-[#102A43]">Who will host this?</div>
                           <div className="mt-1 text-[11px] font-normal text-slate-500">Choose the person who will own the time, place and final confirmation.</div>
                         </div>
-                        <div className="grid grid-cols-3 gap-2">
-                          <button type="button" className="rounded-2xl border border-sky-200 bg-sky-50 px-2 py-3 text-center text-xs font-semibold text-sky-900" disabled={saving || !decisionSetupCard} onClick={() => { if (decisionSetupCard) void createScheduleForHost(decisionSetupCard, currentActor); }}>Me</button>
-                          <button type="button" className={`rounded-2xl border px-2 py-3 text-center text-xs font-semibold ${scheduleHostChoice === "person" ? "border-amber-300 bg-amber-50 text-amber-900" : "border-slate-200 bg-white text-slate-700"}`} onClick={() => setScheduleHostChoice("person")}>Someone else</button>
-                          <button type="button" className="rounded-2xl border border-slate-200 bg-white px-2 py-3 text-center text-xs font-semibold text-slate-700" disabled={saving || otherOrganizerPeople.length === 0} onClick={() => void requestScheduleHost("group")}>Ask group</button>
+                        <div className="grid min-w-0 grid-cols-1 gap-2 min-[390px]:grid-cols-3">
+                          <button type="button" className="min-w-0 whitespace-normal rounded-2xl border border-sky-200 bg-sky-50 px-2 py-3 text-center text-xs font-semibold text-sky-900" disabled={saving || !decisionSetupCard} onClick={() => { if (decisionSetupCard) void createScheduleForHost(decisionSetupCard, currentActor); }}>Me</button>
+                          <button type="button" className={`min-w-0 whitespace-normal rounded-2xl border px-2 py-3 text-center text-xs font-semibold ${scheduleHostChoice === "person" ? "border-amber-300 bg-amber-50 text-amber-900" : "border-slate-200 bg-white text-slate-700"}`} onClick={() => setScheduleHostChoice("person")}>Someone else</button>
+                          <button type="button" className="min-w-0 whitespace-normal rounded-2xl border border-slate-200 bg-white px-2 py-3 text-center text-xs font-semibold text-slate-700" disabled={saving || otherOrganizerPeople.length === 0} onClick={() => void requestScheduleHost("group")}>Ask group</button>
                         </div>
                         {scheduleHostChoice === "person" && <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
                           <Label>Choose host</Label>
@@ -3182,8 +3152,8 @@ export function TaskBoard({
                           <div className="mt-1 text-[10px] font-normal text-slate-400">One option is simply proposed. Two or more automatically become an availability poll, including “None of these work for me”.</div>
                           <div className="mt-1.5 grid gap-2">
                             {scheduleDates.map((group) => <div key={group.id} className="rounded-2xl border border-slate-200 bg-white p-2.5">
-                              <div className="flex items-center gap-2">
-                                <Input type="date" value={group.date} onChange={(event) => updateScheduleDate(group.id, { date: event.target.value })} />
+                              <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
+                                <Input className="w-full min-w-0 max-w-full" type="date" value={group.date} onChange={(event) => updateScheduleDate(group.id, { date: event.target.value })} />
                                 <button type="button" className="rounded-xl border border-slate-200 p-2 text-slate-400" onClick={() => setScheduleDates((current) => current.filter((item) => item.id !== group.id))} disabled={scheduleDates.length <= 1} aria-label="Remove date"><Trash2 className="h-4 w-4" /></button>
                               </div>
                               <div className="mt-2 flex flex-wrap gap-2">
@@ -3222,7 +3192,7 @@ export function TaskBoard({
                         <div className="mt-0.5 text-sm font-semibold leading-relaxed text-[#102A43]">{decisionSetupCard?.title}</div>
                       </div>
                       <div className="grid gap-2">
-                        {decisionQuestionsDraft.map((draft, questionIndex) => <div key={draft.id} className="rounded-2xl border border-slate-200 bg-white p-3">
+                        {decisionQuestionsDraft.map((draft, questionIndex) => <div key={draft.id} className="w-full max-w-full min-w-0 rounded-2xl border border-slate-200 bg-white p-3">
                           <div className="flex items-center justify-between gap-2">
                             <Label htmlFor={`decision-question-${draft.id}`}>Question {questionIndex + 1}</Label>
                             {questionIndex > 0 && <button type="button" className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600" onClick={() => setDecisionQuestionsDraft((current) => current.filter((item) => item.id !== draft.id))} aria-label={`Remove question ${questionIndex + 1}`}><Trash2 className="h-3.5 w-3.5" /></button>}
@@ -3232,10 +3202,10 @@ export function TaskBoard({
                           ) : (
                             <Textarea id={`decision-question-${draft.id}`} className="mt-1" value={draft.text} onChange={(event) => updateDraftQuestion(draft.id, { text: event.target.value })} rows={2} maxLength={220} placeholder="Another question…" />
                           )}
-                          <div className="mt-2 flex rounded-2xl bg-amber-50 p-1">
-                            <button type="button" className={`flex-1 rounded-xl px-2 py-2 text-[10px] font-semibold ${draft.kind === "yes-no-abstain" ? "bg-white text-amber-700 shadow-sm" : "text-amber-500"}`} onClick={() => updateDraftQuestion(draft.id, { kind: "yes-no-abstain" })}>Yes / No / Abstain</button>
-                            <button type="button" className={`flex-1 rounded-xl px-2 py-2 text-[10px] font-semibold ${draft.kind === "choose-one" ? "bg-white text-amber-700 shadow-sm" : "text-amber-500"}`} onClick={() => updateDraftQuestion(draft.id, { kind: "choose-one" })}>Choose one</button>
-                            <button type="button" className={`flex-1 rounded-xl px-2 py-2 text-[10px] font-semibold ${draft.kind === "multi-select" ? "bg-white text-amber-700 shadow-sm" : "text-amber-500"}`} onClick={() => updateDraftQuestion(draft.id, { kind: "multi-select" })}>Choose several</button>
+                          <div className="mt-2 grid w-full min-w-0 grid-cols-1 gap-1 rounded-2xl bg-amber-50 p-1 min-[390px]:grid-cols-3">
+                            <button type="button" className={`min-w-0 whitespace-normal rounded-xl px-2 py-2 text-[10px] font-semibold ${draft.kind === "yes-no-abstain" ? "bg-white text-amber-700 shadow-sm" : "text-amber-500"}`} onClick={() => updateDraftQuestion(draft.id, { kind: "yes-no-abstain" })}>Yes / No / Abstain</button>
+                            <button type="button" className={`min-w-0 whitespace-normal rounded-xl px-2 py-2 text-[10px] font-semibold ${draft.kind === "choose-one" ? "bg-white text-amber-700 shadow-sm" : "text-amber-500"}`} onClick={() => updateDraftQuestion(draft.id, { kind: "choose-one" })}>Choose one</button>
+                            <button type="button" className={`min-w-0 whitespace-normal rounded-xl px-2 py-2 text-[10px] font-semibold ${draft.kind === "multi-select" ? "bg-white text-amber-700 shadow-sm" : "text-amber-500"}`} onClick={() => updateDraftQuestion(draft.id, { kind: "multi-select" })}>Choose several</button>
                           </div>
                           {draft.kind !== "yes-no-abstain" && <div className="mt-2"><Label htmlFor={`decision-options-${draft.id}`}>Choices — one per line</Label><Textarea id={`decision-options-${draft.id}`} className="mt-1" value={draft.options} onChange={(event) => updateDraftQuestion(draft.id, { options: event.target.value })} rows={3} maxLength={700} placeholder="Option A\nOption B" /></div>}
                           {draft.kind === "multi-select" && <div className="mt-2"><Label htmlFor={`decision-max-${draft.id}`}>Maximum choices</Label><Input id={`decision-max-${draft.id}`} type="number" min="1" max="16" value={draft.maxSelections} onChange={(event) => updateDraftQuestion(draft.id, { maxSelections: event.target.value })} inputMode="numeric" /></div>}
@@ -3303,9 +3273,9 @@ export function TaskBoard({
 
                       <div>
                         <Label>Voting style</Label>
-                        <div className="mt-1.5 grid grid-cols-2 gap-2">
-                          <button type="button" className={`rounded-xl border px-3 py-2.5 text-left ${equipmentVoteMode === "rate" ? "border-amber-300 bg-amber-50 text-amber-900" : "border-slate-200 bg-white text-slate-500"}`} onClick={() => setEquipmentVoteMode("rate")}><div className="text-xs font-semibold">Answer each item</div><div className="mt-0.5 text-[10px] font-normal opacity-70">Default: Yes / No / Maybe</div></button>
-                          <button type="button" className={`rounded-xl border px-3 py-2.5 text-left ${equipmentVoteMode === "choose" ? "border-amber-300 bg-amber-50 text-amber-900" : "border-slate-200 bg-white text-slate-500"}`} onClick={() => setEquipmentVoteMode("choose")}><div className="text-xs font-semibold">Choose items</div><div className="mt-0.5 text-[10px] font-normal opacity-70">Pick up to a set number</div></button>
+                        <div className="mt-1.5 grid w-full min-w-0 grid-cols-1 gap-2 min-[360px]:grid-cols-2">
+                          <button type="button" className={`min-w-0 whitespace-normal rounded-xl border px-3 py-2.5 text-left ${equipmentVoteMode === "rate" ? "border-amber-300 bg-amber-50 text-amber-900" : "border-slate-200 bg-white text-slate-500"}`} onClick={() => setEquipmentVoteMode("rate")}><div className="text-xs font-semibold">Answer each item</div><div className="mt-0.5 text-[10px] font-normal opacity-70">Default: Yes / No / Maybe</div></button>
+                          <button type="button" className={`min-w-0 whitespace-normal rounded-xl border px-3 py-2.5 text-left ${equipmentVoteMode === "choose" ? "border-amber-300 bg-amber-50 text-amber-900" : "border-slate-200 bg-white text-slate-500"}`} onClick={() => setEquipmentVoteMode("choose")}><div className="text-xs font-semibold">Choose items</div><div className="mt-0.5 text-[10px] font-normal opacity-70">Pick up to a set number</div></button>
                         </div>
                       </div>
 
@@ -3322,8 +3292,8 @@ export function TaskBoard({
                               placeholder={`Item ${index + 1}`}
                               className="h-10 w-full min-w-0 px-3"
                             />
-                            <div className="mt-2 grid min-w-0 grid-cols-[6.5rem_minmax(0,1fr)_2.5rem_2.25rem] items-center gap-1.5">
-                              <div className="grid h-9 grid-cols-[2rem_minmax(0,1fr)_2rem] overflow-hidden rounded-xl border border-slate-200 bg-white" aria-label={`Quantity for item ${index + 1}`}>
+                            <div className="mt-2 grid min-w-0 grid-cols-[5.25rem_minmax(0,1fr)_2.25rem_2.25rem] items-center gap-1.5">
+                              <div className="grid h-9 grid-cols-[1.7rem_minmax(0,1fr)_1.7rem] overflow-hidden rounded-xl border border-slate-200 bg-white" aria-label={`Quantity for item ${index + 1}`}>
                                 <button type="button" className="flex items-center justify-center text-base font-medium text-slate-500 hover:bg-slate-50" onClick={() => updateEquipmentDraftItem(item.id, { quantity: String(Math.max(0, quantity - 1)) })} aria-label={`Decrease quantity for item ${index + 1}`}>−</button>
                                 <input type="number" min="0" inputMode="numeric" value={item.quantity} onChange={(event) => updateEquipmentDraftItem(item.id, { quantity: event.target.value })} onBlur={() => { if (!item.quantity.trim()) updateEquipmentDraftItem(item.id, { quantity: "1" }); }} className="min-w-0 border-x border-slate-200 bg-transparent px-0 text-center text-sm font-semibold text-[#102A43] outline-none" aria-label={`Quantity value for item ${index + 1}`} />
                                 <button type="button" className="flex items-center justify-center text-base font-medium text-slate-500 hover:bg-slate-50" onClick={() => updateEquipmentDraftItem(item.id, { quantity: String(quantity + 1) })} aria-label={`Increase quantity for item ${index + 1}`}>+</button>

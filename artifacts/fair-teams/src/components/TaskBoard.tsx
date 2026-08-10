@@ -643,6 +643,14 @@ export function TaskBoard({
   const [actionText, setActionText] = useState("");
   const [actionPeopleKeys, setActionPeopleKeys] = useState<string[]>([]);
 
+  const [moveCardId, setMoveCardId] = useState<string | null>(null);
+  const [draggingCardId, setDraggingCardId] = useState<string | null>(null);
+  const [dragOverStage, setDragOverStage] = useState<TopicStage | null>(null);
+  const longPressTimerRef = useRef<number | null>(null);
+  const longPressStartRef = useRef<{ x: number; y: number; cardId: string } | null>(null);
+  const longPressDraggingRef = useRef(false);
+  const suppressCardOpenRef = useRef(false);
+
   const [votingCardId, setVotingCardId] = useState<string | null>(null);
   const [votingDecisionId, setVotingDecisionId] = useState<string | null>(null);
   const [selectedVoteAnswers, setSelectedVoteAnswers] = useState<Record<string, string[]>>({});
@@ -862,6 +870,65 @@ export function TaskBoard({
       setError(nextError instanceof Error ? nextError.message : "Could not move card.");
       return null;
     }
+  };
+
+  const openMoveCard = (card: TaskBoardCard) => setMoveCardId(card.id);
+
+  const moveCardFromPicker = async (stage: TopicStage) => {
+    const card = board.cards.find((item) => item.id === moveCardId);
+    setMoveCardId(null);
+    if (!card) return;
+    await moveCardToStage(card, stage);
+  };
+
+  const clearLongPress = () => {
+    if (longPressTimerRef.current !== null) {
+      window.clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
+  const startCardLongPress = (event: React.PointerEvent, card: TaskBoardCard) => {
+    if (!isMobileBoardViewport() || event.pointerType === "mouse") return;
+    clearLongPress();
+    longPressDraggingRef.current = false;
+    longPressStartRef.current = { x: event.clientX, y: event.clientY, cardId: card.id };
+    longPressTimerRef.current = window.setTimeout(() => {
+      longPressDraggingRef.current = true;
+      suppressCardOpenRef.current = true;
+      setDraggingCardId(card.id);
+      if (navigator.vibrate) navigator.vibrate(18);
+    }, 430);
+  };
+
+  const moveCardLongPress = (event: React.PointerEvent) => {
+    const start = longPressStartRef.current;
+    if (!start) return;
+    if (!longPressDraggingRef.current) {
+      if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > 9) {
+        clearLongPress();
+        longPressStartRef.current = null;
+      }
+      return;
+    }
+    event.preventDefault();
+    const element = document.elementFromPoint(event.clientX, event.clientY) as HTMLElement | null;
+    const stageElement = element?.closest?.("[data-board-stage]") as HTMLElement | null;
+    const stage = stageElement?.dataset.boardStage as TopicStage | undefined;
+    setDragOverStage(stage || null);
+  };
+
+  const finishCardLongPress = async (event: React.PointerEvent, card: TaskBoardCard) => {
+    clearLongPress();
+    longPressStartRef.current = null;
+    if (!longPressDraggingRef.current) return;
+    event.preventDefault();
+    longPressDraggingRef.current = false;
+    const destination = dragOverStage;
+    setDraggingCardId(null);
+    setDragOverStage(null);
+    window.setTimeout(() => { suppressCardOpenRef.current = false; }, 80);
+    if (destination && destination !== stageForCard(card)) await moveCardToStage(card, destination);
   };
 
   const toggleExpanded = (cardId: string) => {
@@ -1818,66 +1885,24 @@ export function TaskBoard({
     );
   };
 
-  const renderStageProgression = (card: TaskBoardCard, stage: TopicStage) => {
+  const renderStageTools = (card: TaskBoardCard, stage: TopicStage) => {
     const openDecision = latestOpenDecision(card);
-    const hasDecisionHistory = Boolean(card.decisions?.length);
-
-    if (stage === "ideas") {
+    const openAction = latestOpenAction(card);
+    if (stage === "deciding" && !openDecision) {
       return (
-        <div className="mt-4 rounded-2xl border border-amber-100 bg-amber-50/45 p-3">
-          <div className="text-[10px] font-semibold uppercase tracking-wide text-amber-700">Current stage · Idea</div>
-          <div className="mt-1 text-xs font-medium leading-relaxed text-slate-600">When this needs an answer, continue to Decide.</div>
-          <Button type="button" className="mt-3 h-11 w-full rounded-2xl bg-violet-600 font-semibold text-white" onClick={() => void continueToDecide(card)}>Continue to Decide <ChevronRight className="ml-1 h-4 w-4" /></Button>
-        </div>
+        <button type="button" className="mt-3 w-full rounded-2xl border border-amber-200 bg-amber-50/70 px-3 py-2.5 text-xs font-semibold text-amber-900" onClick={() => startDecision(card)}>
+          {(card.decisions?.length || 0) ? "Start another decision" : "Start decision"}
+        </button>
       );
     }
-
-    if (stage === "deciding") {
-      if (openDecision) {
-        return <div className="mt-4 text-center text-[11px] font-medium text-slate-400">Finish the current decision before moving forward.</div>;
-      }
-      if (!hasDecisionHistory) {
-        return (
-          <div className="mt-4 rounded-2xl border border-violet-100 bg-violet-50/45 p-3">
-            <div className="text-[10px] font-semibold uppercase tracking-wide text-violet-700">Current stage · Decide</div>
-            <div className="mt-1 text-xs font-medium leading-relaxed text-slate-600">Set up the decision this card needs now.</div>
-            <Button type="button" className="mt-3 h-11 w-full rounded-2xl bg-violet-600 font-semibold text-white" onClick={() => startDecision(card)}>Set up decision</Button>
-            <button type="button" className="mt-2 w-full py-1 text-[11px] font-medium text-slate-400" onClick={() => void continueToAction(card)}>No decision needed · continue to Action</button>
-          </div>
-        );
-      }
+    if (stage === "action" && !openAction) {
       return (
-        <div className="mt-4 rounded-2xl border border-sky-100 bg-sky-50/45 p-3">
-          <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Decision complete</div>
-          <Button type="button" className="mt-2 h-11 w-full rounded-2xl bg-sky-700 font-semibold text-white" onClick={() => void continueToAction(card)}>Continue to Action <ChevronRight className="ml-1 h-4 w-4" /></Button>
-        </div>
+        <button type="button" className="mt-3 w-full rounded-2xl border border-sky-200 bg-sky-50/60 px-3 py-2.5 text-xs font-semibold text-sky-900" onClick={() => openAddAction(card)}>
+          {(card.actions?.length || 0) ? "Add another action" : "Add action details (optional)"}
+        </button>
       );
     }
-
-    if (stage === "action") {
-      if (openDecision) {
-        return (
-          <div className="mt-4 rounded-2xl border border-violet-100 bg-violet-50/45 p-3 text-center">
-            <div className="text-xs font-medium text-violet-800">This older card still has an open decision.</div>
-            <button type="button" className="mt-2 text-[11px] font-semibold text-violet-700" onClick={() => void moveCardToStage(card, "deciding")}>Return to Decide</button>
-          </div>
-        );
-      }
-      return (
-        <div className="mt-4 rounded-2xl border border-emerald-100 bg-emerald-50/45 p-3">
-          <div className="text-[10px] font-semibold uppercase tracking-wide text-sky-800">Current stage · Action</div>
-          <div className="mt-1 text-xs font-medium leading-relaxed text-slate-600">Do the task. Assignment is optional.</div>
-          <Button type="button" className="mt-3 h-11 w-full rounded-2xl bg-emerald-600 font-semibold text-white" onClick={() => void finishTopic(card)}><Check className="mr-1 h-4 w-4" />Mark done</Button>
-        </div>
-      );
-    }
-
-    return (
-      <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-center">
-        <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Done</div>
-        <div className="mt-1 text-xs font-medium text-slate-500">This card is complete. Its evolution will remain available as club memory.</div>
-      </div>
-    );
+    return null;
   };
 
   const renderCard = (card: TaskBoardCard, compact = false, detail = false) => {
@@ -1908,10 +1933,20 @@ export function TaskBoard({
           : "border-slate-200";
 
     return (
-      <article key={card.id} className={detail ? "min-h-full bg-white" : `overflow-hidden rounded-2xl border bg-white shadow-sm ${stageStyle} ${compact ? "" : "lg:rounded-[1.35rem]"}`}>
+      <article
+        key={card.id}
+        draggable={!detail}
+        onDragStart={(event) => { if (detail) return; setDraggingCardId(card.id); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", card.id); }}
+        onDragEnd={() => { setDraggingCardId(null); setDragOverStage(null); }}
+        onPointerDown={(event) => { if (!detail) startCardLongPress(event, card); }}
+        onPointerMove={(event) => { if (!detail) moveCardLongPress(event); }}
+        onPointerUp={(event) => { if (!detail) void finishCardLongPress(event, card); }}
+        onPointerCancel={() => { clearLongPress(); longPressStartRef.current = null; longPressDraggingRef.current = false; setDraggingCardId(null); setDragOverStage(null); }}
+        className={detail ? "min-h-full bg-white" : `overflow-hidden rounded-2xl border bg-white shadow-sm transition ${stageStyle} ${compact ? "" : "lg:rounded-[1.35rem]"} ${draggingCardId === card.id ? "opacity-55 ring-2 ring-slate-300" : ""}`}
+      >
         {!detail && <div className="p-3">
           <div className="flex items-start gap-2">
-            <button type="button" className="min-w-0 flex-1 text-left" onClick={() => openCardDetail(card)}>
+            <button type="button" className="min-w-0 flex-1 text-left" onClick={() => { if (!suppressCardOpenRef.current) openCardDetail(card); }}>
               <div className="flex flex-wrap items-center gap-1.5">
                 {card.category && <span className={`rounded-full px-2 py-0.5 text-[9px] font-black ring-1 lg:px-2.5 lg:py-1 lg:text-[10px] ${tagTone(card.category)}`}>{card.category}</span>}
                 {displayPeople?.length ? <span className="inline-flex max-w-full items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-black text-slate-600 lg:px-2.5 lg:py-1 lg:text-[10px]"><Users className="h-3 w-3 shrink-0" /><span className="truncate">{personSummary(displayPeople)}</span></span> : null}
@@ -1950,6 +1985,7 @@ export function TaskBoard({
                   </button>
                 )
               )}
+              <button type="button" className="rounded-full px-1.5 py-1 text-[9px] font-semibold text-slate-400 hover:bg-slate-50 hover:text-slate-600" onClick={() => openMoveCard(card)} aria-label={`Move ${card.title}`}>Move</button>
               <button type="button" className="rounded-full p-1.5 text-slate-400 hover:bg-slate-50" onClick={() => openEditCard(card)} aria-label={`Edit ${card.title}`}><Pencil className="h-3.5 w-3.5" /></button>
               <button type="button" className="hidden rounded-full p-1.5 text-slate-400 hover:bg-slate-50 lg:block" onClick={() => toggleExpanded(card.id)} aria-label={expanded ? "Collapse topic" : "Expand topic"}>{expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}</button>
             </div>
@@ -1981,18 +2017,32 @@ export function TaskBoard({
             </div>
           )}
 
-          {renderStageProgression(card, stage)}
+          {renderStageTools(card, stage)}
+          <button type="button" className="mt-3 inline-flex h-10 w-full items-center justify-center rounded-2xl border border-slate-200 bg-white text-xs font-semibold text-slate-600" onClick={() => openMoveCard(card)}>Move card</button>
         </div>}
       </article>
     );
   };
 
-  const boardColumn = (stage: TopicStage, title: string, Icon: React.ComponentType<{ className?: string }>) => (
-    <section className={`min-w-0 rounded-[1.35rem] border p-2.5 ${stage === "deciding" ? "border-violet-200 bg-violet-50/35" : stage === "action" ? "border-sky-200 bg-sky-50/35" : stage === "done" ? "border-slate-200 bg-slate-100/50" : "border-slate-200 bg-white/55"}`}>
-      <div className={`mb-2 flex items-center gap-1.5 px-1 text-xs font-black lg:text-[14px] ${stage === "deciding" ? "text-violet-700" : stage === "action" ? "text-sky-800" : stage === "done" ? "text-slate-500" : "text-slate-700"}`}><Icon className="h-4 w-4 lg:h-[18px] lg:w-[18px]" /><span>{title}</span><span className="ml-0.5 rounded-full bg-white/80 px-1.5 py-0.5 text-[9px] lg:px-2 lg:text-[10px] font-black text-slate-500 ring-1 ring-slate-200/70">{cardsByStage[stage].length}</span></div>
+  const boardColumn = (stage: TopicStage, title: string, Icon: React.ComponentType<{ className?: string }>, mobile = false) => (
+    <section
+      data-board-stage={stage}
+      onDragOver={(event) => { event.preventDefault(); setDragOverStage(stage); }}
+      onDragLeave={() => { if (dragOverStage === stage) setDragOverStage(null); }}
+      onDrop={(event) => {
+        event.preventDefault();
+        const cardId = event.dataTransfer.getData("text/plain") || draggingCardId;
+        const card = board.cards.find((item) => item.id === cardId);
+        setDraggingCardId(null);
+        setDragOverStage(null);
+        if (card && stageForCard(card) !== stage) void moveCardToStage(card, stage);
+      }}
+      className={`${mobile ? "w-[82vw] max-w-[22rem] shrink-0 snap-center" : "min-w-0"} rounded-[1.35rem] border p-2.5 transition ${dragOverStage === stage ? "ring-2 ring-slate-300" : ""} ${stage === "deciding" ? "border-amber-200 bg-amber-50/35" : stage === "action" ? "border-sky-200 bg-sky-50/35" : stage === "done" ? "border-slate-200 bg-slate-100/50" : "border-slate-200 bg-white/55"}`}
+    >
+      <div className={`mb-2 flex items-center gap-1.5 px-1 text-xs font-semibold lg:text-[14px] ${stage === "deciding" ? "text-amber-800" : stage === "action" ? "text-sky-800" : stage === "done" ? "text-slate-500" : "text-slate-700"}`}><Icon className="h-4 w-4 lg:h-[18px] lg:w-[18px]" /><span>{title}</span><span className="ml-0.5 rounded-full bg-white/80 px-1.5 py-0.5 text-[9px] lg:px-2 lg:text-[10px] font-semibold text-slate-500 ring-1 ring-slate-200/70">{cardsByStage[stage].length}</span></div>
       <div className="space-y-2">
         {cardsByStage[stage].map((card) => renderCard(card, true))}
-        {cardsByStage[stage].length === 0 && <div className="rounded-2xl border border-dashed border-slate-200 bg-white/40 px-2 py-5 text-center text-[10px] font-bold text-slate-400 lg:text-xs">{stage === "ideas" ? "No ideas yet" : stage === "deciding" ? "Nothing to decide yet" : stage === "action" ? "No to-dos here" : "Nothing completed yet"}</div>}
+        {cardsByStage[stage].length === 0 && <div className="rounded-2xl border border-dashed border-slate-200 bg-white/40 px-2 py-5 text-center text-[10px] font-medium text-slate-400 lg:text-xs">{stage === "ideas" ? "No ideas yet" : stage === "deciding" ? "Nothing to decide yet" : stage === "action" ? "No to-dos here" : "Nothing completed yet"}</div>}
       </div>
     </section>
   );
@@ -2073,17 +2123,8 @@ export function TaskBoard({
             </div>
           </DialogHeader>
 
-          <div className="shrink-0 border-b border-slate-200/70 bg-white/90 px-3 py-2 lg:hidden">
-            <div className="flex gap-1 rounded-2xl bg-slate-100 p-1">
-              {([
-                ["ideas", "Ideas", Lightbulb],
-                ["deciding", "Decide", Gavel],
-                ["action", "Action", Hand],
-                ["done", "Done", Check],
-              ] as Array<[MobileFilter, string, React.ComponentType<{ className?: string }>]>).map(([item, label, Icon]) => (
-                <button key={item} type="button" className={`flex flex-1 items-center justify-center gap-1 rounded-xl px-1 py-2 text-[10px] font-black transition ${mobileFilter === item ? "bg-white text-[#102A43] shadow-sm" : "text-slate-500"}`} onClick={() => setMobileFilter(item)}><Icon className="h-3.5 w-3.5" /><span>{label}</span><span className={`min-w-[18px] rounded-full px-1 py-0.5 text-[9px] ${mobileFilter === item ? "bg-slate-100 text-slate-600" : "bg-white/70 text-slate-400"}`}>{cardsByStage[item].length}</span></button>
-              ))}
-            </div>
+          <div className="shrink-0 border-b border-slate-200/70 bg-white/90 px-3 py-2 text-[11px] font-medium text-slate-500 lg:px-5 lg:text-xs">
+            Move cards by dragging &amp; dropping, or tap <span className="font-semibold text-slate-700">Move</span>.
           </div>
 
           <div className="shrink-0 border-b border-slate-200/70 bg-white/95 px-3 py-2.5 lg:px-5 lg:py-3">
@@ -2115,9 +2156,11 @@ export function TaskBoard({
               <EmptyActionBoard onCreate={focusQuickAdd} />
             ) : (
               <>
-                <div className="px-3 py-3 pb-20 lg:hidden">
-                  <div className="space-y-2">{cardsByStage[mobileFilter].map((card) => renderCard(card))}</div>
-                  {cardsByStage[mobileFilter].length === 0 && <div className="rounded-3xl border border-dashed border-slate-300 bg-white/50 px-4 py-10 text-center text-sm font-bold text-slate-400">{mobileFilter === "ideas" ? "No ideas yet." : mobileFilter === "deciding" ? "Nothing to decide yet." : mobileFilter === "action" ? "No to-dos here." : "Nothing completed yet."}</div>}
+                <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain px-[9vw] py-3 pb-20 lg:hidden" style={{ WebkitOverflowScrolling: "touch" }}>
+                  {boardColumn("ideas", "Ideas", Lightbulb, true)}
+                  {boardColumn("deciding", "Decide", Gavel, true)}
+                  {boardColumn("action", "Action", Hand, true)}
+                  {boardColumn("done", "Done", Check, true)}
                 </div>
                 <div className="hidden w-full grid-cols-4 gap-3 p-4 pb-16 lg:grid xl:gap-4 xl:p-5">
                   {boardColumn("ideas", "Ideas", Lightbulb)}
@@ -2310,6 +2353,25 @@ export function TaskBoard({
             <div><Label htmlFor="link-url">Paste link</Label><Input id="link-url" type="url" inputMode="url" value={linkUrl} onChange={(event) => setLinkUrl(event.target.value)} placeholder="https://…" /></div>
             <div><Label htmlFor="link-label">Label <span className="font-semibold text-slate-400">optional</span></Label><Input id="link-label" value={linkLabel} onChange={(event) => setLinkLabel(event.target.value)} maxLength={80} placeholder={validHttpUrl(linkUrl) ? providerLabel(linkUrl) : "e.g. Select Brillant"} /></div>
             <Button type="button" className="h-11 rounded-2xl font-black text-white" style={{ backgroundColor: accent }} disabled={!validHttpUrl(linkUrl) || saving} onClick={() => void addLink()}>{saving ? "Saving…" : "Add link"}</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(moveCardId)} onOpenChange={(open) => { if (!open) setMoveCardId(null); }}>
+        <DialogContent className="w-[calc(100%-2rem)] max-w-sm rounded-[1.75rem] p-4">
+          <DialogHeader><DialogTitle className="text-left text-base font-semibold text-[#102A43]">Move card</DialogTitle></DialogHeader>
+          <div className="mt-1 text-xs font-medium text-slate-500">Choose where this card belongs now.</div>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            {([
+              ["ideas", "Ideas", Lightbulb],
+              ["deciding", "Decide", Gavel],
+              ["action", "Action", Hand],
+              ["done", "Done", Check],
+            ] as Array<[TopicStage, string, React.ComponentType<{ className?: string }>]>).map(([stage, label, Icon]) => {
+              const card = board.cards.find((item) => item.id === moveCardId);
+              const current = card ? stageForCard(card) === stage : false;
+              return <button key={stage} type="button" disabled={current} className={`flex h-12 items-center justify-center gap-2 rounded-2xl border text-sm font-semibold ${current ? "border-slate-200 bg-slate-100 text-slate-400" : "border-slate-200 bg-white text-[#102A43] active:bg-slate-50"}`} onClick={() => void moveCardFromPicker(stage)}><Icon className="h-4 w-4" />{label}{current ? " · here" : ""}</button>;
+            })}
           </div>
         </DialogContent>
       </Dialog>

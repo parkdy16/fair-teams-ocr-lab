@@ -105,12 +105,11 @@ type DecisionMode = "vote" | "recorded";
 type NewTopicKind = "idea" | "decide" | "action";
 type TopicStage = MobileFilter;
 type DecisionSetupStep = TaskBoardDecisionType | null;
-type EquipmentDecisionIntent = "buy" | "replace" | null;
 type ScheduleHostChoice = "me" | "person" | "group" | null;
 type ScheduleParticipantMode = "all" | "selected";
 type DecisionVoterMode = "all" | "selected";
 type EquipmentVoteMode = "rate" | "choose";
-type EquipmentDraftItem = { id: string; name: string; price: string; url: string };
+type EquipmentDraftItem = { id: string; name: string; quantity: string; price: string; url: string };
 type EditSection = "all" | "note" | "assignees" | "due";
 type DraftQuestion = {
   id: string;
@@ -173,7 +172,32 @@ function answerLabels(raw: string, fallback: string[] = ["Yes", "No", "Maybe"]) 
 }
 
 function newEquipmentDraftItem(name = "") : EquipmentDraftItem {
-  return { id: id("equipment-item"), name, price: "", url: "" };
+  return { id: id("equipment-item"), name, quantity: "1", price: "", url: "" };
+}
+
+function normalizedEquipmentQuantity(value: string | number | undefined) {
+  if (value === undefined || value === null || String(value).trim() === "") return 1;
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 1;
+  return Math.max(0, Math.floor(numeric));
+}
+
+function equipmentSubtotal(price: string | undefined, quantity: string | number | undefined) {
+  const raw = String(price || "").trim();
+  if (!raw) return "";
+  const match = raw.match(/-?\d+(?:[.,]\d+)?/);
+  if (!match) return "";
+  const unit = Number(match[0].replace(",", "."));
+  if (!Number.isFinite(unit)) return "";
+  const qty = normalizedEquipmentQuantity(quantity);
+  const total = unit * qty;
+  const usesComma = match[0].includes(",");
+  const decimals = /[.,]\d{1,2}$/.test(match[0]) ? 2 : Number.isInteger(total) ? 0 : 2;
+  const formatted = total.toFixed(decimals).replace(".", usesComma ? "," : ".");
+  const prefix = raw.slice(0, match.index || 0).trim();
+  const suffix = raw.slice((match.index || 0) + match[0].length).trim();
+  const prefixGap = prefix && !/^[€$£¥₩₹]$/.test(prefix) ? " " : "";
+  return `${prefix}${prefixGap}${formatted}${suffix ? ` ${suffix}` : ""}`.trim();
 }
 
 function safeColor(value?: string) {
@@ -802,11 +826,13 @@ export function TaskBoard({
   const [playerSearch, setPlayerSearch] = useState("");
   const [selectedPlayerIds, setSelectedPlayerIds] = useState<string[]>([]);
   const [playerAnswerOptions, setPlayerAnswerOptions] = useState("Yes\nNo\nMaybe");
-  const [equipmentDecisionIntent, setEquipmentDecisionIntent] = useState<EquipmentDecisionIntent>(null);
   const [equipmentVoteMode, setEquipmentVoteMode] = useState<EquipmentVoteMode>("rate");
   const [equipmentAnswerOptions, setEquipmentAnswerOptions] = useState("Yes\nNo\nMaybe");
   const [equipmentMaxSelections, setEquipmentMaxSelections] = useState("2");
   const [equipmentDraftItems, setEquipmentDraftItems] = useState<EquipmentDraftItem[]>([newEquipmentDraftItem()]);
+  const [equipmentPendingSubject, setEquipmentPendingSubject] = useState("");
+  const [equipmentLinkItemId, setEquipmentLinkItemId] = useState<string | null>(null);
+  const [equipmentLinkDraft, setEquipmentLinkDraft] = useState("");
   const [scheduleHostName, setScheduleHostName] = useState("");
   const [scheduleHostChoice, setScheduleHostChoice] = useState<ScheduleHostChoice>(null);
   const [scheduleRequestedHostKey, setScheduleRequestedHostKey] = useState("");
@@ -1432,7 +1458,6 @@ export function TaskBoard({
     setSelectedPlayerIds([]);
     setPlayerSearch("");
     setPlayerAnswerOptions("Yes\nNo\nMaybe");
-    setEquipmentDecisionIntent(null);
     setEquipmentVoteMode("rate");
     setEquipmentAnswerOptions("Yes\nNo\nMaybe");
     setEquipmentMaxSelections("2");
@@ -1453,10 +1478,10 @@ export function TaskBoard({
       setDecisionMaxSelections("3");
     } else if (preset === "equipment") {
       setDecisionKind("choose-one");
+      setDecisionTitle(card.title);
       setDecisionQuestion("");
       setDecisionOptions("");
-      setEquipmentDecisionIntent(null);
-    }
+      }
   };
 
   const chooseDecisionType = (kind: TaskBoardDecisionType) => {
@@ -1485,10 +1510,10 @@ export function TaskBoard({
       setPlayerAnswerOptions("Yes\nNo\nMaybe");
     } else if (kind === "equipment") {
       setDecisionKind("choose-one");
+      setDecisionTitle(card.title);
       setDecisionQuestion("");
       setDecisionOptions("");
-      setEquipmentDecisionIntent(null);
-      setEquipmentVoteMode("rate");
+        setEquipmentVoteMode("rate");
       setEquipmentAnswerOptions("Yes\nNo\nMaybe");
       setEquipmentMaxSelections("2");
       setEquipmentDraftItems([newEquipmentDraftItem()]);
@@ -1498,16 +1523,9 @@ export function TaskBoard({
     }
   };
 
-  const chooseEquipmentIntent = (intent: Exclude<EquipmentDecisionIntent, null>) => {
-    setEquipmentDecisionIntent(intent);
-    setDecisionTitle("");
-    setDecisionQuestion("");
-    setDecisionOptions("");
-  };
-
   const chooseEquipmentSubject = (label: string) => {
     const cleanLabel = label.trim();
-    if (!cleanLabel || !equipmentDecisionIntent) return;
+    if (!cleanLabel) return;
     setEquipmentDraftItems((current) => {
       const emptyIndex = current.findIndex((item) => !item.name.trim());
       if (emptyIndex >= 0) return current.map((item, index) => index === emptyIndex ? { ...item, name: cleanLabel } : item);
@@ -1821,9 +1839,15 @@ export function TaskBoard({
         rootKind = "choose-one";
       } else if (decisionStep === "equipment") {
         const items = equipmentDraftItems
-          .map((item) => ({ ...item, name: item.name.trim(), price: item.price.trim(), url: item.url.trim() }))
+          .map((item) => ({
+            ...item,
+            name: item.name.trim(),
+            quantity: normalizedEquipmentQuantity(item.quantity),
+            price: item.price.trim(),
+            url: item.url.trim(),
+          }))
           .filter((item) => item.name);
-        if (!equipmentDecisionIntent || items.length < 1) return;
+        if (items.length < 1) return;
         if (items.some((item) => item.url && !validHttpUrl(item.url))) return;
         if (equipmentVoteMode === "rate") {
           const labels = answerLabels(equipmentAnswerOptions);
@@ -1831,6 +1855,7 @@ export function TaskBoard({
             id: id("question"),
             text: item.name,
             kind: "choose-one" as const,
+            itemQuantity: item.quantity,
             itemPrice: item.price || undefined,
             itemUrl: item.url || undefined,
             options: labels.map((label) => ({ id: id("option"), label, count: 0 })),
@@ -1842,10 +1867,17 @@ export function TaskBoard({
           const kind = max > 1 ? "multi-select" as const : "choose-one" as const;
           questions = [{
             id: id("question"),
-            text: card.title,
+            text: decisionTitle.trim() || card.title,
             kind,
             maxSelections: kind === "multi-select" ? max : undefined,
-            options: items.map((item) => ({ id: id("option"), label: item.name, count: 0, price: item.price || undefined, url: item.url || undefined })),
+            options: items.map((item) => ({
+              id: id("option"),
+              label: item.name,
+              count: 0,
+              quantity: item.quantity,
+              price: item.price || undefined,
+              url: item.url || undefined,
+            })),
           }];
           rootKind = kind;
         }
@@ -1879,7 +1911,7 @@ export function TaskBoard({
         kind: rootKind,
         decisionType: decisionStep,
         title: decisionTitle.trim() || undefined,
-        question: decisionStep === "players" || decisionStep === "equipment" ? card.title : decisionStep === "schedule" ? (decisionTitle.trim() || card.title) : decisionTitle.trim() || primaryQuestion?.text || card.title,
+        question: decisionStep === "players" ? card.title : decisionStep === "equipment" ? (decisionTitle.trim() || card.title) : decisionStep === "schedule" ? (decisionTitle.trim() || card.title) : decisionTitle.trim() || primaryQuestion?.text || card.title,
         hostName: decisionStep === "schedule" ? (existingSchedule?.hostName || scheduleHostName.trim()) : undefined,
         hostEmail: decisionStep === "schedule" ? (existingSchedule?.hostEmail || (scheduleHostName.trim().toLowerCase() === currentActor.name.toLowerCase() ? currentActor.email : undefined)) : undefined,
         scheduleState: decisionStep === "schedule" ? "collecting" : undefined,
@@ -1887,7 +1919,7 @@ export function TaskBoard({
         scheduleLocationOptions,
         scheduleParticipantMode: decisionStep === "schedule" ? scheduleParticipantMode : undefined,
         participantMode: decisionStep === "schedule" ? undefined : decisionVoterMode,
-        equipmentIntent: decisionStep === "equipment" ? equipmentDecisionIntent || undefined : undefined,
+        equipmentIntent: undefined,
         equipmentVoteMode: decisionStep === "equipment" ? equipmentVoteMode : undefined,
         questions,
         options: primaryQuestion?.options || [],
@@ -1911,6 +1943,7 @@ export function TaskBoard({
     const category = card.category || (decisionStep === "players" ? "Membership" : decisionStep === "equipment" ? "Equipment" : undefined);
     const next: TaskBoardCard = {
       ...card,
+      title: decisionStep === "equipment" && decisionTitle.trim() ? decisionTitle.trim() : card.title,
       category,
       completedAt: undefined,
       completedByName: undefined,
@@ -2375,7 +2408,7 @@ export function TaskBoard({
       || (decision.decisionType === "players"
         ? "Players"
         : decision.decisionType === "equipment"
-          ? `${decision.equipmentIntent === "replace" ? "Replace" : "Buy"} equipment`
+          ? "Equipment"
           : questions.length === 1 ? questions[0].text : "Vote");
     const historyExpanded = expandedHistoryIds.has(entryKey);
 
@@ -2391,7 +2424,7 @@ export function TaskBoard({
         ) : questions.map((question, questionIndex) => (
           <div key={question.id} className={questions.length > 1 ? "rounded-xl bg-slate-50 p-2.5" : ""}>
             {questions.length > 1 && <div className="mb-2 text-xs font-semibold leading-relaxed text-[#102A43]">{questionIndex + 1}. {question.text}</div>}
-            {decision.decisionType === "equipment" && (question.itemPrice || question.itemUrl) && <div className="mb-2 flex flex-wrap items-center gap-2 text-[10px] font-normal text-slate-500">{question.itemPrice && <span>{question.itemPrice}</span>}{question.itemUrl && <a href={question.itemUrl} target="_blank" rel="noreferrer" className="font-medium text-sky-700 underline">Open product link</a>}</div>}
+            {decision.decisionType === "equipment" && (question.itemQuantity !== undefined || question.itemPrice || question.itemUrl) && <div className="mb-2 flex flex-wrap items-center gap-2 text-[10px] font-normal text-slate-500">{question.itemQuantity !== undefined && <span>Qty {question.itemQuantity}</span>}{question.itemPrice && <span>{question.itemPrice}</span>}{question.itemPrice && question.itemQuantity !== undefined && <span className="font-medium text-slate-600">Subtotal {equipmentSubtotal(question.itemPrice, question.itemQuantity)}</span>}{question.itemUrl && <a href={question.itemUrl} target="_blank" rel="noreferrer" className="font-medium text-sky-700 underline">Open product link</a>}</div>}
             <div className="grid gap-1.5">
               {question.options.map((option) => {
                 const denominator = question.kind === "multi-select" ? Math.max(1, totalVoters) : Math.max(1, question.options.reduce((sum, item) => sum + item.count, 0));
@@ -2405,7 +2438,7 @@ export function TaskBoard({
                 return (
                   <div key={option.id} className="rounded-xl bg-white px-2.5 py-2 ring-1 ring-slate-100">
                     <div className="flex items-center gap-2 text-xs font-medium text-slate-600">
-                      <span className="min-w-0 flex-1 break-words">{option.label}{option.price ? <span className="ml-1.5 text-[10px] font-normal text-slate-400">{option.price}</span> : null}</span>
+                      <span className="min-w-0 flex-1 break-words">{option.label}{option.quantity !== undefined ? <span className="ml-1.5 text-[10px] font-normal text-slate-400">× {option.quantity}</span> : null}{option.price ? <span className="ml-1.5 text-[10px] font-normal text-slate-400">{option.price}</span> : null}{option.price && option.quantity !== undefined ? <span className="ml-1.5 text-[10px] font-medium text-slate-500">subtotal {equipmentSubtotal(option.price, option.quantity)}</span> : null}</span>
                       <span className="shrink-0 rounded-full bg-slate-50 px-2 py-0.5 font-medium text-[#102A43] ring-1 ring-slate-200">{option.count}</span>
                       {question.kind !== "multi-select" && <span className="w-8 text-right text-[10px] text-slate-400">{percent}%</span>}
                     </div>
@@ -2784,46 +2817,33 @@ export function TaskBoard({
         onDragEnd={() => { setDraggingCardId(null); setDragOverStage(null); }}
         className={detail ? "min-h-full bg-white" : `overflow-hidden rounded-2xl border bg-white shadow-sm transition ${stageStyle} ${compact ? "" : "lg:rounded-[1.35rem]"} ${draggingCardId === card.id ? "opacity-25 ring-2 ring-slate-300" : ""}`}
       >
-        {!detail && <div className="p-3">
+        {!detail && <div className="p-2.5 lg:p-3">
           <div className="flex items-start gap-2">
             <button type="button" className="min-w-0 flex-1 text-left" onClick={() => openCardDetail(card)}>
-              <div className="flex flex-wrap items-center gap-1.5">
-                {card.category && <span className={`rounded-full px-2 py-0.5 text-[9px] font-black ring-1 lg:px-2.5 lg:py-1 lg:text-[10px] ${tagTone(card.category)}`}>{card.category}</span>}
-                {stage === "deciding" && <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-semibold ring-1 lg:px-2.5 lg:py-1 lg:text-[10px] ${decisionComplete ? "bg-amber-100 text-amber-900 ring-amber-200" : "bg-amber-50 text-amber-800 ring-amber-200"}`}>{decisionComplete ? <Check className="h-3 w-3" /> : <Gavel className="h-3 w-3" />}{decisionComplete ? "Decision complete" : "Needs decision"}</span>}
-                {displayPeople?.length ? <span className="inline-flex max-w-full items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-black text-slate-600 lg:px-2.5 lg:py-1 lg:text-[10px]"><Users className="h-3 w-3 shrink-0" /><span className="truncate">{personSummary(displayPeople)}</span></span> : null}
-                {card.dueDate && <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-black lg:px-2.5 lg:py-1 lg:text-[10px] ${isOverdue(card.dueDate) && stage !== "done" ? "bg-red-50 text-red-700" : "bg-slate-100 text-slate-600"}`}><CalendarDays className="h-3 w-3" />{dueText(card.dueDate)}</span>}
-                {(card.comments?.length || 0) > 0 && <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-semibold text-slate-600 lg:px-2.5 lg:py-1 lg:text-[10px]" title={`${card.comments!.length} comment${card.comments!.length === 1 ? "" : "s"}`}><MessageCircle className="h-3 w-3" />{card.comments!.length}</span>}
-              </div>
-              <h3 className="mt-2 whitespace-normal break-words text-[14px] font-semibold leading-snug text-[#102A43] lg:text-[17px] lg:leading-snug">{card.title}</h3>
-              {need && !expanded && <div className="mt-2 whitespace-normal break-words text-[11px] font-medium leading-snug text-amber-800 lg:text-[13px]"><Gavel className="mr-1 inline h-3.5 w-3.5" />{need}</div>}
-              {openDecision && !expanded && <div className="mt-1 text-[9px] font-bold text-slate-400 lg:text-[11px]">{voteTotal(openDecision)}{openDecision.eligibleCount ? ` of ${openDecision.eligibleCount}` : ""} responded</div>}
+              <h3 className="whitespace-normal break-words text-[14px] font-semibold leading-snug text-[#102A43] lg:text-[17px] lg:leading-snug">{card.title}</h3>
+              {(card.category || card.dueDate) && <div className="mt-1.5 flex min-w-0 items-center gap-1.5">
+                {card.category && <span className={`max-w-[60%] truncate rounded-full px-2 py-0.5 text-[9px] font-medium ring-1 lg:text-[10px] ${tagTone(card.category)}`}>{card.category}</span>}
+                {card.dueDate && <span className={`ml-auto inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-medium lg:text-[10px] ${isOverdue(card.dueDate) && stage !== "done" ? "bg-red-50 text-red-700" : "bg-slate-100 text-slate-600"}`}><CalendarDays className="h-3 w-3" />{dueText(card.dueDate)}</span>}
+              </div>}
+              {(stage === "deciding" || displayPeople.length > 0 || (card.comments?.length || 0) > 0) && <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-1.5">
+                {stage === "deciding" && <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-medium ring-1 lg:text-[10px] ${decisionComplete ? "bg-amber-100 text-amber-900 ring-amber-200" : "bg-amber-50 text-amber-800 ring-amber-200"}`}>{decisionComplete ? <Check className="h-3 w-3" /> : <Gavel className="h-3 w-3" />}{decisionComplete ? "Decision complete" : "Needs decision"}</span>}
+                {displayPeople.length > 0 && <span className="inline-flex min-w-0 max-w-[65%] items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-medium text-slate-600 lg:text-[10px]"><Users className="h-3 w-3 shrink-0" /><span className="truncate">{personSummary(displayPeople)}</span></span>}
+                {(card.comments?.length || 0) > 0 && <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-medium text-slate-600 lg:text-[10px]" title={`${card.comments!.length} comment${card.comments!.length === 1 ? "" : "s"}`}><MessageCircle className="h-3 w-3" />{card.comments!.length}</span>}
+              </div>}
+              {need && !expanded && <div className="mt-1.5 whitespace-normal break-words text-[10px] font-medium leading-snug text-amber-800 lg:text-[12px]"><Gavel className="mr-1 inline h-3 w-3" />{need}</div>}
+              {openDecision && !expanded && <div className="mt-0.5 text-[9px] font-medium text-slate-400 lg:text-[10px]">{voteTotal(openDecision)}{openDecision.eligibleCount ? ` of ${openDecision.eligibleCount}` : ""} responded</div>}
             </button>
             <div className="flex shrink-0 flex-col items-center gap-0.5">
               {online && cardNotifyTarget && (
                 cardNotificationSent ? (
-                  <span
-                    className="relative rounded-full bg-emerald-50 p-1.5 text-emerald-700"
-                    title={notificationSummary(cardNotification)}
-                    aria-label={notificationSummary(cardNotification) || "Notified"}
-                  >
-                    <Bell className="h-3.5 w-3.5 fill-emerald-100" />
-                    <span className="absolute -right-0.5 -top-0.5 flex h-3 w-3 items-center justify-center rounded-full bg-emerald-600 text-white"><Check className="h-2 w-2" /></span>
+                  <span className="relative rounded-full bg-emerald-50 p-1.5 text-emerald-700" title={notificationSummary(cardNotification)} aria-label={notificationSummary(cardNotification) || "Notified"}>
+                    <Bell className="h-3.5 w-3.5 fill-emerald-100" /><span className="absolute -right-0.5 -top-0.5 flex h-3 w-3 items-center justify-center rounded-full bg-emerald-600 text-white"><Check className="h-2 w-2" /></span>
                   </span>
                 ) : (
-                  <button
-                    type="button"
-                    className={`rounded-full p-1.5 ${cardNotificationQueued ? "cursor-wait bg-amber-50 text-amber-600" : "text-slate-400 hover:bg-amber-50 hover:text-amber-700"}`}
-                    onClick={() => openNotify(card)}
-                    disabled={cardNotificationQueued}
-                    aria-label={cardNotificationQueued ? "Notification is being sent" : `Notify organizers about ${cardNotifyTarget.label.toLowerCase()}`}
-                    title={cardNotificationQueued ? "Sending notification…" : "Notify organizers"}
-                  >
-                    <Bell className={`h-3.5 w-3.5 ${cardNotificationQueued ? "animate-pulse" : ""}`} />
-                  </button>
+                  <button type="button" className={`rounded-full p-1.5 ${cardNotificationQueued ? "cursor-wait bg-amber-50 text-amber-600" : "text-slate-400 hover:bg-amber-50 hover:text-amber-700"}`} onClick={() => openNotify(card)} disabled={cardNotificationQueued} aria-label={cardNotificationQueued ? "Notification is being sent" : `Notify organizers about ${cardNotifyTarget.label.toLowerCase()}`} title={cardNotificationQueued ? "Sending notification…" : "Notify organizers"}><Bell className={`h-3.5 w-3.5 ${cardNotificationQueued ? "animate-pulse" : ""}`} /></button>
                 )
               )}
               <button type="button" className="rounded-full px-1.5 py-1 text-[9px] font-semibold text-slate-400 hover:bg-slate-50 hover:text-slate-600" onClick={() => openMoveCard(card)} aria-label={`Move ${card.title}`}>Move</button>
-              <button type="button" className="rounded-full p-1.5 text-slate-400 hover:bg-slate-50" onClick={() => openEditCard(card)} aria-label={`Edit ${card.title}`}><Pencil className="h-3.5 w-3.5" /></button>
               <button type="button" className="hidden rounded-full p-1.5 text-slate-400 hover:bg-slate-50 lg:block" onClick={() => toggleExpanded(card.id)} aria-label={expanded ? "Collapse topic" : "Expand topic"}>{expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}</button>
             </div>
           </div>
@@ -2886,7 +2906,7 @@ export function TaskBoard({
         }}
         className={`${mobile ? "w-[82vw] max-w-[22rem] shrink-0 snap-center" : "min-w-0"} rounded-[1.35rem] border p-2.5 transition ${dragOverStage === stage ? "ring-2 ring-slate-300" : ""} ${stage === "deciding" ? "border-amber-200 bg-amber-50/35" : stage === "action" ? "border-sky-200 bg-sky-50/35" : stage === "done" ? "border-slate-200 bg-slate-100/50" : "border-slate-200 bg-white/55"}`}
       >
-        <div className={`mb-2 flex items-center gap-1.5 px-1 text-xs font-semibold lg:text-[14px] ${stage === "deciding" ? "text-amber-800" : stage === "action" ? "text-sky-800" : stage === "done" ? "text-slate-500" : "text-slate-700"}`}><Icon className="h-4 w-4 lg:h-[18px] lg:w-[18px]" /><span>{title}</span><span className="ml-0.5 rounded-full bg-white/80 px-1.5 py-0.5 text-[9px] lg:px-2 lg:text-[10px] font-semibold text-slate-500 ring-1 ring-slate-200/70">{cardsByStage[stage].length}</span></div>
+        <div className={`mb-2 flex items-center gap-1.5 px-1 text-[15px] font-semibold lg:text-[16px] ${stage === "deciding" ? "text-amber-800" : stage === "action" ? "text-sky-800" : stage === "done" ? "text-slate-500" : "text-slate-700"}`}><Icon className="h-4 w-4 lg:h-[18px] lg:w-[18px]" /><span>{title}</span><span className="ml-0.5 rounded-full bg-white/80 px-1.5 py-0.5 text-[9px] lg:px-2 lg:text-[10px] font-semibold text-slate-500 ring-1 ring-slate-200/70">{cardsByStage[stage].length}</span></div>
         <div className="space-y-2">
           {cardsByStage[stage].map((card) => renderCard(card, true))}
           {cardsByStage[stage].length === 0 && <div className="rounded-2xl border border-dashed border-slate-200 bg-white/40 px-2 py-5 text-center text-[10px] font-medium text-slate-400 lg:text-xs">{stage === "ideas" ? "No ideas yet" : stage === "deciding" ? "Nothing to decide yet" : stage === "action" ? "No to-dos here" : "Nothing completed yet"}</div>}
@@ -2942,7 +2962,7 @@ export function TaskBoard({
       : decisionStep === "players"
         ? selectedPlayerIds.length >= 1 && playerAnswersValid && decisionVoterValid
         : decisionStep === "equipment"
-          ? Boolean(equipmentDecisionIntent) && equipmentItemsValid && equipmentAnswersValid && decisionVoterValid
+          ? Boolean(decisionTitle.trim()) && equipmentItemsValid && equipmentAnswersValid && decisionVoterValid
           : decisionStep === "vote"
             ? genericQuestionsValid && decisionVoterValid
             : false;
@@ -2980,36 +3000,18 @@ export function TaskBoard({
 
       <Dialog open={boardOpen} onOpenChange={(open) => { setBoardOpen(open); if (!open) setActiveCardId(null); }}>
         <DialogContent className="fixed inset-0 flex h-[100dvh] max-h-none w-full max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-0 bg-white p-0 shadow-none sm:inset-3 sm:h-[calc(100dvh-1.5rem)] sm:w-auto sm:rounded-[2rem] sm:border sm:border-white/70 sm:shadow-2xl lg:inset-6 lg:h-[calc(100dvh-3rem)] lg:rounded-[2rem]">
-          <DialogHeader className="shrink-0 border-b border-white/45 px-3 py-3 pr-12 text-left lg:px-5 lg:py-4 lg:pr-14" style={{ backgroundColor: mixHex(accent, "#ffffff", 0.7) }}>
-            <div className="flex items-center justify-between gap-2">
+          <DialogHeader className="shrink-0 border-b border-white/45 px-3 py-2.5 pr-12 text-left lg:px-5 lg:py-3 lg:pr-14" style={{ backgroundColor: mixHex(accent, "#ffffff", 0.7) }}>
+            <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <DialogTitle className="text-base font-black text-[#102A43] lg:text-[22px] lg:leading-tight">Action Board</DialogTitle>
-                {customBoardName && <p className="mt-0.5 truncate text-[11px] font-black text-slate-600 lg:text-[13px]">{customBoardName}</p>}
+                <div className="flex min-w-0 items-center gap-2">
+                  <DialogTitle className="shrink-0 text-[17px] font-semibold text-[#102A43] lg:text-[20px] lg:leading-tight">Action Board</DialogTitle>
+                  {customBoardName && <span className="truncate rounded-full bg-white/65 px-2 py-0.5 text-[9px] font-medium text-slate-500 ring-1 ring-white/80 lg:text-[10px]">{customBoardName}</span>}
+                </div>
+                <p className="mt-0.5 text-[10px] font-medium text-slate-500 lg:text-[11px]"><span className="lg:hidden">Tap <span className="font-semibold text-slate-700">Move</span> to change a card’s column.</span><span className="hidden lg:inline">Drag cards between columns, or use <span className="font-semibold text-slate-700">Move</span>.</span></p>
               </div>
-              <div className="flex shrink-0 gap-1.5">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-9 w-9 rounded-2xl bg-white/80 p-0 lg:h-11 lg:w-11"
-                  onClick={() => {
-                    setNotifyError("");
-                    setBoardNameDraft(customBoardName || "");
-                    setBoardSettingsOpen(true);
-                  }}
-                  aria-label="Board settings"
-                  title="Board settings"
-                >
-                  <Settings className="h-4 w-4 lg:h-[18px] lg:w-[18px]" />
-                </Button>
-                <Button type="button" className="h-9 w-9 rounded-2xl p-0 font-black text-white lg:h-11 lg:w-11" style={{ backgroundColor: accent }} onClick={focusQuickAdd} aria-label="Add card" title="Add card"><Plus className="h-4 w-4 lg:h-5 lg:w-5" /></Button>
-              </div>
+              <Button type="button" variant="outline" className="h-8 w-8 shrink-0 rounded-xl bg-white/80 p-0 lg:h-9 lg:w-9" onClick={() => { setNotifyError(""); setBoardNameDraft(customBoardName || ""); setBoardSettingsOpen(true); }} aria-label="Board settings" title="Board settings"><Settings className="h-4 w-4" /></Button>
             </div>
           </DialogHeader>
-
-          <div className="shrink-0 border-b border-slate-200/70 bg-white/90 px-3 py-2 text-[11px] font-medium text-slate-500 lg:px-5 lg:text-xs">
-            <span className="lg:hidden">Tap <span className="font-semibold text-slate-700">Move</span> to change a card’s column.</span>
-            <span className="hidden lg:inline">Drag cards between columns, or use <span className="font-semibold text-slate-700">Move</span>.</span>
-          </div>
 
 
 
@@ -3112,7 +3114,7 @@ export function TaskBoard({
               <button type="button" className="rounded-2xl border border-amber-100 bg-amber-50/60 p-4 text-left lg:p-5" onClick={() => chooseDecisionType("vote")}><Vote className="h-5 w-5 text-amber-700" /><div className="mt-2 text-sm font-black text-[#102A43] lg:text-base">Vote</div><div className="mt-1 text-[11px] font-semibold text-slate-500 lg:text-sm">One or more questions</div></button>
               <button type="button" className="rounded-2xl border border-sky-100 bg-sky-50/60 p-4 text-left lg:p-5" onClick={() => chooseDecisionType("schedule")}><CalendarDays className="h-5 w-5 text-sky-700" /><div className="mt-2 text-sm font-black text-[#102A43] lg:text-base">Schedule</div><div className="mt-1 text-[11px] font-semibold text-slate-500 lg:text-sm">Find a time together</div></button>
               <button type="button" className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4 text-left lg:p-5" onClick={() => chooseDecisionType("players")}><Users className="h-5 w-5 text-emerald-700" /><div className="mt-2 text-sm font-black text-[#102A43] lg:text-base">Players</div><div className="mt-1 text-[11px] font-semibold text-slate-500 lg:text-sm">Choose from roster</div></button>
-              <button type="button" className="rounded-2xl border border-amber-100 bg-amber-50/60 p-4 text-left lg:p-5" onClick={() => chooseDecisionType("equipment")}><ClipboardList className="h-5 w-5 text-amber-700" /><div className="mt-2 text-sm font-black text-[#102A43] lg:text-base">Equipment</div><div className="mt-1 text-[11px] font-semibold text-slate-500 lg:text-sm">Inventory · buy · replace</div></button>
+              <button type="button" className="rounded-2xl border border-amber-100 bg-amber-50/60 p-4 text-left lg:p-5" onClick={() => chooseDecisionType("equipment")}><ClipboardList className="h-5 w-5 text-amber-700" /><div className="mt-2 text-sm font-black text-[#102A43] lg:text-base">Equipment</div><div className="mt-1 text-[11px] font-semibold text-slate-500 lg:text-sm">Inventory · compare · choose</div></button>
             </div>
           ) : (
             <div className="grid gap-3">
@@ -3267,89 +3269,94 @@ export function TaskBoard({
                     </>}
 
                     {decisionStep === "equipment" && <>
-                      <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
-                        <div className="flex items-center justify-between gap-2">
-                          <div>
-                            <div className="text-xs font-semibold text-[#102A43]">Club equipment now</div>
-                            <div className="mt-0.5 text-[10px] font-medium text-slate-400">Bag · holder · contents at a glance.</div>
-                          </div>
-                          <span className="rounded-full bg-white px-2 py-1 text-[10px] font-medium text-slate-500 ring-1 ring-slate-200">{equipmentSnapshot?.bags.length || 0} bag{(equipmentSnapshot?.bags.length || 0) === 1 ? "" : "s"}</span>
-                        </div>
+                      <div>
+                        <Label htmlFor="equipment-card-title">Card title</Label>
+                        <Input
+                          id="equipment-card-title"
+                          value={decisionTitle}
+                          onChange={(event) => setDecisionTitle(event.target.value)}
+                          maxLength={220}
+                          placeholder={decisionSetupCard?.title || "Equipment decision"}
+                        />
+                        <div className="mt-1 text-[10px] font-normal text-slate-400">Editing this updates the card title when the vote opens.</div>
+                      </div>
 
-                        {equipmentSnapshot?.bags.length ? (
-                          <div className="mt-2 grid max-h-52 gap-1.5 overflow-y-auto pr-0.5">
-                            {equipmentSnapshot.bags.map((bag) => (
-                              <div key={bag.id} className="rounded-xl bg-white px-2.5 py-2 ring-1 ring-slate-200/80">
-                                <div className="flex items-center gap-2">
-                                  <span className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-black/10" style={{ backgroundColor: bag.color || "#64748b" }} />
-                                  <div className="min-w-0 flex-1 truncate text-[11px] font-semibold text-[#102A43]">{bag.name}</div>
-                                  <div className="max-w-[42%] truncate text-[10px] font-medium text-slate-500">{bag.holder}</div>
+                      <details className="group rounded-2xl border border-slate-200 bg-slate-50/70">
+                        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2.5 marker:hidden">
+                          <div className="min-w-0">
+                            <div className="text-xs font-semibold text-[#102A43]">Club equipment</div>
+                            <div className="mt-0.5 truncate text-[10px] font-medium text-slate-400">
+                              {(equipmentSnapshot?.bags.length || 0)} bag{(equipmentSnapshot?.bags.length || 0) === 1 ? "" : "s"}
+                              {equipmentSnapshot?.totals.length ? ` · ${equipmentSnapshot.totals.slice(0, 3).map((item) => `${item.label} ${item.quantity}`).join(" · ")}` : ""}
+                            </div>
+                          </div>
+                          <ChevronDown className="h-4 w-4 shrink-0 text-slate-400 transition group-open:rotate-180" />
+                        </summary>
+                        <div className="border-t border-slate-200 px-3 pb-3 pt-2">
+                          {equipmentSnapshot?.bags.length ? (
+                            <div className="grid max-h-48 gap-1.5 overflow-y-auto pr-0.5">
+                              {equipmentSnapshot.bags.map((bag) => (
+                                <div key={bag.id} className="rounded-xl bg-white px-2.5 py-2 ring-1 ring-slate-200/80">
+                                  <div className="flex items-center gap-2">
+                                    <span className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-black/10" style={{ backgroundColor: bag.color || "#64748b" }} />
+                                    <div className="min-w-0 flex-1 truncate text-[11px] font-semibold text-[#102A43]">{bag.name}</div>
+                                    <div className="max-w-[42%] truncate text-[10px] font-medium text-slate-500">{bag.holder}</div>
+                                  </div>
+                                  <div className="mt-1 pl-[18px] text-[10px] font-normal leading-relaxed text-slate-500">{bag.items.length ? bag.items.map((item) => `${item.label} × ${item.quantity}`).join(" · ") : "No contents recorded"}</div>
                                 </div>
-                                <div className="mt-1 pl-[18px] text-[10px] font-normal leading-relaxed text-slate-500">{bag.items.length ? bag.items.map((item) => `${item.label} × ${item.quantity}`).join(" · ") : "No contents recorded"}</div>
-                              </div>
-                            ))}
-                          </div>
-                        ) : equipmentItems.length > 0 ? (
-                          <div className="mt-2 text-[10px] font-medium leading-relaxed text-slate-500">{equipmentItems.join(" · ")}</div>
-                        ) : (
-                          <div className="mt-2 rounded-xl border border-dashed border-slate-200 bg-white/60 px-3 py-3 text-center text-[10px] font-medium text-slate-400">No equipment recorded yet. Add bags in Club → Equipment.</div>
-                        )}
+                              ))}
+                            </div>
+                          ) : equipmentItems.length > 0 ? (
+                            <div className="text-[10px] font-medium leading-relaxed text-slate-500">{equipmentItems.join(" · ")}</div>
+                          ) : (
+                            <div className="rounded-xl border border-dashed border-slate-200 bg-white/60 px-3 py-3 text-center text-[10px] font-medium text-slate-400">No equipment recorded yet. Add bags in Club → Equipment.</div>
+                          )}
 
-                        {equipmentSnapshot?.totals.length ? (
-                          <div className="mt-2 border-t border-slate-200 pt-2">
-                            <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-wide text-slate-400">Total inventory · tap to add an item</div>
-                            <div className="flex flex-wrap gap-1.5">{equipmentSnapshot.totals.map((item) => <button key={`${item.label}-${item.quantity}`} type="button" disabled={!equipmentDecisionIntent} className={`rounded-full px-2 py-1 text-[10px] font-medium ring-1 transition ${equipmentDecisionIntent ? "bg-white text-slate-600 ring-slate-200 hover:bg-amber-50 hover:text-amber-800 hover:ring-amber-200" : "bg-slate-100 text-slate-400 ring-slate-200"}`} onClick={() => chooseEquipmentSubject(item.label)}>{item.label} · {item.quantity}</button>)}</div>
-                          </div>
-                        ) : null}
+                          {equipmentSnapshot?.totals.length ? (
+                            <div className="mt-2 border-t border-slate-200 pt-2">
+                              <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-wide text-slate-400">Total inventory · tap an item to add</div>
+                              <div className="flex flex-wrap gap-1.5">{equipmentSnapshot.totals.map((item) => <button key={`${item.label}-${item.quantity}`} type="button" className="rounded-full bg-white px-2 py-1 text-[10px] font-medium text-slate-600 ring-1 ring-slate-200 transition hover:bg-amber-50 hover:text-amber-800 hover:ring-amber-200" onClick={() => setEquipmentPendingSubject(item.label)}>{item.label} · {item.quantity}</button>)}</div>
+                            </div>
+                          ) : null}
+                        </div>
+                      </details>
+
+                      <div>
+                        <Label>Voting style</Label>
+                        <div className="mt-1.5 grid grid-cols-2 gap-2">
+                          <button type="button" className={`rounded-xl border px-3 py-2.5 text-left ${equipmentVoteMode === "rate" ? "border-amber-300 bg-amber-50 text-amber-900" : "border-slate-200 bg-white text-slate-500"}`} onClick={() => setEquipmentVoteMode("rate")}><div className="text-xs font-semibold">Answer each item</div><div className="mt-0.5 text-[10px] font-normal opacity-70">Default: Yes / No / Maybe</div></button>
+                          <button type="button" className={`rounded-xl border px-3 py-2.5 text-left ${equipmentVoteMode === "choose" ? "border-amber-300 bg-amber-50 text-amber-900" : "border-slate-200 bg-white text-slate-500"}`} onClick={() => setEquipmentVoteMode("choose")}><div className="text-xs font-semibold">Choose items</div><div className="mt-0.5 text-[10px] font-normal opacity-70">Pick up to a set number</div></button>
+                        </div>
                       </div>
 
                       <div>
-                        <Label>Buy or replace?</Label>
-                        <div className="mt-1.5 grid grid-cols-2 gap-2">
-                          <button type="button" className={`rounded-2xl border px-3 py-3 text-left transition ${equipmentDecisionIntent === "buy" ? "border-amber-300 bg-amber-50 text-amber-900" : "border-slate-200 bg-white text-slate-600"}`} onClick={() => chooseEquipmentIntent("buy")}><div className="text-sm font-semibold">Buy</div><div className="mt-0.5 text-[10px] font-normal opacity-70">Choose what to purchase</div></button>
-                          <button type="button" className={`rounded-2xl border px-3 py-3 text-left transition ${equipmentDecisionIntent === "replace" ? "border-amber-300 bg-amber-50 text-amber-900" : "border-slate-200 bg-white text-slate-600"}`} onClick={() => chooseEquipmentIntent("replace")}><div className="text-sm font-semibold">Replace</div><div className="mt-0.5 text-[10px] font-normal opacity-70">Replace worn or broken gear</div></button>
-                        </div>
+                        <div className="mb-1 flex items-center justify-between gap-2"><Label>Items</Label><span className="text-[10px] font-medium text-slate-400">Qty starts at 1 · price optional</span></div>
+                        <div className="grid gap-1.5">{equipmentDraftItems.map((item, index) => {
+                          const subtotal = equipmentSubtotal(item.price, item.quantity);
+                          return <div key={item.id} className="rounded-xl border border-slate-200 bg-white px-2.5 py-2">
+                            <div className="grid grid-cols-[minmax(0,1fr)_4.25rem_5.5rem_auto_auto] items-center gap-1.5">
+                              <Input value={item.name} onChange={(event) => updateEquipmentDraftItem(item.id, { name: event.target.value })} maxLength={120} placeholder={`Item ${index + 1}`} className="h-9 min-w-0 px-2.5" />
+                              <Input type="number" min="0" inputMode="numeric" value={item.quantity} onChange={(event) => updateEquipmentDraftItem(item.id, { quantity: event.target.value })} onBlur={() => { if (!item.quantity.trim()) updateEquipmentDraftItem(item.id, { quantity: "1" }); }} aria-label={`Quantity for item ${index + 1}`} placeholder="Qty" className="h-9 px-2" />
+                              <Input value={item.price} onChange={(event) => updateEquipmentDraftItem(item.id, { price: event.target.value })} maxLength={32} inputMode="decimal" placeholder="Price" aria-label={`Price for item ${index + 1}`} className="h-9 px-2" />
+                              <button type="button" className={`relative flex h-9 w-9 items-center justify-center rounded-xl border ${item.url.trim() && validHttpUrl(item.url) ? "border-sky-200 bg-sky-50 text-sky-700" : "border-slate-200 bg-white text-slate-500"}`} onClick={() => { setEquipmentLinkItemId(item.id); setEquipmentLinkDraft(item.url); }} aria-label={`Product link for item ${index + 1}`} title={item.url ? "Edit product link" : "Add product link"}><Link2 className="h-4 w-4" />{item.url.trim() && validHttpUrl(item.url) && <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-sky-700 text-white"><Check className="h-2.5 w-2.5" /></span>}</button>
+                              <button type="button" className="flex h-9 w-8 items-center justify-center rounded-xl text-slate-400 hover:bg-red-50 hover:text-red-600" onClick={() => removeEquipmentDraftItem(item.id)} aria-label={`Remove item ${index + 1}`}><Trash2 className="h-3.5 w-3.5" /></button>
+                            </div>
+                            {subtotal && <div className="mt-1 pl-0.5 text-[9px] font-medium text-slate-400">Subtotal · {subtotal}</div>}
+                          </div>;
+                        })}</div>
+                        <button type="button" className="mt-2 w-fit rounded-xl bg-slate-100 px-3 py-2 text-[11px] font-semibold text-slate-600" onClick={() => setEquipmentDraftItems((current) => [...current, newEquipmentDraftItem()])}><Plus className="mr-1 inline h-3.5 w-3.5" />Add item</button>
                       </div>
 
-                      {equipmentDecisionIntent && <>
-                        <div className="rounded-2xl border border-amber-100 bg-amber-50/40 px-3 py-2.5">
-                          <div className="text-[10px] font-medium uppercase tracking-wide text-amber-700">{equipmentDecisionIntent === "buy" ? "Buy" : "Replace"}</div>
-                          <div className="mt-0.5 text-sm font-semibold leading-relaxed text-[#102A43]">{decisionSetupCard?.title}</div>
-                        </div>
+                      {equipmentVoteMode === "rate" ? <div>
+                        <div className="flex items-center justify-between gap-2"><Label htmlFor="equipment-answer-options">Answer choices</Label><button type="button" className="text-[10px] font-medium text-amber-700" onClick={() => setEquipmentAnswerOptions("Yes\nNo\nMaybe")}>Reset default</button></div>
+                        <Textarea id="equipment-answer-options" value={equipmentAnswerOptions} onChange={(event) => setEquipmentAnswerOptions(event.target.value)} rows={3} maxLength={180} placeholder={"Yes\nNo\nMaybe"} />
+                        <div className="mt-1 text-[10px] font-normal text-slate-400">Each item gets these same answer choices.</div>
+                      </div> : <div>
+                        <Label htmlFor="equipment-max-selections">Maximum items each person can choose</Label>
+                        <Input id="equipment-max-selections" type="number" min="1" max="16" value={equipmentMaxSelections} onChange={(event) => setEquipmentMaxSelections(event.target.value)} inputMode="numeric" />
+                      </div>}
 
-                        <div>
-                          <Label>Voting style</Label>
-                          <div className="mt-1.5 grid grid-cols-2 gap-2">
-                            <button type="button" className={`rounded-xl border px-3 py-2.5 text-left ${equipmentVoteMode === "rate" ? "border-amber-300 bg-amber-50 text-amber-900" : "border-slate-200 bg-white text-slate-500"}`} onClick={() => setEquipmentVoteMode("rate")}><div className="text-xs font-semibold">Answer each item</div><div className="mt-0.5 text-[10px] font-normal opacity-70">Default: Yes / No / Maybe</div></button>
-                            <button type="button" className={`rounded-xl border px-3 py-2.5 text-left ${equipmentVoteMode === "choose" ? "border-amber-300 bg-amber-50 text-amber-900" : "border-slate-200 bg-white text-slate-500"}`} onClick={() => setEquipmentVoteMode("choose")}><div className="text-xs font-semibold">Choose items</div><div className="mt-0.5 text-[10px] font-normal opacity-70">Pick up to a set number</div></button>
-                          </div>
-                        </div>
-
-                        <div>
-                          <div className="mb-1 flex items-center justify-between gap-2"><Label>Items</Label><span className="text-[10px] font-medium text-slate-400">Price and link are optional</span></div>
-                          <div className="grid gap-2">{equipmentDraftItems.map((item, index) => <div key={item.id} className="rounded-2xl border border-slate-200 bg-white p-3">
-                            <div className="mb-2 flex items-center justify-between"><span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Item {index + 1}</span>{equipmentDraftItems.length > 1 && <button type="button" className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600" onClick={() => removeEquipmentDraftItem(item.id)} aria-label={`Remove item ${index + 1}`}><Trash2 className="h-3.5 w-3.5" /></button>}</div>
-                            <Input value={item.name} onChange={(event) => updateEquipmentDraftItem(item.id, { name: event.target.value })} maxLength={120} placeholder="e.g. Molten V5M5000" />
-                            <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                              <Input value={item.price} onChange={(event) => updateEquipmentDraftItem(item.id, { price: event.target.value })} maxLength={32} inputMode="decimal" placeholder="Price · e.g. €34.90" />
-                              <Input type="url" inputMode="url" value={item.url} onChange={(event) => updateEquipmentDraftItem(item.id, { url: event.target.value })} placeholder="Product link · https://…" />
-                            </div>
-                            {item.url.trim() && !validHttpUrl(item.url) && <div className="mt-1 text-[10px] font-medium text-red-500">Enter a full http/https link.</div>}
-                          </div>)}</div>
-                          <button type="button" className="mt-2 w-fit rounded-xl bg-slate-100 px-3 py-2 text-[11px] font-semibold text-slate-600" onClick={() => setEquipmentDraftItems((current) => [...current, newEquipmentDraftItem()])}><Plus className="mr-1 inline h-3.5 w-3.5" />Add item</button>
-                        </div>
-
-                        {equipmentVoteMode === "rate" ? <div>
-                          <div className="flex items-center justify-between gap-2"><Label htmlFor="equipment-answer-options">Answer choices</Label><button type="button" className="text-[10px] font-medium text-amber-700" onClick={() => setEquipmentAnswerOptions("Yes\nNo\nMaybe")}>Reset default</button></div>
-                          <Textarea id="equipment-answer-options" value={equipmentAnswerOptions} onChange={(event) => setEquipmentAnswerOptions(event.target.value)} rows={3} maxLength={180} placeholder={"Yes\nNo\nMaybe"} />
-                          <div className="mt-1 text-[10px] font-normal text-slate-400">Each item gets these same answer choices.</div>
-                        </div> : <div>
-                          <Label htmlFor="equipment-max-selections">Maximum items each person can choose</Label>
-                          <Input id="equipment-max-selections" type="number" min="1" max="16" value={equipmentMaxSelections} onChange={(event) => setEquipmentMaxSelections(event.target.value)} inputMode="numeric" />
-                        </div>}
-
-                        {renderVoterScope()}
-                      </>}
+                      {renderVoterScope()}
                     </>}
                   </>}
                 </>
@@ -3365,6 +3372,31 @@ export function TaskBoard({
               </Button>}
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(equipmentPendingSubject)} onOpenChange={(open) => { if (!open) setEquipmentPendingSubject(""); }}>
+        <DialogContent className="w-[calc(100%-2rem)] max-w-sm rounded-[1.75rem] p-4" onOpenAutoFocus={(event) => event.preventDefault()}>
+          <DialogHeader><DialogTitle className="text-left text-base font-semibold text-[#102A43]">Add equipment item?</DialogTitle></DialogHeader>
+          <div className="text-sm font-normal leading-relaxed text-slate-600">Add <span className="font-semibold text-[#102A43]">{equipmentPendingSubject}</span> to the voting list?</div>
+          <div className="mt-3 flex gap-2">
+            <Button type="button" variant="outline" className="h-10 flex-1 rounded-xl" onClick={() => setEquipmentPendingSubject("")}>Cancel</Button>
+            <Button type="button" className="h-10 flex-1 rounded-xl bg-amber-600 font-semibold text-white hover:bg-amber-700" onClick={() => { chooseEquipmentSubject(equipmentPendingSubject); setEquipmentPendingSubject(""); }}>Add item</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(equipmentLinkItemId)} onOpenChange={(open) => { if (!open) { setEquipmentLinkItemId(null); setEquipmentLinkDraft(""); } }}>
+        <DialogContent className="fixed bottom-2 left-2 right-2 top-auto w-auto max-w-none translate-x-0 translate-y-0 rounded-[1.75rem] p-4 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-sm sm:-translate-x-1/2" onOpenAutoFocus={(event) => event.preventDefault()}>
+          <DialogHeader><DialogTitle className="text-left text-base font-semibold text-[#102A43]">Product link</DialogTitle></DialogHeader>
+          <div className="grid gap-3">
+            <Input type="url" inputMode="url" value={equipmentLinkDraft} onChange={(event) => setEquipmentLinkDraft(event.target.value)} placeholder="https://…" />
+            {equipmentLinkDraft.trim() && !validHttpUrl(equipmentLinkDraft) && <div className="text-[10px] font-medium text-red-500">Enter a full http/https link.</div>}
+            <div className="flex gap-2">
+              {equipmentLinkItemId && equipmentDraftItems.find((item) => item.id === equipmentLinkItemId)?.url && <Button type="button" variant="outline" className="h-10 rounded-xl text-red-600" onClick={() => { updateEquipmentDraftItem(equipmentLinkItemId, { url: "" }); setEquipmentLinkItemId(null); setEquipmentLinkDraft(""); }}>Remove</Button>}
+              <Button type="button" className="h-10 flex-1 rounded-xl bg-[#102A43] font-semibold text-white" disabled={Boolean(equipmentLinkDraft.trim()) && !validHttpUrl(equipmentLinkDraft)} onClick={() => { if (equipmentLinkItemId) updateEquipmentDraftItem(equipmentLinkItemId, { url: equipmentLinkDraft.trim() }); setEquipmentLinkItemId(null); setEquipmentLinkDraft(""); }}>Save link</Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -3416,6 +3448,15 @@ export function TaskBoard({
             {votingDecision.title?.trim() && <div className="whitespace-normal break-words text-sm font-semibold leading-relaxed text-[#102A43]">{votingDecision.title}</div>}
             {votingDecision.decisionType === "players" && <div className="rounded-2xl bg-amber-50 px-3 py-2.5 text-sm font-medium leading-relaxed text-amber-950">{votingDecision.question}</div>}
             {votingDecision.hostName && <div className="rounded-xl bg-sky-50 px-3 py-2 text-[11px] font-bold text-sky-800">Host: <span className="font-semibold">{votingDecision.hostName}</span></div>}
+            {votingDecision.decisionType === "equipment" && <details className="group rounded-2xl border border-slate-200 bg-slate-50/70">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2.5 marker:hidden">
+                <div className="min-w-0"><div className="text-xs font-semibold text-[#102A43]">Club equipment</div><div className="mt-0.5 truncate text-[10px] font-medium text-slate-400">{equipmentSnapshot?.bags.length || 0} bag{(equipmentSnapshot?.bags.length || 0) === 1 ? "" : "s"}{equipmentSnapshot?.totals.length ? ` · ${equipmentSnapshot.totals.slice(0, 3).map((item) => `${item.label} ${item.quantity}`).join(" · ")}` : ""}</div></div>
+                <ChevronDown className="h-4 w-4 shrink-0 text-slate-400 transition group-open:rotate-180" />
+              </summary>
+              <div className="border-t border-slate-200 px-3 pb-3 pt-2">
+                {equipmentSnapshot?.bags.length ? <div className="grid max-h-44 gap-1.5 overflow-y-auto">{equipmentSnapshot.bags.map((bag) => <div key={bag.id} className="rounded-xl bg-white px-2.5 py-2 ring-1 ring-slate-200/80"><div className="flex items-center gap-2"><span className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-black/10" style={{ backgroundColor: bag.color || "#64748b" }} /><div className="min-w-0 flex-1 truncate text-[11px] font-semibold text-[#102A43]">{bag.name}</div><div className="max-w-[42%] truncate text-[10px] font-medium text-slate-500">{bag.holder}</div></div><div className="mt-1 pl-[18px] text-[10px] font-normal text-slate-500">{bag.items.length ? bag.items.map((item) => `${item.label} × ${item.quantity}`).join(" · ") : "No contents recorded"}</div></div>)}</div> : <div className="text-[10px] font-medium text-slate-400">No club equipment recorded.</div>}
+              </div>
+            </details>}
             {(votingDecision.decisionType === "players" || (votingDecision.decisionType === "equipment" && votingDecision.equipmentVoteMode === "rate")) ? (
               <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
                 {decisionQuestions(votingDecision).map((question, questionIndex) => {
@@ -3424,7 +3465,7 @@ export function TaskBoard({
                     <div className="flex items-start gap-2">
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-xs font-medium text-[#102A43]">{question.text}</div>
-                        {votingDecision.decisionType === "equipment" && (question.itemPrice || question.itemUrl) && <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[9px] font-normal text-slate-400">{question.itemPrice && <span>{question.itemPrice}</span>}{question.itemUrl && <a href={question.itemUrl} target="_blank" rel="noreferrer" className="text-sky-700 underline" onClick={(event) => event.stopPropagation()}>Open link</a>}</div>}
+                        {votingDecision.decisionType === "equipment" && (question.itemQuantity !== undefined || question.itemPrice || question.itemUrl) && <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[9px] font-normal text-slate-400">{question.itemQuantity !== undefined && <span>Qty {question.itemQuantity}</span>}{question.itemPrice && <span>{question.itemPrice}</span>}{question.itemPrice && question.itemQuantity !== undefined && <span className="font-medium text-slate-500">Subtotal {equipmentSubtotal(question.itemPrice, question.itemQuantity)}</span>}{question.itemUrl && <a href={question.itemUrl} target="_blank" rel="noreferrer" className="text-sky-700 underline" onClick={(event) => event.stopPropagation()}>Open link</a>}</div>}
                       </div>
                       <div className="flex max-w-[66%] flex-wrap justify-end gap-1">{question.options.map((option) => {
                         const selected = selectedIds.includes(option.id);
@@ -3446,7 +3487,7 @@ export function TaskBoard({
                     const selected = selectedIds.includes(option.id);
                     return <div key={option.id} className="rounded-2xl border border-slate-200 bg-white p-1">
                       <button type="button" className={`w-full rounded-xl px-2 py-2 text-left text-sm font-medium ${selected ? "bg-amber-50 text-amber-800" : "text-[#102A43]"}`} onClick={() => toggleVoteOption(question, option.id)}>
-                        <div className="flex items-center gap-2"><span className="min-w-0 flex-1">{selected && <Check className="mr-1 inline h-4 w-4" />}{option.label}</span>{option.price && <span className="shrink-0 text-xs font-medium text-slate-500">{option.price}</span>}</div>
+                        <div className="flex items-center gap-2"><span className="min-w-0 flex-1">{selected && <Check className="mr-1 inline h-4 w-4" />}{option.label}{option.quantity !== undefined && <span className="ml-1 text-[10px] font-normal text-slate-400">× {option.quantity}</span>}</span><span className="shrink-0 text-right">{option.price && <span className="block text-xs font-medium text-slate-500">{option.price}</span>}{option.price && option.quantity !== undefined && <span className="block text-[9px] font-medium text-slate-400">Subtotal {equipmentSubtotal(option.price, option.quantity)}</span>}</span></div>
                       </button>
                       {option.url && <a href={option.url} target="_blank" rel="noreferrer" className="block px-2 pb-2 text-[10px] font-medium text-sky-700 underline">Open product link</a>}
                     </div>;
@@ -3555,7 +3596,7 @@ export function TaskBoard({
             {(editSection === "all" || editSection === "note") && <div><Label htmlFor="edit-note">Note <span className="font-normal text-slate-400">optional</span></Label><Textarea id="edit-note" value={editNote} onChange={(event) => setEditNote(event.target.value)} rows={4} maxLength={1200} placeholder="Useful context, details or a short update." /></div>}
             {editSection === "all" && <div className="grid grid-cols-2 gap-2">
               <div><Label htmlFor="edit-tag">Tag</Label><select id="edit-tag" className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={editCategory} onChange={(event) => setEditCategory(event.target.value)}><option value="">None</option>{TAGS.map((item) => <option key={item}>{item}</option>)}</select></div>
-              <div><Label htmlFor="edit-due">Due</Label><Input id="edit-due" type="date" value={editDueDate} onChange={(event) => setEditDueDate(event.target.value)} /></div>
+              <div><Label htmlFor="edit-due">Due</Label><input id="edit-due" type="date" className="mt-1 h-10 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm" value={editDueDate} onChange={(event) => setEditDueDate(event.target.value)} /></div>
             </div>}
             {editSection === "due" && <div><Label htmlFor="edit-due-only">Due date <span className="font-normal text-slate-400">optional</span></Label><Input id="edit-due-only" type="date" value={editDueDate} onChange={(event) => setEditDueDate(event.target.value)} /></div>}
             {(editSection === "all" || editSection === "assignees") && renderPeoplePicker(editPeopleKeys, setEditPeopleKeys, "Assignees")}

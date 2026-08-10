@@ -93,7 +93,7 @@ const EMPTY_ROSTER_NAME = "New roster";
 const ROSTERS_STORAGE_KEY = "fair-teams-rosters-v1";
 const DRIVE_RECIPIENTS_STORAGE_KEY = "fair-teams-drive-backup-recipients-v1";
 const DRIVE_ACTIVE_BACKUP_STORAGE_KEY = "fair-teams-drive-active-backup-v1";
-const APP_VERSION = "1.70.0";
+const APP_VERSION = "1.70.1";
 
 function hasSavedRosterState() {
   try {
@@ -6403,7 +6403,7 @@ This is a shared roster. Local Backup can only remove/disassociate this deviceâ€
         </div>
       )}
 
-      {rosterToolsNotice && (
+      {rosterToolsNotice && rosterToolsNotice.tone !== "success" && (
         <div
           className="fixed inset-0 z-[60] flex items-end justify-center bg-black/45 p-4 sm:items-center"
           role="dialog"

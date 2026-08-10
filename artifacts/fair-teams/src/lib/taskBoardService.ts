@@ -62,6 +62,7 @@ export type TaskBoardDecisionQuestion = {
   maxSelections?: number;
   sourcePlayerIds?: string[];
   scheduleRole?: "time" | "location";
+  itemQuantity?: number;
   itemPrice?: string;
   itemUrl?: string;
 };
@@ -93,6 +94,7 @@ export type TaskBoardVoteOption = {
   id: string;
   label: string;
   count: number;
+  quantity?: number;
   price?: string;
   url?: string;
 };
@@ -359,6 +361,7 @@ function parseVote(value: unknown, fallbackId = "decision"): TaskBoardVote | und
       id: String(option.id || `option-${index}`),
       label: String(option.label || `Option ${index + 1}`),
       count: Number(option.count || 0),
+      quantity: option.quantity === 0 || option.quantity ? Math.max(0, Number(option.quantity) || 0) : undefined,
       price: option.price ? String(option.price).trim() : undefined,
       url: option.url ? String(option.url).trim() : undefined,
     };
@@ -392,6 +395,7 @@ function parseVote(value: unknown, fallbackId = "decision"): TaskBoardVote | und
           id: String(option.id || `q${questionIndex}-option-${optionIndex}`),
           label: String(option.label || `Option ${optionIndex + 1}`),
           count: Number(option.count || 0),
+          quantity: option.quantity === 0 || option.quantity ? Math.max(0, Number(option.quantity) || 0) : undefined,
           price: option.price ? String(option.price).trim() : undefined,
           url: option.url ? String(option.url).trim() : undefined,
         };
@@ -408,6 +412,7 @@ function parseVote(value: unknown, fallbackId = "decision"): TaskBoardVote | und
         maxSelections: Number(q.maxSelections || 0) || undefined,
         sourcePlayerIds: Array.isArray(q.sourcePlayerIds) ? q.sourcePlayerIds.map(String).filter(Boolean) : undefined,
         scheduleRole: q.scheduleRole === "time" || q.scheduleRole === "location" ? q.scheduleRole as TaskBoardDecisionQuestion["scheduleRole"] : undefined,
+        itemQuantity: q.itemQuantity === 0 || q.itemQuantity ? Math.max(0, Number(q.itemQuantity) || 0) : undefined,
         itemPrice: q.itemPrice ? String(q.itemPrice).trim() : undefined,
         itemUrl: q.itemUrl ? String(q.itemUrl).trim() : undefined,
       };
@@ -756,12 +761,14 @@ function votePayload(vote?: TaskBoardVote) {
       maxSelections: question.maxSelections || null,
       sourcePlayerIds: question.sourcePlayerIds || [],
       scheduleRole: question.scheduleRole || null,
+      itemQuantity: question.itemQuantity ?? null,
       itemPrice: question.itemPrice?.trim() || null,
       itemUrl: question.itemUrl?.trim() || null,
       options: question.options.map((option) => ({
         id: option.id,
         label: option.label.trim(),
         count: option.count || 0,
+        quantity: option.quantity ?? null,
         price: option.price?.trim() || null,
         url: option.url?.trim() || null,
       })),
@@ -785,7 +792,7 @@ function votePayload(vote?: TaskBoardVote) {
     createdByName: vote.createdByName || null,
     closedByName: vote.closedByName || null,
     notification: notificationPayload(vote.notification),
-    options: (questions[0]?.options || vote.options).map((option) => ({ id: option.id, label: option.label.trim(), count: option.count || 0 })),
+    options: (questions[0]?.options || vote.options).map((option) => ({ id: option.id, label: option.label.trim(), count: option.count || 0, quantity: option.quantity ?? null, price: option.price?.trim() || null, url: option.url?.trim() || null })),
   };
 }
 

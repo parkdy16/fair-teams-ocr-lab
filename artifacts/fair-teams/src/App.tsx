@@ -383,7 +383,7 @@ function App() {
   const [showSplash, setShowSplash] = useState(true);
 
   useEffect(() => {
-    const finish = window.setTimeout(() => setShowSplash(false), 2700);
+    const finish = window.setTimeout(() => setShowSplash(false), 2250);
     return () => window.clearTimeout(finish);
   }, []);
 
@@ -3548,13 +3548,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
     return (
       <div className="stripes-splash min-h-[100dvh] flex flex-col items-center justify-center bg-white text-[#102A43]">
         <div className="stripes-splash-mark" aria-label="Stripes">
-          <div className="stripes-splash-halo" aria-hidden="true" />
           <img src={stripesLogo} alt="" className="stripes-splash-final" aria-hidden="true" />
-          <img src={stripesLogo} alt="" className="stripes-splash-piece stripes-splash-piece-1" aria-hidden="true" />
-          <img src={stripesLogo} alt="" className="stripes-splash-piece stripes-splash-piece-2" aria-hidden="true" />
-          <img src={stripesLogo} alt="" className="stripes-splash-piece stripes-splash-piece-3" aria-hidden="true" />
-          <img src={stripesLogo} alt="" className="stripes-splash-piece stripes-splash-piece-4" aria-hidden="true" />
-          <img src={stripesLogo} alt="" className="stripes-splash-piece stripes-splash-piece-5" aria-hidden="true" />
         </div>
         <div className="stripes-splash-copy text-center">
           <h1 className="stripes-display text-[42px] font-semibold tracking-[-0.035em] leading-none text-[#102A43]">

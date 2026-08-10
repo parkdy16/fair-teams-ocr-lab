@@ -383,7 +383,7 @@ function App() {
   const [showSplash, setShowSplash] = useState(true);
 
   useEffect(() => {
-    const finish = window.setTimeout(() => setShowSplash(false), 1750);
+    const finish = window.setTimeout(() => setShowSplash(false), 2700);
     return () => window.clearTimeout(finish);
   }, []);
 
@@ -3546,18 +3546,23 @@ They will no longer be able to open or edit this shared roster unless it is shar
 
   if (showSplash) {
     return (
-      <div className="min-h-[100dvh] flex flex-col items-center justify-center bg-white text-[#102A43] fairteams-splash-fade">
-        <img
-          src={stripesLogo}
-          alt="Stripes"
-          className="h-28 w-28 object-contain"
-        />
-        <h1 className="stripes-display mt-3 text-[42px] font-semibold tracking-[-0.035em] leading-none text-[#102A43]">
-          Stripes
-        </h1>
-        <p className="mt-3 text-sm font-semibold tracking-[0.04em] text-slate-500">
-          Organize. Decide. Play.
-        </p>
+      <div className="stripes-splash min-h-[100dvh] flex flex-col items-center justify-center bg-white text-[#102A43]">
+        <div className="stripes-splash-mark" aria-label="Stripes">
+          <img src={stripesLogo} alt="" className="stripes-splash-final" aria-hidden="true" />
+          <img src={stripesLogo} alt="" className="stripes-splash-piece stripes-splash-piece-1" aria-hidden="true" />
+          <img src={stripesLogo} alt="" className="stripes-splash-piece stripes-splash-piece-2" aria-hidden="true" />
+          <img src={stripesLogo} alt="" className="stripes-splash-piece stripes-splash-piece-3" aria-hidden="true" />
+          <img src={stripesLogo} alt="" className="stripes-splash-piece stripes-splash-piece-4" aria-hidden="true" />
+          <img src={stripesLogo} alt="" className="stripes-splash-piece stripes-splash-piece-5" aria-hidden="true" />
+        </div>
+        <div className="stripes-splash-copy text-center">
+          <h1 className="stripes-display text-[42px] font-semibold tracking-[-0.035em] leading-none text-[#102A43]">
+            Stripes
+          </h1>
+          <p className="mt-3 text-sm font-semibold tracking-[0.025em] text-slate-500">
+            Organizer’s unfair advantage.
+          </p>
+        </div>
       </div>
     );
   }

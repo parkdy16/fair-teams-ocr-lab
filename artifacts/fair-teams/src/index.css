@@ -454,3 +454,125 @@
 }
 
 
+
+/* Stripes splash: separate parts of the real mark assemble into one. */
+.stripes-splash {
+  animation: stripes-splash-screen-out 260ms ease 2.42s both;
+}
+
+.stripes-splash-mark {
+  position: relative;
+  width: 8rem;
+  height: 8rem;
+  isolation: isolate;
+}
+
+.stripes-splash-mark img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  user-select: none;
+  pointer-events: none;
+}
+
+.stripes-splash-final {
+  opacity: 0;
+  animation: stripes-splash-final-in 430ms cubic-bezier(.2,.8,.2,1) 1.42s forwards;
+}
+
+.stripes-splash-piece {
+  opacity: 0;
+  will-change: transform, opacity;
+  animation-duration: 1.48s;
+  animation-timing-function: cubic-bezier(.2,.78,.18,1);
+  animation-fill-mode: forwards;
+}
+
+/* The clips overlap slightly on purpose so the assembled mark has no seams. */
+.stripes-splash-piece-1 {
+  clip-path: polygon(0 0, 50% 0, 56% 42%, 34% 54%, 0 47%);
+  animation-name: stripes-splash-piece-1;
+}
+.stripes-splash-piece-2 {
+  clip-path: polygon(43% 0, 100% 0, 100% 49%, 69% 55%, 50% 39%);
+  animation-name: stripes-splash-piece-2;
+}
+.stripes-splash-piece-3 {
+  clip-path: polygon(26% 34%, 74% 30%, 83% 71%, 57% 82%, 22% 68%);
+  animation-name: stripes-splash-piece-3;
+}
+.stripes-splash-piece-4 {
+  clip-path: polygon(0 46%, 39% 48%, 57% 100%, 0 100%);
+  animation-name: stripes-splash-piece-4;
+}
+.stripes-splash-piece-5 {
+  clip-path: polygon(61% 45%, 100% 42%, 100% 100%, 46% 100%, 53% 73%);
+  animation-name: stripes-splash-piece-5;
+}
+
+.stripes-splash-copy {
+  margin-top: .75rem;
+  opacity: 0;
+  transform: translateY(6px);
+  animation: stripes-splash-copy-in 440ms ease-out 1.68s forwards;
+}
+
+@keyframes stripes-splash-piece-1 {
+  0%   { opacity: 0; transform: translate(-34px, -24px) rotate(-13deg) scale(.93); }
+  16%  { opacity: 1; }
+  72%  { opacity: 1; transform: translate(2px, -1px) rotate(.8deg) scale(1); }
+  100% { opacity: 0; transform: translate(0, 0) rotate(0) scale(1); }
+}
+@keyframes stripes-splash-piece-2 {
+  0%   { opacity: 0; transform: translate(36px, -25px) rotate(14deg) scale(.94); }
+  16%  { opacity: 1; }
+  72%  { opacity: 1; transform: translate(-2px, 1px) rotate(-.7deg) scale(1); }
+  100% { opacity: 0; transform: translate(0, 0) rotate(0) scale(1); }
+}
+@keyframes stripes-splash-piece-3 {
+  0%   { opacity: 0; transform: translate(0, 28px) rotate(-6deg) scale(.9); }
+  18%  { opacity: 1; }
+  72%  { opacity: 1; transform: translate(0, -1px) rotate(.5deg) scale(1); }
+  100% { opacity: 0; transform: translate(0, 0) rotate(0) scale(1); }
+}
+@keyframes stripes-splash-piece-4 {
+  0%   { opacity: 0; transform: translate(-31px, 32px) rotate(11deg) scale(.92); }
+  18%  { opacity: 1; }
+  72%  { opacity: 1; transform: translate(1px, -1px) rotate(-.5deg) scale(1); }
+  100% { opacity: 0; transform: translate(0, 0) rotate(0) scale(1); }
+}
+@keyframes stripes-splash-piece-5 {
+  0%   { opacity: 0; transform: translate(34px, 30px) rotate(-12deg) scale(.92); }
+  18%  { opacity: 1; }
+  72%  { opacity: 1; transform: translate(-1px, 0) rotate(.5deg) scale(1); }
+  100% { opacity: 0; transform: translate(0, 0) rotate(0) scale(1); }
+}
+@keyframes stripes-splash-final-in {
+  from { opacity: 0; transform: scale(.985); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes stripes-splash-copy-in {
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes stripes-splash-screen-out {
+  to { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stripes-splash,
+  .stripes-splash-final,
+  .stripes-splash-copy,
+  .stripes-splash-piece {
+    animation: none !important;
+  }
+  .stripes-splash-final,
+  .stripes-splash-copy {
+    opacity: 1;
+    transform: none;
+  }
+  .stripes-splash-piece {
+    display: none;
+  }
+}

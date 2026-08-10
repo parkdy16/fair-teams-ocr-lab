@@ -232,7 +232,7 @@ export function savePlayers(players: RoomPlayer[]) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(players.map((p, i) => normalizePlayer(p, i))));
   } catch (error) {
-    console.error("Could not save Fair Teams roster locally.", error);
+    console.error("Could not save Stripes roster locally.", error);
   }
 }
 
@@ -580,21 +580,21 @@ export function saveRosterState(state: RosterState) {
   try {
     const safe = ensureRosterState(state.rosters, state.activeRosterId);
     localStorage.setItem(ROSTERS_STORAGE_KEY, JSON.stringify({
-      app: "Fair Teams",
+      app: "Stripes",
       version: 1,
       activeRosterId: safe.activeRosterId,
       rosters: safe.rosters,
     }));
     localStorage.setItem(ACTIVE_ROSTER_STORAGE_KEY, safe.activeRosterId);
   } catch (error) {
-    console.error("Could not save Fair Teams rosters locally.", error);
+    console.error("Could not save Stripes rosters locally.", error);
   }
 }
 
 export function rosterToShareJson(roster: RoomRoster) {
   const safe = normalizeRoster(roster);
   return JSON.stringify({
-    app: "Fair Teams",
+    app: "Stripes",
     type: "shared-roster",
     version: 1,
     exportedAt: new Date().toISOString(),
@@ -610,7 +610,7 @@ export function rostersToBackupJson(rosters: RoomRoster[], activeRosterId: strin
     ? activeRosterId
     : localRosters[0]?.id || "";
   return JSON.stringify({
-    app: "Fair Teams",
+    app: "Stripes",
     type: "all-rosters-backup",
     version: 1,
     exportedAt: new Date().toISOString(),
@@ -661,7 +661,7 @@ export function parseRosterFile(text: string, filename = "Imported roster"): Roo
       })];
     }
 
-    throw new Error("Import file does not contain a Fair Teams roster.");
+    throw new Error("Import file does not contain a Stripes roster.");
   }
 
   const players = csvToPlayers(trimmed);

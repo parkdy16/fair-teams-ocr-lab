@@ -121,7 +121,7 @@ export function guardFairTeamsSmartCommandBeforeAi(
   if (isFontOrTextSizeFeedback(text)) {
     return guardResponse({
       normalizedIntent: "Font size or readability feedback",
-      assistantSummary: "There is no font-size setting in Fair Teams right now. If the text feels too small on your phone, that is useful design feedback, not something hidden in Settings. The UI would need to be adjusted in the app design.",
+      assistantSummary: "There is no font-size setting in Stripes right now. If the text feels too small on your phone, that is useful design feedback, not something hidden in Settings. The UI would need to be adjusted in the app design.",
       debugWarning: "Guarded font/readability question to prevent invented settings.",
     });
   }
@@ -129,7 +129,7 @@ export function guardFairTeamsSmartCommandBeforeAi(
   if (isGenericUiFeedback(text) && isQuestion(text)) {
     return guardResponse({
       normalizedIntent: "UI/UX feedback question",
-      assistantSummary: "That sounds like UI feedback rather than an app action. I should not invent a setting or feature here. If something feels too small, crowded, or confusing, it probably needs a design adjustment in Fair Teams itself.",
+      assistantSummary: "That sounds like UI feedback rather than an app action. I should not invent a setting or feature here. If something feels too small, crowded, or confusing, it probably needs a design adjustment in Stripes itself.",
       debugWarning: "Guarded generic UI feedback question to avoid generic app advice.",
     });
   }
@@ -147,7 +147,7 @@ export function applyFairTeamsAiTruthGuard(
   if (isFontOrTextSizeFeedback(text) && suspiciousGenericFeatureClaim(summary)) {
     return guardResponse({
       normalizedIntent: "Font size or readability feedback",
-      assistantSummary: "There is no font-size setting in Fair Teams right now. If the text feels too small, that is valid feedback for improving the UI. I should not suggest a setting that does not exist.",
+      assistantSummary: "There is no font-size setting in Stripes right now. If the text feels too small, that is valid feedback for improving the UI. I should not suggest a setting that does not exist.",
       debugWarning: "Replaced AI response that invented a font/settings feature.",
     });
   }
@@ -159,7 +159,7 @@ export function applyFairTeamsAiTruthGuard(
       actions: [emptyAction({
         targetName: "Local roster backup",
         targetArea: "Roster Tools → Local Backup",
-        reason: "This is a real Fair Teams workflow, but it is not wired as an AI action yet.",
+        reason: "This is a real Stripes workflow, but it is not wired as an AI action yet.",
       })],
       unresolvedMessage: "Manual path: Roster Tools → Local Backup.",
       debugWarning: "Replaced informational AI answer for local save/backup action request.",

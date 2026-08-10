@@ -24,7 +24,7 @@ export const PLAYER_STYLE_DEFINITIONS: PlayerStyleDefinition[] = [
     shortLabel: "CB",
     label: "Centre-back type",
     sliderLabel: "Defense",
-    description: "Stays back, wins duels, protects space, and gives the team defensive stability. Fair Teams creates high DEF/physical, lower ATK.",
+    description: "Stays back, wins duels, protects space, and gives the team defensive stability. Stripes creates high DEF/physical, lower ATK.",
     deltas: { attack: -2.6, defense: 1.9, passing: -0.3, speed: -1.0, stamina: 0.3, physical: 1.2 },
   },
   {
@@ -32,7 +32,7 @@ export const PLAYER_STYLE_DEFINITIONS: PlayerStyleDefinition[] = [
     shortLabel: "FB",
     label: "Full-back / wing-back type",
     sliderLabel: "Wide support",
-    description: "Covers wide areas and supports both defense and attack. Fair Teams creates good DEF, speed, stamina, and some ATK.",
+    description: "Covers wide areas and supports both defense and attack. Stripes creates good DEF, speed, stamina, and some ATK.",
     deltas: { attack: -0.7, defense: 0.9, passing: -0.1, speed: 1.2, stamina: 1.0, physical: -0.2 },
   },
   {
@@ -40,7 +40,7 @@ export const PLAYER_STYLE_DEFINITIONS: PlayerStyleDefinition[] = [
     shortLabel: "DM",
     label: "Defensive midfielder type",
     sliderLabel: "Deep support",
-    description: "Protects the team and connects play. Fair Teams creates strong DEF and PASS, with less direct attacking weight.",
+    description: "Protects the team and connects play. Stripes creates strong DEF and PASS, with less direct attacking weight.",
     deltas: { attack: -1.2, defense: 1.3, passing: 1.1, speed: -0.2, stamina: 0.5, physical: 0.5 },
   },
   {
@@ -48,7 +48,7 @@ export const PLAYER_STYLE_DEFINITIONS: PlayerStyleDefinition[] = [
     shortLabel: "CM",
     label: "Balanced midfielder type",
     sliderLabel: "Balanced",
-    description: "All-round player. Fair Teams keeps the profile close to the overall skill, with a small boost to passing and stamina.",
+    description: "All-round player. Stripes keeps the profile close to the overall skill, with a small boost to passing and stamina.",
     deltas: { attack: 0, defense: 0, passing: 0.6, speed: 0, stamina: 0.4, physical: 0 },
   },
   {
@@ -56,7 +56,7 @@ export const PLAYER_STYLE_DEFINITIONS: PlayerStyleDefinition[] = [
     shortLabel: "AM",
     label: "Attacking midfielder type",
     sliderLabel: "Creative support",
-    description: "Creates chances and supports attacks. Fair Teams creates stronger PASS and ATK, with slightly lower defensive weight.",
+    description: "Creates chances and supports attacks. Stripes creates stronger PASS and ATK, with slightly lower defensive weight.",
     deltas: { attack: 1.0, defense: -0.9, passing: 1.2, speed: 0.1, stamina: 0, physical: -0.3 },
   },
   {
@@ -64,7 +64,7 @@ export const PLAYER_STYLE_DEFINITIONS: PlayerStyleDefinition[] = [
     shortLabel: "W",
     label: "Winger type",
     sliderLabel: "Wide attack",
-    description: "Wide attacking player. Fair Teams creates high SPEED and ATK, with less defensive weight.",
+    description: "Wide attacking player. Stripes creates high SPEED and ATK, with less defensive weight.",
     deltas: { attack: 1.4, defense: -1.7, passing: 0.2, speed: 1.7, stamina: 0.4, physical: -0.8 },
   },
   {
@@ -72,7 +72,7 @@ export const PLAYER_STYLE_DEFINITIONS: PlayerStyleDefinition[] = [
     shortLabel: "ST",
     label: "Striker type",
     sliderLabel: "Attack",
-    description: "Main attacking threat. Fair Teams creates very high ATK, lower DEF, and a more direct finishing profile.",
+    description: "Main attacking threat. Stripes creates very high ATK, lower DEF, and a more direct finishing profile.",
     deltas: { attack: 2.0, defense: -2.2, passing: -0.4, speed: 0.5, stamina: -0.2, physical: 0.4 },
   },
 ];
@@ -117,7 +117,7 @@ export function generateStyledPlayerAttributes(
     teamPlay: 2,
   };
 
-  // Keep the existing Fair Teams weighted OVR formula as the source of truth.
+  // Keep the existing Stripes weighted OVR formula as the source of truth.
   // The role creates the shape, then we gently move the shaped stats so the
   // computed OVR lands close to the organizer's chosen overall skill.
   for (let i = 0; i < 8; i += 1) {

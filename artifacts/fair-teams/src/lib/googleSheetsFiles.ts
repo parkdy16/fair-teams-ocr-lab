@@ -1,6 +1,7 @@
 import type { RoomRoster } from "@/lib/localRoster";
 import {
   FAIR_TEAMS_GOOGLE_SHEET_METADATA_TAB,
+  LEGACY_FAIR_TEAMS_GOOGLE_SHEET_METADATA_TAB,
   FAIR_TEAMS_GOOGLE_SHEET_PLAYERS_TAB,
   googleSheetAccessLabelsToCellValue,
   googleSheetRosterTitle,
@@ -68,7 +69,7 @@ async function getGoogleDriveFileMetadata(accessToken: string, fileId: string): 
     throwGoogleSheetFileError(
       response.status,
       message,
-      "Fair Teams cannot open this shared roster. Ask the owner for access or open it again from Shared Roster.",
+      "Stripes cannot open this shared roster. Ask the owner for access or open it again from Shared Roster.",
     );
   }
 
@@ -107,7 +108,7 @@ async function createEmptyGoogleSpreadsheet(accessToken: string, title: string):
     throwGoogleSheetFileError(
       response.status,
       message,
-      "Fair Teams cannot create this shared roster. Check Google Drive access, then retry.",
+      "Stripes cannot create this shared roster. Check Google Drive access, then retry.",
     );
   }
 
@@ -148,7 +149,7 @@ async function getSpreadsheetSummary(accessToken: string, spreadsheetId: string)
     throwGoogleSheetFileError(
       response.status,
       message,
-      "Fair Teams cannot edit this shared roster. Ask the owner for editor access.",
+      "Stripes cannot edit this shared roster. Ask the owner for editor access.",
     );
   }
 
@@ -171,7 +172,7 @@ async function batchUpdateSpreadsheet(accessToken: string, spreadsheetId: string
     throwGoogleSheetFileError(
       response.status,
       message,
-      "Fair Teams cannot edit this shared roster. Ask the owner for editor access.",
+      "Stripes cannot edit this shared roster. Ask the owner for editor access.",
     );
   }
 }
@@ -187,19 +188,29 @@ async function ensureFairTeamsSheetStructure(accessToken: string, spreadsheetId:
 
   const requests: unknown[] = [];
   const hasMetadata = byTitle.has(FAIR_TEAMS_GOOGLE_SHEET_METADATA_TAB);
+  const legacyMetadata = byTitle.get(LEGACY_FAIR_TEAMS_GOOGLE_SHEET_METADATA_TAB);
   const hasPlayers = byTitle.has(FAIR_TEAMS_GOOGLE_SHEET_PLAYERS_TAB);
 
   if (!hasMetadata) {
-    const firstSheet = sheets[0]?.properties;
-    if (firstSheet?.sheetId !== undefined && !byTitle.has(FAIR_TEAMS_GOOGLE_SHEET_METADATA_TAB)) {
+    if (legacyMetadata?.sheetId !== undefined) {
       requests.push({
         updateSheetProperties: {
-          properties: { sheetId: firstSheet.sheetId, title: FAIR_TEAMS_GOOGLE_SHEET_METADATA_TAB },
+          properties: { sheetId: legacyMetadata.sheetId, title: FAIR_TEAMS_GOOGLE_SHEET_METADATA_TAB },
           fields: "title",
         },
       });
     } else {
-      requests.push({ addSheet: { properties: { title: FAIR_TEAMS_GOOGLE_SHEET_METADATA_TAB } } });
+      const firstSheet = sheets[0]?.properties;
+      if (firstSheet?.sheetId !== undefined && !byTitle.has(FAIR_TEAMS_GOOGLE_SHEET_METADATA_TAB)) {
+        requests.push({
+          updateSheetProperties: {
+            properties: { sheetId: firstSheet.sheetId, title: FAIR_TEAMS_GOOGLE_SHEET_METADATA_TAB },
+            fields: "title",
+          },
+        });
+      } else {
+        requests.push({ addSheet: { properties: { title: FAIR_TEAMS_GOOGLE_SHEET_METADATA_TAB } } });
+      }
     }
   }
 
@@ -230,7 +241,7 @@ async function clearGoogleSheetValues(accessToken: string, spreadsheetId: string
     throwGoogleSheetFileError(
       response.status,
       message,
-      "Fair Teams cannot edit this shared roster. Ask the owner for editor access.",
+      "Stripes cannot edit this shared roster. Ask the owner for editor access.",
     );
   }
 }
@@ -261,14 +272,14 @@ async function writeGoogleSheetValues(
     throwGoogleSheetFileError(
       response.status,
       message,
-      "Fair Teams cannot edit this shared roster. Ask the owner for editor access.",
+      "Stripes cannot edit this shared roster. Ask the owner for editor access.",
     );
   }
 }
 
-async function readGoogleSheetValues(accessToken: string, spreadsheetId: string) {
+async function readGoogleSheetValuesForMetadataTab(accessToken: string, spreadsheetId: string, metadataTab: string) {
   const ranges = [
-    `'${FAIR_TEAMS_GOOGLE_SHEET_METADATA_TAB}'!A:B`,
+    `'${metadataTab}'!A:B`,
     `'${FAIR_TEAMS_GOOGLE_SHEET_PLAYERS_TAB}'!A:AZ`,
   ];
   const params = new URLSearchParams({
@@ -277,16 +288,23 @@ async function readGoogleSheetValues(accessToken: string, spreadsheetId: string)
   });
   params.append("ranges", ranges[1]);
 
-  const response = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values:batchGet?${params.toString()}`, {
+  return fetch(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values:batchGet?${params.toString()}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
+}
+
+async function readGoogleSheetValues(accessToken: string, spreadsheetId: string) {
+  let response = await readGoogleSheetValuesForMetadataTab(accessToken, spreadsheetId, FAIR_TEAMS_GOOGLE_SHEET_METADATA_TAB);
+  if (!response.ok && response.status === 400) {
+    response = await readGoogleSheetValuesForMetadataTab(accessToken, spreadsheetId, LEGACY_FAIR_TEAMS_GOOGLE_SHEET_METADATA_TAB);
+  }
 
   if (!response.ok) {
     const message = await readGoogleApiError(response, "Google Sheets could not read this shared roster.");
     throwGoogleSheetFileError(
       response.status,
       message,
-      "Fair Teams cannot read this shared roster. Ask the owner for access.",
+      "Stripes cannot read this shared roster. Ask the owner for access.",
     );
   }
 
@@ -335,7 +353,7 @@ export async function updateGoogleSheetRosterAccessLabels(
       body: JSON.stringify({
         values: [
           ["accessLabels", googleSheetAccessLabelsToCellValue(accessLabels)],
-          ["notes", "This sheet is managed by Fair Teams. Manual editing is not recommended."],
+          ["notes", "This sheet is managed by Stripes. Manual editing is not recommended."],
         ],
       }),
     },
@@ -346,7 +364,7 @@ export async function updateGoogleSheetRosterAccessLabels(
     throwGoogleSheetFileError(
       response.status,
       message,
-      "Fair Teams cannot update sharing names. Ask the owner for editor access.",
+      "Stripes cannot update sharing names. Ask the owner for editor access.",
     );
   }
 
@@ -405,7 +423,7 @@ function sortGoogleSheetRosterFiles(files: GoogleSheetRosterFile[]) {
 
 export async function listGoogleSheetRosterFiles(accessToken: string): Promise<GoogleSheetRosterFile[]> {
   const fairTeamsNameOrMarker =
-    "(name contains 'Fair Teams Shared Roster' or name contains ' - Fair Teams' or appProperties has { key='fairTeamsSharedRoster' and value='true' })";
+    "(name contains 'Stripes' or name contains 'Fair Teams Shared Roster' or name contains ' - Fair Teams' or appProperties has { key='fairTeamsSharedRoster' and value='true' })";
 
   const accessibleRosterQuery = [
     "trashed = false",
@@ -417,7 +435,7 @@ export async function listGoogleSheetRosterFiles(accessToken: string): Promise<G
     "trashed = false",
     "sharedWithMe = true",
     `mimeType = '${FAIR_TEAMS_GOOGLE_SHEET_MIME_TYPE}'`,
-    "(name contains 'Fair Teams Shared Roster' or name contains ' - Fair Teams')",
+    "(name contains 'Stripes' or name contains 'Fair Teams Shared Roster' or name contains ' - Fair Teams')",
   ].join(" and ");
 
   const [accessibleFiles, sharedFiles] = await Promise.all([
@@ -474,7 +492,7 @@ export async function trashGoogleSheetRoster(
     throwGoogleSheetFileError(
       response.status,
       message,
-      "Fair Teams cannot delete this shared roster. Only the owner can delete it.",
+      "Stripes cannot delete this shared roster. Only the owner can delete it.",
     );
   }
 

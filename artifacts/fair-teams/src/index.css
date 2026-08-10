@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Patrick+Hand&family=Outfit:wght@300;400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;650;700&family=Patrick+Hand&family=Outfit:wght@300;400;500;600;700;800;900&display=swap');
 @import "tailwindcss";
 @source "./index.html";
 @source "./src/**/*.{js,jsx,ts,tsx}";
@@ -95,6 +95,7 @@
   --ring: 142 71% 45%;
 
   --app-font-sans: 'Outfit', sans-serif;
+  --app-font-display: 'Fredoka', 'Outfit', sans-serif;
   --app-font-serif: Georgia, serif;
   --app-font-mono: Menlo, monospace;
   --radius: 0.75rem;
@@ -275,7 +276,16 @@
 }
 
 .fairteams-visual-refresh .font-black {
-  font-weight: 800;
+  font-family: var(--app-font-display);
+  font-weight: 650;
+}
+
+.stripes-display {
+  font-family: var(--app-font-display);
+}
+
+.stripes-brand-mark {
+  filter: drop-shadow(0 5px 12px rgba(15, 42, 67, 0.08));
 }
 
 .fairteams-visual-refresh .shadow-sm {

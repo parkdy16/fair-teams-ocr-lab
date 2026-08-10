@@ -3,7 +3,8 @@ import type { RoomPlayer, RoomRoster } from "@/lib/localRoster";
 import { cleanRosterName, normalizePlayer, normalizeRoster } from "@/lib/localRoster";
 
 export const FAIR_TEAMS_GOOGLE_SHEET_SCHEMA_VERSION = 1;
-export const FAIR_TEAMS_GOOGLE_SHEET_METADATA_TAB = "FairTeams_Metadata";
+export const FAIR_TEAMS_GOOGLE_SHEET_METADATA_TAB = "Stripes_Metadata";
+export const LEGACY_FAIR_TEAMS_GOOGLE_SHEET_METADATA_TAB = "FairTeams_Metadata";
 export const FAIR_TEAMS_GOOGLE_SHEET_PLAYERS_TAB = "Players";
 
 export type GoogleSheetCellValue = string | number | boolean;
@@ -246,7 +247,7 @@ function sheetRowToPlayer(row: GoogleSheetCellValue[], headerIndex: Record<strin
 
 export function googleSheetRosterTitle(roster: RoomRoster) {
   const name = cleanRosterName(roster.name, "Shared roster");
-  return `${name} - Fair Teams`;
+  return `${name} - Stripes`;
 }
 
 export function rosterToGoogleSheetValues(roster: RoomRoster): GoogleSheetRosterValues {
@@ -254,7 +255,7 @@ export function rosterToGoogleSheetValues(roster: RoomRoster): GoogleSheetRoster
   const now = new Date().toISOString();
   const metadataValues: GoogleSheetValues = [
     ["key", "value"],
-    ["app", "Fair Teams"],
+    ["app", "Stripes"],
     ["type", "google-sheets-shared-roster"],
     ["schemaVersion", FAIR_TEAMS_GOOGLE_SHEET_SCHEMA_VERSION],
     ["rosterId", normalized.id],
@@ -265,7 +266,7 @@ export function rosterToGoogleSheetValues(roster: RoomRoster): GoogleSheetRoster
     ["exportedAt", now],
     ["imagesIncluded", "FALSE"],
     ["accessLabels", googleSheetAccessLabelsToCellValue(normalized.cloudSource?.accessLabels)],
-    ["notes", "This sheet is managed by Fair Teams. Manual editing is not recommended."],
+    ["notes", "This sheet is managed by Stripes. Manual editing is not recommended."],
   ];
 
   const playerValues: GoogleSheetValues = [
@@ -282,11 +283,11 @@ export function googleSheetValuesToRoster(
   spreadsheetInfo: { spreadsheetId?: string; spreadsheetName?: string; webViewLink?: string; modifiedTime?: string } = {},
 ): RoomRoster {
   const metadata = metadataValueMap(metadataValues);
-  if (metadata.app && metadata.app !== "Fair Teams") {
-    throw new Error("This Google Sheet does not look like a Fair Teams roster.");
+  if (metadata.app && !["Stripes", "Fair Teams"].includes(metadata.app)) {
+    throw new Error("This Google Sheet does not look like a Stripes roster.");
   }
   if (metadata.type && metadata.type !== "google-sheets-shared-roster") {
-    throw new Error("This Google Sheet is not a Fair Teams shared roster.");
+    throw new Error("This Google Sheet is not a Stripes shared roster.");
   }
 
   const header = playerValues[0] || [];

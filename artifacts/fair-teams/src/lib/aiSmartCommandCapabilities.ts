@@ -13,17 +13,17 @@ export const AI_SMART_COMMAND_CAPABILITIES: AiSmartCommandCapability[] = [
   {
     id: "today.select_players",
     actionType: "select_players",
-    label: "Select players for Today",
+    label: "Select players for Session",
     supportStatus: "executable",
-    description: "Select existing roster players for Today from a spoken/typed player list.",
+    description: "Select existing roster players for Session from a spoken/typed player list.",
     examples: ["Joon, Jorge and Sarah are playing today", "오늘 조지랑 사라 와요"],
   },
   {
     id: "today.unselect_players",
     actionType: "unselect_players",
-    label: "Remove players from Today",
+    label: "Remove players from Session",
     supportStatus: "executable",
-    description: "Remove existing roster players from Today without changing the rest of the current selection.",
+    description: "Remove existing roster players from Session without changing the rest of the current selection.",
     examples: ["remove George from today", "Joon is not coming", "take Brijesh out"],
   },
   {
@@ -31,7 +31,7 @@ export const AI_SMART_COMMAND_CAPABILITIES: AiSmartCommandCapability[] = [
     actionType: "mark_players_late",
     label: "Mark late",
     supportStatus: "executable",
-    description: "Mark matched roster players as late in Today while keeping them selected.",
+    description: "Mark matched roster players as late in Session while keeping them selected.",
     examples: ["Tanja is late", "Joon, Jorge and Tanja are here, but Tanja is late"],
   },
   {
@@ -79,7 +79,7 @@ export const AI_SMART_COMMAND_CAPABILITIES: AiSmartCommandCapability[] = [
     actionType: "generate_teams",
     label: "Generate teams",
     supportStatus: "executable",
-    description: "Generate fair teams from the players currently selected in Today after the user confirms the action card.",
+    description: "Generate balanced teams from the players currently selected in Session after the user confirms the action card.",
     examples: ["make two teams from today's selected players", "generate teams", "팀 만들어줘"],
   },
   {
@@ -119,8 +119,8 @@ export const AI_SMART_COMMAND_CAPABILITIES: AiSmartCommandCapability[] = [
     actionType: "open_app_area",
     label: "Open app area",
     supportStatus: "executable",
-    description: "Open a main Fair Teams area such as Roster, Today, Teams, or Club.",
-    examples: ["open Today", "show me the Teams tab", "go to Roster"],
+    description: "Open a main Stripes area such as Roster, Session, Teams, or Club.",
+    examples: ["open Session", "show me the Teams tab", "go to Roster"],
   },
   {
     id: "equipment.add_item",

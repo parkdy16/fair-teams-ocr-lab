@@ -59,7 +59,7 @@ export function captureTrelloAuthorization(userKey: string): { connected: boolea
 export function startTrelloAuthorization(userKey: string) {
   if (typeof window === "undefined") return;
   if (!TRELLO_API_KEY) throw new Error("Trello API key is not configured.");
-  if (!userKey.trim()) throw new Error("Sign in to Fair Teams first.");
+  if (!userKey.trim()) throw new Error("Sign in to Stripes first.");
 
   window.sessionStorage.setItem(PENDING_USER_KEY, userKey);
   const returnUrl = `${window.location.origin}${window.location.pathname}${window.location.search}`;

@@ -102,12 +102,9 @@ function createDriveBackupDocsView() {
   const view = new picker.DocsView(picker.ViewId.DOCS);
   view.setIncludeFolders(false);
   view.setSelectFolderEnabled(false);
-  // Drive backup files created by Fair Teams are saved as application/json.
+  // Drive backup files created by Stripes are saved as application/json.
   // Keep the picker focused on JSON files instead of broad text/document files.
   view.setMimeTypes(FAIR_TEAMS_DRIVE_MIME_TYPE);
-  if (typeof view.setQuery === "function") {
-    view.setQuery("Fair Teams");
-  }
 
   // JSON backup files do not benefit from thumbnail/grid browsing.
   if (picker.DocsViewMode?.LIST) {
@@ -180,7 +177,7 @@ export async function pickGoogleDriveBackupFile(accessToken: string): Promise<Go
     const timeoutId = window.setTimeout(() => {
       fail(
         new Error(
-          "Google Drive picker did not open. Try again from Chrome and make sure pop-ups are allowed for Fair Teams.",
+          "Google Drive picker did not open. Try again from Chrome and make sure pop-ups are allowed for Stripes.",
         ),
       );
     }, 25000);
@@ -192,7 +189,7 @@ export async function pickGoogleDriveBackupFile(accessToken: string): Promise<Go
       builder.setDeveloperKey(config.apiKey);
       applyPickerAppId(builder, config.appId);
       builder.setOAuthToken(accessToken);
-      builder.setTitle("Open Fair Teams Drive backup");
+      builder.setTitle("Open Stripes Drive backup");
       builder.setOrigin(window.location.origin);
       builder.setCallback((response: PickerResponse) => {
         if (response.action === picker.Action.CANCEL) {
@@ -206,10 +203,10 @@ export async function pickGoogleDriveBackupFile(accessToken: string): Promise<Go
           fail(new Error("Google Picker did not return a file."));
           return;
         }
-        const name = picked.name || "Fair Teams Drive backup.json";
+        const name = picked.name || "Stripes Drive backup.json";
         const mimeType = picked.mimeType || "";
         if (!name.toLowerCase().endsWith(".json") && mimeType !== FAIR_TEAMS_DRIVE_MIME_TYPE) {
-          fail(new Error("Please choose a Fair Teams .json backup file."));
+          fail(new Error("Please choose a Stripes .json backup file."));
           return;
         }
         settle({
@@ -282,7 +279,7 @@ export async function pickGoogleSheetRosterFile(accessToken: string): Promise<Go
       builder.setDeveloperKey(config.apiKey);
       applyPickerAppId(builder, config.appId);
       builder.setOAuthToken(accessToken);
-      builder.setTitle("Open shared Fair Teams roster");
+      builder.setTitle("Open shared Stripes roster");
       builder.setOrigin(window.location.origin);
       if (typeof builder.setSelectableMimeTypes === "function") {
         builder.setSelectableMimeTypes(FAIR_TEAMS_GOOGLE_SHEET_MIME_TYPE);
@@ -305,10 +302,10 @@ export async function pickGoogleSheetRosterFile(accessToken: string): Promise<Go
           fail(new Error("Google Picker did not return a file."));
           return;
         }
-        const name = picked.name || "Fair Teams shared roster";
+        const name = picked.name || "Stripes shared roster";
         const mimeType = picked.mimeType || FAIR_TEAMS_GOOGLE_SHEET_MIME_TYPE;
         if (mimeType && mimeType !== FAIR_TEAMS_GOOGLE_SHEET_MIME_TYPE) {
-          fail(new Error("Please choose a Fair Teams shared roster Google Sheet."));
+          fail(new Error("Please choose a Stripes shared roster Google Sheet."));
           return;
         }
         settle({

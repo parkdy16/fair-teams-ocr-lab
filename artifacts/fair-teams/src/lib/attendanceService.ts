@@ -128,7 +128,7 @@ export async function saveAttendanceIssue(
   const now = new Date();
   const userName = user.displayName?.trim() || user.email || "Organizer";
   const payload: Record<string, unknown> = {
-    app: "Fair Teams",
+    app: "Stripes",
     schemaVersion: 1,
     playerId: record.playerId.trim(),
     playerName: record.playerName.trim() || "Unknown player",

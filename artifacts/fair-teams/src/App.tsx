@@ -34,7 +34,7 @@ import type { AiSmartCommandAction } from "@/lib/aiSmartCommandTypes";
 import { FirebaseSharedRosterAuthCard } from "@/components/FirebaseSharedRosterAuthCard";
 import { FirebaseSharedRosterPublishCard } from "@/components/FirebaseSharedRosterPublishCard";
 import { Button } from "@/components/ui/button";
-import fairTeamsLogo from "@/assets/fairteams-logo.png";
+import stripesLogo from "@/assets/stripes-logo-mark.png";
 import {
   RoomPlayer,
   RoomRoster,
@@ -156,7 +156,7 @@ function timestampForFilename(date = new Date()) {
 
 function allRostersDriveBackupFilename(rosters: RoomRoster[]) {
   const readableName = rosters.length === 1 ? rosters[0]?.name || "Roster" : "All rosters";
-  return `Fair Teams - ${slugifyFilename(readableName)} - ${timestampForFilename()}.json`;
+  return `Stripes - ${slugifyFilename(readableName)} - ${timestampForFilename()}.json`;
 }
 
 function uniqueRosterName(name: string, rosters: RoomRoster[]) {
@@ -432,16 +432,16 @@ function App() {
     "advanced-edit": { title: "Advanced Edit", body: "Open Advanced Edit. It is optional, but useful when you know a player well." },
     "save-edit": { title: "Save the profile", body: "You have seen the detailed controls. Save the player profile." },
     "flip-card": { title: "See the other side", body: "Tap Heung-minâ€™s card to flip it and see more player information." },
-    "today-tab": { title: "Match day", body: "Open Today to choose who is playing." },
+    "today-tab": { title: "Session", body: "Open Session to choose who is playing." },
     "select-today": { title: "Complete the lineup", body: "Select Heung-min on the attendance screen." },
     "teams-tab": { title: "Make teams", body: "Open the Teams tab." },
     "field-size": { title: "Choose the pitch", body: "Open Field Size and choose any size." },
-    "generate": { title: "The magic moment", body: "Tap Generate. FairTeams will build the teams." },
+    "generate": { title: "The magic moment", body: "Tap Generate. Stripes will build the teams." },
     "magic-wait": { title: "Wait for itâ€¦", body: "Reading the lineup and balancing every strength." },
     "magic-reveal": { title: "Thatâ€™s the magic", body: "Balanced teams, ready in seconds." },
     "club-tab": { title: "Shared team tools", body: "Open Club to see how groups can work on one roster together." },
     "club-intro": { title: "Club is for shared rosters", body: "Use Club when several organizers work on one roster together. If you use local rosters, you can skip this tab." },
-    "help-question": { title: "Ask FairTeams Help", body: "The question is ready. Tap Ask to see how in-app help works." },
+    "help-question": { title: "Ask Stripes Help", body: "The question is ready. Tap Ask to see how in-app help works." },
     "roster-return": { title: "Back to your roster", body: "Return to Roster for the final setup step." },
     "settings-button": { title: "Roster controls", body: "Tap Settings to switch rosters, create new ones, and manage the app." },
     "recap": { title: "Your roster is ready", body: "One last look at the four main areas." },
@@ -1179,7 +1179,7 @@ function App() {
     activeTab === "today" && rosters.length > 0 && !todayRosterChosen;
   const headerDisplayName = shouldShowTodayStartHeader
     ? formatTodayStartDateLabel()
-    : activeRosterName || "Fair Teams";
+    : activeRosterName || "Stripes";
   const isWhiteHeaderColor = headerColor.toLowerCase() === "#ffffff";
   const identityAccentColor = shouldShowTodayStartHeader
     ? "#E2E8F0"
@@ -1291,15 +1291,15 @@ function App() {
           teamCount = playerIds.size / playersPerTeam;
         }
         if (!teamCount || teamCount < 2 || playerIds.size < teamCount) {
-          return `Replaced Today with ${playerIds.size} player${playerIds.size === 1 ? "" : "s"}. I still need a valid team count before generating teams.`;
+          return `Replaced Session with ${playerIds.size} player${playerIds.size === 1 ? "" : "s"}. I still need a valid team count before generating teams.`;
         }
         const safeTeamCount = prepareTeamsFromAi(teamCount, { autoGenerate: true });
-        return `Replaced Today with ${playerIds.size} player${playerIds.size === 1 ? "" : "s"} and generated ${safeTeamCount} fair team${safeTeamCount === 1 ? "" : "s"}.`;
+        return `Replaced Session with ${playerIds.size} player${playerIds.size === 1 ? "" : "s"} and generated ${safeTeamCount} balanced team${safeTeamCount === 1 ? "" : "s"}.`;
       }
 
       return shouldReplaceTodaySelection
-        ? `Replaced Today with ${playerIds.size} player${playerIds.size === 1 ? "" : "s"}.`
-        : `Added/selected ${playerIds.size} player${playerIds.size === 1 ? "" : "s"} for Today without clearing the current selection.`;
+        ? `Replaced Session with ${playerIds.size} player${playerIds.size === 1 ? "" : "s"}.`
+        : `Added/selected ${playerIds.size} player${playerIds.size === 1 ? "" : "s"} for Session without clearing the current selection.`;
     }
 
     if (action.type === "mark_players_late") {
@@ -1320,7 +1320,7 @@ function App() {
         ),
       );
       setTodayRosterChosen(true);
-      return `Marked ${playerIds.size} player${playerIds.size === 1 ? "" : "s"} as late in Today.`;
+      return `Marked ${playerIds.size} player${playerIds.size === 1 ? "" : "s"} as late in Session.`;
     }
 
     if (action.type === "unselect_players") {
@@ -1330,7 +1330,7 @@ function App() {
           .filter((playerId): playerId is string => Boolean(playerId)),
       );
       if (playerIds.size === 0) {
-        throw new Error("I understood a remove-from-Today request, but could not match any roster players.");
+        throw new Error("I understood a remove-from-Session request, but could not match any roster players.");
       }
 
       replacePlayers(
@@ -1341,7 +1341,7 @@ function App() {
         ),
       );
       setTodayRosterChosen(true);
-      return `Removed ${playerIds.size} player${playerIds.size === 1 ? "" : "s"} from Today without changing anyone else.`;
+      return `Removed ${playerIds.size} player${playerIds.size === 1 ? "" : "s"} from Session without changing anyone else.`;
     }
 
     if (action.type === "add_new_player_suggestion") {
@@ -1376,7 +1376,7 @@ function App() {
           ),
         );
         setTodayRosterChosen(true);
-        return `${duplicate.name} is already in this roster, so I selected them for Today.`;
+        return `${duplicate.name} is already in this roster, so I selected them for Session.`;
       }
 
       const suggestedSkill =
@@ -1409,7 +1409,7 @@ function App() {
       setReviewPlayerIndex(0);
       setReviewAutoOpenPlayerId(nextPlayer.id);
       setActiveTab("players");
-      return `Added ${nextPlayer.name} as a new player, selected them for Today, and opened their player profile for review.`;
+      return `Added ${nextPlayer.name} as a new player, selected them for Session, and opened their player profile for review.`;
     }
 
     if (action.type === "set_team_count") {
@@ -1439,7 +1439,7 @@ function App() {
     if (action.type === "generate_teams") {
       const selectedCount = players.filter((player) => player.attending).length;
       if (selectedCount < 2) {
-        throw new Error("Select at least two players in Today before generating teams.");
+        throw new Error("Select at least two players in Session before generating teams.");
       }
 
       let teamCount = typeof action.teamCount === "number" ? action.teamCount : null;
@@ -1461,7 +1461,7 @@ function App() {
       }
       const shuffleEquals = /shuffle|different|mix|fresh|new/i.test(`${action.distribution || ""} ${action.reason || ""}`);
       const safeTeamCount = prepareTeamsFromAi(teamCount, { autoGenerate: true, shuffleEquals });
-      return `Generated ${safeTeamCount} fair team${safeTeamCount === 1 ? "" : "s"} from ${selectedCount} selected player${selectedCount === 1 ? "" : "s"}.`;
+      return `Generated ${safeTeamCount} balanced team${safeTeamCount === 1 ? "" : "s"} from ${selectedCount} selected player${selectedCount === 1 ? "" : "s"}.`;
     }
 
     if (action.type === "add_pairing_rule") {
@@ -1499,7 +1499,7 @@ function App() {
       const rawArea = String(action.targetArea || "").trim().toLowerCase();
       const targetTab = rawArea.includes("roster") || rawArea.includes("player")
         ? "players"
-        : rawArea.includes("today") || rawArea.includes("attendance")
+        : rawArea.includes("today") || rawArea.includes("session") || rawArea.includes("attendance")
           ? "today"
           : rawArea.includes("team")
             ? "teams"
@@ -1507,13 +1507,13 @@ function App() {
               ? "club"
               : null;
       if (!targetTab || !isAppTab(targetTab)) {
-        throw new Error("I understood an open-area request, but I could not tell which Fair Teams tab to open.");
+        throw new Error("I understood an open-area request, but I could not tell which Stripes tab to open.");
       }
       setActiveTab(targetTab);
-      return `Opened ${targetTab === "players" ? "Roster" : targetTab.charAt(0).toUpperCase() + targetTab.slice(1)}.`;
+      return `Opened ${targetTab === "players" ? "Roster" : targetTab === "today" ? "Session" : targetTab.charAt(0).toUpperCase() + targetTab.slice(1)}.`;
     }
 
-    throw new Error("Fair Teams understands this, but it is not wired to apply yet.");
+    throw new Error("Stripes understands this, but it is not wired to apply yet.");
   };
 
 
@@ -2060,7 +2060,7 @@ function App() {
 
   const previewGoogleDriveBackupFile = async (picked: { id: string; name: string; mimeType?: string }) => {
     if (!picked.name.toLowerCase().endsWith(".json") && picked.mimeType !== "application/json") {
-      showRosterToolsNotice("Choose a Fair Teams backup", "Please select a Fair Teams .json backup file.", "warning");
+      showRosterToolsNotice("Choose a Stripes backup", "Please select a Stripes .json backup file.", "warning");
       return;
     }
 
@@ -2311,7 +2311,7 @@ function App() {
     removeActiveRosterGoogleSheetLink();
     showRosterToolsNotice(
       "Shared file not found",
-      "This Google account cannot find the linked shared roster. It may have been deleted, moved to trash, or not shared with this account. Fair Teams kept the local roster on this device and removed the broken link. Use Open a shared roster to connect again.",
+      "This Google account cannot find the linked shared roster. It may have been deleted, moved to trash, or not shared with this account. Stripes kept the local roster on this device and removed the broken link. Use Open a shared roster to connect again.",
       "warning",
     );
   };
@@ -2697,7 +2697,7 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
       return;
     }
 
-    // Google Picker is its own overlay. Close Fair Teams overlays first so the
+    // Google Picker is its own overlay. Close Stripes overlays first so the
     // picker is not hidden behind our modal stack and the app does not feel frozen.
     setGoogleSheetChoices(null);
     setGoogleSheetActionFile(null);
@@ -2776,7 +2776,7 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
       setGoogleSheetChoices(null);
       setGoogleSheetActionFile(null);
       setRosterFilesOpen(false);
-      showRosterToolsNotice("Shared roster opened", `${file.name} is now available in Fair Teams.`, "success");
+      showRosterToolsNotice("Shared roster opened", `${file.name} is now available in Stripes.`, "success");
     } catch (error) {
       showRosterToolsNotice("Could not open shared roster", error instanceof Error ? error.message : "Please try again.", "error");
     } finally {
@@ -2906,7 +2906,7 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
       setGoogleSheetShareName("");
       setGoogleSheetShareEmail("");
       await loadGoogleSheetAccessList();
-      showRosterToolsNotice("Editor added", `${editorName || email} can now edit this shared roster through Fair Teams.`, "success");
+      showRosterToolsNotice("Editor added", `${editorName || email} can now edit this shared roster through Stripes.`, "success");
     } catch (error) {
       if (isMissingSharedRosterError(error)) {
         handleMissingActiveGoogleSheetLink();
@@ -3545,18 +3545,23 @@ They will no longer be able to open or edit this shared roster unless it is shar
     return (
       <div className="min-h-[100dvh] flex flex-col items-center justify-center bg-white text-[#102A43] fairteams-splash-fade">
         <img
-          src={fairTeamsLogo}
-          alt="Fair Teams"
-          className="w-24 h-24 object-contain mb-3"
+          src={stripesLogo}
+          alt="Stripes"
+          className="h-28 w-28 object-contain"
         />
-        <h1 className="text-4xl font-black tracking-tight leading-none">
-          <span className="text-[#102A43]">FAIR</span>
-          <span className="text-[#16A34A]"> TEAMS</span>
+        <h1 className="stripes-display mt-3 text-[42px] font-semibold tracking-[-0.035em] leading-none text-[#102A43]">
+          Stripes
         </h1>
-        <p className="mt-3 text-sm font-semibold text-slate-500">
-          Balanced teams. Better games.
+        <p className="mt-3 text-sm font-semibold tracking-[0.04em] text-slate-500">
+          Organize. Decide. Play.
         </p>
-        <div className="mt-6 h-1 w-20 rounded-full bg-[#22C55E]" />
+        <div className="mt-7 flex items-center gap-1.5" aria-hidden="true">
+          <span className="h-1.5 w-8 rounded-full bg-[#102A43]" />
+          <span className="h-1.5 w-5 rounded-full bg-[#2563EB]" />
+          <span className="h-1.5 w-5 rounded-full bg-[#14B8A6]" />
+          <span className="h-1.5 w-5 rounded-full bg-[#F59E0B]" />
+          <span className="h-1.5 w-5 rounded-full bg-[#EF4444]" />
+        </div>
       </div>
     );
   }
@@ -3608,13 +3613,13 @@ They will no longer be able to open or edit this shared roster unless it is shar
           <aside className="absolute inset-y-0 left-0 z-40 hidden w-[204px] flex-col border-r border-slate-200 bg-white/96 p-4 backdrop-blur lg:flex">
             <div className="flex items-center px-1.5 py-2">
               <span className="flex h-16 w-full items-center justify-center overflow-hidden rounded-[1.35rem] border border-slate-200/90 bg-gradient-to-br from-white to-slate-50 shadow-[0_8px_22px_rgba(15,23,42,0.07)]">
-                <img src={fairTeamsLogo} alt="Fair Teams" className="h-[3.65rem] w-[3.65rem] object-contain" />
+                <img src={stripesLogo} alt="Stripes" className="h-[3.65rem] w-[3.65rem] object-contain" />
               </span>
             </div>
             <TabsList className="mt-6 flex h-auto w-full flex-col gap-1.5 rounded-none border-0 bg-transparent p-0 shadow-none">
               {([
                 ["players", "Roster", Users],
-                ["today", "Today", Check],
+                ["today", "Session", Check],
                 ["teams", "Teams", RefreshCw],
                 ["club", "Club", Building2],
               ] as const).map(([value, label, Icon]) => (
@@ -3623,7 +3628,11 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   value={value}
                   className={`fairteams-tab-trigger fairteams-desktop-nav-trigger flex h-[3.25rem] w-full justify-start gap-3.5 rounded-xl border border-transparent px-3.5 text-[16px] font-black text-slate-500 shadow-none transition-colors hover:bg-slate-50 data-[state=active]:border-slate-200 data-[state=active]:bg-slate-50 data-[state=active]:text-[#102A43] data-[state=active]:shadow-none ${(tutorialStep === "today-tab" && value === "today") || (tutorialStep === "teams-tab" && value === "teams") || (tutorialStep === "club-tab" && value === "club") || (tutorialStep === "roster-return" && value === "players") ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
                 >
-                  <Icon className="h-5 w-5 shrink-0" strokeWidth={2.25} />
+                  {value === "teams" ? (
+                    <img src={stripesLogo} alt="" aria-hidden="true" className="h-6 w-6 shrink-0 object-contain" />
+                  ) : (
+                    <Icon className="h-5 w-5 shrink-0" strokeWidth={2.25} />
+                  )}
                   {label}
                 </TabsTrigger>
               ))}
@@ -3644,7 +3653,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                     </span>
                   )}
                 </div>
-                <div className="mt-0.5 text-xs font-bold text-slate-400">{activeTab === "players" ? "Roster" : activeTab === "today" ? "Today" : activeTab === "teams" ? "Teams" : "Club"}</div>
+                <div className="mt-0.5 text-xs font-bold text-slate-400">{activeTab === "players" ? "Roster" : activeTab === "today" ? "Session" : activeTab === "teams" ? "Teams" : "Club"}</div>
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-2">
@@ -3692,7 +3701,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   activeTab === "players"
                     ? "Edit active roster identity"
                     : shouldShowTodayStartHeader
-                      ? `Today start: ${headerDisplayName}`
+                      ? `Session start: ${headerDisplayName}`
                       : `Current roster: ${activeRosterName}`
                 }
               >
@@ -3702,7 +3711,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                     style={logoRingStyle}
                   >
                     <img
-                      src={groupLogo || fairTeamsLogo}
+                      src={groupLogo || stripesLogo}
                       alt=""
                       className="h-full w-full object-cover"
                     />
@@ -3994,7 +4003,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 value="today"
                 className={`fairteams-tab-trigger ${tutorialStep === "today-tab" ? "fairteams-tutorial-pulse relative z-[82]" : ""} fairteams-footer-text-tab flex h-full items-center justify-center rounded-xl text-slate-500 transition-all`}
               >
-                <span className="text-[12px] font-semibold leading-none tracking-tight">Today</span>
+                <span className="text-[12px] font-semibold leading-none tracking-tight">Session</span>
               </TabsTrigger>
               <TabsTrigger
                 value="teams"
@@ -4128,7 +4137,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
               <div className="mt-4 space-y-2.5">
                 {[
                   ["Roster", "Your full player list"],
-                  ["Today", "Who is playing now"],
+                  ["Session", "Who is playing now"],
                   ["Teams", "Build and present teams"],
                   ["Club", "Shared-roster tools"],
                 ].map(([label, detail]) => (
@@ -4141,7 +4150,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   </div>
                 ))}
                 <button type="button" className="fairteams-tutorial-action mt-2 h-12 w-full rounded-2xl bg-emerald-600 text-sm font-black text-white shadow-sm" onClick={finishGuidedTour}>
-                  {tutorialReplayMode ? "Return to my app" : "Start using FairTeams"}
+                  {tutorialReplayMode ? "Return to my app" : "Start using Stripes"}
                 </button>
                 <button type="button" onClick={skipGuidedTour} className="fairteams-tutorial-action w-full py-1 text-xs font-black text-slate-500 underline decoration-slate-300 underline-offset-2 lg:text-sm">Skip tutorial</button>
               </div>
@@ -4197,7 +4206,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   maxLength={32}
                   enterKeyHint="done"
                   className="mt-2 h-10 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm font-semibold text-[#102A43] outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
-                  placeholder="Fair Teams"
+                  placeholder="Stripes"
                 />
               </section>
 
@@ -4208,7 +4217,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 <div className="mt-2 flex items-center gap-3">
                   <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 shadow-sm">
                     <img
-                      src={draftGroupLogo || fairTeamsLogo}
+                      src={draftGroupLogo || stripesLogo}
                       alt="Roster logo preview"
                       className="h-full w-full object-cover"
                     />
@@ -4950,8 +4959,8 @@ This is a shared roster. Local Backup can only remove/disassociate this deviceâ€
                 </h2>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
                   {connectedDriveUser?.emailAddress
-                    ? `Signed in as ${connectedDriveUser.emailAddress}. Rosters you opened in Fair Teams appear here.`
-                    : "Rosters you opened in Fair Teams appear here."}
+                    ? `Signed in as ${connectedDriveUser.emailAddress}. Rosters you opened in Stripes appear here.`
+                    : "Rosters you opened in Stripes appear here."}
                 </p>
               </div>
               <Button
@@ -5068,7 +5077,7 @@ This is a shared roster. Local Backup can only remove/disassociate this deviceâ€
 
             <div className="mt-4 rounded-2xl border border-emerald-100 bg-emerald-50/70 p-3">
               <p className="text-xs font-semibold leading-snug text-emerald-900/80">
-                Opens this shared roster in Fair Teams on this device. It does not overwrite the Google Sheet.
+                Opens this shared roster in Stripes on this device. It does not overwrite the Google Sheet.
               </p>
             </div>
 
@@ -5765,7 +5774,7 @@ This is a shared roster. Local Backup can only remove/disassociate this deviceâ€
                   Share one roster
                 </div>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  Shared Roster lets trusted co-organizers open the same roster in Fair Teams. You can see the owner and editors in People & access.
+                  Shared Roster lets trusted co-organizers open the same roster in Stripes. You can see the owner and editors in People & access.
                 </p>
               </div>
 

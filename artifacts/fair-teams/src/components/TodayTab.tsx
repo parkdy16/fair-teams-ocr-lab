@@ -3735,7 +3735,7 @@ export function TodayTab({
     const report = {
       reportVersion: 1,
       createdAt: new Date().toISOString(),
-      appArea: "Fair Teams OCR import",
+      appArea: "Stripes OCR import",
       importContext: ocrImportContext,
       inputSource: ocrInputSource,
       screenshotImportMode:
@@ -3869,7 +3869,7 @@ export function TodayTab({
       {rosterChoices.length > 0 && !todayRosterReady ? (
         <div className="space-y-3 lg:grid lg:grid-cols-[minmax(0,1.05fr)_minmax(360px,0.95fr)] lg:items-center lg:gap-12 lg:space-y-0 lg:rounded-[2rem] lg:border lg:border-slate-200 lg:bg-white lg:p-10 lg:shadow-[0_24px_70px_rgba(15,23,42,0.08)]">
           <div className="px-1 pb-1 pt-2 lg:px-2 lg:py-6">
-            <div className="hidden lg:inline-flex rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-emerald-700">Fair Teams workspace</div>
+            <div className="hidden lg:inline-flex rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-emerald-700">Stripes workspace</div>
             <h2 className="text-2xl font-black tracking-tight text-[#102A43] lg:mt-5 lg:text-5xl lg:leading-[1.02]">
               {startGreetingName ? `Hey, ${startGreetingName}` : "Hey,"}
             </h2>
@@ -4228,7 +4228,7 @@ export function TodayTab({
             </DialogTitle>
             <DialogDescription className="text-xs">
               {ocrInputSource === "voiceText"
-                ? "Check matches and new players before anything is added to Today."
+                ? "Check matches and new players before anything is added to Session."
                 : ocrImportContext === "roster"
                   ? "Add multiple players to your roster from a Meetup, WhatsApp, Telegram, or attendee screenshot."
                   : "Import today's attendees from a Meetup, WhatsApp, Telegram, or list screenshot."}
@@ -4660,7 +4660,7 @@ export function TodayTab({
                                       <div className="pointer-events-none absolute inset-x-3 bottom-3 rounded-2xl bg-slate-950/70 px-3 py-2 text-center text-[11px] font-bold text-white shadow-lg">
                                         {useTwoOtherCropAreas
                                           ? `Drag around List ${activeCropArea + 1}.`
-                                          : "Drag around the names you want Fair Teams to read."}
+                                          : "Drag around the names you want Stripes to read."}
                                       </div>
                                     )}
                                     {areas.map(({ area, label, box }) => {
@@ -5418,7 +5418,7 @@ export function TodayTab({
             </DialogTitle>
             <DialogDescription className="text-xs">
               These scan names are not in your roster yet. Create them with
-              default Skill Level 5 and add them to Today?
+              default Skill Level 5 and add them to Session?
             </DialogDescription>
           </DialogHeader>
           <div className="max-h-56 space-y-2 overflow-y-auto rounded-xl border bg-muted/40 p-3">

@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Shuffle, ArrowLeftRight, Download, HelpCircle, Clock, Palette, Sparkles, BarChart3, List, Maximize2, X, Volume2, Square } from "lucide-react";
-import fairTeamsLogo from "@/assets/fairteams-logo.png";
 
 const PRESENT_TEAMS_SCROLL_FIX_VERSION = "present-fullscreen-portal-v1";
 
@@ -811,7 +810,7 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
       <div className="flex min-h-[calc(100vh-220px)] flex-col gap-3">
         <div className="flex flex-1 flex-col items-center justify-center px-8 text-center">
           <p className="max-w-xs text-sm font-semibold leading-relaxed text-muted-foreground">
-            Select at least 2 players in the Today tab to generate teams.
+            Select at least 2 players in the Session tab to generate teams.
           </p>
         </div>
         {historyPanel && <div className="mt-auto">{historyPanel}</div>}
@@ -1165,8 +1164,8 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
             {tutorialStep === "close-presentation" && <div className="pointer-events-none fixed inset-0 z-[91] bg-slate-950/50" aria-hidden="true" />}
             <div className="relative z-[92] flex shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-slate-950/95 px-3 py-2 pt-[max(0.5rem,env(safe-area-inset-top))]">
               <div className="min-w-0">
-                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-300">Fair Teams</p>
-                <h2 className="truncate text-lg font-black tracking-tight">Today's Teams</h2>
+                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-300">Stripes</p>
+                <h2 className="truncate text-lg font-black tracking-tight">Session's Teams</h2>
               </div>
               <button
                 type="button"

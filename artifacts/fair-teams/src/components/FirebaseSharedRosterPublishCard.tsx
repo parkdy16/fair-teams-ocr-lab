@@ -48,7 +48,7 @@ function friendlyFirestoreError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error || "Something went wrong.");
   if (/permission-denied|Missing or insufficient permissions/i.test(message)) return "Permission denied.";
   if (/network/i.test(message)) return "Network error.";
-  if (/saved by someone else|changed elsewhere|Remote version/i.test(message)) return "Online roster changed. Fair Teams will update and try again.";
+  if (/saved by someone else|changed elsewhere|Remote version/i.test(message)) return "Online roster changed. Stripes will update and try again.";
   return message.replace(/^Firebase:\s*/i, "");
 }
 
@@ -204,7 +204,7 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
     const confirmed = window.confirm(
       `Create a shared copy of ${activeRoster.name || "this roster"}?
 
-Your local roster will stay local. Fair Teams will copy shared identity fields only, reset private extras, and use your current skill numbers as your first Club ratings.`,
+Your local roster will stay local. Stripes will copy shared identity fields only, reset private extras, and use your current skill numbers as your first Club ratings.`,
     );
     if (!confirmed) return;
 
@@ -556,7 +556,7 @@ Your local roster will stay local. Fair Teams will copy shared identity fields o
     () => { setBackupRosterId(""); setSharedRosterBackups([]); },
     <div className="grid gap-2">
       <div className="rounded-2xl border border-violet-100 bg-violet-50/70 px-3 py-2 text-[11px] font-bold leading-snug text-violet-800">
-        FairTeams keeps up to 10 automatic backups. Restoring also saves the current live roster first.
+        Stripes keeps up to 10 automatic backups. Restoring also saves the current live roster first.
       </div>
       {sharedRosterBackups.length === 0 ? (
         <div className="rounded-2xl bg-slate-50 px-3 py-3 text-xs font-bold text-slate-500">

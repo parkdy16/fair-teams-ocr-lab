@@ -5,6 +5,7 @@ import {
   Check,
   CheckCircle2,
   ChevronDown,
+  ChevronRight,
   ChevronUp,
   ClipboardList,
   ExternalLink,
@@ -1898,21 +1899,29 @@ const togglePersonKey = (key: string, setter: React.Dispatch<React.SetStateActio
 
   return (
     <>
-      <section className="rounded-[1.7rem] border p-3 shadow-sm lg:p-4" style={{ borderColor: mixHex(accent, "#ffffff", 0.72), background }}>
+      <section className="overflow-hidden rounded-[1.7rem] border p-3 shadow-sm lg:p-4" style={{ borderColor: mixHex(accent, "#ffffff", 0.72), background }}>
         <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-wide lg:text-[20px] lg:normal-case lg:tracking-normal" style={{ color: accent }}>
-              <ClipboardList className="fairteams-desktop-balanced-icon h-[18px] w-[18px] lg:h-6 lg:w-6" /> Action Board
+          <button type="button" className="flex min-w-0 flex-1 items-center gap-2.5 text-left active:scale-[0.99]" onClick={openBoard}>
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-white/90 shadow-sm ring-1 ring-white/80 lg:h-10 lg:w-10" style={{ color: accent }}>
+              <ClipboardList className="fairteams-desktop-balanced-icon h-[18px] w-[18px] lg:h-6 lg:w-6" />
             </div>
-            {customBoardName && <div className="mt-1 truncate text-[12px] font-bold leading-tight text-slate-600 lg:text-[14px]">{customBoardName}</div>}
-          </div>
-          <Button type="button" className="h-9 shrink-0 rounded-2xl px-3 text-xs font-black text-white lg:text-sm" style={{ backgroundColor: accent }} onClick={openBoard}>Open</Button>
+            <span className="min-w-0">
+              <span className="block text-[17px] font-black leading-tight text-[#102A43] lg:text-[20px]">Action Board</span>
+              <span className="mt-0.5 block truncate text-[10px] font-bold text-slate-500 lg:text-[12px]">
+                {customBoardName || (online ? "Tasks · Votes · Decisions · Shared" : isSharedRoster ? "Tasks · Votes · Decisions · Sign in" : "Tasks · Votes · Decisions")}
+              </span>
+            </span>
+          </button>
+          <button type="button" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/85 shadow-sm ring-1 ring-white/80 active:scale-[0.98] lg:hidden" style={{ color: accent }} onClick={openBoard} aria-label="Open Action Board">
+            <ChevronRight className="h-4 w-4" />
+          </button>
+          <Button type="button" className="hidden h-9 shrink-0 rounded-2xl px-3 text-xs font-black text-white lg:inline-flex lg:text-sm" style={{ backgroundColor: accent }} onClick={openBoard}>Open</Button>
         </div>
-        <div className="mt-3 flex items-center gap-2 text-[10px] font-black text-slate-600 lg:text-xs">
+        <div className="mt-3 hidden items-center gap-2 text-[10px] font-black text-slate-600 lg:flex lg:text-xs">
           {hasNewActivity && <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-amber-700"><span className="h-1.5 w-1.5 rounded-full bg-amber-500" />New activity</span>}
           <span className="rounded-full bg-white/75 px-2.5 py-1">{online ? "Shared" : isSharedRoster ? "Sign in" : "Private"}</span>
         </div>
-        {latestActivity && <div className="mt-2 truncate text-[10px] font-bold text-slate-500 lg:text-xs">Last: “{latestActivity.card.title}” · {activityText(latestActivity.activity)}</div>}
+        {latestActivity && <div className="mt-2 hidden truncate text-[10px] font-bold text-slate-500 lg:block lg:text-xs">Last: “{latestActivity.card.title}” · {activityText(latestActivity.activity)}</div>}
       </section>
 
       <Dialog open={boardOpen} onOpenChange={setBoardOpen}>
@@ -2150,7 +2159,7 @@ const togglePersonKey = (key: string, setter: React.Dispatch<React.SetStateActio
 
       <Dialog open={Boolean(votingCard && votingDecision)} onOpenChange={(open) => { if (!open) { setVotingCardId(null); setVotingDecisionId(null); setSelectedVoteAnswers({}); } }}>
         <DialogContent className="fixed bottom-2 left-2 right-2 top-auto max-h-[90dvh] w-auto max-w-none translate-x-0 translate-y-0 overflow-y-auto rounded-[2rem] p-4 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-md sm:-translate-x-1/2">
-          <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43]">{votingDecision?.kind === "schedule" ? "Your availability" : "Vote on FT"}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43]">{votingDecision?.kind === "schedule" ? "Your availability" : "Vote in Stripes"}</DialogTitle></DialogHeader>
           {votingDecision && <div className="grid gap-3">
             {votingDecision.title?.trim() && <div className="whitespace-normal break-words text-sm font-black leading-snug text-[#102A43]">{votingDecision.title}</div>}
             {votingDecision.hostName && <div className="rounded-xl bg-sky-50 px-3 py-2 text-[11px] font-bold text-sky-800">Host: <span className="font-black">{votingDecision.hostName}</span></div>}

@@ -58,14 +58,14 @@ function actionDetails(action: AiSmartCommandAction) {
 function friendlyAiError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error || "");
   if (/json|structured|parse|schema/i.test(message)) {
-    return "Fair Teams understood part of this, but the AI answer was not clean enough. Try again or use a shorter command.";
+    return "Stripes understood part of this, but the AI answer was not clean enough. Try again or use a shorter command.";
   }
   if (/disabled|branch|configured|key/i.test(message)) return message;
   if (/openai|request failed|502|network|fetch/i.test(message)) {
-    return "Fair Teams AI could not connect cleanly. Try again in a moment.";
+    return "Stripes AI could not connect cleanly. Try again in a moment.";
   }
   if (/fair teams ai command failed|ai command failed/i.test(message)) {
-    return "I could not answer that cleanly, but I can still help with basic Fair Teams questions. Try asking: “How do I add a player?” or “How do I edit a player?”";
+    return "I could not answer that cleanly, but I can still help with basic Stripes questions. Try asking: “How do I add a player?” or “How do I edit a player?”";
   }
   return message || "I could not answer that cleanly. Try asking again in a shorter way.";
 }
@@ -151,8 +151,8 @@ function buildPlayerRatingHowToHelpAnswer(
   if (!looksLikePlayerRatingHowToHelpRequest(commandText)) return null;
 
   const assistantSummary = rosterMode === "shared"
-    ? "To rate a player in a shared roster, open the shared roster’s Club area and use the player rating/review section. Your rating is private: other organizers should not see your individual score. Fair Teams combines submitted ratings into the Club average for shared team generation. If you do not know a player yet, you can skip them and rate them later."
-    : "To rate a player in a local roster, open the Roster tab, tap the player card, then edit their rating/player details. Local roster ratings are your own private ratings and are used directly when Fair Teams generates balanced teams. In a local roster, you can use the normal player profile; shared/Club ratings only appear after you create, join, or open a shared roster.";
+    ? "To rate a player in a shared roster, open the shared roster’s Club area and use the player rating/review section. Your rating is private: other organizers should not see your individual score. Stripes combines submitted ratings into the Club average for shared team generation. If you do not know a player yet, you can skip them and rate them later."
+    : "To rate a player in a local roster, open the Roster tab, tap the player card, then edit their rating/player details. Local roster ratings are your own private ratings and are used directly when Stripes generates balanced teams. In a local roster, you can use the normal player profile; shared/Club ratings only appear after you create, join, or open a shared roster.";
 
   return {
     schemaVersion: 1,
@@ -184,7 +184,7 @@ function buildSharedRosterRatingHelpAnswer(
   if (!looksLikeSharedRosterRatingHelpRequest(commandText)) return null;
 
   const assistantSummary = rosterMode === "shared"
-    ? "You are already in a shared roster. To rate players for this shared roster, open the Club area and use the rating/review section there. Your rating is private: other organizers should not see your individual score, and Fair Teams uses the Club average for shared team generation."
+    ? "You are already in a shared roster. To rate players for this shared roster, open the Club area and use the rating/review section there. Your rating is private: other organizers should not see your individual score, and Stripes uses the Club average for shared team generation."
     : "You are on a local/private roster right now, so shared roster ratings are not available here. Local rosters use your own normal ratings directly. To rate for a shared roster, first create or open a shared roster from the Club/shared roster area, then use the shared rating flow there. Your original local roster stays private.";
 
   return {
@@ -217,7 +217,7 @@ function buildBasicPlayerHelpAnswer(commandText: string): AiSmartCommandResponse
   if (!topic) return null;
 
   const assistantSummary = topic === "add_player"
-    ? "To add a player, go to the Roster tab and tap Add Player. Add the player’s name first, then you can fill in rating/details if you want. After adding them, they become part of this roster and can be selected in Today for team generation."
+    ? "To add a player, go to the Roster tab and tap Add Player. Add the player’s name first, then you can fill in rating/details if you want. After adding them, they become part of this roster and can be selected in Session for team generation."
     : "To edit a player, go to the Roster tab and tap that player’s card. From there you can update their name, AKA/aliases, rating/details, visible traits, notes/category, and local photo if your roster uses those fields. Local roster edits stay private on your device; shared rosters only sync shared-safe player info.";
 
   return {
@@ -569,11 +569,11 @@ function actionCardTitle(action: AiSmartCommandAction) {
       return excluded ? `Leave out ${excluded}` : "Use roster selection";
     }
     if (/possible existing match/i.test(String(action.reason || ""))) return "Use existing player";
-    if (/then_generate/i.test(String(action.distribution || "")) || action.teamCount) return "Replace Today + generate";
-    if (/replace|exact|only/i.test(String(action.distribution || ""))) return "Replace Today selection";
-    return "Add to Today";
+    if (/then_generate/i.test(String(action.distribution || "")) || action.teamCount) return "Replace Session + generate";
+    if (/replace|exact|only/i.test(String(action.distribution || ""))) return "Replace Session selection";
+    return "Add to Session";
   }
-  if (action.type === "unselect_players") return "Remove from Today";
+  if (action.type === "unselect_players") return "Remove from Session";
   if (action.type === "mark_players_late") return "Mark late";
   if (action.type === "add_new_player_suggestion") return "Add new player";
   if (action.type === "open_app_area") return action.targetArea ? `Open ${action.targetArea}` : "Open app area";
@@ -600,7 +600,7 @@ function actionPrimaryVerb(action: AiSmartCommandAction) {
   if (action.type === "select_players") {
     if (isRankedRosterSelectionAction(action)) return "Use players";
     if (/then_generate/i.test(String(action.distribution || "")) || action.teamCount) return "Replace + Generate";
-    return /replace|exact|only/i.test(String(action.distribution || "")) ? "Replace Today" : "Add to Today";
+    return /replace|exact|only/i.test(String(action.distribution || "")) ? "Replace Session" : "Add to Session";
   }
   if (action.type === "unselect_players") return "Remove";
   if (action.type === "mark_players_late") return "Mark late";
@@ -1295,7 +1295,7 @@ function buildActionsFromReviewSelections(
       capabilityId: "today.select_players",
       supportStatus: "executable",
       requiresConfirmation: false,
-      reason: "Reviewed AI names, then replace Today with confirmed existing players.",
+      reason: "Reviewed AI names, then replace Session with confirmed existing players.",
     });
   }
 
@@ -1361,33 +1361,33 @@ function actionImpactLine(action: AiSmartCommandAction) {
         : /then_generate/i.test(String(action.distribution || ""))
           ? " Then generate teams."
           : "";
-      if (excluded) return `Will clear Today and select ${count} roster players, leaving out ${excluded}.${teamFollowup}`;
-      return `Will clear Today and select ${count} ${playerWord} from the roster.${teamFollowup}`;
+      if (excluded) return `Will clear Session and select ${count} roster players, leaving out ${excluded}.${teamFollowup}`;
+      return `Will clear Session and select ${count} ${playerWord} from the roster.${teamFollowup}`;
     }
     if (/then_generate/i.test(String(action.distribution || "")) || action.teamCount) {
       const teamText = action.teamCount
         ? `${action.teamCount} team${action.teamCount === 1 ? "" : "s"}`
         : action.playersPerTeam
           ? `${action.playersPerTeam}v${action.playersPerTeam} teams`
-          : "fair teams";
-      return `Will clear Today, select ${count} ${playerWord}, then generate ${teamText}.`;
+          : "balanced teams";
+      return `Will clear Session, select ${count} ${playerWord}, then generate ${teamText}.`;
     }
     if (/replace|exact|only/i.test(String(action.distribution || ""))) {
-      return `Will clear Today and select ${count} ${playerWord}.`;
+      return `Will clear Session and select ${count} ${playerWord}.`;
     }
     if (/possible existing match/i.test(String(action.reason || ""))) {
-      return `Will use this existing roster player and mark them present Today.`;
+      return `Will use this existing roster player and mark them present Session.`;
     }
-    return `Will add/select ${count} ${playerWord} for Today without clearing anyone else.`;
+    return `Will add/select ${count} ${playerWord} for Session without clearing anyone else.`;
   }
   if (action.type === "unselect_players") {
-    return `Will remove ${count} ${playerWord} from Today without changing anyone else.`;
+    return `Will remove ${count} ${playerWord} from Session without changing anyone else.`;
   }
   if (action.type === "mark_players_late") {
-    return `Will mark ${count} ${playerWord} as late in Today and keep them selected.`;
+    return `Will mark ${count} ${playerWord} as late in Session and keep them selected.`;
   }
   if (action.type === "add_new_player_suggestion") {
-    return `Will add this as a new roster player and mark them present Today.`;
+    return `Will add this as a new roster player and mark them present Session.`;
   }
   if (action.type === "set_team_size" && action.playersPerTeam) {
     return `Will set team size to ${action.playersPerTeam}v${action.playersPerTeam}.`;
@@ -1398,18 +1398,18 @@ function actionImpactLine(action: AiSmartCommandAction) {
   if (action.type === "generate_teams") {
     const isShuffle = /shuffle|different|mix|fresh|reroll/i.test(String(action.distribution || "") + " " + String(action.reason || ""));
     if (action.teamCount) return isShuffle
-      ? `Will reshuffle ${action.teamCount} team${action.teamCount === 1 ? "" : "s"} from the current Today selection.`
-      : `Will generate ${action.teamCount} fair team${action.teamCount === 1 ? "" : "s"} from the current Today selection.`;
+      ? `Will reshuffle ${action.teamCount} team${action.teamCount === 1 ? "" : "s"} from the current Session selection.`
+      : `Will generate ${action.teamCount} balanced team${action.teamCount === 1 ? "" : "s"} from the current Session selection.`;
     if (action.playersPerTeam) return isShuffle
-      ? `Will reshuffle ${action.playersPerTeam}v${action.playersPerTeam} teams from the current Today selection.`
-      : `Will generate ${action.playersPerTeam}v${action.playersPerTeam} teams from the current Today selection.`;
-    return isShuffle ? "Will reshuffle teams from the current Today selection." : "Will generate fair teams from the current Today selection.";
+      ? `Will reshuffle ${action.playersPerTeam}v${action.playersPerTeam} teams from the current Session selection.`
+      : `Will generate ${action.playersPerTeam}v${action.playersPerTeam} teams from the current Session selection.`;
+    return isShuffle ? "Will reshuffle teams from the current Session selection." : "Will generate balanced teams from the current Session selection.";
   }
   if (action.type === "club_add_note") {
     return "Will add this as a Club note.";
   }
   if (action.type === "open_app_area") {
-    return action.targetArea ? `Will open ${action.targetArea}.` : "Will open the requested Fair Teams area.";
+    return action.targetArea ? `Will open ${action.targetArea}.` : "Will open the requested Stripes area.";
   }
   if (action.type === "unsupported_action") {
     return action.targetArea ? `Manual path: ${action.targetArea}` : "I understood this, but it is not wired as an app action yet.";
@@ -1760,7 +1760,7 @@ export function AiSmartCommandPanel({
           if (localStatAnswer) {
             setResult(localStatAnswer);
             onParsed?.(localStatAnswer);
-          } else if (/Fair Teams AI command failed|AI command failed/i.test(friendlyAiError(err)) && /\b(rate|rating|ratings|skill|ovr)\b/i.test(trimmedCommand)) {
+          } else if (/Stripes AI command failed|AI command failed/i.test(friendlyAiError(err)) && /\b(rate|rating|ratings|skill|ovr)\b/i.test(trimmedCommand)) {
             const safeRatingHelp = buildPlayerRatingHowToHelpAnswer("How do I rate a player?", rosterMode);
             if (safeRatingHelp) {
               setResult({
@@ -1878,18 +1878,22 @@ export function AiSmartCommandPanel({
   };
 
   return (
-    <section className="rounded-3xl border border-slate-200 bg-[#f7f8fa] p-3 shadow-sm ring-1 ring-slate-100 lg:p-4">
+    <section className="overflow-hidden rounded-[1.7rem] border border-slate-200 bg-[#f7f8fa] p-3 shadow-sm ring-1 ring-slate-100 lg:p-4">
       <div className="lg:grid lg:grid-cols-[minmax(220px,0.62fr)_minmax(0,1.38fr)] lg:items-end lg:gap-5">
         <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="text-[10px] font-black uppercase tracking-wide text-slate-500">Help</div>
-            <div className="mt-0.5 flex flex-wrap items-center gap-2">
-              <h3 className="flex items-center gap-2 text-base font-black text-[#102A43] lg:text-[20px]"><CircleHelp className="hidden h-6 w-6 text-slate-600 lg:block" />FairTeams Help</h3>
-              <span className="rounded-full bg-white px-2 py-0.5 text-[9px] font-black text-slate-500 shadow-sm ring-1 ring-slate-200">{AI_ASSISTANT_VERSION_LABEL}</span>
+          <div className="flex min-w-0 items-center gap-2.5">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-white/90 text-slate-600 shadow-sm ring-1 ring-slate-200 lg:h-10 lg:w-10">
+              <CircleHelp className="h-[18px] w-[18px] lg:h-6 lg:w-6" />
             </div>
-            <p className="mt-0.5 text-[11px] font-semibold leading-snug text-slate-600 lg:text-[14px]">
-              Ask how anything works. I’ll guide you quickly.
-            </p>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-[17px] font-black leading-tight text-[#102A43] lg:text-[20px]">Help</h3>
+                <span className="hidden rounded-full bg-white px-2 py-0.5 text-[9px] font-black text-slate-500 shadow-sm ring-1 ring-slate-200 lg:inline-flex">{AI_ASSISTANT_VERSION_LABEL}</span>
+              </div>
+              <p className="mt-0.5 truncate text-[10px] font-bold text-slate-500 lg:text-[12px]">
+                Ask Stripes how anything works.
+              </p>
+            </div>
           </div>
           {hasAssistantContent && (
             <button
@@ -1957,7 +1961,7 @@ export function AiSmartCommandPanel({
               onClick={onOpenToday}
               className="mt-2 rounded-full bg-emerald-600 px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-white"
             >
-              View Today
+              View Session
             </button>
           )}
         </div>
@@ -2108,7 +2112,7 @@ export function AiSmartCommandPanel({
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/35 px-3 py-6">
           <div className="max-h-[88vh] w-full max-w-lg overflow-hidden rounded-[28px] bg-white shadow-2xl">
             <div className="border-b border-slate-100 px-4 py-3">
-              <div className="text-[10px] font-black uppercase tracking-wide text-violet-500">Fair Teams Assistant</div>
+              <div className="text-[10px] font-black uppercase tracking-wide text-violet-500">Stripes Assistant</div>
               <div className="mt-0.5 text-lg font-black text-[#102A43]">Review AI names</div>
               <div className="mt-1 text-xs font-semibold leading-snug text-slate-500">
                 {aiReviewStats.heard} names heard · {aiReviewStats.selected} selected · {aiReviewStats.needsReview} need your check
@@ -2180,7 +2184,7 @@ export function AiSmartCommandPanel({
                             disabled={disabled}
                             onClick={() => setReviewSelections((current) => ({ ...current, [item.key]: value }))}
                             className={`rounded-full px-2.5 py-1.5 text-[10px] font-black leading-none shadow-sm disabled:opacity-45 ${selected ? "bg-violet-600 text-white" : "bg-white text-slate-700"}`}
-                            title={option.kind === "new" ? "Add this as a new roster player and mark them present Today." : undefined}
+                            title={option.kind === "new" ? "Add this as a new roster player and mark them present Session." : undefined}
                           >
                             {reviewOptionLabel(option)}
                           </button>

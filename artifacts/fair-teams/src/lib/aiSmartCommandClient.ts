@@ -32,7 +32,7 @@ function cleanRosterForAi(roster: AiSmartCommandRosterPlayer[]): AiSmartCommandR
 
 export async function parseFairTeamsSmartCommand(input: AiSmartCommandRequest): Promise<AiSmartCommandResponse> {
   const commandText = input.commandText.trim();
-  if (!commandText) throw new Error("Write or speak a Fair Teams command first.");
+  if (!commandText) throw new Error("Write or speak a Stripes command first.");
 
   const response = await fetch("/api/ai-smart-command", {
     method: "POST",
@@ -46,7 +46,7 @@ export async function parseFairTeamsSmartCommand(input: AiSmartCommandRequest): 
 
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
-    throw new Error(payload?.error || "Fair Teams AI command failed.");
+    throw new Error(payload?.error || "Stripes AI command failed.");
   }
   return payload as AiSmartCommandResponse;
 }
@@ -83,7 +83,7 @@ export async function transcribeFairTeamsVoiceCommand(audioBlob: Blob): Promise<
 
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
-    throw new Error(payload?.error || "Fair Teams voice could not transcribe that recording.");
+    throw new Error(payload?.error || "Stripes voice could not transcribe that recording.");
   }
   const transcript = typeof payload?.transcript === "string" ? payload.transcript.trim() : "";
   if (!transcript) throw new Error("I could not hear a clear command. Try again closer to the phone.");

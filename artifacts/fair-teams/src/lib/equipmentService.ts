@@ -167,7 +167,7 @@ export async function saveFirebaseEquipmentBag(scopeId: string, bag: FirebaseEqu
   const userName = user.displayName?.trim() || user.email || "Organizer";
   const scope = resolveEquipmentScope(scopeId);
   const payload: Record<string, unknown> = {
-    app: "Fair Teams",
+    app: "Stripes",
     schemaVersion: 4,
     scopeKind: scope.kind,
     scopeId: scope.id,

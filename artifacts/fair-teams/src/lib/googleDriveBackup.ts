@@ -5,7 +5,7 @@ import { FAIR_TEAMS_DRIVE_BACKUP_VERSION } from "@/lib/googleDriveConfig";
 export type GoogleDriveBackupKind = "single-roster" | "all-rosters";
 
 export interface FairTeamsDriveBackup {
-  app: "Fair Teams";
+  app: "Stripes";
   type: "google-drive-text-backup";
   version: number;
   backupKind: GoogleDriveBackupKind;
@@ -70,7 +70,7 @@ export function createDriveBackup(
     : safeRosters[0]?.id;
 
   return {
-    app: "Fair Teams",
+    app: "Stripes",
     type: "google-drive-text-backup",
     version: FAIR_TEAMS_DRIVE_BACKUP_VERSION,
     backupKind,
@@ -91,8 +91,8 @@ export function allRostersToDriveBackupJson(state: RosterState) {
 
 export function parseDriveBackupJson(text: string): FairTeamsDriveBackup {
   const parsed = JSON.parse(text);
-  if (parsed?.app !== "Fair Teams" || parsed?.type !== "google-drive-text-backup") {
-    throw new Error("This is not a Fair Teams Google Drive backup.");
+  if (!(["Stripes", "Fair Teams"].includes(parsed?.app)) || parsed?.type !== "google-drive-text-backup") {
+    throw new Error("This is not a Stripes Google Drive backup.");
   }
   if (!Array.isArray(parsed.rosters)) {
     throw new Error("Drive backup does not contain rosters.");
@@ -107,7 +107,7 @@ export function parseDriveBackupJson(text: string): FairTeamsDriveBackup {
       : rosters[0]?.id;
 
   return {
-    app: "Fair Teams",
+    app: "Stripes",
     type: "google-drive-text-backup",
     version: Number(parsed.version) || FAIR_TEAMS_DRIVE_BACKUP_VERSION,
     backupKind: parsed.backupKind === "single-roster" ? "single-roster" : "all-rosters",

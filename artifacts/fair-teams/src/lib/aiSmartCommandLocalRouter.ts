@@ -198,7 +198,7 @@ function createAddPlayerAction(name: string): AiSmartCommandAction {
   action.supportStatus = "executable";
   action.newPlayerName = displaySpokenName(name);
   action.suggestedSkill = 5;
-  action.reason = "Add this missing name to the roster, then mark them present for Today.";
+  action.reason = "Add this missing name to the roster, then mark them present for Session.";
   return action;
 }
 
@@ -366,7 +366,7 @@ function parseExplicitNewPlayerCommand(
 
   names.forEach((name) => {
     const addAction = createAddPlayerAction(name);
-    addAction.reason = `Add ${name} as a new roster player, then mark them present for Today.`;
+    addAction.reason = `Add ${name} as a new roster player, then mark them present for Session.`;
     actions.push(addAction);
 
     const similar = bestRosterNameMatch(name, players);
@@ -459,7 +459,7 @@ function extractMaybeListSegment(commandText: string) {
   if (bestIndex < 0) return normalized;
   let segment = normalized.slice(bestIndex + bestMarker.length).trim();
 
-  // In mixed commands like “Today we have Joon, Jorge… can you make teams?”,
+  // In mixed commands like “Session we have Joon, Jorge… can you make teams?”,
   // only the attendance list should be sent to name matching. Otherwise the
   // team request can be misread as fake player names.
   const stopPhrases = [
@@ -547,7 +547,7 @@ function createMarkLateAction(playerRefs: AiSmartCommandAction["playerRefs"]): A
   action.supportStatus = "executable";
   action.distribution = "mark_late_today";
   action.playerRefs = playerRefs;
-  action.reason = "Mark these matched players as late in Today and keep them selected.";
+  action.reason = "Mark these matched players as late in Session and keep them selected.";
   return action;
 }
 
@@ -651,7 +651,7 @@ function parseOpenAreaCommand(commandText: string): AiSmartCommandResponse | nul
   if (!/\b(open|show|go to|switch to|take me to|bring me to)\b/.test(normalized)) return null;
   let targetArea: string | null = null;
   if (/\b(roster|players?|player list)\b/.test(normalized)) targetArea = "Roster";
-  else if (/\b(today|attendance|who is here|present players)\b/.test(normalized)) targetArea = "Today";
+  else if (/\b(today|attendance|who is here|present players)\b/.test(normalized)) targetArea = "Session";
   else if (/\b(teams?|team results|generated teams)\b/.test(normalized)) targetArea = "Teams";
   else if (/\b(club|organizers?|notes?|equipment|gear)\b/.test(normalized)) targetArea = "Club";
   if (!targetArea) return null;
@@ -700,8 +700,8 @@ function parseSelectAllRosterCommand(
   selectAction.teamCount = teamCount || null;
   selectAction.playersPerTeam = playersPerTeam;
   selectAction.reason = teamCount
-    ? `Clear Today, select all ${rosterPlayers.length} roster players, then generate ${teamCount} teams.`
-    : `Clear Today and select all ${rosterPlayers.length} players in this roster.`;
+    ? `Clear Session, select all ${rosterPlayers.length} roster players, then generate ${teamCount} teams.`
+    : `Clear Session and select all ${rosterPlayers.length} players in this roster.`;
   selectAction.playerRefs = rosterPlayers.map((player) => ({
     playerId: player.id,
     rosterName: player.name,
@@ -710,10 +710,10 @@ function parseSelectAllRosterCommand(
   }));
 
   return localResponse({
-    normalizedIntent: teamCount ? `Select all roster players and generate ${teamCount} teams` : "Select all roster players for Today",
+    normalizedIntent: teamCount ? `Select all roster players and generate ${teamCount} teams` : "Select all roster players for Session",
     assistantSummary: teamCount
-      ? `I can select all ${rosterPlayers.length} players from this roster for Today, then generate ${teamCount} fair teams.`
-      : `I can replace Today with all ${rosterPlayers.length} players from this roster.`,
+      ? `I can select all ${rosterPlayers.length} players from this roster for Session, then generate ${teamCount} balanced teams.`
+      : `I can replace Session with all ${rosterPlayers.length} players from this roster.`,
     confidence: 0.98,
     actions: [selectAction],
     confirmations: [],
@@ -729,29 +729,29 @@ function parseAppKnowledgeQuestion(commandText: string): AiSmartCommandResponse 
   if (/\b(make|create|generate|select|add|remove|replace|clear|shuffle|mark)\b/.test(normalized) && !/\b(what|why|how|explain|difference|different)\b/.test(normalized)) return null;
 
   let summary = "";
-  let topic = "Fair Teams help";
+  let topic = "Stripes help";
 
   if (/\b(fair teams assistant|ai assistant|assistant|what can you do|what do you do)\b/.test(normalized)) {
-    topic = "Fair Teams Assistant";
-    summary = "Fair Teams Assistant is the shortcut helper inside the app. You can ask how Fair Teams works, ask roster questions, select who is here today, add or remove players from Today, mark someone late, prepare teams, reshuffle teams, and open the right area without hunting through menus. It should always show a safe action card before changing the app.";
+    topic = "Stripes Assistant";
+    summary = "Stripes Assistant is the shortcut helper inside the app. You can ask how Stripes works, ask roster questions, select who is here today, add or remove players from Session, mark someone late, prepare teams, reshuffle teams, and open the right area without hunting through menus. It should always show a safe action card before changing the app.";
   } else if (/\b(voice select|voice selection|voice command).{0,40}\b(ai|assistant)\b|\b(ai|assistant).{0,40}\b(voice select|voice selection)\b/.test(normalized)) {
     topic = "Voice Select vs AI Assistant";
-    summary = "Voice Select is the simple quick tool for selecting players by voice. Fair Teams Assistant is broader: it can understand follow-up corrections, explain the app, prepare teams, mark players late, and show safe action cards. Voice Select can stay as the fast free workflow; AI is the smarter organizer helper.";
+    summary = "Voice Select is the simple quick tool for selecting players by voice. Stripes Assistant is broader: it can understand follow-up corrections, explain the app, prepare teams, mark players late, and show safe action cards. Voice Select can stay as the fast free workflow; AI is the smarter organizer helper.";
   } else if (/\b(voice select|voice selection)\b/.test(normalized)) {
     topic = "Voice Select";
-    summary = "Voice Select is for quickly saying player names and selecting them for Today. It is meant to be simple and fast. The AI assistant is for more flexible instructions like adding, removing, marking late, or preparing teams.";
+    summary = "Voice Select is for quickly saying player names and selecting them for Session. It is meant to be simple and fast. The AI assistant is for more flexible instructions like adding, removing, marking late, or preparing teams.";
   } else if (/\b(screenshot import|smart import|ocr|crop|lost and found|meetup import|better scan)\b/.test(normalized)) {
     topic = "Smart Import";
-    summary = "Smart Import helps you turn a screenshot into Today attendance. You crop the name list, Fair Teams reads names with offline OCR by default, then Review Names lets you confirm matches, add missing names, and rescue names in Lost & Found. Meetup mode is tuned for Meetup-style screenshots; Other mode is for more general screenshots. Better Scan can later be an optional cloud/AI scan, but the offline import should remain the safe default.";
+    summary = "Smart Import helps you turn a screenshot into Session attendance. You crop the name list, Stripes reads names with offline OCR by default, then Review Names lets you confirm matches, add missing names, and rescue names in Lost & Found. Meetup mode is tuned for Meetup-style screenshots; Other mode is for more general screenshots. Better Scan can later be an optional cloud/AI scan, but the offline import should remain the safe default.";
   } else if (/\b(roster tab|roster|player list)\b/.test(normalized)) {
     topic = "Roster";
-    summary = "Roster is your player list. It is where you add and edit players, ratings, aliases/AKA names, photos, categories, and player details. Today uses this roster to decide who is playing now, and Teams uses the selected Today players to make balanced teams.";
+    summary = "Roster is your player list. It is where you add and edit players, ratings, aliases/AKA names, photos, categories, and player details. Session uses this roster to decide who is playing now, and Teams uses the selected Session players to make balanced teams.";
   } else if (/\b(today tab|today|attendance|present players)\b/.test(normalized)) {
-    topic = "Today";
-    summary = "Today is where you mark who is playing now. You can select players manually, import a screenshot, use voice, or ask the assistant. Team generation uses the players selected in Today, so this tab is the bridge between your roster and the final teams.";
+    topic = "Session";
+    summary = "Session is where you mark who is playing now. You can select players manually, import a screenshot, use voice, or ask the assistant. Team generation uses the players selected in Session, so this tab is the bridge between your roster and the final teams.";
   } else if (/\b(teams tab|team generation|generate teams|5v5|6v6|fair teams)\b/.test(normalized)) {
     topic = "Teams";
-    summary = "Teams is where Fair Teams generates balanced teams from the players selected in Today. “5v5” means five players per team, so it normally needs 10 selected players. “Make 2 teams” means two total teams. You can reshuffle to get a different mix while keeping the same selected players.";
+    summary = "Teams is where Stripes generates balanced teams from the players selected in Session. “5v5” means five players per team, so it normally needs 10 selected players. “Make 2 teams” means two total teams. You can reshuffle to get a different mix while keeping the same selected players.";
   } else if (/\b(club tab|club|shared roster|organizer|organizers|equipment|notes)\b/.test(normalized)) {
     topic = "Club";
     summary = "Club is the organizer space. It can hold shared-roster tools, Club ratings, organizer notes, and equipment tracking. Local/private roster features stay focused on your own device; shared/Club features are for co-organizers working together.";
@@ -768,7 +768,7 @@ function parseAppKnowledgeQuestion(commandText: string): AiSmartCommandResponse 
     actions: [],
     confirmations: [],
     unresolved: [],
-    debugWarnings: ["Answered by local Fair Teams app knowledge layer before server AI."],
+    debugWarnings: ["Answered by local Stripes app knowledge layer before server AI."],
   });
 }
 
@@ -886,18 +886,18 @@ function parseGenerateTeamsFromSelectionCommand(
     const openToday = createEmptyAction("open_app_area");
     openToday.capabilityId = "navigation.open_area";
     openToday.supportStatus = "understood_not_wired";
-    openToday.targetArea = "Today";
-    openToday.reason = "Select who is playing in Today first, then generate fair teams.";
+    openToday.targetArea = "Session";
+    openToday.reason = "Select who is playing in Session first, then generate balanced teams.";
     return localResponse({
-      normalizedIntent: "Generate teams from Today selection",
-      assistantSummary: "I can help make teams, but there are not enough players selected in Today yet. Select who is playing first, then ask me to make teams.",
+      normalizedIntent: "Generate teams from Session selection",
+      assistantSummary: "I can help make teams, but there are not enough players selected in Session yet. Select who is playing first, then ask me to make teams.",
       confidence: 0.93,
       actions: [openToday],
       confirmations: [],
       unresolved: [{
-        text: "Today selection",
+        text: "Session selection",
         issue: "missing_context",
-        message: "Select at least two players in Today before generating teams.",
+        message: "Select at least two players in Session before generating teams.",
       }],
       debugWarnings: ["Handled by local team-generation orchestrator: no selected players."],
     });
@@ -908,7 +908,7 @@ function parseGenerateTeamsFromSelectionCommand(
     if (selectedCount < requestedPlayersPerTeam * 2) {
       return localResponse({
         normalizedIntent: `Generate ${requestedPlayersPerTeam}v${requestedPlayersPerTeam} teams`,
-        assistantSummary: `${requestedPlayersPerTeam}v${requestedPlayersPerTeam} needs at least ${requestedPlayersPerTeam * 2} selected players, but Today has ${selectedCount}. Add more players or ask for a different team setup.`,
+        assistantSummary: `${requestedPlayersPerTeam}v${requestedPlayersPerTeam} needs at least ${requestedPlayersPerTeam * 2} selected players, but Session has ${selectedCount}. Add more players or ask for a different team setup.`,
         confidence: 0.94,
         actions: [],
         confirmations: [],
@@ -923,7 +923,7 @@ function parseGenerateTeamsFromSelectionCommand(
     if (selectedCount % requestedPlayersPerTeam !== 0) {
       return localResponse({
         normalizedIntent: `Generate ${requestedPlayersPerTeam}v${requestedPlayersPerTeam} teams`,
-        assistantSummary: `${requestedPlayersPerTeam}v${requestedPlayersPerTeam} does not fit ${selectedCount} selected players evenly. Ask for a number of teams instead, or adjust Today selection.`,
+        assistantSummary: `${requestedPlayersPerTeam}v${requestedPlayersPerTeam} does not fit ${selectedCount} selected players evenly. Ask for a number of teams instead, or adjust Session selection.`,
         confidence: 0.92,
         actions: [],
         confirmations: [],
@@ -943,7 +943,7 @@ function parseGenerateTeamsFromSelectionCommand(
     return localResponse({
       normalizedIntent: "Generate teams, missing team count",
       assistantSummary: suggested
-        ? `I can make fair teams from the ${selectedCount} players selected in Today. How many teams should I make? For example: “make 2 teams.”`
+        ? `I can make balanced teams from the ${selectedCount} players selected in Session. How many teams should I make? For example: “make 2 teams.”`
         : `I can make teams from the ${selectedCount} selected players, but I need the number of teams first.`,
       confidence: 0.9,
       actions: [],
@@ -979,13 +979,13 @@ function parseGenerateTeamsFromSelectionCommand(
   generateAction.teamCount = teamCount;
   generateAction.playersPerTeam = requestedPlayersPerTeam;
   generateAction.distribution = wantsShuffle ? "shuffle_equals" : "balanced";
-  generateAction.reason = `${wantsShuffle ? "Reshuffle using the same team setup" : "Generate fair teams"} from the ${selectedCount} players currently selected in Today.`;
+  generateAction.reason = `${wantsShuffle ? "Reshuffle using the same team setup" : "Generate balanced teams"} from the ${selectedCount} players currently selected in Session.`;
 
   return localResponse({
-    normalizedIntent: `Generate ${teamCount} teams from Today selection`,
+    normalizedIntent: `Generate ${teamCount} teams from Session selection`,
     assistantSummary: wantsShuffle
-      ? `I can reshuffle ${teamCount} team${teamCount === 1 ? "" : "s"} from the ${selectedCount} players selected in Today.`
-      : `I can make ${teamCount} fair team${teamCount === 1 ? "" : "s"} from the ${selectedCount} players selected in Today.`,
+      ? `I can reshuffle ${teamCount} team${teamCount === 1 ? "" : "s"} from the ${selectedCount} players selected in Session.`
+      : `I can make ${teamCount} balanced team${teamCount === 1 ? "" : "s"} from the ${selectedCount} players selected in Session.`,
     confidence: 0.98,
     actions: [generateAction],
     confirmations: [],
@@ -1032,10 +1032,10 @@ function parsePresentPlayerSelectionCommand(
         .slice(0, Math.max(0, 3 - possibleMatchActions.length))
         .map(createAddPlayerAction);
     return localResponse({
-      normalizedIntent: "Update Today, but no roster names matched",
+      normalizedIntent: "Update Session, but no roster names matched",
       assistantSummary: possibleMatchActions.length > 0
         ? "I could not safely auto-match those names, but I found possible roster matches to review."
-        : "I understood that you want to update Today, but I could not match those names to this roster.",
+        : "I understood that you want to update Session, but I could not match those names to this roster.",
       confidence: possibleMatchActions.length > 0 ? 0.86 : 0.84,
       actions: [...possibleMatchActions, ...addActions],
       confirmations: [],
@@ -1070,17 +1070,17 @@ function parsePresentPlayerSelectionCommand(
     removeAction.capabilityId = "today.unselect_players";
     removeAction.distribution = "remove_today_selection";
     removeAction.playerRefs = makePlayerRefs();
-    removeAction.reason = "Remove these matched players from Today without changing anyone else.";
+    removeAction.reason = "Remove these matched players from Session without changing anyone else.";
     actions.push(removeAction);
   } else {
     const selectAction = createEmptyAction("select_players");
     selectAction.capabilityId = "today.select_players";
     selectAction.distribution = replaceMode ? "replace_today_selection" : "add_today_selection";
     selectAction.reason = replaceMode
-      ? "Replace Today with only these matched players."
+      ? "Replace Session with only these matched players."
       : existingSelectionCount > 0
-        ? "Add these matched players to the existing Today selection. This will not clear players already selected."
-        : "Select these matched players for Today.";
+        ? "Add these matched players to the existing Session selection. This will not clear players already selected."
+        : "Select these matched players for Session.";
     selectAction.playerRefs = makePlayerRefs();
     actions.push(selectAction);
 
@@ -1089,14 +1089,14 @@ function parsePresentPlayerSelectionCommand(
       addAction.capabilityId = "today.select_players";
       addAction.distribution = "add_today_selection";
       addAction.playerRefs = makePlayerRefs();
-      addAction.reason = "Alternative: add these matched players to the existing Today selection without clearing anyone else.";
+      addAction.reason = "Alternative: add these matched players to the existing Session selection without clearing anyone else.";
       actions.push(addAction);
     } else if (ambiguousWithExistingSelection && !addMode) {
       const replaceAction = createEmptyAction("select_players");
       replaceAction.capabilityId = "today.select_players";
       replaceAction.distribution = "replace_today_selection";
       replaceAction.playerRefs = makePlayerRefs();
-      replaceAction.reason = "Alternative: clear the current Today selection and use only these matched players.";
+      replaceAction.reason = "Alternative: clear the current Session selection and use only these matched players.";
       actions.push(replaceAction);
     }
   }
@@ -1121,7 +1121,7 @@ function parsePresentPlayerSelectionCommand(
     const teamCountAction = createEmptyAction("set_team_count");
     teamCountAction.capabilityId = "teams.set_team_count";
     teamCountAction.teamCount = 2;
-    teamCountAction.reason = "Prepare a two-team setup from the current Today selection.";
+    teamCountAction.reason = "Prepare a two-team setup from the current Session selection.";
     actions.push(teamCountAction);
 
     const generateAction = createEmptyAction("generate_teams");
@@ -1129,7 +1129,7 @@ function parsePresentPlayerSelectionCommand(
     generateAction.supportStatus = "executable";
     generateAction.teamCount = 2;
     generateAction.distribution = wantsDifferentTeamMix(commandText) ? "shuffle_equals" : "balanced";
-    generateAction.reason = "Generate two fair teams after these matched players are selected.";
+    generateAction.reason = "Generate two balanced teams after these matched players are selected.";
     actions.push(generateAction);
   }
 
@@ -1162,12 +1162,12 @@ function parsePresentPlayerSelectionCommand(
   });
   const missedText = uniqueUnresolved.length > 0 ? ` I could not confidently match: ${uniqueUnresolved.slice(0, 5).map(displaySpokenName).join(", ")}.` : "";
   const modeText = removeMode
-    ? "remove from Today"
+    ? "remove from Session"
     : replaceMode
-      ? "replace Today with"
+      ? "replace Session with"
       : existingSelectionCount > 0
-        ? "add to Today"
-        : "select for Today";
+        ? "add to Session"
+        : "select for Session";
   const teamText = !removeMode && playersPerTeam
     ? ` I also prepared a ${playersPerTeam}v${playersPerTeam} setup.`
     : !removeMode && wantsBalancedTeams(commandText) && matched.length >= 4
@@ -1179,11 +1179,11 @@ function parsePresentPlayerSelectionCommand(
   const ambiguityText = exactListMode && replaceMode && existingSelectionCount > 0
     ? ` You already have ${existingSelectionCount} player${existingSelectionCount === 1 ? "" : "s"} selected, so I treated this as today’s new list. Use the add option if you only meant to add them.`
     : ambiguousWithExistingSelection && !addMode
-      ? ` You already have ${existingSelectionCount} player${existingSelectionCount === 1 ? "" : "s"} selected, so I will not clear them unless you tap Replace Today.`
+      ? ` You already have ${existingSelectionCount} player${existingSelectionCount === 1 ? "" : "s"} selected, so I will not clear them unless you tap Replace Session.`
       : "";
 
   return localResponse({
-    normalizedIntent: removeMode ? "Remove matched players from Today" : replaceMode ? "Replace Today selection with matched players" : "Update Today selection with matched players",
+    normalizedIntent: removeMode ? "Remove matched players from Session" : replaceMode ? "Replace Session selection with matched players" : "Update Session selection with matched players",
     assistantSummary: `I matched ${matched.length} player${matched.length === 1 ? "" : "s"} to ${modeText}: ${names.join(", ")}.${lateText}${teamText}${ambiguityText}${missedText}`,
     confidence: unresolved.length > 0 ? 0.88 : 0.98,
     actions,
@@ -1198,7 +1198,7 @@ function parsePresentPlayerSelectionCommand(
           : `I could not confidently match “${displaySpokenName(name)}” to this roster.`,
       };
     }),
-    debugWarnings: ["Handled by Fair Teams local present-player parser with fuzzy roster matching and safe Today selection mode."],
+    debugWarnings: ["Handled by Stripes local present-player parser with fuzzy roster matching and safe Session selection mode."],
   });
 }
 
@@ -1244,7 +1244,7 @@ function parseRankedRosterSelectionCommand(
   selectAction.playersPerTeam = playersPerTeam;
   selectAction.teamCount = canGenerateAfterSelection ? finalTeamCount : null;
   selectAction.reason = canGenerateAfterSelection
-    ? `${wantsWeakest ? "Weakest" : "Strongest"} ${rankedPlayers.length} players by roster skill. This will clear Today, select those players, then generate ${finalTeamCount} fair teams.`
+    ? `${wantsWeakest ? "Weakest" : "Strongest"} ${rankedPlayers.length} players by roster skill. This will clear Session, select those players, then generate ${finalTeamCount} balanced teams.`
     : `${wantsWeakest ? "Weakest" : "Strongest"} ${rankedPlayers.length} players by roster skill. This replaces today's current selection.`;
   selectAction.playerRefs = rankedPlayers.map((player) => ({
     playerId: player.id,
@@ -1258,13 +1258,13 @@ function parseRankedRosterSelectionCommand(
   return localResponse({
     normalizedIntent: `${wantsWeakest ? "Select weakest" : "Select strongest"} ${rankedPlayers.length} roster players${canGenerateAfterSelection ? ` and generate ${finalTeamCount} teams` : playersPerTeam ? ` for ${playersPerTeam}v${playersPerTeam}` : ""}`,
     assistantSummary: canGenerateAfterSelection
-      ? `I found the ${wantsWeakest ? "weakest" : "strongest"} ${rankedPlayers.length} players in this roster by skill. Because you asked for teams too, I will first clear Today and select those ${rankedPlayers.length} players, then generate ${finalTeamCount} fair teams.`
-      : `I found the ${wantsWeakest ? "weakest" : "strongest"} ${rankedPlayers.length} players in this roster by skill and prepared an exact Today selection.${playersPerTeam ? ` Then set up ${playersPerTeam}v${playersPerTeam}.` : ""}`,
+      ? `I found the ${wantsWeakest ? "weakest" : "strongest"} ${rankedPlayers.length} players in this roster by skill. Because you asked for teams too, I will first clear Session and select those ${rankedPlayers.length} players, then generate ${finalTeamCount} balanced teams.`
+      : `I found the ${wantsWeakest ? "weakest" : "strongest"} ${rankedPlayers.length} players in this roster by skill and prepared an exact Session selection.${playersPerTeam ? ` Then set up ${playersPerTeam}v${playersPerTeam}.` : ""}`,
     confidence: 0.98,
     actions,
     confirmations: [],
     unresolved: [],
-    debugWarnings: ["Handled by Fair Teams local ranked-selection parser before current-Today team generation."],
+    debugWarnings: ["Handled by Stripes local ranked-selection parser before current-Session team generation."],
   });
 }
 
@@ -1296,13 +1296,13 @@ function parseRosterQuestion(commandText: string, players: AiSmartCommandRosterP
   let summary: string | null = null;
   if (/\b(fastest|quickest|speed|pace)\b/.test(normalized)) {
     summary = describeTopPlayers(players, "speed", "speed");
-    if (!summary) summary = "Fair Teams does not have enough speed data in this roster to say who is fastest.";
+    if (!summary) summary = "Stripes does not have enough speed data in this roster to say who is fastest.";
   } else if (/\b(strongest|best|top|highest skill|best player)\b/.test(normalized)) {
     summary = describeTopPlayers(players, "skill", "overall skill");
-    if (!summary) summary = "Fair Teams does not have enough skill data in this roster to rank the strongest players.";
+    if (!summary) summary = "Stripes does not have enough skill data in this roster to rank the strongest players.";
   } else if (/\b(weakest|beginner|lowest skill|worst)\b/.test(normalized)) {
     summary = describeTopPlayers(players, "skill", "overall skill", false);
-    if (!summary) summary = "Fair Teams does not have enough skill data in this roster to rank the weakest players.";
+    if (!summary) summary = "Stripes does not have enough skill data in this roster to rank the weakest players.";
   } else if (/\b(goalkeepers?|keeper|gk)\b/.test(normalized)) {
     const keepers = players.filter((player) => player.isGoalkeeper);
     summary = keepers.length > 0
@@ -1311,8 +1311,8 @@ function parseRosterQuestion(commandText: string, players: AiSmartCommandRosterP
   } else if (/\b(selected|present|here|playing today|today)\b/.test(normalized)) {
     const selected = players.filter((player) => player.attending);
     summary = selected.length > 0
-      ? `Currently selected for Today: ${selected.map((player) => player.name).join(", ")}.`
-      : "No players are currently selected for Today.";
+      ? `Currently selected for Session: ${selected.map((player) => player.name).join(", ")}.`
+      : "No players are currently selected for Session.";
   } else if (/\b(unrated|not rated|missing rating|need rating|needs rating)\b/.test(normalized)) {
     const unrated = players.filter((player) => typeof player.skill !== "number" || !Number.isFinite(player.skill));
     summary = unrated.length > 0
@@ -1343,8 +1343,8 @@ export function parseFairTeamsLocalSmartCommand(
   const selectAllRoster = parseSelectAllRosterCommand(commandText, players);
   if (selectAllRoster) return selectAllRoster;
 
-  // Mixed attendance + team commands are common: “Today we have Joon, Jorge…
-  // can you make teams?” In that case, parse and confirm the named Today list
+  // Mixed attendance + team commands are common: “Session we have Joon, Jorge…
+  // can you make teams?” In that case, parse and confirm the named Session list
   // before using any previously selected players. Plain team setup commands like
   // “make teams of 2” still go to the team orchestrator first.
   if (shouldPreferAttendanceListBeforeTeams(commandText)) {
@@ -1354,8 +1354,8 @@ export function parseFairTeamsLocalSmartCommand(
 
   // Ranked roster requests such as “best 10 from the roster” or
   // “two teams of five with the best players” must be handled before the
-  // current-Today team orchestrator. Otherwise the assistant may incorrectly
-  // use whoever is already selected in Today.
+  // current-Session team orchestrator. Otherwise the assistant may incorrectly
+  // use whoever is already selected in Session.
   const rankedSelection = parseRankedRosterSelectionCommand(commandText, players);
   if (rankedSelection) return rankedSelection;
 

@@ -216,14 +216,14 @@ export async function listGoogleDriveBackupFileGroups(accessToken: string): Prom
   const backupFileQuery = [
     "trashed = false",
     `mimeType = '${FAIR_TEAMS_DRIVE_MIME_TYPE}'`,
-    "(name contains 'Fair Teams' or appProperties has { key='fairTeamsBackup' and value='true' })",
+    "(name contains 'Stripes' or name contains 'Fair Teams' or appProperties has { key='fairTeamsBackup' and value='true' })",
   ].join(" and ");
 
   const sharedBackupFileQuery = [
     "trashed = false",
     "sharedWithMe = true",
     `mimeType = '${FAIR_TEAMS_DRIVE_MIME_TYPE}'`,
-    "name contains 'Fair Teams'",
+    "(name contains 'Stripes' or name contains 'Fair Teams')",
   ].join(" and ");
 
   const [accessibleFiles, sharedFiles] = await Promise.all([
@@ -289,7 +289,7 @@ export async function updateGoogleDriveJsonFile(
       throw new Error("Google Drive connection expired. Disconnect and connect Google Drive again, then retry.");
     }
     if (response.status === 403) {
-      throw new Error("Fair Teams cannot update this Drive file. Open the file from Drive again, or ask the file owner for edit access.");
+      throw new Error("Stripes cannot update this Drive file. Open the file from Drive again, or ask the file owner for edit access.");
     }
     throw new Error(message);
   }
@@ -330,7 +330,7 @@ export async function trashGoogleDriveFile(
       throw new Error("Google Drive connection expired. Disconnect and connect Google Drive again, then retry.");
     }
     if (response.status === 403) {
-      throw new Error("Fair Teams cannot delete this backup. Only the file owner can move this Drive backup to trash.");
+      throw new Error("Stripes cannot delete this backup. Only the file owner can move this Drive backup to trash.");
     }
     throw new Error(message);
   }
@@ -376,7 +376,7 @@ export async function shareGoogleDriveFileWithEditor(
       throw new Error("Google Drive connection expired. Disconnect and connect Google Drive again, then retry.");
     }
     if (response.status === 403) {
-      throw new Error("Fair Teams cannot share this Drive file. Open the file from Drive again, or make sure you own it or have permission to share it.");
+      throw new Error("Stripes cannot share this Drive file. Open the file from Drive again, or make sure you own it or have permission to share it.");
     }
     throw new Error(message);
   }
@@ -422,7 +422,7 @@ export async function shareGoogleDriveFileWithViewer(
       throw new Error("Google Drive connection expired. Disconnect and connect Google Drive again, then retry.");
     }
     if (response.status === 403) {
-      throw new Error("Fair Teams cannot send this Drive backup copy. Try reconnecting Google Drive, then retry.");
+      throw new Error("Stripes cannot send this Drive backup copy. Try reconnecting Google Drive, then retry.");
     }
     throw new Error(message);
   }
@@ -458,7 +458,7 @@ export async function listGoogleDriveFilePermissions(
       throw new Error("Google Drive connection expired. Disconnect and connect Google Drive again, then retry.");
     }
     if (response.status === 403) {
-      throw new Error("Fair Teams cannot read sharing access for this Drive file. Open the file from Drive again, or check your sharing permission.");
+      throw new Error("Stripes cannot read sharing access for this Drive file. Open the file from Drive again, or check your sharing permission.");
     }
     throw new Error(message);
   }
@@ -489,7 +489,7 @@ export async function deleteGoogleDriveFilePermission(
       throw new Error("Google Drive connection expired. Disconnect and connect Google Drive again, then retry.");
     }
     if (response.status === 403) {
-      throw new Error("Fair Teams cannot remove this access. It may belong to the file owner or come from a shared Drive folder.");
+      throw new Error("Stripes cannot remove this access. It may belong to the file owner or come from a shared Drive folder.");
     }
     throw new Error(message);
   }

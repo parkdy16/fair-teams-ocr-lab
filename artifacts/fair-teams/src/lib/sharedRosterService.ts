@@ -175,7 +175,7 @@ function memberUidForEmail(data: DocumentData, memberEmail: string) {
 
 function cleanGroupName(value?: string) {
   const name = (value || "").trim();
-  return name || "My Fair Teams group";
+  return name || "My Stripes group";
 }
 
 function getCurrentSharedRosterUser() {
@@ -347,7 +347,7 @@ async function seedOwnerClubRatingsFromRoster(rosterId: string, players: RoomPla
     const summaryRef = doc(firestore, "sharedRosters", rosterId, "clubRatingSummaries", safeDocId(player.id));
 
     batch.set(submissionRef, {
-      app: "Fair Teams",
+      app: "Stripes",
       schemaVersion: 2,
       rosterId,
       playerId: player.id,
@@ -371,7 +371,7 @@ async function seedOwnerClubRatingsFromRoster(rosterId: string, players: RoomPla
     writes += 1;
 
     batch.set(summaryRef, {
-      app: "Fair Teams",
+      app: "Stripes",
       schemaVersion: 2,
       rosterId,
       playerId: player.id,
@@ -437,7 +437,7 @@ function toGroupSummary(id: string, data: DocumentData): FirebaseSharedGroupSumm
   const memberNamesByUid = cleanNameMap(data.memberNamesByUid);
   return {
     id,
-    name: typeof data.name === "string" && data.name.trim() ? data.name : "My Fair Teams group",
+    name: typeof data.name === "string" && data.name.trim() ? data.name : "My Stripes group",
     ownerUid: typeof data.ownerUid === "string" ? data.ownerUid : "",
     ownerEmail: typeof data.ownerEmail === "string" ? data.ownerEmail : "",
     rosterCount: rosterIds.length,
@@ -553,7 +553,7 @@ export async function createFirebaseSharedGroup(groupName: string): Promise<Fire
   const name = cleanGroupName(groupName);
   const organizerName = nameFromUser(user);
   const payload = {
-    app: "Fair Teams",
+    app: "Stripes",
     schemaVersion: 2,
     name,
     ownerUid: user.uid,
@@ -589,7 +589,7 @@ export async function listFirebaseSharedGroups(): Promise<FirebaseSharedGroupSum
 
 async function requireGroupForRoster(groupId?: string, fallbackName?: string) {
   const user = getCurrentSharedRosterUser();
-  if (!groupId) return createFirebaseSharedGroup(fallbackName || "My Fair Teams group");
+  if (!groupId) return createFirebaseSharedGroup(fallbackName || "My Stripes group");
   const groupRef = doc(getFairTeamsFirestore(), "sharedGroups", groupId);
   const groupSnap = await getDoc(groupRef);
   if (!groupSnap.exists()) throw new Error("Shared group was not found.");
@@ -618,7 +618,7 @@ export async function createFirebaseSharedRoster(roster: RoomRoster, groupId?: s
   const rosterData = cleanForFirestore(makeSharedRosterSnapshot(roster));
   const playerCount = Array.isArray(rosterData.players) ? rosterData.players.length : 0;
   const payload = {
-    app: "Fair Teams",
+    app: "Stripes",
     schemaVersion: 2,
     groupId: group.id,
     groupName: group.name,
@@ -1046,7 +1046,7 @@ export async function saveFirebaseSharedRoster(roster: RoomRoster): Promise<Fire
 
     const remoteVersion = typeof data.version === "number" ? data.version : 1;
     if (remoteVersion !== expectedVersion) {
-      throw new Error(`This shared roster was already saved by someone else. Fair Teams needs the latest online version before saving again. Remote version is ${remoteVersion}, your local copy is ${expectedVersion}.`);
+      throw new Error(`This shared roster was already saved by someone else. Stripes needs the latest online version before saving again. Remote version is ${remoteVersion}, your local copy is ${expectedVersion}.`);
     }
 
     const nextVersion = remoteVersion + 1;

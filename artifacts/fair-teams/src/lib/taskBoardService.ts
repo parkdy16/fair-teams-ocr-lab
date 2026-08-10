@@ -580,7 +580,7 @@ export async function saveTaskBoardMeta(scopeId: string, meta: TaskBoardMeta): P
   const user = actor();
   const now = new Date();
   await setDoc(rootDoc(scopeId), {
-    app: "Fair Teams", schemaVersion: 6, name: meta.name.trim() || "Action Board", customName: meta.customName?.trim() || null,
+    app: "Stripes", schemaVersion: 6, name: meta.name.trim() || "Action Board", customName: meta.customName?.trim() || null,
     updatedByUid: user.uid, updatedByEmail: user.email || null, updatedByName: user.name,
     updatedAt: serverTimestamp(), updatedAtIso: now.toISOString(),
     ...(meta.createdAt ? {} : { createdAt: serverTimestamp(), createdAtIso: now.toISOString() }),
@@ -591,7 +591,7 @@ export async function saveTaskBoardColumn(scopeId: string, column: TaskBoardColu
   const user = actor();
   const now = new Date();
   await setDoc(doc(columnsCollection(scopeId), column.id), {
-    app: "Fair Teams", schemaVersion: 4, name: column.name.trim() || "Column", kind: column.kind || null, position: column.position,
+    app: "Stripes", schemaVersion: 4, name: column.name.trim() || "Column", kind: column.kind || null, position: column.position,
     archived: Boolean(column.archived), updatedByUid: user.uid, updatedByName: user.name,
     updatedAt: serverTimestamp(), updatedAtIso: now.toISOString(),
     ...(column.createdAt ? {} : { createdAt: serverTimestamp(), createdAtIso: now.toISOString() }),
@@ -729,7 +729,7 @@ export async function saveTaskBoardCard(scopeId: string, card: TaskBoardCard): P
   const latestDecision = decisions[decisions.length - 1];
   const latestOpenAction = [...actions].reverse().find((action) => action.status === "open");
   await setDoc(doc(cardsCollection(scopeId), card.id), {
-    app: "Fair Teams", schemaVersion: 6,
+    app: "Stripes", schemaVersion: 6,
     title: card.title.trim() || "Untitled topic", note: card.note?.trim() || null,
     people: (card.people || []).map((person) => ({ name: person.name.trim(), email: person.email?.trim() || null })).filter((person) => person.name),
     gifUrl: card.gifUrl?.trim() || null,

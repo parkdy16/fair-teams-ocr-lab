@@ -1235,7 +1235,7 @@ export function ClubTab({
     : !sharedRosterId
       ? "This shared roster is still connecting. Try again in a moment."
       : !authReady
-        ? "Connecting your Fair Teams account. Try again in a moment."
+        ? "Connecting your Stripes account. Try again in a moment."
         : !(clubUser?.email || authUser?.email)
           ? "Sign in to add Club Notes."
           : "";
@@ -1416,7 +1416,7 @@ export function ClubTab({
       if (onApplyAiSmartCommandAction) {
         return await onApplyAiSmartCommandAction(action);
       }
-      throw new Error("Fair Teams understands this, but it is not wired to apply yet.");
+      throw new Error("Stripes understands this, but it is not wired to apply yet.");
     }
 
     const noteText = action.noteText?.trim();
@@ -2295,7 +2295,7 @@ export function ClubTab({
         <DialogContent className="max-w-sm rounded-3xl p-3">
           <DialogHeader className="px-1 pb-1 text-left">
             <DialogTitle className="text-base font-black text-[#102A43]">
-              Fair Teams account
+              Stripes account
             </DialogTitle>
           </DialogHeader>
           <FirebaseSharedRosterAuthCard />
@@ -2319,7 +2319,7 @@ export function ClubTab({
       />
       </div>
 
-      <section className="order-1 overflow-hidden rounded-[1.7rem] border border-[#d9e9e4] bg-[#f3f8f7] p-3 shadow-sm ring-1 ring-[#e7f1ee] lg:col-span-1 lg:col-start-1 lg:row-start-1 lg:h-full lg:p-4">
+      <section className="order-2 overflow-hidden rounded-[1.7rem] border border-[#d9e9e4] bg-[#f3f8f7] p-3 shadow-sm ring-1 ring-[#e7f1ee] lg:col-span-1 lg:col-start-1 lg:row-start-1 lg:h-full lg:p-4">
         <div className="flex items-start justify-between gap-3">
           <button
             type="button"
@@ -2466,11 +2466,11 @@ export function ClubTab({
         )}
       </section>
 
-      <section className="order-2 overflow-hidden rounded-[1.7rem] border border-violet-100 bg-[#f8f3ff] p-3 shadow-sm ring-1 ring-violet-50 lg:col-span-1 lg:col-start-1 lg:row-start-2 lg:h-full lg:p-4">
+      <section className="order-1 overflow-hidden rounded-[1.7rem] border border-violet-100 bg-[#f8f3ff] p-3 shadow-sm ring-1 ring-violet-50 lg:col-span-1 lg:col-start-1 lg:row-start-2 lg:h-full lg:p-4">
         <div className="flex items-start justify-between gap-3">
           <button
             type="button"
-            className="flex min-w-0 items-center gap-2.5 text-left active:scale-[0.99]"
+            className="flex min-w-0 flex-1 items-center gap-2.5 text-left active:scale-[0.99]"
             onClick={() => setAccountDialogOpen(true)}
           >
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-white/85 text-violet-700 shadow-sm ring-1 ring-violet-100 lg:h-10 lg:w-10">
@@ -2496,7 +2496,7 @@ export function ClubTab({
             {clubUser && (
               <Button
                 type="button"
-                className="hidden h-9 shrink-0 rounded-full border border-slate-200 bg-white px-3 text-xs font-black text-slate-600 hover:bg-slate-50 lg:inline-flex"
+                className="h-8 shrink-0 rounded-full border border-violet-100 bg-white px-2.5 text-[10px] font-black text-violet-700 hover:bg-violet-50 lg:h-9 lg:px-3 lg:text-xs"
                 onClick={(event) => {
                   event.stopPropagation();
                   void signOutOfSharedRosters();
@@ -2521,7 +2521,7 @@ export function ClubTab({
         )}
       </section>
 
-      <div className="order-4 lg:col-span-1 lg:col-start-2 lg:row-start-1 lg:h-full lg:[&>section]:h-full">
+      <div className="order-3 lg:col-span-1 lg:col-start-2 lg:row-start-1 lg:h-full lg:[&>section]:h-full">
         <TaskBoard
           rosterName={activeRosterName}
           workspaceKey={workspaceKey}
@@ -2536,16 +2536,32 @@ export function ClubTab({
         />
       </div>
 
-      <section className="order-3 overflow-visible rounded-[1.7rem] border border-amber-100 bg-[#fffaf0] p-3 shadow-sm ring-1 ring-amber-50 lg:col-span-1 lg:col-start-2 lg:row-start-2 lg:h-full lg:p-4">
-        <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 text-[17px] font-black leading-none text-[#a94f0a] lg:text-[20px]">
-              <StickyNote className="fairteams-desktop-balanced-icon hidden h-6 w-6 lg:block" />
-              Club notes
+      <section className="order-4 overflow-hidden rounded-[1.7rem] border border-amber-100 lg:overflow-visible bg-[#fffaf0] p-3 shadow-sm ring-1 ring-amber-50 lg:col-span-1 lg:col-start-2 lg:row-start-2 lg:h-full lg:p-4">
+        <div className="flex items-start justify-between gap-3">
+          <button
+            type="button"
+            className="flex min-w-0 flex-1 items-center gap-2.5 text-left active:scale-[0.99]"
+            onClick={() => setClubNotesOpen(true)}
+          >
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-white/90 text-[#b76518] shadow-sm ring-1 ring-amber-100 lg:h-10 lg:w-10">
+              <StickyNote className="fairteams-desktop-balanced-icon h-[18px] w-[18px] lg:h-6 lg:w-6" />
             </div>
-            <div className="mt-1 h-0.5 w-20 rounded-full bg-[#c46a17]/70" />
-          </div>
-          <div className="flex shrink-0 items-center gap-1.5">
+            <span className="min-w-0">
+              <span className="block text-[17px] font-black leading-tight text-[#102A43] lg:text-[20px]">Club Notes</span>
+              <span className="mt-0.5 block truncate text-[10px] font-bold text-[#9a641f] lg:text-[12px]">
+                {previewClubNotes[0] ? `Latest: ${previewClubNotes[0].text}` : "Shared notes for organizers"}
+              </span>
+            </span>
+          </button>
+          <button
+            type="button"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/85 text-[#b76518] ring-1 ring-amber-100 active:scale-[0.98] lg:hidden"
+            onClick={() => setClubNotesOpen(true)}
+            aria-label="Open Club Notes"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+          <div className="hidden shrink-0 items-center gap-1.5 lg:flex">
             {clubNotes.length > 0 && (
               <button
                 type="button"
@@ -2566,7 +2582,7 @@ export function ClubTab({
           </div>
         </div>
 
-        <div className={`mt-3 gap-2.5 overflow-visible px-0.5 ${previewClubNotes.length <= 1 ? "flex py-1.5" : "grid grid-cols-3 py-2.5"}`}>
+        <div className={`mt-3 hidden gap-2.5 overflow-visible px-0.5 ${previewClubNotes.length <= 1 ? "lg:flex lg:py-1.5" : "lg:grid lg:grid-cols-3 lg:py-2.5"}`}>
           {previewClubNotes.length > 0 ? (
             previewClubNotes.map((note, index) => (
               <div
@@ -2614,9 +2630,12 @@ export function ClubTab({
 
       <section className="order-5 rounded-[1.7rem] border border-sky-100 bg-[#f6fbff] p-3 shadow-sm ring-1 ring-sky-50 lg:col-span-1 lg:col-start-1 lg:row-start-3 lg:h-full lg:p-4">
         <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-wide text-blue-600 lg:text-[20px] lg:normal-case lg:tracking-normal">
+          <button type="button" className="flex min-w-0 flex-1 items-center gap-2.5 text-left active:scale-[0.99]" onClick={() => setEquipmentBoardOpen(true)}>
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-white/90 text-blue-600 shadow-sm ring-1 ring-sky-100 lg:h-10 lg:w-10">
               <AntiqueBallIcon className="h-[18px] w-[18px] lg:h-6 lg:w-6" />
+            </div>
+            <div className="min-w-0 flex-1">
+            <div className="text-[17px] font-black leading-tight text-[#102A43] lg:text-[20px]">
               Equipment
             </div>
             <div className="mt-1 hidden text-xs font-semibold leading-snug text-slate-500 lg:block lg:text-[14px] lg:leading-relaxed">
@@ -2628,18 +2647,21 @@ export function ClubTab({
               />
               {equipmentStatusText}
             </div>
-          </div>
+            </div>
+          </button>
+          <button type="button" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/85 text-blue-600 ring-1 ring-sky-100 active:scale-[0.98] lg:hidden" onClick={() => setEquipmentBoardOpen(true)} aria-label="Open Equipment">
+            <ChevronRight className="h-4 w-4" />
+          </button>
           <Button
             type="button"
-            className="h-9 shrink-0 rounded-2xl border border-slate-100 bg-white px-3 text-xs font-black text-[#102A43] shadow-sm hover:bg-slate-50 lg:text-sm"
+            className="hidden h-9 shrink-0 rounded-2xl border border-slate-100 bg-white px-3 text-xs font-black text-[#102A43] shadow-sm hover:bg-slate-50 lg:inline-flex lg:text-sm"
             onClick={() => setEquipmentBoardOpen(true)}
           >
             Open
           </Button>
         </div>
 
-
-
+        <div className="hidden lg:block">
         {equipmentKits.length > 0 ? (
           <div className="mt-3 overflow-hidden rounded-[1.35rem] border border-slate-100 bg-slate-50/60">
             {equipmentDashboardHolders.map((holder, index) => {
@@ -2707,6 +2729,7 @@ export function ClubTab({
             No bags yet
           </div>
         )}
+        </div>
       </section>
       </div>
 
@@ -3277,7 +3300,7 @@ export function ClubTab({
                         </div>
 
                         <div className="rounded-2xl border border-violet-100 bg-violet-50 px-3 py-2 text-[11px] font-semibold leading-snug text-violet-800">
-                          The style slider creates realistic ATK/DEF/PASS/SPEED values, then Fair Teams keeps using the existing weighted OVR formula. Manual stat tweaks here become your real shared rating.
+                          The style slider creates realistic ATK/DEF/PASS/SPEED values, then Stripes keeps using the existing weighted OVR formula. Manual stat tweaks here become your real shared rating.
                         </div>
 
                         <div className="rounded-2xl bg-slate-50 px-3 py-2">

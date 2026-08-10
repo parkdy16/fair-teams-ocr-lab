@@ -391,7 +391,7 @@ export async function saveMyClubPlayerRating(rosterId: string, playerId: string,
     const attrAverages = averagesFromSums(sums, nextCount);
 
     transaction.set(submissionRef, {
-      app: "Fair Teams",
+      app: "Stripes",
       schemaVersion: 2,
       rosterId: cleanRosterId(rosterId),
       playerId,
@@ -414,7 +414,7 @@ export async function saveMyClubPlayerRating(rosterId: string, playerId: string,
     }, { merge: true });
 
     transaction.set(summaryRef, {
-      app: "Fair Teams",
+      app: "Stripes",
       schemaVersion: 2,
       rosterId: cleanRosterId(rosterId),
       playerId,
@@ -457,7 +457,7 @@ export async function skipMyClubPlayerRating(rosterId: string, playerId: string)
     const attrAverages = averagesFromSums(sums, nextCount);
 
     transaction.set(submissionRef, {
-      app: "Fair Teams",
+      app: "Stripes",
       schemaVersion: 2,
       rosterId: cleanRosterId(rosterId),
       playerId,
@@ -480,7 +480,7 @@ export async function skipMyClubPlayerRating(rosterId: string, playerId: string)
     }, { merge: true });
 
     transaction.set(summaryRef, {
-      app: "Fair Teams",
+      app: "Stripes",
       schemaVersion: 2,
       rosterId: cleanRosterId(rosterId),
       playerId,
@@ -528,7 +528,7 @@ export async function addClubNote(rosterId: string, text: string): Promise<void>
   if (!cleanText) throw new Error("Write a note first.");
   const now = new Date();
   await addDoc(clubNotesCollection(rosterId), {
-    app: "Fair Teams",
+    app: "Stripes",
     schemaVersion: 1,
     rosterId: cleanRosterId(rosterId),
     text: cleanText,

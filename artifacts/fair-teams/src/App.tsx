@@ -2429,7 +2429,7 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
         activeRoster,
       );
       updateActiveRosterGoogleSheetSource(file);
-      showRosterToolsNotice("Changes saved", "Your roster changes were saved for everyone using this shared roster.", "success");
+      // Routine shared-roster saves are intentionally silent. Surface only problems that need attention.
     } catch (error) {
       if (isMissingSharedRosterError(error)) {
         handleMissingActiveGoogleSheetLink();
@@ -2580,11 +2580,14 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
         failedNames.length > 0 ? `Could not save: ${failedNames.slice(0, 3).join(", ")}${failedNames.length > 3 ? "…" : ""}` : "",
       ].filter(Boolean);
 
-      showRosterToolsNotice(
-        newerOnlineNames.length > 0 || failedNames.length > 0 || missingRosterIds.size > 0 ? "Shared roster save finished with notes" : "Shared rosters saved",
-        summaryLines.join("\n"),
-        newerOnlineNames.length > 0 || failedNames.length > 0 || missingRosterIds.size > 0 ? "warning" : "success",
-      );
+      const sharedSaveNeedsAttention = newerOnlineNames.length > 0 || failedNames.length > 0 || missingRosterIds.size > 0 || skippedEmptyCount > 0;
+      if (sharedSaveNeedsAttention) {
+        showRosterToolsNotice(
+          "Shared roster save finished with notes",
+          summaryLines.join("\n"),
+          "warning",
+        );
+      }
     } finally {
       setGoogleSheetSyncing(false);
     }
@@ -3844,7 +3847,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
           </div>
         )}
 
-        <div className={`flex-1 overflow-y-auto p-4 md:p-5 lg:px-7 lg:py-6 ${shouldShowTodayStartHeader ? "pb-6 md:pb-6" : activeTab === "teams" && teamsWorkspaceView === "setup" ? "pb-36 md:pb-36 lg:pb-6" : "pb-20 md:pb-20 lg:pb-6"}`} style={{ WebkitOverflowScrolling: "touch" }}>
+        <div className={`flex-1 overflow-y-auto p-4 md:p-5 lg:px-7 lg:py-6 ${shouldShowTodayStartHeader ? "pb-6 md:pb-6" : activeTab === "teams" && teamsWorkspaceView === "setup" ? "pb-36 md:pb-36 lg:pb-28" : "pb-20 md:pb-20 lg:pb-6"}`} style={{ WebkitOverflowScrolling: "touch" }}>
           <div className={`mx-auto flex min-h-[calc(100dvh-116px)] w-full flex-col ${shouldShowTodayStartHeader ? "lg:max-w-6xl lg:justify-center" : activeTab === "players" ? "lg:max-w-5xl" : activeTab === "teams" && teamsWorkspaceView === "setup" ? "lg:max-w-6xl" : activeTab === "teams" ? "lg:max-w-none" : "lg:mx-0 lg:max-w-none"}`}>
             <TabsContent
               value="players"
@@ -3988,6 +3991,39 @@ They will no longer be able to open or edit this shared roster unless it is shar
             </TabsContent>
           </div>
         </div>
+
+        {!shouldShowTodayStartHeader && activeTab === "teams" && teamsWorkspaceView === "setup" && (
+          <div className="pointer-events-none fixed inset-x-0 bottom-6 z-40 hidden lg:block">
+            <div className="mx-auto w-full max-w-[1440px] pl-[204px]">
+              <div className="stripes-generate-dock pointer-events-auto mx-auto flex w-full max-w-md items-stretch gap-2 rounded-2xl p-1 shadow-[0_10px_30px_rgba(15,23,42,0.12)]">
+                <label className="relative block h-12 w-[68px] shrink-0" title="Number of teams">
+                  <span className="pointer-events-none absolute left-0 right-0 top-1 text-center text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">Teams</span>
+                  <select
+                    aria-label="Number of teams"
+                    value={sessionTeamCount}
+                    onChange={(event) => setSessionTeamCount(Number(event.target.value))}
+                    className="stripes-team-count h-12 w-full rounded-xl border border-slate-200 bg-white px-2 pb-0.5 pt-3 text-center text-[19px] font-black leading-none text-[#102A43] shadow-sm outline-none transition active:scale-[0.98] focus:border-slate-300 focus:ring-2 focus:ring-slate-200"
+                    data-testid="desktop-team-count"
+                  >
+                    {[2, 3, 4, 5, 6].map((count) => (
+                      <option key={count} value={count}>{count}</option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => { prepareTeamsFromAi(sessionTeamCount, { autoGenerate: true }); if (tutorialStep === "generate") handleTutorialAction("generated"); }}
+                  disabled={players.filter((player) => player.attending).length < 2}
+                  className={`stripes-generate-button flex h-12 min-w-0 flex-1 items-center justify-center rounded-xl px-4 text-[14px] font-black text-white transition active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 ${tutorialStep === "generate" ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
+                  title={players.filter((player) => player.attending).length < 2 ? "Select at least 2 players" : `Generate ${sessionTeamCount} teams`}
+                  data-testid="desktop-generate-teams"
+                >
+                  Generate teams
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {!shouldShowTodayStartHeader && (
           <div className="fixed inset-x-0 bottom-0 z-40 mx-auto w-full max-w-md animate-in fade-in-0 slide-in-from-bottom-2 duration-200 border-t border-slate-200 bg-white/95 px-4 pb-[max(0.65rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-4px_14px_rgba(15,23,42,0.035)] backdrop-blur md:max-w-3xl lg:hidden">

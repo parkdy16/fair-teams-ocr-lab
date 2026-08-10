@@ -4,11 +4,12 @@ import type { RoomPlayer } from "@/lib/localRoster";
 import { FieldSize, PairingRule, Player, Team, TeamColor } from "@/lib/types";
 import { getSpecialSkillStatBoosts } from "@/lib/playerAbilityEffects";
 import { generateTeams, recomputeStats } from "@/lib/teamGenerator";
-import { listenToClubRatingSummaries, listenToMyClubRatings, type ClubMyRating, type ClubRatingSummary } from "@/lib/clubCollaborationService";
+import { listenToClubRatingSummaries, type ClubRatingSummary } from "@/lib/clubCollaborationService";
 import { profileFromAveragedAttributes } from "@/lib/playerStyleProfile";
 import { Button } from "@/components/ui/button";
+import stripesLogo from "@/assets/stripes-logo-mark.png";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Shuffle, ArrowLeftRight, Download, HelpCircle, Clock, Palette, BarChart3, List, Maximize2, X, Volume2, Square, Undo2, Redo2 } from "lucide-react";
+import { Shuffle, ArrowLeftRight, Download, HelpCircle, Clock, Palette, BarChart3, List, Maximize2, X, Square, Undo2, Redo2, ChevronLeft } from "lucide-react";
 
 const PRESENT_TEAMS_SCROLL_FIX_VERSION = "present-fullscreen-portal-v1";
 
@@ -132,6 +133,14 @@ function shortDateTime(value: string) {
   }
 }
 
+function teamsDateLabel(date = new Date()) {
+  try {
+    return new Intl.DateTimeFormat(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" }).format(date);
+  } catch {
+    return date.toLocaleDateString();
+  }
+}
+
 function loadFieldSize(): FieldSize {
   const saved = typeof localStorage !== "undefined" ? localStorage.getItem(FIELD_SIZE_STORAGE_KEY) : null;
   return saved === "small" || saved === "large" || saved === "medium" ? saved : "medium";
@@ -233,7 +242,7 @@ async function exportTeamsAsJpg(teams: Team[], fieldSize: FieldSize) {
   const CANVAS_W = 720;
   const PAD = 28;
   const GAP = 14;
-  const TITLE_H = 78;
+  const TITLE_H = 92;
   const TEAM_HEADER_H = 46;
   const PLAYER_LINE_H = 20;
   const CARD_PAD_X = 16;
@@ -266,23 +275,38 @@ async function exportTeamsAsJpg(teams: Team[], fieldSize: FieldSize) {
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
-  // Stripes export lockup: separated team stripes + wordmark.
-  ctx.textAlign = "center";
-  const stripeColors = ["#3B82F6", "#84CC16", "#F59E0B", "#EF4444"];
-  const stripeStartX = CANVAS_W / 2 - 78;
-  stripeColors.forEach((color, index) => {
-    ctx.fillStyle = color;
-    roundRect(ctx, stripeStartX + index * 15, 17 + index * 1.4, 21, 4, 2);
-    ctx.fill();
-  });
-  ctx.fillStyle = "#102A43";
-  ctx.font = `900 28px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
-  ctx.fillText("STRIPES", CANVAS_W / 2 + 24, 35);
+  // Use the real Stripes mark and the same Fredoka / Outfit typography as the app.
+  try {
+    if (document.fonts) {
+      await document.fonts.ready;
+      await Promise.allSettled([
+        document.fonts.load('600 32px "Fredoka"'),
+        document.fonts.load('700 12px "Outfit"'),
+        document.fonts.load('800 16px "Outfit"'),
+      ]);
+    }
+  } catch {
+    // Canvas still has safe fallbacks if web fonts are unavailable.
+  }
 
+  const brandLogo = await loadImage(stripesLogo).catch(() => null);
+  const logoSize = 52;
+  const brandGap = 9;
+  ctx.font = `600 32px "Fredoka", "Outfit", sans-serif`;
+  const brandText = "Stripes";
+  const brandTextWidth = ctx.measureText(brandText).width;
+  const brandWidth = logoSize + brandGap + brandTextWidth;
+  const brandStartX = (CANVAS_W - brandWidth) / 2;
+
+  if (brandLogo) ctx.drawImage(brandLogo, brandStartX, 9, logoSize, logoSize);
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#102A43";
+  ctx.fillText(brandText, brandStartX + logoSize + brandGap, 44);
+
+  ctx.textAlign = "center";
   ctx.fillStyle = "#64748B";
-  ctx.font = `800 11px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
-  const dateText = new Date().toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" });
-  ctx.fillText(dateText, CANVAS_W / 2, 56);
+  ctx.font = `700 11px "Outfit", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
+  ctx.fillText(`Teams · ${teamsDateLabel()}`, CANVAS_W / 2, 70);
   ctx.textAlign = "left";
 
   const rowY = teamRowHeights.reduce<number[]>((positions, height, row) => {
@@ -320,11 +344,11 @@ async function exportTeamsAsJpg(teams: Team[], fieldSize: FieldSize) {
 
     // Team header: team color is carried by the card outline.
     ctx.fillStyle = "#102A43";
-    ctx.font = `900 16px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
+    ctx.font = `800 16px "Outfit", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
     ctx.fillText(team.name, x + CARD_PAD_X, y + 23);
 
     ctx.fillStyle = "#64748B";
-    ctx.font = `700 10px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
+    ctx.font = `700 10px "Outfit", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
     ctx.fillText(`${team.players.length} ${team.players.length === 1 ? "player" : "players"}`, x + CARD_PAD_X, y + 38);
 
     ctx.strokeStyle = "#E2E8F0";
@@ -340,12 +364,12 @@ async function exportTeamsAsJpg(teams: Team[], fieldSize: FieldSize) {
 
     if (team.players.length === 0) {
       ctx.fillStyle = "#94A3B8";
-      ctx.font = `italic 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
+      ctx.font = `italic 12px "Outfit", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
       ctx.fillText("No players", playerX, playerY);
     } else {
       team.players.forEach(player => {
         ctx.fillStyle = "#102A43";
-        ctx.font = `800 16px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
+        ctx.font = `800 16px "Outfit", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
         const badges = [
           ...(player.isOrganizer ? ["ORG"] : []),
           ...(player.isGoalkeeper ? ["GK"] : []),
@@ -437,8 +461,6 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
   const [justGenerated, setJustGenerated] = useState(false);
   const [showPlayerSkillNumbers, setShowPlayerSkillNumbers] = useState(false);
   const [clubRatingSummaries, setClubRatingSummaries] = useState<ClubRatingSummary[]>([]);
-  const [myClubRatings, setMyClubRatings] = useState<ClubMyRating[]>([]);
-  const [clubRatingError, setClubRatingError] = useState("");
   const [presentTeamsOpen, setPresentTeamsOpen] = useState(false);
   const [gameToolsOpen, setGameToolsOpen] = useState(false);
   const [cardScreen, setCardScreen] = useState<"yellow" | "red" | null>(null);
@@ -452,29 +474,21 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
   useEffect(() => {
     if (!isSharedRoster || !sharedRosterId) {
       setClubRatingSummaries([]);
-      setMyClubRatings([]);
-      setClubRatingError("");
       return;
     }
 
-    setClubRatingError("");
     try {
       const unsubscribeSummaries = listenToClubRatingSummaries(
         sharedRosterId,
         setClubRatingSummaries,
-        (error) => setClubRatingError(error.message || "Could not load Club ratings."),
+        () => {
+          // Teams stays usable with local ratings when Club ratings are unavailable.
+          setClubRatingSummaries([]);
+        },
       );
-      const unsubscribeMine = listenToMyClubRatings(
-        sharedRosterId,
-        setMyClubRatings,
-        (error) => setClubRatingError(error.message || "Could not load your Club ratings."),
-      );
-      return () => {
-        unsubscribeSummaries();
-        unsubscribeMine();
-      };
-    } catch (error) {
-      setClubRatingError(error instanceof Error ? error.message : "Could not connect Club ratings.");
+      return () => unsubscribeSummaries();
+    } catch {
+      setClubRatingSummaries([]);
       return;
     }
   }, [isSharedRoster, sharedRosterId]);
@@ -534,23 +548,12 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
   const clubRatingByPlayerId = useMemo(() => {
     return new Map(clubRatingSummaries.map((summary) => [summary.playerId, summary]));
   }, [clubRatingSummaries]);
-  const clubRevealablePlayerIds = useMemo(() => {
-    return new Set(myClubRatings
-      .filter((rating) => !rating.skipped && typeof rating.skill === "number")
-      .map((rating) => rating.playerId));
-  }, [myClubRatings]);
   const usingClubRatings = Boolean(isSharedRoster);
   const getUsableClubAverage = (playerId: string) => {
     const summary = clubRatingByPlayerId.get(playerId);
     if (!summary || summary.ratingCount <= 0 || typeof summary.averageSkill !== "number") return null;
     return summary.averageSkill;
   };
-  const clubNeedsMyRatingAttendingCount = usingClubRatings
-    ? players.filter((player) => player.attending && !clubRevealablePlayerIds.has(player.id)).length
-    : 0;
-  const clubNoAverageAttendingCount = usingClubRatings
-    ? players.filter((player) => player.attending && getUsableClubAverage(player.id) === null).length
-    : 0;
   const attendingPlayers = useMemo(() => {
     return players.filter((player) => player.attending).map((player) => {
       if (!usingClubRatings) return toLocalPlayer(player);
@@ -568,42 +571,6 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
       selectedCount: attendingPlayers.length,
     });
   }, [attendingPlayers.length, numTeams, onAiTeamStateChange, teams.length]);
-
-  const playWhistleSound = () => {
-    try {
-      const AudioContextCtor = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-      if (!AudioContextCtor) return;
-      const ctx = new AudioContextCtor();
-      const now = ctx.currentTime;
-      const gain = ctx.createGain();
-      gain.connect(ctx.destination);
-      gain.gain.setValueAtTime(0.0001, now);
-      gain.gain.exponentialRampToValueAtTime(0.22, now + 0.025);
-      gain.gain.setValueAtTime(0.22, now + 0.34);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.5);
-
-      const first = ctx.createOscillator();
-      first.type = "sine";
-      first.frequency.setValueAtTime(2300, now);
-      first.frequency.linearRampToValueAtTime(2650, now + 0.18);
-      first.frequency.linearRampToValueAtTime(2400, now + 0.5);
-      first.connect(gain);
-      first.start(now);
-      first.stop(now + 0.52);
-
-      const second = ctx.createOscillator();
-      second.type = "triangle";
-      second.frequency.setValueAtTime(3200, now + 0.06);
-      second.frequency.linearRampToValueAtTime(2850, now + 0.34);
-      second.connect(gain);
-      second.start(now + 0.06);
-      second.stop(now + 0.48);
-
-      window.setTimeout(() => void ctx.close().catch(() => {}), 700);
-    } catch {
-      // Ignore blocked audio contexts or unsupported browser audio.
-    }
-  };
 
   const historyPanel = history.length > 0 ? (
     <div className="bg-card border border-border rounded-xl p-3 shadow-sm">
@@ -872,9 +839,15 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
             Choose at least 2 players to make teams.
           </p>
           {onEditPlayers && (
-            <Button type="button" variant="outline" onClick={onEditPlayers} className="mt-4 rounded-xl font-black">
-              Edit players
-            </Button>
+            <button
+              type="button"
+              onClick={onEditPlayers}
+              className="mt-4 flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-[#102A43] shadow-sm transition hover:bg-slate-50 active:scale-[0.96]"
+              aria-label="Back to team setup"
+              title="Back to team setup"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </button>
           )}
         </div>
         {historyPanel && <div className="mt-auto">{historyPanel}</div>}
@@ -886,15 +859,19 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
     <div className="flex flex-col gap-3 lg:gap-4">
       {/* Controls */}
       <div className="bg-card border border-border px-3 py-2.5 rounded-xl shadow-sm flex flex-col gap-2">
-        {isSharedRoster && (clubNoAverageAttendingCount > 0 || clubRatingError) && (
-          <div className="rounded-xl border border-slate-100 bg-slate-50/70 px-3 py-2 shadow-sm">
-            <div className="min-w-0 text-[10px] font-semibold leading-snug text-slate-500">
-              {clubRatingError || `${clubNoAverageAttendingCount} selected player${clubNoAverageAttendingCount === 1 ? " has" : "s have"} no Club rating yet, so temporary 5.0 is used.`}
-            </div>
-          </div>
-        )}
-
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          {onEditPlayers && (
+            <button
+              type="button"
+              onClick={onEditPlayers}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-[#102A43] shadow-sm transition hover:bg-slate-50 active:scale-[0.96]"
+              data-testid="button-edit-team-players"
+              aria-label="Back to team setup"
+              title="Back to team setup"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+          )}
           <div className="min-w-0">
             <div className="text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">Current teams</div>
             <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-black text-[#102A43]">
@@ -903,16 +880,6 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
               <span>{attendingPlayers.length} players</span>
             </div>
           </div>
-          {onEditPlayers && (
-            <button
-              type="button"
-              onClick={onEditPlayers}
-              className="shrink-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-black text-[#102A43] shadow-sm transition hover:bg-slate-50 active:scale-[0.98]"
-              data-testid="button-edit-team-players"
-            >
-              Edit players
-            </button>
-          )}
         </div>
 
         <div className="flex items-center gap-2 rounded-xl bg-slate-50/80 p-2">
@@ -1227,7 +1194,8 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
         <div className="flex justify-end">
           <Button
             size="sm"
-            className={`h-9 rounded-xl px-3 text-[12px] font-black tracking-tight bg-primary text-primary-foreground hover:bg-primary/90 ${tutorialStep === "present" ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
+            variant="outline"
+            className={`h-9 rounded-xl border-slate-200 bg-white px-3 text-[12px] font-black tracking-tight text-[#102A43] shadow-sm hover:bg-slate-50 ${tutorialStep === "present" ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
             onClick={() => { setPresentTeamsOpen(true); onTutorialAction?.("presented"); }}
             disabled={isGenerating}
             title="Show teams full screen"
@@ -1253,7 +1221,8 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
             <div className="relative z-[92] flex shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-slate-950/95 px-3 py-2 pt-[max(0.5rem,env(safe-area-inset-top))]">
               <div className="min-w-0">
                 <p className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-300">Stripes</p>
-                <h2 className="truncate text-lg font-black tracking-tight">Session teams</h2>
+                <h2 className="truncate text-lg font-black tracking-tight">Teams</h2>
+                <p className="truncate text-[10px] font-semibold text-slate-400">{teamsDateLabel()}</p>
               </div>
               <button
                 type="button"
@@ -1309,15 +1278,6 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
             {gameToolsOpen && (
               <div className="shrink-0 border-t border-white/10 bg-slate-900/95 px-2 py-2">
                 <div className="mx-auto flex max-w-5xl gap-2">
-                  <button
-                    type="button"
-                    onClick={playWhistleSound}
-                    className="flex h-10 flex-1 items-center justify-center rounded-2xl border border-white/15 bg-white/10 px-2 text-[12px] font-black text-white active:scale-[0.98]"
-                    data-testid="button-game-tool-whistle"
-                  >
-                    <Volume2 className="mr-1.5 h-4 w-4" />
-                    Whistle
-                  </button>
                   <button
                     type="button"
                     onClick={() => { setCardScreen("yellow"); setGameToolsOpen(false); }}

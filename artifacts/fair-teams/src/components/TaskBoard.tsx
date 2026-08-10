@@ -567,9 +567,9 @@ function EmptyActionBoard({ onCreate }: { onCreate: () => void }) {
   return (
     <div className="mx-auto flex max-w-3xl flex-col items-center px-4 py-10 text-center">
       <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-violet-600 shadow-sm ring-1 ring-slate-200"><Gavel className="h-6 w-6" /></div>
-      <h3 className="mt-4 text-lg font-black text-[#102A43]">Keep the things that matter out of the chat scroll</h3>
-      <p className="mt-1 max-w-md text-sm font-semibold leading-relaxed text-slate-500">Use a topic when something needs a decision, an owner, or a clear next step. Chat can stay chat.</p>
-      <Button type="button" className="mt-5 h-11 w-11 rounded-2xl p-0 font-black text-white" onClick={onCreate} aria-label="New topic"><Plus className="h-5 w-5" /></Button>
+      <h3 className="mt-4 text-lg font-black text-[#102A43]">Start with one line</h3>
+      <p className="mt-1 max-w-md text-sm font-semibold leading-relaxed text-slate-500">Capture it now. Add decisions, actions and other structure only when the card needs them.</p>
+      <Button type="button" className="mt-5 h-11 rounded-2xl px-4 font-black text-white" onClick={onCreate}><Plus className="mr-1.5 h-4 w-4" />Add a card</Button>
     </div>
   );
 }
@@ -608,6 +608,8 @@ export function TaskBoard({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [currentVoterHash, setCurrentVoterHash] = useState("");
+  const [quickAddTitle, setQuickAddTitle] = useState("");
+  const quickAddInputRef = useRef<HTMLInputElement>(null);
 
   const [newTopicOpen, setNewTopicOpen] = useState(false);
   const [newTopicKind, setNewTopicKind] = useState<NewTopicKind | null>(null);
@@ -884,6 +886,46 @@ export function TaskBoard({
 
   const togglePersonKey = (key: string, setter: React.Dispatch<React.SetStateAction<string[]>>) => {
     setter((current) => current.includes(key) ? current.filter((item) => item !== key) : [...current, key]);
+  };
+
+  const createQuickTopic = async () => {
+    const title = quickAddTitle.trim();
+    if (!title || saving) return;
+    const ideasColumn = columnByKind.get("ideas") || activeColumns[0];
+    if (!ideasColumn) return;
+    const now = Date.now();
+    const card: TaskBoardCard = {
+      id: id("topic"),
+      title,
+      columnId: ideasColumn.id,
+      position: now,
+      people: [],
+      links: [],
+      decisions: [],
+      actions: [],
+      createdAt: now,
+      createdByName: currentActor.name,
+      createdByEmail: currentActor.email,
+      updatedAt: now,
+      updatedByName: currentActor.name,
+      activities: [nowActivity("created", currentActor.name, currentActor.email)],
+    };
+    setSaving(true);
+    setError("");
+    try {
+      await persistCard(card);
+      setQuickAddTitle("");
+      setMobileFilter("ideas");
+      window.setTimeout(() => quickAddInputRef.current?.focus(), 0);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Could not add card.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const focusQuickAdd = () => {
+    window.setTimeout(() => quickAddInputRef.current?.focus(), 0);
   };
 
   const createTopic = async () => {
@@ -1912,7 +1954,7 @@ export function TaskBoard({
                 >
                   <Settings className="h-4 w-4 lg:h-[18px] lg:w-[18px]" />
                 </Button>
-                <Button type="button" className="h-9 w-9 rounded-2xl p-0 font-black text-white lg:h-11 lg:w-11" style={{ backgroundColor: accent }} onClick={() => { resetNewTopic(); setNewTopicOpen(true); }} aria-label="New topic"><Plus className="h-4 w-4 lg:h-5 lg:w-5" /></Button>
+                <Button type="button" className="h-9 w-9 rounded-2xl p-0 font-black text-white lg:h-11 lg:w-11" style={{ backgroundColor: accent }} onClick={focusQuickAdd} aria-label="Add card" title="Add card"><Plus className="h-4 w-4 lg:h-5 lg:w-5" /></Button>
               </div>
             </div>
           </DialogHeader>
@@ -1930,11 +1972,33 @@ export function TaskBoard({
             </div>
           </div>
 
+          <div className="shrink-0 border-b border-slate-200/70 bg-white/95 px-3 py-2.5 lg:px-5 lg:py-3">
+            <form className="mx-auto flex w-full max-w-3xl items-center gap-2" onSubmit={(event) => { event.preventDefault(); void createQuickTopic(); }}>
+              <Input
+                ref={quickAddInputRef}
+                value={quickAddTitle}
+                onChange={(event) => setQuickAddTitle(event.target.value)}
+                maxLength={220}
+                placeholder="Add something…"
+                aria-label="Add a card"
+                className="h-10 rounded-2xl border-slate-200 bg-slate-50/80 px-3 text-sm font-semibold text-[#102A43] shadow-none focus-visible:ring-blue-100 lg:h-11 lg:text-[15px]"
+              />
+              <Button
+                type="submit"
+                className="h-10 shrink-0 rounded-2xl px-4 text-xs font-black text-white lg:h-11 lg:px-5 lg:text-sm"
+                style={{ backgroundColor: accent }}
+                disabled={!quickAddTitle.trim() || saving}
+              >
+                {saving ? "Adding…" : "Add"}
+              </Button>
+            </form>
+          </div>
+
           {error && <div className="mx-3 mt-2 rounded-xl bg-red-50 px-3 py-2 text-[11px] font-bold text-red-700 lg:mx-5">{error}</div>}
 
           <div className="min-h-0 flex-1 overflow-y-auto" style={{ backgroundColor: background }}>
             {loading ? <div className="p-8 text-center text-sm font-black text-slate-500">Loading Action Board…</div> : board.cards.length === 0 ? (
-              <EmptyActionBoard onCreate={() => { resetNewTopic(); setNewTopicOpen(true); }} />
+              <EmptyActionBoard onCreate={focusQuickAdd} />
             ) : (
               <>
                 <div className="px-3 py-3 pb-20 lg:hidden">

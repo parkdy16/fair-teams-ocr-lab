@@ -93,6 +93,7 @@ const EMPTY_ROSTER_NAME = "New roster";
 const ROSTERS_STORAGE_KEY = "fair-teams-rosters-v1";
 const DRIVE_RECIPIENTS_STORAGE_KEY = "fair-teams-drive-backup-recipients-v1";
 const DRIVE_ACTIVE_BACKUP_STORAGE_KEY = "fair-teams-drive-active-backup-v1";
+const APP_VERSION = "1.60.0";
 
 function hasSavedRosterState() {
   try {
@@ -4381,6 +4382,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 <h2 className="text-base font-black tracking-tight text-[#102A43]">
                   Roster Tools
                 </h2>
+                <p className="mt-0.5 text-[10px] font-bold text-slate-400">Stripes v{APP_VERSION}</p>
               </div>
               <Button
                 type="button"

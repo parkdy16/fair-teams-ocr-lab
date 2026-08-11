@@ -2194,7 +2194,7 @@ export function PlayersTab({
   return (
     <div className="flex flex-col gap-4">
       <div className="rounded-2xl border border-border/70 bg-card p-3 shadow-sm">
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="min-w-0">
             <div className="text-[10px] font-black uppercase tracking-wide text-muted-foreground">Players</div>
             <div className="text-lg font-black leading-tight text-foreground">
@@ -2797,8 +2797,8 @@ export function PlayersTab({
 
         </div>
 
-        <div className="mt-2 flex items-center justify-between gap-2 border-t border-border/60 pt-2">
-          <div className="flex items-center gap-1.5 shrink-0">
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
           <Button
             type="button"
             variant="outline"

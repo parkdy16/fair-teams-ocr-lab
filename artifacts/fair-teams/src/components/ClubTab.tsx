@@ -2605,10 +2605,10 @@ export function ClubTab({
       </div>
 
       <section className="order-1 overflow-hidden rounded-[1.7rem] border border-[#d9e9e4] bg-[#f3f8f7] p-3 shadow-sm ring-1 ring-[#e7f1ee] lg:col-span-1 lg:col-start-1 lg:row-start-1 lg:h-full lg:p-4">
-        <div className="flex items-start justify-between gap-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
           <button
             type="button"
-            className="flex min-w-0 flex-1 items-start gap-2.5 text-left active:scale-[0.99]"
+            className="flex min-w-0 flex-[1_1_9.125rem] items-start gap-2.5 text-left active:scale-[0.99]"
             onClick={() => setPlayerManagementCollapsed((current) => !current)}
             aria-expanded={!playerManagementCollapsed}
           >
@@ -2622,7 +2622,7 @@ export function ClubTab({
           </button>
           <button
             type="button"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/85 text-[#52746d] ring-1 ring-[#d6e8e2] active:scale-[0.98]"
+            className="ml-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/85 text-[#52746d] ring-1 ring-[#d6e8e2] active:scale-[0.98]"
             onClick={() => setPlayerManagementCollapsed((current) => !current)}
             aria-label={playerManagementCollapsed ? "Expand Player Management" : "Collapse Player Management"}
           >

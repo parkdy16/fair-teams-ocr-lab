@@ -3772,7 +3772,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
 
             <div className="flex items-center gap-2 shrink-0">
               {activeTab === "teams" && (
-                <span className="text-right text-[9px] font-extrabold leading-[0.95] text-slate-400 tracking-tight whitespace-nowrap">
+                <span className="hidden text-right text-[9px] font-extrabold leading-[0.95] text-slate-400 tracking-tight whitespace-nowrap min-[310px]:block">
                   <span className="block">Balanced teams.</span>
                   <span className="block">Better games.</span>
                 </span>

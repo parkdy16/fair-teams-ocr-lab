@@ -1333,7 +1333,7 @@ function ProfileDialog({
 
           {advancedOpen && (
             <div className="rounded-2xl border border-primary/15 bg-primary/5 p-3 space-y-3">
-              <div className="flex items-start gap-3">
+              <div className="flex flex-wrap items-start gap-3">
                 <div className="relative shrink-0 pt-5">
                   <button
                     type="button"
@@ -1362,7 +1362,7 @@ function ProfileDialog({
                     </div>
                   )}
                 </div>
-                <div className="flex-1 space-y-2 min-w-0">
+                <div className="min-w-0 flex-[1_1_8rem] space-y-2">
                   <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">AKA / Nickname</Label>
                   <Input value={draft.aka || ""} placeholder="Optional" onChange={e => updateDraft({ aka: e.target.value })} className="h-10 text-sm font-semibold" />
                   <div className="grid grid-cols-[1fr_auto] items-end gap-2">
@@ -1431,7 +1431,7 @@ function ProfileDialog({
                   <Label className="text-[10px] uppercase font-bold text-amber-800 tracking-wider flex items-center gap-1"><Star className="w-3 h-3" /> Special traits</Label>
                   <span className="text-[10px] font-bold text-amber-700">Optional</span>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,8rem),1fr))] gap-2 sm:grid-cols-2">
                   {SPECIAL_ABILITIES.map(ability => {
                     const selected = Boolean(draft[ability.key]);
                     const Icon = ability.icon ?? Star;
@@ -2623,7 +2623,7 @@ export function PlayersTab({
 
               {addAdvancedOpen && (
                 <div className="rounded-2xl border border-primary/15 bg-primary/5 p-3 space-y-3">
-                  <div className="flex items-start gap-3">
+                  <div className="flex flex-wrap items-start gap-3">
                     <div className="relative shrink-0 pt-5">
                       <button
                         type="button"
@@ -2649,7 +2649,7 @@ export function PlayersTab({
                         </div>
                       )}
                     </div>
-                    <div className="grid flex-1 grid-cols-2 gap-2 min-w-0">
+                    <div className="grid min-w-0 flex-[1_1_8rem] grid-cols-[repeat(auto-fit,minmax(min(100%,6rem),1fr))] gap-2">
                       <div className="space-y-1.5">
                         <Label htmlFor="add-name-advanced" className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider">Name</Label>
                         <Input
@@ -2743,7 +2743,7 @@ export function PlayersTab({
 
                   <div className="space-y-2">
                     <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider flex items-center gap-1"><Star className="w-3 h-3" /> Special abilities</Label>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,8rem),1fr))] gap-2 sm:grid-cols-2">
                       {SPECIAL_ABILITIES.map(ability => {
                         const selected = Boolean(addDetails[ability.key]);
                         const Icon = ability.icon ?? Star;

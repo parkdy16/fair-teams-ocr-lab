@@ -3867,12 +3867,12 @@ export function ClubTab({
                           return (
                             <div
                               key={kit.id}
-                              className="flex w-full flex-col items-stretch gap-1.5 min-[310px]:flex-row min-[310px]:items-center"
+                              className="flex w-full flex-wrap items-center gap-1.5"
                             >
                               <div
                                 role="button"
                                 tabIndex={0}
-                                className={`min-w-0 flex-1 touch-none select-none rounded-2xl border border-slate-200 bg-white px-2.5 py-1.5 text-left shadow-sm transition hover:border-emerald-200 hover:bg-white active:scale-[0.98] ${isDragging ? "scale-95 opacity-45 ring-2 ring-emerald-200" : ""}`}
+                                className={`min-w-0 flex-[1_1_9rem] touch-none select-none rounded-2xl border border-slate-200 bg-white px-2.5 py-1.5 text-left shadow-sm transition hover:border-emerald-200 hover:bg-white active:scale-[0.98] ${isDragging ? "scale-95 opacity-45 ring-2 ring-emerald-200" : ""}`}
                                 onPointerDown={(event) =>
                                   startEquipmentPointerDrag(event, kit)
                                 }
@@ -3912,7 +3912,7 @@ export function ClubTab({
                               </div>
                               <button
                                 type="button"
-                                className="flex h-9 w-9 shrink-0 self-end items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700 min-[310px]:self-auto"
+                                className="ml-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
                                 aria-label={`Show contents of ${kit.name}`}
                                 onPointerDown={(event) =>
                                   event.stopPropagation()

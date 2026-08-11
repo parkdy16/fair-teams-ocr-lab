@@ -1958,7 +1958,7 @@ export function AiSmartCommandPanel({
             className={`w-full resize-none rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold lg:text-[15px] text-[#102A43] outline-none focus:border-slate-400 ${isHelpExpanded ? "min-h-[84px]" : "min-h-[58px] lg:min-h-[52px]"} ${tutorialActive ? "fairteams-tutorial-pulse" : ""}`}
             placeholder={placeholder}
           />
-          <div className="mt-2 grid grid-cols-2 gap-2">
+          <div className="mt-2 grid grid-cols-[repeat(auto-fit,minmax(min(100%,4.5rem),1fr))] gap-2">
             <button
               type="button"
               onClick={submit}

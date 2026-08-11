@@ -2933,8 +2933,8 @@ export function ClubTab({
       </section>
 
       <section className="order-5 rounded-[1.7rem] border border-sky-100 bg-[#f6fbff] p-3 shadow-sm ring-1 ring-sky-50 lg:col-span-1 lg:col-start-1 lg:row-start-3 lg:h-full lg:p-4">
-        <div className="flex items-start justify-between gap-3">
-          <button type="button" className="flex min-w-0 flex-1 items-center gap-2.5 text-left active:scale-[0.99]" onClick={() => setEquipmentBoardOpen(true)}>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <button type="button" className="flex min-w-0 flex-[1_1_8rem] items-center gap-2.5 text-left active:scale-[0.99]" onClick={() => setEquipmentBoardOpen(true)}>
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-white/90 text-blue-600 shadow-sm ring-1 ring-sky-100 lg:h-10 lg:w-10">
               <AntiqueBallIcon className="h-[18px] w-[18px] lg:h-6 lg:w-6" />
             </div>
@@ -2950,7 +2950,7 @@ export function ClubTab({
             </div>
             </div>
           </button>
-          <button type="button" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/85 text-blue-600 ring-1 ring-sky-100 active:scale-[0.98] lg:hidden" onClick={() => setEquipmentBoardOpen(true)} aria-label="Open Equipment">
+          <button type="button" className="ml-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/85 text-blue-600 ring-1 ring-sky-100 active:scale-[0.98] lg:hidden" onClick={() => setEquipmentBoardOpen(true)} aria-label="Open Equipment">
             <ChevronRight className="h-4 w-4" />
           </button>
           <Button

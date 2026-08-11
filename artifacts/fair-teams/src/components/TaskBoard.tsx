@@ -3443,14 +3443,14 @@ export function TaskBoard({
                 {decisionQuestions(votingDecision).map((question, questionIndex) => {
                   const selectedIds = selectedVoteAnswers[question.id] || [];
                   return <div key={question.id} className={`px-3 py-2.5 ${questionIndex ? "border-t border-slate-100" : ""}`}>
-                    <div className="flex items-start gap-2">
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-xs font-medium text-[#102A43]">{question.text}</div>
+                    <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start">
+                      <div className="min-w-0 sm:flex-1">
+                        <div className="whitespace-normal break-words text-xs font-medium text-[#102A43] sm:truncate">{question.text}</div>
                         {votingDecision.decisionType === "equipment" && (question.itemQuantity !== undefined || question.itemPrice || question.itemUrl) && <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[9px] font-normal text-slate-400">{question.itemQuantity !== undefined && <span>Qty {question.itemQuantity}</span>}{question.itemPrice && <span>{question.itemPrice}</span>}{question.itemPrice && question.itemQuantity !== undefined && <span className="font-medium text-slate-500">Subtotal {equipmentSubtotal(question.itemPrice, question.itemQuantity)}</span>}{question.itemUrl && <a href={question.itemUrl} target="_blank" rel="noreferrer" className="text-sky-700 underline" onClick={(event) => event.stopPropagation()}>Open link</a>}</div>}
                       </div>
-                      <div className="flex max-w-[66%] flex-wrap justify-end gap-1">{question.options.map((option) => {
+                      <div className="flex w-full min-w-0 flex-wrap gap-1 sm:w-auto sm:max-w-[66%] sm:justify-end">{question.options.map((option) => {
                         const selected = selectedIds.includes(option.id);
-                        return <button key={option.id} type="button" className={`rounded-lg border px-2 py-1.5 text-[10px] font-medium ${selected ? "border-amber-400 bg-amber-50 text-amber-800" : "border-slate-200 bg-white text-slate-600"}`} onClick={() => toggleVoteOption(question, option.id)}>{selected && <Check className="mr-0.5 inline h-3 w-3" />}{option.label}</button>;
+                        return <button key={option.id} type="button" className={`max-w-full min-w-0 flex-[1_1_5.5rem] whitespace-normal break-words rounded-lg border px-2 py-1.5 text-[10px] font-medium sm:flex-initial ${selected ? "border-amber-400 bg-amber-50 text-amber-800" : "border-slate-200 bg-white text-slate-600"}`} onClick={() => toggleVoteOption(question, option.id)}>{selected && <Check className="mr-0.5 inline h-3 w-3" />}{option.label}</button>;
                       })}</div>
                     </div>
                   </div>;
@@ -3468,7 +3468,7 @@ export function TaskBoard({
                     const selected = selectedIds.includes(option.id);
                     return <div key={option.id} className="rounded-2xl border border-slate-200 bg-white p-1">
                       <button type="button" className={`w-full rounded-xl px-2 py-2 text-left text-sm font-medium ${selected ? "bg-amber-50 text-amber-800" : "text-[#102A43]"}`} onClick={() => toggleVoteOption(question, option.id)}>
-                        <div className="flex items-center gap-2"><span className="min-w-0 flex-1">{selected && <Check className="mr-1 inline h-4 w-4" />}{option.label}{option.quantity !== undefined && <span className="ml-1 text-[10px] font-normal text-slate-400">× {option.quantity}</span>}</span><span className="shrink-0 text-right">{option.price && <span className="block text-xs font-medium text-slate-500">{option.price}</span>}{option.price && option.quantity !== undefined && <span className="block text-[9px] font-medium text-slate-400">Subtotal {equipmentSubtotal(option.price, option.quantity)}</span>}</span></div>
+                        <div className="flex items-center gap-2"><span className="min-w-0 flex-1 break-words">{selected && <Check className="mr-1 inline h-4 w-4" />}{option.label}{option.quantity !== undefined && <span className="ml-1 text-[10px] font-normal text-slate-400">× {option.quantity}</span>}</span><span className="shrink-0 text-right">{option.price && <span className="block text-xs font-medium text-slate-500">{option.price}</span>}{option.price && option.quantity !== undefined && <span className="block text-[9px] font-medium text-slate-400">Subtotal {equipmentSubtotal(option.price, option.quantity)}</span>}</span></div>
                       </button>
                       {option.url && <a href={option.url} target="_blank" rel="noreferrer" className="block px-2 pb-2 text-[10px] font-medium text-sky-700 underline">Open product link</a>}
                     </div>;

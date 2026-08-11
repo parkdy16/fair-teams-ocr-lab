@@ -3867,7 +3867,7 @@ export function ClubTab({
                           return (
                             <div
                               key={kit.id}
-                              className="flex w-full items-center gap-1.5"
+                              className="flex w-full flex-col items-stretch gap-1.5 min-[310px]:flex-row min-[310px]:items-center"
                             >
                               <div
                                 role="button"
@@ -3890,10 +3890,10 @@ export function ClubTab({
                                   }
                                 }}
                               >
-                                <div className="flex min-w-0 items-center gap-2">
+                                <div className="flex min-w-0 flex-col gap-1.5 min-[310px]:flex-row min-[310px]:items-center min-[310px]:gap-2">
                                   <DuffleBagIcon
                                     color={kit.color || DEFAULT_EQUIPMENT_COLOR}
-                                    className="h-9 w-12 shrink-0"
+                                    className="h-9 w-12 shrink-0 self-center min-[310px]:self-auto"
                                   />
                                   <div className="min-w-0 flex-1">
                                     <div className="flex min-w-0 items-center gap-1.5">
@@ -3912,7 +3912,7 @@ export function ClubTab({
                               </div>
                               <button
                                 type="button"
-                                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
+                                className="flex h-9 w-9 shrink-0 self-end items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700 min-[310px]:self-auto"
                                 aria-label={`Show contents of ${kit.name}`}
                                 onPointerDown={(event) =>
                                   event.stopPropagation()

@@ -2768,10 +2768,10 @@ export function ClubTab({
       </section>
 
       <section className="order-2 overflow-hidden rounded-[1.7rem] border border-violet-100 bg-[#f8f3ff] p-3 shadow-sm ring-1 ring-violet-50 lg:col-span-1 lg:col-start-1 lg:row-start-2 lg:h-full lg:p-4">
-        <div className="flex items-start justify-between gap-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
           <button
             type="button"
-            className="flex min-w-0 flex-1 items-center gap-2.5 text-left active:scale-[0.99]"
+            className="flex min-w-0 flex-[1_1_8.625rem] items-center gap-2.5 text-left active:scale-[0.99]"
             onClick={() => setAccountDialogOpen(true)}
           >
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-white/85 text-violet-700 shadow-sm ring-1 ring-violet-100 lg:h-10 lg:w-10">
@@ -2785,7 +2785,7 @@ export function ClubTab({
               </span>
             </span>
           </button>
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="ml-auto flex shrink-0 items-center gap-2">
             {!clubUser && (
               <Button
                 type="button"

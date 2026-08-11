@@ -3717,7 +3717,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                     />
                   </span>
                 )}
-                <span className="flex min-w-0 max-w-full items-center gap-1.5">
+                <span className="flex min-w-0 max-w-full flex-wrap items-center gap-1.5">
                   <h1
                     className={`truncate leading-tight text-[#102A43] ${
                       shouldShowTodayStartHeader

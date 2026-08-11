@@ -3946,7 +3946,7 @@ export function TodayTab({
               className="h-10 rounded-xl text-xs font-black uppercase tracking-wide"
               data-testid="empty-today-import-button"
             >
-              <ClipboardList className="mr-1.5 h-3.5 w-3.5" />
+              <ClipboardList className="h-3.5 w-3.5" />
               Screenshot Import
             </Button>
             <Button

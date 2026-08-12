@@ -3626,7 +3626,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 <TabsTrigger
                   key={value}
                   value={value}
-                  className={`fairteams-tab-trigger fairteams-desktop-nav-trigger flex h-[3.25rem] w-full justify-start gap-3.5 rounded-xl border border-transparent px-3.5 text-[16px] font-black text-slate-500 shadow-none transition-colors hover:bg-slate-50 data-[state=active]:border-slate-200 data-[state=active]:bg-slate-50 data-[state=active]:text-[#102A43] data-[state=active]:shadow-none ${(tutorialStep === "today-tab" && value === "teams") || (tutorialStep === "club-tab" && value === "club") || (tutorialStep === "roster-return" && value === "players") ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
+                  className={`fairteams-tab-trigger fairteams-desktop-nav-trigger stripes-type-ui flex h-[3.25rem] w-full justify-start gap-3.5 rounded-xl border border-transparent px-3.5 text-[16px] font-black text-slate-500 shadow-none transition-colors hover:bg-slate-50 data-[state=active]:border-slate-200 data-[state=active]:bg-slate-50 data-[state=active]:text-[#102A43] data-[state=active]:shadow-none ${(tutorialStep === "today-tab" && value === "teams") || (tutorialStep === "club-tab" && value === "club") || (tutorialStep === "roster-return" && value === "players") ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
                 >
                   {value === "teams" ? (
                     <TeamStripesIcon className="h-6 w-6 shrink-0" />
@@ -3646,9 +3646,9 @@ They will no longer be able to open or edit this shared roster unless it is shar
             <div className="flex min-w-0 items-center">
               <div className="min-w-0">
                 <div className="flex min-w-0 items-center gap-2">
-                  <h1 className="truncate text-[23px] font-black tracking-tight text-[#102A43]" title={activeRosterName}>{activeRosterName}</h1>
+                  <h1 className="stripes-type-ui truncate text-[23px] font-black tracking-tight text-[#102A43]" title={activeRosterName}>{activeRosterName}</h1>
                   {!isEmptyStarterRoster && (
-                    <span className={`inline-flex h-5 shrink-0 items-center rounded-full px-1.5 text-[11px] font-black uppercase tracking-wide ${activeRosterIsShared ? "bg-violet-50 text-violet-700 ring-1 ring-violet-100" : "bg-slate-100 text-slate-500"}`}>
+                    <span className={`stripes-type-ui inline-flex h-5 shrink-0 items-center rounded-full px-1.5 text-[11px] font-black uppercase tracking-wide ${activeRosterIsShared ? "bg-violet-50 text-violet-700 ring-1 ring-violet-100" : "bg-slate-100 text-slate-500"}`}>
                       {activeRosterIsShared ? "Shared" : "Local"}
                     </span>
                   )}
@@ -3657,7 +3657,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-2">
-              <button type="button" onClick={openGroupSettings} className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-black text-[#102A43] shadow-sm hover:bg-slate-50" title="Edit roster">
+              <button type="button" onClick={openGroupSettings} className="stripes-type-ui inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-black text-[#102A43] shadow-sm hover:bg-slate-50" title="Edit roster">
                 <Pencil className="h-[18px] w-[18px]" strokeWidth={2.25} /> Edit
               </button>
               <button
@@ -3674,7 +3674,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                     }
                   }
                 }}
-                className={`inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-black text-[#102A43] shadow-sm hover:bg-slate-50 ${tutorialStep === "settings-button" ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
+                className={`stripes-type-ui inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-black text-[#102A43] shadow-sm hover:bg-slate-50 ${tutorialStep === "settings-button" ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
                 title="Roster tools"
               >
                 <Settings className="h-[18px] w-[18px]" strokeWidth={2.25} /> Settings
@@ -3719,7 +3719,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 )}
                 <span className="flex min-w-0 max-w-full flex-wrap items-center gap-1.5">
                   <h1
-                    className={`truncate leading-tight text-[#102A43] ${
+                    className={`stripes-type-ui truncate leading-tight text-[#102A43] ${
                       shouldShowTodayStartHeader
                         ? "text-[14px] font-black uppercase tracking-[0.075em] text-[#102A43]/65"
                         : "text-[17px] font-black tracking-tight"
@@ -3729,7 +3729,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   </h1>
                   {!shouldShowTodayStartHeader && !isEmptyStarterRoster && (
                     <span
-                      className={`inline-flex h-5 shrink-0 items-center rounded-full px-1.5 text-[11px] font-black uppercase tracking-wide ${activeRosterIsShared ? "bg-violet-50 text-violet-700 ring-1 ring-violet-100" : "bg-slate-100 text-slate-500"}`}
+                      className={`stripes-type-ui inline-flex h-5 shrink-0 items-center rounded-full px-1.5 text-[11px] font-black uppercase tracking-wide ${activeRosterIsShared ? "bg-violet-50 text-violet-700 ring-1 ring-violet-100" : "bg-slate-100 text-slate-500"}`}
                       title={activeRosterIsShared ? "Shared roster" : "Local roster"}
                     >
                       {activeRosterIsShared ? "Shared" : "Local"}
@@ -3739,7 +3739,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                     <span
                       role="button"
                       tabIndex={0}
-                      className="inline-flex h-5 shrink-0 items-center gap-0.5 rounded-full bg-emerald-50 px-1.5 text-[10px] font-black text-emerald-700 active:scale-95"
+                      className="stripes-type-ui inline-flex h-5 shrink-0 items-center gap-0.5 rounded-full bg-emerald-50 px-1.5 text-[10px] font-black text-emerald-700 active:scale-95"
                       title="Organizers"
                       aria-label="Show people with access"
                       onClick={(event) => {
@@ -3996,7 +3996,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
         {!shouldShowTodayStartHeader && activeTab === "teams" && teamsWorkspaceView === "setup" && (
           <div className="pointer-events-none fixed inset-x-0 bottom-6 z-40 hidden lg:block">
             <div className="mx-auto w-full max-w-[1440px] pl-[204px]">
-              <div className="stripes-generate-dock pointer-events-auto mx-auto flex w-full max-w-md items-stretch gap-2 rounded-2xl p-1 shadow-[0_10px_30px_rgba(15,23,42,0.12)]">
+              <div className="stripes-generate-dock stripes-type-ui pointer-events-auto mx-auto flex w-full max-w-md items-stretch gap-2 rounded-2xl p-1 shadow-[0_10px_30px_rgba(15,23,42,0.12)]">
                 <label className="relative block h-12 w-[68px] shrink-0" title="Number of teams">
                   <span className="pointer-events-none absolute left-0 right-0 top-1 text-center text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">Teams</span>
                   <select
@@ -4029,7 +4029,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
         {!shouldShowTodayStartHeader && (
           <div className="fixed inset-x-0 bottom-0 z-40 mx-auto w-full max-w-md animate-in fade-in-0 slide-in-from-bottom-2 duration-200 border-t border-slate-200 bg-white/95 px-4 pb-[max(0.65rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-4px_14px_rgba(15,23,42,0.035)] backdrop-blur md:max-w-3xl lg:hidden">
             {activeTab === "teams" && teamsWorkspaceView === "setup" && (
-              <div className="stripes-generate-dock mx-auto mb-2 flex w-full max-w-md items-stretch gap-2 rounded-2xl p-1">
+              <div className="stripes-generate-dock stripes-type-ui mx-auto mb-2 flex w-full max-w-md items-stretch gap-2 rounded-2xl p-1">
                 <label className="relative block h-12 w-[68px] shrink-0" title="Number of teams">
                   <span className="pointer-events-none absolute left-0 right-0 top-1 text-center text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">Teams</span>
                   <select

@@ -97,3 +97,27 @@ Status: complete. Implementation commit: 68cf5e6.
 - Migrated “Notify organizers” to `StripesEditorContent`.
 - Preserved its 90dvh limit, scrolling, responsive desktop width, autofocus, recipient selection, message state, validation, and notification behavior.
 - No Firebase, email, backend, or feature logic changed.
+
+## P2 completion checkpoint
+
+Status: complete.
+
+The four-category Stripes modal architecture is now established and proven:
+
+- Sheet
+- Workspace
+- Editor
+- Confirm
+
+Action Board now uses the shared modal architecture for the major surfaces that could be migrated without changing feature behavior.
+
+Remaining raw Action Board dialogs are intentionally deferred rather than forced into an unsuitable category:
+
+- Add equipment item? — candidate Confirm; requires Dialog → AlertDialog semantic conversion.
+- Move card — candidate Sheet; would intentionally change mobile presentation.
+- Answer choices — candidate Editor; would intentionally change mobile presentation.
+- Board settings — candidate Editor; would intentionally change mobile presentation.
+
+These should be revisited only when their intended UX is explicitly approved.
+
+P2 is complete. Do not continue modal migration merely to eliminate every raw DialogContent usage.

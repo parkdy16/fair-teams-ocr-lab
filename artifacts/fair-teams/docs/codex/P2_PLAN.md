@@ -81,3 +81,11 @@ Status: complete. Implementation commit: 4e80b87.
 - Migrated “Finalize schedule” to `StripesSheetContent`.
 - Preserved existing max-height, scrolling, overflow protection, responsive sizing, voting behavior, and schedule behavior.
 - No feature logic changed.
+
+## P2-9 — Decision setup editor migration
+
+Status: complete. Implementation commit: c601684.
+
+- Migrated the Action Board Decision / Schedule setup flow to `StripesEditorContent`.
+- Preserved its 90dvh limit, scrolling, overflow protection, wider responsive desktop geometry, state, validation, and decision/schedule behavior.
+- No feature logic changed.

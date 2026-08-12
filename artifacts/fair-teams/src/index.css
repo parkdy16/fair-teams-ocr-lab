@@ -278,6 +278,7 @@
 }
 
 .fairteams-visual-refresh .font-black.stripes-type-ui,
+.fairteams-visual-refresh.stripes-type-ui .font-black,
 .fairteams-visual-refresh .stripes-type-ui .font-black {
   font-family: var(--app-font-sans);
   font-weight: 800;

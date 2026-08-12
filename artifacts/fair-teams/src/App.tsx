@@ -3571,7 +3571,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
   return (
     <div
       data-tutorial-active={tutorialActive ? "true" : undefined}
-      className="fairteams-visual-refresh flex h-[100dvh] min-h-[100dvh] w-full max-w-md flex-col overflow-hidden bg-background md:max-w-3xl lg:max-w-[1440px] lg:rounded-none xl:my-3 xl:h-[calc(100dvh-1.5rem)] xl:min-h-[calc(100dvh-1.5rem)] xl:rounded-[2rem] xl:border xl:border-slate-200 xl:shadow-xl mx-auto relative"
+      className="fairteams-visual-refresh stripes-type-ui flex h-[100dvh] min-h-[100dvh] w-full max-w-md flex-col overflow-hidden bg-background md:max-w-3xl lg:max-w-[1440px] lg:rounded-none xl:my-3 xl:h-[calc(100dvh-1.5rem)] xl:min-h-[calc(100dvh-1.5rem)] xl:rounded-[2rem] xl:border xl:border-slate-200 xl:shadow-xl mx-auto relative"
       style={{ "--roster-accent": identityAccentColor } as React.CSSProperties}
     >
       <Tabs

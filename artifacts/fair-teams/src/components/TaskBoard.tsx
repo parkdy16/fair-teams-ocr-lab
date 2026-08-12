@@ -745,8 +745,8 @@ function EmptyActionBoard({ onCreate }: { onCreate: () => void }) {
   return (
     <div className="mx-auto flex max-w-3xl flex-col items-center px-4 py-10 text-center">
       <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-amber-600 shadow-sm ring-1 ring-slate-200"><Gavel className="h-6 w-6" /></div>
-      <h3 className="mt-4 text-lg font-black text-[#102A43]">Start with one line</h3>
-      <p className="mt-1 max-w-md text-sm font-semibold leading-relaxed text-slate-500">Capture it now. Add decisions, to-dos and other structure only when the card needs them.</p>
+      <h3 className="mt-4 text-lg font-black text-white">Start with one line</h3>
+      <p className="mt-1 max-w-md text-sm font-semibold leading-relaxed text-blue-100/90">Capture it now. Add decisions, to-dos and other structure only when the card needs them.</p>
       <Button type="button" className="mt-5 h-11 rounded-2xl px-4 font-black text-white" onClick={onCreate}><Plus className="mr-1.5 h-4 w-4" />Add a card</Button>
     </div>
   );
@@ -769,8 +769,10 @@ export function TaskBoard({
   const online = Boolean(scopeId && user?.email);
   // Action Board has a fixed semantic blue identity. Roster color is intentionally ignored
   // so white or very light custom roster colors cannot erase board controls.
-  const accent = "#3b82f6";
-  const background = mixHex(accent, "#ffffff", 0.93);
+  const accent = "#2563eb";
+  // Action Board is a distinct organizer workspace. Keep its stronger
+  // blue identity local to the board rather than spreading it across Club.
+  const background = "#365f7d";
   const currentActor = actor(user);
 
   const availablePeople = useMemo(
@@ -2797,19 +2799,19 @@ export function TaskBoard({
         draggable={!detail && !isMobileBoardViewport()}
         onDragStart={(event) => { if (detail) return; setDraggingCardId(card.id); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", card.id); }}
         onDragEnd={() => { setDraggingCardId(null); setDragOverStage(null); }}
-        className={detail ? "min-h-full bg-white" : `overflow-hidden rounded-2xl border bg-white shadow-sm transition ${stageStyle} ${compact ? "" : "lg:rounded-[1.35rem]"} ${draggingCardId === card.id ? "opacity-25 ring-2 ring-slate-300" : ""}`}
+        className={detail ? "min-h-full bg-white" : `overflow-hidden rounded-2xl border bg-white shadow-sm transition lg:shadow-[0_2px_9px_rgba(15,23,42,0.12)] ${stageStyle} ${compact ? "" : "lg:rounded-[1.35rem]"} ${draggingCardId === card.id ? "opacity-25 ring-2 ring-slate-300" : ""}`}
       >
-        {!detail && <div className="p-2.5 lg:p-3">
+        {!detail && <div className="p-2.5 lg:p-3.5">
           <div className="flex items-start gap-2">
             <button type="button" className="min-w-0 flex-1 text-left" onClick={() => openCardDetail(card)}>
-              <h3 className="whitespace-normal break-words text-[14px] font-semibold leading-snug text-[#102A43] lg:text-[17px] lg:leading-snug">{card.title}</h3>
+              <h3 className="whitespace-normal break-words text-[14px] font-semibold leading-snug text-[#102A43] lg:text-[18px] lg:leading-snug">{card.title}</h3>
               {(card.category || card.dueDate || displayPeople.length > 0 || (card.comments?.length || 0) > 0 || decisionComplete || needsYourVote || openDecision) && <div className="mt-1.5 flex min-w-0 items-center gap-1 overflow-hidden whitespace-nowrap">
-                {card.category && <span className={`max-w-[28%] shrink truncate rounded-full px-1.5 py-0.5 text-[9px] font-medium ring-1 lg:text-[10px] ${tagTone(card.category)}`}>{card.category}</span>}
-                {card.dueDate && <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-medium lg:text-[10px] ${isOverdue(card.dueDate) && stage !== "done" ? "bg-red-50 text-red-700" : "bg-slate-100 text-slate-600"}`}><CalendarDays className="h-3 w-3" />{dueText(card.dueDate)}</span>}
-                {displayPeople.length > 0 && <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] font-medium text-slate-600 lg:min-w-0 lg:max-w-[30%] lg:shrink lg:text-[10px]" title={`Assigned to ${personSummary(displayPeople)}`}><Users className="h-3 w-3 shrink-0" /><span className="lg:hidden">{displayPeople.length}</span><span className="hidden truncate lg:inline">{personSummary(displayPeople)}</span></span>}
-                {(card.comments?.length || 0) > 0 && <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] font-medium text-slate-600 lg:text-[10px]" title={`${card.comments!.length} comment${card.comments!.length === 1 ? "" : "s"}`}><MessageCircle className="h-3 w-3" />{card.comments!.length}</span>}
-                {needsYourVote && <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-semibold text-amber-900 ring-1 ring-amber-200 lg:text-[10px]"><span className="h-1.5 w-1.5 rounded-full bg-amber-600" />Your vote</span>}
-                {decisionComplete && <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-50 px-1.5 py-0.5 text-[9px] font-medium text-amber-800 ring-1 ring-amber-200 lg:text-[10px]"><Check className="h-3 w-3" />Complete</span>}
+                {card.category && <span className={`max-w-[28%] shrink truncate rounded-full px-1.5 py-0.5 text-[9px] font-medium ring-1 lg:text-[11px] ${tagTone(card.category)}`}>{card.category}</span>}
+                {card.dueDate && <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-medium lg:text-[11px] ${isOverdue(card.dueDate) && stage !== "done" ? "bg-red-50 text-red-700" : "bg-slate-100 text-slate-600"}`}><CalendarDays className="h-3 w-3" />{dueText(card.dueDate)}</span>}
+                {displayPeople.length > 0 && <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] font-medium text-slate-600 lg:min-w-0 lg:max-w-[30%] lg:shrink lg:text-[11px]" title={`Assigned to ${personSummary(displayPeople)}`}><Users className="h-3 w-3 shrink-0" /><span className="lg:hidden">{displayPeople.length}</span><span className="hidden truncate lg:inline">{personSummary(displayPeople)}</span></span>}
+                {(card.comments?.length || 0) > 0 && <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] font-medium text-slate-600 lg:text-[11px]" title={`${card.comments!.length} comment${card.comments!.length === 1 ? "" : "s"}`}><MessageCircle className="h-3 w-3" />{card.comments!.length}</span>}
+                {needsYourVote && <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-semibold text-amber-900 ring-1 ring-amber-200 lg:text-[11px]"><span className="h-1.5 w-1.5 rounded-full bg-amber-600" />Your vote</span>}
+                {decisionComplete && <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-50 px-1.5 py-0.5 text-[9px] font-medium text-amber-800 ring-1 ring-amber-200 lg:text-[11px]"><Check className="h-3 w-3" />Complete</span>}
                 {openDecision && <span className="ml-auto hidden shrink-0 text-[10px] font-medium text-slate-400 lg:inline">{voteTotal(openDecision)}{openDecision.eligibleCount ? `/${openDecision.eligibleCount}` : ""} responded</span>}
               </div>}
             </button>
@@ -2823,7 +2825,7 @@ export function TaskBoard({
                   <button type="button" className={`rounded-full p-1.5 ${cardNotificationQueued ? "cursor-wait bg-amber-50 text-amber-600" : "text-slate-400 hover:bg-amber-50 hover:text-amber-700"}`} onClick={() => openNotify(card)} disabled={cardNotificationQueued} aria-label={cardNotificationQueued ? "Notification is being sent" : `Notify organizers about ${cardNotifyTarget.label.toLowerCase()}`} title={cardNotificationQueued ? "Sending notification…" : "Notify organizers"}><Bell className={`h-3.5 w-3.5 ${cardNotificationQueued ? "animate-pulse" : ""}`} /></button>
                 )
               )}
-              <button type="button" className="rounded-full px-1.5 py-1 text-[9px] font-semibold text-slate-400 hover:bg-slate-50 hover:text-slate-600" onClick={() => openMoveCard(card)} aria-label={`Move ${card.title}`}>Move</button>
+              <button type="button" className="rounded-full px-1.5 py-1 text-[9px] font-semibold text-slate-400 hover:bg-slate-50 hover:text-slate-600 lg:text-[11px]" onClick={() => openMoveCard(card)} aria-label={`Move ${card.title}`}>Move</button>
               <button type="button" className="hidden rounded-full p-1.5 text-slate-400 hover:bg-slate-50 lg:block" onClick={() => toggleExpanded(card.id)} aria-label={expanded ? "Collapse topic" : "Expand topic"}>{expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}</button>
             </div>
           </div>
@@ -2879,12 +2881,12 @@ export function TaskBoard({
           setDragOverStage(null);
           if (card && stageForCard(card) !== stage) void moveCardToStage(card, stage);
         }}
-        className={`${mobile ? "w-[82vw] max-w-[22rem] shrink-0 snap-center" : "min-w-0"} rounded-[1.35rem] border p-2.5 transition ${dragOverStage === stage ? "ring-2 ring-slate-300" : ""} ${stage === "deciding" ? "border-amber-200 bg-amber-50/35" : stage === "action" ? "border-sky-200 bg-sky-50/35" : stage === "done" ? "border-slate-200 bg-slate-100/50" : "border-slate-200 bg-white/55"}`}
+        className={`${mobile ? "w-[82vw] max-w-[22rem] shrink-0 snap-center" : "min-w-0"} rounded-[1.35rem] border p-2.5 shadow-sm transition lg:p-3 ${dragOverStage === stage ? "ring-2 ring-white/70" : ""} ${stage === "deciding" ? "border-amber-200/90 bg-amber-50/95" : stage === "action" ? "border-sky-200/90 bg-sky-50/95" : stage === "done" ? "border-slate-200/90 bg-slate-100/95" : "border-white/75 bg-slate-50/95"}`}
       >
-        <div className={`mb-2 flex items-center gap-1.5 px-1 text-[15px] font-semibold lg:text-[16px] ${stage === "deciding" ? "text-amber-800" : stage === "action" ? "text-sky-800" : stage === "done" ? "text-slate-500" : "text-slate-700"}`}><Icon className="h-4 w-4 lg:h-[18px] lg:w-[18px]" /><span>{title}</span><span className="ml-0.5 rounded-full bg-white/80 px-1.5 py-0.5 text-[9px] lg:px-2 lg:text-[10px] font-semibold text-slate-500 ring-1 ring-slate-200/70">{cardsByStage[stage].length}</span></div>
-        <div className="space-y-2">
+        <div className={`mb-2 flex items-center gap-1.5 px-1 text-[15px] font-semibold lg:text-[18px] ${stage === "deciding" ? "text-amber-800" : stage === "action" ? "text-sky-800" : stage === "done" ? "text-slate-500" : "text-slate-700"}`}><Icon className="h-4 w-4 lg:h-5 lg:w-5" /><span>{title}</span><span className="ml-0.5 rounded-full bg-white/80 px-1.5 py-0.5 text-[9px] lg:px-2 lg:text-[11px] font-semibold text-slate-500 ring-1 ring-slate-200/70">{cardsByStage[stage].length}</span></div>
+        <div className="space-y-2 lg:space-y-2.5">
           {cardsByStage[stage].map((card) => renderCard(card, true))}
-          {cardsByStage[stage].length === 0 && <div className="rounded-2xl border border-dashed border-slate-200 bg-white/40 px-2 py-5 text-center text-[10px] font-medium text-slate-400 lg:text-xs">{stage === "ideas" ? "No ideas yet" : stage === "deciding" ? "Nothing to decide yet" : stage === "action" ? "No to-dos here" : "Nothing completed yet"}</div>}
+          {cardsByStage[stage].length === 0 && <div className="rounded-2xl border border-dashed border-slate-200 bg-white/40 px-2 py-5 text-center text-[10px] font-medium text-slate-400 lg:text-[13px]">{stage === "ideas" ? "No ideas yet" : stage === "deciding" ? "Nothing to decide yet" : stage === "action" ? "No to-dos here" : "Nothing completed yet"}</div>}
 
           {canAdd && (quickAddStage === stage ? (
             <form className="rounded-2xl border border-slate-200 bg-white p-2 shadow-sm" onSubmit={(event) => { event.preventDefault(); void createQuickTopic(stage); }}>
@@ -2895,7 +2897,7 @@ export function TaskBoard({
                 maxLength={220}
                 placeholder={addPlaceholder}
                 aria-label={`Add card to ${title}`}
-                className="h-9 rounded-xl border-slate-200 bg-slate-50/70 px-2.5 text-sm font-medium text-[#102A43] shadow-none focus-visible:ring-blue-100"
+                className="h-9 rounded-xl border-slate-200 bg-slate-50/70 px-2.5 text-sm font-medium text-[#102A43] shadow-none focus-visible:ring-blue-100 lg:h-10 lg:text-[15px]"
               />
               <div className="mt-2 flex items-center gap-2">
                 <Button type="submit" className="h-8 rounded-xl px-3 text-xs font-semibold text-white" style={{ backgroundColor: accent }} disabled={!quickAddTitle.trim() || saving}>{saving ? "Adding…" : "Add"}</Button>
@@ -2903,7 +2905,7 @@ export function TaskBoard({
               </div>
             </form>
           ) : (
-            <button type="button" className="flex h-9 w-full items-center gap-1.5 rounded-xl px-2 text-left text-xs font-medium text-slate-500 transition hover:bg-white/80 hover:text-slate-700" onClick={() => focusQuickAdd(stage)}><Plus className="h-3.5 w-3.5" />Add card</button>
+            <button type="button" className="flex h-9 w-full items-center gap-1.5 rounded-xl px-2 text-left text-xs font-medium text-slate-500 transition hover:bg-white/80 hover:text-slate-700 lg:h-10 lg:text-[13px]" onClick={() => focusQuickAdd(stage)}><Plus className="h-3.5 w-3.5" />Add card</button>
           ))}
         </div>
       </section>
@@ -2948,15 +2950,15 @@ export function TaskBoard({
 
   return (
     <>
-      <section className="overflow-hidden rounded-[1.7rem] border p-3 shadow-sm lg:p-4" style={{ borderColor: mixHex(accent, "#ffffff", 0.72), background }}>
+      <section className="overflow-hidden rounded-[1.7rem] border p-3 shadow-sm lg:p-4 lg:shadow-[0_8px_24px_rgba(15,23,42,0.12)]" style={{ borderColor: "#294d67", background }}>
         <div className="stripes-type-ui flex items-start justify-between gap-3">
           <button type="button" className="flex min-w-0 flex-1 items-center gap-2.5 text-left active:scale-[0.99]" onClick={openBoard}>
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-white/90 shadow-sm ring-1 ring-white/80 lg:h-10 lg:w-10" style={{ color: accent }}>
               <ClipboardList className="fairteams-desktop-balanced-icon h-[18px] w-[18px] lg:h-6 lg:w-6" />
             </div>
             <span className="min-w-0">
-              <span className="block text-[17px] font-black leading-tight text-[#102A43] lg:text-[20px]">Action Board</span>
-              <span className="mt-0.5 block truncate text-[10px] font-bold text-slate-500 lg:text-[12px]">
+              <span className="block text-[17px] font-black leading-tight text-white lg:text-[22px]">Action Board</span>
+              <span className="mt-0.5 block truncate text-[10px] font-bold text-blue-100/85 lg:text-[13px]">
                 {customBoardName || (online ? "Tasks · Votes · Decisions · Shared" : isSharedRoster ? "Tasks · Votes · Decisions · Sign in" : "Tasks · Votes · Decisions")}
               </span>
             </span>
@@ -2966,25 +2968,25 @@ export function TaskBoard({
           </button>
           <Button type="button" className="hidden h-9 shrink-0 rounded-2xl px-3 text-xs font-black text-white lg:inline-flex lg:text-sm" style={{ backgroundColor: accent }} onClick={openBoard}>Open</Button>
         </div>
-        <div className="mt-3 hidden items-center gap-2 text-[10px] font-black text-slate-600 lg:flex lg:text-xs">
+        <div className="mt-3 hidden items-center gap-2 text-[10px] font-black text-blue-100/90 lg:flex lg:text-[13px]">
           {hasNewActivity && <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-amber-700"><span className="h-1.5 w-1.5 rounded-full bg-amber-500" />New activity</span>}
-          <span className="rounded-full bg-white/75 px-2.5 py-1">{online ? "Shared" : isSharedRoster ? "Sign in" : "Private"}</span>
+          <span className="rounded-full bg-white/15 px-2.5 py-1 text-white ring-1 ring-white/20">{online ? "Shared" : isSharedRoster ? "Sign in" : "Private"}</span>
         </div>
-        {latestActivity && <div className="mt-2 hidden truncate text-[10px] font-bold text-slate-500 lg:block lg:text-xs">Last: “{latestActivity.card.title}” · {activityText(latestActivity.activity)}</div>}
+        {latestActivity && <div className="mt-2 hidden truncate text-[10px] font-bold text-blue-100/80 lg:block lg:text-[13px]">Last: “{latestActivity.card.title}” · {activityText(latestActivity.activity)}</div>}
       </section>
 
       <Dialog open={boardOpen} onOpenChange={(open) => { setBoardOpen(open); if (!open) setActiveCardId(null); }}>
-        <DialogContent className="stripes-type-ui fixed inset-0 flex h-[100dvh] max-h-none w-full max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-0 bg-white p-0 shadow-none sm:inset-3 sm:h-[calc(100dvh-1.5rem)] sm:w-auto sm:rounded-[2rem] sm:border sm:border-white/70 sm:shadow-2xl lg:inset-6 lg:h-[calc(100dvh-3rem)] lg:rounded-[2rem]">
-          <DialogHeader className="shrink-0 border-b border-white/45 px-3 py-2.5 pr-12 text-left lg:px-5 lg:py-3 lg:pr-14" style={{ backgroundColor: mixHex(accent, "#ffffff", 0.7) }}>
+        <DialogContent className="stripes-type-ui fixed inset-0 flex h-[100dvh] max-h-none w-full max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-0 bg-white p-0 shadow-none [&>button]:text-white [&>button]:opacity-80 sm:inset-3 sm:h-[calc(100dvh-1.5rem)] sm:w-auto sm:rounded-[2rem] sm:border sm:border-white/70 sm:shadow-2xl lg:inset-6 lg:h-[calc(100dvh-3rem)] lg:rounded-[2rem]">
+          <DialogHeader className="shrink-0 border-b border-white/15 px-3 py-2.5 pr-12 text-left lg:px-5 lg:py-3.5 lg:pr-14" style={{ backgroundColor: "#2e536e" }}>
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
                 <div className="flex min-w-0 items-center gap-2">
-                  <DialogTitle className="shrink-0 text-[17px] font-semibold text-[#102A43] lg:text-[20px] lg:leading-tight">Action Board</DialogTitle>
-                  {customBoardName && <span className="truncate rounded-full bg-white/65 px-2 py-0.5 text-[9px] font-medium text-slate-500 ring-1 ring-white/80 lg:text-[10px]">{customBoardName}</span>}
+                  <DialogTitle className="shrink-0 text-[17px] font-semibold text-white lg:text-[22px] lg:leading-tight">Action Board</DialogTitle>
+                  {customBoardName && <span className="truncate rounded-full bg-white/12 px-2 py-0.5 text-[9px] font-medium text-blue-100 ring-1 ring-white/20 lg:text-[11px]">{customBoardName}</span>}
                 </div>
-                <p className="mt-0.5 text-[10px] font-medium text-slate-500 lg:text-[11px]"><span className="lg:hidden">Tap <span className="font-semibold text-slate-700">Move</span> to change a card’s column.</span><span className="hidden lg:inline">Drag cards between columns, or use <span className="font-semibold text-slate-700">Move</span>.</span></p>
+                <p className="mt-0.5 text-[10px] font-medium text-blue-100/80 lg:text-[12px]"><span className="lg:hidden">Tap <span className="font-semibold text-white">Move</span> to change a card’s column.</span><span className="hidden lg:inline">Drag cards between columns, or use <span className="font-semibold text-white">Move</span>.</span></p>
               </div>
-              <Button type="button" variant="outline" className="h-8 w-8 shrink-0 rounded-xl bg-white/80 p-0 lg:h-9 lg:w-9" onClick={() => { setNotifyError(""); setBoardNameDraft(customBoardName || ""); setBoardSettingsOpen(true); }} aria-label="Board settings" title="Board settings"><Settings className="h-4 w-4" /></Button>
+              <Button type="button" variant="outline" className="h-8 w-8 shrink-0 rounded-xl border-white/30 bg-white/90 p-0 text-[#102A43] lg:h-9 lg:w-9" onClick={() => { setNotifyError(""); setBoardNameDraft(customBoardName || ""); setBoardSettingsOpen(true); }} aria-label="Board settings" title="Board settings"><Settings className="h-4 w-4" /></Button>
             </div>
           </DialogHeader>
 
@@ -2993,7 +2995,7 @@ export function TaskBoard({
           {error && <div className="mx-3 mt-2 rounded-xl bg-red-50 px-3 py-2 text-[11px] font-bold text-red-700 lg:mx-5">{error}</div>}
 
           <div className="min-h-0 flex-1 overflow-y-auto" style={{ backgroundColor: background }}>
-            {loading ? <div className="p-8 text-center text-sm font-semibold text-slate-500">Loading Action Board…</div> : (
+            {loading ? <div className="p-8 text-center text-sm font-semibold text-blue-100">Loading Action Board…</div> : (
               <>
                 <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain px-[9vw] py-3 pb-20 scroll-smooth lg:hidden" style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-x pan-y" }}>
                   {boardColumn("ideas", "Ideas", Lightbulb, true)}

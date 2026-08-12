@@ -46,3 +46,12 @@ Status: complete. Implementation commit: `d3fe456`.
 - Preserved AlertDialog semantics, copy, geometry, cancellation, and removal behavior.
 
 After each completed P2 item, record its status, implementation commit, and any important architectural decision.
+
+## P2-5 — Workspace exemplar
+
+Status: complete. Implementation commit: 25afde9.
+
+- Added `StripesWorkspaceContent` as a separate wrapper around the existing Radix-backed `DialogContent`.
+- Migrated only Action Board “Evolution”.
+- Preserved its full-screen mobile and contained desktop workspace geometry, scrolling structure, close behavior, and feature logic.
+- No other workspace or dialog migrations were included.

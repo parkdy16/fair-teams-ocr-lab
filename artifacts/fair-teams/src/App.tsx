@@ -3852,7 +3852,8 @@ They will no longer be able to open or edit this shared roster unless it is shar
           <div className={`mx-auto flex min-h-[calc(100dvh-116px)] w-full flex-col ${shouldShowTodayStartHeader ? "lg:max-w-6xl lg:justify-center" : activeTab === "players" ? "lg:max-w-5xl" : activeTab === "teams" && teamsWorkspaceView === "setup" ? "lg:max-w-6xl" : activeTab === "teams" ? "lg:max-w-none" : "lg:mx-0 lg:max-w-none"}`}>
             <TabsContent
               value="players"
-              className="fairteams-tab-panel m-0 data-[state=active]:animate-in data-[state=active]:fade-in-50"
+              forceMount
+              className={`fairteams-tab-panel m-0 data-[state=active]:animate-in data-[state=active]:fade-in-50 ${activeTab === "players" ? "block" : "hidden"}`}
             >
               <PlayersTab
                 players={players}
@@ -3949,7 +3950,6 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 onBackTargetChange={setClubBackTargetOpen}
                 pairingRules={pairingRules}
                 onOpenPairingRules={() => {
-                  setActiveTab("players");
                   setOpenPairingRulesToken((token) => token + 1);
                 }}
                 onOpenTeams={() => setActiveTab("teams")}

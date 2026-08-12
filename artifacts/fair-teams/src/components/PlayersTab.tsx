@@ -703,7 +703,7 @@ function SpecialAbilityIconRow({ player, max = 4 }: { player: RoomPlayer; max?: 
   const title = abilities.map(ability => ability.label).join(", ");
 
   return (
-    <span title={title} className="inline-flex items-center gap-1 text-primary/80 leading-none">
+    <span title={title} className="stripes-type-ui inline-flex items-center gap-1 text-primary/80 leading-none">
       {visible.map(ability => {
         if (ability.badge === "GK") {
           return (
@@ -806,7 +806,7 @@ function VibePicker({ value, onChange }: { value?: FunBadge; onChange: (value?: 
       </button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-md max-h-[88dvh] overflow-hidden rounded-3xl p-0 gap-0">
+        <DialogContent className="stripes-type-ui max-w-md max-h-[88dvh] overflow-hidden rounded-3xl p-0 gap-0">
           <DialogHeader className="px-5 pt-5 pb-3 text-left border-b border-border/70">
             <DialogTitle>Choose player vibe</DialogTitle>
             {selected ? (
@@ -1131,7 +1131,7 @@ function ProfileDialog({
       </DialogTrigger>
       <DialogContent
         onOpenAutoFocus={(event) => event.preventDefault()}
-        className={`max-w-sm md:max-w-xl overflow-y-auto rounded-3xl ${tutorialHighlightSave ? "!top-[58%] !max-h-[76dvh]" : "max-h-[90dvh]"}`}
+        className={`stripes-type-ui max-w-sm md:max-w-xl overflow-y-auto rounded-3xl ${tutorialHighlightSave ? "!top-[58%] !max-h-[76dvh]" : "max-h-[90dvh]"}`}
       >
         <DialogHeader>
           <DialogTitle>{isSharedRoster ? "Shared Player Info" : "Player Setup"}</DialogTitle>
@@ -2193,7 +2193,7 @@ export function PlayersTab({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="rounded-2xl border border-border/70 bg-card p-3 shadow-sm">
+      <div className="stripes-type-ui rounded-2xl border border-border/70 bg-card p-3 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="min-w-0">
             <div className="text-[10px] font-black uppercase tracking-wide text-muted-foreground">Players</div>
@@ -2214,7 +2214,7 @@ export function PlayersTab({
         <Dialog open={addOptionsOpen} onOpenChange={setAddOptionsOpen}>
           <DialogContent
             onOpenAutoFocus={(event) => event.preventDefault()}
-            className="max-w-[340px] rounded-3xl p-0 overflow-hidden"
+            className="stripes-type-ui max-w-[340px] rounded-3xl p-0 overflow-hidden"
           >
             <div className="flex items-center justify-between border-b border-border px-5 py-4">
               <DialogTitle className="text-xl font-black tracking-tight">Add players</DialogTitle>
@@ -2267,7 +2267,7 @@ export function PlayersTab({
         }}>
           <DialogContent
             onOpenAutoFocus={(event) => event.preventDefault()}
-            className="max-w-sm rounded-3xl p-0 overflow-hidden"
+            className="stripes-type-ui max-w-sm rounded-3xl p-0 overflow-hidden"
           >
             <div className="flex items-center justify-between border-b border-border px-5 py-4">
               <DialogTitle className="text-xl font-black tracking-tight">Add by voice</DialogTitle>
@@ -2352,7 +2352,7 @@ export function PlayersTab({
         }}>
           <DialogContent
             onOpenAutoFocus={(event) => event.preventDefault()}
-            className={`max-w-sm md:max-w-xl rounded-3xl !translate-y-0 overflow-y-auto sm:!top-[50%] sm:!-translate-y-1/2 ${tutorialStep === "submit-player" ? "!top-[18dvh] max-h-[76dvh]" : "!top-[10dvh] max-h-[82dvh]"}`}
+            className={`stripes-type-ui max-w-sm md:max-w-xl rounded-3xl !translate-y-0 overflow-y-auto sm:!top-[50%] sm:!-translate-y-1/2 ${tutorialStep === "submit-player" ? "!top-[18dvh] max-h-[76dvh]" : "!top-[10dvh] max-h-[82dvh]"}`}
           >
             <DialogHeader>
               <DialogTitle>{isSharedRoster ? "Add shared player" : "Add player"}</DialogTitle>
@@ -2863,7 +2863,7 @@ export function PlayersTab({
       }}>
         <DialogContent
           onOpenAutoFocus={(event) => event.preventDefault()}
-          className="max-w-[380px] rounded-3xl p-0 overflow-hidden"
+          className="stripes-type-ui max-w-[380px] rounded-3xl p-0 overflow-hidden"
         >
           <DialogHeader className="border-b border-border px-5 py-4 text-left">
             <DialogTitle className="text-xl font-black tracking-tight">Pairing Rules</DialogTitle>
@@ -2962,7 +2962,7 @@ export function PlayersTab({
       </Dialog>
 
       <Dialog open={clubRatingLegendOpen} onOpenChange={setClubRatingLegendOpen}>
-        <DialogContent className="max-w-xs rounded-3xl p-4">
+        <DialogContent className="stripes-type-ui max-w-xs rounded-3xl p-4">
           <DialogHeader className="text-left">
             <DialogTitle className="text-base font-black text-[#102A43]">Club rating status</DialogTitle>
             <p className="text-[11px] font-semibold leading-snug text-muted-foreground">
@@ -3107,7 +3107,7 @@ export function PlayersTab({
                             <UserMinus className="w-3 h-3" />
                           </Button>
                         </AlertDialogTrigger>
-                        <AlertDialogContent className="max-w-xs rounded-xl">
+                        <AlertDialogContent className="stripes-type-ui max-w-xs rounded-xl">
                           <AlertDialogHeader>
                             <AlertDialogTitle>{isSharedRoster ? "Remove from shared roster?" : "Remove Player?"}</AlertDialogTitle>
                             <AlertDialogDescription>

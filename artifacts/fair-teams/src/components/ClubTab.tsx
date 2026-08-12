@@ -2589,7 +2589,7 @@ export function ClubTab({
       </Dialog>
 
       <div className="contents lg:grid lg:grid-cols-2 lg:items-start lg:gap-5 xl:[grid-template-columns:minmax(18rem,0.84fr)_minmax(0,1.26fr)] xl:[grid-template-rows:auto_auto_auto]">
-      <div id="fairteams-help-panel" className="order-6 lg:col-span-1 lg:col-start-2 lg:row-start-3 lg:h-full lg:[&>div>section]:h-full">
+      <div id="fairteams-help-panel" className="order-6 lg:col-span-1 lg:col-start-2 lg:row-start-3">
         <button
           type="button"
           className="stripes-type-ui flex w-full items-center justify-between rounded-[1.4rem] border border-slate-200 bg-white px-3 py-3 text-left shadow-sm active:scale-[0.99] lg:hidden"
@@ -2613,8 +2613,8 @@ export function ClubTab({
         <div
           id="fairteams-help-content"
           className={helpCollapsed && tutorialStep !== "help-question"
-            ? "hidden lg:block lg:h-full"
-            : "mt-2 block lg:mt-0 lg:h-full"}
+            ? "hidden lg:block"
+            : "mt-2 block lg:mt-0"}
         >
           <AiSmartCommandPanel
             players={players}

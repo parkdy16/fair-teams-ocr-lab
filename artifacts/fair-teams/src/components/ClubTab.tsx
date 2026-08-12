@@ -2577,7 +2577,7 @@ export function ClubTab({
         open={accountModalOpen}
         onOpenChange={setAccountDialogOpen}
       >
-        <DialogContent className="max-w-sm rounded-3xl p-3">
+        <DialogContent className="stripes-type-ui max-w-sm rounded-3xl p-3">
           <DialogHeader className="px-1 pb-1 text-left">
             <DialogTitle className="text-base font-black text-[#102A43]">
               Stripes account
@@ -2605,7 +2605,7 @@ export function ClubTab({
       </div>
 
       <section className="order-1 overflow-hidden rounded-[1.7rem] border border-[#d9e9e4] bg-[#f3f8f7] p-3 shadow-sm ring-1 ring-[#e7f1ee] lg:col-span-1 lg:col-start-1 lg:row-start-1 lg:h-full lg:p-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="stripes-type-ui flex flex-wrap items-start justify-between gap-3">
           <button
             type="button"
             className="flex min-w-0 flex-[1_1_9.125rem] items-start gap-2.5 text-left active:scale-[0.99]"
@@ -2768,7 +2768,7 @@ export function ClubTab({
       </section>
 
       <section className="order-2 overflow-hidden rounded-[1.7rem] border border-violet-100 bg-[#f8f3ff] p-3 shadow-sm ring-1 ring-violet-50 lg:col-span-1 lg:col-start-1 lg:row-start-2 lg:h-full lg:p-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="stripes-type-ui flex flex-wrap items-start justify-between gap-3">
           <button
             type="button"
             className="flex min-w-0 flex-[1_1_8.625rem] items-center gap-2.5 text-left active:scale-[0.99]"
@@ -2841,7 +2841,7 @@ export function ClubTab({
       </div>
 
       <section className="order-4 overflow-hidden rounded-[1.7rem] border border-amber-100 lg:overflow-visible bg-[#fffaf0] p-3 shadow-sm ring-1 ring-amber-50 lg:col-span-1 lg:col-start-2 lg:row-start-2 lg:h-full lg:p-4">
-        <div className="flex items-start justify-between gap-3">
+        <div className="stripes-type-ui flex items-start justify-between gap-3">
           <button
             type="button"
             className="flex min-w-0 flex-1 items-center gap-2.5 text-left active:scale-[0.99]"
@@ -2933,7 +2933,7 @@ export function ClubTab({
       </section>
 
       <section className="order-5 rounded-[1.7rem] border border-sky-100 bg-[#f6fbff] p-3 shadow-sm ring-1 ring-sky-50 lg:col-span-1 lg:col-start-1 lg:row-start-3 lg:h-full lg:p-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="stripes-type-ui flex flex-wrap items-start justify-between gap-3">
           <button type="button" className="flex min-w-0 flex-[1_1_8rem] items-center gap-2.5 text-left active:scale-[0.99]" onClick={() => setEquipmentBoardOpen(true)}>
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-white/90 text-blue-600 shadow-sm ring-1 ring-sky-100 lg:h-10 lg:w-10">
               <AntiqueBallIcon className="h-[18px] w-[18px] lg:h-6 lg:w-6" />
@@ -3035,7 +3035,7 @@ export function ClubTab({
       </div>
 
       <Dialog open={clubNotesOpen} onOpenChange={setClubNotesOpen}>
-        <DialogContent className="max-h-[86svh] max-w-sm overflow-hidden rounded-3xl border border-amber-100 p-0 shadow-[0_14px_40px_rgba(15,23,42,0.16)]">
+        <DialogContent className="stripes-type-ui max-h-[86svh] max-w-sm overflow-hidden rounded-3xl border border-amber-100 p-0 shadow-[0_14px_40px_rgba(15,23,42,0.16)]">
           <DialogHeader className="border-b border-amber-100 bg-amber-50/70 px-4 py-3 text-left">
             <DialogTitle className="flex items-center gap-2 text-base font-black text-[#102A43] lg:text-xl">
               <StickyNote className="h-4 w-4 text-amber-600" />
@@ -3781,7 +3781,7 @@ export function ClubTab({
           }
         }}
       >
-        <DialogContent className="fixed bottom-2 left-2 right-2 top-2 flex h-auto max-h-none w-auto max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-[2rem] p-0 sm:bottom-auto sm:left-1/2 sm:right-auto sm:top-1/2 sm:h-[96dvh] sm:w-[calc(100vw-1rem)] sm:max-w-2xl sm:-translate-x-1/2 sm:-translate-y-1/2 lg:h-[88dvh] lg:max-w-4xl">
+        <DialogContent className="stripes-type-ui fixed bottom-2 left-2 right-2 top-2 flex h-auto max-h-none w-auto max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-[2rem] p-0 sm:bottom-auto sm:left-1/2 sm:right-auto sm:top-1/2 sm:h-[96dvh] sm:w-[calc(100vw-1rem)] sm:max-w-2xl sm:-translate-x-1/2 sm:-translate-y-1/2 lg:h-[88dvh] lg:max-w-4xl">
           <DialogHeader className="border-b border-slate-100 px-4 py-4 pr-12 text-left">
             <div className="grid gap-3">
               <div className="min-w-0">
@@ -3990,7 +3990,7 @@ export function ClubTab({
         onOpenChange={setEquipmentInventoryOpen}
       >
         <DialogContent
-          className="max-h-[82dvh] max-w-sm overflow-hidden rounded-3xl p-0 sm:max-w-md"
+          className="stripes-type-ui max-h-[82dvh] max-w-sm overflow-hidden rounded-3xl p-0 sm:max-w-md"
           onOpenAutoFocus={(event) => event.preventDefault()}
         >
           <DialogHeader className="border-b border-slate-100 px-4 py-3 text-left">

@@ -2948,7 +2948,7 @@ export function TaskBoard({
   return (
     <>
       <section className="overflow-hidden rounded-[1.7rem] border p-3 shadow-sm lg:p-4" style={{ borderColor: mixHex(accent, "#ffffff", 0.72), background }}>
-        <div className="flex items-start justify-between gap-3">
+        <div className="stripes-type-ui flex items-start justify-between gap-3">
           <button type="button" className="flex min-w-0 flex-1 items-center gap-2.5 text-left active:scale-[0.99]" onClick={openBoard}>
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-white/90 shadow-sm ring-1 ring-white/80 lg:h-10 lg:w-10" style={{ color: accent }}>
               <ClipboardList className="fairteams-desktop-balanced-icon h-[18px] w-[18px] lg:h-6 lg:w-6" />
@@ -2973,7 +2973,7 @@ export function TaskBoard({
       </section>
 
       <Dialog open={boardOpen} onOpenChange={(open) => { setBoardOpen(open); if (!open) setActiveCardId(null); }}>
-        <DialogContent className="fixed inset-0 flex h-[100dvh] max-h-none w-full max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-0 bg-white p-0 shadow-none sm:inset-3 sm:h-[calc(100dvh-1.5rem)] sm:w-auto sm:rounded-[2rem] sm:border sm:border-white/70 sm:shadow-2xl lg:inset-6 lg:h-[calc(100dvh-3rem)] lg:rounded-[2rem]">
+        <DialogContent className="stripes-type-ui fixed inset-0 flex h-[100dvh] max-h-none w-full max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-0 bg-white p-0 shadow-none sm:inset-3 sm:h-[calc(100dvh-1.5rem)] sm:w-auto sm:rounded-[2rem] sm:border sm:border-white/70 sm:shadow-2xl lg:inset-6 lg:h-[calc(100dvh-3rem)] lg:rounded-[2rem]">
           <DialogHeader className="shrink-0 border-b border-white/45 px-3 py-2.5 pr-12 text-left lg:px-5 lg:py-3 lg:pr-14" style={{ backgroundColor: mixHex(accent, "#ffffff", 0.7) }}>
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
@@ -3040,7 +3040,7 @@ export function TaskBoard({
       </Dialog>
 
       <Dialog open={Boolean(evolutionCardId)} onOpenChange={(open) => { if (!open) setEvolutionCardId(null); }}>
-        <DialogContent className="fixed inset-0 flex h-[100dvh] max-h-none w-full max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-0 bg-white p-0 shadow-none sm:inset-3 sm:h-[calc(100dvh-1.5rem)] sm:w-auto sm:rounded-[2rem] sm:border sm:border-slate-200 sm:shadow-2xl lg:left-1/2 lg:right-auto lg:top-1/2 lg:h-[min(86dvh,52rem)] lg:w-[min(46rem,calc(100vw-3rem))] lg:-translate-x-1/2 lg:-translate-y-1/2">
+        <DialogContent className="stripes-type-ui fixed inset-0 flex h-[100dvh] max-h-none w-full max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-0 bg-white p-0 shadow-none sm:inset-3 sm:h-[calc(100dvh-1.5rem)] sm:w-auto sm:rounded-[2rem] sm:border sm:border-slate-200 sm:shadow-2xl lg:left-1/2 lg:right-auto lg:top-1/2 lg:h-[min(86dvh,52rem)] lg:w-[min(46rem,calc(100vw-3rem))] lg:-translate-x-1/2 lg:-translate-y-1/2">
           <DialogHeader className="shrink-0 border-b border-slate-200 bg-white px-3 py-3 pr-12 text-left lg:px-5 lg:py-4">
             <div className="flex items-center gap-2"><button type="button" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-[#102A43] hover:bg-slate-100" onClick={() => setEvolutionCardId(null)} aria-label="Back to card"><ArrowLeft className="h-5 w-5" /></button><div className="min-w-0"><DialogTitle className="flex items-center gap-2 text-base font-semibold text-[#102A43] lg:text-xl"><History className="h-4 w-4 text-slate-500 lg:h-5 lg:w-5" />Evolution</DialogTitle>{evolutionCard && <p className="mt-0.5 truncate text-[11px] font-normal text-slate-500 lg:text-sm">{evolutionCard.title}</p>}</div></div>
           </DialogHeader>
@@ -3591,7 +3591,7 @@ export function TaskBoard({
       </Dialog>
 
         <Dialog open={boardSettingsOpen} onOpenChange={setBoardSettingsOpen}>
-        <DialogContent className="max-w-sm rounded-3xl" onOpenAutoFocus={(event) => event.preventDefault()}>
+        <DialogContent className="stripes-type-ui max-w-sm rounded-3xl" onOpenAutoFocus={(event) => event.preventDefault()}>
           <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43]">Board settings</DialogTitle></DialogHeader>
           <div className="grid gap-4">
             <div><Label htmlFor="board-name">Custom name <span className="font-semibold text-slate-400">optional · saves automatically</span></Label><Input id="board-name" value={boardNameDraft} onChange={(event) => changeBoardName(event.target.value)} maxLength={80} placeholder="e.g. Club decisions" /></div>

@@ -37,4 +37,12 @@ Status: complete. Implementation commit: `587d688`.
 - Migrated only Action Board “New topic”.
 - Preserved its mobile-bottom/desktop-centered geometry, scrolling, autofocus, state reset, validation, and creation flow.
 
+## P2-4 — Confirm exemplar
+
+Status: complete. Implementation commit: `d3fe456`.
+
+- Added `StripesConfirmContent` by wrapping the existing Radix-backed `AlertDialogContent`.
+- Migrated only the Roster player-removal confirmation.
+- Preserved AlertDialog semantics, copy, geometry, cancellation, and removal behavior.
+
 After each completed P2 item, record its status, implementation commit, and any important architectural decision.

@@ -278,7 +278,7 @@ function ProductScreenshot({
             src={src}
             alt={alt}
             loading="lazy"
-            className="block max-h-[380px] h-auto w-full object-contain"
+            className="block max-h-[380px] h-auto w-full scale-[1.03] object-contain"
           />
         </figure>
       </div>

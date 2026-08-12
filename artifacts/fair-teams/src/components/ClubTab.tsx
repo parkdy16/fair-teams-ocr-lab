@@ -2590,8 +2590,8 @@ export function ClubTab({
         </DialogContent>
       </Dialog>
 
-      <div className="contents lg:grid lg:grid-cols-2 lg:items-start lg:gap-5 xl:[grid-template-columns:minmax(18rem,0.84fr)_minmax(0,1.26fr)] xl:[grid-template-rows:auto_auto_auto]">
-      <div id="fairteams-help-panel" className="order-6 lg:col-span-1 lg:col-start-2 lg:row-start-3">
+      <div className="contents md:grid md:grid-cols-2 md:items-start md:gap-4 lg:gap-5 xl:[grid-template-columns:minmax(18rem,0.84fr)_minmax(0,1.26fr)] xl:[grid-template-rows:auto_auto_auto]">
+      <div id="fairteams-help-panel" className="order-6 md:col-span-2 lg:col-span-1 lg:col-start-2 lg:row-start-3">
         <button
           type="button"
           className="stripes-type-ui flex w-full items-center justify-between rounded-[1.4rem] border border-slate-200 bg-white px-3 py-3 text-left shadow-sm active:scale-[0.99] lg:hidden"
@@ -2634,7 +2634,7 @@ export function ClubTab({
         </div>
       </div>
 
-      <section className="order-1 overflow-hidden rounded-[1.7rem] border border-[#d9e9e4] bg-[#f3f8f7] p-3 shadow-sm ring-1 ring-[#e7f1ee] lg:col-span-1 lg:col-start-1 lg:row-start-1 lg:h-full lg:p-4">
+      <section className="order-1 overflow-hidden rounded-[1.7rem] border border-[#d9e9e4] bg-[#f3f8f7] p-3 shadow-sm ring-1 ring-[#e7f1ee] md:col-span-2 lg:col-span-1 lg:col-start-1 lg:row-start-1 lg:h-full lg:p-4">
         <div className="stripes-type-ui flex flex-wrap items-start justify-between gap-3">
           <button
             type="button"
@@ -2797,7 +2797,7 @@ export function ClubTab({
         )}
       </section>
 
-      <section className="order-2 overflow-hidden rounded-[1.7rem] border border-violet-100 bg-[#f8f3ff] p-3 shadow-sm ring-1 ring-violet-50 lg:col-span-1 lg:col-start-1 lg:row-start-2 lg:h-full lg:p-4">
+      <section className="order-2 overflow-hidden rounded-[1.7rem] border border-violet-100 bg-[#f8f3ff] p-3 shadow-sm ring-1 ring-violet-50 md:col-span-2 lg:col-span-1 lg:col-start-1 lg:row-start-2 lg:h-full lg:p-4">
         <div className="stripes-type-ui flex flex-wrap items-start justify-between gap-3">
           <button
             type="button"
@@ -2878,7 +2878,7 @@ export function ClubTab({
         )}
       </section>
 
-      <div className="order-3 lg:col-span-1 lg:col-start-2 lg:row-start-1 lg:h-full lg:[&>section]:h-full">
+      <div className="order-3 md:col-span-2 lg:col-span-1 lg:col-start-2 lg:row-start-1 lg:h-full lg:[&>section]:h-full">
         <TaskBoard
           rosterName={activeRosterName}
           workspaceKey={workspaceKey}
@@ -2906,7 +2906,7 @@ export function ClubTab({
               <StickyNote className="fairteams-desktop-balanced-icon h-[18px] w-[18px] lg:h-6 lg:w-6" />
             </div>
             <span className="min-w-0">
-              <span className="block text-[17px] font-black leading-tight text-[#102A43] lg:text-[20px]">Club Notes</span>
+              <span className="block text-[17px] font-black leading-tight text-[#102A43] md:text-[18px] lg:text-[20px]">Club Notes</span>
               <span className="mt-0.5 block truncate text-[10px] font-bold text-[#9a641f] lg:text-[12px]">
                 {previewClubNotes[0] ? `Latest: ${previewClubNotes[0].text}` : "Shared notes for organizers"}
               </span>
@@ -2941,12 +2941,12 @@ export function ClubTab({
           </div>
         </div>
 
-        <div className={`mt-3 hidden gap-2.5 overflow-visible px-0.5 ${previewClubNotes.length <= 1 ? "lg:flex lg:py-1.5" : "lg:grid lg:grid-cols-3 lg:py-2.5"}`}>
+        <div className={`mt-3 hidden gap-2.5 overflow-x-auto px-0.5 md:flex md:py-2 lg:overflow-visible ${previewClubNotes.length <= 1 ? "lg:flex lg:py-1.5" : "lg:grid lg:grid-cols-3 lg:py-2.5"}`}>
           {previewClubNotes.length > 0 ? (
             previewClubNotes.map((note, index) => (
               <div
                 key={note.id}
-                className={`relative rounded-[0.8rem] border border-black/5 px-2.5 py-2.5 shadow-[0_4px_8px_rgba(130,85,35,0.22)] ring-1 ring-white/25 ${previewClubNotes.length === 1 ? "min-h-[5.75rem] w-[9.75rem] lg:w-[12rem]" : "min-h-[6.45rem]"}`}
+                className={`relative rounded-[0.8rem] border border-black/5 px-2.5 py-2.5 shadow-[0_4px_8px_rgba(130,85,35,0.22)] ring-1 ring-white/25 md:min-w-[10rem] lg:min-w-0 ${previewClubNotes.length === 1 ? "min-h-[5.75rem] w-[9.75rem] lg:w-[12rem]" : "min-h-[6.45rem]"}`}
                 style={clubNoteStyle(index)}
               >
                 <div className="flex h-full flex-col">
@@ -2994,13 +2994,13 @@ export function ClubTab({
               <AntiqueBallIcon className="h-[18px] w-[18px] lg:h-6 lg:w-6" />
             </div>
             <div className="min-w-0 flex-1">
-            <div className="text-[17px] font-black leading-tight text-[#102A43] lg:text-[20px]">
+            <div className="text-[17px] font-black leading-tight text-[#102A43] md:text-[18px] lg:text-[20px]">
               Equipment
             </div>
-            <div className="mt-1 hidden text-xs font-semibold leading-snug text-slate-500 lg:block lg:text-[14px] lg:leading-relaxed">
+            <div className="mt-1 hidden text-xs font-semibold leading-snug text-slate-500 md:block md:text-[12px] lg:text-[14px] lg:leading-relaxed">
               Drag bags between people and club storage, or select a bag for details.
             </div>
-            <div className="mt-1 text-[10px] font-black text-slate-400 lg:hidden">
+            <div className="mt-1 text-[10px] font-black text-slate-400 md:hidden">
               Bags · balls · cones · gear
             </div>
             </div>
@@ -3017,7 +3017,7 @@ export function ClubTab({
           </Button>
         </div>
 
-        <div className="hidden lg:block">
+        <div className="hidden md:block">
         {equipmentKits.length > 0 ? (
           <div className="mt-3 overflow-hidden rounded-[1.35rem] border border-slate-100 bg-slate-50/60">
             {equipmentDashboardHolders.map((holder, index) => {

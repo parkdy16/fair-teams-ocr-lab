@@ -4059,24 +4059,24 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 </button>
               </div>
             )}
-            <TabsList className="mx-auto grid h-[50px] w-full max-w-md grid-cols-3 gap-1 rounded-2xl border border-slate-200/70 bg-white p-1.5 shadow-sm">
+            <TabsList className="mx-auto grid h-[50px] w-full max-w-md grid-cols-3 gap-1 rounded-2xl border border-slate-200/70 bg-white p-1.5 shadow-sm md:h-[58px] md:max-w-2xl md:gap-1.5 md:p-2">
               <TabsTrigger
                 value="players"
                 className={`fairteams-tab-trigger ${tutorialStep === "roster-return" ? "fairteams-tutorial-pulse relative z-[82]" : ""} fairteams-footer-text-tab flex h-full items-center justify-center rounded-xl text-slate-500 transition-all`}
               >
-                <span className="text-[12px] font-semibold leading-none tracking-tight">Roster</span>
+                <span className="text-[12px] font-semibold leading-none tracking-tight md:text-[14px] md:font-bold">Roster</span>
               </TabsTrigger>
               <TabsTrigger
                 value="teams"
                 className={`fairteams-tab-trigger ${tutorialStep === "today-tab" ? "fairteams-tutorial-pulse relative z-[82]" : ""} fairteams-footer-text-tab flex h-full items-center justify-center rounded-xl text-slate-500 transition-all`}
               >
-                <span className="inline-flex items-center gap-1 text-[12px] font-semibold leading-none tracking-tight"><TeamStripesIcon className="h-3.5 w-3.5" /> Teams</span>
+                <span className="inline-flex items-center gap-1 text-[12px] font-semibold leading-none tracking-tight md:gap-1.5 md:text-[14px] md:font-bold"><TeamStripesIcon className="h-3.5 w-3.5 md:h-[18px] md:w-[18px]" /> Teams</span>
               </TabsTrigger>
               <TabsTrigger
                 value="club"
                 className={`fairteams-tab-trigger ${tutorialStep === "club-tab" ? "fairteams-tutorial-pulse relative z-[82]" : ""} fairteams-footer-text-tab flex h-full items-center justify-center rounded-xl text-slate-500 transition-all`}
               >
-                <span className="text-[12px] font-semibold leading-none tracking-tight">Club</span>
+                <span className="text-[12px] font-semibold leading-none tracking-tight md:text-[14px] md:font-bold">Club</span>
               </TabsTrigger>
             </TabsList>
           </div>

@@ -273,6 +273,16 @@
   font-family: var(--app-font-display);
 }
 
+.stripes-type-ui {
+  font-family: var(--app-font-sans);
+}
+
+.fairteams-visual-refresh .font-black.stripes-type-ui,
+.fairteams-visual-refresh .stripes-type-ui .font-black {
+  font-family: var(--app-font-sans);
+  font-weight: 800;
+}
+
 .stripes-brand-mark {
   filter: drop-shadow(0 5px 12px rgba(15, 42, 67, 0.08));
 }

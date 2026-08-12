@@ -3355,7 +3355,7 @@ export function TaskBoard({
       </Dialog>
 
       <Dialog open={Boolean(equipmentLinkItemId)} onOpenChange={(open) => { if (!open) { setEquipmentLinkItemId(null); setEquipmentLinkDraft(""); } }}>
-        <DialogContent className="fixed bottom-2 left-2 right-2 top-auto w-auto max-w-none translate-x-0 translate-y-0 rounded-[1.75rem] p-4 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-sm sm:-translate-x-1/2" onOpenAutoFocus={(event) => event.preventDefault()}>
+        <StripesSheetContent className="rounded-[1.75rem] sm:max-w-sm" onOpenAutoFocus={(event) => event.preventDefault()}>
           <DialogHeader><DialogTitle className="text-left text-base font-semibold text-[#102A43]">Product link</DialogTitle></DialogHeader>
           <div className="grid gap-3">
             <Input type="url" inputMode="url" value={equipmentLinkDraft} onChange={(event) => setEquipmentLinkDraft(event.target.value)} placeholder="https://…" />
@@ -3365,7 +3365,7 @@ export function TaskBoard({
               <Button type="button" className="h-10 flex-1 rounded-xl bg-[#102A43] font-semibold text-white" disabled={Boolean(equipmentLinkDraft.trim()) && !validHttpUrl(equipmentLinkDraft)} onClick={() => { if (equipmentLinkItemId) updateEquipmentDraftItem(equipmentLinkItemId, { url: equipmentLinkDraft.trim() }); setEquipmentLinkItemId(null); setEquipmentLinkDraft(""); }}>Save link</Button>
             </div>
           </div>
-        </DialogContent>
+        </StripesSheetContent>
       </Dialog>
 
       <Dialog open={Boolean(linkCardId)} onOpenChange={(open) => { if (!open) setLinkCardId(null); }}>

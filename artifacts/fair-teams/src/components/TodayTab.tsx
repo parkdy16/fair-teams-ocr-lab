@@ -3884,7 +3884,7 @@ export function TodayTab({
               ))}
             </div>
           </div>
-          <div className="space-y-3 lg:rounded-3xl lg:bg-slate-50/80 lg:p-5">
+          <div className="stripes-type-ui space-y-3 lg:rounded-3xl lg:bg-slate-50/80 lg:p-5">
 
           {activeRosterChoice ? (
             <button
@@ -3939,7 +3939,7 @@ export function TodayTab({
             Fastest setup: import a Meetup, WhatsApp, Telegram, or attendee
             screenshot and create multiple players at once.
           </p>
-          <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <div className="stripes-type-ui mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
             <Button
               type="button"
               onClick={openImportChoice}
@@ -3975,7 +3975,7 @@ export function TodayTab({
       ) : (
         <>
           <div
-            className="animate-in fade-in-0 slide-in-from-bottom-1 duration-200 flex items-center justify-between rounded-xl border p-3 shadow-sm"
+            className="stripes-type-ui animate-in fade-in-0 slide-in-from-bottom-1 duration-200 flex items-center justify-between rounded-xl border p-3 shadow-sm"
             style={attendingSummaryStyle}
           >
             <div className="flex flex-col">
@@ -4035,7 +4035,7 @@ export function TodayTab({
             </div>
           </div>
 
-          <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,9.5rem),1fr))] gap-2">
+          <div className="stripes-type-ui grid grid-cols-[repeat(auto-fit,minmax(min(100%,9.5rem),1fr))] gap-2">
             <Button
               type="button"
               variant="outline"
@@ -4069,7 +4069,7 @@ export function TodayTab({
       )}
 
       {quickVoiceOpen && (
-        <div className="fixed inset-x-4 top-24 z-50 mx-auto max-w-sm rounded-3xl border border-slate-200/80 bg-white/95 p-3 shadow-xl backdrop-blur supports-[backdrop-filter]:bg-white/85">
+        <div className="stripes-type-ui fixed inset-x-4 top-24 z-50 mx-auto max-w-sm rounded-3xl border border-slate-200/80 bg-white/95 p-3 shadow-xl backdrop-blur supports-[backdrop-filter]:bg-white/85">
           <div className="mb-2 flex shrink-0 items-center justify-between gap-3">
             <div className="flex items-center gap-2 text-xs font-black text-slate-900">
               <span
@@ -4214,8 +4214,8 @@ export function TodayTab({
           onOpenAutoFocus={(e) => e.preventDefault()}
           className={
             isCropWorkspaceOpen
-              ? "!fixed !left-0 !top-0 !flex !h-[100dvh] !max-h-[100dvh] !w-[100dvw] !max-w-none !translate-x-0 !translate-y-0 overflow-hidden !rounded-none !border-0 !p-0 [&>button]:hidden"
-              : "!fixed !left-1/2 !top-1/2 !-translate-x-1/2 !-translate-y-1/2 !flex h-[92svh] max-h-[calc(100svh-1rem)] w-[94vw] max-w-lg flex-col overflow-hidden rounded-2xl p-4 sm:h-[90dvh] sm:max-h-[90dvh] sm:p-6 md:max-w-3xl"
+              ? "stripes-type-ui !fixed !left-0 !top-0 !flex !h-[100dvh] !max-h-[100dvh] !w-[100dvw] !max-w-none !translate-x-0 !translate-y-0 overflow-hidden !rounded-none !border-0 !p-0 [&>button]:hidden"
+              : "stripes-type-ui !fixed !left-1/2 !top-1/2 !-translate-x-1/2 !-translate-y-1/2 !flex h-[92svh] max-h-[calc(100svh-1rem)] w-[94vw] max-w-lg flex-col overflow-hidden rounded-2xl p-4 sm:h-[90dvh] sm:max-h-[90dvh] sm:p-6 md:max-w-3xl"
           }
         >
           <DialogHeader>
@@ -5367,7 +5367,7 @@ export function TodayTab({
           if (!next) setNewPlayerReviewPrompt(null);
         }}
       >
-        <DialogContent className="max-w-xs rounded-2xl">
+        <DialogContent className="stripes-type-ui max-w-xs rounded-2xl">
           <DialogHeader>
             <DialogTitle className="text-base font-black">
               Review new players?
@@ -5411,7 +5411,7 @@ export function TodayTab({
         open={confirmNewPlayersOpen}
         onOpenChange={setConfirmNewPlayersOpen}
       >
-        <DialogContent className="w-[92vw] max-w-md rounded-2xl p-4 sm:p-6">
+        <DialogContent className="stripes-type-ui w-[92vw] max-w-md rounded-2xl p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle className="text-base font-black">
               Create New Players?
@@ -5472,7 +5472,7 @@ export function TodayTab({
       >
         <DialogContent
           onOpenAutoFocus={(e) => e.preventDefault()}
-          className={`flex h-[88dvh] max-h-[88dvh] w-[94vw] max-w-lg flex-col overflow-hidden rounded-2xl p-4 sm:p-6 ${voiceListening ? "ring-2 ring-red-300" : ""}`}
+          className={`stripes-type-ui flex h-[88dvh] max-h-[88dvh] w-[94vw] max-w-lg flex-col overflow-hidden rounded-2xl p-4 sm:p-6 ${voiceListening ? "ring-2 ring-red-300" : ""}`}
         >
           <DialogHeader>
             <DialogTitle className="text-base font-black">

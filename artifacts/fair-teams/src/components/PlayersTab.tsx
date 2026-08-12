@@ -2193,12 +2193,12 @@ export function PlayersTab({
   );
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="stripes-type-ui rounded-2xl border border-border/70 bg-card p-3 shadow-sm">
+    <div className="flex flex-col gap-3 sm:gap-4">
+      <div className="stripes-type-ui rounded-2xl border border-border/70 bg-card p-2.5 shadow-sm sm:p-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="min-w-0">
-            <div className="text-[10px] font-black uppercase tracking-wide text-muted-foreground">Players</div>
-            <div className="text-lg font-black leading-tight text-foreground">
+            <div className="text-[9px] font-black uppercase tracking-wide text-muted-foreground sm:text-[10px]">Players</div>
+            <div className="text-base font-black leading-tight text-foreground sm:text-lg">
               {search ? `${filtered.length}/${players.length}` : players.length}
             </div>
           </div>
@@ -2206,7 +2206,7 @@ export function PlayersTab({
             type="button"
             variant="outline"
             onClick={() => { setAddOptionsOpen(true); onTutorialAction?.("add-options-opened"); }}
-            className={`h-9 rounded-xl border-primary/20 bg-primary/5 px-3 text-[11px] font-black uppercase tracking-wide text-primary shadow-none hover:bg-primary/10 hover:text-primary ${players.length === 0 ? "fairteams-empty-add-pulse" : ""} ${tutorialStep === "open-add" ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
+            className={`h-8 rounded-xl border-primary/20 bg-primary/5 px-2.5 text-[10px] font-black uppercase tracking-wide text-primary shadow-none hover:bg-primary/10 hover:text-primary sm:h-9 sm:px-3 sm:text-[11px] ${players.length === 0 ? "fairteams-empty-add-pulse" : ""} ${tutorialStep === "open-add" ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
             data-testid="button-open-add-options"
           >
             <Plus className="mr-1.5 h-3.5 w-3.5" /> Add Player
@@ -2986,16 +2986,16 @@ export function PlayersTab({
         </DialogContent>
       </Dialog>
 
-      <div className="space-y-3">
+      <div className="space-y-2.5 sm:space-y-3">
         {players.length > 0 && (
-          <div className="stripes-sticky-search sticky top-0 z-20 -mx-1 flex items-center gap-2 bg-background/94 px-1 py-2 backdrop-blur">
+          <div className="stripes-sticky-search sticky top-0 z-20 -mx-1 flex items-center gap-2 bg-background/94 px-1 py-1.5 backdrop-blur sm:py-2">
             <div className="relative min-w-0 flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
               <Input
                 placeholder="Search roster…"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                className="h-10 pl-9 pr-9 text-sm"
+                className="h-9 pl-9 pr-9 text-xs sm:h-10 sm:text-sm"
                 data-testid="input-search"
               />
               {search && (
@@ -3011,7 +3011,7 @@ export function PlayersTab({
             <button
               type="button"
               onClick={() => setAddOptionsOpen(true)}
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-[#102A43] shadow-sm transition hover:bg-slate-50 active:scale-[0.96]"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-[#102A43] shadow-sm transition hover:bg-slate-50 active:scale-[0.96] sm:h-10 sm:w-10"
               title="Add player"
               aria-label="Add player"
               data-testid="button-sticky-add-player"
@@ -3051,13 +3051,13 @@ export function PlayersTab({
                       setFlippedPlayerIds(prev => ({ ...prev, [player.id]: !prev[player.id] }));
                     }
                   }}
-                  className={`w-full md:w-[calc(50%-0.25rem)] xl:w-[calc(33.333%-0.34rem)] p-2.5 bg-card border border-border/80 rounded-xl shadow-[0_1px_4px_rgba(15,23,42,0.055)] active:scale-[0.99] transition-transform cursor-pointer ${tutorialStep === "flip-card" && player.name === "Heung-min" ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
+                  className={`w-full md:w-[calc(50%-0.25rem)] xl:w-[calc(33.333%-0.34rem)] p-2 bg-card border border-border/80 rounded-xl shadow-[0_1px_4px_rgba(15,23,42,0.055)] active:scale-[0.99] transition-transform cursor-pointer sm:p-2.5 ${tutorialStep === "flip-card" && player.name === "Heung-min" ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
                   data-testid={`player-row-${player.id}`}
                 >
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5 sm:gap-2">
                     <PlayerAvatar player={player} size="sm" />
                     <div className="min-w-0 flex-1">
-                      <div className="font-semibold leading-tight text-[14px] break-words text-[#102A43]">{displayName(player)}</div>
+                      <div className="break-words text-[13px] font-semibold leading-tight text-[#102A43] sm:text-[14px]">{displayName(player)}</div>
                       <PlayerTags player={player} includeVibe includeAbilityCount={!isFlipped} />
                     </div>
                     <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>

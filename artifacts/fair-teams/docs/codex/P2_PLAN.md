@@ -63,3 +63,12 @@ Status: complete. Implementation commit: c3b00d3.
 - Migrated Action Board “To-do details” to the proven `StripesSheetContent`.
 - Preserved existing state, autofocus, people selection, validation, save behavior, and geometry.
 - No feature logic changed.
+
+## P2-7 — Simple Action Board sheet migrations
+
+Status: complete. Implementation commit: 93acf28.
+
+- Migrated “Decision note” to `StripesSheetContent`.
+- Migrated card editing surfaces for Note, Assignees, and Due date to `StripesSheetContent`.
+- Preserved existing state, autofocus, validation, save behavior, and geometry.
+- No feature logic changed.

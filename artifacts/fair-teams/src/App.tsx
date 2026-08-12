@@ -3952,6 +3952,9 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 onOpenPairingRules={() => {
                   setOpenPairingRulesToken((token) => token + 1);
                 }}
+                onOpenSharedRosters={() => {
+                  setSharedRosterLibraryOpenToken((token) => token + 1);
+                }}
                 onOpenTeams={() => setActiveTab("teams")}
                 onRequestAddPlayer={(suggestedName) => {
                   setExternalAddPlayerRequest({ token: Date.now(), name: suggestedName });

@@ -100,6 +100,7 @@ type ClubTabProps = {
   equipmentHolderNamesByEmail?: Record<string, string>;
   pairingRules?: PairingRule[];
   onOpenPairingRules?: () => void;
+  onOpenSharedRosters?: () => void;
   onOpenTeams?: () => void;
   currentTeamCount?: number | null;
   currentTeamsGenerated?: boolean;
@@ -829,6 +830,7 @@ export function ClubTab({
   equipmentHolderNamesByEmail = {},
   pairingRules = [],
   onOpenPairingRules,
+  onOpenSharedRosters,
   onOpenTeams,
   currentTeamCount = null,
   currentTeamsGenerated = false,
@@ -2809,7 +2811,13 @@ export function ClubTab({
               <span className="block truncate text-[17px] font-black leading-tight text-[#102A43] lg:text-[20px]">Club Access</span>
               <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[10px] font-bold text-violet-700/75 lg:text-[12px]">
                 {clubUser && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" aria-label="Online" />}
-                <span className="truncate">{clubUser ? `${clubGreetingName} · ${clubDeskSummary}` : clubDeskSummary}</span>
+                <span className="truncate">
+                  {clubUser && !isSharedRoster
+                    ? `${clubGreetingName} · Local roster open`
+                    : clubUser
+                      ? `${clubGreetingName} · ${clubDeskSummary}`
+                      : clubDeskSummary}
+                </span>
               </span>
             </span>
           </button>
@@ -2845,6 +2853,25 @@ export function ClubTab({
             </button>
           </div>
         </div>
+
+        {clubUser && !isSharedRoster && onOpenSharedRosters && (
+          <div className="mt-2 flex flex-col gap-2 rounded-2xl border border-violet-100 bg-white/75 px-3 py-2.5 min-[360px]:flex-row min-[360px]:items-center min-[360px]:justify-between">
+            <div className="min-w-0 text-[11px] font-semibold leading-snug text-violet-800/75 lg:text-[13px]">
+              You’re signed in. Open a shared roster to use the shared Club workspace.
+            </div>
+            <Button
+              type="button"
+              className="h-9 shrink-0 rounded-xl bg-violet-600 px-3 text-[11px] font-black text-white hover:bg-violet-700 lg:text-xs"
+              onClick={(event) => {
+                event.stopPropagation();
+                setClubDeskCollapsed(false);
+                window.setTimeout(() => onOpenSharedRosters(), 0);
+              }}
+            >
+              Open shared rosters
+            </Button>
+          </div>
+        )}
 
         {!clubDeskCollapsed && (
           <div className="mt-3 min-w-0">{sharedToolsNode}</div>

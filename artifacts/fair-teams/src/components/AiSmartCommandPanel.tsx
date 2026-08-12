@@ -1921,7 +1921,7 @@ export function AiSmartCommandPanel({
 
   return (
     <section className="stripes-type-ui overflow-hidden rounded-[1.7rem] border border-slate-200 bg-[#f7f8fa] p-3 shadow-sm ring-1 ring-slate-100 lg:p-4">
-      <div className="lg:grid lg:grid-cols-[minmax(220px,0.62fr)_minmax(0,1.38fr)] lg:items-end lg:gap-5">
+      <div>
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2.5">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-white/90 text-slate-600 shadow-sm ring-1 ring-slate-200 lg:h-10 lg:w-10">
@@ -1948,7 +1948,7 @@ export function AiSmartCommandPanel({
           )}
         </div>
 
-        <div className="mt-2 lg:mt-0">
+        <div className="mt-3">
           <textarea
             id="fairteams-help-question"
             value={commandText}

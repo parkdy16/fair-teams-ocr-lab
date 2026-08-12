@@ -860,6 +860,7 @@ export function ClubTab({
   const [clubNoteDraft, setClubNoteDraft] = useState("");
   const [clubNoteSaving, setClubNoteSaving] = useState(false);
   const [clubNotesOpen, setClubNotesOpen] = useState(false);
+  const [helpCollapsed, setHelpCollapsed] = useState(true);
   const [clubNoteDeletingId, setClubNoteDeletingId] = useState<string | null>(
     null,
   );
@@ -2588,20 +2589,47 @@ export function ClubTab({
       </Dialog>
 
       <div className="contents lg:grid lg:grid-cols-2 lg:items-start lg:gap-5 xl:[grid-template-columns:minmax(18rem,0.84fr)_minmax(0,1.26fr)] xl:[grid-template-rows:auto_auto_auto]">
-      <div id="fairteams-help-panel" className="order-6 lg:col-span-1 lg:col-start-2 lg:row-start-3 lg:h-full lg:[&>section]:h-full">
-      <AiSmartCommandPanel
-        players={players}
-        rosterName={activeRosterName}
-        rosterMode={isSharedRoster ? "shared" : "local"}
-        activeTab="club"
-        currentTeamCount={currentTeamCount}
-        currentTeamsGenerated={currentTeamsGenerated}
-        onApplyAction={applyAiSmartCommandAction}
-        onOpenToday={onOpenTodayFromAi}
-        onQuestionSubmitted={() => onTutorialAction?.("help-question-submitted")}
-        tutorialActive={tutorialStep === "help-question"}
-        tutorialQuestion="How do shared rosters work?"
-      />
+      <div id="fairteams-help-panel" className="order-6 lg:col-span-1 lg:col-start-2 lg:row-start-3 lg:h-full lg:[&>div>section]:h-full">
+        <button
+          type="button"
+          className="stripes-type-ui flex w-full items-center justify-between rounded-[1.4rem] border border-slate-200 bg-white px-3 py-3 text-left shadow-sm active:scale-[0.99] lg:hidden"
+          onClick={() => setHelpCollapsed((current) => !current)}
+          aria-expanded={!helpCollapsed || tutorialStep === "help-question"}
+          aria-controls="fairteams-help-content"
+        >
+          <span className="min-w-0">
+            <span className="block text-[15px] font-black leading-tight text-[#102A43]">Stripes Help</span>
+            <span className="mt-0.5 block text-[10px] font-semibold text-slate-500">
+              Ask how Stripes works
+            </span>
+          </span>
+          <span className="ml-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-50 text-slate-500">
+            {helpCollapsed && tutorialStep !== "help-question"
+              ? <ChevronDown className="h-4 w-4" />
+              : <ChevronUp className="h-4 w-4" />}
+          </span>
+        </button>
+
+        <div
+          id="fairteams-help-content"
+          className={helpCollapsed && tutorialStep !== "help-question"
+            ? "hidden lg:block lg:h-full"
+            : "mt-2 block lg:mt-0 lg:h-full"}
+        >
+          <AiSmartCommandPanel
+            players={players}
+            rosterName={activeRosterName}
+            rosterMode={isSharedRoster ? "shared" : "local"}
+            activeTab="club"
+            currentTeamCount={currentTeamCount}
+            currentTeamsGenerated={currentTeamsGenerated}
+            onApplyAction={applyAiSmartCommandAction}
+            onOpenToday={onOpenTodayFromAi}
+            onQuestionSubmitted={() => onTutorialAction?.("help-question-submitted")}
+            tutorialActive={tutorialStep === "help-question"}
+            tutorialQuestion="How do shared rosters work?"
+          />
+        </div>
       </div>
 
       <section className="order-1 overflow-hidden rounded-[1.7rem] border border-[#d9e9e4] bg-[#f3f8f7] p-3 shadow-sm ring-1 ring-[#e7f1ee] lg:col-span-1 lg:col-start-1 lg:row-start-1 lg:h-full lg:p-4">

@@ -2995,7 +2995,7 @@ export function PlayersTab({
                 placeholder="Search roster…"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                className="h-9 pl-9 pr-9 text-xs sm:h-10 sm:text-sm"
+                className="h-9 pl-9 pr-9 text-xs sm:h-10 sm:text-sm lg:h-11 lg:pl-10 lg:text-[15px]"
                 data-testid="input-search"
               />
               {search && (
@@ -3011,7 +3011,7 @@ export function PlayersTab({
             <button
               type="button"
               onClick={() => setAddOptionsOpen(true)}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-[#102A43] shadow-sm transition hover:bg-slate-50 active:scale-[0.96] sm:h-10 sm:w-10"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-[#102A43] shadow-sm transition hover:bg-slate-50 active:scale-[0.96] sm:h-10 sm:w-10 lg:h-11 lg:w-11"
               title="Add player"
               aria-label="Add player"
               data-testid="button-sticky-add-player"
@@ -3051,13 +3051,13 @@ export function PlayersTab({
                       setFlippedPlayerIds(prev => ({ ...prev, [player.id]: !prev[player.id] }));
                     }
                   }}
-                  className={`w-full md:w-[calc(50%-0.25rem)] xl:w-[calc(33.333%-0.34rem)] p-2 bg-card border border-border/80 rounded-xl shadow-[0_1px_4px_rgba(15,23,42,0.055)] active:scale-[0.99] transition-transform cursor-pointer sm:p-2.5 ${tutorialStep === "flip-card" && player.name === "Heung-min" ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
+                  className={`w-full md:w-[calc(50%-0.25rem)] xl:w-[calc(33.333%-0.34rem)] 2xl:w-[calc(25%-0.375rem)] p-2 bg-card border border-border/80 rounded-xl shadow-[0_1px_4px_rgba(15,23,42,0.055)] active:scale-[0.99] transition-transform cursor-pointer sm:p-2.5 lg:p-3 ${tutorialStep === "flip-card" && player.name === "Heung-min" ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
                   data-testid={`player-row-${player.id}`}
                 >
                   <div className="flex items-center gap-1.5 sm:gap-2">
                     <PlayerAvatar player={player} size="sm" />
                     <div className="min-w-0 flex-1">
-                      <div className="break-words text-[13px] font-semibold leading-tight text-[#102A43] sm:text-[14px]">{displayName(player)}</div>
+                      <div className="break-words text-[13px] font-semibold leading-tight text-[#102A43] sm:text-[14px] lg:text-[15px]">{displayName(player)}</div>
                       <PlayerTags player={player} includeVibe includeAbilityCount={!isFlipped} />
                     </div>
                     <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>

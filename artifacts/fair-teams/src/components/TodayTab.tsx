@@ -5725,7 +5725,7 @@ export function TodayTab({
             placeholder="Search players…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="h-9 pl-8 pr-8 text-xs"
+            className="h-9 pl-8 pr-8 text-xs lg:h-11 lg:pl-10 lg:pr-10 lg:text-[15px]"
             data-testid="today-search"
           />
           {search && (
@@ -5746,23 +5746,23 @@ export function TodayTab({
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-1.5">
+          <div className="grid grid-cols-2 gap-1.5 md:grid-cols-3 lg:grid-cols-4 lg:gap-2.5">
             {filtered.map((player) => (
               <label
                 key={player.id}
-                className={`flex min-h-[46px] items-center gap-2 px-2.5 py-2.5 border rounded-xl cursor-pointer transition-all ${tutorialTargetPlayerId && tutorialTargetPlayerId !== player.id ? "pointer-events-none opacity-45" : ""} ${tutorialTargetPlayerId === player.id ? "fairteams-tutorial-pulse relative z-[82]" : ""} ${player.attending ? "border-primary/35 bg-primary/[0.035] shadow-[0_1px_4px_rgba(15,23,42,0.05)]" : "border-border/80 bg-card"}`}
+                className={`flex min-h-[46px] items-center gap-2 px-2.5 py-2.5 border rounded-xl cursor-pointer transition-all lg:min-h-[56px] lg:gap-2.5 lg:px-3.5 lg:py-3 ${tutorialTargetPlayerId && tutorialTargetPlayerId !== player.id ? "pointer-events-none opacity-45" : ""} ${tutorialTargetPlayerId === player.id ? "fairteams-tutorial-pulse relative z-[82]" : ""} ${player.attending ? "border-primary/35 bg-primary/[0.035] shadow-[0_1px_4px_rgba(15,23,42,0.05)]" : "border-border/80 bg-card"}`}
                 data-testid={`attendance-row-${player.id}`}
               >
                 <Checkbox
                   checked={!!player.attending}
                   onCheckedChange={() => { togglePlayer(player); if (tutorialTargetPlayerId === player.id) onTutorialSelected?.(player.id); }}
-                  className="w-3.5 h-3.5 rounded-full border border-slate-300 shadow-none shrink-0 data-[state=checked]:bg-primary data-[state=checked]:border-primary data-[state=checked]:text-white"
+                  className="w-3.5 h-3.5 rounded-full border border-slate-300 shadow-none shrink-0 lg:h-4 lg:w-4 data-[state=checked]:bg-primary data-[state=checked]:border-primary data-[state=checked]:text-white"
                   data-testid={`attendance-check-${player.id}`}
                 />
                 <div className="min-w-0 flex-1 overflow-hidden">
                   <div className="flex w-full max-w-full items-center gap-1">
                     <span
-                      className={`min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap font-semibold text-[13px] leading-tight ${player.attending ? "text-[#102A43]" : "text-foreground"}`}
+                      className={`min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap font-semibold text-[13px] leading-tight lg:text-[15px] ${player.attending ? "text-[#102A43]" : "text-foreground"}`}
                       title={displayName(player)}
                     >
                       {displayName(player)}
@@ -5784,14 +5784,14 @@ export function TodayTab({
                       event.stopPropagation();
                       toggleNotHereYet(player);
                     }}
-                    className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border transition-colors ${
+                    className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border transition-colors lg:h-8 lg:w-8 ${
                       isNotHereYet(player)
                         ? "border-amber-300 bg-amber-100 text-amber-800"
                         : "border-slate-200 bg-white/80 text-slate-500"
                     }`}
                     data-testid={`today-status-${player.id}`}
                   >
-                    <Clock3 className="h-3.5 w-3.5" aria-hidden="true" />
+                    <Clock3 className="h-3.5 w-3.5 lg:h-4 lg:w-4" aria-hidden="true" />
                   </button>
                 )}
               </label>

@@ -3849,7 +3849,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
         )}
 
         <div className={`min-h-0 flex-1 overflow-y-auto p-4 md:p-5 lg:px-7 lg:py-6 ${shouldShowTodayStartHeader ? "pb-6 md:pb-6" : activeTab === "teams" && teamsWorkspaceView === "setup" ? "pb-36 md:pb-36 lg:pb-28" : "pb-20 md:pb-20 lg:pb-6"}`} style={{ WebkitOverflowScrolling: "touch" }}>
-          <div className={`mx-auto flex min-h-[calc(100dvh-116px)] w-full flex-col ${shouldShowTodayStartHeader ? "lg:max-w-6xl lg:justify-center" : activeTab === "players" ? "lg:max-w-5xl" : activeTab === "teams" && teamsWorkspaceView === "setup" ? "lg:max-w-6xl" : activeTab === "teams" ? "lg:max-w-none" : "lg:mx-0 lg:max-w-none"}`}>
+          <div className={`mx-auto flex min-h-[calc(100dvh-116px)] w-full flex-col ${shouldShowTodayStartHeader ? "lg:max-w-6xl lg:justify-center" : activeTab === "players" ? "lg:max-w-[1480px]" : activeTab === "teams" && teamsWorkspaceView === "setup" ? "lg:max-w-[1480px]" : activeTab === "teams" ? "lg:max-w-none" : "lg:mx-0 lg:max-w-none"}`}>
             <TabsContent
               value="players"
               forceMount

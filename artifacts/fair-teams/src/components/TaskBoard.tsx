@@ -31,7 +31,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { StripesSheetContent } from "@/components/ui/stripes-modal";
+import { StripesEditorContent, StripesSheetContent } from "@/components/ui/stripes-modal";
 import { Textarea } from "@/components/ui/textarea";
 import type { RoomPlayer } from "@/lib/localRoster";
 import type { SharedRosterUser } from "@/lib/sharedRosterService";
@@ -3050,7 +3050,7 @@ export function TaskBoard({
       </Dialog>
 
       <Dialog open={newTopicOpen} onOpenChange={(open) => { setNewTopicOpen(open); if (!open) resetNewTopic(); }}>
-        <DialogContent className="fixed bottom-2 left-2 right-2 top-auto max-h-[88dvh] w-auto max-w-none translate-x-0 translate-y-0 overflow-y-auto rounded-[2rem] p-4 sm:bottom-auto sm:left-1/2 sm:right-auto sm:top-1/2 sm:w-full sm:max-w-md sm:-translate-x-1/2 sm:-translate-y-1/2 lg:max-w-xl lg:p-6" onOpenAutoFocus={(event) => event.preventDefault()}>
+        <StripesEditorContent onOpenAutoFocus={(event) => event.preventDefault()}>
           <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43] lg:text-xl">{newTopicKind ? (newTopicKind === "idea" ? "New idea" : newTopicKind === "decide" ? "New decision" : "New to-do") : "Create"}</DialogTitle></DialogHeader>
           {!newTopicKind ? (
             <div className="grid gap-2.5 lg:gap-3.5">
@@ -3079,7 +3079,7 @@ export function TaskBoard({
               <Button type="button" className="h-11 rounded-2xl font-black text-white lg:h-12 lg:text-base" style={{ backgroundColor: accent }} disabled={!newTitle.trim() || saving} onClick={() => void createTopic()}>{saving ? "Saving…" : newTopicKind === "idea" ? "Save idea" : newTopicKind === "decide" ? "Continue to decision" : "Create to-do"}</Button>
             </div>
           )}
-        </DialogContent>
+        </StripesEditorContent>
       </Dialog>
       <Dialog open={Boolean(decisionCardId)} onOpenChange={(open) => { if (!open) { setDecisionCardId(null); setDecisionStep(null); setDecisionEditingDecisionId(null); } }}>
         <DialogContent className="fixed bottom-2 left-2 right-2 top-auto box-border min-w-0 max-h-[90dvh] w-auto max-w-[calc(100vw-1rem)] translate-x-0 translate-y-0 overflow-x-hidden overflow-y-auto rounded-[2rem] p-4 sm:bottom-auto sm:left-1/2 sm:right-auto sm:top-1/2 sm:w-[calc(100vw-2rem)] sm:max-w-lg sm:-translate-x-1/2 sm:-translate-y-1/2 lg:max-w-2xl lg:p-6" onOpenAutoFocus={(event) => event.preventDefault()}>

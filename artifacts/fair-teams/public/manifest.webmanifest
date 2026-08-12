@@ -1,7 +1,7 @@
 {
   "name": "Stripes",
   "short_name": "Stripes",
-  "description": "Organize. Decide. Play.",
+  "description": "Team generator and club organizer for recreational sports.",
   "id": "/?app=fair-teams-v3",
   "start_url": "/app?source=pwa&v=3",
   "scope": "/",

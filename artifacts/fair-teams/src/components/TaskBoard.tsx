@@ -3512,13 +3512,13 @@ export function TaskBoard({
       </Dialog>
 
       <Dialog open={Boolean(outcomeCardId && outcomeDecisionId)} onOpenChange={(open) => { if (!open) { setOutcomeCardId(null); setOutcomeDecisionId(null); } }}>
-        <DialogContent className="fixed bottom-2 left-2 right-2 top-auto w-auto max-w-none translate-x-0 translate-y-0 rounded-[2rem] p-4 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-md sm:-translate-x-1/2" onOpenAutoFocus={(event) => event.preventDefault()}>
+        <StripesSheetContent onOpenAutoFocus={(event) => event.preventDefault()}>
           <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43]">Decision note</DialogTitle></DialogHeader>
           <div className="grid gap-3">
             <div><Label htmlFor="outcome-text">Optional note</Label><Textarea id="outcome-text" value={outcomeText} onChange={(event) => setOutcomeText(event.target.value)} rows={3} maxLength={300} placeholder="Add context only if the result needs explanation." /></div>
             <Button type="button" className="h-11 rounded-2xl bg-emerald-600 font-black text-white" disabled={saving} onClick={() => void saveOutcome()}>{saving ? "Saving…" : outcomeText.trim() ? "Save note" : "Remove note"}</Button>
           </div>
-        </DialogContent>
+        </StripesSheetContent>
       </Dialog>
 
       <Dialog open={Boolean(notifyCardId && notifyTarget)} onOpenChange={(open) => { if (!open) closeNotify(); }}>
@@ -3571,7 +3571,7 @@ export function TaskBoard({
       </Dialog>
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="fixed inset-x-2 bottom-2 top-auto w-auto max-w-none translate-x-0 translate-y-0 rounded-[2rem] p-4 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-md sm:-translate-x-1/2" onOpenAutoFocus={(event) => event.preventDefault()}>
+        <StripesSheetContent onOpenAutoFocus={(event) => event.preventDefault()}>
           <DialogHeader><DialogTitle className="text-left text-base font-semibold text-[#102A43]">{editSection === "note" ? "Note" : editSection === "assignees" ? "Assignees" : editSection === "due" ? "Due date" : "Edit card"}</DialogTitle></DialogHeader>
           <div className="grid gap-3">
             {editSection === "all" && <div><Label htmlFor="edit-title">Title</Label><Textarea id="edit-title" value={editTitle} onChange={(event) => setEditTitle(event.target.value)} rows={2} maxLength={220} /></div>}
@@ -3588,7 +3588,7 @@ export function TaskBoard({
               <Button type="button" className="h-11 flex-1 rounded-2xl font-semibold text-white" style={{ backgroundColor: accent }} disabled={!editTitle.trim() || saving} onClick={() => void saveEditedCard()}>{saving ? "Saving…" : "Save"}</Button>
             </div>
           </div>
-        </DialogContent>
+        </StripesSheetContent>
       </Dialog>
 
         <Dialog open={boardSettingsOpen} onOpenChange={setBoardSettingsOpen}>

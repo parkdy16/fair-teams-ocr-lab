@@ -3082,7 +3082,7 @@ export function TaskBoard({
         </StripesEditorContent>
       </Dialog>
       <Dialog open={Boolean(decisionCardId)} onOpenChange={(open) => { if (!open) { setDecisionCardId(null); setDecisionStep(null); setDecisionEditingDecisionId(null); } }}>
-        <DialogContent className="fixed bottom-2 left-2 right-2 top-auto box-border min-w-0 max-h-[90dvh] w-auto max-w-[calc(100vw-1rem)] translate-x-0 translate-y-0 overflow-x-hidden overflow-y-auto rounded-[2rem] p-4 sm:bottom-auto sm:left-1/2 sm:right-auto sm:top-1/2 sm:w-[calc(100vw-2rem)] sm:max-w-lg sm:-translate-x-1/2 sm:-translate-y-1/2 lg:max-w-2xl lg:p-6" onOpenAutoFocus={(event) => event.preventDefault()}>
+        <StripesEditorContent className="box-border min-w-0 max-h-[90dvh] max-w-[calc(100vw-1rem)] overflow-x-hidden sm:w-[calc(100vw-2rem)] sm:max-w-lg lg:max-w-2xl" onOpenAutoFocus={(event) => event.preventDefault()}>
           <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43] lg:text-xl">{decisionStep === "schedule" ? (decisionEditingDecisionId ? "Set up schedule" : "Schedule") : decisionStep ? "Set up decision" : "What kind of decision?"}</DialogTitle></DialogHeader>
           {!decisionStep ? (
             <div className="grid min-w-0 grid-cols-2 gap-2">
@@ -3340,7 +3340,7 @@ export function TaskBoard({
               </Button>}
             </div>
           )}
-        </DialogContent>
+        </StripesEditorContent>
       </Dialog>
 
       <Dialog open={Boolean(equipmentPendingSubject)} onOpenChange={(open) => { if (!open) setEquipmentPendingSubject(""); }}>

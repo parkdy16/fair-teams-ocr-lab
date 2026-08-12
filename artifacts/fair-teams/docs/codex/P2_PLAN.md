@@ -89,3 +89,11 @@ Status: complete. Implementation commit: c601684.
 - Migrated the Action Board Decision / Schedule setup flow to `StripesEditorContent`.
 - Preserved its 90dvh limit, scrolling, overflow protection, wider responsive desktop geometry, state, validation, and decision/schedule behavior.
 - No feature logic changed.
+
+## P2-10 — Notify organizers editor migration
+
+Status: complete. Implementation commit: 68cf5e6.
+
+- Migrated “Notify organizers” to `StripesEditorContent`.
+- Preserved its 90dvh limit, scrolling, responsive desktop width, autofocus, recipient selection, message state, validation, and notification behavior.
+- No Firebase, email, backend, or feature logic changed.

@@ -72,3 +72,12 @@ Status: complete. Implementation commit: 93acf28.
 - Migrated card editing surfaces for Note, Assignees, and Due date to `StripesSheetContent`.
 - Preserved existing state, autofocus, validation, save behavior, and geometry.
 - No feature logic changed.
+
+## P2-8 — Voting and schedule sheet migrations
+
+Status: complete. Implementation commit: 4e80b87.
+
+- Migrated voting response surfaces to `StripesSheetContent`.
+- Migrated “Finalize schedule” to `StripesSheetContent`.
+- Preserved existing max-height, scrolling, overflow protection, responsive sizing, voting behavior, and schedule behavior.
+- No feature logic changed.

@@ -3399,14 +3399,14 @@ export function TaskBoard({
       </Dialog>
 
       <Dialog open={Boolean(actionCardId)} onOpenChange={(open) => { if (!open) setActionCardId(null); }}>
-        <DialogContent className="fixed bottom-2 left-2 right-2 top-auto w-auto max-w-none translate-x-0 translate-y-0 rounded-[2rem] p-4 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-md sm:-translate-x-1/2" onOpenAutoFocus={(event) => event.preventDefault()}>
+        <StripesSheetContent onOpenAutoFocus={(event) => event.preventDefault()}>
           <DialogHeader><DialogTitle className="text-left text-base font-semibold text-[#102A43]">To-do details</DialogTitle></DialogHeader>
           <div className="grid gap-3">
             <div><Label htmlFor="action-text">What needs to happen next?</Label><Textarea id="action-text" value={actionText} onChange={(event) => setActionText(event.target.value)} rows={2} maxLength={220} /></div>
             {renderPeoplePicker(actionPeopleKeys, setActionPeopleKeys, "Who handles this?")}
             <Button type="button" className="h-11 rounded-2xl bg-sky-700 font-black text-white hover:bg-sky-800" disabled={!actionText.trim() || saving} onClick={() => void addAction()}>{saving ? "Saving…" : "Save details"}</Button>
           </div>
-        </DialogContent>
+        </StripesSheetContent>
       </Dialog>
 
       <Dialog open={equipmentAnswersOpen} onOpenChange={(open) => setEquipmentAnswersOpen(open)}>

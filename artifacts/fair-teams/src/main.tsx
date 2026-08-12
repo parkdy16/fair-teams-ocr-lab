@@ -2,6 +2,7 @@ import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import App from "./App";
 import { MarketingHome } from "./components/MarketingHome";
+import { PublicInfoPage } from "./components/PublicInfoPage";
 import "./index.css";
 
 const queryClient = new QueryClient({
@@ -27,11 +28,27 @@ function shouldRenderApp() {
   return pathname === "/app" || pathname.startsWith("/app/") || standalone || legacyAppEntry;
 }
 
+function getPublicPage() {
+  if (typeof window === "undefined") return null;
+
+  const pathname = window.location.pathname.replace(/\/+$/, "") || "/";
+
+  if (pathname === "/privacy") return "privacy" as const;
+  if (pathname === "/terms") return "terms" as const;
+  if (pathname === "/support") return "support" as const;
+
+  return null;
+}
+
+const publicPage = getPublicPage();
+
 createRoot(document.getElementById("root")!).render(
   shouldRenderApp() ? (
     <QueryClientProvider client={queryClient}>
       <App />
     </QueryClientProvider>
+  ) : publicPage ? (
+    <PublicInfoPage page={publicPage} />
   ) : (
     <MarketingHome />
   ),

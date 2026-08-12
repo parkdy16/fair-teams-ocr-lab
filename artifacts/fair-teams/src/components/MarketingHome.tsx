@@ -210,8 +210,17 @@ export function MarketingHome() {
 
         <footer className="flex flex-wrap items-center justify-between gap-4 border-t border-slate-200/80 py-6 text-[11px] font-medium text-slate-400">
           <span>Stripes · Team generator and club organizer</span>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-4">
             <span>Meetup import planned</span>
+            <a href="/privacy" className="font-bold text-slate-500 hover:text-[#102A43]">
+              Privacy
+            </a>
+            <a href="/terms" className="font-bold text-slate-500 hover:text-[#102A43]">
+              Terms
+            </a>
+            <a href="/support" className="font-bold text-slate-500 hover:text-[#102A43]">
+              Support
+            </a>
             <a href="/app" className="font-bold text-slate-600 hover:text-[#102A43]">
               Open app →
             </a>

@@ -3001,7 +3001,7 @@ export function TaskBoard({
                   {boardColumn("action", "To-do", ClipboardList, true)}
                   {boardColumn("done", "Done", Check, true)}
                 </div>
-                <div className="hidden w-full grid-cols-4 gap-3 p-4 pb-16 lg:grid xl:gap-4 xl:p-5">
+                <div className="hidden w-full grid-cols-[repeat(4,minmax(14rem,1fr))] gap-3 overflow-x-auto p-4 pb-16 lg:grid xl:grid-cols-[repeat(4,minmax(15rem,1fr))] xl:gap-4 xl:p-5">
                   {boardColumn("ideas", "Ideas", Lightbulb)}
                   {boardColumn("deciding", "Decide", Gavel)}
                   {boardColumn("action", "To-do", ClipboardList)}

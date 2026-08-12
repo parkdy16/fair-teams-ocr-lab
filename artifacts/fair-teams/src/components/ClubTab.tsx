@@ -3081,7 +3081,7 @@ export function ClubTab({
                     ? "Puma ball died today — Joon"
                     : clubNotesUnavailableReason || "Shared notes appear after sign-in."
                 }
-                className="min-h-[3.2rem] flex-1 resize-none border-0 bg-transparent p-1 text-sm font-semibold shadow-none focus-visible:ring-0"
+                className="min-h-[4.25rem] min-w-0 flex-1 resize-none border-0 bg-transparent p-1 text-sm font-semibold shadow-none focus-visible:ring-0 min-[310px]:min-h-[3.2rem]"
                 maxLength={160}
               />
               <Button

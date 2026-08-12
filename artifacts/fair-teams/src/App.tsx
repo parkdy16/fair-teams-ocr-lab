@@ -4439,7 +4439,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                       </button>
                     )}
                   </div>
-                  <div className={`mt-0.5 block w-full truncate text-left text-[11px] font-semibold ${!isEmptyStarterRoster && rosters.length > 1 ? "text-slate-500" : "text-slate-500"}`}>
+                  <div className={`mt-0.5 block w-full text-left text-[11px] font-semibold leading-snug whitespace-normal min-[310px]:truncate ${!isEmptyStarterRoster && rosters.length > 1 ? "text-slate-500" : "text-slate-500"}`}>
                     {isEmptyStarterRoster
                       ? "Create one below or import a roster"
                       : activeRosterIsShared
@@ -4502,7 +4502,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                       <span className="block text-[10px] font-black uppercase tracking-wide text-slate-500">
                         Local Backup
                       </span>
-                      <span className="mt-0.5 block truncate text-xs font-semibold text-slate-600">
+                      <span className="mt-0.5 block text-xs font-semibold leading-snug whitespace-normal text-slate-600 min-[310px]:truncate">
                         Export or import local roster files.
                       </span>
                     </span>
@@ -4618,7 +4618,7 @@ This is a shared roster. Local Backup can only remove/disassociate this deviceâ€
                       <span className="block text-[10px] font-black uppercase tracking-wide text-blue-500">
                         Cloud Backup
                       </span>
-                      <span className="mt-0.5 block truncate text-xs font-semibold text-slate-600">
+                      <span className="mt-0.5 block text-xs font-semibold leading-snug whitespace-normal text-slate-600 min-[310px]:truncate">
                         Private backup of local rosters.
                       </span>
                     </span>
@@ -4719,7 +4719,7 @@ This is a shared roster. Local Backup can only remove/disassociate this deviceâ€
                       <span className="block text-[10px] font-black uppercase tracking-wide text-emerald-600">
                         Shared Roster
                       </span>
-                      <span className="mt-0.5 block truncate text-xs font-semibold text-slate-600">
+                      <span className="mt-0.5 block text-xs font-semibold leading-snug whitespace-normal text-slate-600 min-[310px]:truncate">
                         {activeRoster?.cloudSource?.provider === "firebase" ? "Firebase shared roster." : "Invite and sync online."}
                       </span>
                     </span>

@@ -37,7 +37,7 @@ export function MarketingHome() {
           </a>
         </header>
 
-        <section className="grid items-center gap-12 pb-20 pt-14 lg:grid-cols-[1.05fr_0.95fr] lg:gap-16 lg:pb-28 lg:pt-24">
+        <section className="grid items-center gap-12 pb-20 pt-14 lg:grid-cols-[1.05fr_0.95fr] lg:gap-16 lg:pb-20 lg:pt-16">
           <div className="max-w-2xl">
             <div className="mb-5 inline-flex rounded-full border border-emerald-100 bg-white px-3 py-1.5 text-[11px] font-bold text-[#2f6f65] shadow-sm">
               Built for recreational sports organizers
@@ -233,7 +233,7 @@ function HeroPreview() {
           <img
             src="/site/teams-mobile.png"
             alt="Stripes generated teams on mobile"
-            className="block h-auto w-full max-w-[19rem]"
+            className="block h-auto w-full max-w-[17rem]"
           />
         </div>
       </div>
@@ -259,8 +259,8 @@ function ProductScreenshot({
   alt: string;
 }) {
   return (
-    <article className="overflow-hidden rounded-[2rem] border border-slate-200/80 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.07)]">
-      <div className="grid gap-6 p-5 sm:p-6 lg:grid-cols-[minmax(12rem,0.3fr)_minmax(0,0.7fr)] lg:items-center lg:gap-8 lg:p-8">
+    <article className="mx-auto w-full max-w-4xl overflow-hidden rounded-[2rem] border border-slate-200/80 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.07)]">
+      <div className="grid gap-6 p-5 sm:p-6 lg:grid-cols-[minmax(14rem,0.4fr)_minmax(0,0.6fr)] lg:items-center lg:gap-7 lg:p-6">
         <div>
           <div className="text-[10px] font-extrabold uppercase tracking-[0.15em] text-slate-400">
             {eyebrow}
@@ -278,7 +278,7 @@ function ProductScreenshot({
             src={src}
             alt={alt}
             loading="lazy"
-            className="block h-auto w-full"
+            className="block max-h-[380px] h-auto w-full object-contain"
           />
         </figure>
       </div>

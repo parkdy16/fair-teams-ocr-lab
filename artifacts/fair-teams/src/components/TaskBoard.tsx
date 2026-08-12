@@ -3522,7 +3522,7 @@ export function TaskBoard({
       </Dialog>
 
       <Dialog open={Boolean(notifyCardId && notifyTarget)} onOpenChange={(open) => { if (!open) closeNotify(); }}>
-        <DialogContent className="fixed bottom-2 left-2 right-2 top-auto max-h-[90dvh] w-auto max-w-none translate-x-0 translate-y-0 overflow-y-auto rounded-[2rem] p-4 sm:bottom-auto sm:left-1/2 sm:right-auto sm:top-1/2 sm:w-full sm:max-w-md sm:-translate-x-1/2 sm:-translate-y-1/2 lg:max-w-lg lg:p-6" onOpenAutoFocus={(event) => event.preventDefault()}>
+        <StripesEditorContent className="max-h-[90dvh] overflow-y-auto lg:max-w-lg" onOpenAutoFocus={(event) => event.preventDefault()}>
           <DialogHeader><DialogTitle className="text-left text-base font-black text-[#102A43] lg:text-xl">Notify organizers</DialogTitle></DialogHeader>
           {notifyTarget && <div className="grid gap-4">
             <div className="rounded-2xl bg-slate-50 px-3 py-3 ring-1 ring-slate-100">
@@ -3567,7 +3567,7 @@ export function TaskBoard({
               <Bell className="mr-1.5 h-4 w-4" />{notifySending ? "Notifying…" : `Notify ${notifyEmailsToSend.length} organizer${notifyEmailsToSend.length === 1 ? "" : "s"}`}
             </Button>
           </div>}
-        </DialogContent>
+        </StripesEditorContent>
       </Dialog>
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>

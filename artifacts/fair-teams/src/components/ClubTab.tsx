@@ -3853,7 +3853,7 @@ export function ClubTab({
 
 
             <div className="overflow-hidden rounded-[1.65rem] border border-slate-200 bg-white shadow-[0_14px_34px_rgba(15,23,42,0.08)]">
-              <div className="grid grid-cols-[6.25rem_minmax(0,1fr)] border-b border-slate-200 bg-white text-[10px] font-black uppercase tracking-wide text-slate-400 lg:grid-cols-[11rem_minmax(0,1fr)] lg:text-xs">
+              <div className="grid grid-cols-[4.75rem_minmax(0,1fr)] border-b border-slate-200 bg-white text-[10px] font-black uppercase tracking-wide text-slate-400 min-[340px]:grid-cols-[5.75rem_minmax(0,1fr)] lg:grid-cols-[11rem_minmax(0,1fr)] lg:text-xs">
                 <div className="px-3 py-2.5">Holder</div>
                 <div className="border-l border-slate-200 px-3 py-2.5">
                   Bags
@@ -3870,11 +3870,11 @@ export function ClubTab({
                   <section
                     key={holder.id}
                     data-equipment-holder-id={holder.id}
-                    className={`grid grid-cols-[6.25rem_minmax(0,1fr)] transition lg:grid-cols-[11rem_minmax(0,1fr)] ${index === 0 ? "" : "border-t border-slate-100"} ${highlighted ? "bg-emerald-50" : "bg-white"}`}
+                    className={`grid grid-cols-[4.75rem_minmax(0,1fr)] transition min-[340px]:grid-cols-[5.75rem_minmax(0,1fr)] lg:grid-cols-[11rem_minmax(0,1fr)] ${index === 0 ? "" : "border-t border-slate-100"} ${highlighted ? "bg-emerald-50" : "bg-white"}`}
                   >
-                    <div className="flex min-h-[3.65rem] items-center px-3 py-2 lg:px-4">
+                    <div className="flex min-h-[3.65rem] items-center px-2 py-2 min-[340px]:px-2.5 lg:px-4">
                       <div className="min-w-0">
-                        <h3 className="truncate text-[12px] font-black leading-tight text-[#102A43] lg:text-sm">
+                        <h3 className="whitespace-normal break-words text-[11px] font-black leading-[1.15] text-[#102A43] min-[340px]:text-[12px] lg:text-sm">
                           {holder.label}
                         </h3>
                       </div>

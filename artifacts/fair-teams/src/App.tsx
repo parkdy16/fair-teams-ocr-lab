@@ -3683,15 +3683,15 @@ They will no longer be able to open or edit this shared roster unless it is shar
           </header>
         )}
 
-        <header className="sticky top-0 z-30 border-b border-border bg-white/92 px-4 pt-3 pb-2 shadow-sm backdrop-blur lg:hidden">
-          <div className="flex items-center justify-between gap-3 px-1 pb-2">
+        <header className="sticky top-0 z-30 border-b border-border bg-white/92 px-2 pt-3 pb-2 shadow-sm backdrop-blur min-[310px]:px-4 lg:hidden">
+          <div className="flex items-center justify-between gap-2 px-0 pb-2 min-[310px]:gap-3 min-[310px]:px-1">
             <div className="min-w-0 flex-1">
               <button
                 type="button"
                 onClick={
                   activeTab === "players" ? openGroupSettings : undefined
                 }
-                className={`group flex max-w-full min-w-0 items-center gap-2.5 text-left ${activeTab === "players" ? "transition-transform active:scale-[0.99]" : "cursor-default"}`}
+                className={`group flex max-w-full min-w-0 items-center gap-2 text-left min-[310px]:gap-2.5 ${activeTab === "players" ? "transition-transform active:scale-[0.99]" : "cursor-default"}`}
                 title={
                   activeTab === "players"
                     ? "Edit active roster name, logo, and color"
@@ -3707,7 +3707,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
               >
                 {!shouldShowTodayStartHeader && (
                   <span
-                    className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-2xl border-2 bg-white shadow-sm"
+                    className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-xl border-2 bg-white shadow-sm min-[310px]:h-9 min-[310px]:w-9 min-[310px]:rounded-2xl"
                     style={logoRingStyle}
                   >
                     <img
@@ -3717,9 +3717,9 @@ They will no longer be able to open or edit this shared roster unless it is shar
                     />
                   </span>
                 )}
-                <span className="flex min-w-0 max-w-full flex-wrap items-center gap-1.5">
+                <span className="flex min-w-0 max-w-full flex-1 flex-wrap items-center gap-x-1.5 gap-y-1">
                   <h1
-                    className={`stripes-type-ui truncate leading-tight text-[#102A43] ${
+                    className={`stripes-type-ui min-w-0 max-w-full flex-[1_1_100%] truncate leading-tight text-[#102A43] min-[310px]:flex-[1_1_auto] ${
                       shouldShowTodayStartHeader
                         ? "text-[14px] font-black uppercase tracking-[0.075em] text-[#102A43]/65"
                         : "text-[17px] font-black tracking-tight"
@@ -3729,7 +3729,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   </h1>
                   {!shouldShowTodayStartHeader && !isEmptyStarterRoster && (
                     <span
-                      className={`stripes-type-ui inline-flex h-5 shrink-0 items-center rounded-full px-1.5 text-[11px] font-black uppercase tracking-wide ${activeRosterIsShared ? "bg-violet-50 text-violet-700 ring-1 ring-violet-100" : "bg-slate-100 text-slate-500"}`}
+                      className={`stripes-type-ui inline-flex h-5 shrink-0 items-center rounded-full px-1.5 text-[10px] font-black uppercase tracking-wide min-[310px]:text-[11px] ${activeRosterIsShared ? "bg-violet-50 text-violet-700 ring-1 ring-violet-100" : "bg-slate-100 text-slate-500"}`}
                       title={activeRosterIsShared ? "Shared roster" : "Local roster"}
                     >
                       {activeRosterIsShared ? "Shared" : "Local"}
@@ -3760,7 +3760,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   )}
                   {activeTab === "players" && (
                     <span
-                      className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-[#102A43]/65 shadow-sm transition-colors group-hover:text-[#102A43]"
+                      className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-[#102A43]/65 shadow-sm transition-colors group-hover:text-[#102A43] min-[310px]:h-6 min-[310px]:w-6"
                       title="Edit roster"
                     >
                       <Pencil className="h-3.5 w-3.5" />
@@ -3782,7 +3782,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   type="button"
                   variant="secondary"
                   size="icon"
-                  className={`h-9 w-9 rounded-xl border border-slate-200 bg-white/85 text-[#102A43] shadow-none ${tutorialStep === "settings-button" ? "fairteams-tutorial-pulse" : ""}`}
+                  className={`h-8 w-8 rounded-xl border border-slate-200 bg-white/85 text-[#102A43] shadow-none min-[310px]:h-9 min-[310px]:w-9 ${tutorialStep === "settings-button" ? "fairteams-tutorial-pulse" : ""}`}
                   onClick={() => {
                     closeRosterToolsPanel();
                     setRosterFilesOpen(true);

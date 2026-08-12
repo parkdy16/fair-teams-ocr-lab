@@ -31,7 +31,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { StripesEditorContent, StripesSheetContent } from "@/components/ui/stripes-modal";
+import { StripesEditorContent, StripesSheetContent, StripesWorkspaceContent } from "@/components/ui/stripes-modal";
 import { Textarea } from "@/components/ui/textarea";
 import type { RoomPlayer } from "@/lib/localRoster";
 import type { SharedRosterUser } from "@/lib/sharedRosterService";
@@ -3041,12 +3041,12 @@ export function TaskBoard({
       </Dialog>
 
       <Dialog open={Boolean(evolutionCardId)} onOpenChange={(open) => { if (!open) setEvolutionCardId(null); }}>
-        <DialogContent className="stripes-type-ui fixed inset-0 flex h-[100dvh] max-h-none w-full max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-0 bg-white p-0 shadow-none sm:inset-3 sm:h-[calc(100dvh-1.5rem)] sm:w-auto sm:rounded-[2rem] sm:border sm:border-slate-200 sm:shadow-2xl lg:left-1/2 lg:right-auto lg:top-1/2 lg:h-[min(86dvh,52rem)] lg:w-[min(46rem,calc(100vw-3rem))] lg:-translate-x-1/2 lg:-translate-y-1/2">
+        <StripesWorkspaceContent>
           <DialogHeader className="shrink-0 border-b border-slate-200 bg-white px-3 py-3 pr-12 text-left lg:px-5 lg:py-4">
             <div className="flex items-center gap-2"><button type="button" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-[#102A43] hover:bg-slate-100" onClick={() => setEvolutionCardId(null)} aria-label="Back to card"><ArrowLeft className="h-5 w-5" /></button><div className="min-w-0"><DialogTitle className="flex items-center gap-2 text-base font-semibold text-[#102A43] lg:text-xl"><History className="h-4 w-4 text-slate-500 lg:h-5 lg:w-5" />Evolution</DialogTitle>{evolutionCard && <p className="mt-0.5 truncate text-[11px] font-normal text-slate-500 lg:text-sm">{evolutionCard.title}</p>}</div></div>
           </DialogHeader>
           <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50/50">{evolutionCard ? renderEvolution(evolutionCard) : <div className="p-8 text-center text-sm text-slate-500">Card history is unavailable.</div>}</div>
-        </DialogContent>
+        </StripesWorkspaceContent>
       </Dialog>
 
       <Dialog open={newTopicOpen} onOpenChange={(open) => { setNewTopicOpen(open); if (!open) resetNewTopic(); }}>

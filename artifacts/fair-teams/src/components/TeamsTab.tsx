@@ -573,7 +573,7 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
   }, [attendingPlayers.length, numTeams, onAiTeamStateChange, teams.length]);
 
   const historyPanel = history.length > 0 ? (
-    <div className="bg-card border border-border rounded-xl p-3 shadow-sm">
+    <div className="stripes-type-ui bg-card border border-border rounded-xl p-3 shadow-sm">
       <div className="flex items-center justify-between gap-2 mb-2">
         <div className="flex items-center gap-2">
           <Clock className="w-4 h-4 text-muted-foreground" />
@@ -858,7 +858,7 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
   return (
     <div className="flex flex-col gap-3 lg:gap-4">
       {/* Controls */}
-      <div className="bg-card border border-border px-3 py-2.5 rounded-xl shadow-sm flex flex-col gap-2">
+      <div className="stripes-type-ui bg-card border border-border px-3 py-2.5 rounded-xl shadow-sm flex flex-col gap-2">
         <div className="flex items-center gap-2.5">
           {onEditPlayers && (
             <button
@@ -963,7 +963,7 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
 
       {/* Swap banner */}
       {swap && (
-        <div className="bg-primary/10 border border-primary/30 rounded-xl px-3 py-2 flex items-center gap-2">
+        <div className="stripes-type-ui bg-primary/10 border border-primary/30 rounded-xl px-3 py-2 flex items-center gap-2">
           <ArrowLeftRight className="w-3.5 h-3.5 text-primary shrink-0" />
           <p className="text-xs font-semibold text-primary flex-1">
             Selected <span className="font-black">{displayName(teams.flatMap(t => t.players).find(p => p.id === swap.playerId) || { name: "player" })}</span> — tap another player to swap, or tap Move here on a team
@@ -974,7 +974,7 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
 
       {/* Teams grid — 2 columns */}
       {teams.length > 0 && (
-        <div className={`grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 lg:gap-3 transition-opacity duration-300 ${isGenerating ? "opacity-50" : "opacity-100"}`}>
+        <div className={`stripes-type-ui grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 lg:gap-3 transition-opacity duration-300 ${isGenerating ? "opacity-50" : "opacity-100"}`}>
           {teams.map((team, index) => {
             const col = colorFor(team.color);
             const accentColor = team.color === "white" ? "hsl(var(--border))" : col.hex;
@@ -1195,7 +1195,7 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
           <Button
             size="sm"
             variant="outline"
-            className={`h-9 rounded-xl border-slate-200 bg-white px-3 text-[12px] font-black tracking-tight text-[#102A43] shadow-sm hover:bg-slate-50 ${tutorialStep === "present" ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
+            className={`stripes-type-ui h-9 rounded-xl border-slate-200 bg-white px-3 text-[12px] font-black tracking-tight text-[#102A43] shadow-sm hover:bg-slate-50 ${tutorialStep === "present" ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
             onClick={() => { setPresentTeamsOpen(true); onTutorialAction?.("presented"); }}
             disabled={isGenerating}
             title="Show teams full screen"

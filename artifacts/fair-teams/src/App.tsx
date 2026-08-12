@@ -3626,7 +3626,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 <TabsTrigger
                   key={value}
                   value={value}
-                  className={`fairteams-tab-trigger fairteams-desktop-nav-trigger stripes-type-ui flex h-[3.25rem] w-full justify-start gap-3.5 rounded-xl border border-transparent px-3.5 text-[16px] font-black text-slate-500 shadow-none transition-colors hover:bg-slate-50 data-[state=active]:border-slate-200 data-[state=active]:bg-slate-50 data-[state=active]:text-[#102A43] data-[state=active]:shadow-none ${(tutorialStep === "today-tab" && value === "teams") || (tutorialStep === "club-tab" && value === "club") || (tutorialStep === "roster-return" && value === "players") ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
+                  className={`fairteams-tab-trigger fairteams-desktop-nav-trigger stripes-type-ui flex h-[3.5rem] w-full justify-start gap-3.5 rounded-xl border border-transparent px-3.5 text-[17px] font-black text-slate-500 shadow-none transition-colors hover:bg-slate-50 data-[state=active]:border-slate-200 data-[state=active]:bg-slate-50 data-[state=active]:text-[#102A43] data-[state=active]:shadow-none ${(tutorialStep === "today-tab" && value === "teams") || (tutorialStep === "club-tab" && value === "club") || (tutorialStep === "roster-return" && value === "players") ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
                 >
                   {value === "teams" ? (
                     <TeamStripesIcon className="h-6 w-6 shrink-0" />
@@ -3642,22 +3642,22 @@ They will no longer be able to open or edit this shared roster unless it is shar
         )}
 
         {!shouldShowTodayStartHeader && (
-          <header className="sticky top-0 z-30 hidden min-h-[76px] items-center justify-between gap-5 border-b border-slate-200 bg-white/94 px-7 py-3 shadow-sm backdrop-blur lg:flex">
+          <header className="sticky top-0 z-30 hidden min-h-[82px] items-center justify-between gap-5 border-b border-slate-200 bg-white/94 px-7 py-3 shadow-sm backdrop-blur lg:flex">
             <div className="flex min-w-0 items-center">
               <div className="min-w-0">
                 <div className="flex min-w-0 items-center gap-2">
-                  <h1 className="stripes-type-ui truncate text-[23px] font-black tracking-tight text-[#102A43]" title={activeRosterName}>{activeRosterName}</h1>
+                  <h1 className="stripes-type-ui truncate text-[26px] font-black tracking-tight text-[#102A43]" title={activeRosterName}>{activeRosterName}</h1>
                   {!isEmptyStarterRoster && (
                     <span className={`stripes-type-ui inline-flex h-5 shrink-0 items-center rounded-full px-1.5 text-[11px] font-black uppercase tracking-wide ${activeRosterIsShared ? "bg-violet-50 text-violet-700 ring-1 ring-violet-100" : "bg-slate-100 text-slate-500"}`}>
                       {activeRosterIsShared ? "Shared" : "Local"}
                     </span>
                   )}
                 </div>
-                <div className="mt-0.5 text-xs font-bold text-slate-400">{activeTab === "players" ? "Roster" : activeTab === "teams" ? "Teams" : "Club"}</div>
+                <div className="mt-0.5 text-[13px] font-bold text-slate-400">{activeTab === "players" ? "Roster" : activeTab === "teams" ? "Teams" : "Club"}</div>
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-2">
-              <button type="button" onClick={openGroupSettings} className="stripes-type-ui inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-black text-[#102A43] shadow-sm hover:bg-slate-50" title="Edit roster">
+              <button type="button" onClick={openGroupSettings} className="stripes-type-ui inline-flex h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 text-[15px] font-black text-[#102A43] shadow-sm hover:bg-slate-50" title="Edit roster">
                 <Pencil className="h-[18px] w-[18px]" strokeWidth={2.25} /> Edit
               </button>
               <button
@@ -3674,7 +3674,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                     }
                   }
                 }}
-                className={`stripes-type-ui inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-black text-[#102A43] shadow-sm hover:bg-slate-50 ${tutorialStep === "settings-button" ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
+                className={`stripes-type-ui inline-flex h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 text-[15px] font-black text-[#102A43] shadow-sm hover:bg-slate-50 ${tutorialStep === "settings-button" ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
                 title="Roster tools"
               >
                 <Settings className="h-[18px] w-[18px]" strokeWidth={2.25} /> Settings

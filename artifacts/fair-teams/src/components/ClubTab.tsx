@@ -2646,8 +2646,8 @@ export function ClubTab({
               <UsersRound className="fairteams-desktop-balanced-icon h-5 w-5 lg:h-6 lg:w-6" />
             </div>
             <span className="min-w-0">
-              <span className="block text-[17px] font-black leading-tight text-[#102A43] lg:text-[20px]">Player Management</span>
-              <span className="mt-0.5 block text-[10px] font-bold text-[#52746d] lg:text-[12px]">Ratings · Attendance · Rules · Warnings</span>
+              <span className="block text-[17px] font-black leading-tight text-[#102A43] lg:text-[22px]">Player Management</span>
+              <span className="mt-0.5 block text-[10px] font-bold text-[#52746d] lg:text-[13px]">Ratings · Attendance · Rules · Warnings</span>
             </span>
           </button>
           <button
@@ -2665,14 +2665,14 @@ export function ClubTab({
             <div className="mt-3 overflow-hidden rounded-[1.25rem] border border-slate-200 bg-white shadow-sm">
               <button
                 type="button"
-                className="flex min-h-[3.25rem] w-full items-center gap-2.5 px-3 py-2 text-left transition hover:bg-[#f4f9f7] active:bg-[#eaf4f1] disabled:opacity-45"
+                className="flex min-h-[3.25rem] lg:min-h-[3.75rem] w-full items-center gap-2.5 px-3 py-2 text-left transition hover:bg-[#f4f9f7] active:bg-[#eaf4f1] disabled:opacity-45"
                 disabled={!clubRatingsEnabled || players.length === 0}
                 onClick={() => setRatingBoardOpen(true)}
               >
                 <Star className="h-4 w-4 shrink-0 text-[#3f756b] lg:h-5 lg:w-5" />
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[12px] font-black text-[#102A43] lg:text-sm">Club ratings</span>
-                  <span className="block truncate text-[10px] font-bold text-slate-500 lg:text-[11px]">
+                  <span className="block text-[12px] font-black text-[#102A43] lg:text-[15px]">Club ratings</span>
+                  <span className="block truncate text-[10px] font-bold text-slate-500 lg:text-[13px]">
                     {clubRatingsEnabled ? `${clubRatedCount}/${players.length} rated` : isSharedRoster ? "Sign in to rate" : "Shared rosters only"}
                   </span>
                 </span>
@@ -2681,14 +2681,14 @@ export function ClubTab({
 
               <button
                 type="button"
-                className="flex min-h-[3.25rem] w-full items-center gap-2.5 border-t border-slate-100 px-3 py-2 text-left transition hover:bg-[#f4f9f7] active:bg-[#eaf4f1] disabled:opacity-45"
+                className="flex min-h-[3.25rem] lg:min-h-[3.75rem] w-full items-center gap-2.5 border-t border-slate-100 px-3 py-2 text-left transition hover:bg-[#f4f9f7] active:bg-[#eaf4f1] disabled:opacity-45"
                 disabled={!attendanceEnabled}
                 onClick={() => { setAttendanceHistoryPlayerId(null); setAttendanceBoardOpen(true); }}
               >
                 <Clock3 className="h-4 w-4 shrink-0 text-[#3f756b] lg:h-5 lg:w-5" />
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[12px] font-black text-[#102A43] lg:text-sm">Attendance</span>
-                  <span className="block truncate text-[10px] font-bold text-slate-500 lg:text-[11px]">
+                  <span className="block text-[12px] font-black text-[#102A43] lg:text-[15px]">Attendance</span>
+                  <span className="block truncate text-[10px] font-bold text-slate-500 lg:text-[13px]">
                     {attendanceEnabled ? "Shared organizer log" : isSharedRoster ? "Sign in to record" : "Shared rosters only"}
                   </span>
                 </span>
@@ -2697,14 +2697,14 @@ export function ClubTab({
 
               <button
                 type="button"
-                className="flex min-h-[3.25rem] w-full items-center gap-2.5 border-t border-slate-100 px-3 py-2 text-left transition hover:bg-[#f4f9f7] active:bg-[#eaf4f1] disabled:opacity-45"
+                className="flex min-h-[3.25rem] lg:min-h-[3.75rem] w-full items-center gap-2.5 border-t border-slate-100 px-3 py-2 text-left transition hover:bg-[#f4f9f7] active:bg-[#eaf4f1] disabled:opacity-45"
                 disabled={!onOpenPairingRules || playerCount < 2}
                 onClick={onOpenPairingRules}
               >
                 <ClipboardList className="h-4 w-4 shrink-0 text-[#3f756b] lg:h-5 lg:w-5" />
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[12px] font-black text-[#102A43] lg:text-sm">Rules</span>
-                  <span className="block truncate text-[10px] font-bold text-slate-500 lg:text-[11px]">
+                  <span className="block text-[12px] font-black text-[#102A43] lg:text-[15px]">Rules</span>
+                  <span className="block truncate text-[10px] font-bold text-slate-500 lg:text-[13px]">
                     {cleanPairingRuleCount > 0 ? `${cleanPairingRuleCount} pairing rule${cleanPairingRuleCount === 1 ? "" : "s"}` : "No pairing rules"}
                   </span>
                 </span>
@@ -2713,14 +2713,14 @@ export function ClubTab({
 
               <button
                 type="button"
-                className="flex min-h-[3.25rem] w-full items-center gap-2.5 border-t border-slate-100 px-3 py-2 text-left transition hover:bg-[#f4f9f7] active:bg-[#eaf4f1] disabled:opacity-45"
+                className="flex min-h-[3.25rem] lg:min-h-[3.75rem] w-full items-center gap-2.5 border-t border-slate-100 px-3 py-2 text-left transition hover:bg-[#f4f9f7] active:bg-[#eaf4f1] disabled:opacity-45"
                 disabled={!attendanceEnabled}
                 onClick={() => { setAttendanceWarningPlayerSearch(""); setAttendanceWarningBoardOpen(true); }}
               >
                 <AlertTriangle className="h-4 w-4 shrink-0 text-[#3f756b] lg:h-5 lg:w-5" />
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[12px] font-black text-[#102A43] lg:text-sm">Warnings</span>
-                  <span className="block truncate text-[10px] font-bold text-slate-500 lg:text-[11px]">
+                  <span className="block text-[12px] font-black text-[#102A43] lg:text-[15px]">Warnings</span>
+                  <span className="block truncate text-[10px] font-bold text-slate-500 lg:text-[13px]">
                     {attendanceEnabled ? `${attendanceOverview.length} player${attendanceOverview.length === 1 ? "" : "s"} with recorded issues` : isSharedRoster ? "Sign in to use warnings" : "Shared rosters only"}
                   </span>
                 </span>
@@ -2808,8 +2808,8 @@ export function ClubTab({
               <KeyRound className="fairteams-desktop-balanced-icon h-[18px] w-[18px] lg:h-5 lg:w-5" />
             </div>
             <span className="min-w-0">
-              <span className="block truncate text-[17px] font-black leading-tight text-[#102A43] lg:text-[20px]">Club Access</span>
-              <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[10px] font-bold text-violet-700/75 lg:text-[12px]">
+              <span className="block truncate text-[17px] font-black leading-tight text-[#102A43] lg:text-[22px]">Club Access</span>
+              <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[10px] font-bold text-violet-700/75 lg:text-[13px]">
                 {clubUser && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" aria-label="Online" />}
                 <span className="truncate">
                   {clubUser && !isSharedRoster
@@ -2834,7 +2834,7 @@ export function ClubTab({
             {clubUser && (
               <Button
                 type="button"
-                className="h-8 shrink-0 rounded-full border border-violet-100 bg-white px-2.5 text-[10px] font-black text-violet-700 hover:bg-violet-50 lg:h-9 lg:px-3 lg:text-xs"
+                className="h-8 shrink-0 rounded-full border border-violet-100 bg-white px-2.5 text-[10px] font-black text-violet-700 hover:bg-violet-50 lg:h-10 lg:px-3.5 lg:text-[13px]"
                 onClick={(event) => {
                   event.stopPropagation();
                   void signOutOfSharedRosters();
@@ -2856,12 +2856,12 @@ export function ClubTab({
 
         {clubUser && !isSharedRoster && onOpenSharedRosters && (
           <div className="mt-2 flex flex-col gap-2 rounded-2xl border border-violet-100 bg-white/75 px-3 py-2.5 min-[360px]:flex-row min-[360px]:items-center min-[360px]:justify-between">
-            <div className="min-w-0 text-[11px] font-semibold leading-snug text-violet-800/75 lg:text-[13px]">
+            <div className="min-w-0 text-[11px] font-semibold leading-snug text-violet-800/75 lg:text-[14px]">
               You’re signed in. Open a shared roster to use the shared Club workspace.
             </div>
             <Button
               type="button"
-              className="h-9 shrink-0 rounded-xl bg-violet-600 px-3 text-[11px] font-black text-white hover:bg-violet-700 lg:text-xs"
+              className="h-9 shrink-0 rounded-xl bg-violet-600 px-3 text-[11px] font-black text-white hover:bg-violet-700 lg:h-10 lg:px-4 lg:text-[13px]"
               onClick={(event) => {
                 event.stopPropagation();
                 setClubDeskCollapsed(false);

@@ -1079,7 +1079,7 @@ export function TaskBoard({
 
   const openCardDetail = (card: TaskBoardCard) => {
     if (!isMobileBoardViewport()) {
-      toggleExpanded(card.id);
+      setActiveCardId(card.id);
       return;
     }
     if (typeof window !== "undefined") {
@@ -3028,6 +3028,41 @@ export function TaskBoard({
                     <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{stageLabel}</div>
                   </div>
                   <button type="button" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-slate-500 active:bg-slate-100" onClick={() => openEditCard(activeCard)} aria-label="Edit card">
+                    <Pencil className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-white">
+                  {renderCard(activeCard, false, true)}
+                </div>
+              </div>
+            );
+          })()}
+
+          {activeCardId && (() => {
+            const activeCard = board.cards.find((card) => card.id === activeCardId);
+            if (!activeCard) return null;
+            const activeStage = stageForCard(activeCard);
+            const stageLabel = activeStage === "deciding" ? "Decide" : activeStage === "action" ? "To-do" : activeStage === "done" ? "Done" : "Idea";
+            return (
+              <div className="absolute inset-y-0 right-0 z-40 hidden w-[min(34rem,46vw)] flex-col border-l border-slate-200 bg-white shadow-[-18px_0_40px_rgba(15,23,42,0.10)] lg:flex">
+                <div className="flex shrink-0 items-center gap-2 border-b border-slate-200 bg-white/95 px-3 py-3 backdrop-blur">
+                  <button
+                    type="button"
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-[#102A43] hover:bg-slate-100"
+                    onClick={closeCardDetail}
+                    aria-label="Close card details"
+                  >
+                    <ArrowLeft className="h-5 w-5" />
+                  </button>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{stageLabel}</div>
+                  </div>
+                  <button
+                    type="button"
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-slate-500 hover:bg-slate-100"
+                    onClick={() => openEditCard(activeCard)}
+                    aria-label="Edit card"
+                  >
                     <Pencil className="h-4 w-4" />
                   </button>
                 </div>

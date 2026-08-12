@@ -29,4 +29,12 @@ Status: complete. Implementation commit: `bf7cc61`.
 - Migrated only Action Board “Product link” to the proven `StripesSheetContent`.
 - Preserved its existing state, validation, autofocus, remove/save behavior, and narrower geometry.
 
+## P2-3 — Editor exemplar
+
+Status: complete. Implementation commit: `587d688`.
+
+- Added `StripesEditorContent` as a separate wrapper around the existing `DialogContent`.
+- Migrated only Action Board “New topic”.
+- Preserved its mobile-bottom/desktop-centered geometry, scrolling, autofocus, state reset, validation, and creation flow.
+
 After each completed P2 item, record its status, implementation commit, and any important architectural decision.

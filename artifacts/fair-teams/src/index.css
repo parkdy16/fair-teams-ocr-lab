@@ -524,6 +524,10 @@
     opacity: 1;
     transform: none;
   }
+
+  .stripes-splash-final {
+    filter: none;
+  }
 }
 
 

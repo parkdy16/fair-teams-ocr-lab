@@ -1,5 +1,6 @@
 import * as React from "react";
 
+import { AlertDialogContent } from "@/components/ui/alert-dialog";
 import { DialogContent } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
@@ -33,4 +34,16 @@ const StripesEditorContent = React.forwardRef<
 ));
 StripesEditorContent.displayName = "StripesEditorContent";
 
-export { StripesEditorContent, StripesSheetContent };
+const StripesConfirmContent = React.forwardRef<
+  React.ElementRef<typeof AlertDialogContent>,
+  React.ComponentPropsWithoutRef<typeof AlertDialogContent>
+>(({ className, ...props }, ref) => (
+  <AlertDialogContent
+    ref={ref}
+    className={cn("stripes-type-ui max-w-xs rounded-xl", className)}
+    {...props}
+  />
+));
+StripesConfirmContent.displayName = "StripesConfirmContent";
+
+export { StripesConfirmContent, StripesEditorContent, StripesSheetContent };

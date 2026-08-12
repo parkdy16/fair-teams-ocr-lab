@@ -16,7 +16,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { UserMinus, Plus, Star, Zap, Search, X, Camera, Image as ImageIcon, Trash2, Pencil, Shield, Activity, Dumbbell, Target, Share2, ArrowDownAZ, Clock3, Mic, Info, Eye, EyeOff } from "lucide-react";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { StripesConfirmContent } from "@/components/ui/stripes-modal";
 import { PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart, ResponsiveContainer } from "recharts";
 import {
   listenToClubRatingSummaries,
@@ -3107,7 +3108,7 @@ export function PlayersTab({
                             <UserMinus className="w-3 h-3" />
                           </Button>
                         </AlertDialogTrigger>
-                        <AlertDialogContent className="stripes-type-ui max-w-xs rounded-xl">
+                        <StripesConfirmContent>
                           <AlertDialogHeader>
                             <AlertDialogTitle>{isSharedRoster ? "Remove from shared roster?" : "Remove Player?"}</AlertDialogTitle>
                             <AlertDialogDescription>
@@ -3122,7 +3123,7 @@ export function PlayersTab({
                               {isSharedRoster ? "Remove for everyone" : "Remove"}
                             </AlertDialogAction>
                           </AlertDialogFooter>
-                        </AlertDialogContent>
+                        </StripesConfirmContent>
                       </AlertDialog>
                     </div>
                   </div>

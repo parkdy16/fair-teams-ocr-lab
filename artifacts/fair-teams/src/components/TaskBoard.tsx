@@ -3424,7 +3424,7 @@ export function TaskBoard({
       </Dialog>
 
       <Dialog open={Boolean(votingCard && votingDecision)} onOpenChange={(open) => { if (!open) { setVotingCardId(null); setVotingDecisionId(null); setSelectedVoteAnswers({}); } }}>
-        <DialogContent className="fixed bottom-2 left-2 right-2 top-auto box-border min-w-0 max-h-[90dvh] w-auto max-w-[calc(100vw-1rem)] translate-x-0 translate-y-0 overflow-x-hidden overflow-y-auto rounded-[2rem] p-4 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-md sm:-translate-x-1/2">
+        <StripesSheetContent className="box-border min-w-0 max-h-[90dvh] max-w-[calc(100vw-1rem)] overflow-x-hidden overflow-y-auto sm:max-w-md">
           <DialogHeader><DialogTitle className="text-left text-base font-semibold text-[#102A43]">{votingDecision?.kind === "schedule" ? "Schedule response" : votingDecision?.decisionType === "players" ? "Player decision" : "Vote in Stripes"}</DialogTitle></DialogHeader>
           {votingDecision && <div className="grid w-full max-w-full min-w-0 gap-3 [&>*]:min-w-0">
             {votingDecision.title?.trim() && <div className="whitespace-normal break-words text-sm font-semibold leading-relaxed text-[#102A43]">{votingDecision.title}</div>}
@@ -3480,11 +3480,11 @@ export function TaskBoard({
             <div className="text-[10px] font-normal leading-snug text-slate-500">{votingDecision.kind === "schedule" ? "Your schedule response is visible to the host so they can find the best overlap." : votingDecision.decisionType === "players" ? "Answer each player using the choices set by the organizer. Your ballot is anonymous and can be updated while the decision remains open." : "Anonymous. You can change your answer while it remains open."}</div>
             <Button type="button" className="h-11 rounded-2xl bg-amber-600 font-semibold text-white" disabled={decisionQuestions(votingDecision).some((question) => !(selectedVoteAnswers[question.id] || []).length) || voteSubmitting} onClick={() => void submitVote()}>{voteSubmitting ? "Recording…" : votingDecision.ballots?.some((ballot) => ballot.voterHash === currentVoterHash) ? "Update" : "Submit"}</Button>
           </div>}
-        </DialogContent>
+        </StripesSheetContent>
       </Dialog>
 
       <Dialog open={Boolean(finalizeScheduleCard && finalizeScheduleDecision)} onOpenChange={(open) => { if (!open) { setFinalizeScheduleCardId(null); setFinalizeScheduleDecisionId(null); } }}>
-        <DialogContent className="fixed bottom-2 left-2 right-2 top-auto max-h-[90dvh] w-auto max-w-none translate-x-0 translate-y-0 overflow-y-auto rounded-[2rem] p-4 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-md sm:-translate-x-1/2" onOpenAutoFocus={(event) => event.preventDefault()}>
+        <StripesSheetContent className="max-h-[90dvh] overflow-y-auto" onOpenAutoFocus={(event) => event.preventDefault()}>
           <DialogHeader><DialogTitle className="text-left text-base font-semibold text-[#102A43]">Finalize schedule</DialogTitle></DialogHeader>
           {finalizeScheduleDecision && <div className="grid gap-3">
             <div className="rounded-2xl bg-sky-50 px-3 py-2.5 text-[11px] font-normal text-sky-900">You can finalize before everyone responds. The host makes the final call.</div>
@@ -3508,7 +3508,7 @@ export function TaskBoard({
             </div>
             <Button type="button" className="h-11 rounded-2xl bg-sky-700 font-semibold text-white hover:bg-sky-800" disabled={saving || !finalScheduleTime || !finalScheduleLocation || (Boolean(finalScheduleMeetingUrl.trim()) && !validHttpUrl(finalScheduleMeetingUrl))} onClick={() => void finalizeSchedule()}>{saving ? "Saving…" : "Confirm schedule"}</Button>
           </div>}
-        </DialogContent>
+        </StripesSheetContent>
       </Dialog>
 
       <Dialog open={Boolean(outcomeCardId && outcomeDecisionId)} onOpenChange={(open) => { if (!open) { setOutcomeCardId(null); setOutcomeDecisionId(null); } }}>

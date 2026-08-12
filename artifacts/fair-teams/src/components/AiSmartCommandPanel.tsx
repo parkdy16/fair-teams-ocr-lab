@@ -1929,10 +1929,10 @@ export function AiSmartCommandPanel({
             </div>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <h3 className="text-[17px] font-black leading-tight text-[#102A43] lg:text-[20px]">Help</h3>
+                <h3 className="text-[17px] font-black leading-tight text-[#102A43] lg:text-[22px]">Help</h3>
                 <span className="hidden rounded-full bg-white px-2 py-0.5 text-[9px] font-black text-slate-500 shadow-sm ring-1 ring-slate-200 lg:inline-flex">{AI_ASSISTANT_VERSION_LABEL}</span>
               </div>
-              <p className="mt-0.5 truncate text-[10px] font-bold text-slate-500 lg:text-[12px]">
+              <p className="mt-0.5 truncate text-[10px] font-bold text-slate-500 lg:text-[13px]">
                 Ask Stripes how anything works.
               </p>
             </div>
@@ -1955,7 +1955,7 @@ export function AiSmartCommandPanel({
             onChange={(event) => setCommandText(event.target.value)}
             onFocus={() => setHelpExpanded(true)}
             rows={isHelpExpanded ? 3 : 2}
-            className={`w-full resize-none rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold lg:text-[15px] text-[#102A43] outline-none focus:border-slate-400 ${isHelpExpanded ? "min-h-[84px]" : "min-h-[58px] lg:min-h-[52px]"} ${tutorialActive ? "fairteams-tutorial-pulse" : ""}`}
+            className={`w-full resize-none rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold lg:text-[16px] text-[#102A43] outline-none focus:border-slate-400 ${isHelpExpanded ? "min-h-[84px] lg:min-h-[104px]" : "min-h-[58px] lg:min-h-[64px]"} ${tutorialActive ? "fairteams-tutorial-pulse" : ""}`}
             placeholder={placeholder}
           />
           <div className="mt-2 grid grid-cols-[repeat(auto-fit,minmax(min(100%,4.5rem),1fr))] gap-2">
@@ -1963,7 +1963,7 @@ export function AiSmartCommandPanel({
               type="button"
               onClick={submit}
               disabled={busy || voiceBusy || !commandText.trim()}
-              className={`h-10 rounded-2xl bg-[#102A43] px-3 text-[11px] font-black uppercase tracking-wide text-white disabled:opacity-45 lg:text-xs ${tutorialActive ? "fairteams-tutorial-pulse" : ""}`}
+              className={`h-10 rounded-2xl bg-[#102A43] px-3 text-[11px] font-black uppercase tracking-wide text-white disabled:opacity-45 lg:h-11 lg:px-4 lg:text-[13px] ${tutorialActive ? "fairteams-tutorial-pulse" : ""}`}
             >
               {busy ? "Thinking…" : "Ask"}
             </button>
@@ -1971,7 +1971,7 @@ export function AiSmartCommandPanel({
               type="button"
               onClick={recording ? stopVoiceRecording : startVoiceRecording}
               disabled={busy || voiceBusy}
-              className={`h-10 rounded-2xl px-3 text-[11px] font-black uppercase tracking-wide text-white disabled:opacity-45 lg:text-xs ${recording ? "bg-rose-600" : "bg-slate-600"}`}
+              className={`h-10 rounded-2xl px-3 text-[11px] font-black uppercase tracking-wide text-white disabled:opacity-45 lg:h-11 lg:px-4 lg:text-[13px] ${recording ? "bg-rose-600" : "bg-slate-600"}`}
             >
               {voiceBusy ? "Hearing…" : recording ? "Done" : "Voice"}
             </button>
@@ -2012,14 +2012,14 @@ export function AiSmartCommandPanel({
       {result && (
         <div
           id="fairteams-help-answer"
-          className={`mt-3 rounded-2xl bg-white p-3 text-xs text-[#102A43] shadow-sm ${tutorialAnswerReady ? "fairteams-tutorial-pulse ring-2 ring-violet-300" : ""}`}
+          className={`mt-3 rounded-2xl bg-white p-3 text-xs text-[#102A43] shadow-sm lg:p-4 lg:text-sm ${tutorialAnswerReady ? "fairteams-tutorial-pulse ring-2 ring-violet-300" : ""}`}
         >
           {tutorialAnswerReady && (
             <div className="mb-2 inline-flex rounded-full bg-violet-100 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-violet-700">
               Answer ready
             </div>
           )}
-          <div className="rounded-2xl bg-violet-50 px-3 py-2 text-sm font-bold leading-snug text-[#102A43]">
+          <div className="rounded-2xl bg-violet-50 px-3 py-2 text-sm font-bold leading-snug text-[#102A43] lg:px-4 lg:py-3 lg:text-[15px] lg:leading-relaxed">
             {result.assistantSummary || "I’m listening."}
           </div>
           {(result.actions.length > 0 || result.confirmations.length > 0 || result.unresolved.length > 0) && (

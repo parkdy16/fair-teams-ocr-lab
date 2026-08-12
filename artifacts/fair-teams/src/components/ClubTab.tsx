@@ -2906,8 +2906,8 @@ export function ClubTab({
               <StickyNote className="fairteams-desktop-balanced-icon h-[18px] w-[18px] lg:h-6 lg:w-6" />
             </div>
             <span className="min-w-0">
-              <span className="block text-[17px] font-black leading-tight text-[#102A43] md:text-[18px] lg:text-[20px]">Club Notes</span>
-              <span className="mt-0.5 block truncate text-[10px] font-bold text-[#9a641f] lg:text-[12px]">
+              <span className="block text-[17px] font-black leading-tight text-[#102A43] md:text-[18px] lg:text-[22px]">Club Notes</span>
+              <span className="mt-0.5 block truncate text-[10px] font-bold text-[#9a641f] lg:text-[13px]">
                 {previewClubNotes[0] ? `Latest: ${previewClubNotes[0].text}` : "Shared notes for organizers"}
               </span>
             </span>
@@ -2924,7 +2924,7 @@ export function ClubTab({
             {clubNotes.length > 0 && (
               <button
                 type="button"
-                className="rounded-full bg-transparent px-2.5 py-1 text-[11px] font-black text-[#a94f0a] active:scale-95 lg:text-xs"
+                className="rounded-full bg-transparent px-2.5 py-1 text-[11px] font-black text-[#a94f0a] active:scale-95 lg:px-3 lg:py-1.5 lg:text-[13px]"
                 onClick={() => setClubNotesOpen(true)}
               >
                 View all
@@ -2932,7 +2932,7 @@ export function ClubTab({
             )}
             <Button
               type="button"
-              className="h-9 rounded-full bg-[#c8772a] px-3 text-[11px] font-black text-white hover:bg-[#af691f] lg:text-xs"
+              className="h-9 rounded-full bg-[#c8772a] px-3 text-[11px] font-black text-white hover:bg-[#af691f] lg:h-10 lg:px-4 lg:text-[13px]"
               onClick={() => setClubNotesOpen(true)}
               disabled={!clubNotesEnabled}
             >
@@ -2946,7 +2946,7 @@ export function ClubTab({
             previewClubNotes.map((note, index) => (
               <div
                 key={note.id}
-                className={`relative rounded-[0.8rem] border border-black/5 px-2.5 py-2.5 shadow-[0_4px_8px_rgba(130,85,35,0.22)] ring-1 ring-white/25 md:min-w-[10rem] lg:min-w-0 ${previewClubNotes.length === 1 ? "min-h-[5.75rem] w-[9.75rem] lg:w-[12rem]" : "min-h-[6.45rem]"}`}
+                className={`relative rounded-[0.8rem] border border-black/5 px-2.5 py-2.5 shadow-[0_4px_8px_rgba(130,85,35,0.22)] ring-1 ring-white/25 md:min-w-[10rem] lg:min-w-0 lg:px-3 lg:py-3 ${previewClubNotes.length === 1 ? "min-h-[5.75rem] w-[9.75rem] lg:min-h-[6.5rem] lg:w-[13rem]" : "min-h-[6.45rem] lg:min-h-[7rem]"}`}
                 style={clubNoteStyle(index)}
               >
                 <div className="flex h-full flex-col">
@@ -2956,7 +2956,7 @@ export function ClubTab({
                   >
                     {note.text}
                   </div>
-                  <div className="mt-1.5 pr-4 text-[9px] font-bold leading-tight text-slate-600/80">
+                  <div className="mt-1.5 pr-4 text-[9px] font-bold leading-tight text-slate-600/80 lg:mt-2 lg:text-[11px]">
                     <div className="truncate">— {note.createdByName || "Organizer"}</div>
                   </div>
                 </div>
@@ -2994,10 +2994,10 @@ export function ClubTab({
               <AntiqueBallIcon className="h-[18px] w-[18px] lg:h-6 lg:w-6" />
             </div>
             <div className="min-w-0 flex-1">
-            <div className="text-[17px] font-black leading-tight text-[#102A43] md:text-[18px] lg:text-[20px]">
+            <div className="text-[17px] font-black leading-tight text-[#102A43] md:text-[18px] lg:text-[22px]">
               Equipment
             </div>
-            <div className="mt-1 hidden text-xs font-semibold leading-snug text-slate-500 md:block md:text-[12px] lg:text-[14px] lg:leading-relaxed">
+            <div className="mt-1 hidden text-xs font-semibold leading-snug text-slate-500 md:block md:text-[12px] lg:text-[15px] lg:leading-relaxed">
               Drag bags between people and club storage, or select a bag for details.
             </div>
             <div className="mt-1 text-[10px] font-black text-slate-400 md:hidden">
@@ -3010,7 +3010,7 @@ export function ClubTab({
           </button>
           <Button
             type="button"
-            className="hidden h-9 shrink-0 rounded-2xl border border-slate-100 bg-white px-3 text-xs font-black text-[#102A43] shadow-sm hover:bg-slate-50 lg:inline-flex lg:text-sm"
+            className="hidden h-9 shrink-0 rounded-2xl border border-slate-100 bg-white px-3 text-xs font-black text-[#102A43] shadow-sm hover:bg-slate-50 lg:inline-flex lg:h-10 lg:px-4 lg:text-[14px]"
             onClick={() => setEquipmentBoardOpen(true)}
           >
             Open
@@ -3030,9 +3030,9 @@ export function ClubTab({
                 <div
                   key={`dashboard-${holder.id}`}
                   data-equipment-holder-id={holder.id}
-                  className={`grid grid-cols-[4.8rem_minmax(0,1fr)] items-center gap-2 px-2.5 py-2 transition ${index === 0 ? "" : "border-t border-slate-100"} ${highlighted ? "bg-emerald-50 ring-2 ring-inset ring-emerald-100" : ""}`}
+                  className={`grid grid-cols-[4.8rem_minmax(0,1fr)] items-center gap-2 px-2.5 py-2 transition lg:grid-cols-[6.5rem_minmax(0,1fr)] lg:gap-3 lg:px-3.5 lg:py-3 ${index === 0 ? "" : "border-t border-slate-100"} ${highlighted ? "bg-emerald-50 ring-2 ring-inset ring-emerald-100" : ""}`}
                 >
-                  <div className="truncate text-[11px] font-black text-[#102A43]">
+                  <div className="truncate text-[11px] font-black text-[#102A43] lg:text-[13px]">
                     {holder.label}
                   </div>
                   <div className="flex min-w-0 flex-wrap justify-end gap-1.5">
@@ -3043,7 +3043,7 @@ export function ClubTab({
                           <button
                             key={`dashboard-kit-${kit.id}`}
                             type="button"
-                            className={`touch-none select-none rounded-2xl border border-slate-200 bg-white px-2 py-1 text-left shadow-sm transition active:scale-[0.98] ${isDragging ? "scale-95 opacity-45 ring-2 ring-emerald-200" : ""}`}
+                            className={`touch-none select-none rounded-2xl border border-slate-200 bg-white px-2 py-1 text-left shadow-sm transition active:scale-[0.98] lg:px-2.5 lg:py-1.5 ${isDragging ? "scale-95 opacity-45 ring-2 ring-emerald-200" : ""}`}
                             onPointerDown={(event) =>
                               startEquipmentPointerDrag(event, kit)
                             }
@@ -3056,9 +3056,9 @@ export function ClubTab({
                             <span className="flex max-w-[7.4rem] items-center gap-1.5">
                               <DuffleBagIcon
                                 color={kit.color || DEFAULT_EQUIPMENT_COLOR}
-                                className="h-6 w-8 shrink-0"
+                                className="h-6 w-8 shrink-0 lg:h-7 lg:w-9"
                               />
-                              <span className="min-w-0 truncate text-[11px] font-black text-[#102A43]">
+                              <span className="min-w-0 truncate text-[11px] font-black text-[#102A43] lg:text-[13px]">
                                 {kit.name}
                               </span>
                             </span>
@@ -3066,7 +3066,7 @@ export function ClubTab({
                         );
                       })
                     ) : (
-                      <span className="rounded-full border border-dashed border-slate-200 bg-white/70 px-2 py-1 text-[10px] font-bold text-slate-400">
+                      <span className="rounded-full border border-dashed border-slate-200 bg-white/70 px-2 py-1 text-[10px] font-bold text-slate-400 lg:px-2.5 lg:py-1.5 lg:text-[12px]">
                         No bag
                       </span>
                     )}

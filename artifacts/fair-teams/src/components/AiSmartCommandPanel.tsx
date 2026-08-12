@@ -1920,7 +1920,7 @@ export function AiSmartCommandPanel({
   };
 
   return (
-    <section className="overflow-hidden rounded-[1.7rem] border border-slate-200 bg-[#f7f8fa] p-3 shadow-sm ring-1 ring-slate-100 lg:p-4">
+    <section className="stripes-type-ui overflow-hidden rounded-[1.7rem] border border-slate-200 bg-[#f7f8fa] p-3 shadow-sm ring-1 ring-slate-100 lg:p-4">
       <div className="lg:grid lg:grid-cols-[minmax(220px,0.62fr)_minmax(0,1.38fr)] lg:items-end lg:gap-5">
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2.5">

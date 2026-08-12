@@ -55,3 +55,11 @@ Status: complete. Implementation commit: 25afde9.
 - Migrated only Action Board “Evolution”.
 - Preserved its full-screen mobile and contained desktop workspace geometry, scrolling structure, close behavior, and feature logic.
 - No other workspace or dialog migrations were included.
+
+## P2-6 — To-do details sheet migration
+
+Status: complete. Implementation commit: c3b00d3.
+
+- Migrated Action Board “To-do details” to the proven `StripesSheetContent`.
+- Preserved existing state, autofocus, people selection, validation, save behavior, and geometry.
+- No feature logic changed.

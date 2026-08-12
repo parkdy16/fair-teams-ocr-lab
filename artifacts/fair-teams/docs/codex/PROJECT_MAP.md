@@ -1,6 +1,6 @@
 # Stripes project map
 
-Verified: 2026-08-12  
+Verified: 2026-08-12
 Baseline commit: `9359997d8f49a137318d2c6ccecc7aa18dc12a13`
 
 ## Source boundaries

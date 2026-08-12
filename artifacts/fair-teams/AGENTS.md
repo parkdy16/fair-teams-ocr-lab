@@ -408,6 +408,18 @@ If a visual change appears to require persistence/backend changes, stop and expl
 
 ---
 
+## Context efficiency
+
+* Avoid redundant repository-wide discovery.
+* Before broad searches, check this file, `STRIPES_ROADMAP.md`, `docs/codex/PROJECT_MAP.md`, and the active phase plan.
+* Reuse recently verified documented facts and approved patterns unless relevant source changed or contradicts them.
+* For bounded tasks, inspect directly relevant live files first and expand only when targeted inspection is insufficient.
+* Do not rescan stale `src/src`, `.bak`, archives, generated output, or unrelated docs.
+* Do not recount an existing repository-wide inventory unless the task requires current counts.
+* Keep verification output and final reports concise: record pass/fail, actionable errors, relevant warnings, and implementation results.
+
+---
+
 ## Verification
 
 The repository currently has build and typecheck commands but no automated lint or test suite.

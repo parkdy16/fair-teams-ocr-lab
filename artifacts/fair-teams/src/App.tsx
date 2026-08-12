@@ -3571,7 +3571,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
   return (
     <div
       data-tutorial-active={tutorialActive ? "true" : undefined}
-      className="fairteams-visual-refresh stripes-type-ui flex h-[100dvh] min-h-[100dvh] w-full max-w-md flex-col overflow-hidden bg-background md:max-w-3xl lg:max-w-[1440px] lg:rounded-none xl:my-3 xl:h-[calc(100dvh-1.5rem)] xl:min-h-[calc(100dvh-1.5rem)] xl:rounded-[2rem] xl:border xl:border-slate-200 xl:shadow-xl mx-auto relative"
+      className="fairteams-visual-refresh stripes-type-ui flex h-[100dvh] min-h-[100dvh] w-full max-w-md flex-col overflow-hidden bg-background md:max-w-3xl lg:w-[96vw] lg:max-w-[1760px] lg:rounded-none xl:my-3 xl:h-[calc(100dvh-1.5rem)] xl:min-h-[calc(100dvh-1.5rem)] xl:rounded-[2rem] xl:border xl:border-slate-200 xl:shadow-xl mx-auto relative"
       style={{ "--roster-accent": identityAccentColor } as React.CSSProperties}
     >
       <Tabs
@@ -3998,7 +3998,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
 
         {!shouldShowTodayStartHeader && activeTab === "teams" && teamsWorkspaceView === "setup" && (
           <div className="pointer-events-none fixed inset-x-0 bottom-6 z-40 hidden lg:block">
-            <div className="mx-auto w-full max-w-[1440px] pl-[204px]">
+            <div className="mx-auto w-[96vw] max-w-[1760px] pl-[204px]">
               <div className="stripes-generate-dock stripes-type-ui pointer-events-auto mx-auto flex w-full max-w-md items-stretch gap-2 rounded-2xl p-1 shadow-[0_10px_30px_rgba(15,23,42,0.12)]">
                 <label className="relative block h-12 w-[68px] shrink-0" title="Number of teams">
                   <span className="pointer-events-none absolute left-0 right-0 top-1 text-center text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">Teams</span>

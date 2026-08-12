@@ -1,7 +1,6 @@
 import {
   ArrowRight,
   CalendarCheck2,
-  CheckCircle2,
   ClipboardList,
   PackageOpen,
   Shuffle,
@@ -141,6 +140,32 @@ export function MarketingHome() {
         </section>
 
         <section className="border-t border-slate-200/80 py-20 lg:py-24">
+          <SectionIntro
+            eyebrow="Inside Stripes"
+            title="One workflow from game day to club work."
+            body="The team generator stays fast and focused, while the Club workspace gives organizers room for the things that need to last beyond one session."
+          />
+
+          <div className="mt-10 grid gap-8">
+            <ProductScreenshot
+              eyebrow="Club workspace"
+              title="The organizer view."
+              body="Player management, club access, decisions, notes, equipment and Help live together without turning Stripes into another chat app."
+              src="/site/club-desktop.png"
+              alt="Stripes Club organizer workspace on desktop"
+            />
+
+            <ProductScreenshot
+              eyebrow="Action Board"
+              title="Decisions that don't disappear in chat."
+              body="Keep a topic visible from idea to decision to follow-through, with voting, ownership, due dates, links, comments and history when they are useful."
+              src="/site/action-board-desktop.png"
+              alt="Stripes Action Board with card details open on desktop"
+            />
+          </div>
+        </section>
+
+        <section className="border-t border-slate-200/80 py-20 lg:py-24">
           <div className="rounded-[2rem] bg-[#102A43] px-6 py-8 text-white sm:px-9 sm:py-10 lg:grid lg:grid-cols-[1fr_auto] lg:items-center lg:gap-12 lg:px-12">
             <div>
               <div className="text-xs font-extrabold uppercase tracking-[0.15em] text-emerald-200">
@@ -203,58 +228,61 @@ function HeroPreview() {
       <div className="absolute -left-8 -top-10 h-44 w-44 rounded-full bg-violet-100/65 blur-3xl" />
       <div className="absolute -bottom-10 -right-8 h-44 w-44 rounded-full bg-emerald-100/75 blur-3xl" />
 
-      <div className="relative overflow-hidden rounded-[2rem] border border-white/90 bg-white/85 p-4 shadow-[0_24px_70px_rgba(15,23,42,0.11)] backdrop-blur">
-        <div className="mb-4 flex items-center justify-between">
-          <div>
-            <div className="font-['Fredoka'] text-lg font-semibold">Saturday game</div>
-            <div className="text-[11px] font-semibold text-slate-400">20 players · 4 teams</div>
-          </div>
-          <div className="rounded-xl bg-[#102A43] px-3 py-2 text-[10px] font-bold text-white">
-            Generate
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-2">
-          {["Navy", "Purple", "Green", "Orange"].map((team, index) => (
-            <div
-              key={team}
-              className="rounded-[1.25rem] border border-slate-100 bg-slate-50/75 p-3"
-            >
-              <div className="mb-2 flex items-center gap-2">
-                <span
-                  className={`h-2.5 w-8 rounded-full ${
-                    index === 0
-                      ? "bg-[#102A43]"
-                      : index === 1
-                        ? "bg-violet-500"
-                        : index === 2
-                          ? "bg-emerald-500"
-                          : "bg-orange-400"
-                  }`}
-                />
-                <span className="text-[11px] font-bold text-slate-600">{team}</span>
-              </div>
-              <div className="space-y-1.5">
-                {[1, 2, 3, 4, 5].map((player) => (
-                  <div
-                    key={player}
-                    className="h-2.5 rounded-full bg-white ring-1 ring-slate-100"
-                    style={{ width: `${82 - player * 5}%` }}
-                  />
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div className="mt-3 flex items-center gap-2 rounded-[1.2rem] bg-[#f1f7f5] px-3 py-2.5">
-          <CheckCircle2 className="h-4 w-4 text-[#2f6f65]" />
-          <span className="text-[11px] font-bold text-[#2f6f65]">
-            Balanced teams ready to play
-          </span>
+      <div className="relative mx-auto w-fit rounded-[2.25rem] border border-white/90 bg-white/80 p-2.5 shadow-[0_24px_70px_rgba(15,23,42,0.12)] backdrop-blur">
+        <div className="overflow-hidden rounded-[1.8rem] border border-slate-200 bg-white">
+          <img
+            src="/site/teams-mobile.png"
+            alt="Stripes generated teams on mobile"
+            className="block h-auto w-full max-w-[19rem]"
+          />
         </div>
       </div>
+
+      <div className="relative mx-auto mt-4 max-w-sm text-center text-[11px] font-semibold leading-relaxed text-slate-400">
+        Choose who is playing, generate balanced teams, then adjust when you need to.
+      </div>
     </div>
+  );
+}
+
+function ProductScreenshot({
+  eyebrow,
+  title,
+  body,
+  src,
+  alt,
+}: {
+  eyebrow: string;
+  title: string;
+  body: string;
+  src: string;
+  alt: string;
+}) {
+  return (
+    <article className="overflow-hidden rounded-[2rem] border border-slate-200/80 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.07)]">
+      <div className="grid gap-6 p-5 sm:p-6 lg:grid-cols-[minmax(12rem,0.3fr)_minmax(0,0.7fr)] lg:items-center lg:gap-8 lg:p-8">
+        <div>
+          <div className="text-[10px] font-extrabold uppercase tracking-[0.15em] text-slate-400">
+            {eyebrow}
+          </div>
+          <h3 className="mt-2 font-['Fredoka'] text-[25px] font-semibold leading-tight tracking-[-0.02em] text-[#102A43] lg:text-[30px]">
+            {title}
+          </h3>
+          <p className="mt-3 text-sm font-medium leading-relaxed text-slate-500">
+            {body}
+          </p>
+        </div>
+
+        <figure className="overflow-hidden rounded-[1.4rem] border border-slate-200 bg-slate-50 shadow-sm">
+          <img
+            src={src}
+            alt={alt}
+            loading="lazy"
+            className="block h-auto w-full"
+          />
+        </figure>
+      </div>
+    </article>
   );
 }
 

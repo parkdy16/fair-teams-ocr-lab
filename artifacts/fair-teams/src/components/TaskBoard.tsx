@@ -853,6 +853,7 @@ export function TaskBoard({
   const [finalScheduleLocation, setFinalScheduleLocation] = useState("");
   const [finalScheduleMeetingUrl, setFinalScheduleMeetingUrl] = useState("");
 
+  const [addToCardId, setAddToCardId] = useState<string | null>(null);
   const [linkCardId, setLinkCardId] = useState<string | null>(null);
   const [linkUrl, setLinkUrl] = useState("");
   const [linkLabel, setLinkLabel] = useState("");
@@ -2838,12 +2839,18 @@ export function TaskBoard({
 
           {card.note?.trim() && <div className="mb-3 rounded-2xl bg-slate-50 px-3 py-3"><div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Note</div><p className="mt-1 whitespace-pre-wrap break-words text-sm font-normal leading-relaxed text-slate-700">{card.note.trim()}</p></div>}
 
-          {stage !== "done" && <div className="mb-3 flex flex-wrap gap-1.5">
-            <button type="button" className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 text-[11px] font-medium text-slate-600 hover:bg-slate-50" onClick={() => openEditCard(card, "note")}><Pencil className="h-3.5 w-3.5" />{card.note?.trim() ? "Edit note" : "Note"}</button>
-            <button type="button" className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 text-[11px] font-medium text-slate-600 hover:bg-slate-50" onClick={() => openEditCard(card, "assignees")}><Users className="h-3.5 w-3.5" />{displayPeople.length ? `Assignees · ${displayPeople.length}` : "Assignees"}</button>
-            <button type="button" className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 text-[11px] font-medium text-slate-600 hover:bg-slate-50" onClick={() => openEditCard(card, "due")}><CalendarDays className="h-3.5 w-3.5" />{card.dueDate ? dueText(card.dueDate) : "Due date"}</button>
-            {(card.links?.length || 0) < 5 && <button type="button" className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 text-[11px] font-medium text-slate-600 hover:bg-slate-50" onClick={() => openAddLink(card)}><Link2 className="h-3.5 w-3.5" />Link</button>}
-          </div>}
+          {stage !== "done" && (
+            <div className="mb-3">
+              <button
+                type="button"
+                className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 text-[11px] font-medium text-slate-600 hover:bg-slate-50"
+                onClick={() => setAddToCardId(card.id)}
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add to card
+              </button>
+            </div>
+          )}
 
           {(card.links?.length || 0) > 0 && <div className="mb-3 grid gap-1.5">
             {card.links?.map((link) => <div key={link.id} className="flex min-w-0 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2"><a href={link.url} target="_blank" rel="noreferrer" className="inline-flex min-w-0 flex-1 items-center gap-2 text-xs font-medium text-slate-700"><Link2 className="h-3.5 w-3.5 shrink-0 text-slate-400" /><span className="truncate">{link.label}</span><ExternalLink className="h-3 w-3 shrink-0 text-slate-400" /></a>{stage !== "done" && <button type="button" className="rounded-lg p-1 text-slate-300 hover:bg-red-50 hover:text-red-600" onClick={() => void removeLink(card, link.id)} aria-label={`Remove ${link.label}`}><Trash2 className="h-3.5 w-3.5" /></button>}</div>)}
@@ -2947,6 +2954,7 @@ export function TaskBoard({
   const finalizeScheduleCard = board.cards.find((card) => card.id === finalizeScheduleCardId);
   const finalizeScheduleDecision = finalizeScheduleCard?.decisions?.find((decision) => decision.id === finalizeScheduleDecisionId);
   const evolutionCard = board.cards.find((card) => card.id === evolutionCardId);
+  const addToCardCard = board.cards.find((card) => card.id === addToCardId);
 
   return (
     <>
@@ -3402,6 +3410,101 @@ export function TaskBoard({
               <Button type="button" className="h-10 flex-1 rounded-xl bg-[#102A43] font-semibold text-white" disabled={Boolean(equipmentLinkDraft.trim()) && !validHttpUrl(equipmentLinkDraft)} onClick={() => { if (equipmentLinkItemId) updateEquipmentDraftItem(equipmentLinkItemId, { url: equipmentLinkDraft.trim() }); setEquipmentLinkItemId(null); setEquipmentLinkDraft(""); }}>Save link</Button>
             </div>
           </div>
+        </StripesSheetContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(addToCardCard)}
+        onOpenChange={(open) => {
+          if (!open) setAddToCardId(null);
+        }}
+      >
+        <StripesSheetContent
+          className="rounded-[1.75rem] sm:max-w-sm"
+          onOpenAutoFocus={(event) => event.preventDefault()}
+        >
+          <DialogHeader>
+            <DialogTitle className="text-left text-base font-semibold text-[#102A43]">
+              Add to card
+            </DialogTitle>
+          </DialogHeader>
+
+          {addToCardCard && (
+            <div className="grid gap-1.5">
+              <button
+                type="button"
+                className="flex min-h-12 items-center gap-3 rounded-2xl px-3 py-2.5 text-left hover:bg-slate-50"
+                onClick={() => {
+                  setAddToCardId(null);
+                  openEditCard(addToCardCard, "note");
+                }}
+              >
+                <Pencil className="h-4 w-4 shrink-0 text-slate-500" />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-semibold text-[#102A43]">Note</span>
+                  <span className="block truncate text-[11px] font-normal text-slate-400">
+                    {addToCardCard.note?.trim() ? "Edit existing note" : "Add context or details"}
+                  </span>
+                </span>
+              </button>
+
+              <button
+                type="button"
+                className="flex min-h-12 items-center gap-3 rounded-2xl px-3 py-2.5 text-left hover:bg-slate-50"
+                onClick={() => {
+                  setAddToCardId(null);
+                  openEditCard(addToCardCard, "assignees");
+                }}
+              >
+                <Users className="h-4 w-4 shrink-0 text-slate-500" />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-semibold text-[#102A43]">Assignees</span>
+                  <span className="block truncate text-[11px] font-normal text-slate-400">
+                    {(addToCardCard.people?.length || 0) > 0
+                      ? `${addToCardCard.people?.length} assigned`
+                      : "Choose who will handle it"}
+                  </span>
+                </span>
+              </button>
+
+              <button
+                type="button"
+                className="flex min-h-12 items-center gap-3 rounded-2xl px-3 py-2.5 text-left hover:bg-slate-50"
+                onClick={() => {
+                  setAddToCardId(null);
+                  openEditCard(addToCardCard, "due");
+                }}
+              >
+                <CalendarDays className="h-4 w-4 shrink-0 text-slate-500" />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-semibold text-[#102A43]">Due date</span>
+                  <span className="block truncate text-[11px] font-normal text-slate-400">
+                    {addToCardCard.dueDate ? dueText(addToCardCard.dueDate) : "Set a deadline"}
+                  </span>
+                </span>
+              </button>
+
+              <button
+                type="button"
+                disabled={(addToCardCard.links?.length || 0) >= 5}
+                className="flex min-h-12 items-center gap-3 rounded-2xl px-3 py-2.5 text-left hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-45"
+                onClick={() => {
+                  setAddToCardId(null);
+                  openAddLink(addToCardCard);
+                }}
+              >
+                <Link2 className="h-4 w-4 shrink-0 text-slate-500" />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-semibold text-[#102A43]">Link</span>
+                  <span className="block truncate text-[11px] font-normal text-slate-400">
+                    {(addToCardCard.links?.length || 0) > 0
+                      ? `${addToCardCard.links?.length} of 5 added`
+                      : "Add a web or document link"}
+                  </span>
+                </span>
+              </button>
+            </div>
+          )}
         </StripesSheetContent>
       </Dialog>
 

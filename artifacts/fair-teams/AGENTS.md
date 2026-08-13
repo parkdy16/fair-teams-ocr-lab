@@ -506,3 +506,33 @@ A task is complete only when:
 - This package depends on the parent `C:\V38OCR` pnpm workspace, including the workspace lockfile, catalog, and base TypeScript configuration. Do not treat the package as fully standalone.
 - Tracked `.bak` files are not live source files. Ignore them when identifying the active implementation unless a task explicitly requires historical comparison.
 - “PWA” in this project does not currently mean general offline application support; no general offline caching service worker is present.
+
+<!-- ROADMAP_DISCIPLINE_START -->
+
+## Roadmap and phase discipline
+
+`STRIPES_ROADMAP.md` is the authoritative source for current product direction,
+phase status, approved architecture decisions, blocked work and deferred work.
+
+`AGENTS.md` defines how implementation work is executed.
+
+Important working rules:
+
+- P0-P5 initial UI consolidation/regression pass is complete.
+- P5 regression checks remain an ongoing launch gate; do not restart P0-P5 as
+  unfinished implementation phases unless the roadmap explicitly reopens one.
+- Before substantial work, identify the current roadmap phase/task.
+- Follow roadmap order rather than jumping to later attractive features.
+- When a major implementation step is completed or an approved product /
+  architecture direction changes, update `STRIPES_ROADMAP.md` before moving on.
+- Do not silently continue implementation from superseded roadmap wording.
+- When roadmap sections conflict, the explicitly marked Current Architecture
+  Checkpoint takes precedence until older sections are cleaned up.
+- Continue using small atomic, independently revertible tasks.
+- Stop at phase boundaries or for new product decisions, architecture
+  decisions, backend/persistence changes or material scope expansion.
+
+Do not duplicate detailed product architecture in `AGENTS.md`; keep those
+decisions in `STRIPES_ROADMAP.md`.
+
+<!-- ROADMAP_DISCIPLINE_END -->

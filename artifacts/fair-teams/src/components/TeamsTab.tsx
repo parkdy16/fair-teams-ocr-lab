@@ -7,24 +7,48 @@ import { generateTeams, recomputeStats } from "@/lib/teamGenerator";
 import { listenToClubRatingSummaries, type ClubRatingSummary } from "@/lib/clubCollaborationService";
 import { profileFromAveragedAttributes } from "@/lib/playerStyleProfile";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { StripesSheetContent } from "@/components/ui/stripes-modal";
 import stripesLogo from "@/assets/stripes-logo-mark.png";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Shuffle, ArrowLeftRight, Download, HelpCircle, Clock, Palette, BarChart3, List, Maximize2, X, Square, Undo2, Redo2, ChevronLeft } from "lucide-react";
+import { Shuffle, ArrowLeftRight, Download, HelpCircle, Clock, Check, BarChart3, List, Maximize2, X, Square, Undo2, Redo2, ChevronLeft } from "lucide-react";
 
 const PRESENT_TEAMS_SCROLL_FIX_VERSION = "present-fullscreen-portal-v1";
 
 const COLOR_OPTIONS: { value: TeamColor; label: string; hex: string; textHex: string }[] = [
-  { value: "red",    label: "Red",    hex: "#ef4444", textHex: "#fff"    },
   { value: "blue",   label: "Blue",   hex: "#3b82f6", textHex: "#fff"    },
+  { value: "red",    label: "Red",    hex: "#ef4444", textHex: "#fff"    },
   { value: "lime",   label: "Lime",   hex: "#84cc16", textHex: "#1a1a1a" },
   { value: "yellow", label: "Yellow", hex: "#facc15", textHex: "#1a1a1a" },
   { value: "orange", label: "Orange", hex: "#f97316", textHex: "#fff"    },
+  { value: "purple", label: "Purple", hex: "#8b5cf6", textHex: "#fff"    },
   { value: "black",  label: "Black",  hex: "#102A43", textHex: "#fff"    },
   { value: "white",  label: "White",  hex: "#FFFFFF", textHex: "#102A43" },
 ];
 
 function colorFor(color: TeamColor) {
   return COLOR_OPTIONS.find(c => c.value === color) ?? COLOR_OPTIONS[0]!;
+}
+
+function TeamColorStripesIcon({
+  color,
+  isWhite = false,
+  className = "h-5 w-5",
+}: {
+  color: string;
+  isWhite?: boolean;
+  className?: string;
+}) {
+  const stroke = isWhite ? "#CBD5E1" : "none";
+
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+      <rect x="4" y="4" width="14" height="3" rx="1.5" fill={color} stroke={stroke} strokeWidth={isWhite ? 0.8 : 0} transform="rotate(-8 11 5.5)" />
+      <rect x="5" y="9" width="15" height="3" rx="1.5" fill={color} stroke={stroke} strokeWidth={isWhite ? 0.8 : 0} transform="rotate(-8 12.5 10.5)" />
+      <rect x="3" y="14" width="14" height="3" rx="1.5" fill={color} stroke={stroke} strokeWidth={isWhite ? 0.8 : 0} transform="rotate(-8 10 15.5)" />
+      <rect x="6" y="19" width="13" height="2.5" rx="1.25" fill={color} stroke={stroke} strokeWidth={isWhite ? 0.8 : 0} transform="rotate(-8 12.5 20.25)" />
+    </svg>
+  );
 }
 
 function GKBadge() {
@@ -451,6 +475,7 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
   const [teamStatsOpen, setTeamStatsOpen] = useState<Record<string, boolean>>({});
   const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
   const [editingTeamName, setEditingTeamName] = useState("");
+  const [colorPickerTeamId, setColorPickerTeamId] = useState<string | null>(null);
   const [history, setHistory] = useState<TeamHistoryEntry[]>(() => loadTeamHistory());
   const [swap, setSwap] = useState<SwapSelection | null>(null);
   const [desktopDrag, setDesktopDrag] = useState<SwapSelection | null>(null);
@@ -715,6 +740,10 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
     const label = colorFor(color).label;
     setTeams(prev => prev.map(t => t.id === teamId ? { ...t, color, name: label } : t));
   };
+
+  const colorPickerTeam = colorPickerTeamId
+    ? teams.find((team) => team.id === colorPickerTeamId) ?? null
+    : null;
 
   const startEditingTeamName = (teamId: string, currentName: string) => {
     setEditingTeamId(teamId);
@@ -1053,23 +1082,20 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
                       )}
 
                       {/* Team color selector */}
-                      <Select value={team.color} onValueChange={v => handleColorChange(team.id, v as TeamColor)}>
-                        <SelectTrigger
-                          className="h-7 w-7 border-0 p-0 shadow-none bg-transparent hover:bg-transparent text-muted-foreground hover:text-foreground outline-none ring-0 focus:outline-none focus:ring-0 focus:ring-offset-0 focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 data-[state=open]:bg-transparent data-[state=open]:ring-0 [&>svg:last-child]:hidden"
-                          style={{ color: accentColor }}
-                          title={`Change team color (${col.label})`}
-                          data-testid={`select-team-color-${team.id}`}
-                        >
-                          <Palette className="h-4 w-4" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {COLOR_OPTIONS.map(c => (
-                            <SelectItem key={c.value} value={c.value} data-testid={`color-${team.id}-${c.value}`}>
-                              {c.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <button
+                        type="button"
+                        onClick={() => setColorPickerTeamId(team.id)}
+                        className="flex h-7 w-7 items-center justify-center rounded-lg transition hover:bg-slate-50 active:scale-[0.96]"
+                        title={`Change team color (${col.label})`}
+                        aria-label={`Change team color. Current color: ${col.label}`}
+                        data-testid={`select-team-color-${team.id}`}
+                      >
+                        <TeamColorStripesIcon
+                          color={col.hex}
+                          isWhite={team.color === "white"}
+                          className="h-[18px] w-[18px]"
+                        />
+                      </button>
                     </div>
                   </div>
                   <div className="flex items-center gap-1.5 text-[10px] font-semibold lg:text-[13px] leading-tight text-muted-foreground">
@@ -1206,6 +1232,63 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
           </Button>
         </div>
       )}
+
+      <Dialog
+        open={Boolean(colorPickerTeam)}
+        onOpenChange={(open) => {
+          if (!open) setColorPickerTeamId(null);
+        }}
+      >
+        <StripesSheetContent
+          className="rounded-[1.75rem] sm:max-w-sm"
+          onOpenAutoFocus={(event) => event.preventDefault()}
+        >
+          <DialogHeader>
+            <DialogTitle className="text-left text-base font-semibold text-[#102A43]">
+              Team color
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="grid grid-cols-4 gap-2 pt-1">
+            {COLOR_OPTIONS.map((option) => {
+              const selected = colorPickerTeam?.color === option.value;
+
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => {
+                    if (!colorPickerTeam) return;
+                    handleColorChange(colorPickerTeam.id, option.value);
+                    setColorPickerTeamId(null);
+                  }}
+                  className={`relative flex min-w-0 flex-col items-center gap-1.5 rounded-2xl border bg-white px-1.5 py-3 text-center transition active:scale-[0.97] ${
+                    selected
+                      ? "border-[#102A43] ring-2 ring-[#102A43]/15"
+                      : "border-slate-200 hover:bg-slate-50"
+                  }`}
+                  aria-pressed={selected}
+                  data-testid={`color-${colorPickerTeam?.id ?? "team"}-${option.value}`}
+                >
+                  <TeamColorStripesIcon
+                    color={option.hex}
+                    isWhite={option.value === "white"}
+                    className="h-8 w-8"
+                  />
+                  <span className="truncate text-[10px] font-semibold text-slate-600">
+                    {option.label}
+                  </span>
+                  {selected && (
+                    <span className="absolute right-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#102A43] text-white">
+                      <Check className="h-2.5 w-2.5" />
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </StripesSheetContent>
+      </Dialog>
 
       {presentTeamsOpen && teams.length > 0 && typeof document !== "undefined" && createPortal(
         <div

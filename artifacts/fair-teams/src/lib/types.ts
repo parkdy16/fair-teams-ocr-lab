@@ -50,7 +50,7 @@ export interface PairingRule {
   createdAt?: string;
 }
 
-export type TeamColor = "red" | "blue" | "lime" | "yellow" | "orange" | "black" | "white";
+export type TeamColor = "red" | "blue" | "lime" | "yellow" | "orange" | "purple" | "black" | "white";
 
 export type FieldSize = "small" | "medium" | "large";
 

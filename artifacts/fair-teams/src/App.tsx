@@ -362,6 +362,14 @@ function formatTodayStartDateLabel(date = new Date()) {
   return `${weekday} · ${month} ${day}`;
 }
 
+function formatTeamsSessionDateLabel(date = new Date()) {
+  const weekday = new Intl.DateTimeFormat("en-US", { weekday: "short" }).format(date);
+  const month = new Intl.DateTimeFormat("en-US", { month: "short" }).format(date);
+  const day = new Intl.DateTimeFormat("en-US", { day: "numeric" }).format(date);
+
+  return `${weekday} · ${month} ${day}`;
+}
+
 const APP_TAB_VALUES = ["players", "teams", "club"] as const;
 type AppTab = (typeof APP_TAB_VALUES)[number];
 
@@ -3887,6 +3895,9 @@ They will no longer be able to open or edit this shared roster unless it is shar
               forceMount
               className={`fairteams-tab-panel m-0 ${activeTab === "teams" ? "block" : "hidden"}`}
             >
+              <div className="mb-3 text-[12px] font-semibold text-slate-400">
+                {formatTeamsSessionDateLabel()}
+              </div>
               <div className={teamsWorkspaceView === "setup" ? "block" : "hidden"}>
                 <TodayTab
                   players={players}

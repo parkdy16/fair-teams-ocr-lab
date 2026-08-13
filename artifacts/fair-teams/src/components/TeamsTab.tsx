@@ -141,6 +141,17 @@ function teamsDateLabel(date = new Date()) {
   }
 }
 
+function compactTeamsDateLabel(date = new Date()) {
+  try {
+    const weekday = new Intl.DateTimeFormat("en-US", { weekday: "short" }).format(date);
+    const month = new Intl.DateTimeFormat("en-US", { month: "short" }).format(date);
+    const day = new Intl.DateTimeFormat("en-US", { day: "numeric" }).format(date);
+    return `${weekday} · ${month} ${day}`;
+  } catch {
+    return "";
+  }
+}
+
 function loadFieldSize(): FieldSize {
   const saved = typeof localStorage !== "undefined" ? localStorage.getItem(FIELD_SIZE_STORAGE_KEY) : null;
   return saved === "small" || saved === "large" || saved === "medium" ? saved : "medium";
@@ -872,8 +883,11 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
               <ChevronLeft className="h-5 w-5" />
             </button>
           )}
-          <div className="min-w-0">
-            <div className="text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">Current teams</div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <div className="text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">Current teams</div>
+              <div className="ml-auto whitespace-nowrap text-[11px] font-semibold text-slate-400">{compactTeamsDateLabel()}</div>
+            </div>
             <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-black text-[#102A43]">
               <span>{numTeams} teams</span>
               <span className="text-slate-300">·</span>

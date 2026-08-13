@@ -1376,6 +1376,48 @@ Approved direction:
 - organizer-removal and workspace-closure rules should be finalized during G1
   rather than inherited from the old owner/editor model.
 
+### Organizer removal governance
+
+Removing another organizer is a protected governance action, not an ordinary
+workspace edit.
+
+Approved rules:
+
+- an organizer may always leave the workspace themselves, subject to the
+  last-organizer safeguard;
+- one organizer may not unilaterally remove another organizer;
+- removing another organizer starts a secret organizer ballot;
+- the organizer whose removal is being considered is not eligible to vote;
+- approval requires a strict majority of the TOTAL organizer count before
+  removal;
+- the approval threshold is therefore `floor(total organizers / 2) + 1`;
+- as soon as the required Yes threshold is reached, removal is approved
+  immediately; remaining votes are not required;
+- the vote may also close early when enough No votes make the approval
+  threshold mathematically unreachable;
+- individual ballots are confidential;
+- the organizer being considered for removal must never see who voted Yes or
+  No;
+- other organizers should also see only aggregate counts/outcome rather than
+  individual ballot identities;
+- governance history may retain the proposal and aggregate result, but not
+  expose individual ballots.
+
+Examples:
+
+- 5 organizers total -> 3 Yes required; target does not vote;
+- 4 organizers total -> 3 Yes required;
+- 3 organizers total -> 2 Yes required;
+- 2 organizers total -> 2 Yes required, but only one organizer is eligible to
+  vote, so unilateral removal is naturally impossible.
+
+This threshold rule intentionally protects two-organizer clubs without
+inventing a separate unilateral-removal exception.
+
+The exact ballot persistence/security implementation belongs to a later G1
+atomic task. Do not implement organizer-removal voting as part of the initial
+role-compatibility patch.
+
 Do not rename or migrate Firestore collections merely to reflect terminology
 unless the G1 audit demonstrates a real technical need.
 

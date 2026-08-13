@@ -6234,7 +6234,7 @@ This is a shared roster. Local Backup can only remove/disassociate this deviceâ€
                 Account access
               </div>
               <p className="mt-1 text-[11px] font-semibold leading-snug text-violet-800/80">
-                Other organizers keep access. The owner keeps the online roster. To only hide this device copy without leaving, use Hide on device instead.
+                Other organizers keep access and the shared workspace stays online. To only hide this device copy without leaving, use Hide on device instead.
               </p>
             </div>
 

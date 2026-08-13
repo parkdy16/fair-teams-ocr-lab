@@ -422,12 +422,43 @@ function timestampToIso(value: unknown): string | undefined {
 function currentUserRoleFromData(data: DocumentData): SharedRosterRole | undefined {
   const user = toSharedRosterUser(getFairTeamsAuth().currentUser);
   if (!user) return undefined;
-  if (data.ownerUid === user.uid) return "owner";
-  const roleByUid = data.roleByUid && typeof data.roleByUid === "object" ? data.roleByUid as Record<string, unknown> : {};
-  const role = roleByUid[user.uid];
-  if (role === "owner" || role === "editor" || role === "organizer" || role === "viewer") return role;
+
   const memberUids = Array.isArray(data.memberUids) ? data.memberUids : [];
-  return memberUids.includes(user.uid) ? "member" : undefined;
+  if (!memberUids.includes(user.uid)) return undefined;
+
+  const roleByUid = data.roleByUid && typeof data.roleByUid === "object"
+    ? data.roleByUid as Record<string, unknown>
+    : {};
+  const role = roleByUid[user.uid];
+
+  if (role === "owner" || role === "editor" || role === "organizer" || role === "viewer") {
+    return role;
+  }
+
+  // Backward compatibility only for an existing member whose old record
+  // identifies them as the creator/owner.
+  if (data.ownerUid === user.uid) return "owner";
+
+  return "member";
+}
+
+function organizerCountFromData(data: DocumentData): number {
+  const memberUids = Array.isArray(data.memberUids)
+    ? data.memberUids.filter((uid): uid is string => typeof uid === "string")
+    : [];
+  const roleByUid = data.roleByUid && typeof data.roleByUid === "object"
+    ? data.roleByUid as Record<string, unknown>
+    : {};
+  const legacyOwnerUid = typeof data.ownerUid === "string" ? data.ownerUid : "";
+
+  return memberUids.filter((uid) => {
+    const role = roleByUid[uid];
+    if (role === "owner" || role === "editor" || role === "organizer") return true;
+
+    // Backward compatibility for very old records that may have ownerUid
+    // but no explicit owner entry in roleByUid.
+    return uid === legacyOwnerUid && role == null;
+  }).length;
 }
 
 function toGroupSummary(id: string, data: DocumentData): FirebaseSharedGroupSummary {
@@ -566,7 +597,7 @@ export async function createFirebaseSharedGroup(groupName: string): Promise<Fire
     memberNamesByUid: { [user.uid]: organizerName },
     memberNamesByEmail: { [normalizeEmail(user.email)]: organizerName },
     memberUidByEmail: { [normalizeEmail(user.email)]: user.uid },
-    roleByUid: { [user.uid]: "owner" },
+    roleByUid: { [user.uid]: "organizer" },
     rosterIds: [],
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
@@ -611,7 +642,7 @@ export async function createFirebaseSharedRoster(roster: RoomRoster, groupId?: s
   const groupMemberUids = Array.isArray(groupData.memberUids) ? groupData.memberUids.filter((id): id is string => typeof id === "string") : [user.uid];
   const groupMemberEmails = Array.isArray(groupData.memberEmails) ? groupData.memberEmails.filter((email): email is string => typeof email === "string") : [normalizeEmail(user.email)];
   const groupPendingInviteEmails = Array.isArray(groupData.pendingInviteEmails) ? groupData.pendingInviteEmails.filter((email): email is string => typeof email === "string") : [];
-  const groupRoleByUid = groupData.roleByUid && typeof groupData.roleByUid === "object" ? groupData.roleByUid as Record<string, unknown> : { [user.uid]: "owner" };
+  const groupRoleByUid = groupData.roleByUid && typeof groupData.roleByUid === "object" ? groupData.roleByUid as Record<string, unknown> : { [user.uid]: "organizer" };
   const organizerName = nameFromUser(user);
   const groupMemberNamesByUid = { ...cleanNameMap(groupData.memberNamesByUid), [user.uid]: organizerName };
   const groupMemberNamesByEmail = { ...cleanNameMap(groupData.memberNamesByEmail), [normalizeEmail(user.email)]: organizerName };
@@ -714,7 +745,7 @@ export async function cancelFirebaseGroupInvite(groupId: string, inviteeEmail: s
   if (!groupSnap.exists()) throw new Error("Shared group was not found.");
   const groupData = groupSnap.data();
   const role = currentUserRoleFromData(groupData);
-  if (role !== "owner" && role !== "editor") throw new Error("Only owners/editors can cancel invites.");
+  if (role !== "owner" && role !== "editor" && role !== "organizer") throw new Error("Only organizers can cancel invites.");
   const rosterIds = Array.isArray(groupData.rosterIds) ? groupData.rosterIds.filter((id): id is string => typeof id === "string") : [];
   const batch = writeBatch(getFairTeamsFirestore());
   batch.update(groupRef, {
@@ -738,15 +769,26 @@ export async function leaveFirebaseSharedRosterAccess(rosterId: string): Promise
   const email = normalizeEmail(user.email);
   const rosterRef = doc(getFairTeamsFirestore(), "sharedRosters", rosterId);
   const rosterSnap = await getDoc(rosterRef);
+
   if (!rosterSnap.exists()) throw new Error("Shared roster was not found.");
+
   const rosterData = rosterSnap.data();
-  if (rosterData.ownerUid === user.uid || normalizeEmail(rosterData.ownerEmail || "") === email) {
-    throw new Error("The owner cannot leave their own shared roster. Delete it online or transfer ownership later.");
+  const rosterRole = currentUserRoleFromData(rosterData);
+
+  if (rosterRole !== "owner" && rosterRole !== "editor" && rosterRole !== "organizer") {
+    throw new Error("Only organizers can leave this shared workspace from Stripes.");
   }
 
   const now = new Date().toISOString();
-  const groupId = typeof rosterData.groupId === "string" && rosterData.groupId.trim() ? rosterData.groupId.trim() : "";
-  const groupName = typeof rosterData.groupName === "string" && rosterData.groupName.trim() ? rosterData.groupName.trim() : undefined;
+  const groupId =
+    typeof rosterData.groupId === "string" && rosterData.groupId.trim()
+      ? rosterData.groupId.trim()
+      : "";
+  const groupName =
+    typeof rosterData.groupName === "string" && rosterData.groupName.trim()
+      ? rosterData.groupName.trim()
+      : undefined;
+
   const batch = writeBatch(getFairTeamsFirestore());
   const affectedRosterIds: string[] = [];
 
@@ -754,7 +796,12 @@ export async function leaveFirebaseSharedRosterAccess(rosterId: string): Promise
     memberUids: arrayRemove(user.uid),
     memberEmails: arrayRemove(email),
     pendingInviteEmails: arrayRemove(email),
-    roleByUid: removeRecordKey(data.roleByUid && typeof data.roleByUid === "object" ? data.roleByUid as Record<string, unknown> : {}, user.uid),
+    roleByUid: removeRecordKey(
+      data.roleByUid && typeof data.roleByUid === "object"
+        ? data.roleByUid as Record<string, unknown>
+        : {},
+      user.uid,
+    ),
     memberNamesByUid: removeRecordKey(cleanNameMap(data.memberNamesByUid), user.uid),
     memberNamesByEmail: removeEmailKey(cleanNameMap(data.memberNamesByEmail), email),
     memberUidByEmail: removeEmailKey(cleanStringMap(data.memberUidByEmail), email),
@@ -765,28 +812,52 @@ export async function leaveFirebaseSharedRosterAccess(rosterId: string): Promise
   if (groupId) {
     const groupRef = doc(getFairTeamsFirestore(), "sharedGroups", groupId);
     const groupSnap = await getDoc(groupRef);
+
     if (!groupSnap.exists()) throw new Error("Shared group was not found.");
+
     const groupData = groupSnap.data();
-    if (groupData.ownerUid === user.uid || normalizeEmail(groupData.ownerEmail || "") === email) {
-      throw new Error("The owner cannot leave their own shared group. Delete it online or transfer ownership later.");
+
+    if (organizerCountFromData(groupData) <= 1) {
+      throw new Error(
+        "The last organizer cannot leave. Invite another organizer before leaving this workspace.",
+      );
     }
-    const rosterIds = Array.isArray(groupData.rosterIds) ? groupData.rosterIds.filter((id): id is string => typeof id === "string" && Boolean(id.trim())) : [rosterId];
+
+    const rosterIds = Array.isArray(groupData.rosterIds)
+      ? groupData.rosterIds.filter(
+          (id): id is string => typeof id === "string" && Boolean(id.trim()),
+        )
+      : [rosterId];
+
     batch.update(groupRef, removeCurrentUserFields(groupData));
+
     for (const id of rosterIds) {
       const linkedRosterRef = doc(getFairTeamsFirestore(), "sharedRosters", id);
       const linkedRosterSnap = id === rosterId ? rosterSnap : await getDoc(linkedRosterRef);
-      const linkedRosterData = linkedRosterSnap.exists() ? linkedRosterSnap.data() : groupData;
-      if (linkedRosterData.ownerUid === user.uid || normalizeEmail(linkedRosterData.ownerEmail || "") === email) continue;
-      batch.update(linkedRosterRef, removeCurrentUserFields(linkedRosterData));
+
+      if (!linkedRosterSnap.exists()) continue;
+
+      batch.update(linkedRosterRef, removeCurrentUserFields(linkedRosterSnap.data()));
       affectedRosterIds.push(id);
     }
   } else {
+    if (organizerCountFromData(rosterData) <= 1) {
+      throw new Error(
+        "The last organizer cannot leave. Invite another organizer before leaving this workspace.",
+      );
+    }
+
     batch.update(rosterRef, removeCurrentUserFields(rosterData));
     affectedRosterIds.push(rosterId);
   }
 
   await batch.commit();
-  return { rosterIds: Array.from(new Set(affectedRosterIds)), groupId: groupId || undefined, groupName };
+
+  return {
+    rosterIds: Array.from(new Set(affectedRosterIds)),
+    groupId: groupId || undefined,
+    groupName,
+  };
 }
 
 export async function removeFirebaseSharedGroupMember(groupId: string, memberEmail: string): Promise<void> {
@@ -876,7 +947,7 @@ export async function inviteEmailToFirebaseSharedGroup(groupId: string, inviteeE
   if (!groupSnap.exists()) throw new Error("Shared group was not found.");
   const groupData = groupSnap.data();
   const role = currentUserRoleFromData(groupData);
-  if (role !== "owner" && role !== "editor") throw new Error("Only owners/editors can invite members to this group.");
+  if (role !== "owner" && role !== "editor" && role !== "organizer") throw new Error("Only organizers can invite members to this group.");
 
   const rosterIds = Array.isArray(groupData.rosterIds) ? groupData.rosterIds.filter((id): id is string => typeof id === "string") : [];
   const now = new Date().toISOString();
@@ -923,7 +994,7 @@ export async function acceptFirebaseGroupInvite(groupId: string): Promise<Fireba
   const now = new Date().toISOString();
   const nextRoleByUid = {
     ...(groupData.roleByUid && typeof groupData.roleByUid === "object" ? groupData.roleByUid as Record<string, unknown> : {}),
-    [user.uid]: "editor",
+    [user.uid]: "organizer",
   };
   const organizerName = nameFromUser(user);
   const nextMemberNamesByUid = { ...cleanNameMap(groupData.memberNamesByUid), [user.uid]: organizerName };
@@ -958,7 +1029,7 @@ export async function acceptFirebaseGroupInvite(groupId: string): Promise<Fireba
   await batch.commit();
   return {
     ...toGroupSummary(groupId, groupData),
-    currentUserRole: "editor",
+    currentUserRole: "organizer",
     memberCount: (Array.isArray(groupData.memberUids) ? groupData.memberUids.length : 0) + 1,
     updatedAt: now,
   };

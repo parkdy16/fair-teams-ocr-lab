@@ -1627,6 +1627,52 @@ Next atomic task:
 G1.2 must not implement organizer-removal voting yet. Secret-ballot organizer
 removal remains a later protected G1 governance task.
 
+#### G1.2 implementation checkpoint — 2026-08-13
+
+Completed:
+
+- new shared-workspace creators are stored as equal `organizer`s rather than
+  operational `owner`s;
+- accepted group invitees become equal `organizer`s rather than `editor`s;
+- legacy `owner` and `editor` records remain backward-compatible;
+- `ownerUid` / `ownerEmail` remain only as legacy creator/history metadata and
+  no longer independently grant active membership or save permission;
+- active membership is authoritative: a user must still be present in
+  `memberUids` before any legacy role fallback can apply;
+- organizers can invite and cancel pending invitations;
+- the old unilateral organizer-removal UI has been removed pending the
+  protected organizer-vote flow;
+- the old unilateral online workspace-delete UI has been removed;
+- ordinary client deletion of shared groups and shared rosters is denied by
+  Firestore rules pending a future governed workspace-closure flow;
+- any organizer may leave a shared workspace without deleting shared data;
+- leaving removes only that organizer's membership/role/name mappings from the
+  group and linked rosters;
+- the last remaining organizer cannot use the ordinary Leave flow;
+- old owner-based delete service helpers remain dormant legacy code for now;
+  they are no longer exposed by the UI and will be superseded by the governed
+  workspace-closure implementation;
+- Firebase Action Board document storage remains untouched;
+- organizer-removal voting is not implemented in G1.2.
+
+Verification:
+
+- production Vite build passes;
+- `git diff --check` passes;
+- the repository's pre-existing TypeScript baseline issue remains separate
+  tooling debt and is not part of G1.2.
+
+Next atomic task:
+
+**G1.3 — Firestore membership-transition hardening.**
+
+G1.3 must enforce the governance model at the rules layer: legitimate invite,
+invite acceptance and self-leave transitions remain possible, while one
+organizer must not be able to directly remove another organizer by writing
+membership fields.
+
+Secret-ballot organizer removal remains the following protected G1 task.
+
 ### G2 — Unified Google Connection
 
 Inspect and consolidate:

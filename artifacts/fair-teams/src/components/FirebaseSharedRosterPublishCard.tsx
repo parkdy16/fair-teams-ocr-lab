@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { CheckCircle2, FolderOpen, History, Loader2, RotateCcw, Share2, Trash2, UserPlus, Users, X } from "lucide-react";
+import { CheckCircle2, FolderOpen, History, Loader2, RotateCcw, Share2, UserPlus, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { RoomRoster } from "@/lib/localRoster";
@@ -7,11 +7,9 @@ import {
   acceptFirebaseGroupInvite,
   cancelFirebaseGroupInvite,
   createFirebaseSharedRoster,
-  deleteFirebaseSharedRoster,
   inviteEmailToFirebaseSharedGroup,
   listenToFirebaseSharedRoster,
   listenToSharedRosterUser,
-  removeFirebaseSharedGroupMember,
   listFirebaseGroupInvites,
   listFirebaseSharedGroups,
   listFirebaseSharedRosters,
@@ -77,8 +75,8 @@ function mergedMemberNames(group?: FirebaseSharedGroupSummary | null, roster?: F
   };
 }
 
-function canRoleSave(role?: string, isOwner?: boolean) {
-  return role === "organizer" || role === "editor" || role === "owner" || Boolean(isOwner);
+function canRoleSave(role?: string) {
+  return role === "organizer" || role === "editor" || role === "owner";
 }
 
 function modalShell(title: string, onClose: () => void, body: React.ReactNode) {
@@ -150,8 +148,8 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
     const localVersion = typeof source.firebaseVersion === "number" ? source.firebaseVersion : 0;
     return Boolean(remoteSummary && remoteSummary.version > localVersion);
   }), [linkedRosters, sharedRosterById]);
-  const activeRole = activeFirebaseSource?.firebaseRole || (activeFirebaseSource?.firebaseOwnerUid === user?.uid ? "owner" : activeSharedRoster?.currentUserRole);
-  const activeCanSave = canRoleSave(activeRole, activeFirebaseSource?.firebaseOwnerUid === user?.uid || activeSharedRoster?.ownerUid === user?.uid);
+  const activeRole = activeFirebaseSource?.firebaseRole || activeSharedRoster?.currentUserRole;
+  const activeCanSave = canRoleSave(activeRole);
   const activeHasLocalChanges = (() => {
     if (!activeRoster || !activeFirebaseSource) return false;
     const localTime = Date.parse(activeRoster.updatedAt || activeRoster.createdAt || "");
@@ -419,55 +417,18 @@ Your local roster will stay local. Stripes will copy shared identity fields only
     }
   };
 
-  const handleRemoveSharedRoster = async (rosterId: string, rosterName = "this shared roster") => {
-    const typed = window.prompt(
-      `Delete “${rosterName}” online for everyone?\n\nThis is different from removing a local copy from this device. The shared roster will disappear for all organizers.\n\nType DELETE to confirm.`,
-    );
-    if (typed !== "DELETE") {
-      if (typed !== null) setNotice({ tone: "info", text: "Online shared roster was not deleted." });
-      return;
-    }
-    setBusy(`delete:${rosterId}`);
-    setNotice(null);
-    try {
-      await deleteFirebaseSharedRoster(rosterId);
-      await refreshSharedData();
-    } catch (error) {
-      setNotice({ tone: "error", text: friendlyFirestoreError(error) });
-    } finally {
-      setBusy("");
-    }
-  };
 
   const openCollaborators = (rosterId?: string) => {
     setCollaboratorRosterId(rosterId || activeSharedRosterId || "");
   };
 
-  const canManageCollaborators = collaboratorGroup?.currentUserRole === "owner"
+  const canManageCollaborators = collaboratorGroup?.currentUserRole === "organizer"
+    || collaboratorGroup?.currentUserRole === "owner"
     || collaboratorGroup?.currentUserRole === "editor"
+    || collaboratorRoster?.currentUserRole === "organizer"
     || collaboratorRoster?.currentUserRole === "owner"
     || collaboratorRoster?.currentUserRole === "editor";
 
-  const handleRemoveCollaborator = async (email: string) => {
-    const groupId = collaboratorGroup?.id || collaboratorRoster?.groupId;
-    if (!groupId) {
-      setNotice({ tone: "error", text: "This older shared roster is missing its group link." });
-      return;
-    }
-    const ok = window.confirm(`Remove access for ${email}? They will lose online access to this shared roster, but any private copies on their devices stay untouched.`);
-    if (!ok) return;
-    setBusy(`remove:${email}`);
-    setNotice(null);
-    try {
-      await removeFirebaseSharedGroupMember(groupId, email);
-      await refreshSharedData();
-      setNotice({ tone: "success", text: "Organizer access removed." });
-    } catch (error) {
-      setNotice({ tone: "error", text: friendlyFirestoreError(error) });
-    } finally {
-      setBusy("");
-    }
-  };
 
   const collaboratorsModal = collaboratorRoster ? modalShell("Organizers", () => setCollaboratorRosterId(""), (
     <div className="grid gap-3">
@@ -492,7 +453,7 @@ Your local roster will stay local. Stripes will copy shared identity fields only
       <div className="grid gap-1.5">
         {canManageCollaborators && (
           <div className="rounded-2xl bg-white px-3 py-2 text-[11px] font-bold leading-snug text-slate-500 shadow-sm">
-            Removing an organizer removes their online access. It does not delete their private copies.
+            Organizers have equal access. Removing another organizer requires a protected organizer vote and is not available from this screen yet.
           </div>
         )}
         {(() => {
@@ -504,29 +465,16 @@ Your local roster will stay local. Stripes will copy shared identity fields only
               {memberEmails.map((email) => {
                 const normalizedEmail = email.trim().toLowerCase();
                 const label = displayNameForEmail(email, memberNamesByEmail, user?.email);
-                const isOwnerEmail = normalizedEmail === (collaboratorRoster.ownerEmail || "").trim().toLowerCase();
                 const isCurrentUser = normalizedEmail === (user?.email || "").trim().toLowerCase();
-                const canRemoveThisMember = canManageCollaborators && !isOwnerEmail && !isCurrentUser;
                 return (
                   <div key={email} className="flex items-center justify-between gap-2 rounded-2xl bg-slate-50 px-3 py-2 text-xs font-bold text-[#102A43]">
                     <div className="min-w-0">
                       <div className="truncate">{label}</div>
                       <div className="truncate text-[10px] text-slate-500">{email}</div>
                     </div>
-                    {canRemoveThisMember ? (
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveCollaborator(email)}
-                        disabled={Boolean(busy)}
-                        className="shrink-0 rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-rose-600 shadow-sm disabled:opacity-50"
-                      >
-                        {busy === `remove:${email}` ? "…" : "Remove access"}
-                      </button>
-                    ) : (
-                      <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black ${isOwnerEmail ? "bg-violet-100 text-violet-700" : isCurrentUser ? "bg-violet-100 text-violet-700" : "bg-white text-slate-500"}`}>
-                        {isOwnerEmail ? "Owner" : isCurrentUser ? "You" : "Organizer"}
-                      </span>
-                    )}
+                    <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black ${isCurrentUser ? "bg-violet-100 text-violet-700" : "bg-white text-slate-500"}`}>
+                      {isCurrentUser ? "You" : "Organizer"}
+                    </span>
                   </div>
                 );
               })}
@@ -612,12 +560,10 @@ No shared roster is open on this device. Choose one below to open it on this dev
               const group = sharedGroups.find((item) => item.id === roster.groupId);
               const collaboratorCount = group ? Math.max(0, group.memberCount - 1) + (group.pendingInviteEmails?.length || 0) : Math.max(0, (roster.memberEmails?.length || 1) - 1) + (roster.pendingInviteEmails?.length || 0);
               const linked = linkedRosters.some((local) => local.cloudSource?.provider === "firebase" && local.cloudSource.firebaseRosterId === roster.id);
-              const isOwner = roster.ownerUid === user?.uid;
-              const showOnlineDelete = isOwner;
               const memberNamesByEmail = mergedMemberNames(group, roster);
               const savedByName = displayNameForEmail(roster.lastSavedByEmail || roster.ownerEmail, memberNamesByEmail, user?.email);
               return (
-                <div key={`modal-${roster.id}`} className={`grid ${showOnlineDelete ? "grid-cols-[1fr_auto_auto]" : "grid-cols-[1fr_auto]"} items-center gap-2 rounded-2xl px-3 py-2 ${linked ? "bg-violet-50" : "bg-slate-50"}`}>
+                <div key={`modal-${roster.id}`} className={`grid grid-cols-[1fr_auto] items-center gap-2 rounded-2xl px-3 py-2 ${linked ? "bg-violet-50" : "bg-slate-50"}`}>
                   <button type="button" onClick={() => { void handleOpenRoster(roster.id); setSharedRosterLibraryOpen(false); }} disabled={Boolean(busy)} className="min-w-0 text-left active:scale-[0.99]">
                     <span className="block truncate text-xs font-black text-[#102A43]">{roster.name}</span>
                     <span className="block truncate text-[10px] font-semibold text-slate-500">{linked ? "Open on this device" : "Open shared roster"} · saved by {savedByName}</span>
@@ -626,18 +572,6 @@ No shared roster is open on this device. Choose one below to open it on this dev
                     <Users className="h-3.5 w-3.5" />
                     {collaboratorCount}
                   </button>
-                  {showOnlineDelete && (
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveSharedRoster(roster.id, roster.name)}
-                      className="flex h-8 items-center gap-1 rounded-xl border border-rose-100 bg-white px-2 text-[10px] font-black text-rose-600 shadow-sm hover:bg-rose-50"
-                      disabled={Boolean(busy)}
-                      title="Delete online for everyone"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                      <span>Online delete</span>
-                    </button>
-                  )}
                 </div>
               );
             })}
@@ -786,12 +720,10 @@ No shared roster is open on this device. Choose an online shared roster below to
               const group = sharedGroups.find((item) => item.id === roster.groupId);
               const collaboratorCount = group ? Math.max(0, group.memberCount - 1) + (group.pendingInviteEmails?.length || 0) : Math.max(0, (roster.memberEmails?.length || 1) - 1) + (roster.pendingInviteEmails?.length || 0);
               const linked = linkedRosters.some((local) => local.cloudSource?.provider === "firebase" && local.cloudSource.firebaseRosterId === roster.id);
-              const isOwner = roster.ownerUid === user?.uid;
-              const showOnlineDelete = variant === "full" && isOwner;
               const memberNamesByEmail = mergedMemberNames(group, roster);
               const savedByName = displayNameForEmail(roster.lastSavedByEmail || roster.ownerEmail, memberNamesByEmail, user?.email);
               return (
-                <div key={roster.id} className={`grid ${showOnlineDelete ? "grid-cols-[1fr_auto_auto]" : "grid-cols-[1fr_auto]"} items-center gap-2 rounded-2xl px-3 py-2 ${linked ? "bg-violet-50" : "bg-slate-50"}`}>
+                <div key={roster.id} className={`grid grid-cols-[1fr_auto] items-center gap-2 rounded-2xl px-3 py-2 ${linked ? "bg-violet-50" : "bg-slate-50"}`}>
                   <button type="button" onClick={() => handleOpenRoster(roster.id)} disabled={Boolean(busy)} className="min-w-0 text-left active:scale-[0.99]">
                     <span className="block truncate text-xs font-black text-[#102A43]">{roster.name}</span>
                     <span className="block truncate text-[10px] font-semibold text-slate-500">saved by {savedByName}</span>
@@ -800,18 +732,6 @@ No shared roster is open on this device. Choose an online shared roster below to
                     <Users className="h-3.5 w-3.5" />
                     {collaboratorCount}
                   </button>
-                  {showOnlineDelete && (
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveSharedRoster(roster.id, roster.name)}
-                      className="flex h-8 items-center gap-1 rounded-xl border border-rose-100 bg-white px-2 text-[10px] font-black text-rose-600 shadow-sm hover:bg-rose-50"
-                      disabled={Boolean(busy)}
-                      title="Delete online for everyone"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                      <span>Online delete</span>
-                    </button>
-                  )}
                 </div>
               );
             })}

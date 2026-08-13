@@ -121,8 +121,8 @@ service cloud.firestore {
           && signedInEmail() in resource.data.pendingInviteEmails
         );
 
-      allow delete: if signedIn()
-        && resource.data.ownerUid == request.auth.uid;
+      // Workspace closure will use a governed flow; ordinary clients cannot delete it.
+      allow delete: if false;
 
       match /equipmentBags/{bagId} {
         allow read: if isGroupMemberById(groupId);
@@ -164,8 +164,8 @@ service cloud.firestore {
           && signedInEmail() in resource.data.pendingInviteEmails
         );
 
-      allow delete: if signedIn()
-        && resource.data.ownerUid == request.auth.uid;
+      // Workspace closure will use a governed flow; ordinary clients cannot delete it.
+      allow delete: if false;
 
       match /equipmentBags/{bagId} {
         allow read: if isRosterMemberById(rosterId);

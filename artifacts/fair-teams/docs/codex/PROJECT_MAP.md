@@ -1,7 +1,7 @@
 # Stripes project map
 
-Verified: 2026-08-12
-Baseline commit: `9359997d8f49a137318d2c6ccecc7aa18dc12a13`
+Verified: 2026-08-13
+Baseline commit: `364df454bbf9238f0d936aab511ae41f2758d3ee`
 
 ## Source boundaries
 
@@ -32,13 +32,44 @@ Ordinary UI work should avoid Firebase initialization, shared-roster services, A
 - No automated lint or test suite is currently configured.
 - The TypeScript command is currently blocked in this workspace because `tsc` is not resolvable; report this rather than installing packages.
 
-## P2 modal baseline
+## Current UI checkpoint
 
-- 43 feature-specific `DialogContent` usages.
-- 1 proper `AlertDialogContent` usage.
-- 33 custom fixed overlays, including 20 bottom-aligned variants.
-- `TaskBoard.tsx` repeats multiple modal sizing recipes.
-- Generic Sheet and Drawer primitives exist.
-- No shared Stripes four-category modal system currently exists.
+The approved UI consolidation state is:
 
-These counts are a snapshot at the baseline commit. Refresh them only when a task specifically depends on current counts.
+- P0 through P4 complete for the approved UI-audit scope.
+- P5 remains the ongoing manual regression / launch-quality gate.
+- Preserve established phone and desktop interaction differences during new work.
+- The current top-level app navigation is Roster, Teams, and Club.
+- Today/session setup is part of the Teams flow rather than a separate top-level tab.
+
+## Shared modal architecture
+
+P2 shared modal architecture is implemented in:
+
+`src/components/ui/stripes-modal.tsx`
+
+Established wrappers:
+
+- `StripesWorkspaceContent`
+- `StripesSheetContent`
+- `StripesEditorContent`
+- `StripesConfirmContent`
+
+These wrappers define the preferred Workspace / Sheet / Editor / Confirm roles.
+
+Not every existing dialog must be migrated. Feature-specific Radix dialogs or
+custom presentation may remain where migration would change established
+behavior, semantics, or layout without a clear benefit.
+
+## External integration checkpoint
+
+Meetup integration planning is tracked in:
+
+`docs/meetup/MEETUP_INTEGRATION_PLAN.md`
+
+Current status:
+
+- eligibility/API access request submitted 2026-08-12
+- waiting for Meetup API eligibility confirmation
+- do not implement Meetup OAuth/import until access permits it
+

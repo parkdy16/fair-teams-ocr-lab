@@ -128,18 +128,19 @@ P3 — mobile density and visual cleanup
 P4 — desktop responsive refinement
 P5 — regression gates
 
-Do not jump ahead to later phases unless explicitly requested.
+Current state:
 
-The objective is evolution, not redesign.
+* P0 through P4 are complete for the approved UI-audit scope.
+* P5 remains an ongoing manual regression and launch-quality gate.
+* Continue to preserve the completed P0-P4 behavior rather than reopening
+  those phases during unrelated work.
+* New product work should respect the responsive, typography and modal systems
+  established during the consolidation.
 
-During P0:
+The objective remains evolution, not redesign.
 
-* do not implement the typography redesign
-* do not implement the shared four-modal system
-* do not broadly clean global CSS
-* do not restructure feature architecture
-
-P0 is correctness only.
+Do not broadly clean global CSS, restructure feature architecture, or modify
+unrelated surfaces during bounded work unless explicitly requested.
 
 ---
 
@@ -274,35 +275,43 @@ Do not restructure Equipment markup broadly during unrelated UI work.
 
 ## Typography direction
 
-The intended future direction is:
+The current Stripes typography system is:
 
 * Fredoka primarily for brand/display personality
 * Outfit primarily for functional product UI
 
-This is NOT fully implemented today.
+P1 typography consolidation is complete for the approved UI-audit scope.
 
-Current global CSS includes a `.fairteams-visual-refresh .font-black` rule that causes functional UI to switch to Fredoka.
+Preserve the current role separation rather than introducing broad global font
+overrides during unrelated work.
 
-Do not fix this during P0.
+When changing typography:
 
-Typography consolidation belongs to P1.
-
-When P1 begins:
-
-* inventory typography usage first
-* define shared roles/tokens
+* prefer existing shared roles and established component patterns
 * avoid blind global class replacement
-* migrate incrementally
+* keep functional controls in the Outfit UI role unless there is a deliberate
+  display/brand reason to use Fredoka
+* verify phone and desktop behavior after meaningful typography changes
 
 ---
 
 ## Modal architecture direction
 
-The intended future modal architecture has four conceptual categories:
+P2 shared modal architecture is implemented for the approved UI-audit scope.
+
+The shared wrappers live in:
+
+`src/components/ui/stripes-modal.tsx`
+
+Use the four established conceptual roles:
 
 ### Workspace
 
-Large/full-screen mobile working surfaces.
+Large working surfaces.
+
+Shared wrapper:
+
+`StripesWorkspaceContent`
 
 Examples:
 
@@ -314,6 +323,10 @@ Examples:
 
 Small contextual actions.
 
+Shared wrapper:
+
+`StripesSheetContent`
+
 Examples:
 
 * Move
@@ -323,6 +336,10 @@ Examples:
 ### Editor
 
 Forms and creation/editing surfaces.
+
+Shared wrapper:
+
+`StripesEditorContent`
 
 Examples:
 
@@ -334,13 +351,23 @@ Examples:
 
 Compact confirmation/destructive dialogs.
 
-This architecture is NOT currently implemented as a shared system.
+Shared wrapper:
 
-The current app uses generic Radix dialogs plus many feature-specific overrides and some custom overlays.
+`StripesConfirmContent`
 
-Do not pretend the four-modal architecture already exists.
+P2 does not mean every dialog in Stripes must use one of these wrappers.
 
-Its implementation belongs to P2 and should be incremental, starting with selected surfaces rather than migrating all dialogs at once.
+Some feature-specific Radix dialogs or custom presentation may remain where
+migration would change established behavior, semantics, or layout without a
+clear benefit.
+
+For new modal work:
+
+* choose the conceptual role first;
+* prefer the matching shared Stripes wrapper where appropriate;
+* preserve existing phone/desktop interaction differences;
+* do not perform broad dialog migrations during unrelated work;
+* do not add another shared modal pattern without a demonstrated need.
 
 ---
 
@@ -439,7 +466,10 @@ After implementation:
 7. report uncertainty explicitly
 8. do not claim visual correctness unless it was actually verified
 
-Manual responsive validation is still required until P5 introduces stronger regression gates.
+P5 is the ongoing regression gate.
+
+Manual responsive validation remains required for meaningful UI changes until
+stronger automated regression coverage is deliberately added.
 
 ---
 

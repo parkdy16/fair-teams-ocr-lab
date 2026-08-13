@@ -34,6 +34,8 @@ export type SharedRosterUser = {
   displayName?: string;
 };
 
+export type SharedRosterRole = "owner" | "editor" | "organizer" | "viewer" | "member";
+
 export type FirebaseSharedRosterSnapshot = FirebaseSharedRosterSummary & {
   roster: RoomRoster;
 };
@@ -54,7 +56,7 @@ export type FirebaseSharedGroupSummary = {
   ownerEmail: string;
   rosterCount: number;
   memberCount: number;
-  currentUserRole?: "owner" | "editor" | "viewer" | "member";
+  currentUserRole?: SharedRosterRole;
   memberEmails?: string[];
   pendingInviteEmails?: string[];
   memberNamesByEmail?: Record<string, string>;
@@ -78,7 +80,7 @@ export type FirebaseSharedRosterSummary = {
   playerCount: number;
   createdAt?: string;
   updatedAt?: string;
-  currentUserRole?: "owner" | "editor" | "viewer" | "member";
+  currentUserRole?: SharedRosterRole;
   memberEmails?: string[];
   pendingInviteEmails?: string[];
   memberNamesByEmail?: Record<string, string>;
@@ -417,13 +419,13 @@ function timestampToIso(value: unknown): string | undefined {
   return undefined;
 }
 
-function currentUserRoleFromData(data: DocumentData): "owner" | "editor" | "viewer" | "member" | undefined {
+function currentUserRoleFromData(data: DocumentData): SharedRosterRole | undefined {
   const user = toSharedRosterUser(getFairTeamsAuth().currentUser);
   if (!user) return undefined;
   if (data.ownerUid === user.uid) return "owner";
   const roleByUid = data.roleByUid && typeof data.roleByUid === "object" ? data.roleByUid as Record<string, unknown> : {};
   const role = roleByUid[user.uid];
-  if (role === "owner" || role === "editor" || role === "viewer") return role;
+  if (role === "owner" || role === "editor" || role === "organizer" || role === "viewer") return role;
   const memberUids = Array.isArray(data.memberUids) ? data.memberUids : [];
   return memberUids.includes(user.uid) ? "member" : undefined;
 }
@@ -1040,7 +1042,7 @@ export async function saveFirebaseSharedRoster(roster: RoomRoster): Promise<Fire
 
     const roleByUid = data.roleByUid && typeof data.roleByUid === "object" ? data.roleByUid as Record<string, unknown> : {};
     const role = roleByUid[user.uid];
-    if (role !== "owner" && role !== "editor") {
+    if (role !== "owner" && role !== "editor" && role !== "organizer") {
       throw new Error("You can open this roster, but you do not have edit permission yet.");
     }
 
@@ -1113,7 +1115,7 @@ export async function saveFirebaseSharedRoster(roster: RoomRoster): Promise<Fire
       playerCount,
       createdAt: timestampToIso(data.createdAt),
       updatedAt: now,
-      currentUserRole: role === "owner" || role === "editor" || role === "viewer" ? role : "member",
+      currentUserRole: role === "owner" || role === "editor" || role === "organizer" || role === "viewer" ? role : "member",
       memberNamesByEmail,
       memberNamesByUid,
       lastSavedByEmail: user.email,
@@ -1149,7 +1151,7 @@ export async function restoreFirebaseSharedRosterBackup(rosterId: string, backup
     if (!memberUids.includes(user.uid)) throw new Error("You are not a member of this shared roster.");
     const roleByUid = data.roleByUid && typeof data.roleByUid === "object" ? data.roleByUid as Record<string, unknown> : {};
     const role = roleByUid[user.uid];
-    if (role !== "owner" && role !== "editor") throw new Error("Only owners and editors can restore shared-roster backups.");
+    if (role !== "owner" && role !== "editor" && role !== "organizer") throw new Error("Only organizers can restore shared-roster backups.");
 
     const backups = normalizeSharedRosterBackups(data.backupHistory);
     const target = backups.find((backup) => backup.id === backupId);
@@ -1195,7 +1197,7 @@ export async function restoreFirebaseSharedRosterBackup(rosterId: string, backup
       playerCount,
       createdAt: timestampToIso(data.createdAt),
       updatedAt: now,
-      currentUserRole: role === "owner" || role === "editor" || role === "viewer" ? role : "member",
+      currentUserRole: role === "owner" || role === "editor" || role === "organizer" || role === "viewer" ? role : "member",
       memberNamesByEmail,
       memberNamesByUid,
       lastSavedByEmail: user.email,

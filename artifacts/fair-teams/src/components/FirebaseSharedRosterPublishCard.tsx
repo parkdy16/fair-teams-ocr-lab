@@ -78,7 +78,7 @@ function mergedMemberNames(group?: FirebaseSharedGroupSummary | null, roster?: F
 }
 
 function canRoleSave(role?: string, isOwner?: boolean) {
-  return role === "editor" || role === "owner" || Boolean(isOwner);
+  return role === "organizer" || role === "editor" || role === "owner" || Boolean(isOwner);
 }
 
 function modalShell(title: string, onClose: () => void, body: React.ReactNode) {

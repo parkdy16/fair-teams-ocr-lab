@@ -253,7 +253,7 @@ export interface RosterCloudSource {
   firebaseVersion?: number;
   firebaseOwnerUid?: string;
   firebaseOwnerEmail?: string;
-  firebaseRole?: "owner" | "editor" | "viewer" | "member";
+  firebaseRole?: "owner" | "editor" | "organizer" | "viewer" | "member";
   firebaseLastSavedByEmail?: string;
   firebaseMemberNamesByEmail?: Record<string, string>;
 
@@ -430,7 +430,7 @@ function cleanRosterCloudSource(value: unknown): RosterCloudSource | undefined {
     if (typeof record.firebaseOwnerEmail === "string" && record.firebaseOwnerEmail.trim()) {
       source.firebaseOwnerEmail = record.firebaseOwnerEmail.trim();
     }
-    if (["owner", "editor", "viewer", "member"].includes(String(record.firebaseRole || ""))) {
+    if (["owner", "editor", "organizer", "viewer", "member"].includes(String(record.firebaseRole || ""))) {
       source.firebaseRole = record.firebaseRole as RosterCloudSource["firebaseRole"];
     }
     if (typeof record.firebaseLastSavedByEmail === "string" && record.firebaseLastSavedByEmail.trim()) {

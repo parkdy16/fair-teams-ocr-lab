@@ -19,7 +19,7 @@ service firebase.storage {
 
       return request.auth != null
         && request.auth.uid in roster.data.memberUids
-        && roster.data.roleByUid[request.auth.uid] in ["owner", "editor"];
+        && roster.data.roleByUid[request.auth.uid] in ["owner", "editor", "organizer"];
     }
 
     function allowedAttachmentType() {

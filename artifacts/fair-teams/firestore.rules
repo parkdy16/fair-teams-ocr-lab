@@ -18,7 +18,7 @@ service cloud.firestore {
     function canEditResource() {
       return signedIn()
         && request.auth.uid in resource.data.memberUids
-        && resource.data.roleByUid[request.auth.uid] in ["owner", "editor"];
+        && resource.data.roleByUid[request.auth.uid] in ["owner", "editor", "organizer"];
     }
 
     function groupPath(groupId) {
@@ -38,7 +38,7 @@ service cloud.firestore {
     function canEditGroupById(groupId) {
       return isGroupMemberById(groupId)
         && get(groupPath(groupId)).data.roleByUid[request.auth.uid]
-          in ["owner", "editor"];
+          in ["owner", "editor", "organizer"];
     }
 
     function isRosterMemberById(rosterId) {
@@ -50,7 +50,7 @@ service cloud.firestore {
     function canEditRosterById(rosterId) {
       return isRosterMemberById(rosterId)
         && get(rosterPath(rosterId)).data.roleByUid[request.auth.uid]
-          in ["owner", "editor"];
+          in ["owner", "editor", "organizer"];
     }
 
     function validClubRatingSummary(rosterId, playerId) {

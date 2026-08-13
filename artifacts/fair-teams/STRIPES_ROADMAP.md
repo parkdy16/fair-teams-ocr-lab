@@ -1598,6 +1598,35 @@ This includes:
 - workspace closure/deletion;
 - existing ClubResource assumptions.
 
+#### G1 implementation checkpoint — 2026-08-13
+
+Completed so far:
+
+- repository-wide G1 ownership/governance audit completed from the committed
+  project snapshot;
+- legacy `owner` / `editor` assumptions confirmed across shared-roster
+  services, UI, Firestore rules and Firebase Storage rules;
+- `organizer` is now recognized as a backward-compatible normal editing role;
+- legacy `owner` and `editor` records remain supported;
+- no existing Firestore membership documents were migrated in this step;
+- no creator, invitation, leave, organizer-removal or workspace-deletion
+  behavior changed yet;
+- Firebase Action Board document storage remains temporarily active until the
+  Google-backed replacement exists;
+- Firebase rules have not been deployed yet;
+- production Vite build and `git diff --check` pass;
+- the repository's existing TypeScript typecheck is not currently a clean
+  verification gate because the committed `tsconfig.json` extends a missing
+  workspace `tsconfig.base.json` and includes the stale `src/src` tree.
+  This is pre-existing tooling debt and was not broadened into G1.1.
+
+Next atomic task:
+
+**G1.2 — equal-organizer creation/join semantics and safe-leave groundwork.**
+
+G1.2 must not implement organizer-removal voting yet. Secret-ballot organizer
+removal remains a later protected G1 governance task.
+
 ### G2 — Unified Google Connection
 
 Inspect and consolidate:

@@ -1,0 +1,61 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isRosterMember(rosterId) {
+      let roster = firestore.get(
+        /databases/(default)/documents/sharedRosters/$(rosterId)
+      );
+
+      return request.auth != null
+        && request.auth.uid in roster.data.memberUids;
+    }
+
+    function canEditRoster(rosterId) {
+      let roster = firestore.get(
+        /databases/(default)/documents/sharedRosters/$(rosterId)
+      );
+
+      return request.auth != null
+        && request.auth.uid in roster.data.memberUids
+        && roster.data.roleByUid[request.auth.uid] in ["owner", "editor"];
+    }
+
+    function allowedAttachmentType() {
+      return request.resource.contentType == "image/jpeg"
+        || request.resource.contentType == "image/png"
+        || request.resource.contentType == "image/webp"
+        || request.resource.contentType == "image/gif"
+        || request.resource.contentType == "image/avif"
+        || request.resource.contentType == "image/heic"
+        || request.resource.contentType == "image/heif"
+        || request.resource.contentType == "application/pdf"
+        || request.resource.contentType == "text/plain"
+        || request.resource.contentType == "text/csv"
+        || request.resource.contentType == "application/rtf"
+        || request.resource.contentType == "application/msword"
+        || request.resource.contentType == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        || request.resource.contentType == "application/vnd.ms-excel"
+        || request.resource.contentType == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        || request.resource.contentType == "application/vnd.ms-powerpoint"
+        || request.resource.contentType == "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        || request.resource.contentType == "application/vnd.oasis.opendocument.text"
+        || request.resource.contentType == "application/vnd.oasis.opendocument.spreadsheet"
+        || request.resource.contentType == "application/vnd.oasis.opendocument.presentation";
+    }
+
+    match /sharedRosters/{rosterId}/resources/{resourceId}/{fileName} {
+      allow read: if isRosterMember(rosterId);
+
+      allow create: if canEditRoster(rosterId)
+        && request.resource.size > 0
+        && request.resource.size <= 10 * 1024 * 1024
+        && allowedAttachmentType();
+
+      allow delete: if canEditRoster(rosterId);
+
+      allow update: if false;
+    }
+  }
+}

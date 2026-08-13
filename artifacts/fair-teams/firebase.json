@@ -2,5 +2,11 @@
   "functions": {
     "source": "functions",
     "runtime": "nodejs22"
+  },
+  "storage": {
+    "rules": "storage.rules"
+  },
+  "firestore": {
+    "rules": "firestore.rules"
   }
 }

@@ -1,0 +1,260 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function signedInEmail() {
+      return request.auth.token.email;
+    }
+
+    function isGroupMember() {
+      return signedIn() && request.auth.uid in resource.data.memberUids;
+    }
+
+    function canEditResource() {
+      return signedIn()
+        && request.auth.uid in resource.data.memberUids
+        && resource.data.roleByUid[request.auth.uid] in ["owner", "editor"];
+    }
+
+    function groupPath(groupId) {
+      return /databases/$(database)/documents/sharedGroups/$(groupId);
+    }
+
+    function rosterPath(rosterId) {
+      return /databases/$(database)/documents/sharedRosters/$(rosterId);
+    }
+
+    function isGroupMemberById(groupId) {
+      return signedIn()
+        && exists(groupPath(groupId))
+        && request.auth.uid in get(groupPath(groupId)).data.memberUids;
+    }
+
+    function canEditGroupById(groupId) {
+      return isGroupMemberById(groupId)
+        && get(groupPath(groupId)).data.roleByUid[request.auth.uid]
+          in ["owner", "editor"];
+    }
+
+    function isRosterMemberById(rosterId) {
+      return signedIn()
+        && exists(rosterPath(rosterId))
+        && request.auth.uid in get(rosterPath(rosterId)).data.memberUids;
+    }
+
+    function canEditRosterById(rosterId) {
+      return isRosterMemberById(rosterId)
+        && get(rosterPath(rosterId)).data.roleByUid[request.auth.uid]
+          in ["owner", "editor"];
+    }
+
+    function validClubRatingSummary(rosterId, playerId) {
+      return isRosterMemberById(rosterId)
+        && request.resource.data.rosterId == rosterId
+        && request.resource.data.playerId == playerId
+        && request.resource.data.ratingCount is int
+        && request.resource.data.ratingCount >= 0
+        && request.resource.data.ratingSum is number
+        && request.resource.data.ratingSum >= 0
+        && (
+          request.resource.data.averageSkill == null
+          ||
+          (
+            request.resource.data.averageSkill is number
+            && request.resource.data.averageSkill >= 1
+            && request.resource.data.averageSkill <= 10
+          )
+        );
+    }
+
+    function validOwnClubRatingSubmission(rosterId) {
+      return isRosterMemberById(rosterId)
+        && request.resource.data.rosterId == rosterId
+        && request.resource.data.playerId is string
+        && request.resource.data.playerId.size() > 0
+        && request.resource.data.userUid == request.auth.uid
+        && request.resource.data.skipped is bool
+        && (
+          (
+            request.resource.data.skipped == true
+            && request.resource.data.skill == null
+          )
+          ||
+          (
+            request.resource.data.skipped == false
+            && request.resource.data.skill is number
+            && request.resource.data.skill >= 1
+            && request.resource.data.skill <= 10
+          )
+        );
+    }
+
+    function validClubNote(rosterId) {
+      return isRosterMemberById(rosterId)
+        && request.resource.data.rosterId == rosterId
+        && request.resource.data.createdByUid == request.auth.uid
+        && request.resource.data.text is string
+        && request.resource.data.text.size() > 0
+        && request.resource.data.text.size() <= 160;
+    }
+
+    match /sharedGroups/{groupId} {
+      allow create: if signedIn()
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.auth.uid in request.resource.data.memberUids;
+
+      allow read: if signedIn()
+        && (
+          request.auth.uid in resource.data.memberUids
+          || signedInEmail() in resource.data.pendingInviteEmails
+        );
+
+      allow update: if canEditResource()
+        ||
+        (
+          signedIn()
+          && signedInEmail() in resource.data.pendingInviteEmails
+        );
+
+      allow delete: if signedIn()
+        && resource.data.ownerUid == request.auth.uid;
+
+      match /equipmentBags/{bagId} {
+        allow read: if isGroupMemberById(groupId);
+        allow create, update, delete: if canEditGroupById(groupId);
+      }
+
+      // Fair Teams v1.50 Tasks Board
+      match /taskBoard/{boardDoc} {
+        allow read: if isGroupMemberById(groupId);
+        allow create, update, delete: if canEditGroupById(groupId);
+
+        match /columns/{columnId} {
+          allow read: if isGroupMemberById(groupId);
+          allow create, update, delete: if canEditGroupById(groupId);
+        }
+
+        match /cards/{cardId} {
+          allow read: if isGroupMemberById(groupId);
+          allow create, update, delete: if canEditGroupById(groupId);
+        }
+      }
+    }
+
+    match /sharedRosters/{rosterId} {
+      allow create: if signedIn()
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.auth.uid in request.resource.data.memberUids;
+
+      allow read: if signedIn()
+        && (
+          request.auth.uid in resource.data.memberUids
+          || signedInEmail() in resource.data.pendingInviteEmails
+        );
+
+      allow update: if canEditResource()
+        ||
+        (
+          signedIn()
+          && signedInEmail() in resource.data.pendingInviteEmails
+        );
+
+      allow delete: if signedIn()
+        && resource.data.ownerUid == request.auth.uid;
+
+      match /equipmentBags/{bagId} {
+        allow read: if isRosterMemberById(rosterId);
+        allow create, update, delete: if canEditRosterById(rosterId);
+      }
+
+      // Fair Teams v1.50 Tasks Board
+      match /taskBoard/{boardDoc} {
+        allow read: if isRosterMemberById(rosterId);
+        allow create, update, delete: if canEditRosterById(rosterId);
+
+        match /columns/{columnId} {
+          allow read: if isRosterMemberById(rosterId);
+          allow create, update, delete: if canEditRosterById(rosterId);
+        }
+
+        match /cards/{cardId} {
+          allow read: if isRosterMemberById(rosterId);
+          allow create, update, delete: if canEditRosterById(rosterId);
+        }
+      }
+
+      // Fair Teams v1.56 Club Attendance
+      match /attendanceIssues/{issueId} {
+        allow read: if isRosterMemberById(rosterId);
+
+        allow create, update, delete: if canEditRosterById(rosterId);
+      }
+
+      match /clubRatingSummaries/{playerId} {
+        // Club average is visible to roster members.
+        allow read: if isRosterMemberById(rosterId);
+
+        // Testing version: client updates the aggregate summary.
+        // Later production version should move this to a Cloud Function.
+        allow create, update: if validClubRatingSummary(rosterId, playerId);
+
+        allow delete: if false;
+      }
+
+      match /clubRatingSubmissions/{submissionId} {
+        // Allows the app transaction to read the user's own rating document,
+        // even before it exists. App document IDs are expected to start with:
+        // request.auth.uid + "_"
+        allow get: if isRosterMemberById(rosterId)
+          && submissionId.matches(request.auth.uid + "_.*");
+
+        // For existing own rating documents only.
+        // Individual ratings stay private.
+        allow list: if isRosterMemberById(rosterId)
+          && resource.data.userUid == request.auth.uid;
+
+        allow create: if validOwnClubRatingSubmission(rosterId)
+          && submissionId.matches(request.auth.uid + "_.*");
+
+        allow update: if validOwnClubRatingSubmission(rosterId)
+          && resource.data.userUid == request.auth.uid
+          && submissionId.matches(request.auth.uid + "_.*");
+
+        allow delete: if false;
+      }
+
+      // Stripes shared file/resource library
+      match /resources/{resourceId} {
+        allow read: if isRosterMemberById(rosterId);
+
+        allow create: if canEditRosterById(rosterId)
+          && request.resource.data.createdByUid == request.auth.uid
+          && request.resource.data.type in [
+            "stripe_file",
+            "google_drive",
+            "external_link"
+          ];
+
+        allow update, delete: if canEditRosterById(rosterId);
+      }
+
+      match /clubNotes/{noteId} {
+        // Shared post-it notes are visible to all organizers in the roster.
+        allow read: if isRosterMemberById(rosterId);
+
+        allow create: if validClubNote(rosterId);
+
+        // Organizers can remove only their own notes.
+        allow delete: if isRosterMemberById(rosterId)
+          && resource.data.createdByUid == request.auth.uid;
+
+        allow update: if false;
+      }
+    }
+  }
+}

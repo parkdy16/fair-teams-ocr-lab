@@ -8,6 +8,7 @@ import {
 } from "firebase/firestore";
 import {
   deleteObject,
+  getBlob,
   ref as storageRef,
   uploadBytes,
 } from "firebase/storage";
@@ -405,6 +406,30 @@ export async function listClubResources(
       (resource): resource is ClubResource => Boolean(resource),
     )
     .sort((a, b) => b.createdAt - a.createdAt);
+}
+
+export async function getClubFileBlob(
+  scopeId: string,
+  resource: ClubResource,
+): Promise<Blob> {
+  const rosterId = sharedRosterIdFromScope(scopeId);
+  requireResourceActor();
+
+  if (resource.type !== "stripe_file" || !resource.storagePath) {
+    throw new Error("This resource is not a Stripes-hosted file.");
+  }
+
+  const expectedPrefix =
+    `sharedRosters/${rosterId}/resources/${cleanRequiredId(resource.id, "Resource ID")}/`;
+
+  if (!resource.storagePath.startsWith(expectedPrefix)) {
+    throw new Error("The file path does not belong to this shared roster.");
+  }
+
+  return getBlob(
+    storageRef(getFairTeamsStorage(), resource.storagePath),
+    STRIPES_FILE_MAX_BYTES,
+  );
 }
 
 function storageObjectWasAlreadyMissing(error: unknown) {

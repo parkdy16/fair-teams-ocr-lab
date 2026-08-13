@@ -10,6 +10,7 @@ import {
   ChevronUp,
   ClipboardList,
   ExternalLink,
+  FileText,
   Gavel,
   Hand,
   History,
@@ -18,6 +19,7 @@ import {
   Mail,
   MapPin,
   MessageCircle,
+  Paperclip,
   Pencil,
   Plus,
   Send,
@@ -33,6 +35,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { StripesEditorContent, StripesSheetContent, StripesWorkspaceContent } from "@/components/ui/stripes-modal";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  deleteClubFileResource,
+  getClubFileBlob,
+  listClubResources,
+  STRIPES_FILE_MAX_CARD_ATTACHMENTS,
+  uploadClubFileResource,
+  type ClubResource,
+} from "@/lib/clubResourceService";
 import type { RoomPlayer } from "@/lib/localRoster";
 import type { SharedRosterUser } from "@/lib/sharedRosterService";
 import {
@@ -858,6 +868,13 @@ export function TaskBoard({
   const [linkUrl, setLinkUrl] = useState("");
   const [linkLabel, setLinkLabel] = useState("");
 
+  const [clubResources, setClubResources] = useState<ClubResource[]>([]);
+  const [fileUploadingCardId, setFileUploadingCardId] = useState<string | null>(null);
+  const [fileOpeningResourceId, setFileOpeningResourceId] = useState<string | null>(null);
+  const [fileDeletingResourceId, setFileDeletingResourceId] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const fileUploadTargetCardIdRef = useRef<string | null>(null);
+
   const [actionCardId, setActionCardId] = useState<string | null>(null);
   const [actionText, setActionText] = useState("");
   const [actionPeopleKeys, setActionPeopleKeys] = useState<string[]>([]);
@@ -940,6 +957,34 @@ export function TaskBoard({
       setError(nextError.message || "Could not load Action Board.");
     });
   }, [online, rosterName, scopeId, workspaceKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    setClubResources([]);
+
+    if (!online || !isSharedRoster || !scopeId) {
+      return;
+    }
+
+    listClubResources(scopeId)
+      .then((resources) => {
+        if (!cancelled) setClubResources(resources);
+      })
+      .catch((nextError) => {
+        if (!cancelled) {
+          setError(
+            nextError instanceof Error
+              ? nextError.message
+              : "Could not load card files.",
+          );
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isSharedRoster, online, scopeId]);
 
   useEffect(() => {
     if (!online) writeLocalBoard(workspaceKey, board);
@@ -2059,6 +2104,184 @@ export function TaskBoard({
     catch (nextError) { setError(nextError instanceof Error ? nextError.message : "Could not remove link."); }
   };
 
+  const cardFileResources = (cardId: string) =>
+    clubResources.filter(
+      (resource) =>
+        resource.type === "stripe_file"
+        && (
+          resource.contexts?.some(
+            (context) =>
+              context.kind === "action_board"
+              && context.entityId === cardId,
+          )
+          || (
+            resource.origin.kind === "action_board"
+            && resource.origin.entityId === cardId
+          )
+        ),
+    );
+
+  const fileSizeText = (size?: number) => {
+    if (!size || size <= 0) return "File";
+    if (size < 1024) return `${size} B`;
+    if (size < 1024 * 1024) {
+      return `${Math.max(1, Math.round(size / 1024))} KB`;
+    }
+    return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const openAddFile = (card: TaskBoardCard) => {
+    if (!isSharedRoster || !scopeId || !user?.email) {
+      setError("Sign in to a shared roster to add files.");
+      return;
+    }
+
+    if (
+      cardFileResources(card.id).length
+      >= STRIPES_FILE_MAX_CARD_ATTACHMENTS
+    ) {
+      setError(
+        `A card can have up to ${STRIPES_FILE_MAX_CARD_ATTACHMENTS} Stripes files.`,
+      );
+      return;
+    }
+
+    fileUploadTargetCardIdRef.current = card.id;
+    setAddToCardId(null);
+    fileInputRef.current?.click();
+  };
+
+  const handleFileSelected = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    const cardId = fileUploadTargetCardIdRef.current;
+
+    if (!file || !cardId || !scopeId) {
+      fileUploadTargetCardIdRef.current = null;
+      return;
+    }
+
+    if (
+      cardFileResources(cardId).length
+      >= STRIPES_FILE_MAX_CARD_ATTACHMENTS
+    ) {
+      fileUploadTargetCardIdRef.current = null;
+      setError(
+        `A card can have up to ${STRIPES_FILE_MAX_CARD_ATTACHMENTS} Stripes files.`,
+      );
+      return;
+    }
+
+    setFileUploadingCardId(cardId);
+    setError("");
+
+    try {
+      const resource = await uploadClubFileResource(
+        scopeId,
+        file,
+        {
+          kind: "action_board",
+          entityId: cardId,
+        },
+      );
+
+      setClubResources((current) => [
+        resource,
+        ...current.filter((item) => item.id !== resource.id),
+      ]);
+    } catch (nextError) {
+      setError(
+        nextError instanceof Error
+          ? nextError.message
+          : "Could not upload file.",
+      );
+    } finally {
+      fileUploadTargetCardIdRef.current = null;
+      setFileUploadingCardId(null);
+    }
+  };
+
+  const openCardFile = async (resource: ClubResource) => {
+    if (!scopeId || fileOpeningResourceId) return;
+
+    const popup =
+      typeof window !== "undefined"
+        ? window.open("", "_blank")
+        : null;
+
+    if (popup) {
+      popup.opener = null;
+      popup.document.title = "Opening Stripes file…";
+    }
+
+    setFileOpeningResourceId(resource.id);
+    setError("");
+
+    try {
+      const blob = await getClubFileBlob(scopeId, resource);
+      const objectUrl = URL.createObjectURL(blob);
+
+      if (popup) {
+        popup.location.href = objectUrl;
+      } else {
+        const anchor = document.createElement("a");
+        anchor.href = objectUrl;
+        anchor.download = resource.name;
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+      }
+
+      window.setTimeout(
+        () => URL.revokeObjectURL(objectUrl),
+        60_000,
+      );
+    } catch (nextError) {
+      popup?.close();
+      setError(
+        nextError instanceof Error
+          ? nextError.message
+          : "Could not open file.",
+      );
+    } finally {
+      setFileOpeningResourceId(null);
+    }
+  };
+
+  const removeCardFile = async (resource: ClubResource) => {
+    if (!scopeId || fileDeletingResourceId) return;
+
+    if (
+      typeof window !== "undefined"
+      && !window.confirm(
+        `Remove "${resource.name}"? This deletes the stored Stripes file.`,
+      )
+    ) {
+      return;
+    }
+
+    setFileDeletingResourceId(resource.id);
+    setError("");
+
+    try {
+      await deleteClubFileResource(scopeId, resource);
+      setClubResources((current) =>
+        current.filter((item) => item.id !== resource.id),
+      );
+    } catch (nextError) {
+      setError(
+        nextError instanceof Error
+          ? nextError.message
+          : "Could not remove file.",
+      );
+    } finally {
+      setFileDeletingResourceId(null);
+    }
+  };
+
   const openAddAction = (card: TaskBoardCard) => {
     if (latestOpenDecision(card)) return;
     setActionCardId(card.id);
@@ -2856,6 +3079,59 @@ export function TaskBoard({
             {card.links?.map((link) => <div key={link.id} className="flex min-w-0 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2"><a href={link.url} target="_blank" rel="noreferrer" className="inline-flex min-w-0 flex-1 items-center gap-2 text-xs font-medium text-slate-700"><Link2 className="h-3.5 w-3.5 shrink-0 text-slate-400" /><span className="truncate">{link.label}</span><ExternalLink className="h-3 w-3 shrink-0 text-slate-400" /></a>{stage !== "done" && <button type="button" className="rounded-lg p-1 text-slate-300 hover:bg-red-50 hover:text-red-600" onClick={() => void removeLink(card, link.id)} aria-label={`Remove ${link.label}`}><Trash2 className="h-3.5 w-3.5" /></button>}</div>)}
           </div>}
 
+          {fileUploadingCardId === card.id && (
+            <div className="mb-3 flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
+              <Paperclip className="h-4 w-4 shrink-0 text-slate-400" />
+              <div className="min-w-0 flex-1">
+                <div className="text-xs font-medium text-slate-600">Uploading file…</div>
+                <div className="text-[10px] font-normal text-slate-400">Keep this card open while the upload finishes.</div>
+              </div>
+            </div>
+          )}
+
+          {cardFileResources(card.id).length > 0 && (
+            <div className="mb-3 grid gap-1.5">
+              {cardFileResources(card.id).map((resource) => (
+                <div
+                  key={resource.id}
+                  className="flex min-w-0 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2"
+                >
+                  <button
+                    type="button"
+                    className="flex min-w-0 flex-1 items-center gap-2 text-left disabled:cursor-wait"
+                    disabled={fileOpeningResourceId === resource.id}
+                    onClick={() => void openCardFile(resource)}
+                  >
+                    <FileText className="h-4 w-4 shrink-0 text-slate-400" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-xs font-medium text-slate-700">
+                        {resource.name}
+                      </span>
+                      <span className="block truncate text-[10px] font-normal text-slate-400">
+                        {fileOpeningResourceId === resource.id
+                          ? "Opening…"
+                          : `${fileSizeText(resource.size)} · ${resource.createdByName}${resource.createdAt ? ` · ${new Date(resource.createdAt).toLocaleDateString()}` : ""}`}
+                      </span>
+                    </span>
+                    <ExternalLink className="h-3 w-3 shrink-0 text-slate-400" />
+                  </button>
+
+                  {stage !== "done" && (
+                    <button
+                      type="button"
+                      className="rounded-lg p-1 text-slate-300 hover:bg-red-50 hover:text-red-600 disabled:cursor-wait disabled:opacity-40"
+                      disabled={fileDeletingResourceId === resource.id}
+                      onClick={() => void removeCardFile(resource)}
+                      aria-label={`Remove ${resource.name}`}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
           {(decisions.length > 0 || actions.length > 0) && <div className="mb-3 flex justify-end"><button type="button" className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-[11px] font-medium text-slate-600 hover:bg-slate-50" onClick={() => setEvolutionCardId(card.id)}><History className="h-3.5 w-3.5" />Evolution · {evolutionStepCount(card)}</button></div>}
           {renderCurrentChapter(card)}
           {renderStageTools(card, stage)}
@@ -3503,10 +3779,48 @@ export function TaskBoard({
                   </span>
                 </span>
               </button>
+
+              <button
+                type="button"
+                disabled={
+                  !online
+                  || !isSharedRoster
+                  || Boolean(fileUploadingCardId)
+                  || cardFileResources(addToCardCard.id).length >= STRIPES_FILE_MAX_CARD_ATTACHMENTS
+                }
+                className="flex min-h-12 items-center gap-3 rounded-2xl px-3 py-2.5 text-left hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-45"
+                onClick={() => openAddFile(addToCardCard)}
+              >
+                <Paperclip className="h-4 w-4 shrink-0 text-slate-500" />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-semibold text-[#102A43]">File</span>
+                  <span className="block truncate text-[11px] font-normal text-slate-400">
+                    {!isSharedRoster
+                      ? "Shared roster required"
+                      : !online
+                        ? "Sign in to add files"
+                        : fileUploadingCardId === addToCardCard.id
+                          ? "Uploading…"
+                          : cardFileResources(addToCardCard.id).length >= STRIPES_FILE_MAX_CARD_ATTACHMENTS
+                            ? `${STRIPES_FILE_MAX_CARD_ATTACHMENTS} of ${STRIPES_FILE_MAX_CARD_ATTACHMENTS} added`
+                            : cardFileResources(addToCardCard.id).length > 0
+                              ? `${cardFileResources(addToCardCard.id).length} of ${STRIPES_FILE_MAX_CARD_ATTACHMENTS} added`
+                              : "Upload from this device"}
+                  </span>
+                </span>
+              </button>
             </div>
           )}
         </StripesSheetContent>
       </Dialog>
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        className="hidden"
+        accept=".jpg,.jpeg,.png,.webp,.gif,.avif,.heic,.heif,.pdf,.txt,.csv,.rtf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.odp"
+        onChange={(event) => void handleFileSelected(event)}
+      />
 
       <Dialog open={Boolean(linkCardId)} onOpenChange={(open) => { if (!open) setLinkCardId(null); }}>
         <StripesSheetContent onOpenAutoFocus={(event) => event.preventDefault()}>

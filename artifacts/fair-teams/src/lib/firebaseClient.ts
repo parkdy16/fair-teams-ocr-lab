@@ -1,6 +1,7 @@
 import { initializeApp, getApp, getApps, type FirebaseApp } from "firebase/app";
 import { getAuth, type Auth } from "firebase/auth";
 import { getFirestore, type Firestore } from "firebase/firestore";
+import { getStorage, type FirebaseStorage } from "firebase/storage";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyDGWZI6T-RQAch8YMon-kcFV36T-XksEbw",
@@ -14,6 +15,7 @@ const firebaseConfig = {
 let app: FirebaseApp | null = null;
 let auth: Auth | null = null;
 let firestore: Firestore | null = null;
+let storage: FirebaseStorage | null = null;
 
 export function getFairTeamsFirebaseApp() {
   if (!app) {
@@ -34,6 +36,13 @@ export function getFairTeamsFirestore() {
     firestore = getFirestore(getFairTeamsFirebaseApp());
   }
   return firestore;
+}
+
+export function getFairTeamsStorage() {
+  if (!storage) {
+    storage = getStorage(getFairTeamsFirebaseApp());
+  }
+  return storage;
 }
 
 export function getFirebaseProjectId() {

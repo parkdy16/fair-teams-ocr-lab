@@ -426,10 +426,21 @@ export async function getClubFileBlob(
     throw new Error("The file path does not belong to this shared roster.");
   }
 
-  return getBlob(
+  const blob = await getBlob(
     storageRef(getFairTeamsStorage(), resource.storagePath),
     STRIPES_FILE_MAX_BYTES,
   );
+
+  const storedType = resource.mimeType?.trim().toLowerCase();
+  const extension =
+    resource.name.trim().toLowerCase().split(".").pop() || "";
+  const safeType =
+    storedType && ALLOWED_ATTACHMENT_TYPES.has(storedType)
+      ? storedType
+      : ATTACHMENT_TYPE_BY_EXTENSION[extension]
+        || "application/octet-stream";
+
+  return blob.slice(0, blob.size, safeType);
 }
 
 function storageObjectWasAlreadyMissing(error: unknown) {

@@ -2261,9 +2261,24 @@ completed locally; G1.5d now owns coordinated production verification.
   refreshed identity state against the forced token's `email_verified` claim
   and refreshes that identity once immediately before Invite, legacy Send
   email, Resend or Cancel; the backend verified-sender rule is unchanged;
-- G1.5d remains in progress pending deployment and re-test of this second fix
-  plus completion of the real-account invitation, verification, reset,
-  acceptance and navigation test matrix.
+- the verified-sender refresh fix has now passed production re-testing, and a
+  live organizer invitation email was sent successfully;
+- that live send exposed a naming defect: historical shared groups may retain
+  the placeholder `My Group` while the authoritative group metadata already
+  records a meaningful `lastSavedRosterName`; invitation creation previously
+  snapshotted the placeholder without applying a meaningful-name fallback, so
+  both the Resend email and recipient onboarding repeated the wrong name;
+- the local server-side correction now resolves invitation names from a
+  meaningful workspace name first, then the current shared-roster name, then a
+  neutral `Stripes workspace` fallback; create, resend, recipient context/list
+  and acceptance handoff share that resolution, allowing existing pending
+  invitations to benefit safely without exposing workspace documents;
+- the blank sender avatar in the received invitation email is deferred as a
+  separate branding/deliverability follow-up; no BIMI, DNS or avatar-provider
+  work is part of this naming correction;
+- G1.5d remains in progress pending deployment and live re-test of the naming
+  correction plus completion of the real-account invitation, verification,
+  reset, acceptance and navigation test matrix.
 
 ### Security & Privacy Launch Gate
 

@@ -10,6 +10,7 @@ const {
   invitationMembershipUpdates,
   invitationState,
   invitationViewerStatus,
+  invitationWorkspaceName,
   legacyInvitationRecord,
   maskInvitationEmail,
   officialInvitationUrl,
@@ -131,6 +132,89 @@ test("public invitation context contains only sanitized minimal fields", () => {
   assert.equal(context.maskedInvitedEmail, maskInvitationEmail("recipient.long@example.com"));
   assert.equal(JSON.stringify(context).includes("recipient.long@example.com"), false);
   assert.equal(JSON.stringify(context).includes("private-group-id"), false);
+});
+
+test("invitation naming prefers a meaningful authoritative workspace name", () => {
+  assert.equal(invitationWorkspaceName({
+    name: "Thursday Football",
+    lastSavedRosterName: "Tuesday Training",
+  }, {
+    workspaceNameSnapshot: "Friday Football",
+  }), "Thursday Football");
+});
+
+test("invitation naming falls back to the meaningful shared-roster name", () => {
+  assert.equal(invitationWorkspaceName({
+    name: "",
+    lastSavedRosterName: "Tuesday Training",
+  }, {
+    workspaceNameSnapshot: "Friday Football",
+  }), "Tuesday Training");
+});
+
+test("the historical My Group placeholder cannot override a real roster name", () => {
+  assert.equal(invitationWorkspaceName({
+    name: "  My Group  ",
+    lastSavedRosterName: "  Sunday   Kickabout ",
+  }, {
+    workspaceNameSnapshot: "My Group",
+  }), "Sunday Kickabout");
+});
+
+test("invitation naming uses a neutral fallback when workspace and roster names are generic", () => {
+  assert.equal(invitationWorkspaceName({
+    name: "My Stripes group",
+    lastSavedRosterName: "Shared roster",
+  }), "Stripes workspace");
+});
+
+test("a generic Shared roster snapshot cannot survive placeholder current names", () => {
+  assert.equal(invitationWorkspaceName({
+    name: "My Group",
+    lastSavedRosterName: "Shared roster",
+  }, {
+    workspaceNameSnapshot: "Shared roster",
+  }), "Stripes workspace");
+});
+
+test("a generic New roster snapshot cannot survive placeholder current names", () => {
+  assert.equal(invitationWorkspaceName({
+    name: "My Stripes group",
+    lastSavedRosterName: "New roster",
+  }, {
+    workspaceNameSnapshot: "New roster",
+  }), "Stripes workspace");
+});
+
+test("a meaningful legacy snapshot remains available when the group is unavailable", () => {
+  assert.equal(invitationWorkspaceName(null, {
+    workspaceNameSnapshot: "Friday Football",
+  }), "Friday Football");
+});
+
+test("invitation email and sanitized context use the same resolved workspace name", () => {
+  const invitationId = "A1b2C3d4E5f6G7h8I9j0";
+  const workspaceName = invitationWorkspaceName({
+    name: "My Group",
+    lastSavedRosterName: "Friday Football",
+  });
+  const invitation = {
+    workspaceNameSnapshot: workspaceName,
+    inviterDisplayNameSnapshot: "Alex Organizer",
+    normalizedEmail: "recipient@example.com",
+    status: "pending",
+    expiresAtIso: new Date(NOW + INVITATION_TTL_MS).toISOString(),
+  };
+  const context = sanitizedInvitationContext(invitation, NOW);
+  const email = invitationEmail({
+    invitationId,
+    workspaceName,
+    inviterDisplayName: invitation.inviterDisplayNameSnapshot,
+    expiresAtIso: invitation.expiresAtIso,
+  });
+  assert.equal(context.workspaceName, "Friday Football");
+  assert.match(email.subject, /^Join Friday Football in Stripes$/);
+  assert.match(email.text, /join Friday Football in Stripes/);
 });
 
 test("invitation viewer status is signed_out without an authenticated identity", () => {

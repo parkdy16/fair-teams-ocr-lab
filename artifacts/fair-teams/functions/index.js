@@ -23,6 +23,7 @@ const {
   invitationLockId,
   invitationState,
   invitationViewerStatus,
+  invitationWorkspaceName,
   legacyInvitationRecord,
   normalizeInvitationEmail,
   pendingInvitationIncludes,
@@ -371,6 +372,13 @@ function recipientInvitationSummary(invitationId, invitation, nowMillis = Date.n
   };
 }
 
+function invitationWithWorkspaceName(invitation, workspace) {
+  return {
+    ...invitation,
+    workspaceNameSnapshot: invitationWorkspaceName(workspace, invitation),
+  };
+}
+
 async function ensureRecipientInvitationForGroup(db, groupId, recipient, nowMillis) {
   const groupRef = db.collection("sharedGroups").doc(groupId);
   const lockRef = db.collection(WORKSPACE_INVITATION_LOCK_COLLECTION)
@@ -411,7 +419,7 @@ async function ensureRecipientInvitationForGroup(db, groupId, recipient, nowMill
     const adopted = legacyInvitationRecord({
       groupId,
       normalizedEmail: recipient.email,
-      workspaceName: groupData.name,
+      workspaceName: invitationWorkspaceName(groupData),
       nowMillis,
     });
     const expiresAtMillis = Date.parse(adopted.expiresAtIso);
@@ -561,8 +569,7 @@ exports.createWorkspaceOrganizerInvitation = onCall({
       const rosterIds = workspaceRosterIds(groupData);
       const rosterRefs = rosterIds.map((rosterId) => db.collection("sharedRosters").doc(rosterId));
       const rosterSnaps = rosterRefs.length ? await tx.getAll(...rosterRefs) : [];
-      const workspaceNameSnapshot = cleanText(groupData.name || "Stripes workspace", 120)
-        || "Stripes workspace";
+      const workspaceNameSnapshot = invitationWorkspaceName(groupData);
       const inviterDisplayNameSnapshot = actorName(request.auth);
       const invitation = {
         schemaVersion: 1,
@@ -717,7 +724,9 @@ exports.resendWorkspaceOrganizerInvitation = onCall({
         throw new HttpsError("resource-exhausted", `Wait ${seconds} seconds before resending this invitation.`);
       }
 
+      const workspaceNameSnapshot = invitationWorkspaceName(groupData, invitationData);
       tx.update(invitationRef, {
+        workspaceNameSnapshot,
         deliveryStatus: "sending",
         deliveryError: FieldValue.delete(),
         sendAttemptId,
@@ -728,6 +737,7 @@ exports.resendWorkspaceOrganizerInvitation = onCall({
       });
       return {
         ...invitationData,
+        workspaceNameSnapshot,
         deliveryStatus: "sending",
         deliveryError: null,
         sendAttemptId,
@@ -854,7 +864,8 @@ exports.cancelWorkspaceOrganizerInvitation = onCall({ region: REGION }, async (r
 
 exports.getWorkspaceOrganizerInvitationContext = onCall({ region: REGION }, async (request) => {
   const invitationId = safeInvitationId(request.data?.invitationId);
-  const invitationSnap = await getFirestore()
+  const db = getFirestore();
+  const invitationSnap = await db
     .collection(WORKSPACE_INVITATION_COLLECTION)
     .doc(invitationId)
     .get();
@@ -862,8 +873,14 @@ exports.getWorkspaceOrganizerInvitationContext = onCall({ region: REGION }, asyn
     throw new HttpsError("not-found", "This invitation no longer exists.");
   }
   const invitation = invitationSnap.data() || {};
+  const groupId = safeWorkspaceId(invitation.groupId);
+  const groupSnap = await db.collection("sharedGroups").doc(groupId).get();
+  const invitationContext = invitationWithWorkspaceName(
+    invitation,
+    groupSnap.exists ? groupSnap.data() || {} : {},
+  );
   return {
-    ...sanitizedInvitationContext(invitation),
+    ...sanitizedInvitationContext(invitationContext),
     viewerStatus: invitationViewerStatus(invitation, invitationActor(request)),
   };
 });
@@ -937,14 +954,15 @@ exports.listWorkspaceRecipientInvitations = onCall({ region: REGION }, async (re
       .where("pendingInviteEmails", "array-contains", recipient.email)
       .limit(50)
       .get();
-    const records = await Promise.all(groupSnapshot.docs.map((groupDoc) => (
-      ensureRecipientInvitationForGroup(db, groupDoc.id, recipient, now)
-    )));
+    const records = await Promise.all(groupSnapshot.docs.map(async (groupDoc) => {
+      const record = await ensureRecipientInvitationForGroup(db, groupDoc.id, recipient, now);
+      return record ? { ...record, workspace: groupDoc.data() || {} } : null;
+    }));
     const invitations = records
       .filter(Boolean)
       .map((record) => recipientInvitationSummary(
         record.invitationId,
-        record.invitation,
+        invitationWithWorkspaceName(record.invitation, record.workspace),
         now,
       ))
       .sort((a, b) => a.workspaceName.localeCompare(b.workspaceName));
@@ -1035,8 +1053,7 @@ exports.acceptWorkspaceOrganizerInvitation = onCall({ region: REGION }, async (r
         ok: true,
         invitationId,
         groupId,
-        workspaceName: cleanText(groupData.name || invitationData.workspaceNameSnapshot, 120)
-          || "Stripes workspace",
+        workspaceName: invitationWorkspaceName(groupData, invitationData),
         rosterIds,
         acceptedAt: nowIso,
       };

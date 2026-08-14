@@ -6,6 +6,20 @@ const { organizerUidsFromWorkspace } = require("./organizerRemoval");
 const INVITATION_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 const RESEND_COOLDOWN_MS = 5 * 60 * 1000;
 const OFFICIAL_APP_URL = "https://stripes.work/app";
+const GENERIC_WORKSPACE_NAME = "Stripes workspace";
+const PLACEHOLDER_WORKSPACE_NAMES = new Set([
+  "my group",
+  "my stripes group",
+  "stripes workspace",
+]);
+const PLACEHOLDER_ROSTER_NAMES = new Set([
+  "new roster",
+  "shared roster",
+]);
+const PLACEHOLDER_INVITATION_SNAPSHOT_NAMES = new Set([
+  ...PLACEHOLDER_WORKSPACE_NAMES,
+  ...PLACEHOLDER_ROSTER_NAMES,
+]);
 
 class WorkspaceInvitationError extends Error {
   constructor(code, message) {
@@ -28,6 +42,22 @@ function validInvitationEmail(value) {
 function cleanInvitationText(value, fallback, maximum = 120) {
   const cleaned = String(value || "").replace(/\s+/g, " ").trim().slice(0, maximum);
   return cleaned || fallback;
+}
+
+function meaningfulInvitationName(value, placeholders) {
+  const name = cleanInvitationText(value, "", 120);
+  return name && !placeholders.has(name.toLowerCase()) ? name : "";
+}
+
+function invitationWorkspaceName(workspace, invitation) {
+  const data = workspace && typeof workspace === "object" ? workspace : {};
+  return meaningfulInvitationName(data.name, PLACEHOLDER_WORKSPACE_NAMES)
+    || meaningfulInvitationName(data.lastSavedRosterName, PLACEHOLDER_ROSTER_NAMES)
+    || meaningfulInvitationName(
+      invitation?.workspaceNameSnapshot,
+      PLACEHOLDER_INVITATION_SNAPSHOT_NAMES,
+    )
+    || GENERIC_WORKSPACE_NAME;
 }
 
 function timestampMillis(value) {
@@ -414,6 +444,7 @@ module.exports = {
   invitationMembershipUpdates,
   invitationState,
   invitationViewerStatus,
+  invitationWorkspaceName,
   legacyInvitationRecord,
   maskInvitationEmail,
   normalizeInvitationEmail,

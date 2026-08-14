@@ -6,6 +6,11 @@ import {
 
 export type WorkspaceInvitationState = "pending" | "expired" | "cancelled" | "accepted";
 export type WorkspaceInvitationDeliveryStatus = "not_sent" | "sending" | "sent" | "failed";
+export type WorkspaceInvitationViewerStatus =
+  | "signed_out"
+  | "wrong_email"
+  | "matching_unverified"
+  | "matching_verified";
 
 export type WorkspaceOrganizerInvitation = {
   invitationId: string | null;
@@ -17,7 +22,7 @@ export type WorkspaceOrganizerInvitation = {
   resendAvailableAt: string | null;
 };
 
-export type WorkspaceInvitationContext = {
+type WorkspaceInvitationSummary = {
   workspaceName: string;
   inviterDisplayName: string;
   state: WorkspaceInvitationState;
@@ -25,7 +30,11 @@ export type WorkspaceInvitationContext = {
   maskedInvitedEmail: string;
 };
 
-export type WorkspaceRecipientInvitation = WorkspaceInvitationContext & {
+export type WorkspaceInvitationContext = WorkspaceInvitationSummary & {
+  viewerStatus: WorkspaceInvitationViewerStatus;
+};
+
+export type WorkspaceRecipientInvitation = WorkspaceInvitationSummary & {
   invitationId: string;
 };
 
@@ -62,6 +71,12 @@ const DELIVERY_STATUSES = new Set<WorkspaceInvitationDeliveryStatus>([
   "sending",
   "sent",
   "failed",
+]);
+const VIEWER_STATUSES = new Set<WorkspaceInvitationViewerStatus>([
+  "signed_out",
+  "wrong_email",
+  "matching_unverified",
+  "matching_verified",
 ]);
 
 function requireSignedInUser() {
@@ -109,6 +124,13 @@ function deliveryStatus(value: unknown): WorkspaceInvitationDeliveryStatus {
   return typeof value === "string" && DELIVERY_STATUSES.has(value as WorkspaceInvitationDeliveryStatus)
     ? value as WorkspaceInvitationDeliveryStatus
     : "not_sent";
+}
+
+function viewerStatus(value: unknown): WorkspaceInvitationViewerStatus {
+  if (typeof value !== "string" || !VIEWER_STATUSES.has(value as WorkspaceInvitationViewerStatus)) {
+    throw new Error("Stripes returned invalid invitation viewer status.");
+  }
+  return value as WorkspaceInvitationViewerStatus;
 }
 
 function parseOrganizerInvitation(value: unknown): WorkspaceOrganizerInvitation {
@@ -241,5 +263,6 @@ export async function getWorkspaceOrganizerInvitationContext(
     state: invitationState(result.data.state),
     expiresAt: optionalIso(result.data.expiresAt) || new Date(0).toISOString(),
     maskedInvitedEmail: String(result.data.maskedInvitedEmail || "***").trim(),
+    viewerStatus: viewerStatus(result.data.viewerStatus),
   };
 }

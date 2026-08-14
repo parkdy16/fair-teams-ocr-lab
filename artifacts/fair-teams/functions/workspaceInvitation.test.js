@@ -9,6 +9,7 @@ const {
   invitationExpiryMillis,
   invitationMembershipUpdates,
   invitationState,
+  invitationViewerStatus,
   legacyInvitationRecord,
   maskInvitationEmail,
   officialInvitationUrl,
@@ -130,6 +131,34 @@ test("public invitation context contains only sanitized minimal fields", () => {
   assert.equal(context.maskedInvitedEmail, maskInvitationEmail("recipient.long@example.com"));
   assert.equal(JSON.stringify(context).includes("recipient.long@example.com"), false);
   assert.equal(JSON.stringify(context).includes("private-group-id"), false);
+});
+
+test("invitation viewer status is signed_out without an authenticated identity", () => {
+  assert.equal(invitationViewerStatus(
+    { normalizedEmail: "recipient@example.com" },
+    null,
+  ), "signed_out");
+});
+
+test("invitation viewer status rejects an authenticated wrong email", () => {
+  assert.equal(invitationViewerStatus(
+    { normalizedEmail: "recipient@example.com" },
+    { uid: "forwarded-user", email: "other@example.com", emailVerified: true },
+  ), "wrong_email");
+});
+
+test("invitation viewer status recognizes a normalized matching unverified email", () => {
+  assert.equal(invitationViewerStatus(
+    { normalizedEmail: "recipient@example.com" },
+    { uid: "recipient", email: " Recipient@Example.com ", emailVerified: false },
+  ), "matching_unverified");
+});
+
+test("invitation viewer status recognizes a normalized matching verified email", () => {
+  assert.equal(invitationViewerStatus(
+    { normalizedEmail: "recipient@example.com" },
+    { uid: "recipient", email: "RECIPIENT@example.com", emailVerified: true },
+  ), "matching_verified");
 });
 
 test("official invitation links always use the Stripes production app origin", () => {

@@ -2094,9 +2094,49 @@ Verification:
 - the documented TypeScript baseline errors remain, with no errors reported in
   the G1.5b frontend files.
 
+#### G1.5c-1 foundation checkpoint — 2026-08-14
+
+Implemented and verified locally; intentionally not pushed or deployed:
+
+- the sanitized invitation-context callable now derives one of four viewer
+  states from Firebase authentication server-side: `signed_out`,
+  `wrong_email`, `matching_unverified` or `matching_verified`;
+- viewer status uses normalized token email matching and never exposes the
+  full invited email; the existing masked email remains the only recipient
+  identity included in public invitation context;
+- viewer status is contextual UX information only and does not replace the
+  trusted verified-identity checks performed during invitation acceptance;
+- a focused client auth helper now provides Firebase hosted-handler action
+  settings for the fixed Stripes `/app` return URL and validated
+  `/app?invite=<opaque-id>` invitation continuation URL;
+- the auth helper supports verification email, password-reset email, Firebase
+  user reload and forced ID-token refresh without probing whether an account
+  exists;
+- the shared Firebase organizer identity now carries `emailVerified`, allowing
+  the existing invitation surface to distinguish a ready organizer from one
+  who must verify before sending invitations while preserving all existing
+  consumers;
+- email verification remains scoped to shared-workspace invitation actions;
+  normal solo/local Stripes and team generation are not verification-gated;
+- full invitation landing/auth forms, verification/reset UI, explicit Join,
+  App query/history integration, guided-tour handling and accepted-roster
+  opening remain for G1.5c-2/G1.5c-3.
+
+Verification:
+
+- all 57 focused organizer-removal, invitation, acceptance,
+  notification-recipient, viewer-status and Firestore-rule contract tests
+  pass;
+- production Vite build passes;
+- the changed invitation-context callable passes Firebase Functions dry-run
+  validation;
+- focused TypeScript review reports no errors in the G1.5c-1 frontend files;
+  the documented repository-wide TypeScript baseline errors remain separate;
+- Firestore rules were not changed by G1.5c-1.
+
 Next atomic task:
 
-**G1.5c — invitation onboarding, verification and continuation UX.**
+**G1.5c-2 — invitation onboarding and explicit join UI.**
 
 G1.5a–G1.5c must ship together after recipient verification/onboarding is
 complete and verified rather than being deployed independently.

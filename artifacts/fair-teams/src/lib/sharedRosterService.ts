@@ -32,6 +32,7 @@ export type SharedRosterUser = {
   uid: string;
   email: string;
   displayName?: string;
+  emailVerified: boolean;
 };
 
 export type SharedRosterRole = "owner" | "editor" | "organizer" | "viewer" | "member";
@@ -97,12 +98,13 @@ export type FirebaseGroupInvite = FirebaseSharedGroupSummary & {
   inviteeEmail: string;
 };
 
-function toSharedRosterUser(user: User | null): SharedRosterUser | null {
+export function toSharedRosterUser(user: User | null): SharedRosterUser | null {
   if (!user || !user.email) return null;
   return {
     uid: user.uid,
     email: user.email,
     displayName: user.displayName || undefined,
+    emailVerified: user.emailVerified,
   };
 }
 

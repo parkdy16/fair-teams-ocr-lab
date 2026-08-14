@@ -340,6 +340,21 @@ function maskInvitationEmail(value) {
   return `${visible}${"*".repeat(Math.max(3, Math.min(local.length - 1, 8)))}${email.slice(at)}`;
 }
 
+function invitationViewerStatus(invitation, actor) {
+  const uid = typeof actor?.uid === "string" ? actor.uid.trim() : "";
+  if (!uid) return "signed_out";
+
+  const invitedEmail = normalizeInvitationEmail(invitation?.normalizedEmail);
+  const viewerEmail = normalizeInvitationEmail(actor?.email);
+  if (!validInvitationEmail(invitedEmail)
+    || !validInvitationEmail(viewerEmail)
+    || invitedEmail !== viewerEmail) {
+    return "wrong_email";
+  }
+
+  return actor?.emailVerified === true ? "matching_verified" : "matching_unverified";
+}
+
 function sanitizedInvitationContext(invitation, nowMillis = Date.now()) {
   return {
     workspaceName: cleanInvitationText(invitation?.workspaceNameSnapshot, "Stripes workspace", 120),
@@ -398,6 +413,7 @@ module.exports = {
   invitationLockId,
   invitationMembershipUpdates,
   invitationState,
+  invitationViewerStatus,
   legacyInvitationRecord,
   maskInvitationEmail,
   normalizeInvitationEmail,

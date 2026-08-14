@@ -22,6 +22,7 @@ const {
   invitationExpiryMillis,
   invitationLockId,
   invitationState,
+  invitationViewerStatus,
   legacyInvitationRecord,
   normalizeInvitationEmail,
   pendingInvitationIncludes,
@@ -860,7 +861,11 @@ exports.getWorkspaceOrganizerInvitationContext = onCall({ region: REGION }, asyn
   if (!invitationSnap.exists) {
     throw new HttpsError("not-found", "This invitation no longer exists.");
   }
-  return sanitizedInvitationContext(invitationSnap.data() || {});
+  const invitation = invitationSnap.data() || {};
+  return {
+    ...sanitizedInvitationContext(invitation),
+    viewerStatus: invitationViewerStatus(invitation, invitationActor(request)),
+  };
 });
 
 exports.listWorkspaceOrganizerInvitations = onCall({ region: REGION }, async (request) => {

@@ -814,6 +814,7 @@ function App() {
   const [privateCopyCreating, setPrivateCopyCreating] = useState(false);
   const [leaveSharedConfirmOpen, setLeaveSharedConfirmOpen] = useState(false);
   const [leaveSharedBusy, setLeaveSharedBusy] = useState(false);
+  const [leaveSharedError, setLeaveSharedError] = useState("");
   const [newRosterName, setNewRosterName] = useState("");
   const [fileImportMode, setFileImportMode] = useState<"shared" | "backup">(
     "shared",
@@ -1895,6 +1896,7 @@ function App() {
     if (!activeRoster || !activeRosterIsFirebaseShared || leaveSharedBusy) return;
     const firebaseRosterId = activeRoster.cloudSource?.firebaseRosterId;
     if (!firebaseRosterId) return;
+    setLeaveSharedError("");
     setLeaveSharedBusy(true);
     try {
       const result = await leaveFirebaseSharedRosterAccess(firebaseRosterId);
@@ -1915,6 +1917,7 @@ function App() {
         return { rosters: remaining, activeRosterId: remaining[0]?.id || current.activeRosterId };
       });
       setLeaveSharedConfirmOpen(false);
+      setLeaveSharedError("");
       setTeamsWorkspaceView("setup");
       setActiveTab("teams");
       setTodayRosterChosen(false);
@@ -1926,7 +1929,7 @@ function App() {
         "success",
       );
     } catch (error) {
-      showRosterToolsNotice("Could not leave shared roster", error instanceof Error ? error.message : "Try again after signing in.", "error");
+      setLeaveSharedError(error instanceof Error ? error.message : "Could not leave the shared roster. Try again after signing in.");
     } finally {
       setLeaveSharedBusy(false);
     }
@@ -4092,6 +4095,10 @@ They will no longer be able to open or edit this shared roster unless it is shar
                     openLibraryToken={sharedRosterLibraryOpenToken}
                     onMakePrivateCopy={activeRosterIsFirebaseShared ? (() => setPrivateCopyConfirmOpen(true)) : undefined}
                     onHideOnDevice={activeRosterIsFirebaseShared ? openClearRoster : undefined}
+                    onLeaveSharedRoster={activeRosterIsFirebaseShared ? (() => {
+                      setLeaveSharedError("");
+                      setLeaveSharedConfirmOpen(true);
+                    }) : undefined}
                   />
                 )}
                 equipmentGroupId={activeFirebaseSource?.firebaseRosterId ? `roster:${activeFirebaseSource.firebaseRosterId}` : undefined}
@@ -6307,7 +6314,11 @@ This is a shared roster. Local Backup can only remove/disassociate this device�
           className="fixed inset-0 z-[86] flex items-end justify-center bg-black/45 p-0 sm:items-center sm:p-4"
           role="dialog"
           aria-modal="true"
-          onClick={() => !leaveSharedBusy && setLeaveSharedConfirmOpen(false)}
+          onClick={() => {
+            if (leaveSharedBusy) return;
+            setLeaveSharedConfirmOpen(false);
+            setLeaveSharedError("");
+          }}
         >
           <div
             className="w-full max-w-sm rounded-t-3xl border border-violet-100 bg-white p-4 shadow-2xl sm:rounded-3xl"
@@ -6320,7 +6331,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device�
               <div className="min-w-0 flex-1">
                 <h2 className="text-base font-black text-[#102A43]">Leave shared roster?</h2>
                 <p className="mt-1 text-sm font-semibold leading-snug text-slate-600">
-                  This removes your account from “{activeRosterName}” and removes the opened copy from this device.
+                  This removes only your organizer access to “{activeRosterName}” and removes its opened copies from this device.
                 </p>
               </div>
             </div>
@@ -6330,27 +6341,40 @@ This is a shared roster. Local Backup can only remove/disassociate this device�
                 Account access
               </div>
               <p className="mt-1 text-[11px] font-semibold leading-snug text-violet-800/80">
-                Other organizers keep access and the shared workspace stays online. To only hide this device copy without leaving, use Hide on device instead.
+                It does not delete the shared roster or club data. Other organizers keep access and the shared workspace stays online.
               </p>
             </div>
+
+            <p className="mt-3 text-[11px] font-bold leading-snug text-slate-500">
+              The last organizer cannot leave this way. Invite another organizer first.
+            </p>
+
+            {leaveSharedError && (
+              <div className="mt-3 rounded-2xl border border-rose-100 bg-rose-50 px-3 py-2 text-xs font-bold leading-snug text-rose-700" role="alert">
+                {leaveSharedError}
+              </div>
+            )}
 
             <div className="mt-4 grid grid-cols-2 gap-2">
               <Button
                 type="button"
                 variant="outline"
                 className="h-11 rounded-2xl border-slate-200 bg-white text-xs font-black text-slate-600"
-                onClick={() => setLeaveSharedConfirmOpen(false)}
+                onClick={() => {
+                  setLeaveSharedConfirmOpen(false);
+                  setLeaveSharedError("");
+                }}
                 disabled={leaveSharedBusy}
               >
                 Cancel
               </Button>
               <Button
                 type="button"
-                className="h-11 rounded-2xl bg-violet-600 text-xs font-black text-white hover:bg-violet-700"
+                className="h-11 rounded-2xl bg-rose-600 text-xs font-black text-white hover:bg-rose-700"
                 onClick={leaveActiveSharedRoster}
                 disabled={leaveSharedBusy}
               >
-                {leaveSharedBusy ? "Leaving…" : "Leave roster"}
+                {leaveSharedBusy ? "Leaving…" : "Leave shared roster"}
               </Button>
             </div>
           </div>

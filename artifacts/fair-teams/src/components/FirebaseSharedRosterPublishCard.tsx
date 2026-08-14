@@ -78,6 +78,7 @@ type Props = {
   openLibraryToken?: number;
   onMakePrivateCopy?: () => void;
   onHideOnDevice?: () => void;
+  onLeaveSharedRoster?: () => void;
   backgroundSync?: boolean;
   headless?: boolean;
 };
@@ -137,7 +138,7 @@ function modalShell(title: string, onClose: () => void, body: React.ReactNode) {
   );
 }
 
-export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster, rosters = [], isEmptyRoster, onOpenRoster, onRosterSaved, onRefreshActiveRoster, onRefreshRosterIdentity, onSharedRosterSummariesUpdated, onSharedInviteOpened, openLibraryToken = 0, onMakePrivateCopy, onHideOnDevice, backgroundSync = true, headless = false }: Props) {
+export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster, rosters = [], isEmptyRoster, onOpenRoster, onRosterSaved, onRefreshActiveRoster, onRefreshRosterIdentity, onSharedRosterSummariesUpdated, onSharedInviteOpened, openLibraryToken = 0, onMakePrivateCopy, onHideOnDevice, onLeaveSharedRoster, backgroundSync = true, headless = false }: Props) {
   const [user, setUser] = useState<SharedRosterUser | null>(null);
   const [busy, setBusy] = useState<string>("");
   const [sharedGroups, setSharedGroups] = useState<FirebaseSharedGroupSummary[]>([]);
@@ -963,7 +964,7 @@ Your local roster will stay local. Stripes will copy shared identity fields only
         </div>
       ) : (
         <div className="rounded-2xl bg-slate-50 px-3 py-2 text-[11px] font-bold leading-snug text-slate-500">
-          You can view organizers here. To stop being part of this roster, use Leave shared roster from the Club page.
+          You can view organizers here. Only an active organizer can manage workspace membership.
         </div>
       )}
       {senderVerificationNotice && (
@@ -1084,6 +1085,29 @@ Your local roster will stay local. Stripes will copy shared identity fields only
           );
         })()}
       </div>
+
+      {onLeaveSharedRoster && canManageCollaborators && collaboratorRoster.id === activeSharedRosterId && (
+        <div className="grid gap-2 rounded-2xl border border-rose-100 bg-rose-50/60 p-3">
+          <div>
+            <div className="text-xs font-black text-rose-800">Workspace membership</div>
+            <p className="mt-0.5 text-[10px] font-semibold leading-snug text-rose-700">
+              Leaving removes only your organizer access. It does not delete the shared roster or club data. The last organizer cannot leave this way.
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-10 w-full rounded-2xl border-rose-200 bg-white text-xs font-black text-rose-700 hover:bg-rose-100 hover:text-rose-800"
+            onClick={() => {
+              setCollaboratorRosterId("");
+              onLeaveSharedRoster();
+            }}
+          >
+            <UserMinus className="h-4 w-4" />
+            Leave shared roster
+          </Button>
+        </div>
+      )}
     </div>
   )) : null;
 

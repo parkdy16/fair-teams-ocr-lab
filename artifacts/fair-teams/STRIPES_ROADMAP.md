@@ -1344,9 +1344,11 @@ storage/ownership wording conflicts with it.
 - W1 Public Website / Launch Readiness is complete.
 - W2 Meetup application is submitted / waiting for API access.
 - Meetup must not block the Google Play launch.
-- Current next architecture phase: G1 Shared Workspace Governance.
-- Google implementation follows governance reconciliation rather than
-  preceding it.
+- G1.4 protected organizer-removal governance is complete and live.
+- Current active atomic task: G1.5 Organizer invitation + verified-email
+  onboarding.
+- Google implementation follows completion of the remaining G1 governance /
+  onboarding work rather than preceding it.
 
 ## Shared workspace governance
 
@@ -1459,49 +1461,94 @@ For individually selected Google resources:
 
 Ordinary pasted URLs remain supported independently.
 
-## Full Club Cabinet managed storage
+## Full Club Cabinet managed storage modes
 
-The full managed Club Cabinet file system should use an eligible
-Google Workspace Shared Drive.
+The full managed Club Cabinet must NOT require Google Workspace.
 
-Reason:
+Club Cabinet should support two Google-backed storage modes beneath the same
+Stripes Cabinet interface.
 
-- Shared Drive files belong to the organization rather than one organizer;
-- organizer turnover therefore does not make one person's account the
-  permanent owner of the club archive;
-- Google remains responsible for file-level access and Shared Drive membership;
-- Stripes can focus on club organization, context and workflow.
+### My Drive Cabinet — universal mode
 
-A Google Workspace account alone is not sufficient.
+A normal Google account may host a managed Club Cabinet.
 
-The organizer must have access to an eligible Shared Drive with the permissions
-required for the requested Cabinet operations.
+Stripes may create or connect a dedicated Cabinet folder in an organizer's
+My Drive and manage real Google folders/files there.
 
-If no eligible Shared Drive is available, Stripes should explain this clearly.
+In this mode:
 
-The user does NOT need Google Workspace to use Stripes generally.
+- the full Stripes Club Cabinet organization layer remains available;
+- Cabinet folders correspond to real Google Drive folders;
+- files remain hosted by Google rather than Stripes;
+- Google remains authoritative for ownership and permissions;
+- the underlying Cabinet storage is associated with an individual Google
+  account;
+- other organizers require appropriate Google sharing permissions;
+- organizer turnover therefore has weaker continuity than an
+  organization-owned Shared Drive;
+- hosting the Cabinet does NOT give that Google-account owner superior Stripes
+  governance rights;
+- Stripes workspace governance and Google file ownership remain separate;
+- lost, revoked or disconnected Google access must produce a clear
+  unavailable/reconnect/handoff state rather than a hidden local copy.
 
-Without a Shared Drive they may still:
+G2 must verify actual Google behavior for:
 
-- use all normal Stripes core functionality;
-- attach individual Google Drive files where supported;
-- use Google's normal sharing/access-request behavior;
-- paste ordinary external links.
+- sharing a managed My Drive Cabinet folder with multiple organizers;
+- organizer create/upload/edit permissions;
+- ownership of files created by different organizers;
+- organizer turnover;
+- reconnect or explicit handoff when the hosting organizer changes.
+
+### Shared Drive Cabinet — organization-owned mode
+
+If a club already has access to an eligible Google Workspace Shared Drive,
+Stripes may connect the Cabinet there instead.
+
+This is the preferred organizational mode where available because:
+
+- files belong to the organization rather than an individual organizer;
+- organizer turnover has stronger continuity;
+- Google remains responsible for Shared Drive membership and permissions.
+
+Shared Drive is an enhancement, not a prerequisite.
+
+Stripes must NOT:
+
+- require Google Workspace to use Club Cabinet;
+- tell users they must purchase Google Workspace;
+- make Workspace status part of Stripes organizer authority;
+- remove the paid Cabinet organization experience merely because My Drive is
+  being used.
+
+A Workspace account alone does not guarantee that an eligible Shared Drive
+exists.
+
+### Product / monetization boundary
+
+Stripes Club charges for Cabinet organization, context and workflow rather than
+Google storage capacity or Google Workspace.
+
+The user's Google account type determines the underlying ownership/storage
+mode, not whether the user receives the Stripes Club Cabinet experience.
 
 ## Cabinet folders
 
-For a managed Club Cabinet connected to a Shared Drive:
+For a managed Club Cabinet, whether backed by My Drive or an eligible Shared
+Drive:
 
-- Cabinet folders correspond to real Google Shared Drive folders;
-- creating a Cabinet folder creates the corresponding Shared Drive folder;
-- renaming a managed Cabinet folder renames the Shared Drive folder;
-- moving a managed Cabinet file/folder updates its real Shared Drive location;
-- files uploaded through Cabinet are stored in the selected Shared Drive
-  folder;
+- Cabinet folders correspond to real Google Drive folders;
+- creating a Cabinet folder creates the corresponding Google Drive folder;
+- renaming a Cabinet folder renames the real Google folder;
+- moving a managed Cabinet file/folder updates its real Google Drive location;
+- files uploaded through Cabinet are stored in the connected Cabinet folder;
 - files uploaded contextually from Action Board / Equipment may be saved into
-  an appropriate Cabinet/Shared Drive location;
-- one underlying Google file may remain connected to multiple Stripes
-  contexts without duplication.
+  an appropriate Cabinet location;
+- one underlying Google file may remain connected to multiple Stripes contexts
+  without duplication.
+
+The storage mode affects Google ownership and continuity rather than the
+Stripes concept of Cabinet organization.
 
 Firestore continues to own Stripes-specific relationships such as:
 
@@ -1551,29 +1598,35 @@ Google remains the canonical file host for Google-connected documents.
 
 ## User-facing explanation
 
-The Google/Cabinet setup must explain the difference between My Drive and a
-Shared Drive without turning setup into an IT lesson.
+The Google/Cabinet setup must explain My Drive and Shared Drive without turning
+setup into an IT lesson.
 
 Provide concise contextual help, for example through a `?` information modal.
 
-The explanation should make clear:
-
 My Drive:
-- files are owned by an individual Google account;
-- other organizers may need to request access;
-- normal Google permissions apply.
+- works with a normal Google account;
+- supports the normal managed Club Cabinet;
+- files/folders remain associated with individual Google ownership;
+- other organizers require appropriate Google sharing permissions;
+- organizer turnover may require an explicit reconnect or handoff;
+- the Google storage host receives no superior Stripes organizer rights.
 
 Shared Drive:
-- intended for organizations using Google Workspace;
-- files belong to the organization;
-- recommended/required for the managed Club Cabinet;
-- files remain with the organization as individual organizers change.
+- available when an organization already has access to an eligible Google
+  Workspace Shared Drive;
+- files belong to the organization rather than an individual organizer;
+- provides stronger continuity when organizers change;
+- recommended where already available;
+- optional, not required for Club Cabinet.
 
 Also state:
 
-- Google Workspace is not required to use Stripes;
+- Google Workspace is not required to use Stripes or Club Cabinet;
+- Stripes does not sell or provide the underlying Google storage;
 - Stripes does not override Google permissions;
-- normal Google access-request behavior is expected for private resources.
+- normal Google access-request behavior remains expected for private
+  resources;
+- Stripes should not tell users to purchase Google Workspace.
 
 ## Next implementation order
 
@@ -1770,18 +1823,35 @@ Verification completed on the final implementation:
   documented pre-existing typecheck baseline remains separate;
 - `git diff --check` passes.
 
-Current status:
+Deployment / live status:
 
-- G1.4 implementation is complete and has been final-reviewed against the
-  approved governance rules;
-- the G1.4 Firestore rules and callable Functions have not been deployed;
-- true multi-account Firestore authorization and end-to-end ballot testing
-  remains a required pre-production validation step because this workspace does
-  not currently include Java or `@firebase/rules-unit-testing`;
-- do not begin G1.5 automatically; it remains the next separately approved
-  atomic task.
+- G1.4 implementation is complete and final-reviewed against the approved
+  governance rules;
+- committed as `2c3a4263dd8b6338e022474ab466ace61c216612`;
+- pushed to `main` / `origin/main`;
+- Vercel production deployment succeeded and `stripes.work` serves the G1.4
+  production bundle;
+- G1.4 Firestore rules are deployed to Firebase project `fair-teams-dev`;
+- all three G1.4 callable Functions are deployed in `europe-west1`;
+- all 15 organizer-removal tests passed before deployment;
+- production build, Firestore dry run, Functions dry run and diff checks
+  passed;
+- the repository's known TypeScript baseline errors remain separate, with no
+  focused G1.4 errors.
 
-Planned next atomic task after G1.4 completion:
+Remaining launch validation:
+
+- perform true multi-account end-to-end governance testing with several real
+  organizer accounts;
+- verify the target cannot vote;
+- verify ballots cannot be changed;
+- verify no organizer can see ballot identities;
+- verify turnout updates without exposing live Yes/No totals;
+- verify pass/fail thresholds at realistic organizer counts;
+- verify successful removal revokes access across linked rosters;
+- verify self-leave remains a separate workflow.
+
+Next approved atomic task:
 
 **G1.5 — Organizer invitation + verified-email onboarding.**
 
@@ -1947,9 +2017,19 @@ Inspect and consolidate:
 - existing scopes/token behavior;
 - incremental permission capability;
 - Google Picker behavior;
-- Shared Drive discovery/selection;
-- required permissions;
+- managed My Drive Cabinet-folder creation/selection;
+- multi-organizer permissions inside a shared My Drive Cabinet;
+- ownership behavior for files created by different organizers;
+- reconnect/handoff behavior when the My Drive storage host changes;
+- optional Shared Drive discovery/selection;
+- capability detection between My Drive and Shared Drive modes;
+- required permissions for each mode;
 - Google verification consequences.
+
+Do not hard-code the Google connection around Shared Drive.
+
+Use the narrowest OAuth permissions that can reliably deliver the promised
+behavior.
 
 Do not break working Cloud Backup behavior merely to create a cleaner new
 integration.
@@ -1961,13 +2041,143 @@ Implement only after G1/G2 decisions are verified.
 Initial goals:
 
 - individual Google resource references;
-- eligible Shared Drive connection;
-- managed real-folder Cabinet model;
+- one provider-neutral Stripes resource/Cabinet metadata model;
+- managed My Drive Cabinet as the universal Google-backed mode;
+- optional eligible Shared Drive Cabinet as the organization-owned mode;
+- one Cabinet UI regardless of backing mode;
+- managed real-folder behavior for the active Google Cabinet location;
 - Action Board contextual attachment;
 - Firestore metadata/context relationships;
-- clear unavailable/permission states.
+- clear unavailable/permission/reconnect states;
+- explicit storage-mode/continuity information during Cabinet setup;
+- no requirement that users purchase Google Workspace.
+
+Core boundary:
+
+**Google owns the file; Stripes owns the club context and organization.**
 
 Each G phase must remain atomic and independently revertible according to
 AGENTS.md.
+
+### T1 — Team Generation Quality + Customization Pass
+
+**Status:** PLANNED / DO NOT IMPLEMENT DURING G1.5–G3.
+
+Team generation remains a core Stripes differentiator and receives a dedicated
+quality/design pass before final launch regression.
+
+Do not casually rewrite current Football behavior.
+
+First collect real match examples, identify where the current model feels
+wrong, define expected reasoning, and establish regression tests.
+
+#### Uneven player counts — real futsal observation
+
+A real 9-player futsal match exposed an important distinction.
+
+With no substitute rotation, the game was a true 4 vs 5.
+
+The current generated teams felt unbalanced because the five-player team's
+numerical advantage dominated the normal skill balance.
+
+In that situation, the four-player team should intentionally contain stronger
+players so that Stripes balances effective match strength rather than merely
+similar skill totals/averages.
+
+However, if substitutes rotate so that both sides always have the same number
+of active players, this compensation should NOT be applied.
+
+Future generation should therefore distinguish:
+
+- **No subs / unequal active team sizes**
+  - e.g. permanent 4 vs 5;
+  - compensate the smaller side with stronger players.
+
+- **With subs / equal active team sizes**
+  - roster sizes may differ;
+  - the same number of players are active at once;
+  - use normal balancing without artificial headcount compensation.
+
+Avoid adding a permanent settings panel.
+
+When player numbers cannot divide evenly, prefer a small contextual question
+such as:
+
+**Will you rotate substitutes?**
+
+The compensation model must be designed/tested using real match scenarios
+rather than guessed.
+
+#### Lightweight team-building customization
+
+Organizers need meaningful control without learning algorithm weights.
+
+Example requests:
+
+- "Make a different variation from last week."
+- "Put Vivian and Paul on the same team."
+- "Keep these two players apart."
+- "Make sure every team has at least one runner."
+- "Spread the good defenders across the teams."
+- "Blue looks too weak defensively."
+
+Text and/or the existing Speak/voice interaction may provide this input.
+
+AI must NOT independently invent teams.
+
+Preferred model:
+
+natural-language request
+→ AI interpretation
+→ explicit structured constraints/preferences
+→ user sees what Stripes understood
+→ deterministic generator optimizes under those constraints
+
+Example interpreted preferences:
+
+- Keep Vivian + Paul together
+- At least one runner per team
+- Distribute strong defenders
+- Avoid last week's main combinations
+
+This transparency is particularly important for organizers who distrust a
+black-box balancing algorithm.
+
+Post-generation AI should use constrained swaps/optimization and explain the
+effect rather than arbitrarily regenerating teams.
+
+Future T1 design should cover:
+
+- uneven-headcount compensation;
+- substitute/no-sub match format;
+- variation/history awareness;
+- together/apart constraints;
+- minimum role/attribute coverage;
+- runner/defender distribution;
+- natural-language/voice customization;
+- grounded post-generation swaps;
+- "Why these teams?" explanations.
+
+#### Multi-sport relationship
+
+T1 should be designed alongside the later multi-sport model without cluttering
+the current Football UI.
+
+Initial sport direction:
+
+- Football
+- Volleyball
+- Basketball
+
+Prefer shared sport-neutral generation infrastructure with sport-specific
+presets/strategies.
+
+Football remains the regression baseline.
+
+Volleyball/Basketball should hide football-only controls instead of adding
+irrelevant options to every sport.
+
+Before implementation, brainstorm the sport models and UI carefully so
+multi-sport support does not introduce unnecessary permanent interface.
 
 <!-- STRIPES_CURRENT_ARCHITECTURE_END -->

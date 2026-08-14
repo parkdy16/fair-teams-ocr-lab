@@ -1265,6 +1265,79 @@ Protect this expected acquisition path:
 
 **The free product is itself Stripes' primary marketing mechanism.**
 
+### Multisport roster + billing architecture — working principle
+
+**Architecture direction locked; exact billing implementation deferred.**
+
+Multisport support creates an important distinction between a player identity,
+a sport-specific roster and the future subscription/billing unit.
+
+A roster must remain specific to one sport or playing context because the same
+person can have substantially different ability in different sports. For
+example, the same Sara may be a strong football player, an average basketball
+player and a beginner volleyball player.
+
+Therefore:
+
+- player skill and sport-specific performance data belong to the player's
+  membership in a particular roster, not globally to the person;
+- football, volleyball, basketball and other materially different playing
+  contexts should use separate rosters when their ratings/team-generation
+  models differ;
+- the same real person may appear in several rosters with independent ratings;
+- Stripes must not combine unrelated sport ratings merely because the player
+  identity is the same;
+- future multisport work should preserve sport-neutral shared infrastructure
+  while allowing sport-specific ratings, presets and generation strategies.
+
+This has a direct subscription implication.
+
+The current shared-workspace architecture is closely tied to a shared roster.
+If paid Club access were permanently billed one subscription per roster, a
+single multisport club correctly maintaining separate football, volleyball and
+basketball rosters could be forced to buy three Club subscriptions simply
+because player ratings must remain sport-specific.
+
+That is not the intended long-term commercial model.
+
+Future Club billing should therefore be capable of grouping multiple related
+sport-specific shared rosters under one club/billing entity, so that a real
+organization can maintain the correct separate roster structure without being
+charged once per sport.
+
+Working entitlement distinction:
+
+- **Solo benefits follow the individual account/organizer.**
+- **Club benefits should ultimately follow a club/billing grouping that can
+  cover multiple related sport-specific shared rosters.**
+- subscription or billing status must never grant superior organizer,
+  governance or ownership authority.
+
+Example:
+
+- Joon, Jorge and Jan jointly organize football, volleyball and basketball for
+  the same club;
+- each sport has its own roster and independent player ratings;
+- this should ultimately be representable as one paid Club relationship rather
+  than three subscriptions solely because three sport rosters are required.
+
+Do not solve this by merging different sports into one roster.
+
+Deferred decisions include:
+
+- the exact Club grouping/data model;
+- how existing shared rosters become linked to a Club billing entity;
+- the number of sport rosters included in a Club plan or any fair-use limit;
+- exact Free / Solo / Club prices and Meetup-import allowances;
+- whether governance remains roster-scoped or gains any future club-level
+  coordination;
+- downgrade and transfer mechanics for the future billing entity.
+
+Do not implement this billing architecture during current G1 governance,
+G1.5 onboarding or G2/G3 Google work unless a later roadmap phase explicitly
+authorizes it.
+
+
 ### Competitive positioning
 
 Stripes should not attempt to out-Spond Spond or replace Signal/WhatsApp.

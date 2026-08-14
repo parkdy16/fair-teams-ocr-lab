@@ -1,7 +1,17 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { CheckCircle2, FolderOpen, History, Loader2, RotateCcw, Share2, UserPlus, Users, X } from "lucide-react";
+import { CheckCircle2, FolderOpen, History, Loader2, RotateCcw, Share2, ShieldCheck, UserMinus, UserPlus, Users, X } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { StripesConfirmContent } from "@/components/ui/stripes-modal";
 import type { RoomRoster } from "@/lib/localRoster";
 import {
   acceptFirebaseGroupInvite,
@@ -23,6 +33,16 @@ import {
   type FirebaseSharedRosterSummary,
   type SharedRosterUser,
 } from "@/lib/sharedRosterService";
+import {
+  castOrganizerRemovalBallot,
+  getOrganizerRemovalParticipation,
+  listenToOrganizerRemovalProposal,
+  listenToOrganizerRemovalProposals,
+  startOrganizerRemovalProposal,
+  type OrganizerRemovalBallotChoice,
+  type OrganizerRemovalParticipation,
+  type OrganizerRemovalProposal,
+} from "@/lib/sharedWorkspaceGovernanceService";
 
 type Props = {
   variant?: "full" | "compact";
@@ -108,6 +128,14 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
   const [sharedRosterLibraryOpen, setSharedRosterLibraryOpen] = useState(false);
   const [backupRosterId, setBackupRosterId] = useState("");
   const [sharedRosterBackups, setSharedRosterBackups] = useState<FirebaseSharedRosterBackup[]>([]);
+  const [removalProposals, setRemovalProposals] = useState<OrganizerRemovalProposal[]>([]);
+  const [removalParticipation, setRemovalParticipation] = useState<OrganizerRemovalParticipation | null>(null);
+  const [removalError, setRemovalError] = useState("");
+  const [removalConfirm, setRemovalConfirm] = useState<
+    | { kind: "propose"; targetEmail: string; targetName: string }
+    | { kind: "ballot"; proposalId: string; targetName: string; choice: OrganizerRemovalBallotChoice }
+    | null
+  >(null);
   const [notice, setNotice] = useState<{ tone: "success" | "error" | "info"; text: string } | null>(null);
   const [autoSyncStatus, setAutoSyncStatus] = useState<"idle" | "saving" | "saved" | "syncing" | "error">("idle");
   const lastLiveRosterVersionRef = useRef(0);
@@ -138,6 +166,10 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
   const collaboratorGroup = useMemo(
     () => sharedGroups.find((group) => group.id === collaboratorRoster?.groupId) || activeGroup,
     [sharedGroups, collaboratorRoster?.groupId, activeGroup],
+  );
+  const activeRemovalProposal = useMemo(
+    () => removalProposals.find((proposal) => proposal.status === "open") || null,
+    [removalProposals],
   );
   const sharedRosterById = useMemo(() => new Map(sharedRosters.map((roster) => [roster.id, roster])), [sharedRosters]);
   const linkedRosters = useMemo(() => rosters.filter((roster) => roster.cloudSource?.provider === "firebase" && roster.cloudSource.firebaseRosterId), [rosters]);
@@ -186,6 +218,54 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
       setBusy((current) => current === "refresh" ? "" : current);
     }
   };
+
+  useEffect(() => {
+    const groupId = collaboratorGroup?.id;
+    if (!user || !groupId || !collaboratorRosterId) {
+      setRemovalProposals([]);
+      setRemovalParticipation(null);
+      setRemovalError("");
+      return;
+    }
+    setRemovalError("");
+    return listenToOrganizerRemovalProposals(groupId, setRemovalProposals, (error) => {
+      setRemovalError(friendlyFirestoreError(error));
+    });
+  }, [user, collaboratorGroup?.id, collaboratorRosterId]);
+
+  useEffect(() => {
+    const groupId = collaboratorGroup?.id;
+    const proposalId = activeRemovalProposal?.id;
+    if (!user || !groupId || !proposalId || !collaboratorRosterId) return;
+    return listenToOrganizerRemovalProposal(groupId, proposalId, (proposal) => {
+      if (!proposal) return;
+      setRemovalError("");
+      setRemovalProposals((current) => [proposal, ...current.filter((item) => item.id !== proposal.id)]);
+    }, (error) => {
+      setRemovalError(friendlyFirestoreError(error));
+    });
+  }, [user, collaboratorGroup?.id, collaboratorRosterId, activeRemovalProposal?.id]);
+
+  useEffect(() => {
+    const groupId = collaboratorGroup?.id;
+    if (!user || !groupId || !activeRemovalProposal || activeRemovalProposal.status !== "open") {
+      setRemovalParticipation(null);
+      return;
+    }
+    const proposalId = activeRemovalProposal.id;
+    let cancelled = false;
+    setRemovalParticipation(null);
+    void getOrganizerRemovalParticipation(groupId, proposalId)
+      .then((participation) => {
+        if (!cancelled) setRemovalParticipation(participation);
+      })
+      .catch((error) => {
+        if (!cancelled) setRemovalError(friendlyFirestoreError(error));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user, collaboratorGroup?.id, activeRemovalProposal?.id, activeRemovalProposal?.status]);
 
   useEffect(() => {
     if (user) void refreshSharedData();
@@ -354,6 +434,70 @@ Your local roster will stay local. Stripes will copy shared identity fields only
     }
   };
 
+  const handleStartOrganizerRemoval = async (targetEmail: string, targetName: string) => {
+    if (!collaboratorGroup || busy) return;
+    setBusy(`removal-proposal:${targetEmail}`);
+    setRemovalError("");
+    setNotice(null);
+    try {
+      const result = await startOrganizerRemovalProposal(collaboratorGroup.id, targetEmail);
+      setNotice({
+        tone: "info",
+        text: result.status === "failed"
+          ? `${targetName} was not removed because the required Yes threshold cannot be reached.`
+          : `Protected organizer vote started for ${targetName}.`,
+      });
+    } catch (error) {
+      setRemovalError(friendlyFirestoreError(error));
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const handleCastOrganizerRemovalBallot = async (
+    proposalId: string,
+    choice: OrganizerRemovalBallotChoice,
+  ) => {
+    if (!collaboratorGroup || busy) return;
+    setBusy(`removal-ballot:${proposalId}`);
+    setRemovalError("");
+    setNotice(null);
+    try {
+      const result = await castOrganizerRemovalBallot(collaboratorGroup.id, proposalId, choice);
+      if (result.status === "open") {
+        setRemovalParticipation((current) => current && current.proposalId === proposalId
+          ? { ...current, hasVoted: true }
+          : current);
+      }
+      setNotice({
+        tone: result.status === "cancelled" ? "info" : "success",
+        text: result.status === "passed"
+          ? "The vote passed. Organizer access was removed."
+          : result.status === "failed"
+            ? "The vote closed without removing the organizer."
+            : result.status === "cancelled"
+              ? "The vote was cancelled because organizer membership changed."
+              : "Your secret ballot was recorded.",
+      });
+      if (result.status === "passed") await refreshSharedData();
+    } catch (error) {
+      setRemovalError(friendlyFirestoreError(error));
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const confirmOrganizerRemovalAction = () => {
+    const pending = removalConfirm;
+    setRemovalConfirm(null);
+    if (!pending) return;
+    if (pending.kind === "propose") {
+      void handleStartOrganizerRemoval(pending.targetEmail, pending.targetName);
+      return;
+    }
+    void handleCastOrganizerRemovalBallot(pending.proposalId, pending.choice);
+  };
+
   const handleAcceptInvite = async (groupId: string) => {
     if (!user || busy) return;
     setBusy(`accept:${groupId}`);
@@ -429,6 +573,156 @@ Your local roster will stay local. Stripes will copy shared identity fields only
     || collaboratorRoster?.currentUserRole === "owner"
     || collaboratorRoster?.currentUserRole === "editor";
 
+  const recentRemovalResults = removalProposals
+    .filter((proposal) => proposal.status !== "open")
+    .slice(0, 3);
+  const removalGovernancePanel = collaboratorGroup && canManageCollaborators ? (
+    <div className="grid gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+      <div className="flex items-start gap-2">
+        <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-violet-600" />
+        <div className="min-w-0">
+          <div className="text-xs font-black text-[#102A43]">Protected organizer removal</div>
+          <div className="mt-0.5 text-[10px] font-semibold leading-snug text-slate-500">
+            Ballots are secret and immutable. Live Yes and No totals stay hidden until the vote closes.
+          </div>
+        </div>
+      </div>
+
+      {removalError && (
+        <div className="rounded-xl bg-rose-50 px-2.5 py-2 text-[10px] font-bold leading-snug text-rose-700">
+          {removalError}
+        </div>
+      )}
+
+      {activeRemovalProposal ? (
+        <div className="grid gap-2 rounded-xl bg-violet-50/80 p-2.5">
+          <div className="min-w-0">
+            <div className="break-words text-xs font-black text-[#102A43]">
+              Remove {activeRemovalProposal.targetDisplayNameSnapshot}?
+            </div>
+            <div className="mt-0.5 text-[10px] font-semibold leading-snug text-violet-800">
+              {activeRemovalProposal.castCount} of {activeRemovalProposal.eligibleOrganizerCount} eligible organizers responded. {activeRemovalProposal.requiredYes} Yes votes are required from {activeRemovalProposal.totalOrganizerCount} total organizers.
+            </div>
+          </div>
+          <div className="h-1.5 overflow-hidden rounded-full bg-violet-100" aria-hidden="true">
+            <div
+              className="h-full rounded-full bg-violet-500 transition-[width]"
+              style={{ width: `${Math.min(100, (activeRemovalProposal.castCount / activeRemovalProposal.eligibleOrganizerCount) * 100)}%` }}
+            />
+          </div>
+          {activeRemovalProposal.targetUid === user?.uid ? (
+            <div className="rounded-xl bg-white px-2.5 py-2 text-[10px] font-bold leading-snug text-slate-600">
+              You are the target of this proposal and cannot vote. Only aggregate turnout and the final result are visible.
+            </div>
+          ) : removalParticipation == null ? (
+            <div className="flex items-center gap-2 rounded-xl bg-white px-2.5 py-2 text-[10px] font-bold text-slate-500">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Checking voting eligibility...
+            </div>
+          ) : removalParticipation.hasVoted ? (
+            <div className="rounded-xl bg-white px-2.5 py-2 text-[10px] font-bold leading-snug text-emerald-700">
+              Your secret ballot is recorded. It cannot be changed.
+            </div>
+          ) : removalParticipation.eligible ? (
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                type="button"
+                className="min-h-10 whitespace-normal rounded-xl bg-rose-600 px-2 text-[10px] font-black leading-tight text-white hover:bg-rose-700"
+                disabled={Boolean(busy)}
+                onClick={() => setRemovalConfirm({
+                  kind: "ballot",
+                  proposalId: activeRemovalProposal.id,
+                  targetName: activeRemovalProposal.targetDisplayNameSnapshot,
+                  choice: "yes",
+                })}
+              >
+                Yes, remove
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-10 whitespace-normal rounded-xl border-violet-200 bg-white px-2 text-[10px] font-black leading-tight text-violet-700"
+                disabled={Boolean(busy)}
+                onClick={() => setRemovalConfirm({
+                  kind: "ballot",
+                  proposalId: activeRemovalProposal.id,
+                  targetName: activeRemovalProposal.targetDisplayNameSnapshot,
+                  choice: "no",
+                })}
+              >
+                No, keep
+              </Button>
+            </div>
+          ) : (
+            <div className="rounded-xl bg-white px-2.5 py-2 text-[10px] font-bold leading-snug text-slate-600">
+              You are not eligible to vote on this proposal.
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="rounded-xl bg-slate-50 px-2.5 py-2 text-[10px] font-semibold leading-snug text-slate-500">
+          To remove another organizer, start a proposal from their organizer row. The target cannot vote.
+        </div>
+      )}
+
+      {recentRemovalResults.length > 0 && (
+        <div className="grid gap-1.5">
+          <div className="text-[9px] font-black uppercase tracking-wide text-slate-400">Recent results</div>
+          {recentRemovalResults.map((proposal) => (
+            <div key={proposal.id} className="rounded-xl bg-slate-50 px-2.5 py-2">
+              <div className="break-words text-[10px] font-black text-[#102A43]">
+                {proposal.targetDisplayNameSnapshot} - {proposal.status === "passed" ? "Removed" : proposal.status === "failed" ? "Not removed" : "Cancelled"}
+              </div>
+              <div className="mt-0.5 text-[9px] font-semibold leading-snug text-slate-500">
+                {proposal.status === "cancelled"
+                  ? `Organizer membership changed / ${proposal.castCount} ballot${proposal.castCount === 1 ? "" : "s"} cast`
+                  : `${proposal.yesCount ?? 0} Yes / ${proposal.noCount ?? 0} No / ${proposal.requiredYes} Yes required`}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  ) : null;
+
+  const removalConfirmModal = (
+    <AlertDialog open={Boolean(removalConfirm)} onOpenChange={(open) => {
+      if (!open) setRemovalConfirm(null);
+    }}>
+      <StripesConfirmContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>
+            {removalConfirm?.kind === "propose"
+              ? `Start a vote about ${removalConfirm.targetName}?`
+              : `Record a ${removalConfirm?.choice === "yes" ? "Yes" : "No"} ballot?`}
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            {removalConfirm?.kind === "propose" ? (
+              "This starts a protected secret ballot. The target cannot vote. Stripes will calculate the required Yes threshold from the current active organizer electorate."
+            ) : (
+              `Your ${removalConfirm?.choice === "yes" ? "Yes vote supports removal" : "No vote keeps the organizer"}. Your choice is secret and cannot be changed after it is recorded.`
+            )}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={confirmOrganizerRemovalAction}
+            className={removalConfirm?.kind === "propose" || removalConfirm?.choice === "yes"
+              ? "bg-rose-600 text-white hover:bg-rose-700"
+              : "bg-violet-600 text-white hover:bg-violet-700"}
+          >
+            {removalConfirm?.kind === "propose"
+              ? "Start vote"
+              : removalConfirm?.choice === "yes"
+                ? "Record Yes"
+                : "Record No"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </StripesConfirmContent>
+    </AlertDialog>
+  );
+
 
   const collaboratorsModal = collaboratorRoster ? modalShell("Organizers", () => setCollaboratorRosterId(""), (
     <div className="grid gap-3">
@@ -453,9 +747,10 @@ Your local roster will stay local. Stripes will copy shared identity fields only
       <div className="grid gap-1.5">
         {canManageCollaborators && (
           <div className="rounded-2xl bg-white px-3 py-2 text-[11px] font-bold leading-snug text-slate-500 shadow-sm">
-            Organizers have equal access. Removing another organizer requires a protected organizer vote and is not available from this screen yet.
+            Organizers have equal access. One organizer cannot remove another without the protected vote below.
           </div>
         )}
+        {removalGovernancePanel}
         {(() => {
           const memberNamesByEmail = mergedMemberNames(collaboratorGroup, collaboratorRoster);
           const memberEmails = collaboratorGroup?.memberEmails || collaboratorRoster.memberEmails || [];
@@ -467,14 +762,32 @@ Your local roster will stay local. Stripes will copy shared identity fields only
                 const label = displayNameForEmail(email, memberNamesByEmail, user?.email);
                 const isCurrentUser = normalizedEmail === (user?.email || "").trim().toLowerCase();
                 return (
-                  <div key={email} className="flex items-center justify-between gap-2 rounded-2xl bg-slate-50 px-3 py-2 text-xs font-bold text-[#102A43]">
+                  <div key={email} className="grid gap-2 rounded-2xl bg-slate-50 px-3 py-2 text-xs font-bold text-[#102A43] sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
                     <div className="min-w-0">
                       <div className="truncate">{label}</div>
                       <div className="truncate text-[10px] text-slate-500">{email}</div>
                     </div>
-                    <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black ${isCurrentUser ? "bg-violet-100 text-violet-700" : "bg-white text-slate-500"}`}>
-                      {isCurrentUser ? "You" : "Organizer"}
-                    </span>
+                    <div className="flex min-w-0 items-center gap-1.5 sm:justify-end">
+                      <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black ${isCurrentUser ? "bg-violet-100 text-violet-700" : "bg-white text-slate-500"}`}>
+                        {isCurrentUser ? "You" : "Organizer"}
+                      </span>
+                      {canManageCollaborators && collaboratorGroup && !isCurrentUser && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="min-h-8 min-w-0 flex-1 whitespace-normal rounded-xl border-rose-100 bg-white px-2 text-[9px] font-black leading-tight text-rose-700 sm:flex-none"
+                          disabled={Boolean(busy) || Boolean(activeRemovalProposal)}
+                          onClick={() => setRemovalConfirm({
+                            kind: "propose",
+                            targetEmail: email,
+                            targetName: label,
+                          })}
+                        >
+                          <UserMinus className="h-3.5 w-3.5" />
+                          {activeRemovalProposal ? "Vote open" : "Propose removal"}
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 );
               })}
@@ -661,6 +974,7 @@ No shared roster is open on this device. Choose one below to open it on this dev
         {sharedRosterLibraryModal}
         {backupHistoryModal}
         {collaboratorsModal}
+        {removalConfirmModal}
       </div>
     );
   }
@@ -744,6 +1058,7 @@ No shared roster is open on this device. Choose an online shared roster below to
 
 {backupHistoryModal}
 {collaboratorsModal}
+{removalConfirmModal}
     </div>
   );
 }

@@ -1673,6 +1673,272 @@ membership fields.
 
 Secret-ballot organizer removal remains the following protected G1 task.
 
+#### G1.3 implementation checkpoint — 2026-08-13
+
+Completed:
+
+- Firestore now treats shared-workspace membership/access fields as protected
+  governance state rather than ordinary organizer-editable data;
+- normal organizers may continue editing shared workspace content without
+  rewriting membership, roles or creator-history metadata;
+- organizers may add or cancel pending invitation emails without directly
+  changing existing organizer membership;
+- a pending invitee may accept only their own invitation and add only
+  themselves as an equal `organizer`;
+- invite acceptance cannot be used to alter another organizer's membership,
+  role or identity mappings;
+- linked-roster invite acceptance derives membership maps from each roster's
+  own current state and changes only the accepting organizer's keys, preserving
+  compatibility with older workspaces whose group/roster metadata may differ;
+- an organizer may use the ordinary Leave flow to remove only themselves;
+- self-leave must remove the signed-in organizer's own UID/email/role/name
+  mappings and cannot directly remove another organizer;
+- Firestore requires another organizer to remain after an ordinary self-leave;
+- legacy creator records remain compatible while the creator is still an
+  active member: `ownerUid` may provide a legacy organizer fallback, but it
+  does not independently restore access after membership is removed;
+- `ownerUid` / `ownerEmail` remain immutable legacy creator/history metadata;
+- ordinary client deletion of shared groups and rosters remains blocked;
+- unilateral organizer removal remains blocked pending the protected ballot
+  implementation;
+- Firebase rules dry-run compilation passes.
+
+#### G1.4 implementation completion checkpoint — 2026-08-13
+
+Completed:
+
+- organizer removal is now a protected governance action rather than a normal
+  shared-workspace membership edit;
+- one organizer cannot directly remove another organizer through ordinary
+  Firestore membership writes;
+- organizer-removal proposals and ballots are handled through trusted backend
+  governance logic rather than exposing direct membership mutation to clients;
+- the target organizer is excluded from the eligible electorate;
+- the approval threshold is fixed at
+  `floor(total organizer count / 2) + 1`, based on the TOTAL organizer count
+  including the target;
+- a proposal passes immediately when the required Yes threshold is reached;
+- a proposal fails early when the remaining possible Yes votes can no longer
+  reach the threshold;
+- the two-organizer case therefore cannot produce unilateral removal:
+  2 total organizers require 2 Yes votes while only one organizer is eligible
+  to vote;
+- removal resolution strips the target organizer's active membership/access
+  mappings while preserving unrelated shared workspace data;
+- organizer-removal logic is separated into dedicated backend governance code;
+- a dedicated client governance service provides the Stripes-facing proposal
+  and voting interface;
+- organizer-removal UI is wired into the shared-workspace organizer controls;
+- protected ballot data is treated as governance/security data rather than
+  ordinary Action Board voting data;
+- governance results expose only the information required by the organizer
+  workflow; individual ballot identities must not become normal shared club
+  data or governance history;
+- aggregate proposal history is readable only by active organizers, while a
+  target may read only the specific proposal naming their UID;
+- electorate snapshots, active-proposal control data and individual ballot
+  documents are server-only under Firestore rules;
+- callable participation checks authorize only active organizers or the
+  proposal target and reveal only the requesting user's own eligibility and
+  participation state;
+- legacy creator fallback remains available only when the active member has no
+  explicit role, so an explicit non-organizer role cannot inherit organizer
+  authority from historical `ownerUid` metadata;
+- successful removal resolves and removes the target's roster-specific email
+  mapping for each linked roster, including compatible legacy metadata;
+- the old direct client organizer-removal export is now a non-mutating
+  compatibility guard that requires callers to use the protected ballot flow;
+- the proposal confirmation no longer estimates organizer totals or thresholds
+  from client display arrays; authoritative counts come from backend electorate
+  calculation;
+- ordinary organizer self-leave remains a separate flow;
+- whole-workspace closure/deletion remains a separate future governed action;
+- Firebase Action Board document attachment storage remains untouched by G1.4.
+
+Verification completed on the final implementation:
+
+- all 15 dedicated organizer-removal unit tests pass;
+- threshold behavior is covered for 2, 3, 4 and 5 organizers;
+- early-pass and mathematically-unreachable early-fail behavior is tested;
+- membership-removal behavior is tested to preserve unrelated workspace data;
+- linked-roster cleanup with a roster-specific legacy email is tested;
+- Firebase Functions source syntax validation passes;
+- production Vite build passes;
+- Firestore rules dry-run compilation passes;
+- dry-run validation passes for all three G1.4 callable Functions;
+- the focused TypeScript audit reports no errors in G1.4 files; the repository's
+  documented pre-existing typecheck baseline remains separate;
+- `git diff --check` passes.
+
+Current status:
+
+- G1.4 implementation is complete and has been final-reviewed against the
+  approved governance rules;
+- the G1.4 Firestore rules and callable Functions have not been deployed;
+- true multi-account Firestore authorization and end-to-end ballot testing
+  remains a required pre-production validation step because this workspace does
+  not currently include Java or `@firebase/rules-unit-testing`;
+- do not begin G1.5 automatically; it remains the next separately approved
+  atomic task.
+
+Planned next atomic task after G1.4 completion:
+
+**G1.5 — Organizer invitation + verified-email onboarding.**
+
+The invitation experience should become a complete onboarding flow rather than
+only a pending-email database state.
+
+Required product behavior:
+
+1. An organizer enters an email address and chooses **Invite organizer**.
+2. Stripes creates the pending workspace invitation.
+3. Stripes sends a short branded invitation email from the Stripes domain.
+4. The email identifies the inviting organizer and club/workspace and provides
+   one clear **Join [club]** action.
+5. The invitation link preserves enough invitation/workspace context for the
+   recipient to continue directly into the correct Stripes workspace.
+6. If the recipient does not yet have a Stripes account, they create one using
+   the invited email address.
+7. The invited email must be verified before shared-workspace organizer access
+   is granted.
+8. If the recipient already has a Stripes account with the verified invited
+   email, signup is skipped and they continue directly to invitation
+   acceptance.
+9. Acceptance makes the recipient an equal `organizer` under the G1 governance
+   model.
+10. A user signed in with a different email must not be able to consume another
+    person's invitation.
+
+Email / account requirements:
+
+- invitation email branding must say Stripes, not legacy Fair Teams branding;
+- account-verification, password-reset and related Firebase Authentication
+  emails must be audited for Stripes branding;
+- email action links should return users to the current Stripes domain/flow;
+- actual test emails should be sent before launch;
+- failed, expired, already-consumed and wrong-account invitation states should
+  have clear recovery UX;
+- invitation email sending must not expose secrets or make the client a trusted
+  email-sending authority.
+
+Security / privacy requirements:
+
+- verified email identity must match the invited normalized email;
+- backend enforcement is required; UI-only checks are insufficient;
+- invitation data should contain only what is needed for the onboarding flow;
+- invite links/tokens must not themselves grant organizer access without
+  successful authentication and verification;
+- G1.5 must be reviewed against the Security & Privacy Launch Gate.
+
+G1.5 should remain independent from G2/G3 Google integration work.
+
+### Security & Privacy Launch Gate
+
+**Status:** Required before public production launch / Google Play release.
+
+This gate does not block normal implementation of G1–G3, but Stripes must not
+be considered launch-ready until every mandatory item below is resolved and
+documented.
+
+#### Security and privacy principles
+
+- collect and retain only personal data Stripes actually needs;
+- Firebase/Google platform encryption at rest and in transit is the baseline;
+  do not assume that ordinary Firestore fields are end-to-end encrypted;
+- authorization must be enforced by backend security rules, not only hidden
+  or disabled UI controls;
+- organizer membership must remain workspace-governed and server-enforced;
+- `ownerUid` / `ownerEmail` are legacy creator/history metadata only and must
+  never independently restore access;
+- use least-privilege Google OAuth scopes and permissions;
+- Stripes should not become a general-purpose document-storage provider;
+- minimize duplication of identity information such as organizer email
+  addresses across Firestore documents;
+- where practical, workspace membership should become the authoritative source
+  of organizer identity/access rather than independently copied roster-level
+  membership records.
+
+#### Mandatory pre-launch checklist
+
+- [ ] **Personal-data inventory**
+  - document what Stripes stores, where it is stored, why it is needed and who
+    can access it;
+  - include organizer/account emails, player names, private organizer ratings,
+    attendance, tardy/no-show/last-minute-cancellation records, notifications,
+    governance records and Google-linked resource metadata.
+
+- [ ] **Data minimization review**
+  - identify duplicated personal information that can be removed or replaced
+    by workspace/member references;
+  - specifically review `memberEmails`, `memberNamesByEmail`,
+    `memberUidByEmail` and linked-roster membership replication.
+
+- [ ] **Backend authorization audit**
+  - review Firestore, Firebase Storage and callable/backend-function rules;
+  - verify that users cannot bypass the Stripes UI to read or modify another
+    workspace's private data;
+  - verify organizer invitation, invite acceptance, self-leave, removal voting
+    and workspace closure at the backend rules layer.
+
+- [ ] **Sensitive club-record review**
+  - explicitly review privacy treatment of private player ratings, attendance,
+    tardiness, no-shows, cancellations and any conduct-related records;
+  - define who can see them and whether every stored field is necessary.
+
+- [ ] **Retention and deletion policy**
+  - define how long account, workspace and historical club data are retained;
+  - provide a safe process for account deletion, leaving a workspace and
+    eventual workspace closure;
+  - ensure abandoned data is not retained indefinitely without a reason.
+
+- [ ] **User-data access / export / erasure**
+  - define how a user can request access to, export or erase personal data when
+    legally applicable;
+  - distinguish personal account deletion from shared club-data governance so
+    one departing organizer cannot destroy data belonging to the club.
+
+- [ ] **Privacy notice / legal basis**
+  - publish a privacy policy describing categories of data, purposes,
+    recipients/processors, retention, user rights and contact information;
+  - document the legal basis relied upon for each material processing purpose.
+
+- [ ] **Controller / processor responsibilities**
+  - document who operates Stripes and acts as controller for account/service
+    data;
+  - document Firebase/Google and other service providers used as processors or
+    subprocessors where applicable;
+  - retain the applicable data-processing agreements/terms.
+
+- [ ] **Google integration privacy**
+  - before G2/G3 production rollout, audit OAuth scopes and request only the
+    permissions required for the chosen functionality;
+  - clearly explain My Drive versus Shared Drive permissions to users;
+  - Stripes must not silently broaden Google access or move/delete originals.
+
+- [ ] **Administrator security**
+  - restrict Firebase, Google Cloud, Vercel, GitHub and other production-admin
+    access to necessary maintainers;
+  - require strong authentication / 2FA on production administrator accounts;
+  - review API keys, secrets and Firebase Secret Manager usage.
+
+- [ ] **Security incident procedure**
+  - maintain a short written process for investigating suspected unauthorized
+    access, containing the incident, preserving relevant evidence and handling
+    legally required notifications.
+
+- [ ] **Store disclosure alignment**
+  - ensure Google Play Data Safety answers and the public privacy policy match
+    the behavior of the production application.
+
+#### Launch rule
+
+A successful build or store submission does **not** by itself satisfy this
+gate. Security/privacy readiness requires both technical verification and the
+required user-facing/legal documentation.
+
+Any new architecture introduced in G2/G3 must be reviewed against this gate
+before being considered complete.
+
 ### G2 — Unified Google Connection
 
 Inspect and consolidate:

@@ -15,9 +15,7 @@ import { StripesConfirmContent } from "@/components/ui/stripes-modal";
 import type { RoomRoster } from "@/lib/localRoster";
 import {
   acceptFirebaseGroupInvite,
-  cancelFirebaseGroupInvite,
   createFirebaseSharedRoster,
-  inviteEmailToFirebaseSharedGroup,
   listenToFirebaseSharedRoster,
   listenToSharedRosterUser,
   listFirebaseGroupInvites,
@@ -33,6 +31,13 @@ import {
   type FirebaseSharedRosterSummary,
   type SharedRosterUser,
 } from "@/lib/sharedRosterService";
+import {
+  cancelWorkspaceOrganizerInvitation,
+  createWorkspaceOrganizerInvitation,
+  listWorkspaceOrganizerInvitations,
+  resendWorkspaceOrganizerInvitation,
+  type WorkspaceOrganizerInvitation,
+} from "@/lib/sharedWorkspaceInvitationService";
 import {
   castOrganizerRemovalBallot,
   getOrganizerRemovalParticipation,
@@ -124,6 +129,9 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
   const [sharedRosters, setSharedRosters] = useState<FirebaseSharedRosterSummary[]>([]);
   const [incomingInvites, setIncomingInvites] = useState<FirebaseGroupInvite[]>([]);
   const [inviteEmail, setInviteEmail] = useState("");
+  const [workspaceInvitations, setWorkspaceInvitations] = useState<WorkspaceOrganizerInvitation[]>([]);
+  const [invitationListGroupId, setInvitationListGroupId] = useState("");
+  const [invitationLoadError, setInvitationLoadError] = useState("");
   const [collaboratorRosterId, setCollaboratorRosterId] = useState("");
   const [sharedRosterLibraryOpen, setSharedRosterLibraryOpen] = useState(false);
   const [backupRosterId, setBackupRosterId] = useState("");
@@ -146,6 +154,9 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
       setSharedGroups([]);
       setSharedRosters([]);
       setIncomingInvites([]);
+      setWorkspaceInvitations([]);
+      setInvitationListGroupId("");
+      setInvitationLoadError("");
     }
   }), []);
 
@@ -218,6 +229,45 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
       setBusy((current) => current === "refresh" ? "" : current);
     }
   };
+
+  const refreshWorkspaceInvitations = async (groupId: string) => {
+    const invitations = await listWorkspaceOrganizerInvitations(groupId);
+    setWorkspaceInvitations(invitations);
+    setInvitationListGroupId(groupId);
+    setInvitationLoadError("");
+  };
+
+  useEffect(() => {
+    const groupId = collaboratorGroup?.id;
+    const role = collaboratorGroup?.currentUserRole || collaboratorRoster?.currentUserRole;
+    if (!user || !groupId || !collaboratorRosterId || !canRoleSave(role)) {
+      setWorkspaceInvitations([]);
+      setInvitationListGroupId("");
+      setInvitationLoadError("");
+      return;
+    }
+    let cancelled = false;
+    void listWorkspaceOrganizerInvitations(groupId)
+      .then((invitations) => {
+        if (cancelled) return;
+        setWorkspaceInvitations(invitations);
+        setInvitationListGroupId(groupId);
+        setInvitationLoadError("");
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setInvitationLoadError(friendlyFirestoreError(error));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    user,
+    collaboratorGroup?.id,
+    collaboratorGroup?.currentUserRole,
+    collaboratorRoster?.currentUserRole,
+    collaboratorRosterId,
+  ]);
 
   useEffect(() => {
     const groupId = collaboratorGroup?.id;
@@ -404,15 +454,23 @@ Your local roster will stay local. Stripes will copy shared identity fields only
     }
   };
 
-  const handleInvite = async () => {
-    if (!user || !collaboratorGroup || !inviteEmail.trim() || busy) return;
+  const handleInvite = async (emailOverride?: string) => {
+    const emailToInvite = (emailOverride || inviteEmail).trim();
+    if (!user || !collaboratorGroup || !emailToInvite || busy) return;
     setBusy("invite");
     setNotice(null);
     try {
-      await inviteEmailToFirebaseSharedGroup(collaboratorGroup.id, inviteEmail);
-      setInviteEmail("");
-      await refreshSharedData();
-      setNotice({ tone: "success", text: "Collaborator invited." });
+      const result = await createWorkspaceOrganizerInvitation(collaboratorGroup.id, emailToInvite);
+      if (!emailOverride) setInviteEmail("");
+      await Promise.all([
+        refreshSharedData(),
+        refreshWorkspaceInvitations(collaboratorGroup.id),
+      ]);
+      setNotice(result.reused
+        ? { tone: "info", text: "That invitation is already pending. Use Resend if another email is needed." }
+        : result.emailSent
+          ? { tone: "success", text: "Invitation email sent." }
+          : { tone: "error", text: "The invitation is pending, but the email could not be sent. Try Resend." });
     } catch (error) {
       setNotice({ tone: "error", text: friendlyFirestoreError(error) });
     } finally {
@@ -420,13 +478,33 @@ Your local roster will stay local. Stripes will copy shared identity fields only
     }
   };
 
-  const handleCancelInvite = async (email: string) => {
+  const handleCancelInvite = async (invitation: WorkspaceOrganizerInvitation) => {
     if (!collaboratorGroup || busy) return;
-    setBusy(`cancel:${email}`);
+    setBusy(`cancel:${invitation.invitedEmail}`);
     setNotice(null);
     try {
-      await cancelFirebaseGroupInvite(collaboratorGroup.id, email);
-      await refreshSharedData();
+      await cancelWorkspaceOrganizerInvitation(collaboratorGroup.id, invitation);
+      await Promise.all([
+        refreshSharedData(),
+        refreshWorkspaceInvitations(collaboratorGroup.id),
+      ]);
+    } catch (error) {
+      setNotice({ tone: "error", text: friendlyFirestoreError(error) });
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const handleResendInvite = async (invitation: WorkspaceOrganizerInvitation) => {
+    if (!collaboratorGroup || !invitation.invitationId || busy) return;
+    setBusy(`resend:${invitation.invitationId}`);
+    setNotice(null);
+    try {
+      const result = await resendWorkspaceOrganizerInvitation(invitation.invitationId);
+      await refreshWorkspaceInvitations(collaboratorGroup.id);
+      setNotice(result.emailSent
+        ? { tone: "success", text: "Invitation email resent." }
+        : { tone: "error", text: "The invitation remains pending, but the email could not be sent." });
     } catch (error) {
       setNotice({ tone: "error", text: friendlyFirestoreError(error) });
     } finally {
@@ -733,7 +811,7 @@ Your local roster will stay local. Stripes will copy shared identity fields only
       {canManageCollaborators ? (
         <div className="grid grid-cols-[1fr_auto] gap-2">
           <input value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} type="email" className="h-10 rounded-2xl border border-violet-100 bg-white px-3 text-sm font-bold outline-none" placeholder="email@example.com" />
-          <Button type="button" className="h-10 rounded-2xl bg-violet-600 px-3 text-xs font-black text-white hover:bg-violet-700" onClick={handleInvite} disabled={!inviteEmail.trim() || Boolean(busy)}>
+          <Button type="button" className="h-10 rounded-2xl bg-violet-600 px-3 text-xs font-black text-white hover:bg-violet-700" onClick={() => void handleInvite()} disabled={!inviteEmail.trim() || Boolean(busy)}>
             <UserPlus className="mr-1.5 h-4 w-4" />
             Invite
           </Button>
@@ -751,10 +829,26 @@ Your local roster will stay local. Stripes will copy shared identity fields only
           </div>
         )}
         {removalGovernancePanel}
+        {invitationLoadError && (
+          <div className="rounded-2xl bg-amber-50 px-3 py-2 text-[10px] font-bold leading-snug text-amber-800">
+            {invitationLoadError}
+          </div>
+        )}
         {(() => {
           const memberNamesByEmail = mergedMemberNames(collaboratorGroup, collaboratorRoster);
           const memberEmails = collaboratorGroup?.memberEmails || collaboratorRoster.memberEmails || [];
           const pendingEmails = collaboratorGroup?.pendingInviteEmails || collaboratorRoster.pendingInviteEmails || [];
+          const pendingInvitations = invitationListGroupId === collaboratorGroup?.id
+            ? workspaceInvitations
+            : pendingEmails.map((email): WorkspaceOrganizerInvitation => ({
+                invitationId: null,
+                invitedEmail: email,
+                state: "pending",
+                expiresAt: null,
+                deliveryStatus: "not_sent",
+                lastSentAt: null,
+                resendAvailableAt: null,
+              }));
           return (
             <>
               {memberEmails.map((email) => {
@@ -791,19 +885,42 @@ Your local roster will stay local. Stripes will copy shared identity fields only
                   </div>
                 );
               })}
-              {pendingEmails.map((email) => (
-                <div key={email} className="flex items-center justify-between gap-2 rounded-2xl bg-amber-50 px-3 py-2 text-xs font-bold text-[#102A43]">
-                  <div className="min-w-0">
-                    <div className="truncate">{displayNameForEmail(email, memberNamesByEmail, user?.email)}</div>
-                    <div className="truncate text-[10px] text-amber-700">Pending invite · {email}</div>
+              {pendingInvitations.map((invitation) => {
+                const deliveryLabel = invitation.state === "expired"
+                  ? "Expired"
+                  : invitation.deliveryStatus === "sent"
+                    ? "Email sent"
+                    : invitation.deliveryStatus === "failed"
+                      ? "Email delivery failed"
+                      : invitation.deliveryStatus === "sending"
+                        ? "Sending email…"
+                        : "Email not sent yet";
+                return (
+                  <div key={invitation.invitationId || invitation.invitedEmail} className="flex items-center justify-between gap-2 rounded-2xl bg-amber-50 px-3 py-2 text-xs font-bold text-[#102A43]">
+                    <div className="min-w-0">
+                      <div className="truncate">{displayNameForEmail(invitation.invitedEmail, memberNamesByEmail, user?.email)}</div>
+                      <div className="truncate text-[10px] text-amber-700">Pending invite · {invitation.invitedEmail}</div>
+                      <div className="text-[9px] font-black text-amber-600">{deliveryLabel}</div>
+                    </div>
+                    {canManageCollaborators ? (
+                      <div className="flex shrink-0 items-center gap-1">
+                        {invitation.state === "expired" || !invitation.invitationId ? (
+                          <Button type="button" variant="outline" className="h-8 rounded-xl border-amber-200 bg-white px-2 text-[9px] font-black text-amber-800" onClick={() => void handleInvite(invitation.invitedEmail)} disabled={Boolean(busy)}>
+                            Send email
+                          </Button>
+                        ) : (
+                          <Button type="button" variant="outline" className="h-8 rounded-xl border-amber-200 bg-white px-2 text-[9px] font-black text-amber-800" onClick={() => void handleResendInvite(invitation)} disabled={Boolean(busy)}>
+                            Resend
+                          </Button>
+                        )}
+                        <button type="button" onClick={() => void handleCancelInvite(invitation)} className="rounded-full bg-white p-1.5 text-amber-700" disabled={Boolean(busy)} aria-label={`Cancel invite for ${invitation.invitedEmail}`}><X className="h-3.5 w-3.5" /></button>
+                      </div>
+                    ) : (
+                      <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-amber-700">Pending</span>
+                    )}
                   </div>
-                  {canManageCollaborators ? (
-                    <button type="button" onClick={() => handleCancelInvite(email)} className="rounded-full bg-white p-1.5 text-amber-700" disabled={Boolean(busy)} aria-label={`Cancel invite for ${email}`}><X className="h-3.5 w-3.5" /></button>
-                  ) : (
-                    <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-amber-700">Pending</span>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </>
           );
         })()}

@@ -222,6 +222,17 @@ service cloud.firestore {
         && request.resource.data.text.size() <= 160;
     }
 
+    // Workspace invitation records and their deduplication controls contain
+    // private recipient and delivery metadata. Clients use trusted callable
+    // functions for organizer lists and sanitized recipient context instead.
+    match /sharedWorkspaceInvitations/{invitationId} {
+      allow read, write: if false;
+    }
+
+    match /sharedWorkspaceInvitationLocks/{lockId} {
+      allow read, write: if false;
+    }
+
     match /sharedGroups/{groupId} {
       allow create: if signedIn()
         && request.resource.data.ownerUid == request.auth.uid

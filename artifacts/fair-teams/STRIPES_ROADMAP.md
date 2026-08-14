@@ -1902,6 +1902,54 @@ Security / privacy requirements:
 
 G1.5 should remain independent from G2/G3 Google integration work.
 
+#### G1.5a implementation checkpoint — 2026-08-14
+
+Implemented and verified locally; intentionally not deployed independently:
+
+- organizer invitations now have opaque server-created records under
+  `sharedWorkspaceInvitations/{invitationId}`;
+- invitation records and their deduplication controls are denied to all
+  direct Firestore clients;
+- trusted callable Functions create, reuse, resend, cancel, list and expose
+  minimal invitation context;
+- invitation creation rejects self-invites, existing organizers,
+  unauthenticated callers, unverified senders and callers who are not active
+  organizers;
+- pending invitations expire after 14 days;
+- duplicate pending invitations reuse the same opaque invitation and resend
+  reuses that invitation with a five-minute minimum cooldown;
+- invitation links are constructed only by the backend as
+  `https://stripes.work/app?invite=<opaque-id>`;
+- public invitation context exposes only the sanitized workspace name,
+  inviter display name, state, expiry and masked invited email;
+- invitation emails use the existing
+  `Stripes <notifications@stripes.work>` Resend sender with short Stripes
+  plain-text and HTML content;
+- Action Board-specific email headers are now optional and are omitted from
+  organizer-invitation email;
+- the organizer UI uses the callable backend and shows pending, delivery,
+  resend and cancel state;
+- legacy `pendingInviteEmails` values remain synchronized and legacy pending
+  entries can be adopted by the new email flow;
+- invitation acceptance, recipient verification/navigation, password-reset
+  work and legacy direct-acceptance rule hardening remain out of G1.5a.
+
+Verification:
+
+- all focused organizer-removal and invitation policy tests pass;
+- production Vite build passes;
+- Firestore rules dry-run compilation passes;
+- dry-run validation passes for all five G1.5a callable Functions;
+- the repository's documented TypeScript baseline errors remain, with no
+  errors reported in the G1.5a files.
+
+Next atomic task:
+
+**G1.5b — verified identity enforcement and trusted invitation acceptance.**
+
+G1.5a must ship together with the required G1.5b identity/acceptance hardening
+rather than being deployed independently.
+
 ### Security & Privacy Launch Gate
 
 **Status:** Required before public production launch / Google Play release.

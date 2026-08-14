@@ -2,6 +2,7 @@ const crypto = require("crypto");
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { defineSecret } = require("firebase-functions/params");
 const { initializeApp } = require("firebase-admin/app");
+const { getAuth } = require("firebase-admin/auth");
 const { getFirestore, FieldValue, Timestamp } = require("firebase-admin/firestore");
 const { getMessaging } = require("firebase-admin/messaging");
 const {
@@ -42,6 +43,14 @@ const {
   validateInvitationRequest,
   verifiedInvitationIdentity,
 } = require("./workspaceInvitation");
+const {
+  EmailVerificationError,
+  verificationContinuationUrl,
+  verificationEmail,
+  verificationIdentity,
+  verificationSendResult,
+  verificationThrottlePlan,
+} = require("./emailVerification");
 
 initializeApp();
 
@@ -51,6 +60,7 @@ const USER_COLLECTION = "fairTeamsUsers";
 const PUSH_INSTALLATION_COLLECTION = "fairTeamsPushInstallations";
 const WORKSPACE_INVITATION_COLLECTION = "sharedWorkspaceInvitations";
 const WORKSPACE_INVITATION_LOCK_COLLECTION = "sharedWorkspaceInvitationLocks";
+const EMAIL_VERIFICATION_THROTTLE_COLLECTION = "authEmailVerificationThrottles";
 const MAX_GOVERNANCE_TRANSACTION_DOCUMENTS = 440;
 const RESEND_API_KEY = defineSecret("RESEND_API_KEY");
 
@@ -253,6 +263,116 @@ async function sendResendEmail({
 
   return payload;
 }
+
+function verificationHttpsError(error) {
+  if (error instanceof HttpsError) return error;
+  if (error instanceof EmailVerificationError) {
+    return new HttpsError(error.code, error.message, error.details);
+  }
+  return new HttpsError("internal", "Stripes could not send the verification email. Try again.");
+}
+
+async function releaseVerificationAttempt(db, throttleRef, attemptId) {
+  await db.runTransaction(async (tx) => {
+    const throttleSnap = await tx.get(throttleRef);
+    if (!throttleSnap.exists) return;
+    const current = throttleSnap.data() || {};
+    const attempts = (Array.isArray(current.attempts) ? current.attempts : [])
+      .filter((attempt) => String(attempt?.id || "") !== attemptId);
+    tx.set(throttleRef, {
+      ...current,
+      attempts,
+      updatedAt: FieldValue.serverTimestamp(),
+      updatedAtIso: new Date().toISOString(),
+    });
+  });
+}
+
+exports.sendStripesEmailVerification = onCall({
+  region: REGION,
+  timeoutSeconds: 60,
+  secrets: [RESEND_API_KEY],
+}, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Sign in first.");
+
+  const db = getFirestore();
+  const firebaseAuth = getAuth();
+  const attemptId = crypto.randomUUID();
+  const now = Date.now();
+  const throttleRef = db.collection(EMAIL_VERIFICATION_THROTTLE_COLLECTION)
+    .doc(request.auth.uid);
+  let identity;
+  let plan;
+  let deliveryAttempted = false;
+
+  try {
+    const authUser = await firebaseAuth.getUser(request.auth.uid);
+    identity = verificationIdentity(authUser);
+    const continuationUrl = verificationContinuationUrl(request.data?.invitationId);
+
+    plan = await db.runTransaction(async (tx) => {
+      const throttleSnap = await tx.get(throttleRef);
+      const current = throttleSnap.exists ? throttleSnap.data() || {} : {};
+      const nextPlan = verificationThrottlePlan(current.attempts, now);
+      if (!nextPlan.allowed) {
+        const resendAvailableAt = new Date(nextPlan.retryAtMillis).toISOString();
+        const message = nextPlan.reason === "daily_limit"
+          ? "The daily verification-email limit has been reached. Try again later."
+          : "Wait before requesting another verification email.";
+        throw new EmailVerificationError("resource-exhausted", message, {
+          reason: nextPlan.reason,
+          resendAvailableAt,
+        });
+      }
+      tx.set(throttleRef, {
+        schemaVersion: 1,
+        uid: identity.uid,
+        attempts: [
+          ...nextPlan.attempts.map((attempt) => ({
+            id: attempt.id,
+            at: Timestamp.fromMillis(attempt.atMillis),
+          })),
+          { id: attemptId, at: Timestamp.fromMillis(now) },
+        ],
+        updatedAt: FieldValue.serverTimestamp(),
+        updatedAtIso: new Date(now).toISOString(),
+      });
+      return nextPlan;
+    });
+
+    const verificationUrl = await firebaseAuth.generateEmailVerificationLink(identity.email, {
+      url: continuationUrl,
+      handleCodeInApp: false,
+    });
+    const content = verificationEmail(verificationUrl);
+    deliveryAttempted = true;
+    await sendResendEmail({
+      to: identity.email,
+      subject: content.subject,
+      text: content.text,
+      html: content.html,
+    });
+    return verificationSendResult(plan);
+  } catch (error) {
+    if (plan && !deliveryAttempted) {
+      await releaseVerificationAttempt(db, throttleRef, attemptId).catch(() => undefined);
+    }
+    if (!(error instanceof EmailVerificationError) && !(error instanceof HttpsError)) {
+      console.error("Could not send Stripes verification email");
+      if (plan && deliveryAttempted) {
+        throw new HttpsError(
+          "internal",
+          "Stripes could not send the verification email. Try again.",
+          {
+            reason: "delivery_failed",
+            resendAvailableAt: new Date(plan.retryAtMillis).toISOString(),
+          },
+        );
+      }
+    }
+    throw verificationHttpsError(error);
+  }
+});
 
 function emailBodies({ senderName, step, topicContext, customMessage, appUrl }) {
   const contextLines = [`Topic: ${step.topicTitle}`, ...topicContext];

@@ -3,6 +3,7 @@ export type SharedRosterUser = {
   email: string;
   displayName?: string;
   emailVerified: boolean;
+  providerIds?: string[];
 };
 
 type FirebaseAuthUserSnapshot = {
@@ -10,6 +11,7 @@ type FirebaseAuthUserSnapshot = {
   email: string | null;
   displayName: string | null;
   emailVerified: boolean;
+  providerData?: Array<{ providerId: string }>;
 };
 
 export function toSharedRosterUser(user: FirebaseAuthUserSnapshot | null): SharedRosterUser | null {
@@ -19,6 +21,9 @@ export function toSharedRosterUser(user: FirebaseAuthUserSnapshot | null): Share
     email: user.email,
     displayName: user.displayName || undefined,
     emailVerified: user.emailVerified,
+    providerIds: Array.from(new Set(
+      (user.providerData || []).map((profile) => profile.providerId).filter(Boolean),
+    )),
   };
 }
 

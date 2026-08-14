@@ -221,6 +221,10 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    match /authEmailVerificationThrottles/{uid} {
+      allow read, write: if false;
+    }
+
     match /sharedGroups/{groupId} {
       allow create: if signedIn()
         && request.resource.data.ownerUid == request.auth.uid

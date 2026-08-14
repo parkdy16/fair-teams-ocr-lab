@@ -1,7 +1,6 @@
 import {
   getIdTokenResult,
   reload,
-  sendEmailVerification,
   sendPasswordResetEmail,
   type ActionCodeSettings,
 } from "firebase/auth";
@@ -14,6 +13,7 @@ import {
   type SharedRosterUser,
 } from "@/lib/sharedRosterService";
 import { cleanWorkspaceInvitationId } from "@/lib/workspaceInvitationOnboardingState";
+import { requestStripesEmailVerification } from "@/lib/stripesEmailVerificationService";
 export {
   cleanWorkspaceInvitationId,
   requireRefreshedWorkspaceInvitationSender,
@@ -45,10 +45,8 @@ function requireCurrentUser() {
 }
 
 export async function sendStripesEmailVerification(invitationId?: string) {
-  await sendEmailVerification(
-    requireCurrentUser(),
-    workspaceInvitationActionCodeSettings(invitationId),
-  );
+  requireCurrentUser();
+  return requestStripesEmailVerification(invitationId);
 }
 
 export async function sendStripesPasswordResetEmail(

@@ -1418,10 +1418,11 @@ storage/ownership wording conflicts with it.
 - W2 Meetup application is submitted / waiting for API access.
 - Meetup must not block the Google Play launch.
 - G1.4 protected organizer-removal governance is complete and live.
-- Current active atomic task: G1.5 Organizer invitation + verified-email
-  onboarding.
-- Google implementation follows completion of the remaining G1 governance /
-  onboarding work rather than preceding it.
+- G1.5e organizer governance eligibility hardening is released and live.
+- Current active atomic task: G1.5f Authentication UX hardening.
+- G1.5f basic Google authentication is the approved onboarding/auth hardening
+  currently being completed; Google Drive/Cabinet implementation still waits
+  until after G1.6 and begins in G2.
 
 ## Shared workspace governance
 
@@ -2300,8 +2301,7 @@ completed locally; G1.5d now owns coordinated production verification.
 
 ### G1.5e — Organizer governance eligibility hardening
 
-**Status:** Implemented locally and ready for review. Not committed, pushed or
-deployed; do not begin G1.6 until G1.5e is approved and released.
+**Status:** Released and live.
 
 Live testing identified a governance-sybil risk: one human organizer could
 invite several additional email accounts they control, accept those
@@ -2369,7 +2369,7 @@ Acceptance notification requirement:
 - pending invitations do not trigger this notification;
 - the newly accepted organizer is excluded from notification recipients.
 
-Local implementation checkpoint:
+Release checkpoint:
 
 - trusted invitation acceptance atomically records server timestamps for the
   organizer's join time and 14-day governance-eligibility time on the shared
@@ -2388,12 +2388,58 @@ Local implementation checkpoint:
 - the organizer-management UI shows the eligibility date and disables only the
   protected-removal controls during the waiting period;
 - focused helper, governance, invitation, rules-contract and UI-state coverage
-  accompanies the implementation; production deployment and live verification
-  remain pending review.
+  accompanies the implementation;
+- committed as `e4010e2` and pushed to `main`;
+- the G1.5e Firestore rules are deployed;
+- `acceptWorkspaceOrganizerInvitation`, `startOrganizerRemovalProposal`,
+  `getOrganizerRemovalState` and `castOrganizerRemovalBallot` deployed
+  successfully.
+
+### G1.5f — Authentication UX hardening
+
+**Status:** Implemented locally and ready for review. Not committed, pushed or
+deployed; do not begin G1.6 until G1.5f is approved and released.
+
+Bounded authentication direction:
+
+- Google is the preferred Stripes sign-in method; email/password remains a
+  supported fallback;
+- Firebase Google authentication is identity-only and remains separate from
+  Google Drive authorization and all G2 scopes/capabilities;
+- popup sign-in preserves the current `/app?invite=<opaque-id>` browser state;
+- provider/account conflicts never trigger automatic account merging,
+  Firestore data migration or UID replacement;
+- when signed-out Google authentication returns Firebase's supported
+  existing-provider conflict, Stripes keeps only that exact pending credential
+  briefly in memory, requires authentication through the matching existing
+  email/password account, then links with `linkWithCredential` so the existing
+  UID is preserved;
+- Stripes does not expose a generic authenticated Google-link popup, persist
+  pending OAuth credentials or rely on post-link unlink cleanup;
+- invitation matching remains backend-enforced against the exact normalized,
+  verified Firebase email, and authentication never auto-accepts an
+  invitation; explicit Join remains required;
+- email/password verification uses a Firebase Admin-generated verification
+  action link delivered through the existing Resend sender
+  `Stripes <notifications@stripes.work>`;
+- Firebase Authentication remains the verification authority, and the client
+  continues to reload the Firebase user and force-refresh the ID token after
+  verification;
+- the verification callable is restricted to the signed-in Firebase UID and
+  server-derived email, never returns or logs the raw action link, and stores
+  its throttle state in a server-only Firestore document;
+- verification resend policy is server-authoritative: at least 60 seconds
+  between requests and at most 10 requests per rolling 24 hours per Firebase
+  UID;
+- custom password-reset delivery through Resend is deferred; the existing
+  Firebase hosted password-reset flow remains in place;
+- production Google testing still requires enabling the `google.com` provider
+  in Firebase Authentication. No Google Drive scope or provider configuration
+  change is part of G1.5f implementation.
 
 ### G1.6 — Workspace closure / last-organizer behavior
 
-**Status:** Planned after G1.5e.
+**Status:** Planned after G1.5f.
 
 G1.6 remains the separate governed task for workspace closure/deletion and the
 last-organizer safeguard. It must not be folded into invitation onboarding or
@@ -2401,11 +2447,10 @@ organizer-removal eligibility work.
 
 Required roadmap order:
 
-1. finish G1.5d live testing and email follow-up;
-2. implement G1.5e governance eligibility hardening;
-3. implement G1.6 workspace closure / last-organizer behavior;
-4. proceed to G2 Unified Google Connection;
-5. proceed to G3 Google Resource + Club Cabinet Foundation.
+1. complete and release G1.5f Authentication UX hardening;
+2. implement G1.6 workspace closure / last-organizer behavior;
+3. proceed to G2 Unified Google Connection;
+4. proceed to G3 Google Resource + Club Cabinet Foundation.
 
 Do not insert another major implementation phase between G1.6 and G2.
 

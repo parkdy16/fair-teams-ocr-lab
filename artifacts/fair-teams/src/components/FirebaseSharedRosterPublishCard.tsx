@@ -59,6 +59,10 @@ import {
   organizerGovernanceEligibilityState,
 } from "@/lib/organizerGovernanceEligibility";
 import { resolveWorkspaceInvitationManagementGroupId } from "@/lib/workspaceInvitationOnboardingState";
+import {
+  verificationEmailError,
+  verificationResendLabel,
+} from "@/lib/stripesEmailVerificationService";
 
 type Props = {
   variant?: "full" | "compact";
@@ -84,14 +88,6 @@ function friendlyFirestoreError(error: unknown) {
   if (/network/i.test(message)) return "Network error.";
   if (/saved by someone else|changed elsewhere|Remote version/i.test(message)) return "Online roster changed. Stripes will update and try again.";
   return message.replace(/^Firebase:\s*/i, "");
-}
-
-function friendlyInvitationVerificationError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error || "Something went wrong.");
-  if (/auth\/network-request-failed|network/i.test(message)) return "Network error. Check your connection and try again.";
-  if (/auth\/too-many-requests|resource-exhausted/i.test(message)) return "Too many attempts. Try again later.";
-  if (/auth\/invalid-user-token|auth\/user-token-expired/i.test(message)) return "Sign in again before verifying your email.";
-  return "Stripes could not complete email verification. Try again.";
 }
 
 function fallbackNameFromEmail(email?: string) {
@@ -159,6 +155,8 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
   const [removalParticipation, setRemovalParticipation] = useState<OrganizerRemovalParticipation | null>(null);
   const [removalError, setRemovalError] = useState("");
   const [senderVerificationNotice, setSenderVerificationNotice] = useState<{ tone: "success" | "error" | "info"; text: string } | null>(null);
+  const [senderVerificationResendAt, setSenderVerificationResendAt] = useState<string | null>(null);
+  const [senderVerificationClock, setSenderVerificationClock] = useState(() => Date.now());
   const [invitationNotice, setInvitationNotice] = useState<{ tone: "success" | "error" | "info"; text: string } | null>(null);
   const [removalConfirm, setRemovalConfirm] = useState<
     | { kind: "propose"; targetEmail: string; targetName: string }
@@ -169,6 +167,17 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
   const [autoSyncStatus, setAutoSyncStatus] = useState<"idle" | "saving" | "saved" | "syncing" | "error">("idle");
   const lastLiveRosterVersionRef = useRef(0);
   const senderInvitationStatus = workspaceInvitationSenderStatus(user);
+  const senderVerificationCooldownLabel = verificationResendLabel(senderVerificationResendAt, senderVerificationClock);
+
+  useEffect(() => {
+    if (!senderVerificationResendAt || Date.parse(senderVerificationResendAt) <= Date.now()) return;
+    const interval = window.setInterval(() => {
+      const now = Date.now();
+      setSenderVerificationClock(now);
+      if (Date.parse(senderVerificationResendAt) <= now) window.clearInterval(interval);
+    }, 1000);
+    return () => window.clearInterval(interval);
+  }, [senderVerificationResendAt]);
 
   useEffect(() => listenToSharedRosterUser((nextUser) => {
     setUser(nextUser);
@@ -559,10 +568,15 @@ Your local roster will stay local. Stripes will copy shared identity fields only
     setBusy("organizer-verification-email");
     setSenderVerificationNotice(null);
     try {
-      await sendStripesEmailVerification();
+      const verification = await sendStripesEmailVerification();
+      setSenderVerificationResendAt(verification.resendAvailableAt);
+      setSenderVerificationClock(Date.now());
       setSenderVerificationNotice({ tone: "success", text: "Verification email sent. Check your inbox." });
     } catch (error) {
-      setSenderVerificationNotice({ tone: "error", text: friendlyInvitationVerificationError(error) });
+      const safeError = verificationEmailError(error);
+      setSenderVerificationResendAt(safeError.resendAvailableAt);
+      setSenderVerificationClock(Date.now());
+      setSenderVerificationNotice({ tone: "error", text: safeError.message });
     } finally {
       setBusy("");
     }
@@ -579,7 +593,7 @@ Your local roster will stay local. Stripes will copy shared identity fields only
         ? { tone: "success", text: "Email verified. You can invite organizers now." }
         : { tone: "info", text: "Verification is not confirmed yet. Open the email link, then try again." });
     } catch (error) {
-      setSenderVerificationNotice({ tone: "error", text: friendlyInvitationVerificationError(error) });
+      setSenderVerificationNotice({ tone: "error", text: "Stripes could not refresh email verification. Try again." });
     } finally {
       setBusy("");
     }
@@ -936,7 +950,7 @@ Your local roster will stay local. Stripes will copy shared identity fields only
             Stripes will return you to the normal app after Firebase verifies your account.
           </div>
           <div className="grid gap-2 sm:grid-cols-2">
-            <Button type="button" variant="outline" className="min-h-9 whitespace-normal rounded-xl border-amber-200 bg-white px-2 text-[10px] font-black text-amber-900" onClick={() => void handleSendOrganizerVerification()} disabled={Boolean(busy)}>
+            <Button type="button" variant="outline" className="min-h-9 whitespace-normal rounded-xl border-amber-200 bg-white px-2 text-[10px] font-black text-amber-900" onClick={() => void handleSendOrganizerVerification()} disabled={Boolean(busy) || Boolean(senderVerificationCooldownLabel)}>
               <Mail className="h-3.5 w-3.5" />
               {busy === "organizer-verification-email" ? "Sending…" : "Send verification email"}
             </Button>
@@ -945,6 +959,7 @@ Your local roster will stay local. Stripes will copy shared identity fields only
               I’ve verified — continue
             </Button>
           </div>
+          {senderVerificationCooldownLabel && <div className="text-[10px] font-bold text-amber-800">{senderVerificationCooldownLabel}</div>}
         </div>
       ) : (
         <div className="rounded-2xl bg-slate-50 px-3 py-2 text-[11px] font-bold leading-snug text-slate-500">

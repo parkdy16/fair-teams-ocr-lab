@@ -95,4 +95,8 @@ test("invitation records and locks remain server-only", () => {
     rules,
     /match \/sharedWorkspaceInvitationLocks\/\{lockId\} \{\s*allow read, write: if false;/,
   );
+  assert.match(
+    rules,
+    /match \/authEmailVerificationThrottles\/\{uid\} \{\s*allow read, write: if false;/,
+  );
 });

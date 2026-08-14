@@ -20,6 +20,7 @@ function firebaseUser({
     email,
     displayName: "Organizer",
     emailVerified,
+    providerData: [],
   };
 }
 
@@ -49,6 +50,16 @@ test("normal listener reconstruction preserves Firebase verified state", () => {
 
   assert.deepEqual(reconstructedValue, firstListenerValue);
   assert.equal(workspaceInvitationSenderStatus(reconstructedValue), "ready");
+});
+
+test("normal listener reconstruction preserves Google provider identity", () => {
+  const googleUser = toSharedRosterUser({
+    ...firebaseUser({ emailVerified: true }),
+    providerData: [{ providerId: "google.com" }],
+  });
+  assert.deepEqual(googleUser?.providerIds, ["google.com"]);
+  assert.equal(googleUser?.uid, "organizer-1");
+  assert.equal(googleUser?.emailVerified, true);
 });
 
 test("action readiness requires both refreshed Firebase user state and token verification", () => {

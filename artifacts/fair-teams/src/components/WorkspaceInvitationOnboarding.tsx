@@ -25,6 +25,17 @@ import {
   canSubmitWorkspaceInvitationJoin,
   resolveWorkspaceInvitationOnboardingView,
 } from "@/lib/workspaceInvitationOnboardingState";
+import {
+  clearPendingGoogleLinkCredential,
+  completePendingGoogleLinkForCurrentUser,
+  googleAuthError,
+  hasPendingGoogleLinkCredential,
+  signInToSharedRostersWithGoogle,
+} from "@/lib/firebaseGoogleAuth";
+import {
+  verificationEmailError,
+  verificationResendLabel,
+} from "@/lib/stripesEmailVerificationService";
 
 export type WorkspaceInvitationOnboardingProps = {
   invitationId: string;
@@ -33,7 +44,7 @@ export type WorkspaceInvitationOnboardingProps = {
 };
 
 type Notice = { tone: "error" | "info" | "success"; text: string };
-type BusyAction = "signin" | "create" | "reset" | "verify" | "refresh" | "join" | "signout" | "handoff" | "";
+type BusyAction = "google" | "signin" | "create" | "reset" | "verify" | "refresh" | "join" | "signout" | "handoff" | "";
 
 function validEmail(value: string) {
   return value.length <= 320 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -102,7 +113,10 @@ export function WorkspaceInvitationOnboarding({
   const [password, setPassword] = useState("");
   const [organizerName, setOrganizerName] = useState("");
   const [resetOpen, setResetOpen] = useState(false);
+  const [googleLinkPending, setGoogleLinkPending] = useState(() => hasPendingGoogleLinkCredential());
   const [verificationSent, setVerificationSent] = useState(false);
+  const [verificationResendAt, setVerificationResendAt] = useState<string | null>(null);
+  const [verificationClock, setVerificationClock] = useState(() => Date.now());
   const [busyAction, setBusyAction] = useState<BusyAction>("");
   const [notice, setNotice] = useState<Notice | null>(null);
   const [acceptedResult, setAcceptedResult] = useState<AcceptWorkspaceOrganizerInvitationResult | null>(null);
@@ -140,6 +154,16 @@ export function WorkspaceInvitationOnboarding({
     void refreshContext();
   }, [authReady, user?.uid, user?.emailVerified, refreshContext]);
 
+  useEffect(() => {
+    if (!verificationResendAt || Date.parse(verificationResendAt) <= Date.now()) return;
+    const interval = window.setInterval(() => {
+      const now = Date.now();
+      setVerificationClock(now);
+      if (Date.parse(verificationResendAt) <= now) window.clearInterval(interval);
+    }, 1000);
+    return () => window.clearInterval(interval);
+  }, [verificationResendAt]);
+
   const view = resolveWorkspaceInvitationOnboardingView({
     loading: !authReady || contextLoading,
     unavailable: contextUnavailable,
@@ -147,6 +171,7 @@ export function WorkspaceInvitationOnboarding({
   });
   const normalizedEmail = email.trim().toLowerCase();
   const cleanName = cleanOrganizerName(organizerName);
+  const verificationCooldownLabel = verificationResendLabel(verificationResendAt, verificationClock);
 
   const handleSignIn = async () => {
     if (!validEmail(normalizedEmail)) {
@@ -160,15 +185,50 @@ export function WorkspaceInvitationOnboarding({
     setBusyAction("signin");
     setNotice(null);
     try {
-      const nextUser = await signInToSharedRosters(normalizedEmail, password);
-      setUser(nextUser);
+      let nextUser = await signInToSharedRosters(normalizedEmail, password);
       setPassword("");
+      if (hasPendingGoogleLinkCredential()) {
+        const completion = await completePendingGoogleLinkForCurrentUser();
+        nextUser = completion.user;
+        setGoogleLinkPending(false);
+        if (completion.linked) {
+          setNotice({ tone: "success", text: "Google sign-in connected to your existing Stripes account." });
+        }
+      } else {
+        setGoogleLinkPending(false);
+      }
+      setUser(nextUser);
       await refreshContext();
     } catch (error) {
-      setNotice({ tone: "error", text: friendlyAuthError(error) });
+      setGoogleLinkPending(hasPendingGoogleLinkCredential());
+      setNotice({ tone: "error", text: error instanceof Error && error.name === "StripesGoogleAuthError"
+        ? googleAuthError(error).message
+        : friendlyAuthError(error) });
     } finally {
       setBusyAction("");
     }
+  };
+
+  const handleGoogleSignIn = async () => {
+    setBusyAction("google");
+    setNotice(null);
+    try {
+      const nextUser = await signInToSharedRostersWithGoogle();
+      setUser(nextUser);
+      await refreshContext();
+    } catch (error) {
+      const safeError = googleAuthError(error);
+      setGoogleLinkPending(hasPendingGoogleLinkCredential());
+      setNotice({ tone: "error", text: safeError.message });
+    } finally {
+      setBusyAction("");
+    }
+  };
+
+  const handleCancelGoogleLink = () => {
+    clearPendingGoogleLinkCredential();
+    setGoogleLinkPending(false);
+    setNotice({ tone: "info", text: "Google connection cancelled. Your Stripes account was not changed." });
   };
 
   const handleCreateAccount = async () => {
@@ -193,11 +253,16 @@ export function WorkspaceInvitationOnboarding({
       const nextContext = await refreshContext();
       if (nextContext?.state === "pending" && nextContext.viewerStatus === "matching_unverified") {
         try {
-          await sendStripesEmailVerification(invitationId);
+          const verification = await sendStripesEmailVerification(invitationId);
           setVerificationSent(true);
+          setVerificationResendAt(verification.resendAvailableAt);
+          setVerificationClock(Date.now());
           setNotice({ tone: "success", text: "Account created. Check your inbox to verify your email." });
         } catch (error) {
-          setNotice({ tone: "error", text: `Account created. ${friendlyAuthError(error)}` });
+          const safeError = verificationEmailError(error);
+          setVerificationResendAt(safeError.resendAvailableAt);
+          setVerificationClock(Date.now());
+          setNotice({ tone: "error", text: `Account created. ${safeError.message}` });
         }
       }
     } catch (error) {
@@ -248,11 +313,16 @@ export function WorkspaceInvitationOnboarding({
     setBusyAction("verify");
     setNotice(null);
     try {
-      await sendStripesEmailVerification(invitationId);
+      const verification = await sendStripesEmailVerification(invitationId);
       setVerificationSent(true);
+      setVerificationResendAt(verification.resendAvailableAt);
+      setVerificationClock(Date.now());
       setNotice({ tone: "success", text: "Verification email sent. Check your inbox." });
     } catch (error) {
-      setNotice({ tone: "error", text: friendlyAuthError(error) });
+      const safeError = verificationEmailError(error);
+      setVerificationResendAt(safeError.resendAvailableAt);
+      setVerificationClock(Date.now());
+      setNotice({ tone: "error", text: safeError.message });
     } finally {
       setBusyAction("");
     }
@@ -383,6 +453,11 @@ export function WorkspaceInvitationOnboarding({
           <LogOut />
           {busyAction === "signout" ? "Signing out…" : "Sign out / use another account"}
         </Button>
+        {googleLinkPending && (
+          <Button type="button" variant="outline" className="min-h-10 rounded-2xl border-slate-200 text-xs font-black" disabled={Boolean(busyAction)} onClick={handleCancelGoogleLink}>
+            Cancel Google connection
+          </Button>
+        )}
       </div>,
     );
   }
@@ -396,7 +471,7 @@ export function WorkspaceInvitationOnboarding({
         </div>
         {notice && <NoticeBox notice={notice} />}
         <div className="grid gap-2 sm:grid-cols-2">
-          <Button type="button" variant="outline" className="min-h-11 whitespace-normal rounded-2xl border-violet-200 font-black text-violet-800" disabled={Boolean(busyAction)} onClick={() => void handleSendVerification()}>
+          <Button type="button" variant="outline" className="min-h-11 whitespace-normal rounded-2xl border-violet-200 font-black text-violet-800" disabled={Boolean(busyAction) || Boolean(verificationCooldownLabel)} onClick={() => void handleSendVerification()}>
             <Mail />
             {busyAction === "verify" ? "Sending…" : verificationSent ? "Resend verification" : "Send verification email"}
           </Button>
@@ -405,6 +480,7 @@ export function WorkspaceInvitationOnboarding({
             I’ve verified — continue
           </Button>
         </div>
+        {verificationCooldownLabel && <p className="text-center text-xs font-bold text-slate-500">{verificationCooldownLabel}</p>}
       </div>,
     );
   }
@@ -428,6 +504,15 @@ export function WorkspaceInvitationOnboarding({
   return shell(
     <div className="grid gap-5">
       <InvitationContextHeader context={context} />
+      <Button type="button" variant="outline" className="min-h-12 rounded-2xl border-slate-200 bg-white text-sm font-black text-[#102A43]" disabled={Boolean(busyAction)} onClick={() => void handleGoogleSignIn()}>
+        <span aria-hidden="true" className="font-black text-blue-600">G</span>
+        {busyAction === "google" ? "Connecting…" : "Continue with Google"}
+      </Button>
+      <div className="flex items-center gap-3 text-[10px] font-black uppercase tracking-wide text-slate-400" aria-hidden="true">
+        <span className="h-px flex-1 bg-slate-100" />
+        or
+        <span className="h-px flex-1 bg-slate-100" />
+      </div>
       <div className="grid grid-cols-2 gap-2 rounded-2xl bg-slate-100 p-1">
         <button type="button" className={`min-h-10 rounded-xl px-3 text-xs font-black ${authMode === "signin" ? "bg-white text-[#102A43] shadow-sm" : "text-slate-500"}`} onClick={() => setAuthMode("signin")}>Sign in</button>
         <button type="button" className={`min-h-10 rounded-xl px-3 text-xs font-black ${authMode === "create" ? "bg-white text-[#102A43] shadow-sm" : "text-slate-500"}`} onClick={() => setAuthMode("create")}>Create account</button>
@@ -454,6 +539,11 @@ export function WorkspaceInvitationOnboarding({
         </div>
       )}
       {notice && <NoticeBox notice={notice} />}
+      {googleLinkPending && (
+        <Button type="button" variant="outline" className="min-h-10 rounded-2xl border-slate-200 text-xs font-black" disabled={Boolean(busyAction)} onClick={handleCancelGoogleLink}>
+          Cancel Google connection
+        </Button>
+      )}
       <Button type="button" className="min-h-12 rounded-2xl bg-[#102A43] text-sm font-black text-white hover:bg-[#0b2036]" disabled={Boolean(busyAction)} onClick={() => void (authMode === "signin" ? handleSignIn() : handleCreateAccount())}>
         {busyAction === "signin" || busyAction === "create" ? <Loader2 className="animate-spin" /> : authMode === "create" ? <UserPlus /> : null}
         {busyAction === "signin" ? "Signing in…" : busyAction === "create" ? "Creating account…" : authMode === "signin" ? "Sign in" : "Create account"}

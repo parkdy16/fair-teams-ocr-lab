@@ -9,6 +9,13 @@ import {
   updateSharedRosterOrganizerName,
   type SharedRosterUser,
 } from "@/lib/sharedRosterService";
+import {
+  clearPendingGoogleLinkCredential,
+  completePendingGoogleLinkForCurrentUser,
+  googleAuthError,
+  hasPendingGoogleLinkCredential,
+  signInToSharedRostersWithGoogle,
+} from "@/lib/firebaseGoogleAuth";
 
 function friendlyAuthError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error || "Something went wrong.");
@@ -63,7 +70,8 @@ export function FirebaseSharedRosterAuthCard() {
   const [password, setPassword] = useState("");
   const [organizerName, setOrganizerName] = useState("");
   const [editingName, setEditingName] = useState(false);
-  const [busyAction, setBusyAction] = useState<"signin" | "create" | "signout" | "name" | "">("");
+  const [googleLinkPending, setGoogleLinkPending] = useState(() => hasPendingGoogleLinkCredential());
+  const [busyAction, setBusyAction] = useState<"google" | "signin" | "create" | "signout" | "name" | "">("");
   const [notice, setNotice] = useState<{ tone: "error" | "info"; text: string } | null>(null);
 
   useEffect(() => {
@@ -102,15 +110,50 @@ export function FirebaseSharedRosterAuthCard() {
     setBusyAction("signin");
     setNotice(null);
     try {
-      const nextUser = await signInToSharedRosters(trimmedEmail, password);
-      setUser(nextUser);
+      let nextUser = await signInToSharedRosters(trimmedEmail, password);
       setPassword("");
+      if (hasPendingGoogleLinkCredential()) {
+        const completion = await completePendingGoogleLinkForCurrentUser();
+        nextUser = completion.user;
+        setGoogleLinkPending(false);
+        if (completion.linked) {
+          setNotice({ tone: "info", text: "Google sign-in connected to your existing Stripes account." });
+        }
+      } else {
+        setGoogleLinkPending(false);
+      }
+      setUser(nextUser);
       if (!nextUser.displayName) setEditingName(true);
     } catch (error) {
-      setNotice({ tone: "error", text: friendlyAuthError(error) });
+      setGoogleLinkPending(hasPendingGoogleLinkCredential());
+      setNotice({ tone: "error", text: error instanceof Error && error.name === "StripesGoogleAuthError"
+        ? googleAuthError(error).message
+        : friendlyAuthError(error) });
     } finally {
       setBusyAction("");
     }
+  };
+
+  const handleGoogleSignIn = async () => {
+    setBusyAction("google");
+    setNotice(null);
+    try {
+      const nextUser = await signInToSharedRostersWithGoogle();
+      setUser(nextUser);
+      if (!nextUser.displayName) setEditingName(true);
+    } catch (error) {
+      const safeError = googleAuthError(error);
+      setGoogleLinkPending(hasPendingGoogleLinkCredential());
+      setNotice({ tone: "error", text: safeError.message });
+    } finally {
+      setBusyAction("");
+    }
+  };
+
+  const handleCancelGoogleLink = () => {
+    clearPendingGoogleLinkCredential();
+    setGoogleLinkPending(false);
+    setNotice({ tone: "info", text: "Google connection cancelled. Your Stripes account was not changed." });
   };
 
   const handleSaveOrganizerName = async () => {
@@ -199,12 +242,26 @@ export function FirebaseSharedRosterAuthCard() {
         )}
 
         {notice && <div className={`rounded-xl px-2 py-1 text-[10px] font-bold ${notice.tone === "error" ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>{notice.text}</div>}
+        {googleLinkPending && (
+          <Button type="button" variant="outline" className="min-h-8 rounded-xl border-slate-100 bg-slate-50 text-[10px] font-black" onClick={handleCancelGoogleLink} disabled={Boolean(busyAction)}>
+            Cancel Google connection
+          </Button>
+        )}
       </div>
     );
   }
 
   return (
     <div className="grid gap-2 rounded-2xl border border-slate-100 bg-white p-2 shadow-sm">
+      <Button type="button" variant="outline" className="h-10 rounded-2xl border-slate-200 bg-white text-xs font-black text-[#102A43]" onClick={() => void handleGoogleSignIn()} disabled={Boolean(busyAction)}>
+        <span aria-hidden="true" className="font-black text-blue-600">G</span>
+        {busyAction === "google" ? "Connecting…" : "Continue with Google"}
+      </Button>
+      <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-wide text-slate-400" aria-hidden="true">
+        <span className="h-px flex-1 bg-slate-100" />
+        or
+        <span className="h-px flex-1 bg-slate-100" />
+      </div>
       <div className="grid gap-2 sm:grid-cols-2">
         <div className="flex items-center gap-2 rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2">
           <Mail className="h-4 w-4 shrink-0 text-slate-400" />
@@ -222,6 +279,11 @@ export function FirebaseSharedRosterAuthCard() {
         </Button>
       </div>
       {notice && <div className="rounded-xl bg-rose-50 px-2 py-1 text-[10px] font-bold text-rose-700">{notice.text}</div>}
+      {googleLinkPending && (
+        <Button type="button" variant="outline" className="min-h-8 rounded-xl border-slate-100 bg-slate-50 text-[10px] font-black" onClick={handleCancelGoogleLink} disabled={Boolean(busyAction)}>
+          Cancel Google connection
+        </Button>
+      )}
     </div>
   );
 }

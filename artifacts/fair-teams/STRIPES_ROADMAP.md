@@ -2300,7 +2300,8 @@ completed locally; G1.5d now owns coordinated production verification.
 
 ### G1.5e — Organizer governance eligibility hardening
 
-**Status:** Approved future bounded G1 task. Do not implement during G1.5d.
+**Status:** Implemented locally and ready for review. Not committed, pushed or
+deployed; do not begin G1.6 until G1.5e is approved and released.
 
 Live testing identified a governance-sybil risk: one human organizer could
 invite several additional email accounts they control, accept those
@@ -2331,6 +2332,20 @@ eligibility: the existing threshold formula applies to the frozen total of
 governance-eligible organizers, and organizers still inside the 14-day waiting
 period are excluded from that total and threshold.
 
+Locked small-electorate rule:
+
+- a protected organizer-removal proposal may be created only when at least two
+  governance-eligible organizers exist at proposal creation;
+- `requiredYes = floor(eligibleGovernanceOrganizerCount / 2) + 1`;
+- when the target is governance-eligible, the target remains in the frozen
+  eligible count but cannot vote, preserving the existing two-organizer
+  protection;
+- a waiting-period organizer may be targeted but is excluded from the eligible
+  count, so at least two other governance-eligible organizers are required to
+  start that proposal;
+- this is not blanket 14-day immunity: two eligible organizers may unanimously
+  remove a waiting-period organizer.
+
 Proposal stability rules:
 
 - the eligible removal electorate is frozen when a proposal is created;
@@ -2354,8 +2369,27 @@ Acceptance notification requirement:
 - pending invitations do not trigger this notification;
 - the newly accepted organizer is excluded from notification recipients.
 
-G1.5e must be implemented as its own bounded, independently reviewable task
-after G1.5d is explicitly closed.
+Local implementation checkpoint:
+
+- trusted invitation acceptance atomically records server timestamps for the
+  organizer's join time and 14-day governance-eligibility time on the shared
+  workspace while granting operational access immediately;
+- active legacy organizers without eligibility metadata remain eligible, while
+  malformed explicit metadata fails closed;
+- protected-removal creation and ballot callables enforce current eligibility,
+  store a private frozen eligible UID set and apply the locked small-electorate
+  rule without exposing voter identity;
+- self-leave and protected removal clear the departing organizer's governance
+  timing metadata, and Firestore rules deny direct client mutation except for
+  the signed-in organizer's own removal during an otherwise valid self-leave;
+- existing active organizers receive the transactional joined-organizer email
+  after acceptance; delivery failure is recorded but cannot roll back accepted
+  membership;
+- the organizer-management UI shows the eligibility date and disables only the
+  protected-removal controls during the waiting period;
+- focused helper, governance, invitation, rules-contract and UI-state coverage
+  accompanies the implementation; production deployment and live verification
+  remain pending review.
 
 ### G1.6 — Workspace closure / last-organizer behavior
 

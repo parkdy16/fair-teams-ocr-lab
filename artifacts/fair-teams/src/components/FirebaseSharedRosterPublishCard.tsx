@@ -54,6 +54,10 @@ import {
   type OrganizerRemovalParticipation,
   type OrganizerRemovalProposal,
 } from "@/lib/sharedWorkspaceGovernanceService";
+import {
+  governanceEligibilityDateLabel,
+  organizerGovernanceEligibilityState,
+} from "@/lib/organizerGovernanceEligibility";
 import { resolveWorkspaceInvitationManagementGroupId } from "@/lib/workspaceInvitationOnboardingState";
 
 type Props = {
@@ -208,6 +212,13 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
     () => removalProposals.find((proposal) => proposal.status === "open") || null,
     [removalProposals],
   );
+  const currentRemovalEligibility = useMemo(() => organizerGovernanceEligibilityState(
+    collaboratorGroup?.organizerGovernanceEligibleAtByUid,
+    user?.uid,
+  ), [collaboratorGroup?.organizerGovernanceEligibleAtByUid, user?.uid]);
+  const removalEligibilityLabel = currentRemovalEligibility.eligibleAt == null
+    ? ""
+    : governanceEligibilityDateLabel(currentRemovalEligibility.eligibleAt);
   const sharedRosterById = useMemo(() => new Map(sharedRosters.map((roster) => [roster.id, roster])), [sharedRosters]);
   const linkedRosters = useMemo(() => rosters.filter((roster) => roster.cloudSource?.provider === "firebase" && roster.cloudSource.firebaseRosterId), [rosters]);
   const remoteUpdatedLinkedRosters = useMemo(() => linkedRosters.filter((roster) => {
@@ -598,6 +609,12 @@ Your local roster will stay local. Stripes will copy shared identity fields only
 
   const handleStartOrganizerRemoval = async (targetEmail: string, targetName: string) => {
     if (!collaboratorGroup || busy) return;
+    if (!currentRemovalEligibility.eligible) {
+      setRemovalError(removalEligibilityLabel
+        ? `Removal voting is available ${removalEligibilityLabel}.`
+        : "Removal voting is not available to this organizer yet.");
+      return;
+    }
     setBusy(`removal-proposal:${targetEmail}`);
     setRemovalError("");
     setNotice(null);
@@ -758,6 +775,14 @@ Your local roster will stay local. Stripes will copy shared identity fields only
         </div>
       )}
 
+      {!currentRemovalEligibility.eligible && (
+        <div className="rounded-xl bg-slate-50 px-2.5 py-2 text-[10px] font-bold leading-snug text-slate-600">
+          {removalEligibilityLabel
+            ? `Removal voting available ${removalEligibilityLabel}.`
+            : "Removal voting is not available to this organizer yet."}
+        </div>
+      )}
+
       {activeRemovalProposal ? (
         <div className="grid gap-2 rounded-xl bg-violet-50/80 p-2.5">
           <div className="min-w-0">
@@ -765,7 +790,7 @@ Your local roster will stay local. Stripes will copy shared identity fields only
               Remove {activeRemovalProposal.targetDisplayNameSnapshot}?
             </div>
             <div className="mt-0.5 text-[10px] font-semibold leading-snug text-violet-800">
-              {activeRemovalProposal.castCount} of {activeRemovalProposal.eligibleOrganizerCount} eligible organizers responded. {activeRemovalProposal.requiredYes} Yes votes are required from {activeRemovalProposal.totalOrganizerCount} total organizers.
+              {activeRemovalProposal.castCount} of {activeRemovalProposal.eligibleOrganizerCount} eligible voters responded. {activeRemovalProposal.requiredYes} Yes votes are required from {activeRemovalProposal.totalOrganizerCount} governance-eligible organizers.
             </div>
           </div>
           <div className="h-1.5 overflow-hidden rounded-full bg-violet-100" aria-hidden="true">
@@ -825,7 +850,9 @@ Your local roster will stay local. Stripes will copy shared identity fields only
         </div>
       ) : (
         <div className="rounded-xl bg-slate-50 px-2.5 py-2 text-[10px] font-semibold leading-snug text-slate-500">
-          To remove another organizer, start a proposal from their organizer row. The target cannot vote.
+          {currentRemovalEligibility.eligible
+            ? "To remove another organizer, start a proposal from their organizer row. The target cannot vote."
+            : "Protected removal proposal and voting controls activate automatically on your eligibility date."}
         </div>
       )}
 
@@ -862,7 +889,7 @@ Your local roster will stay local. Stripes will copy shared identity fields only
           </AlertDialogTitle>
           <AlertDialogDescription>
             {removalConfirm?.kind === "propose" ? (
-              "This starts a protected secret ballot. The target cannot vote. Stripes will calculate the required Yes threshold from the current active organizer electorate."
+              "This starts a protected secret ballot. The target cannot vote. Stripes will freeze the governance-eligible electorate and calculate the required Yes threshold from that set."
             ) : (
               `Your ${removalConfirm?.choice === "yes" ? "Yes vote supports removal" : "No vote keeps the organizer"}. Your choice is secret and cannot be changed after it is recorded.`
             )}
@@ -983,7 +1010,7 @@ Your local roster will stay local. Stripes will copy shared identity fields only
                           type="button"
                           variant="outline"
                           className="min-h-8 min-w-0 flex-1 whitespace-normal rounded-xl border-rose-100 bg-white px-2 text-[9px] font-black leading-tight text-rose-700 sm:flex-none"
-                          disabled={Boolean(busy) || Boolean(activeRemovalProposal)}
+                          disabled={Boolean(busy) || Boolean(activeRemovalProposal) || !currentRemovalEligibility.eligible}
                           onClick={() => setRemovalConfirm({
                             kind: "propose",
                             targetEmail: email,
@@ -991,7 +1018,11 @@ Your local roster will stay local. Stripes will copy shared identity fields only
                           })}
                         >
                           <UserMinus className="h-3.5 w-3.5" />
-                          {activeRemovalProposal ? "Vote open" : "Propose removal"}
+                          {activeRemovalProposal
+                            ? "Vote open"
+                            : currentRemovalEligibility.eligible
+                              ? "Propose removal"
+                              : "Removal unavailable"}
                         </Button>
                       )}
                     </div>

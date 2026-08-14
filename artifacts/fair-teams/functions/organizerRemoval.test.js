@@ -6,14 +6,19 @@ const {
   activeWorkspaceNotificationRecipients,
   buildOrganizerRemovalElectorate,
   evaluateOrganizerRemovalVote,
+  GOVERNANCE_ELIGIBILITY_DELAY_MS,
+  governanceEligibleOrganizerUids,
   memberDisplayName,
   organizerMembershipFingerprint,
+  organizerGovernanceEligibility,
   organizerUidsFromWorkspace,
   removeOrganizerMembership,
   requiredYesVotes,
   resolveMemberEmailByUid,
   resolveMemberUidByEmail,
 } = require("./organizerRemoval");
+
+const NOW = Date.parse("2026-08-14T12:00:00.000Z");
 
 function notificationWorkspace(overrides = {}) {
   return {
@@ -166,11 +171,160 @@ test("the electorate excludes the target but keeps the threshold based on all or
     },
   }, "target"), {
     organizerUids: ["target", "voter-a", "voter-b", "voter-c"],
+    governanceEligibleOrganizerUids: ["target", "voter-a", "voter-b", "voter-c"],
     eligibleVoterUids: ["voter-a", "voter-b", "voter-c"],
+    targetGovernanceEligible: true,
     totalOrganizerCount: 4,
+    eligibleGovernanceOrganizerCount: 4,
     eligibleOrganizerCount: 3,
     requiredYes: 3,
   });
+});
+
+test("legacy active organizers without timing metadata remain governance eligible", () => {
+  const workspace = notificationWorkspace();
+  assert.deepEqual(organizerGovernanceEligibility(workspace, "organizer-a", NOW), {
+    eligible: true,
+    eligibleAtMillis: 0,
+    legacy: true,
+  });
+  assert.deepEqual(governanceEligibleOrganizerUids(workspace, NOW), [
+    "organizer-a",
+    "organizer-b",
+  ]);
+});
+
+test("new organizer eligibility activates automatically after fourteen days", () => {
+  const eligibleAt = NOW + GOVERNANCE_ELIGIBILITY_DELAY_MS;
+  const workspace = notificationWorkspace({
+    organizerGovernanceEligibleAtByUid: { "organizer-b": eligibleAt },
+  });
+  assert.equal(organizerGovernanceEligibility(workspace, "organizer-b", NOW).eligible, false);
+  assert.equal(organizerGovernanceEligibility(workspace, "organizer-b", eligibleAt).eligible, true);
+});
+
+test("one eligible organizer plus a waiting target cannot create a proposal", () => {
+  assert.throws(() => buildOrganizerRemovalElectorate(notificationWorkspace({
+    organizerGovernanceEligibleAtByUid: {
+      "organizer-b": NOW + GOVERNANCE_ELIGIBILITY_DELAY_MS,
+    },
+  }), "organizer-b", NOW), /at least two governance-eligible organizers/i);
+});
+
+test("two eligible organizers can target a waiting organizer only at a two-Yes threshold", () => {
+  const workspace = {
+    memberUids: ["organizer-a", "organizer-c", "waiting-target"],
+    roleByUid: {
+      "organizer-a": "organizer",
+      "organizer-c": "organizer",
+      "waiting-target": "organizer",
+    },
+    organizerGovernanceEligibleAtByUid: {
+      "waiting-target": NOW + GOVERNANCE_ELIGIBILITY_DELAY_MS,
+    },
+  };
+  const electorate = buildOrganizerRemovalElectorate(workspace, "waiting-target", NOW);
+  assert.equal(electorate.targetGovernanceEligible, false);
+  assert.equal(electorate.totalOrganizerCount, 2);
+  assert.equal(electorate.eligibleOrganizerCount, 2);
+  assert.equal(electorate.requiredYes, 2);
+  assert.deepEqual(electorate.eligibleVoterUids, ["organizer-a", "organizer-c"]);
+  assert.equal(evaluateOrganizerRemovalVote({
+    totalOrganizerCount: 2,
+    eligibleOrganizerCount: 2,
+    yesCount: 1,
+    noCount: 0,
+  }).status, "open");
+  assert.equal(evaluateOrganizerRemovalVote({
+    totalOrganizerCount: 2,
+    eligibleOrganizerCount: 2,
+    yesCount: 2,
+    noCount: 0,
+  }).status, "passed");
+});
+
+test("two eligible organizers with one as target preserve unilateral-removal protection", () => {
+  const electorate = buildOrganizerRemovalElectorate(notificationWorkspace(), "organizer-b", NOW);
+  assert.equal(electorate.targetGovernanceEligible, true);
+  assert.equal(electorate.totalOrganizerCount, 2);
+  assert.equal(electorate.eligibleOrganizerCount, 1);
+  assert.equal(electorate.requiredYes, 2);
+  assert.equal(evaluateOrganizerRemovalVote({
+    totalOrganizerCount: 2,
+    eligibleOrganizerCount: 1,
+    yesCount: 0,
+    noCount: 0,
+  }).status, "failed");
+});
+
+test("three eligible organizers with one as target require two Yes votes", () => {
+  const workspace = notificationWorkspace({
+    memberUids: ["organizer-a", "organizer-b", "organizer-c"],
+    roleByUid: {
+      "organizer-a": "organizer",
+      "organizer-b": "organizer",
+      "organizer-c": "organizer",
+    },
+  });
+  const electorate = buildOrganizerRemovalElectorate(workspace, "organizer-b", NOW);
+  assert.equal(electorate.totalOrganizerCount, 3);
+  assert.equal(electorate.requiredYes, 2);
+  assert.deepEqual(electorate.eligibleVoterUids, ["organizer-a", "organizer-c"]);
+});
+
+test("a proposal electorate remains frozen when a waiting organizer later matures", () => {
+  const eligibleAt = NOW + GOVERNANCE_ELIGIBILITY_DELAY_MS;
+  const workspace = {
+    memberUids: ["target", "voter-a", "voter-b", "waiting"],
+    roleByUid: {
+      target: "organizer",
+      "voter-a": "organizer",
+      "voter-b": "organizer",
+      waiting: "organizer",
+    },
+    organizerGovernanceEligibleAtByUid: { waiting: eligibleAt },
+  };
+  const frozen = buildOrganizerRemovalElectorate(workspace, "target", NOW);
+  assert.deepEqual(frozen.eligibleVoterUids, ["voter-a", "voter-b"]);
+  assert.deepEqual(
+    buildOrganizerRemovalElectorate(workspace, "target", eligibleAt).eligibleVoterUids,
+    ["voter-a", "voter-b", "waiting"],
+  );
+  assert.deepEqual(frozen.eligibleVoterUids, ["voter-a", "voter-b"]);
+});
+
+test("an organizer accepted after proposal creation cannot join the frozen electorate", () => {
+  const workspaceAtCreation = {
+    memberUids: ["target", "voter-a", "voter-b"],
+    roleByUid: {
+      target: "organizer",
+      "voter-a": "organizer",
+      "voter-b": "organizer",
+    },
+  };
+  const frozen = buildOrganizerRemovalElectorate(workspaceAtCreation, "target", NOW);
+  const workspaceAfterAcceptance = {
+    ...workspaceAtCreation,
+    memberUids: [...workspaceAtCreation.memberUids, "newcomer"],
+    roleByUid: {
+      ...workspaceAtCreation.roleByUid,
+      newcomer: "organizer",
+    },
+    organizerGovernanceEligibleAtByUid: {
+      newcomer: NOW + GOVERNANCE_ELIGIBILITY_DELAY_MS,
+    },
+  };
+
+  assert.deepEqual(frozen.eligibleVoterUids, ["voter-a", "voter-b"]);
+  assert.deepEqual(
+    buildOrganizerRemovalElectorate(
+      workspaceAfterAcceptance,
+      "target",
+      NOW + GOVERNANCE_ELIGIBILITY_DELAY_MS,
+    ).eligibleVoterUids,
+    ["newcomer", "voter-a", "voter-b"],
+  );
+  assert.deepEqual(frozen.eligibleVoterUids, ["voter-a", "voter-b"]);
 });
 
 test("target lookup prefers the email map and supports legacy parallel membership arrays", () => {
@@ -203,6 +357,8 @@ test("organizer removal strips only active membership mappings and preserves unr
     memberNamesByUid: { target: "Target", remaining: "Remaining" },
     memberNamesByEmail: { "Target@Example.com": "Target", "remaining@example.com": "Remaining" },
     memberUidByEmail: { "stale-target@example.com": "target", "remaining@example.com": "remaining" },
+    organizerJoinedAtByUid: { target: 1, remaining: 2 },
+    organizerGovernanceEligibleAtByUid: { target: 3, remaining: 4 },
   }, "target", "target@example.com"), {
     memberUids: ["remaining"],
     memberEmails: ["remaining@example.com"],
@@ -211,6 +367,8 @@ test("organizer removal strips only active membership mappings and preserves unr
     memberNamesByUid: { remaining: "Remaining" },
     memberNamesByEmail: { "remaining@example.com": "Remaining" },
     memberUidByEmail: { "remaining@example.com": "remaining" },
+    organizerJoinedAtByUid: { remaining: 2 },
+    organizerGovernanceEligibleAtByUid: { remaining: 4 },
   });
 });
 

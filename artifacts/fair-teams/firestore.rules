@@ -35,7 +35,11 @@ service cloud.firestore {
         && request.resource.data.get("memberEmails", []) == resource.data.get("memberEmails", [])
         && request.resource.data.get("pendingInviteEmails", []) == resource.data.get("pendingInviteEmails", [])
         && request.resource.data.get("roleByUid", {}) == resource.data.get("roleByUid", {})
-        && request.resource.data.get("memberUidByEmail", {}) == resource.data.get("memberUidByEmail", {});
+        && request.resource.data.get("memberUidByEmail", {}) == resource.data.get("memberUidByEmail", {})
+        && request.resource.data.get("organizerJoinedAtByUid", {})
+          == resource.data.get("organizerJoinedAtByUid", {})
+        && request.resource.data.get("organizerGovernanceEligibleAtByUid", {})
+          == resource.data.get("organizerGovernanceEligibleAtByUid", {});
     }
 
     // An organizer may remove only their own access and matching stale pending
@@ -51,6 +55,8 @@ service cloud.firestore {
           "memberNamesByUid",
           "memberNamesByEmail",
           "memberUidByEmail",
+          "organizerJoinedAtByUid",
+          "organizerGovernanceEligibleAtByUid",
           "updatedAt",
           "updatedAtIso"
         ])
@@ -77,6 +83,14 @@ service cloud.firestore {
         && request.resource.data.get("memberNamesByEmail", {})
           .diff(resource.data.get("memberNamesByEmail", {}))
           .affectedKeys().hasOnly([signedInEmail()])
+        && request.resource.data.get("organizerJoinedAtByUid", {})
+          .diff(resource.data.get("organizerJoinedAtByUid", {}))
+          .affectedKeys().hasOnly([request.auth.uid])
+        && !(request.auth.uid in request.resource.data.get("organizerJoinedAtByUid", {}))
+        && request.resource.data.get("organizerGovernanceEligibleAtByUid", {})
+          .diff(resource.data.get("organizerGovernanceEligibleAtByUid", {}))
+          .affectedKeys().hasOnly([request.auth.uid])
+        && !(request.auth.uid in request.resource.data.get("organizerGovernanceEligibleAtByUid", {}))
         && (
           request.resource.data.get("roleByUid", {}).values()
             .hasAny(["owner", "editor", "organizer"])

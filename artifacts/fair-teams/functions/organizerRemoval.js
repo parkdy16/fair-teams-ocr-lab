@@ -3,6 +3,7 @@
 const crypto = require("node:crypto");
 
 const ORGANIZER_ROLES = new Set(["owner", "editor", "organizer"]);
+const GOVERNANCE_ELIGIBILITY_DELAY_MS = 14 * 24 * 60 * 60 * 1000;
 
 function requireInteger(value, name, minimum = 0) {
   if (!Number.isInteger(value) || value < minimum) {
@@ -26,6 +27,48 @@ function organizerUidsFromWorkspace(data) {
     if (ORGANIZER_ROLES.has(role)) return true;
     return uid === legacyOwnerUid && role == null;
   }).sort();
+}
+
+function timestampMillis(value) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  if (value && typeof value === "object" && typeof value.toMillis === "function") {
+    const parsed = Number(value.toMillis());
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+}
+
+function organizerGovernanceEligibility(workspace, uid, nowMillis = Date.now()) {
+  const organizerUids = organizerUidsFromWorkspace(workspace);
+  if (!organizerUids.includes(uid)) {
+    return { eligible: false, eligibleAtMillis: 0, legacy: false };
+  }
+
+  const eligibilityByUid = workspace?.organizerGovernanceEligibleAtByUid;
+  const hasEligibilityRecord = Boolean(
+    eligibilityByUid
+    && typeof eligibilityByUid === "object"
+    && Object.prototype.hasOwnProperty.call(eligibilityByUid, uid),
+  );
+  if (!hasEligibilityRecord) {
+    return { eligible: true, eligibleAtMillis: 0, legacy: true };
+  }
+
+  const eligibleAtMillis = timestampMillis(eligibilityByUid[uid]);
+  return {
+    eligible: eligibleAtMillis > 0 && nowMillis >= eligibleAtMillis,
+    eligibleAtMillis,
+    legacy: false,
+  };
+}
+
+function governanceEligibleOrganizerUids(workspace, nowMillis = Date.now()) {
+  return organizerUidsFromWorkspace(workspace)
+    .filter((uid) => organizerGovernanceEligibility(workspace, uid, nowMillis).eligible);
 }
 
 function cleanEmail(value) {
@@ -111,7 +154,7 @@ function removeEmailKeys(value, email, targetUid = "") {
 function removeOrganizerMembership(data, targetUid, targetEmail) {
   const workspace = data && typeof data === "object" ? data : {};
   const normalizedEmail = cleanEmail(targetEmail);
-  return {
+  const updates = {
     memberUids: (Array.isArray(workspace.memberUids) ? workspace.memberUids : [])
       .filter((uid) => uid !== targetUid),
     memberEmails: (Array.isArray(workspace.memberEmails) ? workspace.memberEmails : [])
@@ -123,6 +166,17 @@ function removeOrganizerMembership(data, targetUid, targetEmail) {
     memberNamesByEmail: removeEmailKeys(workspace.memberNamesByEmail, normalizedEmail),
     memberUidByEmail: removeEmailKeys(workspace.memberUidByEmail, normalizedEmail, targetUid),
   };
+  if (workspace.organizerJoinedAtByUid && typeof workspace.organizerJoinedAtByUid === "object") {
+    updates.organizerJoinedAtByUid = removeRecordKey(workspace.organizerJoinedAtByUid, targetUid);
+  }
+  if (workspace.organizerGovernanceEligibleAtByUid
+    && typeof workspace.organizerGovernanceEligibleAtByUid === "object") {
+    updates.organizerGovernanceEligibleAtByUid = removeRecordKey(
+      workspace.organizerGovernanceEligibleAtByUid,
+      targetUid,
+    );
+  }
+  return updates;
 }
 
 function memberDisplayName(data, uid, email) {
@@ -160,41 +214,59 @@ function requiredYesVotes(totalOrganizerCount) {
   return Math.floor(total / 2) + 1;
 }
 
-function buildOrganizerRemovalElectorate(workspace, targetUid) {
+function buildOrganizerRemovalElectorate(workspace, targetUid, nowMillis = Date.now()) {
   if (typeof targetUid !== "string" || !targetUid) {
     throw new TypeError("targetUid must be a non-empty string.");
   }
 
   const organizerUids = organizerUidsFromWorkspace(workspace);
-  if (organizerUids.length < 2) {
-    throw new RangeError("An organizer-removal proposal requires at least two organizers.");
-  }
   if (!organizerUids.includes(targetUid)) {
     throw new RangeError("The proposal target must be an active organizer.");
   }
+  const governanceEligibleUids = governanceEligibleOrganizerUids(workspace, nowMillis);
+  if (governanceEligibleUids.length < 2) {
+    throw new RangeError(
+      "An organizer-removal proposal requires at least two governance-eligible organizers.",
+    );
+  }
+  const targetGovernanceEligible = governanceEligibleUids.includes(targetUid);
+  const eligibleVoterUids = governanceEligibleUids.filter((uid) => uid !== targetUid);
 
   return {
     organizerUids,
-    eligibleVoterUids: organizerUids.filter((uid) => uid !== targetUid),
-    totalOrganizerCount: organizerUids.length,
-    eligibleOrganizerCount: organizerUids.length - 1,
-    requiredYes: requiredYesVotes(organizerUids.length),
+    governanceEligibleOrganizerUids: governanceEligibleUids,
+    eligibleVoterUids,
+    targetGovernanceEligible,
+    totalOrganizerCount: governanceEligibleUids.length,
+    eligibleGovernanceOrganizerCount: governanceEligibleUids.length,
+    eligibleOrganizerCount: eligibleVoterUids.length,
+    requiredYes: requiredYesVotes(governanceEligibleUids.length),
   };
 }
 
-function evaluateOrganizerRemovalVote({ totalOrganizerCount, yesCount, noCount }) {
+function evaluateOrganizerRemovalVote({
+  totalOrganizerCount,
+  eligibleOrganizerCount,
+  yesCount,
+  noCount,
+}) {
   const total = requireInteger(totalOrganizerCount, "totalOrganizerCount", 2);
   const yes = requireInteger(yesCount, "yesCount");
   const no = requireInteger(noCount, "noCount");
-  const eligibleOrganizerCount = total - 1;
+  const eligible = eligibleOrganizerCount == null
+    ? total - 1
+    : requireInteger(eligibleOrganizerCount, "eligibleOrganizerCount");
+  if (eligible > total) {
+    throw new RangeError("eligibleOrganizerCount cannot exceed totalOrganizerCount.");
+  }
   const castCount = yes + no;
 
-  if (castCount > eligibleOrganizerCount) {
+  if (castCount > eligible) {
     throw new RangeError("yesCount plus noCount cannot exceed the eligible organizer count.");
   }
 
   const requiredYes = requiredYesVotes(total);
-  const remainingCount = eligibleOrganizerCount - castCount;
+  const remainingCount = eligible - castCount;
   let status = "open";
   let outcomeReason = null;
 
@@ -210,7 +282,7 @@ function evaluateOrganizerRemovalVote({ totalOrganizerCount, yesCount, noCount }
     status,
     outcomeReason,
     totalOrganizerCount: total,
-    eligibleOrganizerCount,
+    eligibleOrganizerCount: eligible,
     requiredYes,
     yesCount: yes,
     noCount: no,
@@ -223,8 +295,11 @@ module.exports = {
   activeWorkspaceNotificationRecipients,
   buildOrganizerRemovalElectorate,
   evaluateOrganizerRemovalVote,
+  GOVERNANCE_ELIGIBILITY_DELAY_MS,
+  governanceEligibleOrganizerUids,
   memberDisplayName,
   organizerMembershipFingerprint,
+  organizerGovernanceEligibility,
   organizerUidsFromWorkspace,
   removeOrganizerMembership,
   requiredYesVotes,

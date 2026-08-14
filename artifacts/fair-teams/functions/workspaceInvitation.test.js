@@ -5,6 +5,7 @@ const assert = require("node:assert/strict");
 const {
   INVITATION_TTL_MS,
   RESEND_COOLDOWN_MS,
+  deliverOrganizerJoinedNotification,
   invitationEmail,
   invitationExpiryMillis,
   invitationMembershipUpdates,
@@ -14,6 +15,7 @@ const {
   legacyInvitationRecord,
   maskInvitationEmail,
   officialInvitationUrl,
+  organizerJoinedNotification,
   planInvitationAcceptance,
   resendAvailability,
   sanitizedInvitationContext,
@@ -426,11 +428,114 @@ test("acceptance removes pending email from every linked roster and preserves un
   assert.deepEqual(updatedWorkspace.pendingInviteEmails, ["other@example.com"]);
   assert.equal(updatedWorkspace.roleByUid[VERIFIED_RECIPIENT.uid], "organizer");
   assert.equal(updatedWorkspace.memberUidByEmail[VERIFIED_RECIPIENT.email], VERIFIED_RECIPIENT.uid);
+  assert.equal(updatedWorkspace.organizerJoinedAtByUid[VERIFIED_RECIPIENT.uid], NOW);
+  assert.equal(
+    updatedWorkspace.organizerGovernanceEligibleAtByUid[VERIFIED_RECIPIENT.uid],
+    NOW + 14 * 24 * 60 * 60 * 1000,
+  );
+  assert.equal(updatedRosters[0].roleByUid[VERIFIED_RECIPIENT.uid], "organizer");
+  assert.equal("organizerGovernanceEligibleAtByUid" in updatedRosters[0], false);
   assert.deepEqual(updatedRosters[0].pendingInviteEmails, ["keep@example.com"]);
   assert.deepEqual(updatedRosters[0].memberEmails, ["SENDER@example.com", VERIFIED_RECIPIENT.email]);
   assert.deepEqual(updatedRosters[0].rosterData, { players: ["unchanged"] });
   assert.deepEqual(updatedRosters[1].pendingInviteEmails, []);
   assert.equal(updatedRosters[1].version, 17);
+});
+
+test("accepted membership timing can be supplied as server-authoritative values", () => {
+  const joinedAt = { toMillis: () => NOW };
+  const governanceEligibleAt = { toMillis: () => NOW + 14 * 24 * 60 * 60 * 1000 };
+  const plan = planInvitationAcceptance({
+    actor: VERIFIED_RECIPIENT,
+    invitation: pendingAcceptanceInvitation(),
+    workspace: ACCEPTANCE_WORKSPACE,
+    linkedRosters: [],
+    displayName: "Recipient Name",
+    nowMillis: NOW,
+    joinedAt,
+    governanceEligibleAt,
+  });
+  assert.equal(plan.workspaceUpdates.organizerJoinedAtByUid[VERIFIED_RECIPIENT.uid], joinedAt);
+  assert.equal(
+    plan.workspaceUpdates.organizerGovernanceEligibleAtByUid[VERIFIED_RECIPIENT.uid],
+    governanceEligibleAt,
+  );
+});
+
+test("accepted organizer notification includes only existing active organizers", () => {
+  const workspace = {
+    name: "Thursday Football",
+    memberUids: ["sender", "other", "viewer", VERIFIED_RECIPIENT.uid],
+    memberEmails: [
+      "sender@example.com",
+      "other@example.com",
+      "viewer@example.com",
+      VERIFIED_RECIPIENT.email,
+    ],
+    memberUidByEmail: {
+      "sender@example.com": "sender",
+      "other@example.com": "other",
+      "viewer@example.com": "viewer",
+      [VERIFIED_RECIPIENT.email]: VERIFIED_RECIPIENT.uid,
+    },
+    roleByUid: {
+      sender: "organizer",
+      other: "editor",
+      viewer: "viewer",
+      [VERIFIED_RECIPIENT.uid]: "organizer",
+    },
+  };
+  const notification = organizerJoinedNotification({
+    workspace,
+    invitation: {
+      status: "accepted",
+      inviterDisplayNameSnapshot: "Sender Name",
+      workspaceNameSnapshot: "Thursday Football",
+    },
+    newOrganizerUid: VERIFIED_RECIPIENT.uid,
+    newOrganizerEmail: VERIFIED_RECIPIENT.email,
+    newOrganizerDisplayName: "Recipient Name",
+    acceptedAtIso: new Date(NOW).toISOString(),
+    governanceEligibleAtIso: new Date(NOW + 14 * 24 * 60 * 60 * 1000).toISOString(),
+  });
+  assert.deepEqual(notification.recipientEmails, ["sender@example.com", "other@example.com"]);
+  assert.match(notification.subject, /Recipient Name joined Thursday Football/);
+  assert.match(notification.text, /Normal organizer access is available immediately/);
+  assert.match(notification.text, /Protected organizer-removal proposal and voting rights begin/);
+  assert.match(notification.text, /Sender Name/);
+});
+
+test("a pending invitation does not produce a joined-organizer notification", () => {
+  assert.equal(organizerJoinedNotification({
+    workspace: ACCEPTANCE_WORKSPACE,
+    invitation: pendingAcceptanceInvitation(),
+    newOrganizerUid: VERIFIED_RECIPIENT.uid,
+    newOrganizerEmail: VERIFIED_RECIPIENT.email,
+    newOrganizerDisplayName: "Recipient",
+    acceptedAtIso: new Date(NOW).toISOString(),
+    governanceEligibleAtIso: new Date(NOW + 14 * 24 * 60 * 60 * 1000).toISOString(),
+  }), null);
+});
+
+test("notification email delivery failure is reported without rejecting acceptance work", async () => {
+  const notification = {
+    recipientEmails: ["first@example.com", "second@example.com"],
+    subject: "New organizer joined",
+    text: "Text",
+    html: "<p>Text</p>",
+  };
+  const attempted = [];
+  const result = await deliverOrganizerJoinedNotification(notification, async ({ to }) => {
+    attempted.push(to);
+    if (to === "second@example.com") throw new Error("provider failure");
+  });
+  assert.deepEqual(attempted.sort(), ["first@example.com", "second@example.com"]);
+  assert.deepEqual(result, {
+    status: "partial",
+    recipientCount: 2,
+    sentCount: 1,
+    failedCount: 1,
+  });
 });
 
 test("a legitimate legacy pending email can be adopted into the trusted flow", () => {

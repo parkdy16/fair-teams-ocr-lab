@@ -25,7 +25,9 @@ export type OrganizerRemovalProposal = {
   targetUid: string;
   targetDisplayNameSnapshot: string;
   totalOrganizerCount: number;
+  eligibleGovernanceOrganizerCount: number;
   eligibleOrganizerCount: number;
+  targetGovernanceEligible: boolean;
   requiredYes: number;
   yesCount: number | null;
   noCount: number | null;
@@ -42,7 +44,9 @@ export type StartOrganizerRemovalProposalResult = {
   status: OrganizerRemovalProposalStatus;
   targetDisplayNameSnapshot: string;
   totalOrganizerCount: number;
+  eligibleGovernanceOrganizerCount: number;
   eligibleOrganizerCount: number;
+  targetGovernanceEligible: boolean;
   requiredYes: number;
   castCount: number;
   outcomeReason: OrganizerRemovalOutcomeReason | null;
@@ -135,12 +139,21 @@ function parseProposal(id: string, data: DocumentData): OrganizerRemovalProposal
   const status = proposalStatus(data.status);
   const targetUid = typeof data.targetUid === "string" ? data.targetUid : "";
   const totalOrganizerCount = integer(data.totalOrganizerCount, 2);
+  const eligibleGovernanceOrganizerCount = integer(
+    data.eligibleGovernanceOrganizerCount ?? data.totalOrganizerCount,
+    2,
+  );
   const eligibleOrganizerCount = integer(data.eligibleOrganizerCount, 1);
+  const targetGovernanceEligible = typeof data.targetGovernanceEligible === "boolean"
+    ? data.targetGovernanceEligible
+    : true;
   const requiredYes = integer(data.requiredYes, 2);
   const castCount = integer(data.castCount);
-  if (!status || !targetUid || totalOrganizerCount == null || eligibleOrganizerCount == null
+  if (!status || !targetUid || totalOrganizerCount == null
+    || eligibleGovernanceOrganizerCount == null || eligibleOrganizerCount == null
     || requiredYes == null || castCount == null) return null;
-  if (eligibleOrganizerCount !== totalOrganizerCount - 1
+  if (eligibleGovernanceOrganizerCount !== totalOrganizerCount
+    || eligibleOrganizerCount !== totalOrganizerCount - (targetGovernanceEligible ? 1 : 0)
     || requiredYes !== Math.floor(totalOrganizerCount / 2) + 1
     || castCount > eligibleOrganizerCount) return null;
 
@@ -169,7 +182,9 @@ function parseProposal(id: string, data: DocumentData): OrganizerRemovalProposal
       ? data.targetDisplayNameSnapshot.trim()
       : "Organizer",
     totalOrganizerCount,
+    eligibleGovernanceOrganizerCount,
     eligibleOrganizerCount,
+    targetGovernanceEligible,
     requiredYes,
     yesCount: parsedYesCount,
     noCount: parsedNoCount,

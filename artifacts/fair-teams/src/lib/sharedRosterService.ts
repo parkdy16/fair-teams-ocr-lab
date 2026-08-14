@@ -62,6 +62,8 @@ export type FirebaseSharedGroupSummary = {
   memberNamesByEmail?: Record<string, string>;
   memberNamesByUid?: Record<string, string>;
   memberUidByEmail?: Record<string, string>;
+  organizerJoinedAtByUid?: Record<string, string>;
+  organizerGovernanceEligibleAtByUid?: Record<string, string>;
   lastSavedByEmail?: string;
   lastSavedRosterName?: string;
   lastSavedAt?: string;
@@ -400,6 +402,15 @@ function timestampToIso(value: unknown): string | undefined {
   return undefined;
 }
 
+function cleanTimestampMap(value: unknown) {
+  if (!value || typeof value !== "object") return {};
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .map(([uid, timestamp]) => [String(uid).trim(), timestampToIso(timestamp) || ""])
+      .filter(([uid]) => Boolean(uid)),
+  ) as Record<string, string>;
+}
+
 function currentUserRoleFromData(data: DocumentData): SharedRosterRole | undefined {
   const user = toSharedRosterUser(getFairTeamsAuth().currentUser);
   if (!user) return undefined;
@@ -461,6 +472,10 @@ function toGroupSummary(id: string, data: DocumentData): FirebaseSharedGroupSumm
     pendingInviteEmails,
     memberNamesByEmail,
     memberNamesByUid,
+    organizerJoinedAtByUid: cleanTimestampMap(data.organizerJoinedAtByUid),
+    organizerGovernanceEligibleAtByUid: cleanTimestampMap(
+      data.organizerGovernanceEligibleAtByUid,
+    ),
     lastSavedByEmail: typeof data.lastSavedByEmail === "string" ? data.lastSavedByEmail : undefined,
     lastSavedRosterName: typeof data.lastSavedRosterName === "string" ? data.lastSavedRosterName : undefined,
     lastSavedAt: timestampToIso(data.lastSavedAt) || (typeof data.lastSavedAtIso === "string" ? data.lastSavedAtIso : undefined),
@@ -753,7 +768,7 @@ export async function leaveFirebaseSharedRosterAccess(rosterId: string): Promise
   const batch = writeBatch(getFairTeamsFirestore());
   const affectedRosterIds: string[] = [];
 
-  const removeCurrentUserFields = (data: DocumentData) => ({
+  const removeCurrentUserFields = (data: DocumentData, includeGovernanceTiming = false) => ({
     memberUids: arrayRemove(user.uid),
     memberEmails: arrayRemove(email),
     pendingInviteEmails: arrayRemove(email),
@@ -766,6 +781,21 @@ export async function leaveFirebaseSharedRosterAccess(rosterId: string): Promise
     memberNamesByUid: removeRecordKey(cleanNameMap(data.memberNamesByUid), user.uid),
     memberNamesByEmail: removeEmailKey(cleanNameMap(data.memberNamesByEmail), email),
     memberUidByEmail: removeEmailKey(cleanStringMap(data.memberUidByEmail), email),
+    ...(includeGovernanceTiming ? {
+      organizerJoinedAtByUid: removeRecordKey(
+        data.organizerJoinedAtByUid && typeof data.organizerJoinedAtByUid === "object"
+          ? data.organizerJoinedAtByUid as Record<string, unknown>
+          : {},
+        user.uid,
+      ),
+      organizerGovernanceEligibleAtByUid: removeRecordKey(
+        data.organizerGovernanceEligibleAtByUid
+          && typeof data.organizerGovernanceEligibleAtByUid === "object"
+          ? data.organizerGovernanceEligibleAtByUid as Record<string, unknown>
+          : {},
+        user.uid,
+      ),
+    } : {}),
     updatedAt: serverTimestamp(),
     updatedAtIso: now,
   });
@@ -790,7 +820,7 @@ export async function leaveFirebaseSharedRosterAccess(rosterId: string): Promise
         )
       : [rosterId];
 
-    batch.update(groupRef, removeCurrentUserFields(groupData));
+    batch.update(groupRef, removeCurrentUserFields(groupData, true));
 
     for (const id of rosterIds) {
       const linkedRosterRef = doc(getFairTeamsFirestore(), "sharedRosters", id);

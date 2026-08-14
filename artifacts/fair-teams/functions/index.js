@@ -8,7 +8,10 @@ const {
   activeWorkspaceNotificationRecipients,
   buildOrganizerRemovalElectorate,
   evaluateOrganizerRemovalVote,
+  GOVERNANCE_ELIGIBILITY_DELAY_MS,
+  governanceEligibleOrganizerUids,
   memberDisplayName,
+  organizerGovernanceEligibility,
   organizerMembershipFingerprint,
   organizerUidsFromWorkspace,
   removeOrganizerMembership,
@@ -17,6 +20,7 @@ const {
 } = require("./organizerRemoval");
 const {
   activeMemberIncludes,
+  deliverOrganizerJoinedNotification,
   WorkspaceInvitationError,
   invitationEmail,
   invitationExpiryMillis,
@@ -26,6 +30,7 @@ const {
   invitationWorkspaceName,
   legacyInvitationRecord,
   normalizeInvitationEmail,
+  organizerJoinedNotification,
   pendingInvitationIncludes,
   planInvitationAcceptance,
   resendAvailability,
@@ -972,7 +977,11 @@ exports.listWorkspaceRecipientInvitations = onCall({ region: REGION }, async (re
   }
 });
 
-exports.acceptWorkspaceOrganizerInvitation = onCall({ region: REGION }, async (request) => {
+exports.acceptWorkspaceOrganizerInvitation = onCall({
+  region: REGION,
+  timeoutSeconds: 60,
+  secrets: [RESEND_API_KEY],
+}, async (request) => {
   let recipient;
   try {
     recipient = verifiedInvitationIdentity(invitationActor(request));
@@ -986,8 +995,9 @@ exports.acceptWorkspaceOrganizerInvitation = onCall({ region: REGION }, async (r
   const now = Date.now();
   const nowIso = new Date(now).toISOString();
 
+  let acceptance;
   try {
-    return await db.runTransaction(async (tx) => {
+    acceptance = await db.runTransaction(async (tx) => {
       const invitationSnap = await tx.get(invitationRef);
       if (!invitationSnap.exists) {
         throw new HttpsError("not-found", "This invitation no longer exists.");
@@ -1017,6 +1027,8 @@ exports.acceptWorkspaceOrganizerInvitation = onCall({ region: REGION }, async (r
         linkedRosters,
         displayName: actorName(request.auth),
         nowMillis: now,
+        joinedAt: Timestamp.fromMillis(now),
+        governanceEligibleAt: Timestamp.fromMillis(now + GOVERNANCE_ELIGIBILITY_DELAY_MS),
       });
 
       if (!lockSnap.exists || lockSnap.data()?.activeInvitationId !== invitationId) {
@@ -1044,23 +1056,75 @@ exports.acceptWorkspaceOrganizerInvitation = onCall({ region: REGION }, async (r
         acceptedByUid: recipient.uid,
         acceptedAt: FieldValue.serverTimestamp(),
         acceptedAtIso: nowIso,
+        acceptedOrganizerGovernanceEligibleAt: Timestamp.fromMillis(
+          now + GOVERNANCE_ELIGIBILITY_DELAY_MS,
+        ),
+        acceptedOrganizerGovernanceEligibleAtIso: new Date(
+          now + GOVERNANCE_ELIGIBILITY_DELAY_MS,
+        ).toISOString(),
         updatedAt: FieldValue.serverTimestamp(),
         updatedAtIso: nowIso,
       });
       tx.delete(lockRef);
 
-      return {
+      const result = {
         ok: true,
         invitationId,
         groupId,
         workspaceName: invitationWorkspaceName(groupData, invitationData),
         rosterIds,
         acceptedAt: nowIso,
+        governanceEligibleAt: new Date(now + GOVERNANCE_ELIGIBILITY_DELAY_MS).toISOString(),
+      };
+      return {
+        result,
+        notification: organizerJoinedNotification({
+          workspace: groupData,
+          invitation: { ...invitationData, status: "accepted" },
+          newOrganizerUid: recipient.uid,
+          newOrganizerEmail: recipient.email,
+          newOrganizerDisplayName: actorName(request.auth),
+          acceptedAtIso: nowIso,
+          governanceEligibleAtIso: result.governanceEligibleAt,
+        }),
       };
     });
   } catch (error) {
     throw invitationHttpsError(error, "Could not accept this invitation.");
   }
+
+  let delivery = {
+    status: "failed",
+    recipientCount: acceptance.notification?.recipientEmails.length || 0,
+    sentCount: 0,
+    failedCount: acceptance.notification?.recipientEmails.length || 0,
+  };
+  try {
+    delivery = await deliverOrganizerJoinedNotification(
+      acceptance.notification,
+      sendResendEmail,
+    );
+  } catch (error) {
+    console.error("Could not deliver new-organizer governance notification", error);
+  }
+
+  try {
+    await invitationRef.set({
+      organizerJoinedNotificationStatus: delivery.status,
+      organizerJoinedNotificationRecipientCount: delivery.recipientCount,
+      organizerJoinedNotificationSentCount: delivery.sentCount,
+      organizerJoinedNotificationFailedCount: delivery.failedCount,
+      organizerJoinedNotificationUpdatedAt: FieldValue.serverTimestamp(),
+      organizerJoinedNotificationUpdatedAtIso: new Date().toISOString(),
+    }, { merge: true });
+  } catch (error) {
+    console.error("Could not record new-organizer notification delivery state", error);
+  }
+
+  return {
+    ...acceptance.result,
+    organizerJoinedNotificationStatus: delivery.status,
+  };
 });
 
 exports.startOrganizerRemovalProposal = onCall({ region: REGION }, async (request) => {
@@ -1095,6 +1159,24 @@ exports.startOrganizerRemovalProposal = onCall({ region: REGION }, async (reques
       if (!organizerUids.includes(request.auth.uid)) {
         throw new HttpsError("permission-denied", "Only an active organizer can propose removal.");
       }
+      const proposerEligibility = organizerGovernanceEligibility(
+        groupData,
+        request.auth.uid,
+        now,
+      );
+      if (!proposerEligibility.eligible) {
+        throw new HttpsError(
+          "failed-precondition",
+          "Protected organizer-removal proposals are not available to this organizer yet.",
+        );
+      }
+      const governanceEligibleUids = governanceEligibleOrganizerUids(groupData, now);
+      if (governanceEligibleUids.length < 2) {
+        throw new HttpsError(
+          "failed-precondition",
+          "At least two governance-eligible organizers are required to start a removal vote.",
+        );
+      }
       const linkedRosterIds = Array.from(new Set(
         (Array.isArray(groupData.rosterIds) ? groupData.rosterIds : [])
           .filter((rosterId) => typeof rosterId === "string" && rosterId.length > 0),
@@ -1105,8 +1187,6 @@ exports.startOrganizerRemovalProposal = onCall({ region: REGION }, async (reques
       if (organizerUids.length + linkedRosterIds.length + 4 > MAX_GOVERNANCE_TRANSACTION_DOCUMENTS) {
         throw new HttpsError("resource-exhausted", "This workspace is too large for one protected removal transaction.");
       }
-      const currentMembershipFingerprint = organizerMembershipFingerprint(organizerUids);
-
       const targetUid = resolveMemberUidByEmail(groupData, targetEmail);
       if (!targetUid || !organizerUids.includes(targetUid)) {
         throw new HttpsError("failed-precondition", "That organizer is no longer active in this workspace.");
@@ -1114,6 +1194,12 @@ exports.startOrganizerRemovalProposal = onCall({ region: REGION }, async (reques
       if (targetUid === request.auth.uid) {
         throw new HttpsError("invalid-argument", "Use Leave shared roster to remove your own access.");
       }
+
+      const electorate = buildOrganizerRemovalElectorate(groupData, targetUid, now);
+      const currentMembershipFingerprint = organizerMembershipFingerprint([
+        targetUid,
+        ...electorate.governanceEligibleOrganizerUids,
+      ]);
 
       const activeProposalId = controlSnap.exists
         ? String(controlSnap.data()?.activeProposalId || "")
@@ -1128,8 +1214,20 @@ exports.startOrganizerRemovalProposal = onCall({ region: REGION }, async (reques
             const activePrivateRef = groupRef.collection("organizerRemovalPrivate").doc(activeProposalId);
             const activePrivateSnap = await tx.get(activePrivateRef);
             const activePrivateData = activePrivateSnap.exists ? activePrivateSnap.data() || {} : {};
+            const activeFrozenGovernanceUids = Array.from(new Set(
+              (Array.isArray(activePrivateData.governanceEligibleOrganizerUids)
+                ? activePrivateData.governanceEligibleOrganizerUids
+                : activePrivateData.organizerUids || [])
+                .filter((uid) => typeof uid === "string" && uid.length > 0),
+            ));
+            const activeTargetUid = String(activePrivateData.targetUid || "");
+            const activeRelevantUids = Array.from(new Set([
+              activeTargetUid,
+              ...activeFrozenGovernanceUids,
+            ])).filter((uid) => organizerUids.includes(uid));
+            const activeMembershipFingerprint = organizerMembershipFingerprint(activeRelevantUids);
             if (!activePrivateSnap.exists
-              || activePrivateData.membershipFingerprint === currentMembershipFingerprint) {
+              || activePrivateData.membershipFingerprint === activeMembershipFingerprint) {
               throw new HttpsError("failed-precondition", "An organizer-removal vote is already open.");
             }
             staleActiveProposal = {
@@ -1145,9 +1243,9 @@ exports.startOrganizerRemovalProposal = onCall({ region: REGION }, async (reques
         }
       }
 
-      const electorate = buildOrganizerRemovalElectorate(groupData, targetUid);
       const initialResult = evaluateOrganizerRemovalVote({
         totalOrganizerCount: electorate.totalOrganizerCount,
+        eligibleOrganizerCount: electorate.eligibleOrganizerCount,
         yesCount: 0,
         noCount: 0,
       });
@@ -1174,12 +1272,14 @@ exports.startOrganizerRemovalProposal = onCall({ region: REGION }, async (reques
       }
 
       tx.create(proposalRef, {
-        schemaVersion: 1,
+        schemaVersion: 2,
         status: initialResult.status,
         targetUid,
         targetDisplayNameSnapshot,
         totalOrganizerCount: electorate.totalOrganizerCount,
+        eligibleGovernanceOrganizerCount: electorate.eligibleGovernanceOrganizerCount,
         eligibleOrganizerCount: electorate.eligibleOrganizerCount,
+        targetGovernanceEligible: electorate.targetGovernanceEligible,
         requiredYes: electorate.requiredYes,
         yesCount: isOpen ? null : initialResult.yesCount,
         noCount: isOpen ? null : initialResult.noCount,
@@ -1195,11 +1295,12 @@ exports.startOrganizerRemovalProposal = onCall({ region: REGION }, async (reques
 
       if (isOpen) {
         tx.create(privateRef, {
-          schemaVersion: 1,
+          schemaVersion: 2,
           proposalId: proposalRef.id,
           targetUid,
           proposedByUid: request.auth.uid,
-          organizerUids: electorate.organizerUids,
+          organizerUids: electorate.governanceEligibleOrganizerUids,
+          governanceEligibleOrganizerUids: electorate.governanceEligibleOrganizerUids,
           eligibleVoterUids: electorate.eligibleVoterUids,
           membershipFingerprint,
           yesCount: 0,
@@ -1228,7 +1329,9 @@ exports.startOrganizerRemovalProposal = onCall({ region: REGION }, async (reques
         status: initialResult.status,
         targetDisplayNameSnapshot,
         totalOrganizerCount: electorate.totalOrganizerCount,
+        eligibleGovernanceOrganizerCount: electorate.eligibleGovernanceOrganizerCount,
         eligibleOrganizerCount: electorate.eligibleOrganizerCount,
+        targetGovernanceEligible: electorate.targetGovernanceEligible,
         requiredYes: electorate.requiredYes,
         castCount: 0,
         outcomeReason: initialResult.outcomeReason,
@@ -1275,7 +1378,8 @@ exports.getOrganizerRemovalState = onCall({ region: REGION }, async (request) =>
   const isOpen = proposalData.status === "open";
   const eligible = isOpen
     && organizerUids.includes(request.auth.uid)
-    && eligibleVoterUids.includes(request.auth.uid);
+    && eligibleVoterUids.includes(request.auth.uid)
+    && organizerGovernanceEligibility(groupData, request.auth.uid).eligible;
 
   return {
     proposalId,
@@ -1339,12 +1443,29 @@ exports.castOrganizerRemovalBallot = onCall({ region: REGION }, async (request) 
       if (!currentOrganizerUids.includes(request.auth.uid)) {
         throw new HttpsError("permission-denied", "Only an active organizer can vote.");
       }
+      if (!organizerGovernanceEligibility(groupData, request.auth.uid, now).eligible) {
+        throw new HttpsError(
+          "permission-denied",
+          "Protected organizer-removal voting is not available to this organizer yet.",
+        );
+      }
 
       const votedUids = Array.from(new Set(
         (Array.isArray(privateData.votedUids) ? privateData.votedUids : [])
           .filter((uid) => typeof uid === "string" && uid.length > 0),
       ));
-      const currentMembershipFingerprint = organizerMembershipFingerprint(currentOrganizerUids);
+      const frozenGovernanceUids = Array.from(new Set(
+        (Array.isArray(privateData.governanceEligibleOrganizerUids)
+          ? privateData.governanceEligibleOrganizerUids
+          : privateData.organizerUids || [])
+          .filter((uid) => typeof uid === "string" && uid.length > 0),
+      ));
+      const frozenTargetUid = String(privateData.targetUid || "");
+      const currentRelevantUids = Array.from(new Set([
+        frozenTargetUid,
+        ...frozenGovernanceUids,
+      ])).filter((uid) => currentOrganizerUids.includes(uid));
+      const currentMembershipFingerprint = organizerMembershipFingerprint(currentRelevantUids);
       if (privateData.membershipFingerprint !== currentMembershipFingerprint) {
         tx.update(proposalRef, {
           status: "cancelled",
@@ -1378,6 +1499,15 @@ exports.castOrganizerRemovalBallot = onCall({ region: REGION }, async (request) 
       if (!targetUid || targetUid !== proposalData.targetUid) {
         throw new HttpsError("failed-precondition", "This organizer-removal vote has invalid target data.");
       }
+      const targetGovernanceEligible = frozenGovernanceUids.includes(targetUid);
+      const expectedEligibleVoterUids = frozenGovernanceUids.filter((uid) => uid !== targetUid);
+      if (Number(proposalData.totalOrganizerCount) !== frozenGovernanceUids.length
+        || Number(proposalData.eligibleOrganizerCount) !== expectedEligibleVoterUids.length
+        || Boolean(proposalData.targetGovernanceEligible ?? true) !== targetGovernanceEligible
+        || eligibleVoterUids.length !== expectedEligibleVoterUids.length
+        || eligibleVoterUids.some((uid) => !expectedEligibleVoterUids.includes(uid))) {
+        throw new HttpsError("failed-precondition", "This organizer-removal vote has invalid electorate data.");
+      }
       if (request.auth.uid === targetUid || !eligibleVoterUids.includes(request.auth.uid)) {
         throw new HttpsError("permission-denied", "You are not eligible to vote on this proposal.");
       }
@@ -1389,6 +1519,7 @@ exports.castOrganizerRemovalBallot = onCall({ region: REGION }, async (request) 
       const nextNoCount = Number(privateData.noCount || 0) + (choice === "no" ? 1 : 0);
       const result = evaluateOrganizerRemovalVote({
         totalOrganizerCount: Number(proposalData.totalOrganizerCount),
+        eligibleOrganizerCount: eligibleVoterUids.length,
         yesCount: nextYesCount,
         noCount: nextNoCount,
       });

@@ -58,6 +58,8 @@ export type AcceptWorkspaceOrganizerInvitationResult = {
   workspaceName: string;
   rosterIds: string[];
   acceptedAt: string;
+  governanceEligibleAt: string;
+  organizerJoinedNotificationStatus: "not_required" | "sent" | "partial" | "failed";
 };
 
 const INVITATION_STATES = new Set<WorkspaceInvitationState>([

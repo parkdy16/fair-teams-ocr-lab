@@ -10,6 +10,7 @@ const sharedRosterService = fs.readFileSync(
   path.join(__dirname, "..", "src", "lib", "sharedRosterService.ts"),
   "utf8",
 );
+const functionsIndex = fs.readFileSync(path.join(__dirname, "index.js"), "utf8");
 
 test("pending recipients cannot read complete workspace or roster documents", () => {
   assert.doesNotMatch(rules, /signedInEmail\(\)\s+in\s+resource\.data\.pendingInviteEmails/);
@@ -28,6 +29,8 @@ test("organizers cannot bypass callables by changing pending invitation emails",
     organizerUpdate,
     /request\.resource\.data\.get\("pendingInviteEmails", \[\]\)\s*== resource\.data\.get\("pendingInviteEmails", \[\]\)/,
   );
+  assert.match(organizerUpdate, /organizerJoinedAtByUid/);
+  assert.match(organizerUpdate, /organizerGovernanceEligibleAtByUid/);
 });
 
 test("self-leave removes only the signed-in organizer pending identity", () => {
@@ -45,6 +48,37 @@ test("self-leave removes only the signed-in organizer pending identity", () => {
     sharedRosterService.indexOf("export async function removeFirebaseSharedGroupMember"),
   );
   assert.match(selfLeaveClient, /pendingInviteEmails:\s*arrayRemove\(email\)/);
+  assert.match(selfLeaveRule, /organizerJoinedAtByUid[\s\S]{0,260}affectedKeys\(\)\.hasOnly\(\[request\.auth\.uid\]\)/);
+  assert.match(selfLeaveRule, /organizerGovernanceEligibleAtByUid[\s\S]{0,280}affectedKeys\(\)\.hasOnly\(\[request\.auth\.uid\]\)/);
+  assert.match(selfLeaveClient, /removeCurrentUserFields\(groupData, true\)/);
+});
+
+test("protected removal callables enforce current and frozen governance eligibility", () => {
+  const proposalCallable = functionsIndex.slice(
+    functionsIndex.indexOf("exports.startOrganizerRemovalProposal"),
+    functionsIndex.indexOf("exports.getOrganizerRemovalState"),
+  );
+  const ballotCallable = functionsIndex.slice(
+    functionsIndex.indexOf("exports.castOrganizerRemovalBallot"),
+    functionsIndex.indexOf("exports.registerPushInstallation"),
+  );
+  assert.match(proposalCallable, /organizerGovernanceEligibility/);
+  assert.match(proposalCallable, /governanceEligibleUids\.length < 2/);
+  assert.match(proposalCallable, /governanceEligibleOrganizerUids/);
+  assert.match(ballotCallable, /organizerGovernanceEligibility/);
+  assert.match(ballotCallable, /governanceEligibleOrganizerUids/);
+  assert.match(ballotCallable, /eligibleVoterUids\.includes\(request\.auth\.uid\)/);
+});
+
+test("trusted acceptance owns governance timing and post-acceptance notification", () => {
+  const acceptanceCallable = functionsIndex.slice(
+    functionsIndex.indexOf("exports.acceptWorkspaceOrganizerInvitation"),
+    functionsIndex.indexOf("exports.startOrganizerRemovalProposal"),
+  );
+  assert.match(acceptanceCallable, /Timestamp\.fromMillis\(now\)/);
+  assert.match(acceptanceCallable, /GOVERNANCE_ELIGIBILITY_DELAY_MS/);
+  assert.match(acceptanceCallable, /deliverOrganizerJoinedNotification/);
+  assert.match(acceptanceCallable, /organizerJoinedNotificationStatus/);
 });
 
 test("clients have no direct membership-acceptance rule", () => {

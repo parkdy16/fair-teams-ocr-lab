@@ -1,7 +1,11 @@
 "use strict";
 
 const crypto = require("node:crypto");
-const { organizerUidsFromWorkspace } = require("./organizerRemoval");
+const {
+  activeWorkspaceNotificationRecipients,
+  GOVERNANCE_ELIGIBILITY_DELAY_MS,
+  organizerUidsFromWorkspace,
+} = require("./organizerRemoval");
 
 const INVITATION_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 const RESEND_COOLDOWN_MS = 5 * 60 * 1000;
@@ -211,7 +215,11 @@ function validateInvitationAcceptance({ actor, invitation, workspace, nowMillis 
   return identity;
 }
 
-function invitationMembershipUpdates(workspace, { uid, email, displayName }) {
+function invitationMembershipUpdates(
+  workspace,
+  { uid, email, displayName },
+  membershipTiming,
+) {
   const normalizedEmail = normalizeInvitationEmail(email);
   if (!uid || !validInvitationEmail(normalizedEmail)) {
     throw new TypeError("A valid invitation recipient is required.");
@@ -266,15 +274,44 @@ function invitationMembershipUpdates(workspace, { uid, email, displayName }) {
         : {}),
       [normalizedEmail]: uid,
     },
+    ...(membershipTiming ? {
+      organizerJoinedAtByUid: {
+        ...(workspace?.organizerJoinedAtByUid
+          && typeof workspace.organizerJoinedAtByUid === "object"
+          ? workspace.organizerJoinedAtByUid
+          : {}),
+        [uid]: membershipTiming.joinedAt,
+      },
+      organizerGovernanceEligibleAtByUid: {
+        ...(workspace?.organizerGovernanceEligibleAtByUid
+          && typeof workspace.organizerGovernanceEligibleAtByUid === "object"
+          ? workspace.organizerGovernanceEligibleAtByUid
+          : {}),
+        [uid]: membershipTiming.governanceEligibleAt,
+      },
+    } : {}),
   };
 }
 
-function planInvitationAcceptance({ actor, invitation, workspace, linkedRosters, displayName, nowMillis }) {
+function planInvitationAcceptance({
+  actor,
+  invitation,
+  workspace,
+  linkedRosters,
+  displayName,
+  nowMillis,
+  joinedAt = nowMillis,
+  governanceEligibleAt = nowMillis + GOVERNANCE_ELIGIBILITY_DELAY_MS,
+}) {
   const identity = validateInvitationAcceptance({ actor, invitation, workspace, nowMillis });
   const recipient = { ...identity, displayName };
   return {
     identity,
-    workspaceUpdates: invitationMembershipUpdates(workspace, recipient),
+    membershipTiming: { joinedAt, governanceEligibleAt },
+    workspaceUpdates: invitationMembershipUpdates(workspace, recipient, {
+      joinedAt,
+      governanceEligibleAt,
+    }),
     rosterUpdates: (Array.isArray(linkedRosters) ? linkedRosters : [])
       .map((roster) => invitationMembershipUpdates(roster, recipient)),
   };
@@ -432,6 +469,78 @@ function invitationEmail({ invitationId, workspaceName, inviterDisplayName, expi
   return { subject, text, html, link };
 }
 
+function organizerJoinedNotification({
+  workspace,
+  invitation,
+  newOrganizerUid,
+  newOrganizerEmail,
+  newOrganizerDisplayName,
+  acceptedAtIso,
+  governanceEligibleAtIso,
+}) {
+  if (invitation?.status !== "accepted") return null;
+  const acceptedAt = new Date(acceptedAtIso);
+  const governanceEligibleAt = new Date(governanceEligibleAtIso);
+  if (!Number.isFinite(acceptedAt.getTime()) || !Number.isFinite(governanceEligibleAt.getTime())) {
+    throw new TypeError("Accepted and governance-eligibility dates must be valid.");
+  }
+
+  const recipientEmails = activeWorkspaceNotificationRecipients(workspace)
+    .filter((recipient) => recipient.uid !== newOrganizerUid)
+    .map((recipient) => recipient.email);
+  const workspaceName = invitationWorkspaceName(workspace, invitation);
+  const organizerName = cleanInvitationText(
+    newOrganizerDisplayName,
+    normalizeInvitationEmail(newOrganizerEmail).split("@")[0] || "Organizer",
+    80,
+  );
+  const organizerEmail = normalizeInvitationEmail(newOrganizerEmail);
+  const inviterName = cleanInvitationText(
+    invitation?.inviterDisplayNameSnapshot,
+    "An organizer",
+    80,
+  );
+  const acceptanceDate = acceptedAt.toISOString().slice(0, 10);
+  const eligibilityDate = governanceEligibleAt.toISOString().slice(0, 10);
+  const subject = `${organizerName} joined ${workspaceName} in Stripes`;
+  const text = [
+    `${organizerName} (${organizerEmail}) joined ${workspaceName} as an organizer on ${acceptanceDate}.`,
+    `Invited by: ${inviterName}.`,
+    "Normal organizer access is available immediately.",
+    `Protected organizer-removal proposal and voting rights begin on ${eligibilityDate}.`,
+  ].join("\n");
+  const html = `
+    <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#102A43;line-height:1.5">
+      <div style="font-size:13px;font-weight:800;color:#7c3aed;margin-bottom:10px">Stripes</div>
+      <h2 style="font-size:22px;line-height:1.25;margin:0 0 12px">New organizer joined</h2>
+      <p style="margin:0 0 12px"><strong>${escapeHtml(organizerName)}</strong> (${escapeHtml(organizerEmail)}) joined <strong>${escapeHtml(workspaceName)}</strong> as an organizer on ${escapeHtml(acceptanceDate)}.</p>
+      <p style="margin:0 0 12px">Invited by: ${escapeHtml(inviterName)}.</p>
+      <p style="margin:0 0 8px">Normal organizer access is available immediately.</p>
+      <p style="font-size:13px;color:#64748b;margin:0">Protected organizer-removal proposal and voting rights begin on ${escapeHtml(eligibilityDate)}.</p>
+    </div>`;
+  return { recipientEmails, subject, text, html };
+}
+
+async function deliverOrganizerJoinedNotification(notification, sendEmail) {
+  if (!notification || notification.recipientEmails.length === 0) {
+    return { status: "not_required", recipientCount: 0, sentCount: 0, failedCount: 0 };
+  }
+  const results = await Promise.allSettled(notification.recipientEmails.map((to) => sendEmail({
+    to,
+    subject: notification.subject,
+    text: notification.text,
+    html: notification.html,
+  })));
+  const sentCount = results.filter((result) => result.status === "fulfilled").length;
+  const failedCount = results.length - sentCount;
+  return {
+    status: failedCount === 0 ? "sent" : sentCount > 0 ? "partial" : "failed",
+    recipientCount: results.length,
+    sentCount,
+    failedCount,
+  };
+}
+
 module.exports = {
   activeMemberIncludes,
   INVITATION_TTL_MS,
@@ -449,6 +558,8 @@ module.exports = {
   maskInvitationEmail,
   normalizeInvitationEmail,
   officialInvitationUrl,
+  organizerJoinedNotification,
+  deliverOrganizerJoinedNotification,
   pendingInvitationIncludes,
   planInvitationAcceptance,
   resendAvailability,

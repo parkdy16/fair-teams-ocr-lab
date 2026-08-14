@@ -2268,17 +2268,112 @@ completed locally; G1.5d now owns coordinated production verification.
   records a meaningful `lastSavedRosterName`; invitation creation previously
   snapshotted the placeholder without applying a meaningful-name fallback, so
   both the Resend email and recipient onboarding repeated the wrong name;
-- the local server-side correction now resolves invitation names from a
+- the deployed server-side correction now resolves invitation names from a
   meaningful workspace name first, then the current shared-roster name, then a
   neutral `Stripes workspace` fallback; create, resend, recipient context/list
   and acceptance handoff share that resolution, allowing existing pending
   invitations to benefit safely without exposing workspace documents;
-- the blank sender avatar in the received invitation email is deferred as a
-  separate branding/deliverability follow-up; no BIMI, DNS or avatar-provider
-  work is part of this naming correction;
-- G1.5d remains in progress pending deployment and live re-test of the naming
-  correction plus completion of the real-account invitation, verification,
-  reset, acceptance and navigation test matrix.
+- the core organizer invitation/onboarding path has now passed real production
+  testing: a verified organizer can send an invitation; the email and an
+  existing pending invitation context resolve the correct meaningful
+  workspace/roster name; a signed-out recipient can open the invitation, sign
+  in or create the invited account, verify that identity and explicitly join;
+  verification does not auto-join; successful Join creates a normal equal
+  operational organizer and the accepted shared workspace/roster loads;
+- the full G1.5d matrix is not yet complete. Still-pending live-account cases
+  include the existing matching verified/unverified account variants,
+  wrong-account recovery, password reset, cancelled/expired/already-used links,
+  failed/offline roster-handoff Retry and mobile browser/PWA Back behavior;
+- Firebase Authentication verification emails currently use the Firebase
+  project identity/domain rather than `stripes.work`, and those messages have
+  landed in Spam during multiple real-account tests;
+- password-reset branding and deliverability must be reviewed together with
+  verification-email branding and deliverability;
+- Resend organizer-invitation emails currently show no Stripes sender avatar;
+  sender-avatar/BIMI/DNS work is deferred until the functional flow is stable;
+- do not casually alter SPF, DKIM or DMARC while addressing Firebase Auth email
+  branding because `stripes.work` already has production Resend DNS
+  configuration;
+- G1.5d remains **In progress** until the remaining live-account cases and the
+  Firebase Auth/Resend email-branding and deliverability follow-ups are
+  explicitly closed.
+
+### G1.5e — Organizer governance eligibility hardening
+
+**Status:** Approved future bounded G1 task. Do not implement during G1.5d.
+
+Live testing identified a governance-sybil risk: one human organizer could
+invite several additional email accounts they control, accept those
+invitations, manufacture a voting majority and use protected
+organizer-removal voting against legitimate organizers.
+
+A verified email proves control of an email address. It does not prove a
+unique human identity. Stripes must not attempt privacy-heavy identity
+detection such as device fingerprinting, IP matching or document verification
+to solve this problem.
+
+Locked product rule:
+
+- a newly accepted organizer receives normal operational organizer access
+  immediately;
+- protected organizer-removal governance eligibility begins 14 days after
+  invitation acceptance;
+- during that 14-day period the organizer remains a normal operational
+  organizer, but cannot start an organizer-removal proposal, cannot cast an
+  organizer-removal ballot and is not counted in the eligible removal
+  electorate or removal threshold;
+- after 14 days, governance eligibility activates automatically;
+- organizers who already predate this feature remain governance-eligible;
+- governance-eligibility timestamps must be server-authoritative.
+
+For G1.5e, the earlier removal-threshold wording is qualified by governance
+eligibility: the existing threshold formula applies to the frozen total of
+governance-eligible organizers, and organizers still inside the 14-day waiting
+period are excluded from that total and threshold.
+
+Proposal stability rules:
+
+- the eligible removal electorate is frozen when a proposal is created;
+- organizers added after proposal creation cannot participate in that
+  proposal;
+- an organizer whose 14-day waiting period expires after proposal creation
+  cannot join that already-open vote;
+- the target remains unable to vote;
+- existing secret-ballot privacy, aggregate-result visibility, threshold,
+  immediate-pass and mathematically-unreachable early-fail rules remain
+  unchanged.
+
+Acceptance notification requirement:
+
+- accepting an organizer invitation sends existing active organizers one
+  transactional **new organizer joined** email;
+- the email identifies the new organizer, the inviter where known, the
+  workspace/club name, the acceptance date, that normal organizer access is
+  immediate and that protected-removal governance eligibility begins after
+  14 days;
+- pending invitations do not trigger this notification;
+- the newly accepted organizer is excluded from notification recipients.
+
+G1.5e must be implemented as its own bounded, independently reviewable task
+after G1.5d is explicitly closed.
+
+### G1.6 — Workspace closure / last-organizer behavior
+
+**Status:** Planned after G1.5e.
+
+G1.6 remains the separate governed task for workspace closure/deletion and the
+last-organizer safeguard. It must not be folded into invitation onboarding or
+organizer-removal eligibility work.
+
+Required roadmap order:
+
+1. finish G1.5d live testing and email follow-up;
+2. implement G1.5e governance eligibility hardening;
+3. implement G1.6 workspace closure / last-organizer behavior;
+4. proceed to G2 Unified Google Connection;
+5. proceed to G3 Google Resource + Club Cabinet Foundation.
+
+Do not insert another major implementation phase between G1.6 and G2.
 
 ### Security & Privacy Launch Gate
 
@@ -2305,6 +2400,67 @@ documented.
 - where practical, workspace membership should become the authoritative source
   of organizer identity/access rather than independently copied roster-level
   membership records.
+
+#### Firebase Authentication and account security
+
+Principles:
+
+- Stripes does not store users' plaintext passwords; Firebase Authentication
+  remains responsible for password verification and credential handling;
+- a Firebase UID is an identifier, not a secret, and security must never depend
+  on hiding it;
+- knowing another user's UID must not grant access;
+- Firestore rules and callable/backend authorization remain authoritative;
+- sensitive operations must validate authenticated identity, active membership
+  and the required role server-side;
+- authenticated session/token theft is a more relevant threat than UID
+  disclosure.
+
+Mandatory Firebase Auth/account-security checks before launch:
+
+- [ ] **Password policy**
+  - inspect the actual Firebase Authentication password policy;
+  - decide and enforce an appropriate production minimum and requirements;
+  - do not assume Firebase defaults are sufficient.
+
+- [ ] **Email-enumeration protection**
+  - review and enable Firebase email-enumeration protection unless a documented
+    incompatibility prevents it;
+  - this was deferred during G1.5 live testing and must be revisited before
+    public launch.
+
+- [ ] **Sign-in and authentication-abuse protection**
+  - review Firebase protections and rate limits for repeated sign-in,
+    password-reset and verification attempts;
+  - confirm invitation endpoints are also appropriately rate-limited and
+    resistant to abuse.
+
+- [ ] **Session and token handling**
+  - review ID-token and refresh-token lifecycles;
+  - verify sign-out and revocation behavior;
+  - verify sensitive operations do not trust stale client-only authentication
+    state;
+  - ensure access and refresh tokens are never logged or stored in
+    inappropriate shared persistence.
+
+- [ ] **Backend authorization penetration-style checks**
+  - attempt access using another known UID;
+  - attempt to read or write another workspace by manually changing document
+    or workspace IDs;
+  - invoke protected callables as non-members and organizer-only callables as
+    ordinary members;
+  - attempt to consume an invitation from the wrong account and to reuse stale,
+    cancelled or expired invitations;
+  - attempt to modify membership/governance fields directly from a client;
+  - attempt to access another club's private ratings, attendance and resources;
+  - every attempt must fail closed regardless of the UI.
+
+- [ ] **Account recovery and email infrastructure**
+  - test verification and password reset end-to-end;
+  - improve Firebase Auth email branding, domain alignment and deliverability;
+  - document transactional email providers and sending domains;
+  - ensure Firebase Auth DNS changes do not break the existing Resend SPF,
+    DKIM or DMARC configuration.
 
 #### Mandatory pre-launch checklist
 
@@ -2364,10 +2520,12 @@ documented.
   - Stripes must not silently broaden Google access or move/delete originals.
 
 - [ ] **Administrator security**
-  - restrict Firebase, Google Cloud, Vercel, GitHub and other production-admin
-    access to necessary maintainers;
-  - require strong authentication / 2FA on production administrator accounts;
-  - review API keys, secrets and Firebase Secret Manager usage.
+  - require strong authentication / 2FA for Firebase / Google Cloud, GitHub,
+    Vercel, Resend, Cloudflare and other production-admin services;
+  - review active administrator accounts and remove unnecessary permissions;
+  - review API keys, secrets and Firebase Secret Manager usage;
+  - check the repository, Git history and production logs for accidental
+    secrets or sensitive token material.
 
 - [ ] **Security incident procedure**
   - maintain a short written process for investigating suspected unauthorized

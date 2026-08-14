@@ -4,6 +4,7 @@ import {
   PASSWORD_RESET_CONFIRMATION,
   canSubmitWorkspaceInvitationJoin,
   openAcceptedWorkspaceInvitation,
+  requireRefreshedWorkspaceInvitationSender,
   resolveWorkspaceInvitationManagementGroupId,
   resolveWorkspaceInvitationOnboardingView,
   urlWithoutWorkspaceInvitation,
@@ -82,6 +83,24 @@ test("sender readiness distinguishes signed-out, unverified, and verified organi
   assert.equal(workspaceInvitationSenderStatus(null), "signed_out");
   assert.equal(workspaceInvitationSenderStatus({ emailVerified: false }), "verification_required");
   assert.equal(workspaceInvitationSenderStatus({ emailVerified: true }), "ready");
+});
+
+test("invitation actions accept a freshly verified identity and reject stale or signed-out identity", async () => {
+  const verified = { uid: "verified-organizer", emailVerified: true };
+  await assert.doesNotReject(async () => {
+    assert.equal(
+      await requireRefreshedWorkspaceInvitationSender(async () => verified),
+      verified,
+    );
+  });
+  await assert.rejects(
+    requireRefreshedWorkspaceInvitationSender(async () => ({ uid: "unverified-organizer", emailVerified: false })),
+    /Verify your Stripes account email/,
+  );
+  await assert.rejects(
+    requireRefreshedWorkspaceInvitationSender(async () => null),
+    /Sign in/,
+  );
 });
 
 test("invitation management resolves the loaded workspace or its carried roster/source identity", () => {

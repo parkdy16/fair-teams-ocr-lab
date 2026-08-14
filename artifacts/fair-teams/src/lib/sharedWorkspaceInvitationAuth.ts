@@ -1,5 +1,5 @@
 import {
-  getIdToken,
+  getIdTokenResult,
   reload,
   sendEmailVerification,
   sendPasswordResetEmail,
@@ -7,12 +7,16 @@ import {
 } from "firebase/auth";
 import { getFairTeamsAuth } from "@/lib/firebaseClient";
 import {
+  sharedRosterUserWithTokenVerification,
+} from "@/lib/sharedRosterAuthState";
+import {
   toSharedRosterUser,
   type SharedRosterUser,
 } from "@/lib/sharedRosterService";
 import { cleanWorkspaceInvitationId } from "@/lib/workspaceInvitationOnboardingState";
 export {
   cleanWorkspaceInvitationId,
+  requireRefreshedWorkspaceInvitationSender,
   workspaceInvitationSenderStatus,
   type WorkspaceInvitationSenderStatus,
 } from "@/lib/workspaceInvitationOnboardingState";
@@ -63,8 +67,8 @@ export async function sendStripesPasswordResetEmail(
 export async function reloadAndRefreshStripesAuthIdentity(): Promise<SharedRosterUser> {
   const user = requireCurrentUser();
   await reload(user);
-  await getIdToken(user, true);
+  const tokenResult = await getIdTokenResult(user, true);
   const refreshedUser = toSharedRosterUser(getFairTeamsAuth().currentUser || user);
   if (!refreshedUser) throw new Error("Firebase did not return an account email.");
-  return refreshedUser;
+  return sharedRosterUserWithTokenVerification(refreshedUser, tokenResult.claims);
 }

@@ -138,6 +138,15 @@ export function workspaceInvitationSenderStatus(
   return user.emailVerified ? "ready" : "verification_required";
 }
 
+export async function requireRefreshedWorkspaceInvitationSender<
+  T extends { emailVerified: boolean },
+>(refreshIdentity: () => Promise<T | null>): Promise<T> {
+  const user = await refreshIdentity();
+  if (!user) throw new Error("Sign in before managing organizer invitations.");
+  if (!user.emailVerified) throw new Error("Verify your Stripes account email before continuing.");
+  return user;
+}
+
 export function resolveWorkspaceInvitationManagementGroupId({
   loadedGroupId,
   rosterGroupId,

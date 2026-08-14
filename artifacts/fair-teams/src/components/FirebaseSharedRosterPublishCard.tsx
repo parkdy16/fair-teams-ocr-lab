@@ -39,6 +39,7 @@ import {
   type WorkspaceOrganizerInvitation,
 } from "@/lib/sharedWorkspaceInvitationService";
 import {
+  requireRefreshedWorkspaceInvitationSender,
   reloadAndRefreshStripesAuthIdentity,
   sendStripesEmailVerification,
   workspaceInvitationSenderStatus,
@@ -484,13 +485,15 @@ Your local roster will stay local. Stripes will copy shared identity fields only
     }
   };
 
+  const refreshInvitationSenderForAction = () => requireRefreshedWorkspaceInvitationSender(async () => {
+    const refreshedUser = await reloadAndRefreshStripesAuthIdentity();
+    setUser(refreshedUser);
+    return refreshedUser;
+  });
+
   const handleInvite = async (emailOverride?: string) => {
     const emailToInvite = (emailOverride || inviteEmail).trim();
     if (!user || !emailToInvite || busy) return;
-    if (senderInvitationStatus !== "ready") {
-      setInvitationNotice({ tone: "info", text: "Verify your email before inviting another organizer." });
-      return;
-    }
     if (!collaboratorGroupId) {
       setInvitationNotice({ tone: "error", text: "This shared roster is missing its workspace link. Refresh shared rosters and try again." });
       return;
@@ -498,6 +501,7 @@ Your local roster will stay local. Stripes will copy shared identity fields only
     setBusy("invite");
     setInvitationNotice(null);
     try {
+      await refreshInvitationSenderForAction();
       const result = await createWorkspaceOrganizerInvitation(collaboratorGroupId, emailToInvite);
       if (!emailOverride) setInviteEmail("");
       await Promise.all([
@@ -525,6 +529,7 @@ Your local roster will stay local. Stripes will copy shared identity fields only
     setBusy(`cancel:${invitation.invitedEmail}`);
     setInvitationNotice(null);
     try {
+      await refreshInvitationSenderForAction();
       await cancelWorkspaceOrganizerInvitation(collaboratorGroupId, invitation);
       await Promise.all([
         refreshSharedData(),
@@ -578,6 +583,7 @@ Your local roster will stay local. Stripes will copy shared identity fields only
     setBusy(`resend:${invitation.invitationId}`);
     setInvitationNotice(null);
     try {
+      await refreshInvitationSenderForAction();
       const result = await resendWorkspaceOrganizerInvitation(invitation.invitationId);
       await refreshWorkspaceInvitations(collaboratorGroupId);
       setInvitationNotice(result.emailSent

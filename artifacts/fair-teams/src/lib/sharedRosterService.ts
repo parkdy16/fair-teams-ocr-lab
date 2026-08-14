@@ -1,11 +1,10 @@
 import {
   createUserWithEmailAndPassword,
-  onAuthStateChanged,
+  onIdTokenChanged,
   signInWithEmailAndPassword,
   signOut,
   updateProfile,
   type Unsubscribe,
-  type User,
 } from "firebase/auth";
 import {
   addDoc,
@@ -27,13 +26,13 @@ import {
 import { calculateOverall, normalizeRoster, type RoomPlayer, type RoomRoster } from "@/lib/localRoster";
 import { inferPlayerStyleFromAttributes } from "@/lib/playerStyleProfile";
 import { getFirebaseProjectId, getFairTeamsAuth, getFairTeamsFirestore } from "@/lib/firebaseClient";
+import {
+  toSharedRosterUser,
+  type SharedRosterUser,
+} from "@/lib/sharedRosterAuthState";
 
-export type SharedRosterUser = {
-  uid: string;
-  email: string;
-  displayName?: string;
-  emailVerified: boolean;
-};
+export { toSharedRosterUser };
+export type { SharedRosterUser };
 
 export type SharedRosterRole = "owner" | "editor" | "organizer" | "viewer" | "member";
 
@@ -97,16 +96,6 @@ export type FirebaseSharedRosterSummary = {
 export type FirebaseGroupInvite = FirebaseSharedGroupSummary & {
   inviteeEmail: string;
 };
-
-export function toSharedRosterUser(user: User | null): SharedRosterUser | null {
-  if (!user || !user.email) return null;
-  return {
-    uid: user.uid,
-    email: user.email,
-    displayName: user.displayName || undefined,
-    emailVerified: user.emailVerified,
-  };
-}
 
 function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
@@ -509,7 +498,7 @@ function toRosterSummary(id: string, data: DocumentData): FirebaseSharedRosterSu
 }
 
 export function listenToSharedRosterUser(callback: (user: SharedRosterUser | null) => void): Unsubscribe {
-  return onAuthStateChanged(getFairTeamsAuth(), (user) => {
+  return onIdTokenChanged(getFairTeamsAuth(), (user) => {
     callback(toSharedRosterUser(user));
   });
 }

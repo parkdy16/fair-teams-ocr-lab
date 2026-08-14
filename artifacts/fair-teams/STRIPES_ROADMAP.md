@@ -2248,9 +2248,22 @@ completed locally; G1.5d now owns coordinated production verification.
   roster, matching loaded group or active Firebase source, uses it for all four
   organizer invitation paths and shows explicit in-modal success/failure state;
   a genuinely missing workspace identity now fails visibly instead of silently;
-- G1.5d remains in progress pending deployment of this fix and completion of the
-  real-account invitation, verification, reset, acceptance and navigation test
-  matrix.
+  this first invitation hotfix is deployed;
+- continued production testing exposed a second sender-verification issue: an
+  organizer successfully verified, initially became recognized as verified,
+  but a later invitation action was rejected as verification-required;
+- the confirmed cause was two unsynchronized Firebase Auth representations:
+  each mounted shared-roster card kept its own `SharedRosterUser` snapshot from
+  `onAuthStateChanged`, which does not emit same-UID reload/token changes, while
+  invitation actions trusted that React snapshot without reconciling the ID
+  token claim used by the authoritative backend;
+- the narrow local fix listens to Firebase ID-token changes centrally, verifies
+  refreshed identity state against the forced token's `email_verified` claim
+  and refreshes that identity once immediately before Invite, legacy Send
+  email, Resend or Cancel; the backend verified-sender rule is unchanged;
+- G1.5d remains in progress pending deployment and re-test of this second fix
+  plus completion of the real-account invitation, verification, reset,
+  acceptance and navigation test matrix.
 
 ### Security & Privacy Launch Gate
 

@@ -6,7 +6,7 @@
   },
   "main": "index.js",
   "scripts": {
-    "test": "node --test organizerRemoval.test.js workspaceInvitation.test.js"
+    "test": "node --test organizerRemoval.test.js workspaceInvitation.test.js workspaceInvitationRules.test.js"
   },
   "dependencies": {
     "firebase-admin": "^14.2.0",

@@ -537,6 +537,7 @@ function App() {
   const hasPrivateBackupRosters = privateBackupRosters.some((roster) => roster.players.length > 0 || roster.name !== EMPTY_ROSTER_NAME);
   const privateBackupSummary = hasPrivateBackupRosters ? countBackupRosters(privateBackupRosters) : { rosterCount: 0, playerCount: 0 };
   const deviceBackupSummary = privateBackupSummary;
+  const [firebaseNotificationMemberEmailsByRosterId, setFirebaseNotificationMemberEmailsByRosterId] = useState<Record<string, string[]>>({});
   const googleDriveConfig = getGoogleDriveConfig();
   const [googleDriveAccessToken, setGoogleDriveAccessToken] = useState("");
   const [googleDriveConnecting, setGoogleDriveConnecting] = useState(false);
@@ -604,7 +605,7 @@ function App() {
   const sharedRosterPickerChoices = rosters.filter(isRosterCloudShared);
   const firebaseAccessLabelsFromSummary = (summary: FirebaseSharedRosterSummary) =>
     Object.fromEntries(
-      [...(summary.memberEmails || []), ...(summary.pendingInviteEmails || [])]
+      (summary.memberEmails || [])
         .map((email) => email.trim().toLowerCase())
         .filter((email) => email.includes("@"))
         .map((email) => [email, "editor"]),
@@ -636,6 +637,9 @@ function App() {
         .filter((email) => email.includes("@"))))
     : [];
   const activeFirebaseEquipmentHolderNamesByEmail = activeFirebaseSource?.firebaseMemberNamesByEmail || {};
+  const activeFirebaseNotificationMemberEmails = activeFirebaseSource?.firebaseRosterId
+    ? firebaseNotificationMemberEmailsByRosterId[activeFirebaseSource.firebaseRosterId] || []
+    : [];
   const cleanFirebasePersonLabel = (email: string) => {
     const normalized = email.trim().toLowerCase();
     const savedName = activeFirebaseEquipmentHolderNamesByEmail[normalized] || activeFirebaseEquipmentHolderNamesByEmail[email];
@@ -651,6 +655,14 @@ function App() {
     .filter((label, index, all) => Boolean(label) && all.indexOf(label) === index);
 
   const syncFirebaseRosterBadgesFromSummaries = (summaries: FirebaseSharedRosterSummary[]) => {
+    setFirebaseNotificationMemberEmailsByRosterId(Object.fromEntries(
+      summaries.map((summary) => [
+        summary.id,
+        Array.from(new Set((summary.memberEmails || [])
+          .map((email) => email.trim().toLowerCase())
+          .filter((email) => email.includes("@")))),
+      ]),
+    ));
     if (!summaries.length) return;
     const summaryById = new Map(summaries.map((summary) => [summary.id, summary]));
     setRosterState((current) => {
@@ -4002,6 +4014,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 equipmentGroupId={activeFirebaseSource?.firebaseRosterId ? `roster:${activeFirebaseSource.firebaseRosterId}` : undefined}
                 equipmentHolderLabels={activeFirebaseEquipmentHolderLabels}
                 equipmentHolderNamesByEmail={activeFirebaseEquipmentHolderNamesByEmail}
+                notificationRecipientEmails={activeFirebaseNotificationMemberEmails}
               />
             </TabsContent>
           </div>

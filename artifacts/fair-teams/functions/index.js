@@ -5,6 +5,7 @@ const { initializeApp } = require("firebase-admin/app");
 const { getFirestore, FieldValue, Timestamp } = require("firebase-admin/firestore");
 const { getMessaging } = require("firebase-admin/messaging");
 const {
+  activeWorkspaceNotificationRecipients,
   buildOrganizerRemovalElectorate,
   evaluateOrganizerRemovalVote,
   memberDisplayName,
@@ -15,18 +16,24 @@ const {
   resolveMemberUidByEmail,
 } = require("./organizerRemoval");
 const {
+  activeMemberIncludes,
   WorkspaceInvitationError,
   invitationEmail,
   invitationExpiryMillis,
   invitationLockId,
   invitationState,
+  legacyInvitationRecord,
   normalizeInvitationEmail,
+  pendingInvitationIncludes,
+  planInvitationAcceptance,
   resendAvailability,
   sanitizedInvitationContext,
-  shouldReusePendingInvitation,
+  shouldReuseWorkspaceInvitation,
+  supersededInvitationStatus,
   timestampMillis,
   validateInvitationActor,
   validateInvitationRequest,
+  verifiedInvitationIdentity,
 } = require("./workspaceInvitation");
 
 initializeApp();
@@ -356,6 +363,80 @@ function organizerInvitationSummary(invitationId, invitation, nowMillis = Date.n
   };
 }
 
+function recipientInvitationSummary(invitationId, invitation, nowMillis = Date.now()) {
+  return {
+    invitationId,
+    ...sanitizedInvitationContext(invitation, nowMillis),
+  };
+}
+
+async function ensureRecipientInvitationForGroup(db, groupId, recipient, nowMillis) {
+  const groupRef = db.collection("sharedGroups").doc(groupId);
+  const lockRef = db.collection(WORKSPACE_INVITATION_LOCK_COLLECTION)
+    .doc(invitationLockId(groupId, recipient.email));
+  const adoptedInvitationRef = db.collection(WORKSPACE_INVITATION_COLLECTION).doc();
+  const nowIso = new Date(nowMillis).toISOString();
+
+  return db.runTransaction(async (tx) => {
+    const [groupSnap, lockSnap] = await tx.getAll(groupRef, lockRef);
+    if (!groupSnap.exists) return null;
+    const groupData = groupSnap.data() || {};
+    if (!pendingInvitationIncludes(groupData, recipient.email)
+      || activeMemberIncludes(groupData, recipient.uid, recipient.email)) {
+      return null;
+    }
+
+    const activeInvitationId = lockSnap.exists
+      ? String(lockSnap.data()?.activeInvitationId || "")
+      : "";
+    if (activeInvitationId) {
+      const activeInvitationRef = db.collection(WORKSPACE_INVITATION_COLLECTION)
+        .doc(safeInvitationId(activeInvitationId));
+      const activeInvitationSnap = await tx.get(activeInvitationRef);
+      if (!activeInvitationSnap.exists) {
+        throw new HttpsError("failed-precondition", "This invitation has invalid server state.");
+      }
+      const activeInvitation = activeInvitationSnap.data() || {};
+      if (activeInvitation.groupId !== groupId
+        || normalizeInvitationEmail(activeInvitation.normalizedEmail) !== recipient.email) {
+        throw new HttpsError("failed-precondition", "This invitation has invalid server state.");
+      }
+      return {
+        invitationId: activeInvitationRef.id,
+        invitation: activeInvitation,
+      };
+    }
+
+    const adopted = legacyInvitationRecord({
+      groupId,
+      normalizedEmail: recipient.email,
+      workspaceName: groupData.name,
+      nowMillis,
+    });
+    const expiresAtMillis = Date.parse(adopted.expiresAtIso);
+    const invitation = {
+      ...adopted,
+      createdAt: Timestamp.fromMillis(nowMillis),
+      updatedAt: FieldValue.serverTimestamp(),
+      expiresAt: Timestamp.fromMillis(expiresAtMillis),
+      lastSendAttemptAt: null,
+      lastSentAt: null,
+    };
+    tx.create(adoptedInvitationRef, invitation);
+    tx.set(lockRef, {
+      schemaVersion: 1,
+      groupId,
+      activeInvitationId: adoptedInvitationRef.id,
+      updatedAt: FieldValue.serverTimestamp(),
+      updatedAtIso: nowIso,
+    });
+    return {
+      invitationId: adoptedInvitationRef.id,
+      invitation,
+    };
+  });
+}
+
 async function deliverWorkspaceInvitation(db, invitationRef, invitation, sendAttemptId) {
   let emailSent = false;
   let deliveryStatus = "failed";
@@ -462,8 +543,12 @@ exports.createWorkspaceOrganizerInvitation = onCall({
       if (activeInvitationSnap?.exists) {
         const activeInvitation = activeInvitationSnap.data() || {};
         if (activeInvitation.groupId === groupId
-          && normalizeInvitationEmail(activeInvitation.normalizedEmail) === normalizedEmail
-          && shouldReusePendingInvitation(activeInvitation, now)) {
+          && shouldReuseWorkspaceInvitation({
+            invitation: activeInvitation,
+            workspace: groupData,
+            email: normalizedEmail,
+            nowMillis: now,
+          })) {
           return {
             reused: true,
             invitationId: activeInvitationRef.id,
@@ -502,8 +587,14 @@ exports.createWorkspaceOrganizerInvitation = onCall({
       };
 
       if (activeInvitationSnap?.exists && activeInvitationSnap.data()?.status === "pending") {
+        const replacementStatus = supersededInvitationStatus(groupData, normalizedEmail);
         tx.update(activeInvitationRef, {
-          status: "expired",
+          status: replacementStatus,
+          ...(replacementStatus === "cancelled" ? {
+            cancelledAt: FieldValue.serverTimestamp(),
+            cancelledAtIso: nowIso,
+            cancellationReason: "workspace-no-longer-pending",
+          } : {}),
           updatedAt: FieldValue.serverTimestamp(),
           updatedAtIso: nowIso,
         });
@@ -601,11 +692,18 @@ exports.resendWorkspaceOrganizerInvitation = onCall({
         throw new HttpsError("not-found", "This shared workspace no longer exists.");
       }
 
-      validateInvitationRequest({
+      const groupData = groupSnap.data() || {};
+      const validated = validateInvitationRequest({
         actor: invitationActor(request),
-        workspace: groupSnap.data() || {},
+        workspace: groupData,
         targetEmail: invitationData.normalizedEmail,
       });
+      if (!pendingInvitationIncludes(groupData, validated.normalizedTargetEmail)) {
+        throw new HttpsError(
+          "failed-precondition",
+          "This invitation is no longer active. Send a new invitation instead.",
+        );
+      }
       const availability = resendAvailability(invitationData, now);
       if (availability.state === "expired") {
         throw new HttpsError("failed-precondition", "This invitation has expired. Send a new invitation instead.");
@@ -816,6 +914,130 @@ exports.listWorkspaceOrganizerInvitations = onCall({ region: REGION }, async (re
     return { invitations };
   } catch (error) {
     throw invitationHttpsError(error, "Could not load workspace invitations.");
+  }
+});
+
+exports.listWorkspaceRecipientInvitations = onCall({ region: REGION }, async (request) => {
+  let recipient;
+  try {
+    recipient = verifiedInvitationIdentity(invitationActor(request));
+  } catch (error) {
+    throw invitationHttpsError(error, "Could not load your invitations.");
+  }
+
+  const db = getFirestore();
+  const now = Date.now();
+  try {
+    const groupSnapshot = await db.collection("sharedGroups")
+      .where("pendingInviteEmails", "array-contains", recipient.email)
+      .limit(50)
+      .get();
+    const records = await Promise.all(groupSnapshot.docs.map((groupDoc) => (
+      ensureRecipientInvitationForGroup(db, groupDoc.id, recipient, now)
+    )));
+    const invitations = records
+      .filter(Boolean)
+      .map((record) => recipientInvitationSummary(
+        record.invitationId,
+        record.invitation,
+        now,
+      ))
+      .sort((a, b) => a.workspaceName.localeCompare(b.workspaceName));
+    return { invitations };
+  } catch (error) {
+    throw invitationHttpsError(error, "Could not load your invitations.");
+  }
+});
+
+exports.acceptWorkspaceOrganizerInvitation = onCall({ region: REGION }, async (request) => {
+  let recipient;
+  try {
+    recipient = verifiedInvitationIdentity(invitationActor(request));
+  } catch (error) {
+    throw invitationHttpsError(error, "Could not accept this invitation.");
+  }
+
+  const invitationId = safeInvitationId(request.data?.invitationId);
+  const db = getFirestore();
+  const invitationRef = db.collection(WORKSPACE_INVITATION_COLLECTION).doc(invitationId);
+  const now = Date.now();
+  const nowIso = new Date(now).toISOString();
+
+  try {
+    return await db.runTransaction(async (tx) => {
+      const invitationSnap = await tx.get(invitationRef);
+      if (!invitationSnap.exists) {
+        throw new HttpsError("not-found", "This invitation no longer exists.");
+      }
+      const invitationData = invitationSnap.data() || {};
+      const groupId = safeWorkspaceId(invitationData.groupId);
+      const invitedEmail = normalizeInvitationEmail(invitationData.normalizedEmail);
+      const groupRef = db.collection("sharedGroups").doc(groupId);
+      const lockRef = db.collection(WORKSPACE_INVITATION_LOCK_COLLECTION)
+        .doc(invitationLockId(groupId, invitedEmail));
+      const [groupSnap, lockSnap] = await tx.getAll(groupRef, lockRef);
+      if (!groupSnap.exists) {
+        throw new HttpsError("not-found", "This shared workspace no longer exists.");
+      }
+
+      const groupData = groupSnap.data() || {};
+      const rosterIds = workspaceRosterIds(groupData);
+      const rosterRefs = rosterIds.map((rosterId) => db.collection("sharedRosters").doc(rosterId));
+      const rosterSnaps = rosterRefs.length ? await tx.getAll(...rosterRefs) : [];
+      const linkedRosters = rosterSnaps.map((rosterSnap) => (
+        rosterSnap.exists ? rosterSnap.data() || {} : {}
+      ));
+      const plan = planInvitationAcceptance({
+        actor: invitationActor(request),
+        invitation: invitationData,
+        workspace: groupData,
+        linkedRosters,
+        displayName: actorName(request.auth),
+        nowMillis: now,
+      });
+
+      if (!lockSnap.exists || lockSnap.data()?.activeInvitationId !== invitationId) {
+        throw new HttpsError("failed-precondition", "This invitation is no longer active.");
+      }
+      if (plan.identity.uid !== recipient.uid || plan.identity.email !== recipient.email) {
+        throw new HttpsError("permission-denied", "This invitation does not match the signed-in account.");
+      }
+
+      tx.update(groupRef, {
+        ...plan.workspaceUpdates,
+        updatedAt: FieldValue.serverTimestamp(),
+        updatedAtIso: nowIso,
+      });
+      rosterSnaps.forEach((rosterSnap, index) => {
+        if (!rosterSnap.exists) return;
+        tx.update(rosterRefs[index], {
+          ...plan.rosterUpdates[index],
+          updatedAt: FieldValue.serverTimestamp(),
+          updatedAtIso: nowIso,
+        });
+      });
+      tx.update(invitationRef, {
+        status: "accepted",
+        acceptedByUid: recipient.uid,
+        acceptedAt: FieldValue.serverTimestamp(),
+        acceptedAtIso: nowIso,
+        updatedAt: FieldValue.serverTimestamp(),
+        updatedAtIso: nowIso,
+      });
+      tx.delete(lockRef);
+
+      return {
+        ok: true,
+        invitationId,
+        groupId,
+        workspaceName: cleanText(groupData.name || invitationData.workspaceNameSnapshot, 120)
+          || "Stripes workspace",
+        rosterIds,
+        acceptedAt: nowIso,
+      };
+    });
+  } catch (error) {
+    throw invitationHttpsError(error, "Could not accept this invitation.");
   }
 });
 
@@ -1292,24 +1514,21 @@ exports.notifyActionBoardStep = onCall({ region: REGION, timeoutSeconds: 60, sec
   const parentSnap = await parent.get();
   if (!parentSnap.exists) throw new HttpsError("not-found", "This shared club no longer exists.");
   const parentData = parentSnap.data() || {};
-  const memberUids = Array.isArray(parentData.memberUids) ? parentData.memberUids.map(String) : [];
-  if (!memberUids.includes(request.auth.uid)) throw new HttpsError("permission-denied", "Only club organizers can notify this board.");
+  if (!organizerUidsFromWorkspace(parentData).includes(request.auth.uid)) {
+    throw new HttpsError("permission-denied", "Only club organizers can notify this board.");
+  }
 
-  const allowedEmails = uniqueEmails(parentData.memberEmails || []);
+  const activeRecipients = activeWorkspaceNotificationRecipients(parentData);
+  const activeRecipientUidByEmail = new Map(activeRecipients.map((recipient) => [recipient.email, recipient.uid]));
   const requestedEmails = uniqueEmails(request.data?.recipientEmails || []).filter((value) => value !== cleanEmail(request.auth.token.email));
   if (!requestedEmails.length) throw new HttpsError("invalid-argument", "Choose at least one other organizer.");
   if (requestedEmails.length > 30) throw new HttpsError("invalid-argument", "Choose fewer organizers.");
-  const invalid = requestedEmails.filter((recipient) => !allowedEmails.includes(recipient));
+  const invalid = requestedEmails.filter((recipient) => !activeRecipientUidByEmail.has(recipient));
   if (invalid.length) throw new HttpsError("permission-denied", "A selected recipient is not an organizer in this club.");
 
-  const memberUidByEmail = parentData.memberUidByEmail && typeof parentData.memberUidByEmail === "object" ? parentData.memberUidByEmail : {};
-  const fallbackEmails = uniqueEmails(parentData.memberEmails || []);
-  const recipientUids = requestedEmails.map((recipient) => {
-    const explicit = String(memberUidByEmail[recipient] || "");
-    if (explicit) return explicit;
-    const index = fallbackEmails.indexOf(recipient);
-    return index >= 0 ? String(memberUids[index] || "") : "";
-  }).filter(Boolean);
+  const recipientUids = requestedEmails
+    .map((recipient) => activeRecipientUidByEmail.get(recipient) || "")
+    .filter(Boolean);
 
   const cardRef = cardBase.doc(String(cardId));
   const requestId = crypto.randomUUID();

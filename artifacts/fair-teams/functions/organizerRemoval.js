@@ -77,6 +77,23 @@ function resolveMemberEmailByUid(data, uid) {
   return "";
 }
 
+function activeWorkspaceNotificationRecipients(data) {
+  const workspace = data && typeof data === "object" ? data : {};
+  const organizerUids = new Set(organizerUidsFromWorkspace(workspace));
+  const memberEmails = Array.isArray(workspace.memberEmails) ? workspace.memberEmails : [];
+  const recipients = new Map();
+
+  memberEmails.forEach((candidateEmail) => {
+    const email = cleanEmail(candidateEmail);
+    if (!email.includes("@") || recipients.has(email)) return;
+    const uid = resolveMemberUidByEmail(workspace, email);
+    if (!uid || !organizerUids.has(uid)) return;
+    recipients.set(email, { email, uid });
+  });
+
+  return Array.from(recipients.values());
+}
+
 function removeRecordKey(value, key) {
   const record = value && typeof value === "object" ? value : {};
   return Object.fromEntries(Object.entries(record).filter(([candidateKey]) => candidateKey !== key));
@@ -203,6 +220,7 @@ function evaluateOrganizerRemovalVote({ totalOrganizerCount, yesCount, noCount }
 }
 
 module.exports = {
+  activeWorkspaceNotificationRecipients,
   buildOrganizerRemovalElectorate,
   evaluateOrganizerRemovalVote,
   memberDisplayName,

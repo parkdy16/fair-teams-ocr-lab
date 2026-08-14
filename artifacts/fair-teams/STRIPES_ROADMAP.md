@@ -1900,6 +1900,36 @@ Security / privacy requirements:
   successful authentication and verification;
 - G1.5 must be reviewed against the Security & Privacy Launch Gate.
 
+### Pending invitation membership boundary
+
+A pending organizer invitation is onboarding state only. It is **not workspace
+membership**.
+
+Until the recipient successfully verifies the invited identity and explicitly
+accepts the invitation:
+
+- the recipient is not an organizer/member;
+- the pending email must not appear in normal **Send notification** recipient
+  lists;
+- the recipient must not receive Action Board, voting, Equipment, club or
+  other ordinary workspace notifications;
+- the recipient must not be counted for organizer collaboration or governance
+  behavior;
+- the recipient may receive only invitation/onboarding-related email;
+- sanitized invitation context is the only workspace information available
+  before acceptance.
+
+After successful acceptance, the new organizer becomes eligible for normal
+organizer notifications and collaboration behavior through active workspace
+membership.
+
+Cancelled, expired, stale, legacy or otherwise unaccepted invitations must
+never create ordinary notification recipients.
+
+Core invariant:
+
+**Pending invitation != workspace membership.**
+
 G1.5 should remain independent from G2/G3 Google integration work.
 
 #### G1.5a implementation checkpoint — 2026-08-14
@@ -1943,12 +1973,60 @@ Verification:
 - the repository's documented TypeScript baseline errors remain, with no
   errors reported in the G1.5a files.
 
+#### G1.5b implementation checkpoint — 2026-08-14
+
+Implemented and verified locally; intentionally not pushed or deployed:
+
+- incoming organizer invitations are now listed through a trusted callable
+  that derives the recipient identity only from an authenticated, verified
+  Firebase token and returns sanitized invitation summaries;
+- organizer invitation acceptance now runs in an Admin SDK Firestore
+  transaction and requires an authenticated, verified token email that exactly
+  matches the normalized pending invitation recipient;
+- acceptance atomically re-reads the invitation, deduplication lock, workspace
+  and all currently linked rosters before adding the recipient as an equal
+  organizer, updating identity/name mappings and removing the pending email;
+- accepted invitations retain minimal server-only outcome metadata and their
+  active deduplication lock is removed;
+- cancelled, expired, consumed, wrong-account, unverified, already-member and
+  invalid-lock acceptance attempts fail without granting membership;
+- legacy `pendingInviteEmails` entries are adopted into opaque server-only
+  invitation records for verified matching recipients without restoring direct
+  Firestore read or acceptance authority;
+- pending recipients can no longer read full shared workspace or roster
+  documents before joining;
+- normal organizer writes can no longer change `pendingInviteEmails`, and the
+  former direct client invitation query, mutation and acceptance APIs are
+  retained only as fail-closed compatibility guards for the tracked stale
+  source tree;
+- self-leave and protected organizer removal clear the departing organizer's
+  matching pending invitation identity while preserving unrelated invitations;
+- a server invitation is reusable only while the authoritative workspace still
+  considers its recipient pending; a later deliberate reinvite cancels stale
+  server state and creates a fresh opaque invitation;
+- invitation links remain contextual identifiers and never grant membership
+  by themselves;
+- ordinary workspace notification eligibility follows active membership rather
+  than pending invitation state: pending invitees must not appear in normal
+  Send notification recipient lists or receive ordinary workspace
+  notifications before acceptance.
+
+Verification:
+
+- all 53 focused organizer-removal, invitation, acceptance,
+  notification-recipient and Firestore-rule contract tests pass;
+- production Vite build passes;
+- Firestore rules dry-run compilation passes;
+- dry-run validation passes for all seven G1.5 invitation callable Functions;
+- the documented TypeScript baseline errors remain, with no errors reported in
+  the G1.5b frontend files.
+
 Next atomic task:
 
-**G1.5b — verified identity enforcement and trusted invitation acceptance.**
+**G1.5c — invitation onboarding, verification and continuation UX.**
 
-G1.5a must ship together with the required G1.5b identity/acceptance hardening
-rather than being deployed independently.
+G1.5a–G1.5c must ship together after recipient verification/onboarding is
+complete and verified rather than being deployed independently.
 
 ### Security & Privacy Launch Gate
 

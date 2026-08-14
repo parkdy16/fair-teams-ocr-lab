@@ -25,6 +25,10 @@ export type WorkspaceInvitationContext = {
   maskedInvitedEmail: string;
 };
 
+export type WorkspaceRecipientInvitation = WorkspaceInvitationContext & {
+  invitationId: string;
+};
+
 export type CreateWorkspaceOrganizerInvitationResult = {
   ok: true;
   reused: boolean;
@@ -36,6 +40,15 @@ export type ResendWorkspaceOrganizerInvitationResult = {
   ok: true;
   emailSent: boolean;
   invitation: WorkspaceOrganizerInvitation;
+};
+
+export type AcceptWorkspaceOrganizerInvitationResult = {
+  ok: true;
+  invitationId: string;
+  groupId: string;
+  workspaceName: string;
+  rosterIds: string[];
+  acceptedAt: string;
 };
 
 const INVITATION_STATES = new Set<WorkspaceInvitationState>([
@@ -115,6 +128,21 @@ function parseOrganizerInvitation(value: unknown): WorkspaceOrganizerInvitation 
   };
 }
 
+function parseRecipientInvitation(value: unknown): WorkspaceRecipientInvitation {
+  const data = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  const invitationId = typeof data.invitationId === "string" ? data.invitationId.trim() : "";
+  const expiresAt = optionalIso(data.expiresAt);
+  if (!invitationId || !expiresAt) throw new Error("Stripes returned invalid invitation data.");
+  return {
+    invitationId,
+    workspaceName: String(data.workspaceName || "Stripes workspace").trim(),
+    inviterDisplayName: String(data.inviterDisplayName || "An organizer").trim(),
+    state: invitationState(data.state),
+    expiresAt,
+    maskedInvitedEmail: String(data.maskedInvitedEmail || "***").trim(),
+  };
+}
+
 export async function createWorkspaceOrganizerInvitation(
   groupId: string,
   invitedEmail: string,
@@ -173,6 +201,30 @@ export async function listWorkspaceOrganizerInvitations(
   return Array.isArray(result.data.invitations)
     ? result.data.invitations.map(parseOrganizerInvitation)
     : [];
+}
+
+export async function listWorkspaceRecipientInvitations(): Promise<WorkspaceRecipientInvitation[]> {
+  requireSignedInUser();
+  const callable = httpsCallable<Record<string, never>, { invitations: unknown[] }>(
+    functionsClient(),
+    "listWorkspaceRecipientInvitations",
+  );
+  const result = await callable({});
+  return Array.isArray(result.data.invitations)
+    ? result.data.invitations.map(parseRecipientInvitation)
+    : [];
+}
+
+export async function acceptWorkspaceOrganizerInvitation(
+  invitationId: string,
+): Promise<AcceptWorkspaceOrganizerInvitationResult> {
+  requireSignedInUser();
+  const callable = httpsCallable<
+    { invitationId: string },
+    AcceptWorkspaceOrganizerInvitationResult
+  >(functionsClient(), "acceptWorkspaceOrganizerInvitation");
+  const result = await callable({ invitationId: cleanDocumentId(invitationId, "invitation") });
+  return result.data;
 }
 
 export async function getWorkspaceOrganizerInvitationContext(

@@ -3,6 +3,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
+  activeWorkspaceNotificationRecipients,
   buildOrganizerRemovalElectorate,
   evaluateOrganizerRemovalVote,
   memberDisplayName,
@@ -13,6 +14,116 @@ const {
   resolveMemberEmailByUid,
   resolveMemberUidByEmail,
 } = require("./organizerRemoval");
+
+function notificationWorkspace(overrides = {}) {
+  return {
+    memberUids: ["organizer-a", "organizer-b"],
+    memberEmails: ["organizer-a@example.com", "organizer-b@example.com"],
+    memberUidByEmail: {
+      "organizer-a@example.com": "organizer-a",
+      "organizer-b@example.com": "organizer-b",
+    },
+    roleByUid: {
+      "organizer-a": "organizer",
+      "organizer-b": "editor",
+    },
+    ...overrides,
+  };
+}
+
+test("notification sender authorization allows an active organizer", () => {
+  assert.equal(organizerUidsFromWorkspace(notificationWorkspace()).includes("organizer-a"), true);
+});
+
+test("notification sender authorization preserves a legacy active editor", () => {
+  assert.equal(organizerUidsFromWorkspace(notificationWorkspace()).includes("organizer-b"), true);
+});
+
+test("notification sender authorization rejects an explicit viewer member", () => {
+  const workspace = notificationWorkspace({
+    roleByUid: {
+      "organizer-a": "organizer",
+      "organizer-b": "viewer",
+    },
+  });
+  assert.equal(organizerUidsFromWorkspace(workspace).includes("organizer-b"), false);
+});
+
+test("notification sender authorization rejects a UID absent from membership", () => {
+  assert.equal(organizerUidsFromWorkspace(notificationWorkspace()).includes("not-a-member"), false);
+});
+
+test("notification recipients include an active organizer", () => {
+  assert.deepEqual(activeWorkspaceNotificationRecipients(notificationWorkspace()), [
+    { email: "organizer-a@example.com", uid: "organizer-a" },
+    { email: "organizer-b@example.com", uid: "organizer-b" },
+  ]);
+});
+
+test("notification recipients exclude a pending-only invitee", () => {
+  const workspace = notificationWorkspace({
+    pendingInviteEmails: ["pending@example.com"],
+  });
+  assert.equal(activeWorkspaceNotificationRecipients(workspace).some((item) => item.email === "pending@example.com"), false);
+});
+
+test("notification recipients include an active organizer with stale pending state only once", () => {
+  const workspace = notificationWorkspace({
+    memberEmails: ["ORGANIZER-A@example.com", "organizer-a@example.com", "organizer-b@example.com"],
+    pendingInviteEmails: ["organizer-a@example.com"],
+  });
+  assert.deepEqual(activeWorkspaceNotificationRecipients(workspace), [
+    { email: "organizer-a@example.com", uid: "organizer-a" },
+    { email: "organizer-b@example.com", uid: "organizer-b" },
+  ]);
+});
+
+test("notification recipients ignore cancelled expired stale and legacy invitation state", () => {
+  ["cancelled", "expired", "stale", "legacy"].forEach((state) => {
+    const pendingEmail = `${state}@example.com`;
+    const workspace = notificationWorkspace({ pendingInviteEmails: [pendingEmail] });
+    assert.equal(activeWorkspaceNotificationRecipients(workspace).some((item) => item.email === pendingEmail), false);
+  });
+});
+
+test("notification recipients include a newly accepted organizer through active membership", () => {
+  const workspace = notificationWorkspace({
+    memberUids: ["organizer-a", "organizer-b", "accepted"],
+    memberEmails: ["organizer-a@example.com", "organizer-b@example.com", "accepted@example.com"],
+    pendingInviteEmails: [],
+    memberUidByEmail: {
+      "organizer-a@example.com": "organizer-a",
+      "organizer-b@example.com": "organizer-b",
+      "accepted@example.com": "accepted",
+    },
+    roleByUid: {
+      "organizer-a": "organizer",
+      "organizer-b": "editor",
+      accepted: "organizer",
+    },
+  });
+  assert.equal(activeWorkspaceNotificationRecipients(workspace).some((item) => item.email === "accepted@example.com"), true);
+});
+
+test("notification recipient filtering preserves unrelated active organizers", () => {
+  const workspace = notificationWorkspace({
+    memberUids: ["organizer-a", "organizer-b", "stale-member"],
+    memberEmails: ["organizer-a@example.com", "organizer-b@example.com", "stale-member@example.com"],
+    memberUidByEmail: {
+      "organizer-a@example.com": "organizer-a",
+      "organizer-b@example.com": "organizer-b",
+      "stale-member@example.com": "stale-member",
+    },
+    roleByUid: {
+      "organizer-a": "organizer",
+      "organizer-b": "editor",
+    },
+  });
+  assert.deepEqual(activeWorkspaceNotificationRecipients(workspace), [
+    { email: "organizer-a@example.com", uid: "organizer-a" },
+    { email: "organizer-b@example.com", uid: "organizer-b" },
+  ]);
+});
 
 test("required Yes votes use the total organizer count, including the target", () => {
   assert.equal(requiredYesVotes(2), 2);
@@ -107,6 +218,7 @@ test("linked-roster cleanup can resolve and remove a roster-specific target emai
   const roster = {
     memberUids: ["remaining", "target"],
     memberEmails: ["remaining@example.com", "target+legacy@example.com"],
+    pendingInviteEmails: ["TARGET+legacy@example.com", "pending@example.com"],
     roleByUid: { remaining: "organizer", target: "organizer" },
     memberNamesByEmail: {
       "remaining@example.com": "Remaining",
@@ -122,7 +234,7 @@ test("linked-roster cleanup can resolve and remove a roster-specific target emai
   assert.deepEqual(removeOrganizerMembership(roster, "target", rosterTargetEmail), {
     memberUids: ["remaining"],
     memberEmails: ["remaining@example.com"],
-    pendingInviteEmails: [],
+    pendingInviteEmails: ["pending@example.com"],
     roleByUid: { remaining: "organizer" },
     memberNamesByUid: {},
     memberNamesByEmail: { "remaining@example.com": "Remaining" },

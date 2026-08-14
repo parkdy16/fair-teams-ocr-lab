@@ -72,18 +72,7 @@ function existingOrganizerEmails(workspace) {
 }
 
 function validateInvitationActor({ actor, workspace }) {
-  const uid = typeof actor?.uid === "string" ? actor.uid.trim() : "";
-  if (!uid) {
-    throw new WorkspaceInvitationError("unauthenticated", "Sign in first.");
-  }
-
-  const actorEmail = normalizeInvitationEmail(actor?.email);
-  if (!actor?.emailVerified || !validInvitationEmail(actorEmail)) {
-    throw new WorkspaceInvitationError(
-      "failed-precondition",
-      "Verify your organizer email before managing invitations.",
-    );
-  }
+  const { uid, email: actorEmail } = verifiedInvitationIdentity(actor);
 
   const organizerUids = organizerUidsFromWorkspace(workspace);
   if (!organizerUids.includes(uid)) {
@@ -94,6 +83,22 @@ function validateInvitationActor({ actor, workspace }) {
   }
 
   return { actorEmail, organizerUids };
+}
+
+function verifiedInvitationIdentity(actor) {
+  const uid = typeof actor?.uid === "string" ? actor.uid.trim() : "";
+  if (!uid) {
+    throw new WorkspaceInvitationError("unauthenticated", "Sign in first.");
+  }
+
+  const actorEmail = normalizeInvitationEmail(actor?.email);
+  if (!actor?.emailVerified || !validInvitationEmail(actorEmail)) {
+    throw new WorkspaceInvitationError(
+      "failed-precondition",
+      "Verify your Stripes account email before continuing.",
+    );
+  }
+  return { uid, email: actorEmail };
 }
 
 function validateInvitationRequest({ actor, workspace, targetEmail }) {
@@ -125,6 +130,152 @@ function invitationExpiryMillis(createdAtMillis) {
   return createdAt + INVITATION_TTL_MS;
 }
 
+function pendingInvitationIncludes(workspace, email) {
+  const normalizedEmail = normalizeInvitationEmail(email);
+  return (Array.isArray(workspace?.pendingInviteEmails) ? workspace.pendingInviteEmails : [])
+    .some((candidate) => normalizeInvitationEmail(candidate) === normalizedEmail);
+}
+
+function activeMemberIncludes(workspace, uid, email) {
+  const normalizedEmail = normalizeInvitationEmail(email);
+  if ((Array.isArray(workspace?.memberUids) ? workspace.memberUids : []).includes(uid)) return true;
+  if ((Array.isArray(workspace?.memberEmails) ? workspace.memberEmails : [])
+    .some((candidate) => normalizeInvitationEmail(candidate) === normalizedEmail)) return true;
+  const uidByEmail = workspace?.memberUidByEmail && typeof workspace.memberUidByEmail === "object"
+    ? workspace.memberUidByEmail
+    : {};
+  return Object.entries(uidByEmail).some(([candidateEmail, candidateUid]) => (
+    normalizeInvitationEmail(candidateEmail) === normalizedEmail || candidateUid === uid
+  ));
+}
+
+function validateInvitationAcceptance({ actor, invitation, workspace, nowMillis = Date.now() }) {
+  const identity = verifiedInvitationIdentity(actor);
+  const invitedEmail = normalizeInvitationEmail(invitation?.normalizedEmail);
+  if (!validInvitationEmail(invitedEmail) || identity.email !== invitedEmail) {
+    throw new WorkspaceInvitationError(
+      "permission-denied",
+      "Sign in with the verified email address that received this invitation.",
+    );
+  }
+
+  const state = invitationState(invitation, nowMillis);
+  if (state === "expired") {
+    throw new WorkspaceInvitationError("failed-precondition", "This invitation has expired.");
+  }
+  if (state === "cancelled") {
+    throw new WorkspaceInvitationError("failed-precondition", "This invitation was cancelled.");
+  }
+  if (state === "accepted") {
+    throw new WorkspaceInvitationError("already-exists", "This invitation has already been accepted.");
+  }
+  if (state !== "pending") {
+    throw new WorkspaceInvitationError("failed-precondition", "This invitation is no longer pending.");
+  }
+  if (!pendingInvitationIncludes(workspace, invitedEmail)) {
+    throw new WorkspaceInvitationError("failed-precondition", "This invitation is no longer active.");
+  }
+  if (activeMemberIncludes(workspace, identity.uid, invitedEmail)) {
+    throw new WorkspaceInvitationError("already-exists", "This account is already a workspace member.");
+  }
+  return identity;
+}
+
+function invitationMembershipUpdates(workspace, { uid, email, displayName }) {
+  const normalizedEmail = normalizeInvitationEmail(email);
+  if (!uid || !validInvitationEmail(normalizedEmail)) {
+    throw new TypeError("A valid invitation recipient is required.");
+  }
+  const safeName = cleanInvitationText(
+    displayName,
+    normalizedEmail.split("@")[0] || "Organizer",
+    80,
+  );
+  const existingMemberUids = Array.isArray(workspace?.memberUids)
+    ? [...workspace.memberUids]
+    : [];
+  const memberUids = existingMemberUids.includes(uid)
+    ? existingMemberUids
+    : [...existingMemberUids, uid];
+  const existingMemberEmails = Array.isArray(workspace?.memberEmails)
+    ? [...workspace.memberEmails]
+    : [];
+  const memberEmails = existingMemberEmails.some(
+    (candidate) => normalizeInvitationEmail(candidate) === normalizedEmail,
+  )
+    ? existingMemberEmails
+    : [...existingMemberEmails, normalizedEmail];
+  const pendingInviteEmails = (Array.isArray(workspace?.pendingInviteEmails)
+    ? workspace.pendingInviteEmails
+    : [])
+    .filter((candidate) => normalizeInvitationEmail(candidate) !== normalizedEmail);
+
+  return {
+    memberUids,
+    memberEmails,
+    pendingInviteEmails,
+    roleByUid: {
+      ...(workspace?.roleByUid && typeof workspace.roleByUid === "object" ? workspace.roleByUid : {}),
+      [uid]: "organizer",
+    },
+    memberNamesByUid: {
+      ...(workspace?.memberNamesByUid && typeof workspace.memberNamesByUid === "object"
+        ? workspace.memberNamesByUid
+        : {}),
+      [uid]: safeName,
+    },
+    memberNamesByEmail: {
+      ...(workspace?.memberNamesByEmail && typeof workspace.memberNamesByEmail === "object"
+        ? workspace.memberNamesByEmail
+        : {}),
+      [normalizedEmail]: safeName,
+    },
+    memberUidByEmail: {
+      ...(workspace?.memberUidByEmail && typeof workspace.memberUidByEmail === "object"
+        ? workspace.memberUidByEmail
+        : {}),
+      [normalizedEmail]: uid,
+    },
+  };
+}
+
+function planInvitationAcceptance({ actor, invitation, workspace, linkedRosters, displayName, nowMillis }) {
+  const identity = validateInvitationAcceptance({ actor, invitation, workspace, nowMillis });
+  const recipient = { ...identity, displayName };
+  return {
+    identity,
+    workspaceUpdates: invitationMembershipUpdates(workspace, recipient),
+    rosterUpdates: (Array.isArray(linkedRosters) ? linkedRosters : [])
+      .map((roster) => invitationMembershipUpdates(roster, recipient)),
+  };
+}
+
+function legacyInvitationRecord({ groupId, normalizedEmail, workspaceName, nowMillis = Date.now() }) {
+  const email = normalizeInvitationEmail(normalizedEmail);
+  if (!groupId || !validInvitationEmail(email)) {
+    throw new TypeError("A valid legacy workspace invitation is required.");
+  }
+  const expiresAtMillis = invitationExpiryMillis(nowMillis);
+  return {
+    schemaVersion: 1,
+    groupId,
+    normalizedEmail: email,
+    status: "pending",
+    workspaceNameSnapshot: cleanInvitationText(workspaceName, "Stripes workspace", 120),
+    invitedByUid: null,
+    inviterDisplayNameSnapshot: "A workspace organizer",
+    legacyAdopted: true,
+    createdAtIso: new Date(nowMillis).toISOString(),
+    updatedAtIso: new Date(nowMillis).toISOString(),
+    expiresAtIso: new Date(expiresAtMillis).toISOString(),
+    lastSendAttemptAtIso: null,
+    lastSentAtIso: null,
+    deliveryStatus: "not_sent",
+    deliveryError: null,
+    sendAttemptId: null,
+  };
+}
+
 function invitationState(invitation, nowMillis = Date.now()) {
   const rawStatus = typeof invitation?.status === "string" ? invitation.status : "pending";
   if (rawStatus !== "pending") return rawStatus;
@@ -135,6 +286,18 @@ function invitationState(invitation, nowMillis = Date.now()) {
 
 function shouldReusePendingInvitation(invitation, nowMillis = Date.now()) {
   return Boolean(invitation) && invitationState(invitation, nowMillis) === "pending";
+}
+
+function shouldReuseWorkspaceInvitation({ invitation, workspace, email, nowMillis = Date.now() }) {
+  const normalizedEmail = normalizeInvitationEmail(email);
+  return validInvitationEmail(normalizedEmail)
+    && normalizeInvitationEmail(invitation?.normalizedEmail) === normalizedEmail
+    && pendingInvitationIncludes(workspace, normalizedEmail)
+    && shouldReusePendingInvitation(invitation, nowMillis);
+}
+
+function supersededInvitationStatus(workspace, email) {
+  return pendingInvitationIncludes(workspace, email) ? "expired" : "cancelled";
 }
 
 function resendAvailability(invitation, nowMillis = Date.now()) {
@@ -225,6 +388,7 @@ function invitationEmail({ invitationId, workspaceName, inviterDisplayName, expi
 }
 
 module.exports = {
+  activeMemberIncludes,
   INVITATION_TTL_MS,
   OFFICIAL_APP_URL,
   RESEND_COOLDOWN_MS,
@@ -232,14 +396,22 @@ module.exports = {
   invitationEmail,
   invitationExpiryMillis,
   invitationLockId,
+  invitationMembershipUpdates,
   invitationState,
+  legacyInvitationRecord,
   maskInvitationEmail,
   normalizeInvitationEmail,
   officialInvitationUrl,
+  pendingInvitationIncludes,
+  planInvitationAcceptance,
   resendAvailability,
   sanitizedInvitationContext,
   shouldReusePendingInvitation,
+  shouldReuseWorkspaceInvitation,
+  supersededInvitationStatus,
   timestampMillis,
   validateInvitationActor,
+  validateInvitationAcceptance,
   validateInvitationRequest,
+  verifiedInvitationIdentity,
 };

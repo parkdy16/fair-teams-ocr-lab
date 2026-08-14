@@ -14,28 +14,28 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { StripesConfirmContent } from "@/components/ui/stripes-modal";
 import type { RoomRoster } from "@/lib/localRoster";
 import {
-  acceptFirebaseGroupInvite,
   createFirebaseSharedRoster,
   listenToFirebaseSharedRoster,
   listenToSharedRosterUser,
-  listFirebaseGroupInvites,
   listFirebaseSharedGroups,
   listFirebaseSharedRosters,
   listFirebaseSharedRosterBackups,
   readFirebaseSharedRoster,
   restoreFirebaseSharedRosterBackup,
   saveFirebaseSharedRoster,
-  type FirebaseGroupInvite,
   type FirebaseSharedRosterBackup,
   type FirebaseSharedGroupSummary,
   type FirebaseSharedRosterSummary,
   type SharedRosterUser,
 } from "@/lib/sharedRosterService";
 import {
+  acceptWorkspaceOrganizerInvitation,
   cancelWorkspaceOrganizerInvitation,
   createWorkspaceOrganizerInvitation,
+  listWorkspaceRecipientInvitations,
   listWorkspaceOrganizerInvitations,
   resendWorkspaceOrganizerInvitation,
+  type WorkspaceRecipientInvitation,
   type WorkspaceOrganizerInvitation,
 } from "@/lib/sharedWorkspaceInvitationService";
 import {
@@ -127,7 +127,7 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
   const [busy, setBusy] = useState<string>("");
   const [sharedGroups, setSharedGroups] = useState<FirebaseSharedGroupSummary[]>([]);
   const [sharedRosters, setSharedRosters] = useState<FirebaseSharedRosterSummary[]>([]);
-  const [incomingInvites, setIncomingInvites] = useState<FirebaseGroupInvite[]>([]);
+  const [incomingInvites, setIncomingInvites] = useState<WorkspaceRecipientInvitation[]>([]);
   const [inviteEmail, setInviteEmail] = useState("");
   const [workspaceInvitations, setWorkspaceInvitations] = useState<WorkspaceOrganizerInvitation[]>([]);
   const [invitationListGroupId, setInvitationListGroupId] = useState("");
@@ -218,7 +218,11 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
     if (!user) return;
     setBusy((current) => current || "refresh");
     try {
-      const [groups, rosters, invites] = await Promise.all([listFirebaseSharedGroups(), listFirebaseSharedRosters(), listFirebaseGroupInvites()]);
+      const [groups, rosters, invites] = await Promise.all([
+        listFirebaseSharedGroups(),
+        listFirebaseSharedRosters(),
+        listWorkspaceRecipientInvitations().catch(() => []),
+      ]);
       setSharedGroups(groups);
       setSharedRosters(rosters);
       setIncomingInvites(invites);
@@ -576,20 +580,20 @@ Your local roster will stay local. Stripes will copy shared identity fields only
     void handleCastOrganizerRemovalBallot(pending.proposalId, pending.choice);
   };
 
-  const handleAcceptInvite = async (groupId: string) => {
+  const handleAcceptInvite = async (invitationId: string) => {
     if (!user || busy) return;
-    setBusy(`accept:${groupId}`);
+    setBusy(`accept:${invitationId}`);
     setNotice(null);
     try {
-      const acceptedGroup = await acceptFirebaseGroupInvite(groupId);
-      const groupRosters = await listFirebaseSharedRosters(groupId);
+      const acceptedInvitation = await acceptWorkspaceOrganizerInvitation(invitationId);
+      const groupRosters = await listFirebaseSharedRosters(acceptedInvitation.groupId);
       const rosterToOpen = groupRosters[0];
 
       if (rosterToOpen) {
         const snapshot = await readFirebaseSharedRoster(rosterToOpen.id);
         onOpenRoster?.(snapshot.roster, snapshot.name, snapshot);
         onSharedInviteOpened?.(snapshot.roster);
-        setNotice({ tone: "success", text: `${snapshot.name || acceptedGroup.name || "Shared roster"} opened.` });
+        setNotice({ tone: "success", text: `${snapshot.name || acceptedInvitation.workspaceName || "Shared roster"} opened.` });
       } else {
         await refreshSharedData();
         setNotice({ tone: "success", text: "Shared roster added." });
@@ -1047,10 +1051,10 @@ No shared roster is open on this device. Choose one below to open it on this dev
         {incomingInvites.length > 0 && (
           <div className="grid gap-1.5">
             {incomingInvites.slice(0, 2).map((invite) => (
-              <div key={invite.id} className="flex items-center justify-between gap-2 rounded-2xl border border-violet-100 bg-violet-50/80 px-3 py-2">
-                <div className="min-w-0 truncate text-xs font-black text-[#102A43]">Invite: {invite.name}</div>
-                <Button type="button" variant="outline" className="h-8 rounded-xl border-violet-100 bg-white px-2 text-[10px] font-black text-violet-700" onClick={() => handleAcceptInvite(invite.id)} disabled={Boolean(busy)}>
-                  {busy === `accept:${invite.id}` ? "…" : "Accept"}
+              <div key={invite.invitationId} className="flex items-center justify-between gap-2 rounded-2xl border border-violet-100 bg-violet-50/80 px-3 py-2">
+                <div className="min-w-0 truncate text-xs font-black text-[#102A43]">Invite: {invite.workspaceName}</div>
+                <Button type="button" variant="outline" className="h-8 rounded-xl border-violet-100 bg-white px-2 text-[10px] font-black text-violet-700" onClick={() => handleAcceptInvite(invite.invitationId)} disabled={Boolean(busy) || invite.state !== "pending"}>
+                  {busy === `accept:${invite.invitationId}` ? "…" : invite.state === "expired" ? "Expired" : "Accept"}
                 </Button>
               </div>
             ))}
@@ -1103,10 +1107,10 @@ No shared roster is open on this device. Choose one below to open it on this dev
       {incomingInvites.length > 0 && (
         <div className="grid gap-1.5 rounded-2xl border border-violet-100 bg-violet-50/70 p-2">
           {incomingInvites.slice(0, 3).map((invite) => (
-            <div key={invite.id} className="flex items-center justify-between gap-2 rounded-xl bg-white px-2 py-2">
-              <div className="min-w-0 truncate text-xs font-black text-[#102A43]">{invite.name}</div>
-              <Button type="button" variant="outline" className="h-8 rounded-xl border-violet-100 px-2 text-[10px] font-black text-violet-700" onClick={() => handleAcceptInvite(invite.id)} disabled={Boolean(busy)}>
-                {busy === `accept:${invite.id}` ? "Accepting…" : "Accept"}
+            <div key={invite.invitationId} className="flex items-center justify-between gap-2 rounded-xl bg-white px-2 py-2">
+              <div className="min-w-0 truncate text-xs font-black text-[#102A43]">{invite.workspaceName}</div>
+              <Button type="button" variant="outline" className="h-8 rounded-xl border-violet-100 px-2 text-[10px] font-black text-violet-700" onClick={() => handleAcceptInvite(invite.invitationId)} disabled={Boolean(busy) || invite.state !== "pending"}>
+                {busy === `accept:${invite.invitationId}` ? "Accepting…" : invite.state === "expired" ? "Expired" : "Accept"}
               </Button>
             </div>
           ))}

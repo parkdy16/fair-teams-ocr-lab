@@ -89,6 +89,10 @@ export type FirebaseSharedRosterSummary = {
   lastSavedByEmail?: string;
 };
 
+/**
+ * @deprecated Incoming organizer invitations are sanitized and loaded through
+ * sharedWorkspaceInvitationService. Kept only for stale-tree type compatibility.
+ */
 export type FirebaseGroupInvite = FirebaseSharedGroupSummary & {
   inviteeEmail: string;
 };
@@ -723,32 +727,12 @@ export async function deleteFirebaseSharedGroup(groupId: string): Promise<void> 
   await batch.commit();
 }
 
-export async function cancelFirebaseGroupInvite(groupId: string, inviteeEmail: string): Promise<void> {
-  const user = getCurrentSharedRosterUser();
-  const email = normalizeEmail(inviteeEmail);
-  const groupRef = doc(getFairTeamsFirestore(), "sharedGroups", groupId);
-  const groupSnap = await getDoc(groupRef);
-  if (!groupSnap.exists()) throw new Error("Shared group was not found.");
-  const groupData = groupSnap.data();
-  const role = currentUserRoleFromData(groupData);
-  if (role !== "owner" && role !== "editor" && role !== "organizer") throw new Error("Only organizers can cancel invites.");
-  const rosterIds = Array.isArray(groupData.rosterIds) ? groupData.rosterIds.filter((id): id is string => typeof id === "string") : [];
-  const batch = writeBatch(getFairTeamsFirestore());
-  batch.update(groupRef, {
-    pendingInviteEmails: arrayRemove(email),
-    updatedAt: serverTimestamp(),
-    updatedAtIso: new Date().toISOString(),
-  });
-  rosterIds.forEach((rosterId) => {
-    batch.update(doc(getFairTeamsFirestore(), "sharedRosters", rosterId), {
-      pendingInviteEmails: arrayRemove(email),
-      updatedAt: serverTimestamp(),
-      updatedAtIso: new Date().toISOString(),
-    });
-  });
-  await batch.commit();
+/**
+ * @deprecated Invitation state is server-controlled by callable Functions.
+ */
+export async function cancelFirebaseGroupInvite(_groupId: string, _inviteeEmail: string): Promise<void> {
+  throw new Error("Organizer invitations must be cancelled through the trusted invitation service.");
 }
-
 
 export async function leaveFirebaseSharedRosterAccess(rosterId: string): Promise<{ rosterIds: string[]; groupId?: string; groupName?: string }> {
   const user = getCurrentSharedRosterUser();
@@ -867,127 +851,27 @@ export async function listFirebaseSharedRosters(groupId?: string): Promise<Fireb
     .sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime());
 }
 
-export async function inviteEmailToFirebaseSharedGroup(groupId: string, inviteeEmail: string): Promise<void> {
-  const user = getCurrentSharedRosterUser();
-  const email = normalizeEmail(inviteeEmail);
-  if (!email || !email.includes("@")) throw new Error("Enter a valid email address to invite.");
-  if (email === normalizeEmail(user.email)) throw new Error("You are already signed in with that email.");
-
-  const groupRef = doc(getFairTeamsFirestore(), "sharedGroups", groupId);
-  const groupSnap = await getDoc(groupRef);
-  if (!groupSnap.exists()) throw new Error("Shared group was not found.");
-  const groupData = groupSnap.data();
-  const role = currentUserRoleFromData(groupData);
-  if (role !== "owner" && role !== "editor" && role !== "organizer") throw new Error("Only organizers can invite members to this group.");
-
-  const rosterIds = Array.isArray(groupData.rosterIds) ? groupData.rosterIds.filter((id): id is string => typeof id === "string") : [];
-  const now = new Date().toISOString();
-  const batch = writeBatch(getFairTeamsFirestore());
-  batch.update(groupRef, {
-    pendingInviteEmails: arrayUnion(email),
-    updatedAt: serverTimestamp(),
-    updatedAtIso: now,
-  });
-  rosterIds.forEach((rosterId) => {
-    batch.update(doc(getFairTeamsFirestore(), "sharedRosters", rosterId), {
-      pendingInviteEmails: arrayUnion(email),
-      updatedAt: serverTimestamp(),
-      updatedAtIso: now,
-    });
-  });
-  await batch.commit();
-}
-
+/**
+ * @deprecated Recipient invitations are server-filtered and sanitized by a
+ * callable Function. This legacy Firestore query is intentionally disabled.
+ */
 export async function listFirebaseGroupInvites(): Promise<FirebaseGroupInvite[]> {
-  const user = getCurrentSharedRosterUser();
-  const email = normalizeEmail(user.email);
-  const inviteQuery = query(
-    collection(getFairTeamsFirestore(), "sharedGroups"),
-    where("pendingInviteEmails", "array-contains", email),
-  );
-  const snapshot = await getDocs(inviteQuery);
-  return snapshot.docs
-    .map((docSnap) => ({ ...toGroupSummary(docSnap.id, docSnap.data()), inviteeEmail: email }))
-    .sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime());
+  throw new Error("Incoming invitations must be loaded through the trusted invitation service.");
 }
 
-export async function acceptFirebaseGroupInvite(groupId: string): Promise<FirebaseSharedGroupSummary> {
-  const user = getCurrentSharedRosterUser();
-  const email = normalizeEmail(user.email);
-  const groupRef = doc(getFairTeamsFirestore(), "sharedGroups", groupId);
-  const groupSnap = await getDoc(groupRef);
-  if (!groupSnap.exists()) throw new Error("Shared group invite was not found.");
-  const groupData = groupSnap.data();
-  const pendingEmails = Array.isArray(groupData.pendingInviteEmails) ? groupData.pendingInviteEmails : [];
-  if (!pendingEmails.includes(email)) throw new Error("This invite is not for the signed-in email address.");
+/**
+ * @deprecated Organizer membership can only be granted by the trusted
+ * invitation-acceptance callable.
+ */
+export async function acceptFirebaseGroupInvite(_groupId: string): Promise<FirebaseSharedGroupSummary> {
+  throw new Error("Organizer invitations must be accepted through the trusted invitation service.");
+}
 
-  const rosterIds = Array.isArray(groupData.rosterIds) ? groupData.rosterIds.filter((id): id is string => typeof id === "string") : [];
-  const now = new Date().toISOString();
-  const nextRoleByUid = {
-    ...(groupData.roleByUid && typeof groupData.roleByUid === "object" ? groupData.roleByUid as Record<string, unknown> : {}),
-    [user.uid]: "organizer",
-  };
-  const organizerName = nameFromUser(user);
-  const nextMemberNamesByUid = { ...cleanNameMap(groupData.memberNamesByUid), [user.uid]: organizerName };
-  const nextMemberNamesByEmail = { ...cleanNameMap(groupData.memberNamesByEmail), [email]: organizerName };
-  const nextMemberUidByEmail = { ...cleanStringMap(groupData.memberUidByEmail), [email]: user.uid };
-
-  const batch = writeBatch(getFairTeamsFirestore());
-  batch.update(groupRef, {
-    memberUids: arrayUnion(user.uid),
-    memberEmails: arrayUnion(email),
-    pendingInviteEmails: arrayRemove(email),
-    memberNamesByUid: nextMemberNamesByUid,
-    memberNamesByEmail: nextMemberNamesByEmail,
-    memberUidByEmail: nextMemberUidByEmail,
-    roleByUid: nextRoleByUid,
-    updatedAt: serverTimestamp(),
-    updatedAtIso: now,
-  });
-  for (const rosterId of rosterIds) {
-    const rosterRef = doc(getFairTeamsFirestore(), "sharedRosters", rosterId);
-    const rosterSnap = await getDoc(rosterRef);
-    if (!rosterSnap.exists()) continue;
-
-    const rosterData = rosterSnap.data();
-    const rosterRoleByUid = {
-      ...(rosterData.roleByUid && typeof rosterData.roleByUid === "object"
-        ? rosterData.roleByUid as Record<string, unknown>
-        : {}),
-      [user.uid]: "organizer",
-    };
-    const rosterMemberNamesByUid = {
-      ...cleanNameMap(rosterData.memberNamesByUid),
-      [user.uid]: organizerName,
-    };
-    const rosterMemberNamesByEmail = {
-      ...cleanNameMap(rosterData.memberNamesByEmail),
-      [email]: organizerName,
-    };
-    const rosterMemberUidByEmail = {
-      ...cleanStringMap(rosterData.memberUidByEmail),
-      [email]: user.uid,
-    };
-
-    batch.update(rosterRef, {
-      memberUids: arrayUnion(user.uid),
-      memberEmails: arrayUnion(email),
-      pendingInviteEmails: arrayRemove(email),
-      memberNamesByUid: rosterMemberNamesByUid,
-      memberNamesByEmail: rosterMemberNamesByEmail,
-      memberUidByEmail: rosterMemberUidByEmail,
-      roleByUid: rosterRoleByUid,
-      updatedAt: serverTimestamp(),
-      updatedAtIso: now,
-    });
-  }
-  await batch.commit();
-  return {
-    ...toGroupSummary(groupId, groupData),
-    currentUserRole: "organizer",
-    memberCount: (Array.isArray(groupData.memberUids) ? groupData.memberUids.length : 0) + 1,
-    updatedAt: now,
-  };
+/**
+ * @deprecated Invitation state is server-controlled by callable Functions.
+ */
+export async function inviteEmailToFirebaseSharedGroup(_groupId: string, _inviteeEmail: string): Promise<void> {
+  throw new Error("Organizer invitations must be created through the trusted invitation service.");
 }
 
 export async function readFirebaseSharedRoster(rosterId: string): Promise<FirebaseSharedRosterSnapshot> {

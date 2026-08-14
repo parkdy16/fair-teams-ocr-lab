@@ -98,6 +98,7 @@ type ClubTabProps = {
   equipmentGroupId?: string;
   equipmentHolderLabels?: string[];
   equipmentHolderNamesByEmail?: Record<string, string>;
+  notificationRecipientEmails?: string[];
   pairingRules?: PairingRule[];
   onOpenPairingRules?: () => void;
   onOpenSharedRosters?: () => void;
@@ -828,6 +829,7 @@ export function ClubTab({
   equipmentGroupId,
   equipmentHolderLabels = [],
   equipmentHolderNamesByEmail = {},
+  notificationRecipientEmails = [],
   pairingRules = [],
   onOpenPairingRules,
   onOpenSharedRosters,
@@ -1045,7 +1047,7 @@ export function ClubTab({
     () =>
       Array.from(
         new Set(
-          (equipmentHolderLabels || [])
+          notificationRecipientEmails
             .map((email) => email.trim().toLowerCase())
             .filter((email) => email.includes("@")),
         ),
@@ -1053,7 +1055,7 @@ export function ClubTab({
         email,
         name: cleanEquipmentHolderLabel(email, equipmentHolderNamesByEmail),
       })),
-    [equipmentHolderLabels, equipmentHolderNamesByEmail],
+    [equipmentHolderNamesByEmail, notificationRecipientEmails],
   );
   const actionBoardEquipmentItems = useMemo(
     () =>

@@ -2134,9 +2134,49 @@ Verification:
   the documented repository-wide TypeScript baseline errors remain separate;
 - Firestore rules were not changed by G1.5c-1.
 
+#### G1.5c-2 onboarding UI checkpoint — 2026-08-14
+
+Implemented and verified locally; intentionally not pushed or deployed:
+
+- a dedicated `WorkspaceInvitationOnboarding` component now models loading,
+  unavailable, expired, cancelled, already-used, signed-out, wrong-account,
+  matching-unverified and matching-verified invitation states;
+- signed-out recipients can switch between existing Firebase sign-in and
+  account creation while preserving the entered email, password-reset uses
+  the invitation-aware hosted Firebase action flow, and confirmation remains
+  generic so account existence is not disclosed;
+- new accounts request verification only after refreshed server invitation
+  context confirms `matching_unverified` rather than trusting a client-side
+  email comparison;
+- verification continuation reloads the Firebase user, forces an ID-token
+  refresh and re-fetches server context before exposing Join;
+- joining remains an explicit action available only for server-confirmed
+  `matching_verified` context and uses the trusted G1.5b acceptance callable;
+- duplicate Join submission is guarded, and the complete acceptance result is
+  retained and passed through the component callback so later App handoff can
+  recover without attempting acceptance again;
+- the existing organizer invitation surface now gives unverified organizers
+  compact Send verification email and I’ve verified — continue actions using
+  the normal `https://stripes.work/app` continuation rather than surfacing an
+  unexplained backend failure;
+- invitation management remains available normally for verified organizers;
+  no solo/local application capability is verification-gated;
+- `App.tsx`, invitation query parsing, browser history, guided-tour handling
+  and accepted-workspace opening remain unchanged for G1.5c-3.
+
+Verification:
+
+- all 7 focused onboarding-state and sender-readiness tests pass;
+- all 57 G1.5 governance/invitation tests continue to pass;
+- production Vite build passes;
+- focused TypeScript review reports no errors in the G1.5c-2 files; the
+  documented repository-wide TypeScript baseline errors remain separate;
+- no backend Function or Firestore rule changed in G1.5c-2.
+
 Next atomic task:
 
-**G1.5c-2 — invitation onboarding and explicit join UI.**
+**G1.5c-3 — App integration, invitation continuation, accepted-workspace
+opening, history and guided-tour handling.**
 
 G1.5a–G1.5c must ship together after recipient verification/onboarding is
 complete and verified rather than being deployed independently.

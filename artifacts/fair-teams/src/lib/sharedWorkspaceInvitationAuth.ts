@@ -10,14 +10,13 @@ import {
   toSharedRosterUser,
   type SharedRosterUser,
 } from "@/lib/sharedRosterService";
+export {
+  workspaceInvitationSenderStatus,
+  type WorkspaceInvitationSenderStatus,
+} from "@/lib/workspaceInvitationOnboardingState";
 
 const STRIPES_APP_URL = "https://stripes.work/app";
 const OPAQUE_INVITATION_ID = /^[A-Za-z0-9_-]{16,200}$/;
-
-export type WorkspaceInvitationSenderStatus =
-  | "signed_out"
-  | "verification_required"
-  | "ready";
 
 export function cleanWorkspaceInvitationId(value: string) {
   const invitationId = value.trim();
@@ -40,13 +39,6 @@ export function workspaceInvitationActionCodeSettings(
     url: workspaceInvitationContinuationUrl(invitationId),
     handleCodeInApp: false,
   };
-}
-
-export function workspaceInvitationSenderStatus(
-  user: SharedRosterUser | null,
-): WorkspaceInvitationSenderStatus {
-  if (!user) return "signed_out";
-  return user.emailVerified ? "ready" : "verification_required";
 }
 
 function requireCurrentUser() {

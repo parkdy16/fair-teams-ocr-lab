@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { CheckCircle2, FolderOpen, History, Loader2, RotateCcw, Share2, ShieldCheck, UserMinus, UserPlus, Users, X } from "lucide-react";
+import { CheckCircle2, FolderOpen, History, Loader2, Mail, RotateCcw, Share2, ShieldCheck, UserMinus, UserPlus, Users, X } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -39,6 +39,11 @@ import {
   type WorkspaceOrganizerInvitation,
 } from "@/lib/sharedWorkspaceInvitationService";
 import {
+  reloadAndRefreshStripesAuthIdentity,
+  sendStripesEmailVerification,
+  workspaceInvitationSenderStatus,
+} from "@/lib/sharedWorkspaceInvitationAuth";
+import {
   castOrganizerRemovalBallot,
   getOrganizerRemovalParticipation,
   listenToOrganizerRemovalProposal,
@@ -73,6 +78,14 @@ function friendlyFirestoreError(error: unknown) {
   if (/network/i.test(message)) return "Network error.";
   if (/saved by someone else|changed elsewhere|Remote version/i.test(message)) return "Online roster changed. Stripes will update and try again.";
   return message.replace(/^Firebase:\s*/i, "");
+}
+
+function friendlyInvitationVerificationError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error || "Something went wrong.");
+  if (/auth\/network-request-failed|network/i.test(message)) return "Network error. Check your connection and try again.";
+  if (/auth\/too-many-requests|resource-exhausted/i.test(message)) return "Too many attempts. Try again later.";
+  if (/auth\/invalid-user-token|auth\/user-token-expired/i.test(message)) return "Sign in again before verifying your email.";
+  return "Stripes could not complete email verification. Try again.";
 }
 
 function fallbackNameFromEmail(email?: string) {
@@ -139,6 +152,7 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
   const [removalProposals, setRemovalProposals] = useState<OrganizerRemovalProposal[]>([]);
   const [removalParticipation, setRemovalParticipation] = useState<OrganizerRemovalParticipation | null>(null);
   const [removalError, setRemovalError] = useState("");
+  const [senderVerificationNotice, setSenderVerificationNotice] = useState<{ tone: "success" | "error" | "info"; text: string } | null>(null);
   const [removalConfirm, setRemovalConfirm] = useState<
     | { kind: "propose"; targetEmail: string; targetName: string }
     | { kind: "ballot"; proposalId: string; targetName: string; choice: OrganizerRemovalBallotChoice }
@@ -147,6 +161,7 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
   const [notice, setNotice] = useState<{ tone: "success" | "error" | "info"; text: string } | null>(null);
   const [autoSyncStatus, setAutoSyncStatus] = useState<"idle" | "saving" | "saved" | "syncing" | "error">("idle");
   const lastLiveRosterVersionRef = useRef(0);
+  const senderInvitationStatus = workspaceInvitationSenderStatus(user);
 
   useEffect(() => listenToSharedRosterUser((nextUser) => {
     setUser(nextUser);
@@ -244,7 +259,7 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
   useEffect(() => {
     const groupId = collaboratorGroup?.id;
     const role = collaboratorGroup?.currentUserRole || collaboratorRoster?.currentUserRole;
-    if (!user || !groupId || !collaboratorRosterId || !canRoleSave(role)) {
+    if (!user || senderInvitationStatus !== "ready" || !groupId || !collaboratorRosterId || !canRoleSave(role)) {
       setWorkspaceInvitations([]);
       setInvitationListGroupId("");
       setInvitationLoadError("");
@@ -267,6 +282,7 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
     };
   }, [
     user,
+    senderInvitationStatus,
     collaboratorGroup?.id,
     collaboratorGroup?.currentUserRole,
     collaboratorRoster?.currentUserRole,
@@ -461,6 +477,10 @@ Your local roster will stay local. Stripes will copy shared identity fields only
   const handleInvite = async (emailOverride?: string) => {
     const emailToInvite = (emailOverride || inviteEmail).trim();
     if (!user || !collaboratorGroup || !emailToInvite || busy) return;
+    if (senderInvitationStatus !== "ready") {
+      setNotice({ tone: "info", text: "Verify your email before inviting another organizer." });
+      return;
+    }
     setBusy("invite");
     setNotice(null);
     try {
@@ -494,6 +514,37 @@ Your local roster will stay local. Stripes will copy shared identity fields only
       ]);
     } catch (error) {
       setNotice({ tone: "error", text: friendlyFirestoreError(error) });
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const handleSendOrganizerVerification = async () => {
+    if (!user || busy) return;
+    setBusy("organizer-verification-email");
+    setSenderVerificationNotice(null);
+    try {
+      await sendStripesEmailVerification();
+      setSenderVerificationNotice({ tone: "success", text: "Verification email sent. Check your inbox." });
+    } catch (error) {
+      setSenderVerificationNotice({ tone: "error", text: friendlyInvitationVerificationError(error) });
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const handleRefreshOrganizerVerification = async () => {
+    if (!user || busy) return;
+    setBusy("organizer-verification-refresh");
+    setSenderVerificationNotice(null);
+    try {
+      const refreshedUser = await reloadAndRefreshStripesAuthIdentity();
+      setUser(refreshedUser);
+      setSenderVerificationNotice(refreshedUser.emailVerified
+        ? { tone: "success", text: "Email verified. You can invite organizers now." }
+        : { tone: "info", text: "Verification is not confirmed yet. Open the email link, then try again." });
+    } catch (error) {
+      setSenderVerificationNotice({ tone: "error", text: friendlyInvitationVerificationError(error) });
     } finally {
       setBusy("");
     }
@@ -654,6 +705,7 @@ Your local roster will stay local. Stripes will copy shared identity fields only
     || collaboratorRoster?.currentUserRole === "organizer"
     || collaboratorRoster?.currentUserRole === "owner"
     || collaboratorRoster?.currentUserRole === "editor";
+  const canManageInvitations = canManageCollaborators && senderInvitationStatus === "ready";
 
   const recentRemovalResults = removalProposals
     .filter((proposal) => proposal.status !== "open")
@@ -812,7 +864,7 @@ Your local roster will stay local. Stripes will copy shared identity fields only
         Organizers can open this shared roster, submit their own Club ratings, and help keep shared player info up to date.
       </div>
 
-      {canManageCollaborators ? (
+      {canManageInvitations ? (
         <div className="grid grid-cols-[1fr_auto] gap-2">
           <input value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} type="email" className="h-10 rounded-2xl border border-violet-100 bg-white px-3 text-sm font-bold outline-none" placeholder="email@example.com" />
           <Button type="button" className="h-10 rounded-2xl bg-violet-600 px-3 text-xs font-black text-white hover:bg-violet-700" onClick={() => void handleInvite()} disabled={!inviteEmail.trim() || Boolean(busy)}>
@@ -820,9 +872,31 @@ Your local roster will stay local. Stripes will copy shared identity fields only
             Invite
           </Button>
         </div>
+      ) : canManageCollaborators && senderInvitationStatus === "verification_required" ? (
+        <div className="grid gap-2 rounded-2xl border border-amber-200 bg-amber-50 p-3">
+          <div className="text-xs font-black text-amber-900">Verify your email before inviting another organizer.</div>
+          <div className="text-[10px] font-semibold leading-snug text-amber-800">
+            Stripes will return you to the normal app after Firebase verifies your account.
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <Button type="button" variant="outline" className="min-h-9 whitespace-normal rounded-xl border-amber-200 bg-white px-2 text-[10px] font-black text-amber-900" onClick={() => void handleSendOrganizerVerification()} disabled={Boolean(busy)}>
+              <Mail className="h-3.5 w-3.5" />
+              {busy === "organizer-verification-email" ? "Sending…" : "Send verification email"}
+            </Button>
+            <Button type="button" className="min-h-9 whitespace-normal rounded-xl bg-violet-600 px-2 text-[10px] font-black text-white hover:bg-violet-700" onClick={() => void handleRefreshOrganizerVerification()} disabled={Boolean(busy)}>
+              {busy === "organizer-verification-refresh" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+              I’ve verified — continue
+            </Button>
+          </div>
+        </div>
       ) : (
         <div className="rounded-2xl bg-slate-50 px-3 py-2 text-[11px] font-bold leading-snug text-slate-500">
           You can view organizers here. To stop being part of this roster, use Leave shared roster from the Club page.
+        </div>
+      )}
+      {senderVerificationNotice && (
+        <div className={`rounded-2xl px-3 py-2 text-[10px] font-bold leading-snug ${senderVerificationNotice.tone === "error" ? "bg-rose-50 text-rose-800" : senderVerificationNotice.tone === "success" ? "bg-emerald-50 text-emerald-800" : "bg-sky-50 text-sky-800"}`} role="status">
+          {senderVerificationNotice.text}
         </div>
       )}
 
@@ -906,7 +980,7 @@ Your local roster will stay local. Stripes will copy shared identity fields only
                       <div className="truncate text-[10px] text-amber-700">Pending invite · {invitation.invitedEmail}</div>
                       <div className="text-[9px] font-black text-amber-600">{deliveryLabel}</div>
                     </div>
-                    {canManageCollaborators ? (
+                    {canManageInvitations ? (
                       <div className="flex shrink-0 items-center gap-1">
                         {invitation.state === "expired" || !invitation.invitationId ? (
                           <Button type="button" variant="outline" className="h-8 rounded-xl border-amber-200 bg-white px-2 text-[9px] font-black text-amber-800" onClick={() => void handleInvite(invitation.invitedEmail)} disabled={Boolean(busy)}>

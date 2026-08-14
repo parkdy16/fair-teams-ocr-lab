@@ -137,3 +137,17 @@ export function workspaceInvitationSenderStatus(
   if (!user) return "signed_out";
   return user.emailVerified ? "ready" : "verification_required";
 }
+
+export function resolveWorkspaceInvitationManagementGroupId({
+  loadedGroupId,
+  rosterGroupId,
+  sourceGroupId,
+}: {
+  loadedGroupId?: string | null;
+  rosterGroupId?: string | null;
+  sourceGroupId?: string | null;
+}) {
+  return [rosterGroupId, loadedGroupId, sourceGroupId]
+    .map((value) => value?.trim() || "")
+    .find(Boolean) || null;
+}

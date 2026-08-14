@@ -4,6 +4,7 @@ import {
   PASSWORD_RESET_CONFIRMATION,
   canSubmitWorkspaceInvitationJoin,
   openAcceptedWorkspaceInvitation,
+  resolveWorkspaceInvitationManagementGroupId,
   resolveWorkspaceInvitationOnboardingView,
   urlWithoutWorkspaceInvitation,
   workspaceInvitationQueryFromUrl,
@@ -81,6 +82,27 @@ test("sender readiness distinguishes signed-out, unverified, and verified organi
   assert.equal(workspaceInvitationSenderStatus(null), "signed_out");
   assert.equal(workspaceInvitationSenderStatus({ emailVerified: false }), "verification_required");
   assert.equal(workspaceInvitationSenderStatus({ emailVerified: true }), "ready");
+});
+
+test("invitation management resolves the loaded workspace or its carried roster/source identity", () => {
+  assert.equal(resolveWorkspaceInvitationManagementGroupId({
+    loadedGroupId: "loaded-group",
+  }), "loaded-group");
+  assert.equal(resolveWorkspaceInvitationManagementGroupId({
+    loadedGroupId: "loaded-group",
+    rosterGroupId: "roster-group",
+  }), "roster-group");
+  assert.equal(resolveWorkspaceInvitationManagementGroupId({
+    sourceGroupId: "source-group",
+  }), "source-group");
+});
+
+test("legacy pending invitation management can use the roster group ID and fails closed without one", () => {
+  assert.equal(resolveWorkspaceInvitationManagementGroupId({
+    loadedGroupId: null,
+    rosterGroupId: " legacy-roster-group ",
+  }), "legacy-roster-group");
+  assert.equal(resolveWorkspaceInvitationManagementGroupId({}), null);
 });
 
 test("invitation query accepts one valid opaque ID and rejects malformed or duplicate values", () => {

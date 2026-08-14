@@ -2221,8 +2221,36 @@ Next atomic task:
 **G1.5d — Firebase/Resend branding and action-link configuration,
 deliverability checks and live multi-account invitation verification.**
 
-G1.5a–G1.5c must ship together after recipient verification/onboarding is
-complete and verified rather than being deployed independently.
+G1.5a–G1.5c were released together after recipient verification/onboarding was
+completed locally; G1.5d now owns coordinated production verification.
+
+#### G1.5d live-test checkpoint — 2026-08-14
+
+**Status:** In progress.
+
+- coordinated G1.5 live testing has begun on `stripes.work` with the invitation
+  Functions and hardened Firestore rules deployed to `fair-teams-dev` in
+  `europe-west1`;
+- sender verification passed in production: an unverified organizer can request
+  Firebase verification, return to Stripes and unlock invitation management
+  after refreshing the verified identity;
+- the production Firebase verification email was delivered to Spam, so
+  verification-email branding and deliverability remain an explicit G1.5d
+  follow-up;
+- live testing found that a legacy `pendingInviteEmails` row could show an
+  enabled **Send email** action that appeared to do nothing;
+- the confirmed frontend root cause was a silent `handleInvite()` return when
+  the separately loaded group summary was unavailable even though the shared
+  roster/source already carried the canonical workspace group ID; invitation
+  listing refresh, Resend refresh and Cancel shared the same unnecessary group
+  object dependency;
+- the local fix resolves one canonical invitation-management group ID from the
+  roster, matching loaded group or active Firebase source, uses it for all four
+  organizer invitation paths and shows explicit in-modal success/failure state;
+  a genuinely missing workspace identity now fails visibly instead of silently;
+- G1.5d remains in progress pending deployment of this fix and completion of the
+  real-account invitation, verification, reset, acceptance and navigation test
+  matrix.
 
 ### Security & Privacy Launch Gate
 

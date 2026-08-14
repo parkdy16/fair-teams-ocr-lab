@@ -53,6 +53,7 @@ import {
   type OrganizerRemovalParticipation,
   type OrganizerRemovalProposal,
 } from "@/lib/sharedWorkspaceGovernanceService";
+import { resolveWorkspaceInvitationManagementGroupId } from "@/lib/workspaceInvitationOnboardingState";
 
 type Props = {
   variant?: "full" | "compact";
@@ -153,6 +154,7 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
   const [removalParticipation, setRemovalParticipation] = useState<OrganizerRemovalParticipation | null>(null);
   const [removalError, setRemovalError] = useState("");
   const [senderVerificationNotice, setSenderVerificationNotice] = useState<{ tone: "success" | "error" | "info"; text: string } | null>(null);
+  const [invitationNotice, setInvitationNotice] = useState<{ tone: "success" | "error" | "info"; text: string } | null>(null);
   const [removalConfirm, setRemovalConfirm] = useState<
     | { kind: "propose"; targetEmail: string; targetName: string }
     | { kind: "ballot"; proposalId: string; targetName: string; choice: OrganizerRemovalBallotChoice }
@@ -190,9 +192,17 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
     [sharedRosters, collaboratorRosterId, activeSharedRoster],
   );
   const collaboratorGroup = useMemo(
-    () => sharedGroups.find((group) => group.id === collaboratorRoster?.groupId) || activeGroup,
-    [sharedGroups, collaboratorRoster?.groupId, activeGroup],
+    () => sharedGroups.find((group) => group.id === collaboratorRoster?.groupId)
+      || (collaboratorRoster?.id === activeSharedRosterId ? activeGroup : null),
+    [sharedGroups, collaboratorRoster?.groupId, collaboratorRoster?.id, activeSharedRosterId, activeGroup],
   );
+  const collaboratorGroupId = resolveWorkspaceInvitationManagementGroupId({
+    loadedGroupId: collaboratorGroup?.id,
+    rosterGroupId: collaboratorRoster?.groupId,
+    sourceGroupId: collaboratorRoster?.id === activeSharedRosterId
+      ? activeFirebaseSource?.firebaseGroupId
+      : null,
+  });
   const activeRemovalProposal = useMemo(
     () => removalProposals.find((proposal) => proposal.status === "open") || null,
     [removalProposals],
@@ -257,7 +267,7 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
   };
 
   useEffect(() => {
-    const groupId = collaboratorGroup?.id;
+    const groupId = collaboratorGroupId;
     const role = collaboratorGroup?.currentUserRole || collaboratorRoster?.currentUserRole;
     if (!user || senderInvitationStatus !== "ready" || !groupId || !collaboratorRosterId || !canRoleSave(role)) {
       setWorkspaceInvitations([]);
@@ -283,7 +293,7 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
   }, [
     user,
     senderInvitationStatus,
-    collaboratorGroup?.id,
+    collaboratorGroupId,
     collaboratorGroup?.currentUserRole,
     collaboratorRoster?.currentUserRole,
     collaboratorRosterId,
@@ -476,44 +486,53 @@ Your local roster will stay local. Stripes will copy shared identity fields only
 
   const handleInvite = async (emailOverride?: string) => {
     const emailToInvite = (emailOverride || inviteEmail).trim();
-    if (!user || !collaboratorGroup || !emailToInvite || busy) return;
+    if (!user || !emailToInvite || busy) return;
     if (senderInvitationStatus !== "ready") {
-      setNotice({ tone: "info", text: "Verify your email before inviting another organizer." });
+      setInvitationNotice({ tone: "info", text: "Verify your email before inviting another organizer." });
+      return;
+    }
+    if (!collaboratorGroupId) {
+      setInvitationNotice({ tone: "error", text: "This shared roster is missing its workspace link. Refresh shared rosters and try again." });
       return;
     }
     setBusy("invite");
-    setNotice(null);
+    setInvitationNotice(null);
     try {
-      const result = await createWorkspaceOrganizerInvitation(collaboratorGroup.id, emailToInvite);
+      const result = await createWorkspaceOrganizerInvitation(collaboratorGroupId, emailToInvite);
       if (!emailOverride) setInviteEmail("");
       await Promise.all([
         refreshSharedData(),
-        refreshWorkspaceInvitations(collaboratorGroup.id),
+        refreshWorkspaceInvitations(collaboratorGroupId),
       ]);
-      setNotice(result.reused
+      setInvitationNotice(result.reused
         ? { tone: "info", text: "That invitation is already pending. Use Resend if another email is needed." }
         : result.emailSent
           ? { tone: "success", text: "Invitation email sent." }
           : { tone: "error", text: "The invitation is pending, but the email could not be sent. Try Resend." });
     } catch (error) {
-      setNotice({ tone: "error", text: friendlyFirestoreError(error) });
+      setInvitationNotice({ tone: "error", text: friendlyFirestoreError(error) });
     } finally {
       setBusy("");
     }
   };
 
   const handleCancelInvite = async (invitation: WorkspaceOrganizerInvitation) => {
-    if (!collaboratorGroup || busy) return;
+    if (busy) return;
+    if (!collaboratorGroupId) {
+      setInvitationNotice({ tone: "error", text: "This shared roster is missing its workspace link. Refresh shared rosters and try again." });
+      return;
+    }
     setBusy(`cancel:${invitation.invitedEmail}`);
-    setNotice(null);
+    setInvitationNotice(null);
     try {
-      await cancelWorkspaceOrganizerInvitation(collaboratorGroup.id, invitation);
+      await cancelWorkspaceOrganizerInvitation(collaboratorGroupId, invitation);
       await Promise.all([
         refreshSharedData(),
-        refreshWorkspaceInvitations(collaboratorGroup.id),
+        refreshWorkspaceInvitations(collaboratorGroupId),
       ]);
+      setInvitationNotice({ tone: "success", text: "Invitation cancelled." });
     } catch (error) {
-      setNotice({ tone: "error", text: friendlyFirestoreError(error) });
+      setInvitationNotice({ tone: "error", text: friendlyFirestoreError(error) });
     } finally {
       setBusy("");
     }
@@ -551,17 +570,21 @@ Your local roster will stay local. Stripes will copy shared identity fields only
   };
 
   const handleResendInvite = async (invitation: WorkspaceOrganizerInvitation) => {
-    if (!collaboratorGroup || !invitation.invitationId || busy) return;
+    if (!invitation.invitationId || busy) return;
+    if (!collaboratorGroupId) {
+      setInvitationNotice({ tone: "error", text: "This shared roster is missing its workspace link. Refresh shared rosters and try again." });
+      return;
+    }
     setBusy(`resend:${invitation.invitationId}`);
-    setNotice(null);
+    setInvitationNotice(null);
     try {
       const result = await resendWorkspaceOrganizerInvitation(invitation.invitationId);
-      await refreshWorkspaceInvitations(collaboratorGroup.id);
-      setNotice(result.emailSent
+      await refreshWorkspaceInvitations(collaboratorGroupId);
+      setInvitationNotice(result.emailSent
         ? { tone: "success", text: "Invitation email resent." }
         : { tone: "error", text: "The invitation remains pending, but the email could not be sent." });
     } catch (error) {
-      setNotice({ tone: "error", text: friendlyFirestoreError(error) });
+      setInvitationNotice({ tone: "error", text: friendlyFirestoreError(error) });
     } finally {
       setBusy("");
     }
@@ -696,6 +719,7 @@ Your local roster will stay local. Stripes will copy shared identity fields only
 
 
   const openCollaborators = (rosterId?: string) => {
+    setInvitationNotice(null);
     setCollaboratorRosterId(rosterId || activeSharedRosterId || "");
   };
 
@@ -899,6 +923,11 @@ Your local roster will stay local. Stripes will copy shared identity fields only
           {senderVerificationNotice.text}
         </div>
       )}
+      {invitationNotice && (
+        <div className={`rounded-2xl px-3 py-2 text-[10px] font-bold leading-snug ${invitationNotice.tone === "error" ? "bg-rose-50 text-rose-800" : invitationNotice.tone === "success" ? "bg-emerald-50 text-emerald-800" : "bg-sky-50 text-sky-800"}`} role="status">
+          {invitationNotice.text}
+        </div>
+      )}
 
       <div className="grid gap-1.5">
         {canManageCollaborators && (
@@ -916,7 +945,7 @@ Your local roster will stay local. Stripes will copy shared identity fields only
           const memberNamesByEmail = mergedMemberNames(collaboratorGroup, collaboratorRoster);
           const memberEmails = collaboratorGroup?.memberEmails || collaboratorRoster.memberEmails || [];
           const pendingEmails = collaboratorGroup?.pendingInviteEmails || collaboratorRoster.pendingInviteEmails || [];
-          const pendingInvitations = invitationListGroupId === collaboratorGroup?.id
+          const pendingInvitations = invitationListGroupId === collaboratorGroupId
             ? workspaceInvitations
             : pendingEmails.map((email): WorkspaceOrganizerInvitation => ({
                 invitationId: null,

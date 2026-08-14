@@ -10,21 +10,14 @@ import {
   toSharedRosterUser,
   type SharedRosterUser,
 } from "@/lib/sharedRosterService";
+import { cleanWorkspaceInvitationId } from "@/lib/workspaceInvitationOnboardingState";
 export {
+  cleanWorkspaceInvitationId,
   workspaceInvitationSenderStatus,
   type WorkspaceInvitationSenderStatus,
 } from "@/lib/workspaceInvitationOnboardingState";
 
 const STRIPES_APP_URL = "https://stripes.work/app";
-const OPAQUE_INVITATION_ID = /^[A-Za-z0-9_-]{16,200}$/;
-
-export function cleanWorkspaceInvitationId(value: string) {
-  const invitationId = value.trim();
-  if (!OPAQUE_INVITATION_ID.test(invitationId)) {
-    throw new Error("Choose a valid organizer invitation.");
-  }
-  return invitationId;
-}
 
 export function workspaceInvitationContinuationUrl(invitationId?: string) {
   if (!invitationId) return STRIPES_APP_URL;

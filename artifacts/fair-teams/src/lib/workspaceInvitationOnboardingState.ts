@@ -9,6 +9,84 @@ export type WorkspaceInvitationOnboardingView =
   | "verification_required"
   | "join_ready";
 
+const OPAQUE_INVITATION_ID = /^[A-Za-z0-9_-]{16,200}$/;
+
+export function cleanWorkspaceInvitationId(value: string) {
+  const invitationId = value.trim();
+  if (!OPAQUE_INVITATION_ID.test(invitationId)) {
+    throw new Error("Choose a valid organizer invitation.");
+  }
+  return invitationId;
+}
+
+export type WorkspaceInvitationQuery = {
+  invitationId: string | null;
+  invalidInvitation: boolean;
+};
+
+export function workspaceInvitationQueryFromUrl(value: string): WorkspaceInvitationQuery {
+  let url: URL;
+  try {
+    url = new URL(value, "https://stripes.work");
+  } catch {
+    return { invitationId: null, invalidInvitation: false };
+  }
+
+  const invitationValues = url.searchParams.getAll("invite");
+  if (invitationValues.length === 0) {
+    return { invitationId: null, invalidInvitation: false };
+  }
+  if (invitationValues.length !== 1) {
+    return { invitationId: null, invalidInvitation: true };
+  }
+
+  try {
+    return {
+      invitationId: cleanWorkspaceInvitationId(invitationValues[0]),
+      invalidInvitation: false,
+    };
+  } catch {
+    return { invitationId: null, invalidInvitation: true };
+  }
+}
+
+export function urlWithoutWorkspaceInvitation(value: string) {
+  const url = new URL(value, "https://stripes.work");
+  url.searchParams.delete("invite");
+  return `${url.pathname}${url.search}${url.hash}`;
+}
+
+export function workspaceInvitationSuppressesGuidedTour(invitationId: string | null) {
+  return Boolean(invitationId);
+}
+
+export async function openAcceptedWorkspaceInvitation({
+  rosterIds,
+  openRoster,
+  onOpened,
+}: {
+  rosterIds: string[];
+  openRoster: (rosterId: string) => void | Promise<void>;
+  onOpened: (rosterId: string) => void;
+}) {
+  const candidateIds = Array.from(new Set(rosterIds.map((id) => id.trim()).filter(Boolean)));
+  let lastError: unknown;
+
+  for (const rosterId of candidateIds) {
+    try {
+      await openRoster(rosterId);
+    } catch (error) {
+      lastError = error;
+      continue;
+    }
+    onOpened(rosterId);
+    return rosterId;
+  }
+
+  if (lastError instanceof Error) throw lastError;
+  throw new Error("The joined workspace does not have an available roster yet.");
+}
+
 export type WorkspaceInvitationOnboardingContextState = {
   state: "pending" | "expired" | "cancelled" | "accepted";
   viewerStatus:

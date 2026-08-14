@@ -2178,6 +2178,49 @@ Next atomic task:
 **G1.5c-3 — App integration, invitation continuation, accepted-workspace
 opening, history and guided-tour handling.**
 
+#### G1.5c-3 App integration checkpoint — 2026-08-14
+
+Implemented and verified locally; intentionally not pushed or deployed:
+
+- `/app?invite=<opaque-id>` now validates the invitation ID with the shared
+  opaque-ID rule and mounts the existing onboarding component in a dedicated
+  full-page Stripes flow without introducing a router or changing the current
+  application tab;
+- invalid invitation query values fail closed and are removed without changing
+  unrelated query parameters, the URL hash or `history.state`;
+- active invitation flows suppress the first-run guided tour without writing
+  onboarding completion state, while normal tour eligibility resumes after the
+  invitation flow ends;
+- terminal Continue actions remove only the invitation query value with
+  `history.replaceState`, so opening or leaving the flow does not add an
+  invitation-specific browser-history entry;
+- successful trusted acceptance tries the returned linked roster IDs in order,
+  reads the first available roster through the existing authenticated Firebase
+  path, opens/links it through the established App state behavior and removes
+  the invitation query only after that handoff succeeds;
+- a failed roster handoff leaves the invitation context mounted so Continue can
+  retry the retained acceptance result without invoking acceptance again;
+- already-used invitations remain a neutral terminal state and do not infer or
+  automatically open workspace access;
+- no backend Function, Firestore rule, persistence schema or normal solo/local
+  capability changed in G1.5c-3.
+
+Verification:
+
+- all 12 focused onboarding/App-flow tests pass, including the existing seven
+  G1.5c-2 state and sender-readiness tests;
+- all 57 G1.5 governance/invitation tests continue to pass;
+- production Vite build passes;
+- focused TypeScript review reports no new errors in the G1.5c-3 logic; the
+  documented repository-wide TypeScript baseline errors remain separate;
+- no Functions or Firestore rules changed, so no new backend/rules dry run was
+  required for this frontend-only checkpoint.
+
+Next atomic task:
+
+**G1.5d — Firebase/Resend branding and action-link configuration,
+deliverability checks and live multi-account invitation verification.**
+
 G1.5a–G1.5c must ship together after recipient verification/onboarding is
 complete and verified rather than being deployed independently.
 

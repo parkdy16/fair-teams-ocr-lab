@@ -29,6 +29,7 @@ import { PlayersTab } from "@/components/PlayersTab";
 import { TodayTab } from "@/components/TodayTab";
 import { TeamsTab } from "@/components/TeamsTab";
 import { ClubTab } from "@/components/ClubTab";
+import { WorkspaceInvitationOnboarding } from "@/components/WorkspaceInvitationOnboarding";
 import type { PairingRule } from "@/lib/types";
 import type { AiSmartCommandAction } from "@/lib/aiSmartCommandTypes";
 import { FirebaseSharedRosterAuthCard } from "@/components/FirebaseSharedRosterAuthCard";
@@ -83,6 +84,13 @@ import { pickGoogleSheetRosterFile, warmUpGoogleDrivePicker } from "@/lib/google
 import { leaveFirebaseSharedRosterAccess, listFirebaseSharedRosters, readFirebaseSharedRoster, type FirebaseSharedRosterSummary } from "@/lib/sharedRosterService";
 import { fetchClubRatingSummaries, type ClubRatingSummary } from "@/lib/clubCollaborationService";
 import { profileFromAveragedAttributes } from "@/lib/playerStyleProfile";
+import {
+  openAcceptedWorkspaceInvitation,
+  urlWithoutWorkspaceInvitation,
+  workspaceInvitationQueryFromUrl,
+  workspaceInvitationSuppressesGuidedTour,
+} from "@/lib/workspaceInvitationOnboardingState";
+import type { AcceptWorkspaceOrganizerInvitationResult } from "@/lib/sharedWorkspaceInvitationService";
 
 const GROUP_NAME_STORAGE_KEY = "fair-teams-group-name";
 const HEADER_COLOR_STORAGE_KEY = "fair-teams-header-color-v2";
@@ -390,6 +398,28 @@ function TeamStripesIcon({ className = "h-5 w-5" }: { className?: string }) {
 
 function App() {
   const [showSplash, setShowSplash] = useState(true);
+  const [workspaceInvitationQuery, setWorkspaceInvitationQuery] = useState(() =>
+    workspaceInvitationQueryFromUrl(window.location.href),
+  );
+  const workspaceInvitationId = workspaceInvitationQuery.invitationId;
+
+  useEffect(() => {
+    const syncInvitationQuery = () => {
+      setWorkspaceInvitationQuery(workspaceInvitationQueryFromUrl(window.location.href));
+    };
+    window.addEventListener("popstate", syncInvitationQuery);
+    return () => window.removeEventListener("popstate", syncInvitationQuery);
+  }, []);
+
+  useEffect(() => {
+    if (!workspaceInvitationQuery.invalidInvitation) return;
+    window.history.replaceState(
+      window.history.state,
+      "",
+      urlWithoutWorkspaceInvitation(window.location.href),
+    );
+    setWorkspaceInvitationQuery({ invitationId: null, invalidInvitation: false });
+  }, [workspaceInvitationQuery.invalidInvitation]);
 
   useEffect(() => {
     const finish = window.setTimeout(() => setShowSplash(false), 2250);
@@ -1600,6 +1630,29 @@ function App() {
       message: openedExisting
         ? `${firebaseSummary?.groupName ? `${firebaseSummary.groupName} · ` : ""}${sourceName || sharedRoster.name || "Shared roster"} is already open on this device.`
         : `${firebaseSummary?.groupName ? `${firebaseSummary.groupName} · ` : ""}${sourceName || sharedRoster.name || "Shared roster"} was opened on this device. It remains an online shared roster connected to your account.`,
+    });
+  };
+
+  const clearWorkspaceInvitationContext = () => {
+    window.history.replaceState(
+      window.history.state,
+      "",
+      urlWithoutWorkspaceInvitation(window.location.href),
+    );
+    setWorkspaceInvitationQuery({ invitationId: null, invalidInvitation: false });
+  };
+
+  const handleWorkspaceInvitationAccepted = async (
+    result: AcceptWorkspaceOrganizerInvitationResult,
+  ) => {
+    await openAcceptedWorkspaceInvitation({
+      rosterIds: result.rosterIds,
+      openRoster: async (rosterId) => {
+        const snapshot = await readFirebaseSharedRoster(rosterId);
+        openFirebaseSharedRosterAsLocalCopy(snapshot.roster, snapshot.name, snapshot);
+        finishSharedInviteOpen(snapshot.roster);
+      },
+      onOpened: clearWorkspaceInvitationContext,
     });
   };
 
@@ -3406,15 +3459,17 @@ They will no longer be able to open or edit this shared roster unless it is shar
   }, [activeTab]);
 
   useEffect(() => {
-    if (showSplash || !hasTopLevelBackTarget || fairTeamsBackTrapArmedRef.current) return;
+    if (workspaceInvitationId || showSplash || !hasTopLevelBackTarget || fairTeamsBackTrapArmedRef.current) return;
     pushFairTeamsBackTrap();
-  }, [hasTopLevelBackTarget, showSplash]);
+  }, [hasTopLevelBackTarget, showSplash, workspaceInvitationId]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
 
     const handlePopState = () => {
       fairTeamsBackTrapArmedRef.current = false;
+
+      if (workspaceInvitationQueryFromUrl(window.location.href).invitationId) return;
 
       const childBackEvent = new Event("fairteams:native-back", { cancelable: true });
       const childDidNotHandleBack = window.dispatchEvent(childBackEvent);
@@ -3517,7 +3572,12 @@ They will no longer be able to open or edit this shared roster unless it is shar
   };
 
   useEffect(() => {
-    if (!onboardingReady || tutorialStep || tutorialStartedRef.current) return;
+    if (
+      workspaceInvitationSuppressesGuidedTour(workspaceInvitationId) ||
+      !onboardingReady ||
+      tutorialStep ||
+      tutorialStartedRef.current
+    ) return;
 
     const url = new URL(window.location.href);
     const forceTour = url.searchParams.get("tour") === "1";
@@ -3534,7 +3594,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
 
     if (onboardingComplete || !unusedApp) return;
     startGuidedTour(false);
-  }, [onboardingReady, onboardingProbe, tutorialStep, rosters, activeRosterId]);
+  }, [onboardingReady, onboardingProbe, tutorialStep, rosters, activeRosterId, workspaceInvitationId]);
 
 
   const handleTutorialBack = () => {
@@ -3585,6 +3645,29 @@ They will no longer be able to open or edit this shared roster unless it is shar
           </p>
         </div>
       </div>
+    );
+  }
+
+  if (workspaceInvitationId) {
+    return (
+      <main className="fairteams-visual-refresh stripes-type-ui min-h-[100dvh] w-full overflow-y-auto bg-slate-50 px-4 py-6 text-[#102A43] sm:px-6 sm:py-10">
+        <div className="mx-auto grid w-full max-w-lg gap-5">
+          <div className="flex items-center justify-center gap-3" aria-label="Stripes organizer invitation">
+            <span className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <img src={stripesLogo} alt="" className="h-12 w-12 object-contain" aria-hidden="true" />
+            </span>
+            <div>
+              <div className="stripes-display text-2xl font-semibold leading-none">Stripes</div>
+              <div className="mt-1 text-xs font-bold text-slate-500">Organizer invitation</div>
+            </div>
+          </div>
+          <WorkspaceInvitationOnboarding
+            invitationId={workspaceInvitationId}
+            onAccepted={handleWorkspaceInvitationAccepted}
+            onContinue={clearWorkspaceInvitationContext}
+          />
+        </div>
+      </main>
     );
   }
 

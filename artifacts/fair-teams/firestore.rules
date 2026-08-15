@@ -225,6 +225,12 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Trusted workspace closure uses a short-lived Admin SDK cleanup checkpoint.
+    // It is never client-readable or client-writable.
+    match /sharedWorkspaceClosures/{closureId} {
+      allow read, write: if false;
+    }
+
     match /sharedGroups/{groupId} {
       allow create: if signedIn()
         && request.resource.data.ownerUid == request.auth.uid

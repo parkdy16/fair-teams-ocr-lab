@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { CheckCircle2, FolderOpen, History, Loader2, Mail, RotateCcw, Share2, ShieldCheck, UserMinus, UserPlus, Users, X } from "lucide-react";
+import { CheckCircle2, FolderOpen, History, Loader2, Mail, RotateCcw, Share2, ShieldCheck, Trash2, UserMinus, UserPlus, Users, X } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -63,6 +63,10 @@ import {
   verificationEmailError,
   verificationResendLabel,
 } from "@/lib/stripesEmailVerificationService";
+import {
+  getSharedWorkspaceClosureState,
+  type SharedWorkspaceClosureState,
+} from "@/lib/sharedWorkspaceClosureService";
 
 type Props = {
   variant?: "full" | "compact";
@@ -79,6 +83,7 @@ type Props = {
   onMakePrivateCopy?: () => void;
   onHideOnDevice?: () => void;
   onLeaveSharedRoster?: () => void;
+  onCloseSharedWorkspace?: (state: SharedWorkspaceClosureState) => void;
   backgroundSync?: boolean;
   headless?: boolean;
 };
@@ -138,7 +143,7 @@ function modalShell(title: string, onClose: () => void, body: React.ReactNode) {
   );
 }
 
-export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster, rosters = [], isEmptyRoster, onOpenRoster, onRosterSaved, onRefreshActiveRoster, onRefreshRosterIdentity, onSharedRosterSummariesUpdated, onSharedInviteOpened, openLibraryToken = 0, onMakePrivateCopy, onHideOnDevice, onLeaveSharedRoster, backgroundSync = true, headless = false }: Props) {
+export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster, rosters = [], isEmptyRoster, onOpenRoster, onRosterSaved, onRefreshActiveRoster, onRefreshRosterIdentity, onSharedRosterSummariesUpdated, onSharedInviteOpened, openLibraryToken = 0, onMakePrivateCopy, onHideOnDevice, onLeaveSharedRoster, onCloseSharedWorkspace, backgroundSync = true, headless = false }: Props) {
   const [user, setUser] = useState<SharedRosterUser | null>(null);
   const [busy, setBusy] = useState<string>("");
   const [sharedGroups, setSharedGroups] = useState<FirebaseSharedGroupSummary[]>([]);
@@ -155,6 +160,9 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
   const [removalProposals, setRemovalProposals] = useState<OrganizerRemovalProposal[]>([]);
   const [removalParticipation, setRemovalParticipation] = useState<OrganizerRemovalParticipation | null>(null);
   const [removalError, setRemovalError] = useState("");
+  const [workspaceClosureState, setWorkspaceClosureState] = useState<SharedWorkspaceClosureState | null>(null);
+  const [workspaceClosureLoading, setWorkspaceClosureLoading] = useState(false);
+  const [workspaceClosureError, setWorkspaceClosureError] = useState("");
   const [senderVerificationNotice, setSenderVerificationNotice] = useState<{ tone: "success" | "error" | "info"; text: string } | null>(null);
   const [senderVerificationResendAt, setSenderVerificationResendAt] = useState<string | null>(null);
   const [senderVerificationClock, setSenderVerificationClock] = useState(() => Date.now());
@@ -758,6 +766,8 @@ Your local roster will stay local. Stripes will copy shared identity fields only
 
   const openCollaborators = (rosterId?: string) => {
     setInvitationNotice(null);
+    setWorkspaceClosureState(null);
+    setWorkspaceClosureError("");
     setCollaboratorRosterId(rosterId || activeSharedRosterId || "");
   };
 
@@ -768,6 +778,50 @@ Your local roster will stay local. Stripes will copy shared identity fields only
     || collaboratorRoster?.currentUserRole === "owner"
     || collaboratorRoster?.currentUserRole === "editor";
   const canManageInvitations = canManageCollaborators && senderInvitationStatus === "ready";
+  const canRequestWorkspaceClosure = Boolean(onCloseSharedWorkspace);
+
+  useEffect(() => {
+    const checkingCollaborators = Boolean(
+      collaboratorRosterId && collaboratorRoster?.id === activeSharedRosterId,
+    );
+    const checkingRecovery = Boolean(activeSharedRosterId && !activeSharedRoster);
+    if (!canRequestWorkspaceClosure
+      || !user
+      || (!checkingRecovery && (!canManageCollaborators || !checkingCollaborators))) {
+      setWorkspaceClosureState(null);
+      setWorkspaceClosureError("");
+      setWorkspaceClosureLoading(false);
+      return;
+    }
+    const queriedRosterId = checkingRecovery ? activeSharedRosterId : collaboratorRosterId;
+    let cancelled = false;
+    setWorkspaceClosureLoading(true);
+    setWorkspaceClosureError("");
+    void getSharedWorkspaceClosureState(queriedRosterId)
+      .then((state) => {
+        if (!cancelled) setWorkspaceClosureState(state);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setWorkspaceClosureState(null);
+          setWorkspaceClosureError(checkingRecovery ? "" : friendlyFirestoreError(error));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setWorkspaceClosureLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    canRequestWorkspaceClosure,
+    user,
+    canManageCollaborators,
+    collaboratorRosterId,
+    collaboratorRoster?.id,
+    activeSharedRosterId,
+    activeSharedRoster,
+  ]);
 
   const recentRemovalResults = removalProposals
     .filter((proposal) => proposal.status !== "open")
@@ -1086,26 +1140,65 @@ Your local roster will stay local. Stripes will copy shared identity fields only
         })()}
       </div>
 
-      {onLeaveSharedRoster && canManageCollaborators && collaboratorRoster.id === activeSharedRosterId && (
+      {(onLeaveSharedRoster || onCloseSharedWorkspace) && canManageCollaborators && collaboratorRoster.id === activeSharedRosterId && (
         <div className="grid gap-2 rounded-2xl border border-rose-100 bg-rose-50/60 p-3">
           <div>
             <div className="text-xs font-black text-rose-800">Workspace membership</div>
             <p className="mt-0.5 text-[10px] font-semibold leading-snug text-rose-700">
-              Leaving removes only your organizer access. It does not delete the shared roster or club data. The last organizer cannot leave this way.
+              Leaving removes only your organizer access. It does not delete the shared roster or club data.
             </p>
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            className="h-10 w-full rounded-2xl border-rose-200 bg-white text-xs font-black text-rose-700 hover:bg-rose-100 hover:text-rose-800"
-            onClick={() => {
-              setCollaboratorRosterId("");
-              onLeaveSharedRoster();
-            }}
-          >
-            <UserMinus className="h-4 w-4" />
-            Leave shared roster
-          </Button>
+          {workspaceClosureState?.cleanupPending ? (
+            <div className="rounded-xl bg-white px-2.5 py-2 text-[10px] font-black leading-snug text-rose-800">
+              This workspace is already closed. Finish the remaining cleanup to remove its outstanding Stripes-owned data.
+            </div>
+          ) : workspaceClosureState?.isLastOrganizer && (
+            <div className="rounded-xl bg-white px-2.5 py-2 text-[10px] font-black leading-snug text-rose-800">
+              You are the last organizer. Invite another organizer before leaving, or close this shared workspace.
+            </div>
+          )}
+          {workspaceClosureError && (
+            <div className="rounded-xl bg-white px-2.5 py-2 text-[10px] font-bold leading-snug text-rose-700" role="alert">
+              {workspaceClosureError}
+            </div>
+          )}
+          {onLeaveSharedRoster && (
+            <Button
+              type="button"
+              variant="outline"
+              className="h-10 w-full rounded-2xl border-rose-200 bg-white text-xs font-black text-rose-700 hover:bg-rose-100 hover:text-rose-800"
+              onClick={() => {
+                setCollaboratorRosterId("");
+                onLeaveSharedRoster();
+              }}
+              disabled={workspaceClosureLoading || workspaceClosureState?.isLastOrganizer || workspaceClosureState?.cleanupPending}
+            >
+              <UserMinus className="h-4 w-4" />
+              Leave shared roster
+            </Button>
+          )}
+          {onCloseSharedWorkspace && (
+            <>
+              {!workspaceClosureLoading && workspaceClosureState && !workspaceClosureState.canClose && (
+                <p className="text-[10px] font-semibold leading-snug text-rose-700">
+                  Close is available only when one organizer remains.
+                </p>
+              )}
+              <Button
+                type="button"
+                className="h-10 w-full rounded-2xl bg-rose-700 text-xs font-black text-white hover:bg-rose-800"
+                onClick={() => {
+                  if (!workspaceClosureState?.canClose) return;
+                  setCollaboratorRosterId("");
+                  onCloseSharedWorkspace(workspaceClosureState);
+                }}
+                disabled={workspaceClosureLoading || !workspaceClosureState?.canClose}
+              >
+                {workspaceClosureLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                {workspaceClosureState?.cleanupPending ? "Finish workspace cleanup" : "Close shared workspace"}
+              </Button>
+            </>
+          )}
         </div>
       )}
     </div>
@@ -1223,10 +1316,30 @@ No shared roster is open on this device. Choose one below to open it on this dev
     </div>,
   ) : null;
 
+  const workspaceClosureRecoveryPanel = workspaceClosureState?.cleanupPending && onCloseSharedWorkspace ? (
+    <div className="grid gap-2 rounded-2xl border border-rose-200 bg-rose-50 p-3">
+      <div>
+        <div className="text-xs font-black text-rose-900">Workspace cleanup pending</div>
+        <p className="mt-0.5 text-[10px] font-semibold leading-snug text-rose-800">
+          “{workspaceClosureState.workspaceName}” is already closed. Finish cleanup of its remaining Stripes-owned data.
+        </p>
+      </div>
+      <Button
+        type="button"
+        className="h-10 rounded-2xl bg-rose-700 text-xs font-black text-white hover:bg-rose-800"
+        onClick={() => onCloseSharedWorkspace(workspaceClosureState)}
+      >
+        <Trash2 className="h-4 w-4" />
+        Finish workspace cleanup
+      </Button>
+    </div>
+  ) : null;
+
 
   if (variant === "compact") {
     return (
       <div className="grid gap-2">
+        {workspaceClosureRecoveryPanel}
         {incomingInvites.length > 0 && (
           <div className="grid gap-1.5">
             {incomingInvites.slice(0, 2).map((invite) => (
@@ -1283,6 +1396,7 @@ No shared roster is open on this device. Choose one below to open it on this dev
 
   return (
     <div className="grid gap-3">
+      {workspaceClosureRecoveryPanel}
       {incomingInvites.length > 0 && (
         <div className="grid gap-1.5 rounded-2xl border border-violet-100 bg-violet-50/70 p-2">
           {incomingInvites.slice(0, 3).map((invite) => (

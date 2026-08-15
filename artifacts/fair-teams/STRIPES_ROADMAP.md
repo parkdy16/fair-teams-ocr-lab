@@ -1419,10 +1419,12 @@ storage/ownership wording conflicts with it.
 - Meetup must not block the Google Play launch.
 - G1.4 protected organizer-removal governance is complete and live.
 - G1.5e organizer governance eligibility hardening is released and live.
-- Current active atomic task: G1.5f Authentication UX hardening.
-- G1.5f basic Google authentication is the approved onboarding/auth hardening
-  currently being completed; Google Drive/Cabinet implementation still waits
-  until after G1.6 and begins in G2.
+- G1.5f Authentication UX hardening is released on `main` as `984bb4e`.
+- The discoverable Club-shell **Leave shared roster** action is released on
+  `main` as `a79deb6`.
+- Current active atomic task: G1.6 Workspace closure / last-organizer behavior.
+- Google Drive/Cabinet implementation still waits until after G1.6 and begins
+  in G2.
 
 ## Shared workspace governance
 
@@ -2397,8 +2399,10 @@ Release checkpoint:
 
 ### G1.5f — Authentication UX hardening
 
-**Status:** Implemented locally and ready for review. Not committed, pushed or
-deployed; do not begin G1.6 until G1.5f is approved and released.
+**Status:** Released on `main` as `984bb4e`. Firestore rules and the
+`sendStripesEmailVerification` Function were deployed before the frontend
+release. Production Google testing still requires manual Firebase Console
+provider enablement.
 
 Bounded authentication direction:
 
@@ -2439,11 +2443,48 @@ Bounded authentication direction:
 
 ### G1.6 — Workspace closure / last-organizer behavior
 
-**Status:** Planned after G1.5f.
+**Status:** Implemented locally and ready for review. Not committed, pushed or
+deployed.
 
-G1.6 remains the separate governed task for workspace closure/deletion and the
-last-organizer safeguard. It must not be folded into invitation onboarding or
-organizer-removal eligibility work.
+Implementation checkpoint:
+
+- ordinary **Leave shared roster** remains membership-only and remains blocked
+  for the last organizer;
+- the Organizer/Club shell explains that the last organizer must invite
+  another organizer before leaving or use the separate **Close shared
+  workspace** action;
+- closure is available only to the sole active organizer and requires the
+  authoritative workspace name to be typed explicitly;
+- `getSharedWorkspaceClosureState` provides server-authoritative closure
+  eligibility, while `closeSharedWorkspace` rechecks organizer membership and
+  the one-organizer invariant in an Admin SDK transaction;
+- the transaction deletes the authoritative group/standalone-roster parent and
+  every roster whose own `groupId` links it to the closing group, so membership
+  changes and invitation acceptance cannot race past closure;
+- a server-only cleanup checkpoint makes post-transaction cleanup retryable by
+  the same organizer without granting any client access; unfinished cleanup is
+  rediscovered through a trusted callable using a locally known linked roster
+  ID, so recovery survives browser refresh/app restart after parent deletion;
+- recursive Firestore cleanup removes workspace descendants, including Action
+  Board, Equipment, attendance, ratings, notes, resources, backups and
+  governance state;
+- top-level invitation records, deduplication locks and Action Board
+  notification-thread metadata are removed by authoritative workspace/scope
+  identifiers;
+- only canonical Stripes-uploaded Storage paths under
+  `sharedRosters/{rosterId}/resources/` are deleted; user identity/push records,
+  unrelated workspaces and private local rosters remain outside the boundary;
+- invitation context now fails closed as soon as its workspace parent is no
+  longer available;
+- successful closure removes only linked opened copies from the current device,
+  returns the app to a safe local roster state and reports **Shared workspace
+  closed.**;
+- direct client group/roster deletion remains denied; the temporary closure
+  checkpoint collection is also server-only.
+
+G1 governance implementation is functionally complete at this local checkpoint,
+but G1 must not be marked released or advanced to G2 until G1.6 review,
+deployment and live verification are complete.
 
 Required roadmap order:
 

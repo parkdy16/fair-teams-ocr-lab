@@ -91,6 +91,11 @@ import {
   workspaceInvitationSuppressesGuidedTour,
 } from "@/lib/workspaceInvitationOnboardingState";
 import type { AcceptWorkspaceOrganizerInvitationResult } from "@/lib/sharedWorkspaceInvitationService";
+import {
+  closeSharedWorkspace,
+  workspaceClosureConfirmationMatches,
+  type SharedWorkspaceClosureState,
+} from "@/lib/sharedWorkspaceClosureService";
 
 const GROUP_NAME_STORAGE_KEY = "fair-teams-group-name";
 const HEADER_COLOR_STORAGE_KEY = "fair-teams-header-color-v2";
@@ -815,6 +820,10 @@ function App() {
   const [leaveSharedConfirmOpen, setLeaveSharedConfirmOpen] = useState(false);
   const [leaveSharedBusy, setLeaveSharedBusy] = useState(false);
   const [leaveSharedError, setLeaveSharedError] = useState("");
+  const [closeSharedConfirm, setCloseSharedConfirm] = useState<SharedWorkspaceClosureState | null>(null);
+  const [closeSharedConfirmationName, setCloseSharedConfirmationName] = useState("");
+  const [closeSharedBusy, setCloseSharedBusy] = useState(false);
+  const [closeSharedError, setCloseSharedError] = useState("");
   const [newRosterName, setNewRosterName] = useState("");
   const [fileImportMode, setFileImportMode] = useState<"shared" | "backup">(
     "shared",
@@ -1932,6 +1941,54 @@ function App() {
       setLeaveSharedError(error instanceof Error ? error.message : "Could not leave the shared roster. Try again after signing in.");
     } finally {
       setLeaveSharedBusy(false);
+    }
+  };
+
+
+  const closeActiveSharedWorkspace = async () => {
+    if (!closeSharedConfirm || closeSharedBusy) return;
+    if (!closeSharedConfirm.cleanupPending && !workspaceClosureConfirmationMatches(
+      closeSharedConfirm.workspaceName,
+      closeSharedConfirmationName,
+    )) {
+      setCloseSharedError(`Type “${closeSharedConfirm.workspaceName}” exactly to confirm closure.`);
+      return;
+    }
+    setCloseSharedError("");
+    setCloseSharedBusy(true);
+    try {
+      const result = await closeSharedWorkspace(closeSharedConfirm, closeSharedConfirmationName);
+      const affectedRosterIds = new Set(result.rosterIds);
+      const affectedGroupId = result.groupId;
+      setRosterState((current) => {
+        const remaining = current.rosters.filter((roster) => {
+          const source = roster.cloudSource?.provider === "firebase" ? roster.cloudSource : undefined;
+          if (!source?.firebaseRosterId) return true;
+          if (affectedRosterIds.has(source.firebaseRosterId)) return false;
+          if (affectedGroupId && source.firebaseGroupId === affectedGroupId) return false;
+          return true;
+        });
+        if (remaining.length === 0) {
+          const empty = createRoster(EMPTY_ROSTER_NAME, []);
+          return { rosters: [empty], activeRosterId: empty.id };
+        }
+        return { rosters: remaining, activeRosterId: remaining[0]?.id || current.activeRosterId };
+      });
+      setCloseSharedConfirm(null);
+      setCloseSharedConfirmationName("");
+      setCloseSharedError("");
+      setTeamsWorkspaceView("setup");
+      setActiveTab("teams");
+      setTodayRosterChosen(false);
+      showRosterToolsNotice(
+        "Shared workspace closed.",
+        `“${result.workspaceName}” and its Stripes-owned shared data were permanently deleted. Linked opened copies were removed from this device.`,
+        "success",
+      );
+    } catch (error) {
+      setCloseSharedError(error instanceof Error ? error.message : "Could not close the shared workspace.");
+    } finally {
+      setCloseSharedBusy(false);
     }
   };
 
@@ -4098,6 +4155,11 @@ They will no longer be able to open or edit this shared roster unless it is shar
                     onLeaveSharedRoster={activeRosterIsFirebaseShared ? (() => {
                       setLeaveSharedError("");
                       setLeaveSharedConfirmOpen(true);
+                    }) : undefined}
+                    onCloseSharedWorkspace={activeRosterIsFirebaseShared ? ((state) => {
+                      setCloseSharedConfirm(state);
+                      setCloseSharedConfirmationName("");
+                      setCloseSharedError("");
                     }) : undefined}
                   />
                 )}
@@ -6303,6 +6365,108 @@ This is a shared roster. Local Backup can only remove/disassociate this device�
                 onClick={closeDriveImportPreview}
               >
                 Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {closeSharedConfirm && (
+        <div
+          className="fixed inset-0 z-[87] flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="close-shared-workspace-title"
+          onClick={() => {
+            if (closeSharedBusy) return;
+            setCloseSharedConfirm(null);
+            setCloseSharedConfirmationName("");
+            setCloseSharedError("");
+          }}
+        >
+          <div
+            className="w-full max-w-sm rounded-t-3xl border border-rose-100 bg-white p-4 shadow-2xl sm:rounded-3xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-rose-50 text-rose-700">
+                <Trash2 className="h-5 w-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h2 id="close-shared-workspace-title" className="text-base font-black text-[#102A43]">
+                  {closeSharedConfirm.cleanupPending ? "Finish workspace cleanup?" : "Close shared workspace?"}
+                </h2>
+                <p className="mt-1 text-sm font-semibold leading-snug text-slate-600">
+                  {closeSharedConfirm.cleanupPending
+                    ? `“${closeSharedConfirm.workspaceName}” is already closed. Retry the remaining cleanup of its Stripes-owned data.`
+                    : `This permanently deletes “${closeSharedConfirm.workspaceName}” and all Stripes-owned shared workspace data for every device.`}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-rose-100 bg-rose-50/70 p-3">
+              <div className="text-[10px] font-black uppercase tracking-wide text-rose-700">
+                Permanent closure
+              </div>
+              <p className="mt-1 text-[11px] font-semibold leading-snug text-rose-800/80">
+                {closeSharedConfirm.cleanupPending
+                  ? "Already-deleted items stay deleted. Stripes will safely retry only the bounded cleanup recorded by the trusted closure checkpoint."
+                  : "Shared rosters, Action Board data, equipment, attendance, ratings, notes, resources, backups, governance history and pending invitations will be deleted. This cannot be undone."}
+              </p>
+            </div>
+
+            {!closeSharedConfirm.cleanupPending && (
+              <label className="mt-4 grid gap-1.5 text-xs font-black text-[#102A43]">
+                Type {closeSharedConfirm.workspaceName} to confirm
+                <input
+                  autoFocus
+                  value={closeSharedConfirmationName}
+                  onChange={(event) => {
+                    setCloseSharedConfirmationName(event.target.value);
+                    setCloseSharedError("");
+                  }}
+                  className="h-11 rounded-2xl border border-rose-200 bg-white px-3 text-sm font-bold text-[#102A43] outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-100"
+                  disabled={closeSharedBusy}
+                  autoComplete="off"
+                />
+              </label>
+            )}
+
+            {closeSharedError && (
+              <div className="mt-3 rounded-2xl border border-rose-100 bg-rose-50 px-3 py-2 text-xs font-bold leading-snug text-rose-700" role="alert">
+                {closeSharedError}
+              </div>
+            )}
+
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="h-11 rounded-2xl border-slate-200 bg-white text-xs font-black text-slate-600"
+                onClick={() => {
+                  setCloseSharedConfirm(null);
+                  setCloseSharedConfirmationName("");
+                  setCloseSharedError("");
+                }}
+                disabled={closeSharedBusy}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                className="h-11 rounded-2xl bg-rose-700 text-xs font-black text-white hover:bg-rose-800"
+                onClick={() => void closeActiveSharedWorkspace()}
+                disabled={closeSharedBusy || (
+                  !closeSharedConfirm.cleanupPending
+                  && !workspaceClosureConfirmationMatches(
+                    closeSharedConfirm.workspaceName,
+                    closeSharedConfirmationName,
+                  )
+                )}
+              >
+                {closeSharedBusy
+                  ? (closeSharedConfirm.cleanupPending ? "Finishing…" : "Closing…")
+                  : (closeSharedConfirm.cleanupPending ? "Finish cleanup" : "Close shared workspace")}
               </Button>
             </div>
           </div>

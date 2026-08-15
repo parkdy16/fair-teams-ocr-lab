@@ -5,6 +5,7 @@ const { initializeApp } = require("firebase-admin/app");
 const { getAuth } = require("firebase-admin/auth");
 const { getFirestore, FieldValue, Timestamp } = require("firebase-admin/firestore");
 const { getMessaging } = require("firebase-admin/messaging");
+const { getStorage } = require("firebase-admin/storage");
 const {
   activeWorkspaceNotificationRecipients,
   buildOrganizerRemovalElectorate,
@@ -51,6 +52,14 @@ const {
   verificationSendResult,
   verificationThrottlePlan,
 } = require("./emailVerification");
+const {
+  WorkspaceClosureError,
+  resumableWorkspaceClosure,
+  validateWorkspaceClosure,
+  workspaceClosureCleanupTargets,
+  workspaceClosureId,
+  workspaceClosureState,
+} = require("./workspaceClosure");
 
 initializeApp();
 
@@ -60,6 +69,7 @@ const USER_COLLECTION = "fairTeamsUsers";
 const PUSH_INSTALLATION_COLLECTION = "fairTeamsPushInstallations";
 const WORKSPACE_INVITATION_COLLECTION = "sharedWorkspaceInvitations";
 const WORKSPACE_INVITATION_LOCK_COLLECTION = "sharedWorkspaceInvitationLocks";
+const WORKSPACE_CLOSURE_COLLECTION = "sharedWorkspaceClosures";
 const EMAIL_VERIFICATION_THROTTLE_COLLECTION = "authEmailVerificationThrottles";
 const MAX_GOVERNANCE_TRANSACTION_DOCUMENTS = 440;
 const RESEND_API_KEY = defineSecret("RESEND_API_KEY");
@@ -438,6 +448,15 @@ function invitationHttpsError(error, fallbackMessage) {
   return new HttpsError("internal", fallbackMessage);
 }
 
+function closureHttpsError(error, fallbackMessage) {
+  if (error instanceof HttpsError) return error;
+  if (error instanceof WorkspaceClosureError) {
+    return new HttpsError(error.code, error.message);
+  }
+  console.error(fallbackMessage, error);
+  return new HttpsError("internal", fallbackMessage);
+}
+
 function safeInvitationId(value) {
   const id = String(value || "").trim();
   if (!/^[A-Za-z0-9_-]{16,200}$/.test(id)) {
@@ -502,6 +521,55 @@ function invitationWithWorkspaceName(invitation, workspace) {
     ...invitation,
     workspaceNameSnapshot: invitationWorkspaceName(workspace, invitation),
   };
+}
+
+function authoritativeWorkspaceName(workspace) {
+  return invitationWorkspaceName(workspace);
+}
+
+async function deleteQueryDocuments(db, query) {
+  while (true) {
+    const snapshot = await query.limit(400).get();
+    if (snapshot.empty) return;
+    const batch = db.batch();
+    snapshot.docs.forEach((document) => batch.delete(document.ref));
+    await batch.commit();
+  }
+}
+
+async function finishWorkspaceClosureCleanup(db, cleanup) {
+  const targets = workspaceClosureCleanupTargets(cleanup);
+  for (const root of targets.firestoreRoots) {
+    const collection = root.kind === "group" ? "sharedGroups" : "sharedRosters";
+    await db.recursiveDelete(db.collection(collection).doc(root.id));
+  }
+
+  if (targets.deleteInvitationStateForGroupId) {
+    await deleteQueryDocuments(
+      db,
+      db.collection(WORKSPACE_INVITATION_COLLECTION)
+        .where("groupId", "==", targets.deleteInvitationStateForGroupId),
+    );
+    await deleteQueryDocuments(
+      db,
+      db.collection(WORKSPACE_INVITATION_LOCK_COLLECTION)
+        .where("groupId", "==", targets.deleteInvitationStateForGroupId),
+    );
+  }
+
+  for (const scope of targets.notificationScopes) {
+    await deleteQueryDocuments(
+      db,
+      db.collection(THREAD_COLLECTION)
+        .where("scopeKind", "==", scope.kind)
+        .where("scopeId", "==", scope.id),
+    );
+  }
+
+  const bucket = getStorage().bucket();
+  for (const prefix of targets.storagePrefixes) {
+    await bucket.deleteFiles({ prefix, force: true });
+  }
 }
 
 async function ensureRecipientInvitationForGroup(db, groupId, recipient, nowMillis) {
@@ -1000,13 +1068,227 @@ exports.getWorkspaceOrganizerInvitationContext = onCall({ region: REGION }, asyn
   const invitation = invitationSnap.data() || {};
   const groupId = safeWorkspaceId(invitation.groupId);
   const groupSnap = await db.collection("sharedGroups").doc(groupId).get();
+  if (!groupSnap.exists) {
+    throw new HttpsError("not-found", "This shared workspace is no longer available.");
+  }
   const invitationContext = invitationWithWorkspaceName(
     invitation,
-    groupSnap.exists ? groupSnap.data() || {} : {},
+    groupSnap.data() || {},
   );
   return {
     ...sanitizedInvitationContext(invitationContext),
     viewerStatus: invitationViewerStatus(invitation, invitationActor(request)),
+  };
+});
+
+exports.getSharedWorkspaceClosureState = onCall({ region: REGION }, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Sign in first.");
+  const rosterId = safeWorkspaceId(request.data?.rosterId);
+  const db = getFirestore();
+  try {
+    const closureSnapshot = await db.collection(WORKSPACE_CLOSURE_COLLECTION)
+      .where("rosterIds", "array-contains", rosterId)
+      .limit(20)
+      .get();
+    const resumable = resumableWorkspaceClosure({
+      actorUid: request.auth.uid,
+      rosterId,
+      checkpoints: closureSnapshot.docs.map((document) => document.data() || {}),
+    });
+    if (resumable) return resumable;
+
+    const rosterSnap = await db.collection("sharedRosters").doc(rosterId).get();
+    if (!rosterSnap.exists) {
+      throw new HttpsError("not-found", "This shared roster no longer exists.");
+    }
+    const roster = rosterSnap.data() || {};
+    const rawGroupId = typeof roster.groupId === "string" ? roster.groupId.trim() : "";
+    if (rawGroupId) {
+      const groupId = safeWorkspaceId(rawGroupId);
+      const groupSnap = await db.collection("sharedGroups").doc(groupId).get();
+      if (!groupSnap.exists) {
+        throw new HttpsError("not-found", "This shared workspace no longer exists.");
+      }
+      const group = groupSnap.data() || {};
+      return {
+        workspaceKind: "group",
+        workspaceId: groupId,
+        groupId,
+        rosterId,
+        ...workspaceClosureState({
+          actorUid: request.auth.uid,
+          workspace: group,
+          workspaceName: authoritativeWorkspaceName(group),
+        }),
+      };
+    }
+
+    return {
+      workspaceKind: "roster",
+      workspaceId: rosterId,
+      groupId: null,
+      rosterId,
+      ...workspaceClosureState({
+        actorUid: request.auth.uid,
+        workspace: roster,
+        workspaceName: authoritativeWorkspaceName(roster),
+      }),
+    };
+  } catch (error) {
+    throw closureHttpsError(error, "Could not load workspace closure status.");
+  }
+});
+
+exports.closeSharedWorkspace = onCall({
+  region: REGION,
+  timeoutSeconds: 540,
+  memory: "512MiB",
+}, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Sign in first.");
+
+  const rosterId = safeWorkspaceId(request.data?.rosterId);
+  const workspaceKind = String(request.data?.workspaceKind || "").trim();
+  const workspaceId = safeWorkspaceId(request.data?.workspaceId);
+  const confirmationName = cleanText(request.data?.confirmationName, 120);
+  let cleanup;
+  let closureRef;
+  const db = getFirestore();
+
+  try {
+    const closureId = workspaceClosureId(workspaceKind, workspaceId);
+    closureRef = db.collection(WORKSPACE_CLOSURE_COLLECTION).doc(closureId);
+    cleanup = await db.runTransaction(async (tx) => {
+      const closureSnap = await tx.get(closureRef);
+      if (closureSnap.exists) {
+        const existing = closureSnap.data() || {};
+        if (existing.closedByUid !== request.auth.uid
+          || existing.workspaceKind !== workspaceKind
+          || existing.workspaceId !== workspaceId
+          || existing.rosterId !== rosterId) {
+          throw new HttpsError("permission-denied", "This workspace closure cannot be resumed by this account.");
+        }
+        return {
+          workspaceKind,
+          workspaceId,
+          workspaceName: cleanText(existing.workspaceName, 120) || "Stripes workspace",
+          groupId: typeof existing.groupId === "string" ? existing.groupId : null,
+          rosterId,
+          rosterIds: Array.isArray(existing.rosterIds) ? existing.rosterIds : [],
+        };
+      }
+
+      const rosterRef = db.collection("sharedRosters").doc(rosterId);
+      const rosterSnap = await tx.get(rosterRef);
+      if (!rosterSnap.exists) {
+        throw new HttpsError("not-found", "This shared roster no longer exists.");
+      }
+      const roster = rosterSnap.data() || {};
+      const rosterGroupId = typeof roster.groupId === "string" ? roster.groupId.trim() : "";
+      const nowIso = new Date().toISOString();
+
+      if (workspaceKind === "group") {
+        if (!rosterGroupId || rosterGroupId !== workspaceId) {
+          throw new HttpsError("failed-precondition", "This roster is not linked to that shared workspace.");
+        }
+        const groupRef = db.collection("sharedGroups").doc(workspaceId);
+        const groupSnap = await tx.get(groupRef);
+        if (!groupSnap.exists) {
+          throw new HttpsError("not-found", "This shared workspace no longer exists.");
+        }
+        const group = groupSnap.data() || {};
+        const workspaceName = authoritativeWorkspaceName(group);
+        validateWorkspaceClosure({
+          actorUid: request.auth.uid,
+          workspace: group,
+          workspaceName,
+          confirmationName,
+        });
+
+        const linkedRosterQuery = db.collection("sharedRosters").where("groupId", "==", workspaceId);
+        const linkedRosterSnap = await tx.get(linkedRosterQuery);
+        const rosterIds = linkedRosterSnap.docs.map((document) => document.id);
+        if (!rosterIds.includes(rosterId)) {
+          throw new HttpsError("failed-precondition", "This roster is no longer linked to the shared workspace.");
+        }
+        if (rosterIds.length + 2 > MAX_GOVERNANCE_TRANSACTION_DOCUMENTS) {
+          throw new HttpsError("resource-exhausted", "This workspace is too large for one closure transaction.");
+        }
+
+        const result = {
+          workspaceKind,
+          workspaceId,
+          workspaceName,
+          groupId: workspaceId,
+          rosterId,
+          rosterIds,
+        };
+        tx.create(closureRef, {
+          schemaVersion: 1,
+          ...result,
+          closedByUid: request.auth.uid,
+          cleanupStatus: "pending",
+          createdAt: FieldValue.serverTimestamp(),
+          createdAtIso: nowIso,
+        });
+        linkedRosterSnap.docs.forEach((document) => tx.delete(document.ref));
+        tx.delete(groupRef);
+        return result;
+      }
+
+      if (workspaceKind !== "roster" || workspaceId !== rosterId || rosterGroupId) {
+        throw new HttpsError("failed-precondition", "This is not a standalone shared roster.");
+      }
+      const workspaceName = authoritativeWorkspaceName(roster);
+      validateWorkspaceClosure({
+        actorUid: request.auth.uid,
+        workspace: roster,
+        workspaceName,
+        confirmationName,
+      });
+      const result = {
+        workspaceKind,
+        workspaceId,
+        workspaceName,
+        groupId: null,
+        rosterId,
+        rosterIds: [rosterId],
+      };
+      tx.create(closureRef, {
+        schemaVersion: 1,
+        ...result,
+        closedByUid: request.auth.uid,
+        cleanupStatus: "pending",
+        createdAt: FieldValue.serverTimestamp(),
+        createdAtIso: nowIso,
+      });
+      tx.delete(rosterRef);
+      return result;
+    });
+  } catch (error) {
+    throw closureHttpsError(error, "Could not close this shared workspace.");
+  }
+
+  try {
+    await finishWorkspaceClosureCleanup(db, cleanup);
+    await closureRef.delete();
+  } catch (error) {
+    console.error("Could not finish shared-workspace closure cleanup", error);
+    await closureRef.set({
+      cleanupStatus: "failed",
+      cleanupFailedAt: FieldValue.serverTimestamp(),
+      cleanupFailedAtIso: new Date().toISOString(),
+    }, { merge: true }).catch(() => undefined);
+    throw new HttpsError(
+      "internal",
+      "The workspace was closed, but cleanup is still finishing. Try again to complete it.",
+    );
+  }
+
+  return {
+    ok: true,
+    workspaceName: cleanup.workspaceName,
+    groupId: cleanup.groupId,
+    rosterIds: cleanup.rosterIds,
   };
 });
 

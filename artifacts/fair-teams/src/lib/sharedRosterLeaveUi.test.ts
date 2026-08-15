@@ -32,7 +32,7 @@ test("Organizer Club shell exposes the existing Leave shared roster flow", () =>
 
   assert.match(clubShell, /onLeaveSharedRoster=/);
   assert.match(clubShell, /setLeaveSharedConfirmOpen\(true\)/);
-  assert.match(organizerModal, /onLeaveSharedRoster && canManageCollaborators/);
+  assert.match(organizerModal, /\(onLeaveSharedRoster \|\| onCloseSharedWorkspace\) && canManageCollaborators/);
   assert.match(organizerModal, />\s*Leave shared roster\s*</);
   assert.match(organizerModal, /onLeaveSharedRoster\(\)/);
 });

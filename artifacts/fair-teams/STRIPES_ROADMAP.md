@@ -208,7 +208,8 @@ Storage when the user's Google Drive can own the underlying file.
 
 Desired behavior:
 
-- reuse the existing unified Google identity/session where appropriate;
+- reuse the connected Google Drive authorization/session where appropriate,
+  while keeping Firebase Google identity separate;
 - request only additional Drive permissions needed for the requested feature;
 - avoid unnecessary re-authentication;
 - use narrow OAuth scopes where feasible;
@@ -550,6 +551,11 @@ resources as one coherent library.
 Normal files added through Stripes remain hosted in the connected user's
 Google Drive.
 
+Core principle:
+
+**Stripes Cabinet is not a replacement for Google Drive. Stripes organizes and
+explains; Google stores, edits and protects.**
+
 Stripes owns:
 
 - organization;
@@ -560,8 +566,28 @@ Stripes owns:
 Google owns:
 
 - actual document/file bytes;
-- file-level access and sharing;
-- native editing/preview behavior where applicable.
+- Google Docs, Sheets and presentation editing;
+- file/folder ownership;
+- Viewer, Commenter and Editor permissions;
+- sharing controls and Google-native collaboration;
+- native preview, version and edit history where applicable.
+
+Stripes provides:
+
+- club context and categories/collections;
+- responsibility and source/type context;
+- resource discovery and relationships to club workflows;
+- actions to open originals in Google;
+- truthful access/unavailable/reconnect information where available.
+
+Cabinet documents are not automatically read-only. Clubs may keep live working
+Google Docs, Sheets and presentations in Cabinet, such as a Treasurer's annual
+budget spreadsheet. Google permissions determine whether another organizer is
+a Viewer, Commenter or Editor. Future descriptive states such as **Working
+document**, **Final** or **Club record** are organizational/context metadata
+unless a separate permissions architecture is explicitly approved. G2 must not
+create immutable records, Stripes-managed versioning or special read-only
+enforcement.
 
 A Drive-backed resource:
 
@@ -755,10 +781,26 @@ systems.
 
 Cabinet belongs to the shared roster / club workspace.
 
-Initial access should follow organizer-level shared-roster permissions.
+Access to Stripes Cabinet metadata follows active workspace membership. Access
+to the underlying Google folders/files follows Google permissions.
 
-Do not build Drive-style granular per-file or per-folder permissions for the
-first Cabinet version.
+Google folder permissions are the important file-security boundary because
+files may inherit access from their parent folder. G2 should focus on how the
+Cabinet folder/location is shared in Google rather than recreating Google ACLs
+inside Stripes.
+
+Example Finance folder:
+
+- Maria -> Editor;
+- Joon -> Viewer;
+- Alex -> Viewer;
+- Treasurer assistant -> Editor.
+
+Google remains authoritative for those roles. Do not mirror the complete
+Google ACL into Firestore, and do not claim a Stripes organizer has Google
+access unless that access has actually been verified.
+
+Do not build a redundant Stripes per-file ACL for the first Cabinet version.
 
 Player/member Cabinet access is a separate future product decision.
 
@@ -1405,7 +1447,7 @@ obviously reasonable.**
 Status: APPROVED PRODUCT / ARCHITECTURE DIRECTION
 
 Recorded after the 2026-08-13 storage, Google Drive and shared-roster
-governance review.
+governance review, and updated after the 2026-08-15 G2 preflight.
 
 This section is the authoritative current direction where older roadmap
 storage/ownership wording conflicts with it.
@@ -1422,9 +1464,12 @@ storage/ownership wording conflicts with it.
 - G1.5f Authentication UX hardening is released on `main` as `984bb4e`.
 - The discoverable Club-shell **Leave shared roster** action is released on
   `main` as `a79deb6`.
-- Current active atomic task: G1.6 Workspace closure / last-organizer behavior.
-- Google Drive/Cabinet implementation still waits until after G1.6 and begins
-  in G2.
+- G1.6 Workspace closure / last-organizer behavior is released on `main` as
+  `61b3079` with its Firestore rules and callable Functions deployed.
+- G1 Shared Workspace Governance is complete and released.
+- Current major implementation phase: G2 Unified Google Connection.
+- Next atomic implementation target: G2.1a Drive connection-state/auth
+  foundation.
 
 ## Shared workspace governance
 
@@ -1510,13 +1555,88 @@ Do not create unrelated authentication experiences for:
 - Club Cabinet;
 - future Google capabilities.
 
-Reuse the existing Google identity/session where technically appropriate and
-request additional permissions only when a capability requires them.
+The user-facing Google connection may be coherent, but Firebase identity and
+Google Drive authorization are separate security capabilities.
 
-Do not hard-code the architecture around one OAuth scope before the existing
-Cloud Backup implementation and current Google Drive requirements are audited.
+Firebase Google Sign-In:
 
-Use the narrowest permission that can reliably deliver the promised behavior.
+- uses Firebase `GoogleAuthProvider` with identity-only scopes `openid`,
+  `email` and `profile`;
+- produces and preserves the existing Firebase UID/session;
+- retains the current UID-preserving provider-conflict/account-link behavior;
+- must never receive Google Drive scopes.
+
+Google Drive authorization:
+
+- currently uses the Google Identity Services browser token model;
+- uses `https://www.googleapis.com/auth/drive.file` as the least-privilege G2
+  baseline;
+- currently flows from `App.tsx` through
+  `requestGoogleDriveAccessToken()` to a short-lived browser access token used
+  by Drive, Sheets and Picker APIs;
+- keeps that token only in browser/React memory: it is not stored in Firestore,
+  localStorage or URLs and is not intentionally logged;
+- loses the token on refresh and does not store a refresh token.
+
+G2 may improve explicit connection, expiry and reconnect state, but it must not
+introduce durable OAuth-token storage without a separate security review.
+
+A user's Firebase/Stripes identity and connected Google Drive identity may be
+different. Stripes must never silently assume that the Firebase email equals
+the connected Drive email. Show the active Drive identity where relevant, for
+example: **Google Drive connected as maria@example.com**.
+
+Continue using the narrowest permission that reliably delivers each approved
+capability. Never silently broaden OAuth permissions.
+
+### Existing Google implementation reuse direction
+
+Extend:
+
+- `src/lib/googleDriveConfig.ts`: preserve `drive.file` and add explicit
+  capability/config handling where needed;
+- `src/lib/googleDriveFiles.ts`: preserve existing Drive REST helpers and
+  later extend them for Cabinet folders, pagination, permissions, `driveId`,
+  capabilities and Shared Drive-aware parameters without breaking Cloud
+  Backup;
+- `src/lib/googleDrivePicker.ts`: preserve the Picker/script setup and later
+  extend it for Cabinet folder/resource selection;
+- `.env.example`: eventually document the relevant existing Google variables,
+  including optional `VITE_GOOGLE_APP_ID` where appropriate.
+
+Refactor incrementally:
+
+- `src/lib/googleDriveAuth.ts`: retain GIS token acquisition while evolving it
+  from one-off backup authorization into a reusable memory-only Drive
+  connection lifecycle with account, granted scope, expiry, reconnect and safe
+  disconnect state;
+- `src/App.tsx`: move raw Drive connection responsibility into that reusable
+  layer without disrupting working Cloud Backup behavior.
+
+Reuse as-is:
+
+- `src/lib/googleDriveBackup.ts`: its bounded backup serialization/parsing is
+  independent from the connection architecture.
+
+Retire later, while preserving historical compatibility:
+
+- `src/lib/googleSheetsFiles.ts`;
+- `src/lib/googleSheetsRoster.ts`;
+- the hidden legacy Google Sheets roster UI and handlers.
+
+Do not build G2/Cabinet on Google Sheets roster state. Firebase shared
+workspace state remains canonical for club collaboration.
+
+Do not touch during G2:
+
+- Firebase Google identity implementation, policy, shared-roster auth UI or
+  invitation onboarding auth;
+- current Action Board Firebase attachment/storage behavior in
+  `src/lib/clubResourceService.ts`, Task Board attachments and Firebase Storage
+  rules/resources.
+
+Existing Firebase-hosted attachments remain until the later G4 retirement
+phase.
 
 ## Individual Google Drive resources
 
@@ -1607,6 +1727,90 @@ Google storage capacity or Google Workspace.
 
 The user's Google account type determines the underlying ownership/storage
 mode, not whether the user receives the Stripes Club Cabinet experience.
+
+## Flexible real-world club roles
+
+Stripes may record optional **Club roles / organizational titles** that
+describe how a real club has already organized itself. Stripes does not decide
+who becomes Treasurer, Chair, Board Member or another club officer; the club
+uses its normal real-world process and Stripes records the result.
+
+Use a compact set of suggested labels:
+
+- Board Member;
+- Chair / President;
+- Vice Chair / Vice President;
+- Treasurer;
+- Secretary;
+- Council / Advisory Board;
+- Coach / Sports Lead;
+- Equipment Manager;
+- Events / Social;
+- Membership / Communications;
+- Custom.
+
+An organizer may have multiple roles. Custom labels must always remain
+available so a club can record titles such as **Council of Elders** without
+forcing a large fixed taxonomy.
+
+These roles are descriptive and operational metadata only. A club role must
+never automatically:
+
+- grant stronger Stripes governance authority;
+- alter protected organizer-removal voting or bypass governance-eligibility
+  rules;
+- grant workspace-closure rights beyond the existing organizer rules;
+- grant Google Drive access;
+- make the organizer owner of the Stripes workspace;
+- make a Treasurer or other title superior to another organizer inside
+  Stripes.
+
+Stripes organizer governance remains equal. Real-world roles explain
+responsibility, not authority within the Stripes governance engine.
+
+Cabinet may use a role as explanatory context, for example:
+
+**2026 Budget**
+
+Google Sheet · Finance
+
+Added by Maria · Treasurer
+
+Open in Google
+
+That label does not grant Maria or anyone else Google permission. Google
+sharing remains the security authority.
+
+A club may optionally identify an organizer responsible for Cabinet,
+documents, Finance or another collection. This is operational responsibility,
+not higher Stripes governance status. Do not build a hard-coded Treasurer
+permission system; the responsible person may be a Secretary, Board Member,
+Document Officer or holder of a custom role.
+
+## Cabinet management, ownership and location changes
+
+In My Drive mode, one Google account may technically own or host the Cabinet
+folder/files. That Google ownership must never make the host owner of the
+Stripes workspace or give them superior Stripes governance rights.
+
+If the Google host/manager leaves, treat it as a Google
+access/handoff/reconnect problem. Do not automatically destroy or move Google
+files. Later UX may explain **Cabinet managed through Maria's Google Drive**,
+but that describes infrastructure responsibility, not club ownership.
+
+Any active organizer may eventually configure or change the Cabinet connection
+under the normal equal-organizer model. Replacing an existing location requires
+explicit confirmation because it changes which Google location Stripes treats
+as the Club Cabinet, for example:
+
+**Change Club Cabinet?**
+
+Stripes will stop using the current Google folder as the Club Cabinet.
+Existing files will remain in Google Drive.
+
+G2 must not create a new secret-ballot/governance system for Cabinet-location
+changes. Changing Cabinet metadata must never delete the old Google folder or
+its files.
 
 ## Cabinet folders
 
@@ -2443,8 +2647,9 @@ Bounded authentication direction:
 
 ### G1.6 — Workspace closure / last-organizer behavior
 
-**Status:** Implemented locally and ready for review. Not committed, pushed or
-deployed.
+**Status:** Released on `main` as `61b3079`. Firestore rules and the
+`getSharedWorkspaceClosureState` and `closeSharedWorkspace` callable Functions
+were deployed with the release.
 
 Implementation checkpoint:
 
@@ -2482,18 +2687,24 @@ Implementation checkpoint:
 - direct client group/roster deletion remains denied; the temporary closure
   checkpoint collection is also server-only.
 
-G1 governance implementation is functionally complete at this local checkpoint,
-but G1 must not be marked released or advanced to G2 until G1.6 review,
-deployment and live verification are complete.
+G1 Shared Workspace Governance is complete and released. Its final model
+preserves equal normal organizers, protected organizer removal, hardened
+verified-email invitations, the 14-day protected-removal eligibility delay,
+the last-organizer ordinary-Leave safeguard and a separate deliberate
+server-authoritative workspace-closure flow. Closure recursively removes
+Stripes workspace data, uses a durable server-only cleanup checkpoint so failed
+cleanup remains retryable after reload, and keeps direct client workspace
+deletion denied.
 
 Required roadmap order:
 
-1. complete and release G1.5f Authentication UX hardening;
-2. implement G1.6 workspace closure / last-organizer behavior;
-3. proceed to G2 Unified Google Connection;
-4. proceed to G3 Google Resource + Club Cabinet Foundation.
+1. G1 Shared Workspace Governance — complete and released;
+2. G2 Unified Google Connection — current implementation phase;
+3. G3 Google Resource + Club Cabinet Foundation;
+4. later G4 retirement/migration of existing Firebase-hosted Action Board
+   attachments after the Google-backed replacement is proven.
 
-Do not insert another major implementation phase between G1.6 and G2.
+Do not insert another major implementation phase between G1 and G2.
 
 ### Security & Privacy Launch Gate
 
@@ -2667,32 +2878,250 @@ before being considered complete.
 
 ### G2 — Unified Google Connection
 
-Inspect and consolidate:
+**Status:** Current implementation phase. Preflight architecture completed.
 
-- existing Cloud Backup Google auth;
-- existing scopes/token behavior;
-- incremental permission capability;
-- Google Picker behavior;
-- managed My Drive Cabinet-folder creation/selection;
-- multi-organizer permissions inside a shared My Drive Cabinet;
-- ownership behavior for files created by different organizers;
-- reconnect/handoff behavior when the My Drive storage host changes;
-- optional Shared Drive discovery/selection;
-- capability detection between My Drive and Shared Drive modes;
-- required permissions for each mode;
-- Google verification consequences.
+G2 builds the reusable Google connection, Cabinet-location and Google-native
+permission foundation. It does not build the full Cabinet/resource UX, migrate
+Action Board attachments or change Firebase Google identity authentication.
 
-Do not hard-code the Google connection around Shared Drive.
+#### G2 preflight findings
 
-Use the narrowest OAuth permissions that can reliably deliver the promised
-behavior.
+- Firebase Google Sign-In is an identity-only `GoogleAuthProvider` path using
+  `openid`, `email` and `profile`; it produces the Firebase UID/session and must
+  never acquire Drive scopes.
+- Google Drive authorization is a separate Google Identity Services browser
+  token flow using the least-privilege
+  `https://www.googleapis.com/auth/drive.file` scope.
+- Drive access tokens are short-lived and memory-only. They disappear on
+  refresh and are not stored in Firestore, localStorage, URLs or intentional
+  logs; no refresh token is stored.
+- The Firebase identity and connected Drive account may differ. Show the
+  connected Drive account explicitly and never infer email equality.
+- `src/App.tsx` currently owns the raw Drive connection state; G2 must move
+  that responsibility incrementally without breaking Cloud Backup.
+- the existing backup serializer remains reusable; the legacy Google Sheets
+  roster-state path remains compatibility-only and must not become the Cabinet
+  foundation.
+- current Action Board Firebase attachment/storage behavior remains unchanged
+  until G4.
 
-Do not break working Cloud Backup behavior merely to create a cleaner new
-integration.
+#### Disconnect semantics
+
+**Disconnect Google Drive** means:
+
+- discard the current live access token;
+- return Drive connection state to disconnected;
+- do not delete Google files;
+- do not delete the Stripes workspace;
+- do not automatically revoke unrelated Google account access;
+- do not unnecessarily erase remembered Cabinet, backup or resource
+  references.
+
+Connection state and resource/location state are separate concepts. A future
+explicit **Remove Google access** / OAuth-revocation action may be evaluated
+separately. Do not conflate disconnect with deletion.
+
+#### Shared Drive scope constraint
+
+Under the `drive.file` least-privilege model, Stripes must not automatically
+enumerate all Shared Drives through broader Drive scopes.
+
+Current direction:
+
+- retain `drive.file`;
+- use user-driven Google Picker selection where possible;
+- inspect selected folder/file metadata;
+- detect `driveId` and live capabilities;
+- use `supportsAllDrives` and other Shared Drive-aware request parameters where
+  required;
+- do not require Google Workspace.
+
+If reliable Shared Drive setup cannot be delivered with Picker plus
+`drive.file`, stop for explicit OAuth-scope, security and privacy review.
+Automatic Shared Drive enumeration is an architectural stop condition unless
+separately approved. Never silently broaden OAuth permissions.
+
+#### G2.1 — Unified explicit Google Drive connection
+
+Goal: turn the current Drive authorization into a reusable, explicit
+connection layer while preserving Cloud Backup.
+
+Connection state supports:
+
+- disconnected;
+- connecting;
+- connected;
+- expired / reconnect required;
+- error.
+
+Track the connected Drive account, granted scope, token expiry and
+connection/reconnect status.
+
+Preserve:
+
+- memory-only access token;
+- explicit user gesture for authorization;
+- complete separation from Firebase Google identity;
+- existing Cloud Backup behavior.
+
+G2.1 must not create Cabinet folders, write Cabinet metadata to Firestore,
+implement Shared Drive selection or migrate attachments.
+
+First atomic implementation slice:
+
+**G2.1a — Drive connection-state/auth foundation only.**
+
+#### G2.2 — Managed My Drive Cabinet location
+
+Establish a dedicated Stripes-managed My Drive folder/location without adding
+a Cabinet browser.
+
+Requirements:
+
+- idempotent create-or-rediscover behavior;
+- stable folder/file ID and app-specific marker/property;
+- survive ordinary rename or move;
+- safely handle missing, trashed and duplicate cases;
+- avoid an arbitrary whole-Drive scan;
+- work with normal personal Google accounts;
+- never imply Google Workspace is required.
+
+#### G2.3 — Multi-organizer Google permission foundation
+
+Google permissions remain authoritative. Build the ability to:
+
+- inspect relevant folder/file permissions;
+- share using appropriate Google-native roles;
+- distinguish Viewer, Commenter and Editor where supported;
+- show truthful access state;
+- handle permission revocation;
+- avoid claiming that every Stripes organizer automatically has Google access.
+
+Do not build a duplicate Stripes file ACL, Treasurer-specific permissions or
+automatic permission escalation based on a club title.
+
+Real-account testing is required for folder sharing, collaborator file
+creation, ownership/inheritance, permission revocation and organizer turnover.
+
+#### G2.4 — Optional Shared Drive capability
+
+Shared Drive remains optional. Use user-driven Picker selection, `driveId`,
+live capabilities and correct Shared Drive-aware API behavior.
+
+Do not require Workspace. Do not use broad automatic `drives.list`
+enumeration without an explicit scope/security review.
+
+#### G2.5 — Provider-neutral Cabinet-location metadata
+
+Firestore stores Stripes context/reference metadata only.
+
+Recommended conceptual location:
+
+`sharedGroups/{groupId}/cabinet/config`
+
+Retain standalone shared-roster compatibility if still required.
+
+Suggested fields:
+
+- `schemaVersion`;
+- `provider: "google_drive"`;
+- `backing: "my_drive" | "shared_drive"`;
+- `rootFileId`;
+- `driveId | null`;
+- `hostOrganizerUid | null`;
+- `hostGooglePermissionId | null`;
+- `displayName`;
+- `createdByUid`;
+- `createdAt`;
+- `updatedByUid`;
+- `updatedAt`.
+
+Do not store:
+
+- access tokens;
+- refresh tokens;
+- OAuth secrets;
+- file bytes;
+- unnecessary Google emails;
+- copied Google permission lists;
+- claims that every organizer has Google access.
+
+Cabinet metadata belongs beneath the workspace so G1.6 closure naturally
+removes Stripes-side Cabinet metadata. Closing a Stripes workspace must not
+automatically delete external Google files unless a future explicit product
+decision approves that behavior.
+
+Any active organizer may eventually change the Cabinet location under normal
+equal-organizer governance, with explicit replacement confirmation. No new
+secret-ballot system is required for this change, and the previous Google
+folder/files must remain untouched.
+
+#### Permanent G2 security regression requirements
+
+- Firebase Google login contains no Drive scopes;
+- Drive authorization requests only approved Drive capability scopes;
+- tokens never enter Firestore, localStorage, URLs or logs;
+- expiry/reconnect behavior is deterministic;
+- Drive account identity is displayed independently from Firebase identity;
+- Disconnect never deletes Google files;
+- Cloud Backup remains functional;
+- legacy Google Sheet roster parsing remains functional;
+- Action Board Firebase attachments remain unchanged during G2;
+- Cabinet metadata cannot be read or written across unrelated workspaces;
+- pending invitees and removed organizers cannot access workspace Cabinet
+  metadata;
+- normal personal Google accounts work without Workspace messaging;
+- Shared Drive capability does not silently broaden OAuth scopes.
+
+#### Manual Google production configuration checklist
+
+- Google Drive API enabled;
+- Google Picker API configured;
+- Google Sheets API retained while legacy Sheets compatibility remains;
+- OAuth consent screen branded for Stripes;
+- correct privacy, terms and support URLs;
+- verified production domain;
+- `drive.file` declared;
+- OAuth publishing/test-user state appropriate;
+- authorized JavaScript origins verified;
+- production `VITE_GOOGLE_CLIENT_ID` configured;
+- production `VITE_GOOGLE_API_KEY` configured;
+- optional `VITE_GOOGLE_APP_ID` documented/verified;
+- API-key referrer and API restrictions reviewed;
+- Firebase Google provider remains identity-only;
+- any future broader Drive scope triggers explicit verification, privacy and
+  security review.
+
+#### Current next implementation target
+
+**Next: G2.1a — Drive connection-state/auth foundation.**
+
+Scope:
+
+- reusable Drive connection lifecycle;
+- connected account identity;
+- granted `drive.file` scope;
+- expiry and reconnect state;
+- safe Disconnect behavior;
+- preserve Cloud Backup;
+- keep the OAuth token memory-only.
+
+Explicitly excluded:
+
+- Cabinet folder creation;
+- Cabinet Firestore metadata;
+- Shared Drive setup;
+- Cabinet UI;
+- attachment migration;
+- club-role UI implementation unless separately scheduled.
+
+The flexible club-role architecture is recorded, but its UI is not part of
+G2.1a.
 
 ### G3 — Google Resource + Club Cabinet Foundation
 
-Implement only after G1/G2 decisions are verified.
+Implement only after G2 connection/location/permission foundations are
+verified. G3 builds the actual user-facing Club Cabinet/resource experience.
 
 Initial goals:
 
@@ -2712,128 +3141,1930 @@ Core boundary:
 
 **Google owns the file; Stripes owns the club context and organization.**
 
+Potential G3 resource context may include title, Google type/source, club
+category, who added it, an optional club-role label, truthful Google
+access/status, an Open in Google action and origin/context such as Action Board
+or Equipment where relevant later.
+
+Do not implement this full Cabinet UX during G2. Existing Firebase-hosted
+Action Board attachments remain until the later G4 migration/retirement phase.
+
 Each G phase must remain atomic and independently revertible according to
 AGENTS.md.
 
-### T1 — Team Generation Quality + Customization Pass
+### T1 — Multi-Sport Team Generation Architecture
 
-**Status:** PLANNED / DO NOT IMPLEMENT DURING G1.5–G3.
+**Status:** APPROVED ARCHITECTURE / DOCUMENTATION ONLY — NOT IMPLEMENTED.
 
-Team generation remains a core Stripes differentiator and receives a dedicated
-quality/design pass before final launch regression.
+Team generation remains a core Stripes differentiator. T1 defines a generic,
+versioned multi-sport foundation without casually rewriting current Football
+behavior or weakening deterministic fairness.
 
-Do not casually rewrite current Football behavior.
+The product goal remains generating fair teams quickly without exposing
+mathematical complexity to recreational organizers.
 
-First collect real match examples, identify where the current model feels
-wrong, define expected reasoning, and establish regression tests.
+T1 is an independent product track that may be worked while G2 is paused. It
+does not replace or reorder the locked Google/Cabinet roadmap: G2 remains the
+next Google/Cabinet implementation phase when that work resumes. This section
+does not alter any completed G1 decision or any approved G2 architecture.
 
-#### Uneven player counts — real futsal observation
+#### Core architecture
 
-A real 9-player futsal match exposed an important distinction.
+The target architecture consists of:
 
-With no substitute rotation, the game was a true 4 vs 5.
+- one generic team-balancing engine;
+- one versioned **Sport Definition** per roster;
+- Football as the first versioned built-in Sport Definition and regression
+  baseline;
+- future built-in Sport Definitions such as Volleyball and Basketball;
+- a **Custom Sport / Game** definition for organizer-defined activities;
+- either three triangle attributes or six hexagon attributes per definition;
+- zero or one optional **Special Ability** outside the attribute geometry;
+- temporary **Balance Priorities** chosen for the current Today/generation
+  session;
+- sport policies for field size, team-size format and other sport-specific
+  balancing behavior;
+- structured, machine-readable team evaluation that can power tests,
+  comparisons, swaps, explanations and later grounded AI assistance.
 
-The current generated teams felt unbalanced because the five-player team's
-numerical advantage dominated the normal skill balance.
+The generic engine must operate on generic concepts such as attribute IDs,
+ratings, priorities, constraints, ability coverage and sport policies. It must
+not contain hard-coded Football labels such as Attack, Defense or Goalkeeper.
 
-In that situation, the four-player team should intentionally contain stronger
-players so that Stripes balances effective match strength rather than merely
-similar skill totals/averages.
+Built-in Sport Definitions may supply carefully tested defaults and
+sport-specific policy behavior. Custom definitions use transparent generic
+behavior rather than pretending Stripes knows sport-specific strategy it has
+not been taught.
 
-However, if substitutes rotate so that both sides always have the same number
-of active players, this compensation should NOT be applied.
+#### Versioned Sport Definition per roster
 
-Future generation should therefore distinguish:
+Every roster has one versioned Sport Definition. Its source is either:
 
-- **No subs / unequal active team sizes**
-  - e.g. permanent 4 vs 5;
-  - compensate the smaller side with stronger players.
+- `built_in`, using a Stripes-owned versioned definition; or
+- `custom`, using an organizer-created definition stored with that roster.
 
-- **With subs / equal active team sizes**
-  - roster sizes may differ;
-  - the same number of players are active at once;
-  - use normal balancing without artificial headcount compensation.
+A Sport Definition establishes at least:
 
-Avoid adding a permanent settings panel.
+- stable sport/definition identity;
+- source and schema version;
+- display name;
+- three-attribute triangle or six-attribute hexagon profile shape;
+- stable attribute IDs;
+- attribute labels, meanings, help definitions and display order;
+- zero or one optional Special Ability definition;
+- applicable sport policies and supported Balance Priority options.
 
-When player numbers cannot divide evenly, prefer a small contextual question
-such as:
+A Stripes-maintained built-in definition may contain its Overall Skill model,
+three/six balance attributes, optional Special Ability, default balance
+behavior, sport-specific evaluation, team-size policy, field/court condition
+policy and other validated sport-specific rules.
 
-**Will you rotate substitutes?**
+During Custom Sport / Game roster creation, the organizer defines the
+sport/game name, chooses three triangle attributes or six hexagon attributes,
+names those attributes and may optionally define one Special Ability. The
+organizer may skip Special Ability completely. Custom definitions must work
+with generic team balancing without requiring custom algorithm code.
 
-The compensation model must be designed/tested using real match scenarios
-rather than guessed.
+The roster's definition is the contract used by player profiles, radar
+visualization, team generation, evaluation, priorities and explanations.
 
-#### Lightweight team-building customization
+#### Immutable roster schema
 
-Organizers need meaningful control without learning algorithm weights.
+After roster creation, the following Sport Definition semantics are immutable
+for that roster:
 
-Example requests:
+- sport identity, source and version;
+- three-versus-six attribute shape;
+- stable attribute IDs;
+- each attribute's meaning and order;
+- the optional Special Ability's stable identity and meaning.
 
-- "Make a different variation from last week."
-- "Put Vivian and Paul on the same team."
-- "Keep these two players apart."
-- "Make sure every team has at least one runner."
-- "Spread the good defenders across the teams."
-- "Blue looks too weak defensively."
+Existing player data must never be silently reinterpreted under a new meaning.
+A future schema change requires an explicit migration flow or roster
+duplication into a newer definition. Existing rosters remain pinned to their
+recorded version until the organizer deliberately migrates them.
 
-Text and/or the existing Speak/voice interaction may provide this input.
+Whether a custom definition may later receive cosmetic-only display-label
+renames without changing its immutable semantic contract remains an explicit
+open decision. Cosmetic changes must never mutate stable IDs or meanings.
 
-AI must NOT independently invent teams.
+#### Player profile model
 
-Preferred model:
+Each player's membership in a roster keeps separate concepts:
 
-natural-language request
-→ AI interpretation
-→ explicit structured constraints/preferences
-→ user sees what Stripes understood
-→ deterministic generator optimizes under those constraints
+- **Overall Skill** — the organizer's general assessment of that player in the
+  roster's sport/context;
+- **Attribute ratings** — three or six ratings whose IDs come from the active
+  Sport Definition;
+- **Special Ability** — optional rating/state only when the definition enables
+  one.
 
-Example interpreted preferences:
+Overall Skill and advanced attributes are related inputs, but their exact
+mathematical relationship remains open. T1 must not assume one universal
+Player Index that collapses every sport and every definition into a single
+formula.
 
-- Keep Vivian + Paul together
-- At least one runner per team
-- Distribute strong defenders
-- Avoid last week's main combinations
+The same real person may have independent profiles in different sport-specific
+rosters. Ratings belong to the player's roster membership, not to a universal
+cross-sport identity.
 
-This transparency is particularly important for organizers who distrust a
-black-box balancing algorithm.
+#### Radar visualization and advanced ratings
 
-Post-generation AI should use constrained swaps/optimization and explain the
-effect rather than arbitrarily regenerating teams.
+The advanced-rating radar uses the actual active Sport Definition:
 
-Future T1 design should cover:
+- three attributes render as a triangle;
+- six attributes render as a hexagon;
+- labels and help copy come from the definition;
+- the same stable attribute IDs power the optimizer, Balance Priorities,
+  structured evaluation and explanations.
 
-- uneven-headcount compensation;
-- substitute/no-sub match format;
-- variation/history awareness;
-- together/apart constraints;
-- minimum role/attribute coverage;
-- runner/defender distribution;
-- natural-language/voice customization;
-- grounded post-generation swaps;
-- "Why these teams?" explanations.
+The radar must not be a decorative layer disconnected from team generation.
+Changing a displayed axis or its semantics is therefore a schema/versioning
+decision, not a typography-only rename.
 
-#### Multi-sport relationship
+#### Football definitions
 
-T1 should be designed alongside the later multi-sport model without cluttering
-the current Football UI.
+The current Football six-axis order clockwise from 12 o'clock is:
 
-Initial sport direction:
+- Attack;
+- Passing;
+- Stamina;
+- Defense;
+- Strength / Physical;
+- Speed.
 
-- Football
-- Volleyball
-- Basketball
+A proposed **Football v2** profile is:
 
-Prefer shared sport-neutral generation infrastructure with sport-specific
-presets/strategies.
+- Attack;
+- Passing;
+- Stamina;
+- Defense;
+- Technique;
+- Pace.
 
-Football remains the regression baseline.
+`Physical` to `Technique` is a semantic change and must never reinterpret an
+existing Physical rating as Technique. `Speed` to `Pace` may be terminology
+compatible, but stable-ID compatibility must be audited rather than assumed.
+T1 must inspect the current stored model, default values, UI and optimizer
+usage before defining any v1-to-v2 migration.
 
-Volleyball/Basketball should hide football-only controls instead of adding
-irrelevant options to every sport.
+Football remains the initial regression baseline. New Football rosters may use
+the latest approved built-in version once implemented, while existing rosters
+stay pinned to their recorded version until explicit migration.
 
-Before implementation, brainstorm the sport models and UI carefully so
-multi-sport support does not introduce unnecessary permanent interface.
+#### Optional Special Ability
+
+A Sport Definition may declare zero or one Special Ability. It is deliberately
+outside the triangle/hexagon attribute geometry because it represents a
+distinct coverage or role concern rather than another general axis.
+
+For Football, the proposed Special Ability is **Goalkeeper**. Whether its first
+representation is boolean, a small ordinal scale or another compact model is
+still open and must be resolved before implementation.
+
+A Custom Sport / Game may also define zero or one Special Ability with a
+stable ID and immutable meaning. Its creation UI must explain the distinction
+with this copy:
+
+> Special ability — optional. Is there one role or ability Stripes should pay
+> special attention to when forming teams? Examples: Goalkeeper, Setter,
+> Healer, Pitcher. Skip if your sport/game does not need one.
+
+If skipped, no Special Ability data or control exists for that roster. Future
+Volleyball and Basketball Special Abilities remain TBD and must be designed
+sport-by-sport rather than guessed now.
+
+Special Ability balancing uses distinct internal semantics from ordinary
+attribute weighting. It must not be disguised as a seventh radar axis.
+
+#### Balance Priorities
+
+Balance Priorities are temporary choices for the current Today/team-generation
+session. They are not permanent changes to player ratings or the roster's
+Sport Definition.
+
+Requirements:
+
+- derive available priorities dynamically from the active Sport Definition;
+- allow zero, one or multiple priorities;
+- do not expose raw optimizer-weight sliders;
+- treat an attribute priority as a modifier to normal fairness, not a
+  replacement for overall team balance;
+- treat Special Ability priority as a distinct coverage/role policy rather
+  than an ordinary attribute multiplier;
+- make the active priorities visible in structured evaluation and future
+  explanations;
+- clear or deliberately re-establish session priorities according to the
+  Today/session lifecycle rather than silently making them roster defaults.
+
+For example, Football v2 may show a **Player attributes** section containing
+Attack, Passing, Stamina, Defense, Technique and Pace, followed by a
+**Special ability** section containing Goalkeeper. The Special Ability section
+appears only when the active definition supplies one.
+
+Selecting Defense does not create more defensive ability. It tells the
+optimizer to distribute the available defensive ability more evenly while
+preserving acceptable overall fairness. Selecting Goalkeeper may instead
+increase the importance of goalkeeper coverage/quality distribution rather
+than merely equalizing a numerical average; the active Sport Definition owns
+that interpretation.
+
+The exact multiplier, trade-off limits and many-priority UX remain unresolved.
+
+#### Generic optimizer and evaluation contract
+
+The optimizer receives a sport-neutral input contract containing:
+
+- players and their Overall Skill;
+- definition-addressed advanced attribute ratings;
+- optional Special Ability values;
+- temporary Balance Priorities;
+- team count and team-size policy;
+- existing together/apart locks and other explicit constraints;
+- applicable built-in or generic sport policies;
+- history/variation inputs when that feature is deliberately enabled.
+
+The optimizer must produce a structured evaluation rather than only rendered
+teams. The machine-readable result should be able to describe:
+
+- overall fairness;
+- per-attribute team totals/averages and imbalance;
+- priority-specific outcomes;
+- Special Ability coverage;
+- team-size/headcount effects;
+- satisfied or unsatisfied constraints;
+- candidate swap effects;
+- the grounded facts used by **Why these teams?** explanations.
+
+This evaluation contract is the foundation for deterministic regression tests,
+team comparisons, constrained swaps and later AI explanations. UI prose must
+be derived from evaluated facts rather than invented independently.
+
+#### Missing advanced data
+
+Stripes must not fabricate missing advanced attribute values from Overall
+Skill merely to fill the radar or satisfy the optimizer contract.
+
+T1 must explicitly decide:
+
+- the coverage threshold at which advanced evaluation becomes useful;
+- how partially rated players affect attribute balance;
+- whether an attribute can be prioritized when data coverage is incomplete;
+- how uncertainty is represented in evaluation and explanations;
+- what fallback uses Overall Skill without falsely claiming advanced insight.
+
+Until those rules are approved, missing data remains missing data.
+
+#### Sport-specific policy layering
+
+For Football, team generation should apply inputs in an explicit, testable
+order:
+
+player ratings
+→ Football defaults
+→ field-size modifier
+→ temporary Today Balance Priorities
+→ deterministic optimizer and structured evaluation
+
+The exact mathematical combination remains part of T1 design and testing.
+This layering records responsibilities; it does not pre-approve multipliers.
+
+##### Field size
+
+T1.1 must audit how the current field-size control affects generation today.
+Do not preserve or replace behavior based on assumptions.
+
+For Football v2, the following are hypotheses to test against real matches,
+not locked formulas:
+
+- Small field may increase the relevance of Technique and Passing;
+- Medium field may remain neutral;
+- Large field may increase the relevance of Pace and Stamina.
+
+Custom Sport / Game definitions use generic behavior unless a policy is
+explicitly authored and validated. Stripes must not silently apply Football
+field assumptions to another sport.
+
+##### Uneven team sizes and substitutes
+
+Uneven-player behavior belongs behind a `teamSizePolicy` rather than scattered
+special cases.
+
+A real nine-player futsal match demonstrated that permanent 4-vs-5 play differs
+from a five-player roster rotating substitutes while equal numbers are active:
+
+- **No substitutes / unequal active team sizes:** the smaller team may require
+  stronger players to balance effective match strength;
+- **Rotating substitutes / equal active team sizes:** use normal balance and
+  do not apply artificial headcount compensation.
+
+When attendance cannot divide evenly, a small contextual question such as
+**Will you rotate substitutes?** is preferable to a permanent settings panel.
+The compensation mathematics remain unresolved and must be tested with real
+match scenarios.
+
+#### Built-in versus Custom Sport / Game behavior
+
+Built-in definitions are versioned Stripes products. They may provide tested
+sport-specific defaults, policy modifiers, Special Ability behavior and
+explanation vocabulary.
+
+Custom Sport / Game definitions provide:
+
+- a name;
+- either three or six organizer-defined attributes;
+- stable IDs, labels, meanings and order;
+- zero or one optional Special Ability;
+- generic optimizer/evaluation behavior;
+- temporary priorities derived from those custom attributes and ability.
+
+Custom definitions must not receive invented sport expertise. The initial
+generic balancing model, especially Special Ability evaluation, remains an
+explicit design task.
+
+Once implemented, a valid Custom Sport / Game should automatically receive its
+radar, generic attribute balancing, dynamic Balance Priorities, optional
+Special Ability handling and structured evaluation without bespoke optimizer
+code.
+
+#### Versioning and compatibility
+
+Built-in Sport Definitions are immutable versioned contracts:
+
+- new rosters may default to the latest approved version;
+- existing rosters remain pinned to their stored version;
+- a display-label change is not automatically a data migration;
+- semantic changes require a new definition version;
+- migration must show what will change and must be explicit;
+- where safe migration cannot be proven, duplicate the roster into the new
+  definition instead of rewriting the old profile data;
+- historical sessions and explanations must remain interpretable against the
+  definition version that produced them.
+
+#### Future natural-language and AI boundary
+
+Organizers may later request changes such as:
+
+- "Make a different variation from last week.";
+- "Put Vivian and Paul on the same team.";
+- "Keep these two players apart.";
+- "Make sure every team has at least one runner.";
+- "Spread the good defenders across the teams.";
+- "Blue looks too weak defensively.".
+
+AI must not independently invent teams or reference attributes that do not
+exist in the active Sport Definition.
+
+Approved future flow:
+
+natural-language/voice request
+→ AI receives the active versioned Sport Definition
+→ AI returns only valid structured constraints/preferences
+→ Stripes shows the structured interpretation to the organizer
+→ deterministic optimizer generates or adjusts teams
+→ structured evaluation grounds the explanation
+
+Post-generation assistance should propose constrained, evaluated swaps and
+explain their effect. AI implementation belongs after the deterministic T1
+foundation and is not part of the initial T1 sequence.
+
+#### Atomic implementation sequence
+
+T1 must proceed in small, independently reviewable steps:
+
+1. **T1.1 — Current implementation and data audit**
+   - map current player fields, six attributes, Overall Skill formula, radar,
+     Goalkeeper representation, field-size logic, team-size logic, pairing
+     constraints, optimizer/evaluation, persistence, hard-coded Football
+     assumptions, existing tests, history and missing-data behavior;
+   - collect representative real-match regression cases, including permanent
+     4-vs-5 and rotating-substitute scenarios;
+   - do not change behavior.
+2. **T1.2 — Versioned Sport Definition contract**
+   - define built-in/custom schemas, stable IDs, immutability, three/six
+     profile shape and optional Special Ability contract;
+   - define compatibility and validation tests before persistence migration.
+3. **T1.3 — Player profile contract**
+   - separate Overall Skill, definition-addressed attributes and optional
+     Special Ability while preserving existing Football data.
+4. **T1.4 — Generic structured evaluation**
+   - create sport-neutral evaluation output and regression fixtures around the
+     existing deterministic generator before changing optimization behavior.
+5. **T1.5 — Temporary Balance Priorities**
+   - add definition-derived session priorities with no raw sliders and no
+     silent persistence as player/roster ratings.
+6. **T1.6 — Football v2 definition**
+   - resolve Technique/Pace semantics, Goalkeeper representation, defaults,
+     field modifiers and explicit v1 compatibility/migration UX.
+7. **T1.7 — Custom Sport / Game creation**
+   - create immutable three- or six-attribute definitions with zero/one
+     Special Ability and clear help copy.
+8. **T1.8 — Generic custom-sport balancing**
+   - apply transparent generic evaluation/optimization without invented sport
+     strategy.
+9. **T1.9 — Sport and team-size policies**
+   - implement tested field/format policies, including no-sub versus rotating
+     uneven-team behavior.
+10. **T1.10 — Grounded explanations and swaps**
+    - derive **Why these teams?**, comparisons and constrained swap effects
+      from structured evaluation.
+
+Natural-language/voice interpretation and AI assistance remain later work
+after T1.1–T1.10 establish the deterministic contracts and regression gates.
+
+#### T1 Live Split — Human-Assisted Team Formation
+
+**Status:** HIGH-VALUE PRODUCT DIRECTION / MAJOR T1 FEATURE. Further UX and
+algorithm refinement is required before implementation.
+
+Live Split addresses a real weakness of pre-generated recreational teams:
+attendance is often uncertain at the exact moment teams need to be formed.
+It may become a core/game-changing T1 feature, but its product direction is
+approved while its final implementation scope is not.
+
+##### Real-world problem
+
+A Meetup event may show 19 expected players while, on the field:
+
+- some people do not arrive;
+- some are late;
+- the organizer does not immediately know who is missing;
+- people continue arriving while teams are being formed.
+
+An experienced organizer may reasonably prefer to split teams manually on
+site rather than first clean up attendance and repeatedly regenerate complete
+teams. Stripes should support that reality directly.
+
+##### Generate Teams and Live Split have different jobs
+
+Preserve two complementary serious team-formation modes.
+
+**Generate Teams** is best when the actual participant set is reasonably
+settled. For example, 19 players are expected and the organizer confirms all
+19 are present, or quickly removes the known absences and confirms 16. Once
+Stripes knows the participating set, Generate creates the complete team
+arrangement.
+
+**Live Split** is best when attendance is uncertain, incomplete, still
+changing, being resolved physically on site, or the organizer simply prefers
+manual formation. The Meetup/Today list becomes the candidate pool. The
+organizer taps players as they physically see them and progressively assigns
+them into teams.
+
+Assignment effectively confirms that player as present. Untapped expected
+players remain unassigned, possibly absent or potentially late. Live Split can
+therefore resolve actual attendance through the act of forming teams.
+
+The UI may recommend:
+
+- **Attendance settled → Generate**;
+- **Attendance uncertain → Live Split**.
+
+The organizer remains free to choose either mode. Never hard-code a rule such
+as **missing player = Live Split required**: an organizer may know exactly who
+is absent and still prefer automatic generation.
+
+##### Shared deterministic intelligence
+
+Generate and Live Split use the same deterministic T1 evaluation foundation:
+
+```text
+Expected / actual players
+          ↓
+Sport Definition
+          ↓
+Team evaluation / Best Completion Engine
+          ↓
+┌─────────────────────────┐
+│                         │
+Generate Teams        Live Split
+│                         │
+Stripes chooses       Organizer chooses
+complete teams        progressively
+│                         │
+└────────────┬────────────┘
+             ↓
+      Same fairness model
+```
+
+Do not build a separate simplistic fairness algorithm for Live Split.
+
+##### Best Completion Engine
+
+The **Best Completion Engine** is an important T1 architectural concept. Given:
+
+- attending/candidate players;
+- teams already partially built;
+- unassigned players;
+- locked manual assignments;
+- the active Sport Definition;
+- Overall Skill;
+- sport attributes;
+- temporary Balance Priorities;
+- optional Special Ability;
+- gender-balancing requirements where applicable;
+- team-size policy;
+- field/court conditions;
+
+the engine answers:
+
+**What is the best fair completion still possible from the current state?**
+
+Conceptually:
+
+```text
+partially assigned teams
++ remaining players
++ sport/session rules
+          ↓
+Best Completion Engine
+          ↓
+best achievable completion
++ team evaluation
++ suggested next assignments
++ minimal corrections if necessary
+```
+
+This capability is broader than Live Split. It may later support automatic
+Generate, late arrivals, no-show correction, post-generation swaps,
+**Blue is weak defensively** adjustments, **Why These Teams?** and future AI
+instructions.
+
+##### Globally future-aware recommendations
+
+Live Split recommendations must not be greedy. The engine must not ask only:
+
+**Who best matches the next player or team right now?**
+
+It must ask:
+
+**Which assignment helps the current team while preserving the ability to form
+fair teams from everyone remaining?**
+
+For example, with 30 players forming 15 pairs, consuming all medium-strength
+players in the first ten locally plausible pairs may leave five badly
+mismatched pairs. Recommendation quality should combine:
+
+- quality of the current assignment;
+- fairness of teams already formed;
+- best achievable fairness of the remaining teams.
+
+Suggestions consider the entire unassigned pool. Future-completion feasibility
+becomes increasingly important as that pool shrinks.
+
+This global/future-aware behavior is required for pairs, two teams, three
+teams, four or more teams, all supported built-in sports and Custom Sport/Game
+where applicable.
+
+##### Continuous tap and active-color loop
+
+Preserve the strongest current UX direction: one tap assigns one selected
+player to the currently active team color, then the active team advances
+automatically.
+
+Four-team example:
+
+```text
+NEXT → BLUE    tap Anna
+NEXT → RED     tap Maria
+NEXT → GREEN   tap Lisa
+NEXT → YELLOW  tap Sarah
+NEXT → BLUE
+```
+
+The ordinary path should require approximately **N players → N assignment
+taps**. Avoid requiring **tap player → choose destination team** for every
+normal assignment.
+
+If a team reaches its target capacity, the active-color loop skips that team
+where appropriate. Do not hard-code equal team sizes. Respect the future
+`SportDefinition.teamSizePolicy`, including unequal-team cases.
+
+##### Round anchor and simultaneous suggestions
+
+The color loop naturally creates implicit distribution rounds, although the UI
+does not need to expose the word **round**.
+
+The first player manually selected in a new loop becomes its temporary anchor.
+For four teams, if Blue is active and the organizer selects
+**Anna · female · Skill 4**, Anna becomes the anchor. Stripes then calculates
+useful counterparts for Red, Green and Yellow.
+
+Where useful, show one simultaneous suggested player for each remaining team:
+
+```text
+BLUE          RED          GREEN        YELLOW
+Anna          Maria        Lisa         Sarah
+anchor        suggested    suggested    suggested
+```
+
+For three teams, show the anchor plus up to two suggestions. Suggestions should
+preferably appear as subtle team-color highlighting directly in the unassigned
+player interface rather than as repeated modal confirmations. Exact visual
+design remains open.
+
+##### Recommendation inputs, not anchor cloning
+
+Do not reduce recommendation logic to **find players most similar to the
+anchor**. Anchor similarity is useful, but it is only one input.
+
+Recommendations should consider:
+
+- approximate similarity to the current anchor;
+- Overall Skill;
+- current destination-team strength;
+- all already-built teams;
+- sport attributes;
+- today's Balance Priorities;
+- optional Special Ability;
+- gender distribution where applicable;
+- team capacity;
+- the entire remaining unassigned-player pool;
+- best achievable eventual team fairness.
+
+A mathematically closer clone of the anchor may be a worse recommendation when
+using that player now makes the remaining teams substantially harder to
+balance.
+
+If Anna is a female Skill 4 anchor and the session is distributing gender,
+Stripes may strongly prefer comparable female players for the other teams. Do
+not hard-code **female anchor → female player mandatory**. Gender is relevant
+only when data exists, the roster/session uses it and the balancing policy
+considers it relevant. Live Split must also work when gender is not tracked.
+
+##### Organizer authority and continuous recalculation
+
+Preserve the central principle:
+
+**Organizer defines reality; algorithm continuously adapts.**
+
+Suggestions are advisory. If Stripes suggests **Maria → Red** and the organizer
+taps Peter instead:
+
+- Peter is assigned immediately;
+- that manual choice becomes locked reality;
+- remaining recommendations recalculate immediately.
+
+Never block an organizer because the algorithm prefers another player.
+
+After every tap:
+
+1. lock the organizer's decision;
+2. reevaluate all current teams;
+3. reevaluate the remaining pool;
+4. recalculate the best achievable completion;
+5. update remaining suggestions.
+
+The UI must feel immediate. Live Split fails if smart recommendations visibly
+take several seconds after each tap. Responsiveness is a hard implementation
+requirement. The exact optimization/search technique remains a later
+engineering decision; do not assume brute-force enumeration.
+
+##### Avoiding an unfair final corner
+
+One of Live Split's main benefits is preventing the common manual-split failure
+where the first teams look reasonable but the remaining players cannot be
+distributed fairly.
+
+Most future-completion intelligence should remain invisible. Do not show
+constant mathematical warnings. If manual choices materially reduce the
+possibility of a fair result, Stripes may show simple feedback such as:
+
+**Remaining players are becoming harder to balance.**
+
+and offer a useful recommendation. Near the final rounds, recommendations may
+become more visually assertive because fewer fair completions remain, but they
+remain optional.
+
+##### Undo and live team evaluation
+
+Maintain a prominent Undo control. Undo restores:
+
+- the previous assignment;
+- the previous active team/color;
+- round/anchor state;
+- recommendation state.
+
+Repeated undo should be supported where practical.
+
+After every tap, the shared engine evaluates the current team state. Keep
+user-facing feedback visual and simple. Potential meanings include:
+
+- teams currently close;
+- Blue noticeably stronger;
+- Green needs defensive help;
+- Special Ability distribution uneven.
+
+Do not require the organizer to interpret raw optimizer scores. Exact
+visualization remains a UX design problem.
+
+##### Late arrivals and no-shows
+
+Live Split must support a player arriving after teams already exist. For
+example, 19 players were expected, 16 have been assigned and Jorge arrives
+late. The organizer marks/selects Jorge as present. The Best Completion /
+evaluation engine may recommend **Best fit: Green**. The organizer may accept
+or ignore it.
+
+Do not automatically regenerate existing teams. If the late arrival creates a
+meaningful imbalance, suggest the smallest useful correction, for example:
+
+```text
+Jorge → Green
+Suggested adjustment: Marco ↔ Peter
+```
+
+Untapped expected Meetup players may remain unassigned without explicit
+cleanup before Live Split begins. If an already-assigned player turns out not
+to be playing:
+
+- remove or mark that player absent;
+- preserve other existing assignments;
+- reevaluate;
+- recommend the smallest useful correction.
+
+Complete regeneration is not the default.
+
+##### Attendance-through-assignment workflow
+
+Live Split can collapse:
+
+```text
+confirm attendance
+        ↓
+configure teams
+        ↓
+form teams
+```
+
+into:
+
+```text
+expected player pool
+        ↓
+tap the people who are actually here
+        ↓
+teams emerge
+```
+
+This continuous attendance/team-formation workflow is one of Live Split's
+strongest product benefits because it reduces on-field administrative work.
+
+##### Shared T1 integrations
+
+Live Split consumes the same temporary Balance Priorities as automatic
+Generate. For example, when Football Defense is prioritized, suggestions
+consider defensive distribution more strongly while preserving Overall Skill
+fairness and future-completion quality. Do not create a separate Live Split
+weighting model.
+
+Live Split also consumes the active Sport Definition's optional Special
+Ability. For Football, Goalkeeper distribution may influence suggestions when
+relevant. Do not implement a Live Split-specific goalkeeper model.
+
+The generic Live Split architecture eventually consumes:
+
+- Sport Definition;
+- player sport profiles;
+- Overall Skill;
+- balance attributes;
+- optional Special Ability;
+- Balance Priorities;
+- team-size policies;
+- field/court conditions.
+
+Volleyball, Basketball and Custom Sport/Game should reuse the same interaction
+and recommendation architecture. Do not hard-code Football assumptions into
+the generic Best Completion or Live Split engine.
+
+##### Relationship to Quick Teams
+
+Keep this boundary explicit:
+
+**Quick Teams**
+
+- one-off;
+- names only;
+- random;
+- playful;
+- no roster intelligence.
+
+**Live Split**
+
+- a serious Stripes Team Generator feature;
+- uses roster/current attendance;
+- uses player ratings and sport intelligence;
+- uses future-aware optimization;
+- keeps assignments under human control;
+- is designed for uncertain real-world attendance.
+
+Do not merge the two features.
+
+##### UX and algorithm questions still unresolved
+
+Do not implement before refining and prototyping:
+
+- mobile one-screen layout;
+- active-color visibility;
+- representation of two, three, four or more teams;
+- 20–30+ player pools;
+- anchor/suggestion presentation;
+- simultaneous suggestions;
+- balance feedback;
+- team-full behavior;
+- manual team correction;
+- Undo;
+- late arrival;
+- no-show removal;
+- scrolling while preserving visible active-team context;
+- one-handed outdoor use;
+- sunlight/readability;
+- accessibility for people who cannot distinguish team colors;
+- whether team-first assistance adds value or should be omitted;
+- the optimization/search approach and performance bounds needed for
+  immediate recalculation;
+- how Best Completion recommendations trade local round quality against final
+  global fairness.
+
+Do not ask Codex to invent the final Live Split interface from a vague
+specification. Continue UX and algorithm refinement, prototype the interaction
+states and performance assumptions, and only then assign a bounded
+implementation sequence.
+
+Live Split is approved as a potentially core/game-changing T1 direction, not
+as an implementation-ready feature. It does not alter the current T1.1–T1.10
+sequence until its UX and algorithm decisions are sufficiently refined to
+place it safely.
+
+#### Explicit unresolved questions
+
+The following decisions remain open and must not be silently answered during
+implementation:
+
+- Overall Skill versus detailed-attribute mathematical relationship;
+- Generic team-attribute aggregation formula;
+- Balance Priority multiplier;
+- Maximum acceptable Overall Skill trade-off;
+- Missing-rating behavior;
+- Special Ability / Goalkeeper value scale;
+- Generic Custom Sport / Game Special Ability evaluation;
+- Football v2 default weights;
+- Small / Medium / Large field modifiers;
+- Uneven-team compensation formula;
+- Football v1-to-v2 migration UX;
+- Whether Pace permanently retains the legacy Speed identity internally;
+- Exact Football attribute help/rating definitions;
+- Custom attribute cosmetic-renaming policy;
+- UX behavior when many Balance Priorities are selected.
+
+Do not begin T1 implementation from this architecture record alone. Start with
+the bounded T1.1 audit, resolve its factual findings and regression cases, then
+seek approval for each behavioral contract that remains open.
+
+#### 2026-08-17 locked T1 refinement — Player Profiles, Balance Priorities and Detailed Profile UX
+
+**Status:** APPROVED DESIGN DIRECTION / DOCUMENTATION ONLY — NOT IMPLEMENTED.
+
+Detailed implementation/UX reference:
+
+`docs/design/T1_PLAYER_PROFILE_TEAMING_SPEC_2026-08-17.md`
+
+This dated refinement records the current authoritative T1 direction. Where
+older T1 wording conflicts with this subsection, **this 2026-08-17 refinement
+takes precedence**.
+
+In particular, this refinement supersedes older assumptions that:
+
+- Detailed attributes must determine Overall Skill;
+- Field Size should remain a normal team-generation control;
+- the generic multi-sport engine requires a field/court-size concept;
+- the future categorical player concept should be called Special Ability;
+- the current Team Play multiplier or large algorithmic trait pile should
+  remain part of the future generic core.
+
+##### Overall Skill and attribute meaning
+
+**Overall Skill is the required primary strength anchor.**
+
+Overall answers:
+
+> How good is this player?
+
+Detailed sport attributes answer:
+
+> How is this player good?
+
+Overall remains organizer-authored and is the dominant fairness input for team
+formation.
+
+Detailed attributes describe the player's ability shape and team-composition
+characteristics. They must not secretly become a second competing Overall
+rating.
+
+Example:
+
+- Marco — Overall 7
+- Attack 9
+- Passing 8
+- Stamina 7
+- Defense 6
+- Technique 9
+- Pace 8
+
+The intended interpretation is that Marco remains fundamentally an Overall-7
+player but has particular strengths and weaknesses relative to players around
+that level.
+
+Changing an attribute must **not silently recalculate Overall**.
+
+Changing Overall later must **not silently move reviewed attribute values**.
+
+If Overall and a Detailed profile become extremely contradictory, Stripes may
+offer a rare, non-blocking suggestion to review Overall. It must never silently
+rewrite user data.
+
+Overall fairness remains the main guardrail when Generate or Live Split uses
+attribute composition.
+
+##### Basic profile and Detailed profile are both complete states
+
+A player may legitimately use only Overall Skill.
+
+This is a complete **Basic profile**, not an unfinished Detailed profile.
+
+A Basic player card must not show:
+
+- missing-profile warnings;
+- an empty or permanently greyed-out radar as a nag;
+- fabricated detailed attribute ratings;
+- blank reserved space for Detailed-only content.
+
+The flipped Basic card should instead present Overall cleanly, including an
+Overall-focused visualization/description and a quiet optional action such as:
+
+`Add detailed profile ›`
+
+A user who chooses to maintain an Overall-only roster should never feel that
+Stripes considers the roster incomplete.
+
+The evaluator may use a neutral internal composition fallback where necessary
+for an Overall-only player, but those neutral values are **not recorded player
+ratings and must not be displayed as if reviewed**.
+
+##### Detailed profile is optional accuracy enrichment
+
+Detailed Profile is for organizers who want Stripes to record the player more
+accurately and use that additional information throughout the product.
+
+Once reviewed and saved, the detailed attributes are real persistent player
+observations.
+
+Core data-truth rule:
+
+> **One recorded attribute value = one radar value = one evaluator input value.**
+
+Do not store one number, visualize another and secretly optimize a third via
+legacy trait boosts.
+
+Detailed-profile information should materially improve:
+
+- radar visualization;
+- Generate;
+- Live Split;
+- Balance Priorities;
+- team-composition evaluation;
+- constrained-swap evaluation;
+- built-in Playing Profile inference;
+- future grounded “Why these teams?” explanations.
+
+##### Three-attribute and six-attribute profiles
+
+A Sport Definition may expose either three or six attributes.
+
+The rating component, radar/triangle and evaluator must render from the active
+Sport Definition rather than hard-code Football.
+
+Current future Football v2 attribute direction:
+
+1. Attack
+2. Passing
+3. Stamina
+4. Defense
+5. Technique
+6. Pace
+
+Migration rules:
+
+- old Physical/Strength -> Technique is **not a rename**;
+- old Physical values must never be silently reinterpreted as Technique;
+- Speed -> Pace is mainly a semantic/display evolution and may retain internal
+  compatibility during migration;
+- built-in Sport Definitions must be versioned so historical roster semantics
+  are not silently changed.
+
+##### Special Role replaces the future Special Ability concept
+
+For the future core, the categorical team-building concept is **Special Role**.
+
+A Sport Definition may define zero or one optional Special Role.
+
+Football example:
+
+- Goalkeeper
+
+Special Role is separate from the radar/attribute geometry and may create a
+structural team-composition requirement.
+
+The generic engine understands role coverage; it does not need to understand
+the football word “Goalkeeper”.
+
+Custom Sport/Game may optionally define its own one Special Role.
+
+##### Team Play and legacy trait pile
+
+The future T1 core should not depend on:
+
+- the current Team Play multiplier;
+- the large collection of algorithmic player-trait badges/boosts.
+
+Legacy data must be preserved for compatibility/migration, not destructively
+deleted.
+
+Current traits may remain readable for old rosters during transition, but T1
+must not casually reproduce their hidden stat mutations in the new generic
+engine.
+
+##### Detailed Profile rating mental model
+
+The organizer should not be asked to invent six independent numbers from
+scratch.
+
+The rating question is relative to Overall:
+
+> Compared with another player around this Overall level, what stands out?
+
+Conceptually each attribute uses a small understandable range such as:
+
+- much weaker;
+- weaker;
+- typical for this Overall;
+- stronger;
+- much stronger.
+
+The relative language helps the organizer judge the player.
+
+The resulting numeric attribute remains visible and persistent so profiles can
+still be compared accurately.
+
+Do not repeat five long textual choices six times on screen.
+
+##### Six-row Detailed Profile input
+
+For a six-attribute sport, Detailed Profile should use six **spacious horizontal
+selection rows**, one per attribute.
+
+Football example:
+
+- Attack
+- Passing
+- Stamina
+- Defense
+- Technique
+- Pace
+
+Explain the horizontal scale once near the top, for example:
+
+> WEAKER <-   -> STRONGER
+> Center = typical for an Overall 7 player
+
+Each row then remains visually simple.
+
+Rows must be large enough for phone use so the finger does not hide the only
+important feedback.
+
+The active row and selected value must remain easy to see while touching the
+screen.
+
+##### One continuous zig-zag swipe
+
+Mobile Detailed Profile should support a distinctive fast-input gesture.
+
+The organizer may place a finger on the first attribute row and move downward
+through all remaining rows in **one continuous gesture**.
+
+Horizontal position on each crossed row chooses that attribute's snap level.
+
+The resulting path naturally forms a zig-zag according to the player's
+strengths and weaknesses.
+
+This allows a six-attribute player profile to be mapped in roughly one gesture
+instead of six separate forms.
+
+The gesture is an accelerator, not a requirement.
+
+The same component must also support:
+
+- tapping individual values;
+- tapping all six rows instead of swiping;
+- swiping several rows then correcting others;
+- editing one attribute later without repeating the full gesture.
+
+Do not create a separate “swipe mode”.
+
+##### Gesture behavior and feedback
+
+During the one-swipe interaction:
+
+- crossing a row activates it;
+- horizontal position snaps to a valid level;
+- re-entering a row may correct that row during the same gesture;
+- selection feedback is immediate;
+- the active value should be visible above/beside the finger rather than hidden
+  underneath it;
+- the radar preview updates live;
+- pointer-up ends the continuous gesture but does not prevent tap corrections.
+
+Where supported, subtle haptic ticks may reinforce row/snap selection.
+
+Haptics remain supplemental and must never be required for understanding.
+
+The implementation must deliberately solve vertical-scroll conflict. Once a
+clear rating gesture begins inside the control, the interaction should not be
+routinely stolen by page scrolling.
+
+Real-device Android testing is mandatory before this interaction is considered
+finished.
+
+##### Detailed Profile onboarding and `?` help
+
+Because the zig-zag gesture is unusual, Detailed Profile needs dedicated
+onboarding.
+
+A permanent but unobtrusive `?` help control should always allow the organizer
+to replay it.
+
+On first use, show a short animated, game-like tutorial that demonstrates:
+
+1. the Overall reference;
+2. weaker on the left, typical in the center, stronger on the right;
+3. a fingertip beginning on the first attribute row;
+4. the fingertip moving downward in a visible zig-zag;
+5. each row snapping as it is crossed;
+6. the selected value briefly emphasizing;
+7. the radar forming live;
+8. the fact that the user may also tap any row individually.
+
+Suggested closing instruction:
+
+> Swipe through all six — or tap any row to adjust.
+
+The onboarding may optionally finish with a small practice interaction.
+
+Rules:
+
+- automatically show once;
+- immediate Skip available;
+- do not repeatedly auto-show after completion/dismissal;
+- `?` always replays it;
+- respect reduced-motion settings with a static/step-based alternative.
+
+The experience should feel tactile and game-like, **not gamified**.
+
+Avoid points, scores, achievements, confetti or exaggerated praise.
+
+##### Radar behavior
+
+For a saved Detailed profile, the radar is a visualization of actual recorded
+data, not decoration.
+
+The primary radar polygon must plot the exact stored attribute values.
+
+A subtle Overall reference polygon may sit behind it to show how the player's
+shape differs from the Overall baseline.
+
+Example:
+
+- muted polygon = Overall 7 reference;
+- primary polygon = reviewed Attack/Passing/etc. values.
+
+The Overall reference must remain visually secondary.
+
+A Basic Overall-only player does **not** show a fake/empty radar simply for
+layout consistency.
+
+Once Detailed Profile exists, radar input, stored values and evaluator data
+must remain consistent.
+
+##### Playing Profile
+
+Built-in sports may derive a human-readable **Playing Profile** from the
+reviewed attribute shape.
+
+Playing Profile is:
+
+- derived only;
+- presentation-only;
+- not organizer-rated;
+- not an optimization input;
+- recomputable rather than authoritative persistent player truth;
+- normally one or at most two complementary descriptions;
+- based primarily on relative attribute shape rather than absolute Overall;
+- text-only;
+- optional when no meaningful shape stands out.
+
+A low-Overall player and high-Overall player may therefore share the same
+Playing Profile if their relative shapes are similar.
+
+Possible Football vocabulary remains design material, not final hard-coded
+copy.
+
+**Custom Sport/Game has no Playing Profile in v1.**
+
+The player-card layout must remain content-driven. If Playing Profile or Special
+Role does not exist, no blank space should be reserved for it.
+
+##### Balance Priorities replaces Field Size
+
+The current Football **Field Size** team-generation control should be retired as
+the normal way of changing balancing behavior.
+
+Its real purpose was indirectly telling the algorithm which qualities matter
+more for the current game.
+
+Replace it with a session-only **Balance Priorities** modal/control.
+
+Default:
+
+> **Balanced**
+
+Balanced gives equal/default composition attention to the active Sport
+Definition's attributes.
+
+The modal is populated directly from the active sport's attributes.
+
+Football example:
+
+- Balanced
+- Attack
+- Passing
+- Stamina
+- Defense
+- Technique
+- Pace
+
+Custom board-game example:
+
+- Balanced
+- Strategy
+- Negotiation
+- Experience
+
+Do not expose a permanent Low/Medium/High weighting configurator.
+
+The exact number of simultaneous focused priorities remains a prototype
+decision. Test whether one or two selected priorities is clearer than arbitrary
+many.
+
+Selecting most attributes should not create a meaningless pseudo-priority
+state.
+
+##### Same Balance Priorities for Generate and Live Split
+
+Balance Priorities is one session concept shared by both team-building modes.
+
+Generate uses the priorities when evaluating/searching complete team
+arrangements.
+
+Live Split uses the same priorities while:
+
+- recommending the next player;
+- matching round/anchor counterparts;
+- protecting the quality of the remaining pool;
+- placing late arrivals;
+- proposing minimal corrections.
+
+A priority affects **composition attention**, not the player's saved Overall.
+
+For example, selecting Defense should make Stripes work harder to distribute
+defensive ability fairly; it should not secretly transform an Overall-7 player
+into an Overall-8 player.
+
+##### Field Size is not part of the generic multi-sport core
+
+The generic team model must not require Field Size.
+
+Some users may use Stripes for basketball, volleyball, other sports or even
+board games where the concept is meaningless.
+
+If a future built-in sport genuinely needs a sport-specific session control,
+its Sport Definition may expose one explicitly.
+
+Custom Sport/Game has no built-in field-size/session-context assumption in v1.
+
+##### Built-in versus Custom Sport/Game
+
+The generic T1 engine should understand generic concepts:
+
+- players;
+- Overall Skill;
+- attribute vectors;
+- equal/default attribute-composition treatment;
+- optional Special Role;
+- hard constraints;
+- team-size policy;
+- partial/manual locks;
+- candidate arrangements;
+- structured team evaluation.
+
+It must not fundamentally understand Football-specific labels.
+
+Built-in sports may provide:
+
+- three or six named attributes;
+- optional Special Role;
+- carefully justified sport-specific session controls;
+- Playing Profile definitions;
+- tuned explanatory language.
+
+Custom Sport/Game creation should remain deliberately simple:
+
+1. enter sport/game name;
+2. choose three or six attributes;
+3. name those attributes;
+4. optionally define one Special Role;
+5. create roster.
+
+Custom v1 should **not** include:
+
+- permanent per-attribute weighting;
+- built-in sport contexts;
+- Playing Profile/archetypes;
+- Team Play;
+- the legacy trait pile.
+
+Custom attributes receive equal/default composition treatment unless a
+temporary Balance Priority is selected for the current session.
+
+##### Shared evaluator / Best Completion Engine
+
+Generate and Live Split should ultimately use the same structured evaluation
+foundation.
+
+Conceptual priority order:
+
+1. Overall fairness;
+2. hard/structural requirements such as team size, Special Role and approved
+   pairing constraints;
+3. attribute composition;
+4. temporary Balance Priorities/session emphasis.
+
+Attribute composition must normally not be allowed to badly damage Overall
+fairness.
+
+The evaluator should return machine-readable metrics suitable for:
+
+- Generate;
+- Live Split;
+- team comparison;
+- constrained swaps;
+- late-arrival placement;
+- no-show repair;
+- “Why these teams?” explanations;
+- future grounded AI translation.
+
+##### Live Split direction
+
+Live Split addresses the real organizer problem that RSVP lists often differ
+from who is actually present.
+
+Generate remains appropriate when the participant set is settled.
+
+Live Split is appropriate when attendance is uncertain/changing or the
+organizer prefers manual formation with algorithmic assistance.
+
+Core interaction:
+
+- show a highly visible current team/color destination;
+- tapping a player assigns them to that team and effectively confirms presence;
+- destination advances round-robin;
+- full teams are skipped according to team-size policy;
+- avoid requiring player -> destination-picker for every assignment.
+
+The first manually chosen player in a round/color loop may act as a temporary
+anchor.
+
+Stripes may highlight suggested counterparts for the remaining teams directly
+in the unassigned pool.
+
+Suggestions are non-blocking.
+
+If the organizer ignores Stripes and selects another player:
+
+> **Organizer defines reality; algorithm continuously adapts.**
+
+Recommendations must be future-aware rather than locally greedy. They should
+consider the entire remaining pool and best achievable completion so useful
+balancing players are not all consumed early.
+
+Live Split also requires:
+
+- prominent persistent Undo;
+- repeated Undo;
+- restoration of cursor/anchor/recommendation state;
+- minimal-correction handling for late arrivals;
+- minimal-correction handling for assigned-player no-shows/removal;
+- restrained human-readable balance warnings instead of raw optimizer scores;
+- one-handed outdoor use;
+- large touch targets;
+- visible active destination while scrolling;
+- color accessibility;
+- support for 2, 3, 4+ teams and unavoidable uneven counts.
+
+Exact Live Split layout remains a dedicated prototype task before coding.
+
+##### AI trust boundary
+
+Future AI assistance may interpret natural-language organizer requests, but the
+structured/deterministic evaluator remains authoritative.
+
+Required pattern:
+
+1. AI translates the request into visible structured settings;
+2. Stripes shows what it understood;
+3. the evaluator acts;
+4. the explanation reports grounded effects.
+
+Example:
+
+> “Blue looks too weak defensively.”
+
+may become a visible Defense priority or constrained-swap request.
+
+AI must not invent attributes that do not exist in the active Sport Definition.
+
+##### Current generator migration implications
+
+The current Football generator must be treated as legacy behavior to audit and
+regression-test, not as generic architecture to rename.
+
+Important current-state issues already identified include:
+
+- displayed/saved Overall uses a different model from generation weighted
+  skill;
+- current generator Field Size matrices change weighted skill;
+- Physical contributes little to current Overall and is omitted from current
+  generation weighted skill/team-stat rows;
+- current greedy generation contains hard-coded female and speed-based runner
+  passes;
+- `not_here_yet` currently receives a strong generation discount;
+- pairing-rule cleanup is swap-based and cannot repair team-size spread;
+- current trait effects create hidden stat coupling;
+- GK is currently visual metadata rather than genuine generator role coverage;
+- local/shared conversions do not feed identical trait information into
+  balancing.
+
+T1 must make these concepts explicit, intentionally migrate them or retire them.
+Do not simply rename the current heuristics.
+
+The detailed numeric audit and regression implications are recorded in:
+
+`docs/design/T1_PLAYER_PROFILE_TEAMING_SPEC_2026-08-17.md`
+
+##### Open T1 implementation questions
+
+The following remain deliberately unresolved and must **not** be silently
+decided during coding:
+
+1. exact numeric mapping of the five relative snap positions, particularly near
+   Overall 1/10 boundaries;
+2. whether the first release needs half-step fine adjustment;
+3. whether Detailed Profile supports an explicit per-attribute
+   unknown/not-sure state;
+4. exact maximum simultaneous Balance Priorities;
+5. exact compact-radar size/layout above the six rating rows;
+6. animation-only versus interactive-practice onboarding ending;
+7. final Football Playing Profile vocabulary/thresholds;
+8. exact Best Completion search/performance strategy;
+9. future gender/composition treatment — do not automatically preserve the
+   current hard-coded female bucket;
+10. exact migration path for current Football attributes, Team Play and legacy
+    traits.
+
+These are legitimate implementation stop points requiring an explicit product
+decision.
+
+##### T1 implementation guardrails
+
+This is a design checkpoint, not authorization to begin a broad algorithm
+rewrite.
+
+Before replacing the current generator:
+
+1. add focused regression scenarios for current behavior;
+2. define/version Sport Definition and player-profile persistence semantics;
+3. prototype the Detailed Profile six-row/one-swipe interaction on a real
+   phone;
+4. validate snap mapping, finger visibility and scroll behavior;
+5. define structured evaluator metrics;
+6. implement the shared evaluator and Generate/Live Split in small atomic
+   phases.
+
+The existence of this design work does not silently reorder unrelated locked
+roadmap phases.
+
+### QT — Quick Teams
+
+**Status:** APPROVED PRODUCT / CREATIVE DIRECTION — NOT IMPLEMENTED.
+
+Quick Teams is a small, self-contained, playful utility inside Stripes. It is
+separate from T1 Multi-Sport Team Generation.
+
+T1 is the serious deterministic fair-team architecture using saved rosters,
+player ratings, Sport Definitions, attributes, Special Abilities, Balance
+Priorities and sport rules. Quick Teams deliberately does not replicate that
+system.
+
+#### QT.0 — Product purpose
+
+Quick Teams exists for moments when somebody simply needs to divide people
+into teams or groups immediately, including:
+
+- spontaneous sports teams;
+- pairs;
+- party/game groups;
+- classroom groups;
+- workshop groups;
+- event teams;
+- volunteer groups;
+- other one-off grouping scenarios.
+
+It should be:
+
+- stupidly simple;
+- genuinely useful;
+- extremely fast;
+- playful;
+- memorable;
+- disposable by default.
+
+A new user should understand and use it immediately without a tutorial. Quick
+Teams may be one of the first Stripes interactions a new user sees, so its
+creative quality matters disproportionately to its technical complexity.
+
+It should function simultaneously as:
+
+- a useful tool;
+- a small playful/kinetic experience;
+- a subtle trailer for the deeper Stripes fair-team generator.
+
+#### QT.1 — Placement
+
+Do not add Quick Teams as a permanent app tab.
+
+Place it on the existing Choose Roster / landing page as a clearly separate
+cameo utility. Persistent saved rosters remain the main Stripes workflow.
+
+Possible entry copy:
+
+**Quick Teams**
+
+Make one-off teams in seconds. No roster needed.
+
+The exact final name/copy remains open to creative-direction work. Do not
+introduce a separate product or sub-brand.
+
+#### QT.2 — One-screen experience
+
+Quick Teams opens as one contained experience:
+
+- full-screen sheet/contained takeover on mobile;
+- large contained modal/dialog on desktop and tablet.
+
+It must not navigate the user through Roster, Today, the Teams tab, Club or
+multi-step setup pages. Conceptually everything happens on one screen.
+
+No wizard. No **Step 1 of 3**.
+
+#### QT.3 — Core interaction
+
+Keep the grouping logic deliberately simple.
+
+Minimum interaction:
+
+**Input**
+
+- type names;
+- paste names, ideally one per line;
+- optionally use AI-assisted Speak input.
+
+**Setting**
+
+- choose **TEAMS OF X**;
+- update the resulting team count/sizes immediately;
+- show truthful live feedback such as **12 PEOPLE → 3 TEAMS**;
+- for uneven counts, show the actual resulting group sizes immediately.
+
+**Main action**
+
+- use a playful direct action such as **SHUFFLE** rather than formal wording
+  such as **Run team-generation algorithm**.
+
+**Result actions**
+
+- Shuffle again;
+- Edit names;
+- subtle Export;
+- Close/Done.
+
+Results remain in the same contained screen.
+
+#### QT.4 — Random grouping, not fair-team generation
+
+Quick Teams performs fast random/even grouping.
+
+Do not add:
+
+- Skill ratings;
+- Football attributes;
+- custom three/six-attribute profiles;
+- Balance Priorities;
+- Goalkeeper/Special Ability logic;
+- field size;
+- pairing constraints;
+- team history;
+- AI optimization;
+- sport-specific balancing.
+
+Those belong to the proper T1 Team Generator.
+
+The distinction is intentional:
+
+**Quick Teams**
+→ fast, random, playful.
+
+**Stripes Team Generator**
+→ informed, deterministic, genuinely fair team composition using saved player
+information.
+
+Resist feature creep.
+
+#### QT.5 — Extremely fast name entry
+
+Name entry is the biggest friction point.
+
+The primary universal method is a large conventional paste/type field that:
+
+- supports one name per line;
+- parses the list immediately;
+- shows a live person count;
+- makes parsed names immediately editable/removable.
+
+Avoid requiring **Add person → Save → Add person → Save** for each person.
+Bulk entry should feel instantaneous.
+
+#### QT.6 — AI-assisted Speak input
+
+Quick Teams is a high-value location for narrow AI-assisted voice input. Place
+a Speak control beside conventional text/paste entry.
+
+Example spoken input:
+
+> Okay, we have Joon, Maria, Peter, Daniel is playing too, and Marco.
+
+AI responsibility is deliberately narrow: extract people's names only and
+populate the editable list.
+
+Do not turn this into a chatbot or return conversational assistant prose such
+as **Sure, I added these five players.** Names should simply appear.
+
+Requirements:
+
+- manual type/paste always works without AI;
+- voice/AI is a convenience, never a dependency;
+- AI is conservative about uncertain names;
+- AI never knowingly invents names;
+- uncertain extraction remains visibly editable/correctable;
+- the user can immediately remove or edit mistaken names.
+
+This AI use removes input friction. It does not add intelligence to the random
+grouping algorithm.
+
+#### QT.7 — Export and professional usefulness
+
+After teams are generated, provide a subtle Export action. It must not compete
+visually with Shuffle.
+
+Suggested export menu:
+
+- Copy teams;
+- Download CSV.
+
+CSV remains simple and spreadsheet-friendly:
+
+```csv
+Team,Name
+Blue,Joon
+Blue,Maria
+Red,Peter
+Red,Daniel
+```
+
+Export is an output convenience, not another workflow. A future
+**Save as roster** option may be considered separately but is not required for
+Quick Teams v1.
+
+#### QT.8 — Creative direction
+
+Do not make the primary aesthetic **retro arcade software**.
+
+Avoid relying on:
+
+- pixel-art clichés;
+- fake CRT screens;
+- heavy scanlines;
+- arcade coins;
+- high scores;
+- forced 8-bit styling;
+- novelty-game theming.
+
+Preferred direction: a clean modern Stripes interface containing a small
+kinetic/playful team-making machine.
+
+Desired emotional qualities:
+
+- utilitarian;
+- direct;
+- playful;
+- nerdy;
+- tactile;
+- satisfying;
+- slightly eccentric;
+- still unmistakably Stripes.
+
+Subtle retro/technical references may appear through counters, compact
+monospace accents, **READY**, responsive numerical feedback and
+mechanical/kinetic behavior. Playfulness should primarily come from interaction
+and motion, not decorative retro styling.
+
+#### QT.9 — Key visual moment
+
+The most important creative moment is a loose pile/list of people transforming
+into colored teams. Stripes themselves should ideally perform or communicate
+that transformation:
+
+1. each name becomes a neutral strip/token;
+2. the user presses Shuffle;
+3. strips briefly interleave, move or deal;
+4. strips separate into Stripes team colors;
+5. names resolve into the resulting teams.
+
+The reveal should be quick and satisfying, not a slow loading animation. It
+should communicate the Stripes identity:
+
+**people → shuffle → colored teams**
+
+Spend disproportionate design attention on this moment.
+
+#### QT.10 — Responsive interaction
+
+Mobile:
+
+- use a full-screen sheet/contained takeover;
+- preserve the one-screen conceptual flow;
+- use large tap targets;
+- support fast keyboard and voice entry.
+
+Desktop/tablet:
+
+- use a large contained modal/dialog;
+- do not unnecessarily navigate away from Choose Roster.
+
+Closing Quick Teams returns immediately to the existing Choose Roster / landing
+context.
+
+#### QT.11 — First-use role
+
+Quick Teams may be particularly prominent when the user is new or no saved
+roster exists. It can provide a zero-commitment demonstration of Stripes:
+
+**Got some names? Make teams now.**
+
+For established users with saved rosters, Quick Teams remains convenient but
+secondary to the normal roster workflow. Do not force returning organizers
+through Quick Teams whenever the app loads.
+
+#### QT.12 — Relationship to the serious Team Generator
+
+Quick Teams should quietly reveal that deeper Stripes functionality exists
+without becoming an advertisement. After results, a subtle optional line or
+action may eventually say:
+
+**Need genuinely balanced teams? Use a Stripes roster →**
+
+Avoid aggressive upsell language or feature tours. The immediate Quick Teams
+result remains the focus.
+
+#### QT.13 — Central product principle
+
+**Quick Teams may use sophisticated input and output conveniences, while the
+grouping interaction itself remains stupidly simple.**
+
+Sophisticated input:
+
+- paste;
+- fast parsing;
+- AI voice name extraction.
+
+Simple middle:
+
+- Teams of X;
+- Shuffle.
+
+Useful output:
+
+- reshuffle;
+- copy;
+- CSV export.
+
+This simplicity is intentional.
+
+#### QT.14 — Creative process before engineering
+
+Do not ask Codex to invent the final visual design from a vague instruction
+such as **make a cool retro Quick Teams interface**.
+
+Before implementation:
+
+1. prepare a short QT creative brief;
+2. explore approximately two or three visual/interaction directions;
+3. choose and refine the strongest direction;
+4. define exact interaction states, copy and animation behavior;
+5. give Codex a bounded implementation specification.
+
+Creative direction comes before engineering because Quick Teams may be a
+user's first impression of Stripes.
+
+#### QT.15 — Initial implementation scope when scheduled
+
+**Conceptual QT1:**
+
+- Choose Roster/landing-page Quick Teams entry;
+- one-screen responsive modal/sheet;
+- bulk text/paste name entry;
+- editable parsed names;
+- team-size selector;
+- live group-count/size calculation;
+- random team allocation;
+- same-screen result;
+- Shuffle Again;
+- Edit;
+- Copy;
+- CSV export;
+- close/discard.
+
+AI Speak may be included in QT1 if the existing AI/voice infrastructure makes
+it clean and reliable. Otherwise, it may be a tightly scoped QT1.x addition
+without changing the interaction model.
+
+**Conceptual QT2:**
+
+- final kinetic Stripes shuffle/reveal polish;
+- animation/accessibility refinement;
+- onboarding/first-use tuning;
+- only then consider optional save/promote behavior if genuinely useful.
+
+#### Explicit exclusions
+
+Quick Teams v1 must not become:
+
+- another tab;
+- a new core product pillar;
+- another roster system;
+- a multi-sport profile editor;
+- another advanced optimizer;
+- a Club feature;
+- a social/chat feature;
+- an AI conversation surface.
+
+Its strength comes from being intentionally small.
+
+#### Roadmap relationship
+
+Keep the tracks distinct:
+
+**T1**
+= Multi-Sport / Custom Sport deterministic fair-team architecture.
+
+**QT**
+= lightweight one-off random team/group utility and first-use playful
+experience.
+
+QT may reuse generic utilities where sensible, but must not block or complicate
+T1 architecture. Do not merge the two roadmaps merely because both eventually
+produce groups of people.
+
+Do not begin QT implementation from this product record. Complete the QT
+creative brief and direction selection first, then schedule the bounded QT1
+implementation independently from T1 and G2.
 
 <!-- STRIPES_CURRENT_ARCHITECTURE_END -->

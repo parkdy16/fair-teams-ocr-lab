@@ -1502,8 +1502,10 @@ storage/ownership wording conflicts with it.
   has passed production real-account verification.
 - G2.2 Managed My Drive Cabinet location is released as `a861c56`, documented
   by `20f93dc` and has passed production real-account verification.
-- G2.3 Multi-organizer Google permission foundation is implemented locally and
-  awaiting review and real multi-account verification before G2.4 begins.
+- G2.3 Multi-organizer Google permission foundation is committed as `97d803a`,
+  documented by `f15d8de` and has passed implementation review.
+- G2.4 Optional Shared Drive capability is implemented locally and awaiting
+  real Workspace/Shared Drive verification before G2.5 begins.
 
 ## Shared workspace governance
 
@@ -3088,6 +3090,25 @@ live capabilities and correct Shared Drive-aware API behavior.
 Do not require Workspace. Do not use broad automatic `drives.list`
 enumeration without an explicit scope/security review.
 
+Implementation checkpoint — 2026-08-18:
+
+- the existing Picker plus `drive.file` architecture was verified to support a
+  user-selected Shared Drive folder without broad Drive enumeration or scope;
+- a Shared-Drive-only folder Picker view explicitly enables Shared Drives and
+  folder selection while preserving existing backup and Sheets Picker flows;
+- Stripes re-reads only the selected item by stable file ID with
+  `supportsAllDrives=true`, validates folder MIME type, actual `driveId` and
+  live read/list/add-child capabilities, and treats Google as authoritative;
+- the in-memory result exposes provider/backing, stable folder/drive IDs and a
+  presentation name for the future G2.5 metadata seam without persisting it;
+- cancelled, invalid/My Drive, insufficient-permission, reconnect and
+  unavailable states are explicit; no membership or permission mutation is
+  attempted;
+- focused tests and the production build pass; real Shared Drive Picker,
+  Workspace policy and collaborator content tests remain required;
+- production requires Shared Drive support enabled in the Google Drive API UI
+  integration configuration in addition to the existing Picker/API setup.
+
 #### G2.5 — Provider-neutral Cabinet-location metadata
 
 Firestore stores Stripes context/reference metadata only.
@@ -3171,30 +3192,29 @@ folder/files must remain untouched.
 
 #### Current next implementation target
 
-**Current gate: review and real multi-account verification of the local G2.3
-implementation. Do not begin G2.4 until that gate is approved.**
+**Current gate: review and real Workspace/Shared Drive verification of the
+local G2.4 implementation. Do not begin G2.5 until that gate is approved.**
 
 Scope:
 
-- inspect the managed My Drive Cabinet root's live Google permissions;
-- grant an explicitly supplied Google account editor (`writer`) access;
-- distinguish owner/editor/commenter/viewer and direct/inherited/mixed/unknown
-  source state;
-- remove only a selected direct permission when Google authorizes it;
-- structured reconnect, insufficient-permission and protected states.
+- explicit Shared-Drive-only Picker folder selection;
+- selected-item metadata lookup by stable ID with `supportsAllDrives`;
+- actual `driveId`, folder MIME and live capability validation;
+- in-memory provider-neutral location result for the G2.5 seam;
+- explicit cancelled, invalid, insufficient, reconnect and unavailable states.
 
 Explicitly excluded:
 
-- Cabinet folder creation changes;
+- broader Drive scopes or automatic Shared Drive enumeration;
+- Shared Drive creation or membership/permission administration;
 - Cabinet Firestore metadata;
-- Shared Drive setup;
 - Cabinet UI;
 - attachment migration;
 - automatic Firebase/organizer-to-Google identity mapping;
-- child-file permission rewriting or claims about inherited child access.
+- Cabinet file creation or child-file permission rewriting.
 
 The flexible club-role architecture is recorded, but its UI is not part of
-G2.3.
+G2.4.
 
 ### G3 — Google Resource + Club Cabinet Foundation
 
@@ -3307,9 +3327,10 @@ architecture/security consequences.
 
 ### Authoritative remaining implementation sequence
 
-G2.1a and G2.2 are released and production-verified. G2.3 is implemented
-locally; the current gate is review and real multi-account verification. G2.4
-begins only after that gate is approved.
+G2.1a and G2.2 are released and production-verified. G2.3 is committed and
+reviewed. G2.4 is implemented locally; the current gate is review and real
+Workspace/Shared Drive verification. G2.5 begins only after that gate is
+approved.
 
 Complete the G-track in order before building the full Cabinet UI:
 

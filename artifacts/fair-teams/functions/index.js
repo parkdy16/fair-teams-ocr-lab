@@ -16,10 +16,12 @@ const {
   organizerGovernanceEligibility,
   organizerMembershipFingerprint,
   organizerUidsFromWorkspace,
-  removeOrganizerMembership,
-  resolveMemberEmailByUid,
   resolveMemberUidByEmail,
 } = require("./organizerRemoval");
+const {
+  castOrganizerRemovalBallotTransaction,
+  OrganizerRemovalTransactionError,
+} = require("./organizerRemovalTransaction");
 const {
   activeMemberIncludes,
   deliverOrganizerJoinedNotification,
@@ -60,6 +62,10 @@ const {
   workspaceClosureId,
   workspaceClosureState,
 } = require("./workspaceClosure");
+const {
+  preflightGroupRosterLinkage,
+  WorkspaceRosterLinkageError,
+} = require("./workspaceRosterLinkage");
 
 initializeApp();
 
@@ -441,6 +447,9 @@ function invitationActor(request) {
 
 function invitationHttpsError(error, fallbackMessage) {
   if (error instanceof HttpsError) return error;
+  if (error instanceof WorkspaceRosterLinkageError) {
+    return new HttpsError(error.code, error.message);
+  }
   if (error instanceof WorkspaceInvitationError) {
     return new HttpsError(error.code, error.message);
   }
@@ -471,20 +480,6 @@ function safeWorkspaceId(value) {
     throw new HttpsError("invalid-argument", "Choose a valid shared workspace.");
   }
   return id;
-}
-
-function workspaceRosterIds(workspace) {
-  const rosterIds = Array.from(new Set(
-    (Array.isArray(workspace?.rosterIds) ? workspace.rosterIds : [])
-      .filter((rosterId) => typeof rosterId === "string" && rosterId.length > 0),
-  ));
-  if (rosterIds.some((rosterId) => rosterId.includes("/"))) {
-    throw new HttpsError("failed-precondition", "This workspace has an invalid linked-roster record.");
-  }
-  if (rosterIds.length + 3 > MAX_GOVERNANCE_TRANSACTION_DOCUMENTS) {
-    throw new HttpsError("resource-exhausted", "This workspace is too large for one invitation transaction.");
-  }
-  return rosterIds;
 }
 
 function isoFromInvitationValue(value) {
@@ -759,9 +754,14 @@ exports.createWorkspaceOrganizerInvitation = onCall({
         }
       }
 
-      const rosterIds = workspaceRosterIds(groupData);
-      const rosterRefs = rosterIds.map((rosterId) => db.collection("sharedRosters").doc(rosterId));
-      const rosterSnaps = rosterRefs.length ? await tx.getAll(...rosterRefs) : [];
+      const { rosterRefs } = await preflightGroupRosterLinkage({
+        transaction: tx,
+        firestore: db,
+        expectedGroupId: groupId,
+        workspace: groupData,
+        maxRosterCount: MAX_GOVERNANCE_TRANSACTION_DOCUMENTS - 3,
+        tooLargeMessage: "This workspace is too large for one invitation transaction.",
+      });
       const workspaceNameSnapshot = invitationWorkspaceName(groupData);
       const inviterDisplayNameSnapshot = actorName(request.auth);
       const invitation = {
@@ -814,9 +814,8 @@ exports.createWorkspaceOrganizerInvitation = onCall({
         updatedAt: FieldValue.serverTimestamp(),
         updatedAtIso: nowIso,
       });
-      rosterSnaps.forEach((rosterSnap, index) => {
-        if (!rosterSnap.exists) return;
-        tx.update(rosterRefs[index], {
+      rosterRefs.forEach((rosterRef) => {
+        tx.update(rosterRef, {
           pendingInviteEmails: FieldValue.arrayUnion(normalizedEmail),
           updatedAt: FieldValue.serverTimestamp(),
           updatedAtIso: nowIso,
@@ -1019,18 +1018,22 @@ exports.cancelWorkspaceOrganizerInvitation = onCall({ region: REGION }, async (r
         }
       }
 
-      const rosterIds = workspaceRosterIds(groupData);
-      const rosterRefs = rosterIds.map((rosterId) => db.collection("sharedRosters").doc(rosterId));
-      const rosterSnaps = rosterRefs.length ? await tx.getAll(...rosterRefs) : [];
+      const { rosterRefs } = await preflightGroupRosterLinkage({
+        transaction: tx,
+        firestore: db,
+        expectedGroupId: groupId,
+        workspace: groupData,
+        maxRosterCount: MAX_GOVERNANCE_TRANSACTION_DOCUMENTS - 3,
+        tooLargeMessage: "This workspace is too large for one invitation transaction.",
+      });
 
       tx.update(groupRef, {
         pendingInviteEmails: FieldValue.arrayRemove(normalizedEmail),
         updatedAt: FieldValue.serverTimestamp(),
         updatedAtIso: nowIso,
       });
-      rosterSnaps.forEach((rosterSnap, index) => {
-        if (!rosterSnap.exists) return;
-        tx.update(rosterRefs[index], {
+      rosterRefs.forEach((rosterRef) => {
+        tx.update(rosterRef, {
           pendingInviteEmails: FieldValue.arrayRemove(normalizedEmail),
           updatedAt: FieldValue.serverTimestamp(),
           updatedAtIso: nowIso,
@@ -1416,12 +1419,18 @@ exports.acceptWorkspaceOrganizerInvitation = onCall({
       }
 
       const groupData = groupSnap.data() || {};
-      const rosterIds = workspaceRosterIds(groupData);
-      const rosterRefs = rosterIds.map((rosterId) => db.collection("sharedRosters").doc(rosterId));
-      const rosterSnaps = rosterRefs.length ? await tx.getAll(...rosterRefs) : [];
-      const linkedRosters = rosterSnaps.map((rosterSnap) => (
-        rosterSnap.exists ? rosterSnap.data() || {} : {}
-      ));
+      const {
+        rosterIds,
+        rosterRefs,
+        linkedRosters,
+      } = await preflightGroupRosterLinkage({
+        transaction: tx,
+        firestore: db,
+        expectedGroupId: groupId,
+        workspace: groupData,
+        maxRosterCount: MAX_GOVERNANCE_TRANSACTION_DOCUMENTS - 3,
+        tooLargeMessage: "This workspace is too large for one invitation transaction.",
+      });
       const plan = planInvitationAcceptance({
         actor: invitationActor(request),
         invitation: invitationData,
@@ -1445,9 +1454,8 @@ exports.acceptWorkspaceOrganizerInvitation = onCall({
         updatedAt: FieldValue.serverTimestamp(),
         updatedAtIso: nowIso,
       });
-      rosterSnaps.forEach((rosterSnap, index) => {
-        if (!rosterSnap.exists) return;
-        tx.update(rosterRefs[index], {
+      rosterRefs.forEach((rosterRef, index) => {
+        tx.update(rosterRef, {
           ...plan.rosterUpdates[index],
           updatedAt: FieldValue.serverTimestamp(),
           updatedAtIso: nowIso,
@@ -1579,16 +1587,14 @@ exports.startOrganizerRemovalProposal = onCall({ region: REGION }, async (reques
           "At least two governance-eligible organizers are required to start a removal vote.",
         );
       }
-      const linkedRosterIds = Array.from(new Set(
-        (Array.isArray(groupData.rosterIds) ? groupData.rosterIds : [])
-          .filter((rosterId) => typeof rosterId === "string" && rosterId.length > 0),
-      ));
-      if (linkedRosterIds.some((rosterId) => rosterId.includes("/"))) {
-        throw new HttpsError("failed-precondition", "This workspace has an invalid linked-roster record.");
-      }
-      if (organizerUids.length + linkedRosterIds.length + 4 > MAX_GOVERNANCE_TRANSACTION_DOCUMENTS) {
-        throw new HttpsError("resource-exhausted", "This workspace is too large for one protected removal transaction.");
-      }
+      await preflightGroupRosterLinkage({
+        transaction: tx,
+        firestore: db,
+        expectedGroupId: groupId,
+        workspace: groupData,
+        maxRosterCount: MAX_GOVERNANCE_TRANSACTION_DOCUMENTS - organizerUids.length - 4,
+        tooLargeMessage: "This workspace is too large for one protected removal transaction.",
+      });
       const targetUid = resolveMemberUidByEmail(groupData, targetEmail);
       if (!targetUid || !organizerUids.includes(targetUid)) {
         throw new HttpsError("failed-precondition", "That organizer is no longer active in this workspace.");
@@ -1741,6 +1747,9 @@ exports.startOrganizerRemovalProposal = onCall({ region: REGION }, async (reques
     });
   } catch (error) {
     if (error instanceof HttpsError) throw error;
+    if (error instanceof WorkspaceRosterLinkageError) {
+      throw new HttpsError(error.code, error.message);
+    }
     console.error("Could not create organizer-removal proposal", error);
     throw new HttpsError("internal", "Could not start the organizer-removal vote.");
   }
@@ -1814,211 +1823,33 @@ exports.castOrganizerRemovalBallot = onCall({ region: REGION }, async (request) 
   const nowIso = new Date(now).toISOString();
 
   try {
-    return await db.runTransaction(async (tx) => {
-      const [groupSnap, proposalSnap, privateSnap, controlSnap, ballotSnap] = await tx.getAll(
+    return await db.runTransaction((tx) => castOrganizerRemovalBallotTransaction({
+      transaction: tx,
+      firestore: db,
+      refs: {
         groupRef,
         proposalRef,
         privateRef,
         controlRef,
         ballotRef,
-      );
-      if (!groupSnap.exists) {
-        throw new HttpsError("not-found", "This shared workspace no longer exists.");
-      }
-      if (!proposalSnap.exists) {
-        throw new HttpsError("not-found", "This organizer-removal vote no longer exists.");
-      }
-
-      const proposalData = proposalSnap.data() || {};
-      if (proposalData.status !== "open") {
-        throw new HttpsError("failed-precondition", "This organizer-removal vote is already closed.");
-      }
-      if (!privateSnap.exists
-        || !controlSnap.exists
-        || controlSnap.data()?.activeProposalId !== proposalId) {
-        throw new HttpsError("failed-precondition", "This organizer-removal vote is not active.");
-      }
-
-      const groupData = groupSnap.data() || {};
-      const privateData = privateSnap.data() || {};
-      const currentOrganizerUids = organizerUidsFromWorkspace(groupData);
-      if (!currentOrganizerUids.includes(request.auth.uid)) {
-        throw new HttpsError("permission-denied", "Only an active organizer can vote.");
-      }
-      if (!organizerGovernanceEligibility(groupData, request.auth.uid, now).eligible) {
-        throw new HttpsError(
-          "permission-denied",
-          "Protected organizer-removal voting is not available to this organizer yet.",
-        );
-      }
-
-      const votedUids = Array.from(new Set(
-        (Array.isArray(privateData.votedUids) ? privateData.votedUids : [])
-          .filter((uid) => typeof uid === "string" && uid.length > 0),
-      ));
-      const frozenGovernanceUids = Array.from(new Set(
-        (Array.isArray(privateData.governanceEligibleOrganizerUids)
-          ? privateData.governanceEligibleOrganizerUids
-          : privateData.organizerUids || [])
-          .filter((uid) => typeof uid === "string" && uid.length > 0),
-      ));
-      const frozenTargetUid = String(privateData.targetUid || "");
-      const currentRelevantUids = Array.from(new Set([
-        frozenTargetUid,
-        ...frozenGovernanceUids,
-      ])).filter((uid) => currentOrganizerUids.includes(uid));
-      const currentMembershipFingerprint = organizerMembershipFingerprint(currentRelevantUids);
-      if (privateData.membershipFingerprint !== currentMembershipFingerprint) {
-        tx.update(proposalRef, {
-          status: "cancelled",
-          yesCount: null,
-          noCount: null,
-          castCount: Number.isInteger(privateData.castCount) ? privateData.castCount : 0,
-          outcomeReason: "membership_changed",
-          closedAt: FieldValue.serverTimestamp(),
-          closedAtIso: nowIso,
-          updatedAt: FieldValue.serverTimestamp(),
-          updatedAtIso: nowIso,
-        });
-        votedUids.forEach((voterUid) => {
-          tx.delete(privateRef.collection("ballots").doc(voterUid));
-        });
-        tx.delete(privateRef);
-        tx.delete(controlRef);
-        return {
-          ok: true,
-          proposalId,
-          status: "cancelled",
-          castCount: Number.isInteger(privateData.castCount) ? privateData.castCount : 0,
-          outcomeReason: "membership_changed",
-        };
-      }
-
-      const targetUid = String(privateData.targetUid || "");
-      const eligibleVoterUids = Array.isArray(privateData.eligibleVoterUids)
-        ? privateData.eligibleVoterUids.filter((uid) => typeof uid === "string" && uid.length > 0)
-        : [];
-      if (!targetUid || targetUid !== proposalData.targetUid) {
-        throw new HttpsError("failed-precondition", "This organizer-removal vote has invalid target data.");
-      }
-      const targetGovernanceEligible = frozenGovernanceUids.includes(targetUid);
-      const expectedEligibleVoterUids = frozenGovernanceUids.filter((uid) => uid !== targetUid);
-      if (Number(proposalData.totalOrganizerCount) !== frozenGovernanceUids.length
-        || Number(proposalData.eligibleOrganizerCount) !== expectedEligibleVoterUids.length
-        || Boolean(proposalData.targetGovernanceEligible ?? true) !== targetGovernanceEligible
-        || eligibleVoterUids.length !== expectedEligibleVoterUids.length
-        || eligibleVoterUids.some((uid) => !expectedEligibleVoterUids.includes(uid))) {
-        throw new HttpsError("failed-precondition", "This organizer-removal vote has invalid electorate data.");
-      }
-      if (request.auth.uid === targetUid || !eligibleVoterUids.includes(request.auth.uid)) {
-        throw new HttpsError("permission-denied", "You are not eligible to vote on this proposal.");
-      }
-      if (ballotSnap.exists || votedUids.includes(request.auth.uid)) {
-        throw new HttpsError("failed-precondition", "Your ballot has already been recorded.");
-      }
-
-      const nextYesCount = Number(privateData.yesCount || 0) + (choice === "yes" ? 1 : 0);
-      const nextNoCount = Number(privateData.noCount || 0) + (choice === "no" ? 1 : 0);
-      const result = evaluateOrganizerRemovalVote({
-        totalOrganizerCount: Number(proposalData.totalOrganizerCount),
-        eligibleOrganizerCount: eligibleVoterUids.length,
-        yesCount: nextYesCount,
-        noCount: nextNoCount,
-      });
-      const nextVotedUids = [...votedUids, request.auth.uid];
-      let linkedRosterRefs = [];
-      let linkedRosterSnaps = [];
-      let targetEmail = "";
-
-      if (result.status === "passed") {
-        targetEmail = resolveMemberEmailByUid(groupData, targetUid);
-        if (!targetEmail || !targetEmail.includes("@")) {
-          throw new HttpsError("failed-precondition", "The target organizer has an incomplete membership record.");
-        }
-        const linkedRosterIds = Array.from(new Set(
-          (Array.isArray(groupData.rosterIds) ? groupData.rosterIds : [])
-            .filter((rosterId) => typeof rosterId === "string" && rosterId.length > 0),
-        ));
-        if (linkedRosterIds.some((rosterId) => rosterId.includes("/"))) {
-          throw new HttpsError("failed-precondition", "This workspace has an invalid linked-roster record.");
-        }
-        if (linkedRosterIds.length + nextVotedUids.length + 4 > MAX_GOVERNANCE_TRANSACTION_DOCUMENTS) {
-          throw new HttpsError("resource-exhausted", "This workspace is too large for one protected removal transaction.");
-        }
-        linkedRosterRefs = linkedRosterIds.map((rosterId) => db.collection("sharedRosters").doc(rosterId));
-        linkedRosterSnaps = linkedRosterRefs.length ? await tx.getAll(...linkedRosterRefs) : [];
-      }
-
-      if (result.status === "open") {
-        tx.create(ballotRef, {
-          choice,
-          castAt: FieldValue.serverTimestamp(),
-          castAtIso: nowIso,
-        });
-        tx.update(privateRef, {
-          yesCount: result.yesCount,
-          noCount: result.noCount,
-          castCount: result.castCount,
-          votedUids: nextVotedUids,
-          updatedAt: FieldValue.serverTimestamp(),
-          updatedAtIso: nowIso,
-        });
-        tx.update(proposalRef, {
-          castCount: result.castCount,
-          updatedAt: FieldValue.serverTimestamp(),
-          updatedAtIso: nowIso,
-        });
-      } else {
-        tx.update(proposalRef, {
-          status: result.status,
-          yesCount: result.yesCount,
-          noCount: result.noCount,
-          castCount: result.castCount,
-          outcomeReason: result.outcomeReason,
-          closedAt: FieldValue.serverTimestamp(),
-          closedAtIso: nowIso,
-          updatedAt: FieldValue.serverTimestamp(),
-          updatedAtIso: nowIso,
-        });
-
-        if (result.status === "passed") {
-          tx.update(groupRef, {
-            ...removeOrganizerMembership(groupData, targetUid, targetEmail),
-            updatedAt: FieldValue.serverTimestamp(),
-            updatedAtIso: nowIso,
-          });
-          linkedRosterSnaps.forEach((rosterSnap, index) => {
-            if (!rosterSnap.exists) return;
-            const rosterData = rosterSnap.data() || {};
-            const rosterTargetEmail = resolveMemberEmailByUid(rosterData, targetUid) || targetEmail;
-            tx.update(linkedRosterRefs[index], {
-              ...removeOrganizerMembership(rosterData, targetUid, rosterTargetEmail),
-              updatedAt: FieldValue.serverTimestamp(),
-              updatedAtIso: nowIso,
-            });
-          });
-        }
-
-        votedUids.forEach((voterUid) => {
-          tx.delete(privateRef.collection("ballots").doc(voterUid));
-        });
-        tx.delete(privateRef);
-        tx.delete(controlRef);
-      }
-
-      return {
-        ok: true,
-        proposalId,
-        status: result.status,
-        castCount: result.castCount,
-        requiredYes: result.requiredYes,
-        yesCount: result.status === "open" ? null : result.yesCount,
-        noCount: result.status === "open" ? null : result.noCount,
-        outcomeReason: result.outcomeReason,
-      };
-    });
+      },
+      actorUid: request.auth.uid,
+      groupId,
+      proposalId,
+      choice,
+      nowMillis: now,
+      nowIso,
+      maxTransactionDocuments: MAX_GOVERNANCE_TRANSACTION_DOCUMENTS,
+      fieldValue: FieldValue,
+    }));
   } catch (error) {
     if (error instanceof HttpsError) throw error;
+    if (error instanceof OrganizerRemovalTransactionError) {
+      throw new HttpsError(error.code, error.message);
+    }
+    if (error instanceof WorkspaceRosterLinkageError) {
+      throw new HttpsError(error.code, error.message);
+    }
     console.error("Could not cast organizer-removal ballot", error);
     throw new HttpsError("internal", "Could not record the organizer-removal ballot.");
   }

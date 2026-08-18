@@ -6,7 +6,7 @@
   },
   "main": "index.js",
   "scripts": {
-    "test": "node --test organizerRemoval.test.js workspaceInvitation.test.js workspaceInvitationRules.test.js emailVerification.test.js workspaceClosure.test.js workspaceClosureRules.test.js cabinetRules.test.js",
+    "test": "node --test organizerRemoval.test.js organizerRemovalTransaction.test.js workspaceInvitation.test.js workspaceInvitationRules.test.js emailVerification.test.js workspaceClosure.test.js workspaceClosureRules.test.js cabinetRules.test.js workspaceRosterLinkage.test.js",
     "test:rules:cabinet": "firebase emulators:exec --config ../firebase.json --only firestore --project demo-stripes-cabinet-rules \"node --test cabinetRules.emulator.test.js\""
   },
   "dependencies": {

@@ -11,6 +11,10 @@ const sharedRosterService = fs.readFileSync(
   "utf8",
 );
 const functionsIndex = fs.readFileSync(path.join(__dirname, "index.js"), "utf8");
+const organizerRemovalTransaction = fs.readFileSync(
+  path.join(__dirname, "organizerRemovalTransaction.js"),
+  "utf8",
+);
 
 test("pending recipients cannot read complete workspace or roster documents", () => {
   assert.doesNotMatch(rules, /signedInEmail\(\)\s+in\s+resource\.data\.pendingInviteEmails/);
@@ -65,9 +69,10 @@ test("protected removal callables enforce current and frozen governance eligibil
   assert.match(proposalCallable, /organizerGovernanceEligibility/);
   assert.match(proposalCallable, /governanceEligibleUids\.length < 2/);
   assert.match(proposalCallable, /governanceEligibleOrganizerUids/);
-  assert.match(ballotCallable, /organizerGovernanceEligibility/);
-  assert.match(ballotCallable, /governanceEligibleOrganizerUids/);
-  assert.match(ballotCallable, /eligibleVoterUids\.includes\(request\.auth\.uid\)/);
+  assert.match(ballotCallable, /castOrganizerRemovalBallotTransaction/);
+  assert.match(organizerRemovalTransaction, /organizerGovernanceEligibility/);
+  assert.match(organizerRemovalTransaction, /governanceEligibleOrganizerUids/);
+  assert.match(organizerRemovalTransaction, /eligibleVoterUids\.includes\(actorUid\)/);
 });
 
 test("trusted acceptance owns governance timing and post-acceptance notification", () => {

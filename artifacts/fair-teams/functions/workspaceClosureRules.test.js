@@ -68,6 +68,7 @@ test("cleanup covers descendants, invitations, locks, notification metadata and 
   assert.match(cleanup, /db\.recursiveDelete/);
   assert.match(cleanup, /WORKSPACE_INVITATION_COLLECTION/);
   assert.match(cleanup, /WORKSPACE_INVITATION_LOCK_COLLECTION/);
+  assert.match(cleanup, /SHARED_ROSTER_CREATION_REQUEST_COLLECTION/);
   assert.match(cleanup, /THREAD_COLLECTION/);
   assert.match(cleanup, /bucket\.deleteFiles\(\{ prefix, force: true \}\)/);
 });

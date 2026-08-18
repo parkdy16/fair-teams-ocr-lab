@@ -66,6 +66,11 @@ const {
   preflightGroupRosterLinkage,
   WorkspaceRosterLinkageError,
 } = require("./workspaceRosterLinkage");
+const {
+  creationRequestDocumentId,
+  createLinkedSharedRosterTransaction,
+  SharedRosterCreationError,
+} = require("./sharedRosterCreation");
 
 initializeApp();
 
@@ -75,6 +80,7 @@ const USER_COLLECTION = "fairTeamsUsers";
 const PUSH_INSTALLATION_COLLECTION = "fairTeamsPushInstallations";
 const WORKSPACE_INVITATION_COLLECTION = "sharedWorkspaceInvitations";
 const WORKSPACE_INVITATION_LOCK_COLLECTION = "sharedWorkspaceInvitationLocks";
+const SHARED_ROSTER_CREATION_REQUEST_COLLECTION = "sharedRosterCreationRequests";
 const WORKSPACE_CLOSURE_COLLECTION = "sharedWorkspaceClosures";
 const EMAIL_VERIFICATION_THROTTLE_COLLECTION = "authEmailVerificationThrottles";
 const MAX_GOVERNANCE_TRANSACTION_DOCUMENTS = 440;
@@ -550,6 +556,11 @@ async function finishWorkspaceClosureCleanup(db, cleanup) {
       db.collection(WORKSPACE_INVITATION_LOCK_COLLECTION)
         .where("groupId", "==", targets.deleteInvitationStateForGroupId),
     );
+    await deleteQueryDocuments(
+      db,
+      db.collection(SHARED_ROSTER_CREATION_REQUEST_COLLECTION)
+        .where("groupId", "==", targets.deleteInvitationStateForGroupId),
+    );
   }
 
   for (const scope of targets.notificationScopes) {
@@ -679,6 +690,48 @@ async function deliverWorkspaceInvitation(db, invitationRef, invitation, sendAtt
 
   return { emailSent, deliveryStatus };
 }
+
+exports.createLinkedSharedRoster = onCall({ region: REGION, timeoutSeconds: 60 }, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Sign in first.");
+
+  const groupId = safeWorkspaceId(request.data?.groupId);
+  const db = getFirestore();
+  const groupRef = db.collection("sharedGroups").doc(groupId);
+  const rosterRef = db.collection("sharedRosters").doc();
+  const nowIso = new Date().toISOString();
+
+  try {
+    const requestDocumentId = creationRequestDocumentId({
+      actorUid: request.auth.uid,
+      groupId,
+      creationRequestId: request.data?.creationRequestId,
+    });
+    const requestRef = db.collection(SHARED_ROSTER_CREATION_REQUEST_COLLECTION).doc(requestDocumentId);
+    return await db.runTransaction((tx) => createLinkedSharedRosterTransaction({
+      transaction: tx,
+      firestore: db,
+      groupRef,
+      requestRef,
+      rosterRef,
+      actor: {
+        uid: request.auth.uid,
+        email: request.auth.token?.email,
+      },
+      input: request.data,
+      nowIso,
+      fieldValue: FieldValue,
+      maxTransactionDocuments: MAX_GOVERNANCE_TRANSACTION_DOCUMENTS,
+    }));
+  } catch (error) {
+    if (error instanceof HttpsError) throw error;
+    if (error instanceof SharedRosterCreationError
+      || error instanceof WorkspaceRosterLinkageError) {
+      throw new HttpsError(error.code, error.message);
+    }
+    console.error("Could not create linked shared roster", error);
+    throw new HttpsError("internal", "Could not create this shared roster.");
+  }
+});
 
 exports.createWorkspaceOrganizerInvitation = onCall({
   region: REGION,

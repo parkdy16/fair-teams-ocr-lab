@@ -9,7 +9,6 @@ import {
 import {
   addDoc,
   arrayRemove,
-  arrayUnion,
   collection,
   doc,
   getDoc,
@@ -30,6 +29,14 @@ import {
   toSharedRosterUser,
   type SharedRosterUser,
 } from "@/lib/sharedRosterAuthState";
+import { createLinkedSharedRoster } from "@/lib/sharedRosterCreationService";
+import {
+  adoptSharedRosterCreationResult,
+  bindSharedRosterCreationAttemptToGroup,
+  getOrCreateSharedRosterCreationAttempt,
+  preserveCreatedRosterWhenRatingSeedFails,
+  recordSharedRosterCreationResult,
+} from "@/lib/sharedRosterCreationAttempt";
 
 export { toSharedRosterUser };
 export type { SharedRosterUser };
@@ -89,6 +96,7 @@ export type FirebaseSharedRosterSummary = {
   memberNamesByUid?: Record<string, string>;
   memberUidByEmail?: Record<string, string>;
   lastSavedByEmail?: string;
+  creationWarning?: string;
 };
 
 /**
@@ -628,94 +636,70 @@ async function requireGroupForRoster(groupId?: string, fallbackName?: string) {
   return toGroupSummary(groupSnap.id, data);
 }
 
-export async function createFirebaseSharedRoster(roster: RoomRoster, groupId?: string, groupName?: string): Promise<FirebaseSharedRosterSummary> {
-  const user = getCurrentSharedRosterUser();
+const sharedRosterCreationInFlight = new Map<string, Promise<FirebaseSharedRosterSummary>>();
+
+async function createFirebaseSharedRosterAttempt(
+  roster: RoomRoster,
+  groupId?: string,
+  groupName?: string,
+): Promise<FirebaseSharedRosterSummary> {
   if (!roster.players.length) throw new Error("Add players before creating a shared roster.");
 
-  const group = await requireGroupForRoster(groupId, groupName);
-  const groupSnap = await getDoc(doc(getFairTeamsFirestore(), "sharedGroups", group.id));
-  const groupData = groupSnap.exists() ? groupSnap.data() : {};
-  const groupMemberUids = Array.isArray(groupData.memberUids) ? groupData.memberUids.filter((id): id is string => typeof id === "string") : [user.uid];
-  const groupMemberEmails = Array.isArray(groupData.memberEmails) ? groupData.memberEmails.filter((email): email is string => typeof email === "string") : [normalizeEmail(user.email)];
-  const groupPendingInviteEmails = Array.isArray(groupData.pendingInviteEmails) ? groupData.pendingInviteEmails.filter((email): email is string => typeof email === "string") : [];
-  const groupRoleByUid = groupData.roleByUid && typeof groupData.roleByUid === "object" ? groupData.roleByUid as Record<string, unknown> : { [user.uid]: "organizer" };
-  const organizerName = nameFromUser(user);
-  const groupMemberNamesByUid = { ...cleanNameMap(groupData.memberNamesByUid), [user.uid]: organizerName };
-  const groupMemberNamesByEmail = { ...cleanNameMap(groupData.memberNamesByEmail), [normalizeEmail(user.email)]: organizerName };
-  const groupMemberUidByEmail = { ...cleanStringMap(groupData.memberUidByEmail), [normalizeEmail(user.email)]: user.uid };
-  const now = new Date().toISOString();
-  const rosterData = cleanForFirestore(makeSharedRosterSnapshot(roster));
-  const playerCount = Array.isArray(rosterData.players) ? rosterData.players.length : 0;
-  const payload = {
-    app: "Stripes",
-    schemaVersion: 2,
-    groupId: group.id,
-    groupName: group.name,
-    name: roster.name || "Shared roster",
-    ownerUid: user.uid,
-    ownerEmail: user.email,
-    memberUids: groupMemberUids,
-    memberEmails: groupMemberEmails,
-    pendingInviteEmails: groupPendingInviteEmails,
-    memberNamesByUid: groupMemberNamesByUid,
-    memberNamesByEmail: groupMemberNamesByEmail,
-    memberUidByEmail: groupMemberUidByEmail,
-    roleByUid: groupRoleByUid,
-    version: 1,
-    playerCount,
-    rosterData,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-    createdAtIso: now,
-    updatedAtIso: now,
-    lastSavedByUid: user.uid,
-    lastSavedByEmail: user.email,
-    lastSavedAt: serverTimestamp(),
-    lastSavedAtIso: now,
-    backupHistory: [],
-  };
+  const user = getCurrentSharedRosterUser();
+  let attempt = getOrCreateSharedRosterCreationAttempt(user.uid, roster.id);
+  if (groupId && attempt.groupId && attempt.groupId !== groupId) {
+    throw new Error("Finish the pending shared-roster creation attempt before choosing another workspace.");
+  }
 
-  const docRef = await addDoc(collection(getFairTeamsFirestore(), "sharedRosters"), payload);
-  const groupRef = doc(getFairTeamsFirestore(), "sharedGroups", group.id);
-  const batch = writeBatch(getFairTeamsFirestore());
-  batch.update(groupRef, {
-    rosterIds: arrayUnion(docRef.id),
-    memberNamesByUid: groupMemberNamesByUid,
-    memberNamesByEmail: groupMemberNamesByEmail,
-    memberUidByEmail: groupMemberUidByEmail,
-    lastSavedByUid: user.uid,
-    lastSavedByEmail: user.email,
-    lastSavedRosterId: docRef.id,
-    lastSavedRosterName: payload.name,
-    lastSavedAt: serverTimestamp(),
-    lastSavedAtIso: now,
-    updatedAt: serverTimestamp(),
-    updatedAtIso: now,
+  let group = await requireGroupForRoster(attempt.groupId || groupId, groupName);
+  attempt = bindSharedRosterCreationAttemptToGroup(attempt, group.id);
+  if (attempt.groupId !== group.id) {
+    group = await requireGroupForRoster(attempt.groupId, groupName);
+  }
+  const rosterData = cleanForFirestore(makeSharedRosterSnapshot(roster));
+  const created = await createLinkedSharedRoster({
+    creationRequestId: attempt.creationRequestId,
+    groupId: group.id,
+    name: roster.name || "Shared roster",
+    rosterData,
   });
-  await batch.commit();
-  await seedOwnerClubRatingsFromRoster(docRef.id, roster.players);
-  return toRosterSummary(docRef.id, payload);
+  recordSharedRosterCreationResult(attempt, created.id);
+  return preserveCreatedRosterWhenRatingSeedFails(
+    created,
+    () => seedOwnerClubRatingsFromRoster(created.id, roster.players),
+  );
+}
+
+export async function createFirebaseSharedRoster(
+  roster: RoomRoster,
+  groupId?: string,
+  groupName?: string,
+): Promise<FirebaseSharedRosterSummary> {
+  const user = getCurrentSharedRosterUser();
+  const inFlightKey = `${user.uid}\u0000${roster.id}`;
+  const existing = sharedRosterCreationInFlight.get(inFlightKey);
+  if (existing) return existing;
+
+  const creation = createFirebaseSharedRosterAttempt(roster, groupId, groupName);
+  sharedRosterCreationInFlight.set(inFlightKey, creation);
+  try {
+    return await creation;
+  } finally {
+    if (sharedRosterCreationInFlight.get(inFlightKey) === creation) {
+      sharedRosterCreationInFlight.delete(inFlightKey);
+    }
+  }
+}
+
+export function adoptFirebaseSharedRosterCreation(localRosterId: string, sharedRosterId: string) {
+  const user = getCurrentSharedRosterUser();
+  return adoptSharedRosterCreationResult(user.uid, localRosterId, sharedRosterId);
 }
 
 
-export async function deleteFirebaseSharedRoster(rosterId: string): Promise<void> {
-  const user = getCurrentSharedRosterUser();
-  const rosterRef = doc(getFairTeamsFirestore(), "sharedRosters", rosterId);
-  const rosterSnap = await getDoc(rosterRef);
-  if (!rosterSnap.exists()) throw new Error("Shared roster was not found.");
-  const data = rosterSnap.data();
-  const groupId = typeof data.groupId === "string" ? data.groupId : undefined;
-  if (data.ownerUid !== user.uid) throw new Error("Only the roster owner can remove this shared roster.");
-  const batch = writeBatch(getFairTeamsFirestore());
-  batch.delete(rosterRef);
-  if (groupId) {
-    batch.update(doc(getFairTeamsFirestore(), "sharedGroups", groupId), {
-      rosterIds: arrayRemove(rosterId),
-      updatedAt: serverTimestamp(),
-      updatedAtIso: new Date().toISOString(),
-    });
-  }
-  await batch.commit();
+/** @deprecated Use the governed shared-workspace closure flow. */
+export async function deleteFirebaseSharedRoster(_rosterId: string): Promise<void> {
+  throw new Error("Shared rosters can only be removed through workspace closure.");
 }
 
 export async function deleteFirebaseSharedGroup(groupId: string): Promise<void> {

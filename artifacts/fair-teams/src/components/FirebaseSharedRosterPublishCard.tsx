@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { StripesConfirmContent } from "@/components/ui/stripes-modal";
 import type { RoomRoster } from "@/lib/localRoster";
 import {
+  adoptFirebaseSharedRosterCreation,
   createFirebaseSharedRoster,
   listenToFirebaseSharedRoster,
   listenToSharedRosterUser,
@@ -401,9 +402,23 @@ Your local roster will stay local. Stripes will copy shared identity fields only
     try {
       const created = await createFirebaseSharedRoster(activeRoster, undefined, activeRoster.name || "Shared roster");
       const snapshot = await readFirebaseSharedRoster(created.id);
-      onOpenRoster?.(snapshot.roster, snapshot.name || created.name || "Shared roster", snapshot);
-      await refreshSharedData();
-      setNotice({ tone: "success", text: "Shared copy created. Your local roster stayed local. Current skills became your first Club ratings." });
+      if (onOpenRoster) {
+        onOpenRoster(snapshot.roster, snapshot.name || created.name || "Shared roster", snapshot);
+        adoptFirebaseSharedRosterCreation(activeRoster.id, created.id);
+      }
+      let refreshWarning = "";
+      try {
+        await refreshSharedData();
+      } catch {
+        refreshWarning = "The shared-roster list could not refresh yet.";
+      }
+      const secondaryWarnings = [created.creationWarning, refreshWarning].filter(Boolean).join(" ");
+      setNotice({
+        tone: secondaryWarnings ? "info" : "success",
+        text: secondaryWarnings
+          ? `Shared copy created. ${secondaryWarnings}`
+          : "Shared copy created. Your local roster stayed local. Current skills became your first Club ratings.",
+      });
     } catch (error) {
       setNotice({ tone: "error", text: friendlyFirestoreError(error) });
     } finally {

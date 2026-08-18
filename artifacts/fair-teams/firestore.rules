@@ -36,6 +36,9 @@ service cloud.firestore {
         && request.resource.data.get("pendingInviteEmails", []) == resource.data.get("pendingInviteEmails", [])
         && request.resource.data.get("roleByUid", {}) == resource.data.get("roleByUid", {})
         && request.resource.data.get("memberUidByEmail", {}) == resource.data.get("memberUidByEmail", {})
+        && request.resource.data.keys().hasAny(["rosterIds"])
+          == resource.data.keys().hasAny(["rosterIds"])
+        && request.resource.data.get("rosterIds", []) == resource.data.get("rosterIds", [])
         && request.resource.data.get("organizerJoinedAtByUid", {})
           == resource.data.get("organizerJoinedAtByUid", {})
         && request.resource.data.get("organizerGovernanceEligibleAtByUid", {})
@@ -205,6 +208,11 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Server-only idempotency records for atomic shared-roster creation.
+    match /sharedRosterCreationRequests/{requestId} {
+      allow read, write: if false;
+    }
+
     function validInitialRosterPendingInvites() {
       let groupId = request.resource.data.get("groupId", "");
       return groupId == ""
@@ -296,7 +304,10 @@ service cloud.firestore {
       allow create: if signedIn()
         && request.resource.data.ownerUid == request.auth.uid
         && request.auth.uid in request.resource.data.memberUids
-        && request.resource.data.get("pendingInviteEmails", []).size() == 0;
+        && request.resource.data.get("pendingInviteEmails", []).size() == 0
+        && request.resource.data.keys().hasAll(["rosterIds"])
+        && request.resource.data.rosterIds is list
+        && request.resource.data.rosterIds.size() == 0;
 
       allow read: if signedIn()
         && request.auth.uid in resource.data.memberUids;
@@ -368,6 +379,7 @@ service cloud.firestore {
 
     match /sharedRosters/{rosterId} {
       allow create: if signedIn()
+        && request.resource.data.get("groupId", "") == ""
         && request.resource.data.ownerUid == request.auth.uid
         && request.auth.uid in request.resource.data.memberUids
         && validInitialRosterPendingInvites();

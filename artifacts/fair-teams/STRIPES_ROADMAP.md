@@ -1500,8 +1500,10 @@ storage/ownership wording conflicts with it.
 - Current major implementation phase: G2 Unified Google Connection.
 - G2.1a Drive connection-state/auth foundation is released as `023d15d` and
   has passed production real-account verification.
-- G2.2 Managed My Drive Cabinet location is implemented locally and awaiting
-  review and real-account verification before G2.3 begins.
+- G2.2 Managed My Drive Cabinet location is released as `a861c56`, documented
+  by `20f93dc` and has passed production real-account verification.
+- G2.3 Multi-organizer Google permission foundation is implemented locally and
+  awaiting review and real multi-account verification before G2.4 begins.
 
 ## Shared workspace governance
 
@@ -3031,7 +3033,7 @@ Requirements:
 
 Implementation checkpoint — 2026-08-18:
 
-- implemented locally using an app-created My Drive folder with private,
+- released as `a861c56` using an app-created My Drive folder with private,
   versioned `appProperties` markers and stable Drive file ID;
 - exact marker lookup survives rename/move, ignores unmarked look-alikes and
   uses an optional preferred folder ID when marked duplicates exist;
@@ -3039,8 +3041,8 @@ Implementation checkpoint — 2026-08-18:
   state and remain untouched;
 - trashed/missing folders produce a replacement in My Drive root;
 - location readiness, reconnect and error state remain session-memory only;
-- focused tests and the production build pass; real Drive folder lifecycle
-  verification remains required before G2.3.
+- focused tests and the production build pass; the folder lifecycle has passed
+  production real-account verification.
 
 #### G2.3 — Multi-organizer Google permission foundation
 
@@ -3058,6 +3060,25 @@ automatic permission escalation based on a club title.
 
 Real-account testing is required for folder sharing, collaborator file
 creation, ownership/inheritance, permission revocation and organizer turnover.
+
+Implementation checkpoint — 2026-08-18:
+
+- implemented locally as a reusable Cabinet-root permission controller over
+  Google Drive's live permission list, with no Stripes ACL or identity mapping;
+- explicit Google-account email input grants My Drive `writer` access,
+  reuses owner/writer access and upgrades an existing direct lower role;
+- permission inspection normalizes owner/editor/commenter/viewer plus direct,
+  inherited, mixed or unknown source state, with unknown source failing closed
+  and structured reconnect and insufficient-access results;
+- removal re-reads live state and can remove only the selected direct user
+  permission for the expected Google email; owner, inherited and unrelated
+  permissions remain protected, and mixed-source removal remains explicit that
+  inherited access may continue;
+- same-folder mutations are serialized in memory, and results explicitly state
+  that child-file access may differ from Cabinet-root access;
+- focused tests and the production build pass; real multi-account sharing,
+  inheritance, revocation and collaborator file-creation verification remains
+  required before G2.4.
 
 #### G2.4 — Optional Shared Drive capability
 
@@ -3150,28 +3171,30 @@ folder/files must remain untouched.
 
 #### Current next implementation target
 
-**Current gate: review and real-account verification of the local G2.2
-implementation. Do not begin G2.3 until that gate is approved.**
+**Current gate: review and real multi-account verification of the local G2.3
+implementation. Do not begin G2.4 until that gate is approved.**
 
 Scope:
 
-- app-marked managed My Drive Cabinet folder;
-- idempotent create/resolve;
-- stable Drive file ID across rename/move;
-- safe missing, trashed and duplicate handling;
-- session-only location state and existing `drive.file` authorization.
+- inspect the managed My Drive Cabinet root's live Google permissions;
+- grant an explicitly supplied Google account editor (`writer`) access;
+- distinguish owner/editor/commenter/viewer and direct/inherited/mixed/unknown
+  source state;
+- remove only a selected direct permission when Google authorizes it;
+- structured reconnect, insufficient-permission and protected states.
 
 Explicitly excluded:
 
-- Cabinet folder creation;
+- Cabinet folder creation changes;
 - Cabinet Firestore metadata;
 - Shared Drive setup;
 - Cabinet UI;
 - attachment migration;
-- club-role UI implementation unless separately scheduled.
+- automatic Firebase/organizer-to-Google identity mapping;
+- child-file permission rewriting or claims about inherited child access.
 
 The flexible club-role architecture is recorded, but its UI is not part of
-G2.1a.
+G2.3.
 
 ### G3 — Google Resource + Club Cabinet Foundation
 
@@ -3284,9 +3307,9 @@ architecture/security consequences.
 
 ### Authoritative remaining implementation sequence
 
-G2.1a is released and production-verified. G2.2 is implemented locally; the
-current gate is review and real-account verification. G2.3 begins only after
-that gate is approved.
+G2.1a and G2.2 are released and production-verified. G2.3 is implemented
+locally; the current gate is review and real multi-account verification. G2.4
+begins only after that gate is approved.
 
 Complete the G-track in order before building the full Cabinet UI:
 

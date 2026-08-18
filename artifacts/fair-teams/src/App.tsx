@@ -54,6 +54,8 @@ import {
 import { getGoogleDriveConfig } from "@/lib/googleDriveConfig";
 import { allRostersToDriveBackupJson, parseDriveBackupJson } from "@/lib/googleDriveBackup";
 import { requestGoogleDriveAccessToken, revokeGoogleDriveAccessToken } from "@/lib/googleDriveAuth";
+import { GoogleDriveCabinetLocationController } from "@/lib/googleDriveCabinet";
+import { resolveManagedMyDriveCabinetFolder } from "@/lib/googleDriveCabinetApi";
 import {
   canDisconnectGoogleDrive,
   GoogleDriveConnectionController,
@@ -589,6 +591,13 @@ function App() {
     });
   }
   const googleDriveConnection = googleDriveConnectionRef.current;
+  const googleDriveCabinetRef = useRef<GoogleDriveCabinetLocationController | null>(null);
+  if (!googleDriveCabinetRef.current) {
+    googleDriveCabinetRef.current = new GoogleDriveCabinetLocationController(
+      resolveManagedMyDriveCabinetFolder,
+    );
+  }
+  const googleDriveCabinet = googleDriveCabinetRef.current;
   const [googleDriveConnectionSnapshot, setGoogleDriveConnectionSnapshot] = useState(
     () => googleDriveConnection.getSnapshot(),
   );
@@ -2151,7 +2160,30 @@ function App() {
         setCurrentDriveBackup((file) => file ? { ...file, connectedEmail: result.account?.emailAddress } : file);
       }
       void warmUpGoogleDrivePicker();
-      showRosterToolsNotice("Google Drive connected", "Your browser session is now connected to Google Drive.", "success");
+      const cabinet = await googleDriveCabinet.resolve(googleDriveConnection.getAccessToken());
+      if (googleDriveConnection.getSnapshot().status !== "connected") return;
+      if (cabinet.status === "reconnect_required") {
+        googleDriveConnection.markExpired(cabinet.error || undefined);
+        showRosterToolsNotice("Reconnect Google Drive", cabinet.error || "Google Drive access expired. Reconnect to continue.", "warning");
+        return;
+      }
+      if (cabinet.status !== "ready") {
+        showRosterToolsNotice(
+          "Google Drive connected",
+          cabinet.error || "Stripes Cabinet is currently unavailable. Your existing Drive tools remain connected.",
+          "warning",
+        );
+        return;
+      }
+      showRosterToolsNotice(
+        cabinet.duplicateFolderIds.length ? "Stripes Cabinet ready" : "Google Drive connected",
+        cabinet.duplicateFolderIds.length
+          ? "Stripes is using its preferred managed Cabinet folder. Other marked folders were left untouched."
+          : cabinet.created
+            ? "Your Stripes Cabinet folder was created in My Drive."
+            : "Your existing Stripes Cabinet folder is ready.",
+        cabinet.duplicateFolderIds.length ? "warning" : "success",
+      );
       return;
     }
     showRosterToolsNotice(
@@ -2162,6 +2194,7 @@ function App() {
   };
 
   const disconnectGoogleDrive = async () => {
+    googleDriveCabinet.reset();
     const result = await googleDriveConnection.disconnect();
     showRosterToolsNotice(
       "Google Drive disconnected",

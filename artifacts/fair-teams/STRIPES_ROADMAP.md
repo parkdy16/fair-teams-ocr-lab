@@ -1498,8 +1498,10 @@ storage/ownership wording conflicts with it.
   `61b3079` with its Firestore rules and callable Functions deployed.
 - G1 Shared Workspace Governance is complete and released.
 - Current major implementation phase: G2 Unified Google Connection.
-- G2.1a Drive connection-state/auth foundation is implemented locally and
-  awaiting review and real-account verification before G2.2 begins.
+- G2.1a Drive connection-state/auth foundation is released as `023d15d` and
+  has passed production real-account verification.
+- G2.2 Managed My Drive Cabinet location is implemented locally and awaiting
+  review and real-account verification before G2.3 begins.
 
 ## Shared workspace governance
 
@@ -3027,6 +3029,19 @@ Requirements:
 - work with normal personal Google accounts;
 - never imply Google Workspace is required.
 
+Implementation checkpoint — 2026-08-18:
+
+- implemented locally using an app-created My Drive folder with private,
+  versioned `appProperties` markers and stable Drive file ID;
+- exact marker lookup survives rename/move, ignores unmarked look-alikes and
+  uses an optional preferred folder ID when marked duplicates exist;
+- multiple marked folders without a valid preferred ID surface an ambiguous
+  state and remain untouched;
+- trashed/missing folders produce a replacement in My Drive root;
+- location readiness, reconnect and error state remain session-memory only;
+- focused tests and the production build pass; real Drive folder lifecycle
+  verification remains required before G2.3.
+
 #### G2.3 — Multi-organizer Google permission foundation
 
 Google permissions remain authoritative. Build the ability to:
@@ -3135,18 +3150,16 @@ folder/files must remain untouched.
 
 #### Current next implementation target
 
-**Current gate: review and real-account verification of the local G2.1a
-implementation. Do not begin G2.2 until that gate is approved.**
+**Current gate: review and real-account verification of the local G2.2
+implementation. Do not begin G2.3 until that gate is approved.**
 
 Scope:
 
-- reusable Drive connection lifecycle;
-- connected account identity;
-- granted `drive.file` scope;
-- expiry and reconnect state;
-- safe Disconnect behavior;
-- preserve Cloud Backup;
-- keep the OAuth token memory-only.
+- app-marked managed My Drive Cabinet folder;
+- idempotent create/resolve;
+- stable Drive file ID across rename/move;
+- safe missing, trashed and duplicate handling;
+- session-only location state and existing `drive.file` authorization.
 
 Explicitly excluded:
 
@@ -3271,9 +3284,9 @@ architecture/security consequences.
 
 ### Authoritative remaining implementation sequence
 
-G2.1a is implemented locally. The current gate is review and real-account
-verification; G2.2 is the next atomic implementation target only after that
-gate is approved.
+G2.1a is released and production-verified. G2.2 is implemented locally; the
+current gate is review and real-account verification. G2.3 begins only after
+that gate is approved.
 
 Complete the G-track in order before building the full Cabinet UI:
 

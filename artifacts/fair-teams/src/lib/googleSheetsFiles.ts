@@ -1,4 +1,5 @@
 import type { RoomRoster } from "@/lib/localRoster";
+import { GoogleApiHttpError } from "@/lib/googleApiError";
 import {
   FAIR_TEAMS_GOOGLE_SHEET_METADATA_TAB,
   LEGACY_FAIR_TEAMS_GOOGLE_SHEET_METADATA_TAB,
@@ -20,7 +21,7 @@ export const FAIR_TEAMS_GOOGLE_SHEET_MIME_TYPE = "application/vnd.google-apps.sp
 const MISSING_SHARED_ROSTER_MESSAGE = "Shared roster file not found. It may have been deleted, moved to trash, or not shared with this Google account.";
 
 function throwGoogleSheetFileError(status: number, message: string, fallback403: string) {
-  if (status === 401) throw new Error("Google connection expired. Sign in with Google again, then retry.");
+  if (status === 401) throw new GoogleApiHttpError(401, "Google connection expired. Sign in with Google again, then retry.");
   if (status === 403) throw new Error(fallback403);
   if (status === 404) throw new Error(MISSING_SHARED_ROSTER_MESSAGE);
   throw new Error(message);
@@ -132,6 +133,9 @@ async function renameGoogleSheetRosterFile(accessToken: string, spreadsheetId: s
 
   if (!response.ok) {
     const message = await readGoogleApiError(response, "Google Drive could not rename this shared roster file.");
+    if (response.status === 401) {
+      throw new GoogleApiHttpError(401, "Google connection expired. Reconnect Google Drive, then retry.");
+    }
     console.warn(message);
   }
 }
@@ -405,7 +409,7 @@ async function fetchGoogleSheetRosterFiles(accessToken: string, query: string): 
 
   if (!response.ok) {
     const message = await readGoogleApiError(response, "Google Drive could not list shared rosters.");
-    if (response.status === 401) throw new Error("Google connection expired. Reconnect Google Drive, then retry.");
+    if (response.status === 401) throw new GoogleApiHttpError(401, "Google connection expired. Reconnect Google Drive, then retry.");
     throw new Error(message);
   }
 

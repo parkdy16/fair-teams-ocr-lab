@@ -53,7 +53,12 @@ import {
 } from "@/lib/localRoster";
 import { getGoogleDriveConfig } from "@/lib/googleDriveConfig";
 import { allRostersToDriveBackupJson, parseDriveBackupJson } from "@/lib/googleDriveBackup";
-import { requestGoogleDriveAccessToken } from "@/lib/googleDriveAuth";
+import { requestGoogleDriveAccessToken, revokeGoogleDriveAccessToken } from "@/lib/googleDriveAuth";
+import {
+  canDisconnectGoogleDrive,
+  GoogleDriveConnectionController,
+  isGoogleDriveAuthorizationExpiredError,
+} from "@/lib/googleDriveConnection";
 import {
   createGoogleDriveJsonFile,
   deleteGoogleDriveFilePermission,
@@ -574,13 +579,30 @@ function App() {
   const deviceBackupSummary = privateBackupSummary;
   const [firebaseNotificationMemberEmailsByRosterId, setFirebaseNotificationMemberEmailsByRosterId] = useState<Record<string, string[]>>({});
   const googleDriveConfig = getGoogleDriveConfig();
-  const [googleDriveAccessToken, setGoogleDriveAccessToken] = useState("");
-  const [googleDriveConnecting, setGoogleDriveConnecting] = useState(false);
+  const googleDriveConnectionRef = useRef<GoogleDriveConnectionController | null>(null);
+  if (!googleDriveConnectionRef.current) {
+    googleDriveConnectionRef.current = new GoogleDriveConnectionController({
+      requestedScope: googleDriveConfig.scope,
+      requestAccessToken: requestGoogleDriveAccessToken,
+      revokeAccessToken: revokeGoogleDriveAccessToken,
+      loadAccount: getGoogleDriveUserSummary,
+    });
+  }
+  const googleDriveConnection = googleDriveConnectionRef.current;
+  const [googleDriveConnectionSnapshot, setGoogleDriveConnectionSnapshot] = useState(
+    () => googleDriveConnection.getSnapshot(),
+  );
+  useEffect(
+    () => googleDriveConnection.subscribe(setGoogleDriveConnectionSnapshot),
+    [googleDriveConnection],
+  );
+  const googleDriveAccessToken = googleDriveConnection.getAccessToken();
+  const googleDriveConnecting = googleDriveConnectionSnapshot.status === "connecting";
   const [googleDriveSaving, setGoogleDriveSaving] = useState(false);
   const [googleDriveUpdating, setGoogleDriveUpdating] = useState(false);
   const [googleDriveOpening, setGoogleDriveOpening] = useState(false);
   const [currentDriveBackup, setCurrentDriveBackup] = useState<ActiveDriveBackupFile | null>(() => readStoredActiveDriveBackup());
-  const [connectedDriveUser, setConnectedDriveUser] = useState<{ displayName?: string; emailAddress?: string } | null>(null);
+  const connectedDriveUser = googleDriveConnectionSnapshot.account;
   const [driveImportPreview, setDriveImportPreview] = useState<DriveImportPreview | null>(null);
   const [driveBackupChoices, setDriveBackupChoices] = useState<GoogleDriveBackupFileGroups | null>(null);
   const [driveBackupDeleteConfirm, setDriveBackupDeleteConfirm] = useState<DriveBackupDeleteConfirm | null>(null);
@@ -620,12 +642,31 @@ function App() {
   const [googleSheetConflictConfirm, setGoogleSheetConflictConfirm] = useState<GoogleSheetConflictConfirm | null>(null);
   const [googleSheetUpdatePrompt, setGoogleSheetUpdatePrompt] = useState<GoogleSheetConflictConfirm | null>(null);
   const [googleSheetUpdatePromptDismissedKey, setGoogleSheetUpdatePromptDismissedKey] = useState("");
-  const googleDriveConnected = Boolean(googleDriveAccessToken);
+  const googleDriveConnected = googleDriveConnectionSnapshot.status === "connected";
+  const googleDriveReconnectRequired = googleDriveConnectionSnapshot.status === "expired";
+  const googleDriveCanDisconnect = canDisconnectGoogleDrive(googleDriveConnectionSnapshot);
   const googleDriveStatusText = !googleDriveConfig.isConfigured
     ? "Add Google Client ID and API key to .env.local"
+    : googleDriveConnecting
+      ? "Connecting..."
+      : googleDriveConnected
+        ? connectedDriveUser?.emailAddress || "Connected account unavailable"
+        : googleDriveReconnectRequired
+          ? connectedDriveUser?.emailAddress
+            ? `${connectedDriveUser.emailAddress} Â· Reconnect required`
+            : "Reconnect required"
+          : googleDriveConnectionSnapshot.status === "error"
+            ? googleDriveConnectionSnapshot.error || "Connection failed"
+            : "Not signed in";
+  const googleDriveActionLabel = googleDriveConnecting
+    ? "Connecting..."
     : googleDriveConnected
-      ? "Connected to Google Drive"
-      : "Ready to connect to Google Drive";
+      ? "Disconnect"
+      : googleDriveReconnectRequired || (
+          googleDriveConnectionSnapshot.status === "error" && Boolean(connectedDriveUser)
+        )
+        ? "Reconnect"
+        : "Sign in";
   const activeGoogleSheetSource =
     activeRoster?.cloudSource?.provider === "google-sheets"
       ? activeRoster.cloudSource
@@ -856,6 +897,14 @@ function App() {
     setRosterToolsNotice({ title, message, tone });
   };
 
+  const googleDriveErrorMessage = (error: unknown, fallback = "Please try again.") => {
+    const message = error instanceof Error ? error.message : fallback;
+    if (isGoogleDriveAuthorizationExpiredError(error)) {
+      googleDriveConnection.markExpired(message);
+    }
+    return message;
+  };
+
   const rememberDriveBackup = (file: GoogleDriveFileResult, summary?: DriveBackupSummary) => {
     const next: ActiveDriveBackupFile = {
       ...currentDriveBackup,
@@ -998,7 +1047,10 @@ function App() {
             lastKnownRemoteModifiedAt: lastRemoteModifiedAt,
           });
         }
-      } catch {
+      } catch (error) {
+        if (isGoogleDriveAuthorizationExpiredError(error)) {
+          googleDriveConnection.markExpired(error instanceof Error ? error.message : undefined);
+        }
         // Do not interrupt the user for background change checks.
       }
     };
@@ -2093,33 +2145,31 @@ function App() {
       return;
     }
 
-    setGoogleDriveConnecting(true);
-    try {
-      const result = await requestGoogleDriveAccessToken(googleDriveAccessToken ? "" : "consent");
-      setGoogleDriveAccessToken(result.accessToken);
-      try {
-        const user = await getGoogleDriveUserSummary(result.accessToken);
-        setConnectedDriveUser(user);
-        if (currentDriveBackup && user.emailAddress) {
-          setCurrentDriveBackup((file) => file ? { ...file, connectedEmail: user.emailAddress } : file);
-        }
-      } catch {
-        setConnectedDriveUser(null);
+    const result = await googleDriveConnection.connect();
+    if (result.status === "connected") {
+      if (currentDriveBackup && result.account?.emailAddress) {
+        setCurrentDriveBackup((file) => file ? { ...file, connectedEmail: result.account?.emailAddress } : file);
       }
       void warmUpGoogleDrivePicker();
       showRosterToolsNotice("Google Drive connected", "Your browser session is now connected to Google Drive.", "success");
-    } catch (error) {
-      showRosterToolsNotice("Could not connect Google Drive", error instanceof Error ? error.message : "Please try again.", "error");
-    } finally {
-      setGoogleDriveConnecting(false);
+      return;
     }
+    showRosterToolsNotice(
+      result.status === "expired" ? "Reconnect Google Drive" : "Could not connect Google Drive",
+      result.error || "Please try again.",
+      result.status === "expired" ? "warning" : "error",
+    );
   };
 
-  const disconnectGoogleDrive = () => {
-    setGoogleDriveAccessToken("");
-    setConnectedDriveUser(null);
-    setCurrentDriveBackup(null);
-    showRosterToolsNotice("Google Drive disconnected", "This browser session is no longer connected to Google Drive.", "info");
+  const disconnectGoogleDrive = async () => {
+    const result = await googleDriveConnection.disconnect();
+    showRosterToolsNotice(
+      "Google Drive disconnected",
+      result.revokeError
+        ? "This browser session is disconnected, but Google could not confirm authorization revocation."
+        : "This browser session is disconnected and no Drive token is retained.",
+      result.revokeError ? "warning" : "info",
+    );
   };
 
   const preserveLocalImagesForDriveRosters = (
@@ -2221,7 +2271,7 @@ function App() {
         rosterNames: backup.rosters.map((roster) => roster.name),
       });
     } catch (error) {
-      showRosterToolsNotice("Could not open Google Drive backup", error instanceof Error ? error.message : "Please try again.", "error");
+      showRosterToolsNotice("Could not open Google Drive backup", googleDriveErrorMessage(error), "error");
     } finally {
       setGoogleDriveOpening(false);
     }
@@ -2243,7 +2293,7 @@ function App() {
       setDriveBackupChoices(groups);
       setDriveBackupTab("mine");
     } catch (error) {
-      showRosterToolsNotice("Could not list Google Drive backups", error instanceof Error ? error.message : "Please try again.", "error");
+      showRosterToolsNotice("Could not list Google Drive backups", googleDriveErrorMessage(error), "error");
     } finally {
       setGoogleDriveOpening(false);
     }
@@ -2279,7 +2329,7 @@ function App() {
       setDriveBackupDeleteConfirm(null);
       showRosterToolsNotice("Backup moved to trash", `${file.name} was moved to your Google Drive trash.`, "success");
     } catch (error) {
-      showRosterToolsNotice("Could not delete backup", error instanceof Error ? error.message : "Please try again.", "error");
+      showRosterToolsNotice("Could not delete backup", googleDriveErrorMessage(error), "error");
     } finally {
       setGoogleDriveDeletingFileId("");
     }
@@ -2334,7 +2384,7 @@ function App() {
       const openText = file.webViewLink ? "\n\nThis is now the active Drive backup." : "";
       showRosterToolsNotice(successTitle, `${file.name}${openText}`, "success");
     } catch (error) {
-      showRosterToolsNotice("Could not save to Google Drive", error instanceof Error ? error.message : "Please try again.", "error");
+      showRosterToolsNotice("Could not save to Google Drive", googleDriveErrorMessage(error), "error");
     } finally {
       setGoogleDriveSaving(false);
     }
@@ -2420,7 +2470,7 @@ function App() {
       setDriveUpdateConfirm(null);
       showRosterToolsNotice("Drive backup updated", `${file.name}\n\nNow contains ${formatBackupSummary(deviceBackupSummary)}.`, "success");
     } catch (error) {
-      showRosterToolsNotice("Could not update Google Drive backup", error instanceof Error ? error.message : "Please try again.", "error");
+      showRosterToolsNotice("Could not update Google Drive backup", googleDriveErrorMessage(error), "error");
     } finally {
       setGoogleDriveUpdating(false);
     }
@@ -2516,7 +2566,7 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
         "success",
       );
     } catch (error) {
-      showRosterToolsNotice("Could not create shared roster", error instanceof Error ? error.message : "Please try again.", "error");
+      showRosterToolsNotice("Could not create shared roster", googleDriveErrorMessage(error), "error");
     } finally {
       setGoogleSheetSyncing(false);
     }
@@ -2569,7 +2619,7 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
         handleMissingActiveGoogleSheetLink();
         return;
       }
-      showRosterToolsNotice("Could not save shared roster", error instanceof Error ? error.message : "Please try again.", "error");
+      showRosterToolsNotice("Could not save shared roster", googleDriveErrorMessage(error), "error");
     } finally {
       setGoogleSheetSyncing(false);
     }
@@ -2632,7 +2682,7 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
         handleMissingActiveGoogleSheetLink();
         return;
       }
-      showRosterToolsNotice("Could not reload shared roster", error instanceof Error ? error.message : "Please try again.", "error");
+      showRosterToolsNotice("Could not reload shared roster", googleDriveErrorMessage(error), "error");
     } finally {
       setGoogleSheetOpening(false);
     }
@@ -2685,6 +2735,7 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
           if (isMissingSharedRosterError(error)) {
             missingRosterIds.add(roster.id);
           } else {
+            googleDriveErrorMessage(error);
             failedNames.push(roster.name);
           }
         }
@@ -2760,6 +2811,7 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
           if (isMissingSharedRosterError(error)) {
             missingRosterIds.add(roster.id);
           } else {
+            googleDriveErrorMessage(error);
             failedNames.push(roster.name);
           }
         }
@@ -2823,7 +2875,7 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
       const files = await listGoogleSheetRosterFiles(googleDriveAccessToken);
       setGoogleSheetChoices(files);
     } catch (error) {
-      showRosterToolsNotice("Could not list shared rosters", error instanceof Error ? error.message : "Please try again.", "error");
+      showRosterToolsNotice("Could not list shared rosters", googleDriveErrorMessage(error), "error");
     } finally {
       setGoogleSheetOpening(false);
     }
@@ -2857,7 +2909,7 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
       const file = await getGoogleSheetRosterFileMetadata(googleDriveAccessToken, picked.id);
       setGoogleSheetActionFile(file);
     } catch (error) {
-      showRosterToolsNotice("Could not open shared roster file", error instanceof Error ? error.message : "Please try again.", "error");
+      showRosterToolsNotice("Could not open shared roster file", googleDriveErrorMessage(error), "error");
     } finally {
       setGoogleSheetOpening(false);
     }
@@ -2921,7 +2973,7 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
       setRosterFilesOpen(false);
       showRosterToolsNotice("Shared roster opened", `${file.name} is now available in Stripes.`, "success");
     } catch (error) {
-      showRosterToolsNotice("Could not open shared roster", error instanceof Error ? error.message : "Please try again.", "error");
+      showRosterToolsNotice("Could not open shared roster", googleDriveErrorMessage(error), "error");
     } finally {
       setGoogleSheetOpening(false);
     }
@@ -2976,7 +3028,7 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
         "success",
       );
     } catch (error) {
-      showRosterToolsNotice("Could not delete shared roster", error instanceof Error ? error.message : "Please try again.", "error");
+      showRosterToolsNotice("Could not delete shared roster", googleDriveErrorMessage(error), "error");
     } finally {
       setGoogleSheetDeleting(false);
     }
@@ -2995,7 +3047,7 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
         return;
       }
       setGoogleSheetAccessList([]);
-      showRosterToolsNotice("Could not load sharing access", error instanceof Error ? error.message : "Please try again.", "error");
+      showRosterToolsNotice("Could not load sharing access", googleDriveErrorMessage(error), "error");
     } finally {
       setGoogleSheetAccessLoading(false);
     }
@@ -3056,7 +3108,7 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
         setGoogleSheetShareOpen(false);
         return;
       }
-      showRosterToolsNotice("Could not share roster", error instanceof Error ? error.message : "Please try again.", "error");
+      showRosterToolsNotice("Could not share roster", googleDriveErrorMessage(error), "error");
     } finally {
       setGoogleSheetSharing(false);
     }
@@ -3087,7 +3139,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
       setGoogleSheetAccessList((current) => current ? current.filter((item) => item.id !== permission.id) : current);
       showRosterToolsNotice("Access removed", `${label} can no longer access this shared roster through this direct file permission.`, "success");
     } catch (error) {
-      showRosterToolsNotice("Could not remove access", error instanceof Error ? error.message : "Please try again.", "error");
+      showRosterToolsNotice("Could not remove access", googleDriveErrorMessage(error), "error");
     } finally {
       setGoogleSheetRemovingPermissionId("");
     }
@@ -3177,7 +3229,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
         "success",
       );
     } catch (error) {
-      showRosterToolsNotice("Could not send backup copy", error instanceof Error ? error.message : "Please try again.", "error");
+      showRosterToolsNotice("Could not send backup copy", googleDriveErrorMessage(error), "error");
     } finally {
       setGoogleDriveSharing(false);
     }
@@ -3190,7 +3242,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
       const permissions = await listGoogleDriveFilePermissions(googleDriveAccessToken, currentDriveBackup.id);
       setDriveAccessList(permissions.filter((permission) => !permission.deleted));
     } catch (error) {
-      showRosterToolsNotice("Could not load sharing access", error instanceof Error ? error.message : "Please try again.", "error");
+      showRosterToolsNotice("Could not load sharing access", googleDriveErrorMessage(error), "error");
     } finally {
       setDriveAccessLoading(false);
     }
@@ -3227,7 +3279,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
       );
       showRosterToolsNotice("Access removed", `${removedLabel} can no longer access this Drive backup through this direct file permission.`, "success");
     } catch (error) {
-      showRosterToolsNotice("Could not remove access", error instanceof Error ? error.message : "Please try again.", "error");
+      showRosterToolsNotice("Could not remove access", googleDriveErrorMessage(error), "error");
     } finally {
       setDriveRemovingPermissionId("");
     }
@@ -4815,18 +4867,31 @@ This is a shared roster. Local Backup can only remove/disassociate this deviceâ€
                           Google
                         </div>
                         <div className="mt-0.5 truncate text-xs font-black text-[#102A43]">
-                          {connectedDriveUser?.emailAddress || (googleDriveConnected ? "Connected" : "Not signed in")}
+                          {googleDriveStatusText}
                         </div>
                       </div>
-                      <Button
-                        type="button"
-                        variant={googleDriveConnected ? "ghost" : "default"}
-                        className={`h-9 shrink-0 rounded-2xl px-3 text-xs font-black ${googleDriveConnected ? "text-slate-500 hover:bg-white hover:text-slate-700" : "bg-[#102A43] text-white hover:bg-[#0b2036]"}`}
-                        onClick={googleDriveConnected ? disconnectGoogleDrive : connectGoogleDrive}
-                        disabled={!googleDriveConfig.isConfigured || googleDriveConnecting}
-                      >
-                        {googleDriveConnecting ? "Connecting..." : googleDriveConnected ? "Disconnect" : "Sign in"}
-                      </Button>
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        <Button
+                          type="button"
+                          variant={googleDriveConnected ? "ghost" : "default"}
+                          className={`h-9 shrink-0 rounded-2xl px-3 text-xs font-black ${googleDriveConnected ? "text-slate-500 hover:bg-white hover:text-slate-700" : "bg-[#102A43] text-white hover:bg-[#0b2036]"}`}
+                          onClick={googleDriveConnected ? disconnectGoogleDrive : connectGoogleDrive}
+                          disabled={!googleDriveConfig.isConfigured || googleDriveConnecting}
+                        >
+                          {googleDriveActionLabel}
+                        </Button>
+                        {!googleDriveConnected && googleDriveCanDisconnect && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            className="h-9 shrink-0 rounded-2xl px-3 text-xs font-black text-slate-500 hover:bg-white hover:text-slate-700"
+                            onClick={disconnectGoogleDrive}
+                            disabled={googleDriveConnecting}
+                          >
+                            Disconnect
+                          </Button>
+                        )}
+                      </div>
                     </div>
 
                     <div
@@ -4947,18 +5012,31 @@ This is a shared roster. Local Backup can only remove/disassociate this deviceâ€
                           Google
                         </div>
                         <div className="mt-0.5 truncate text-xs font-black text-[#102A43]">
-                          {connectedDriveUser?.emailAddress || (googleDriveConnected ? "Connected" : "Not signed in")}
+                          {googleDriveStatusText}
                         </div>
                       </div>
-                      <Button
-                        type="button"
-                        variant={googleDriveConnected ? "ghost" : "default"}
-                        className={`h-9 shrink-0 rounded-2xl px-3 text-xs font-black ${googleDriveConnected ? "text-slate-500 hover:bg-white hover:text-slate-700" : "bg-[#102A43] text-white hover:bg-[#0b2036]"}`}
-                        onClick={googleDriveConnected ? disconnectGoogleDrive : connectGoogleDrive}
-                        disabled={!googleDriveConfig.isConfigured || googleDriveConnecting}
-                      >
-                        {googleDriveConnecting ? "Connecting..." : googleDriveConnected ? "Disconnect" : "Sign in"}
-                      </Button>
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        <Button
+                          type="button"
+                          variant={googleDriveConnected ? "ghost" : "default"}
+                          className={`h-9 shrink-0 rounded-2xl px-3 text-xs font-black ${googleDriveConnected ? "text-slate-500 hover:bg-white hover:text-slate-700" : "bg-[#102A43] text-white hover:bg-[#0b2036]"}`}
+                          onClick={googleDriveConnected ? disconnectGoogleDrive : connectGoogleDrive}
+                          disabled={!googleDriveConfig.isConfigured || googleDriveConnecting}
+                        >
+                          {googleDriveActionLabel}
+                        </Button>
+                        {!googleDriveConnected && googleDriveCanDisconnect && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            className="h-9 shrink-0 rounded-2xl px-3 text-xs font-black text-slate-500 hover:bg-white hover:text-slate-700"
+                            onClick={disconnectGoogleDrive}
+                            disabled={googleDriveConnecting}
+                          >
+                            Disconnect
+                          </Button>
+                        )}
+                      </div>
                     </div>
 
                     <div

@@ -1,4 +1,5 @@
 import { FAIR_TEAMS_DRIVE_MIME_TYPE } from "@/lib/googleDriveConfig";
+import { GoogleApiHttpError } from "@/lib/googleApiError";
 
 export interface GoogleDriveUserSummary {
   displayName?: string;
@@ -68,7 +69,7 @@ export async function getGoogleDriveUserSummary(accessToken: string): Promise<Go
   if (!response.ok) {
     const message = await readDriveError(response);
     if (response.status === 401) {
-      throw new Error("Google Drive connection expired. Disconnect and connect Google Drive again, then retry.");
+      throw new GoogleApiHttpError(401, "Google Drive connection expired. Disconnect and connect Google Drive again, then retry.");
     }
     throw new Error(message);
   }
@@ -119,7 +120,7 @@ export async function createGoogleDriveJsonFile(
   if (!response.ok) {
     const message = await readDriveError(response);
     if (response.status === 401) {
-      throw new Error("Google Drive connection expired. Disconnect and connect Google Drive again, then retry.");
+      throw new GoogleApiHttpError(401, "Google Drive connection expired. Disconnect and connect Google Drive again, then retry.");
     }
     throw new Error(message);
   }
@@ -145,7 +146,7 @@ export async function readGoogleDriveJsonFile(accessToken: string, fileId: strin
   if (!metadataResponse.ok) {
     const message = await readDriveError(metadataResponse);
     if (metadataResponse.status === 401) {
-      throw new Error("Google Drive connection expired. Disconnect and connect Google Drive again, then retry.");
+      throw new GoogleApiHttpError(401, "Google Drive connection expired. Disconnect and connect Google Drive again, then retry.");
     }
     throw new Error(message);
   }
@@ -167,7 +168,7 @@ export async function readGoogleDriveJsonFile(accessToken: string, fileId: strin
   if (!contentResponse.ok) {
     const message = await readDriveError(contentResponse);
     if (contentResponse.status === 401) {
-      throw new Error("Google Drive connection expired. Disconnect and connect Google Drive again, then retry.");
+      throw new GoogleApiHttpError(401, "Google Drive connection expired. Disconnect and connect Google Drive again, then retry.");
     }
     throw new Error(message);
   }
@@ -195,7 +196,7 @@ async function fetchGoogleDriveBackupList(accessToken: string, query: string): P
   if (!response.ok) {
     const message = await readDriveError(response);
     if (response.status === 401) {
-      throw new Error("Google Drive connection expired. Disconnect and connect Google Drive again, then retry.");
+      throw new GoogleApiHttpError(401, "Google Drive connection expired. Disconnect and connect Google Drive again, then retry.");
     }
     throw new Error(message);
   }
@@ -286,7 +287,7 @@ export async function updateGoogleDriveJsonFile(
   if (!response.ok) {
     const message = await readDriveError(response);
     if (response.status === 401) {
-      throw new Error("Google Drive connection expired. Disconnect and connect Google Drive again, then retry.");
+      throw new GoogleApiHttpError(401, "Google Drive connection expired. Disconnect and connect Google Drive again, then retry.");
     }
     if (response.status === 403) {
       throw new Error("Stripes cannot update this Drive file. Open the file from Drive again, or ask the file owner for edit access.");
@@ -327,7 +328,7 @@ export async function trashGoogleDriveFile(
   if (!response.ok) {
     const message = await readDriveError(response);
     if (response.status === 401) {
-      throw new Error("Google Drive connection expired. Disconnect and connect Google Drive again, then retry.");
+      throw new GoogleApiHttpError(401, "Google Drive connection expired. Disconnect and connect Google Drive again, then retry.");
     }
     if (response.status === 403) {
       throw new Error("Stripes cannot delete this backup. Only the file owner can move this Drive backup to trash.");
@@ -373,7 +374,7 @@ export async function shareGoogleDriveFileWithEditor(
   if (!response.ok) {
     const message = await readDriveError(response);
     if (response.status === 401) {
-      throw new Error("Google Drive connection expired. Disconnect and connect Google Drive again, then retry.");
+      throw new GoogleApiHttpError(401, "Google Drive connection expired. Disconnect and connect Google Drive again, then retry.");
     }
     if (response.status === 403) {
       throw new Error("Stripes cannot share this Drive file. Open the file from Drive again, or make sure you own it or have permission to share it.");
@@ -419,7 +420,7 @@ export async function shareGoogleDriveFileWithViewer(
   if (!response.ok) {
     const message = await readDriveError(response);
     if (response.status === 401) {
-      throw new Error("Google Drive connection expired. Disconnect and connect Google Drive again, then retry.");
+      throw new GoogleApiHttpError(401, "Google Drive connection expired. Disconnect and connect Google Drive again, then retry.");
     }
     if (response.status === 403) {
       throw new Error("Stripes cannot send this Drive backup copy. Try reconnecting Google Drive, then retry.");
@@ -455,7 +456,7 @@ export async function listGoogleDriveFilePermissions(
   if (!response.ok) {
     const message = await readDriveError(response);
     if (response.status === 401) {
-      throw new Error("Google Drive connection expired. Disconnect and connect Google Drive again, then retry.");
+      throw new GoogleApiHttpError(401, "Google Drive connection expired. Disconnect and connect Google Drive again, then retry.");
     }
     if (response.status === 403) {
       throw new Error("Stripes cannot read sharing access for this Drive file. Open the file from Drive again, or check your sharing permission.");
@@ -486,7 +487,7 @@ export async function deleteGoogleDriveFilePermission(
   if (!response.ok) {
     const message = await readDriveError(response);
     if (response.status === 401) {
-      throw new Error("Google Drive connection expired. Disconnect and connect Google Drive again, then retry.");
+      throw new GoogleApiHttpError(401, "Google Drive connection expired. Disconnect and connect Google Drive again, then retry.");
     }
     if (response.status === 403) {
       throw new Error("Stripes cannot remove this access. It may belong to the file owner or come from a shared Drive folder.");
@@ -494,4 +495,3 @@ export async function deleteGoogleDriveFilePermission(
     throw new Error(message);
   }
 }
-

@@ -20,6 +20,10 @@ type GoogleTokenClient = {
   requestAccessToken: (options?: { prompt?: string }) => void;
 };
 
+type GoogleRevocationResponse = {
+  successful?: boolean;
+};
+
 declare global {
   interface Window {
     google?: {
@@ -111,5 +115,28 @@ export async function requestGoogleDriveAccessToken(prompt: "consent" | "" = "co
     }
 
     tokenClient.requestAccessToken({ prompt });
+  });
+}
+
+export async function revokeGoogleDriveAccessToken(accessToken: string) {
+  const token = accessToken.trim();
+  if (!token) return;
+
+  await ensureGoogleIdentityScript();
+  await new Promise<void>((resolve, reject) => {
+    const revoke = (window.google?.accounts?.oauth2 as unknown as {
+      revoke?: (accessToken: string, callback: (response: GoogleRevocationResponse) => void) => void;
+    } | undefined)?.revoke;
+    if (!revoke) {
+      reject(new Error("Google Drive authorization revocation is unavailable."));
+      return;
+    }
+    revoke(token, (response) => {
+      if (response?.successful === false) {
+        reject(new Error("Google could not revoke the Drive authorization."));
+        return;
+      }
+      resolve();
+    });
   });
 }

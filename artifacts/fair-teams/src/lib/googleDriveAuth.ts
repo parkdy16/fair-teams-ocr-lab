@@ -1,4 +1,5 @@
 import { getGoogleDriveConfig } from "@/lib/googleDriveConfig";
+import { normalizeGoogleDriveLoginHint } from "./googleDriveAuthPolicy.ts";
 
 const GOOGLE_IDENTITY_SCRIPT_URL = "https://accounts.google.com/gsi/client";
 
@@ -79,7 +80,10 @@ export function ensureGoogleIdentityScript() {
   return identityScriptPromise;
 }
 
-export async function requestGoogleDriveAccessToken(prompt: "consent" | "" = "consent") {
+export async function requestGoogleDriveAccessToken(
+  prompt: "consent" | "" = "consent",
+  loginHint?: string,
+) {
   const config = getGoogleDriveConfig();
   if (!config.isConfigured) {
     throw new Error("Google Drive keys are missing. Check VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_API_KEY in .env.local.");
@@ -114,7 +118,12 @@ export async function requestGoogleDriveAccessToken(prompt: "consent" | "" = "co
       return;
     }
 
-    tokenClient.requestAccessToken({ prompt });
+    (tokenClient as unknown as {
+      requestAccessToken: (options?: { prompt?: string; login_hint?: string }) => void;
+    }).requestAccessToken({
+      prompt,
+      login_hint: normalizeGoogleDriveLoginHint(loginHint),
+    });
   });
 }
 

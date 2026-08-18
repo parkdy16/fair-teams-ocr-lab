@@ -292,31 +292,23 @@ test("Cabinet foundation remains token-memory-only and outside Firebase persiste
   assert.doesNotMatch(cabinet, /private\s+accessToken|accessToken\s*=/);
 });
 
-test("Drive connection validates only an explicitly configured Cabinet", () => {
+test("generic Drive connection does not resolve or validate Cabinet state", () => {
   const app = fs.readFileSync(new URL("../App.tsx", import.meta.url), "utf8");
   const connect = app.slice(
     app.indexOf("const connectGoogleDrive"),
     app.indexOf("const disconnectGoogleDrive"),
   );
-  assert.match(connect, /if \(activeCanConfigureCabinet && activeCabinetScope\)[\s\S]*?getSharedWorkspaceCabinetLocation/);
-  assert.match(connect, /if \(!savedCabinetLocation\) \{[\s\S]*?googleDriveCabinet\.reset\(\)[\s\S]*?return;/);
-  assert.match(connect, /savedCabinetLocation\?\.backing === "shared_drive"[\s\S]*?resolveGoogleDriveSharedCabinetLocation\([\s\S]*?savedCabinetLocation\.folderId,[\s\S]*?savedCabinetLocation\.driveId/);
-  assert.match(connect, /googleDriveCabinet\.resolve\(\s*googleDriveConnection\.getAccessToken\(\),\s*savedCabinetLocation\.folderId,\s*true,?\s*\)/);
-  assert.ok(
-    connect.indexOf("if (!savedCabinetLocation)") < connect.indexOf("googleDriveCabinet.resolve("),
-    "an organizer with no saved Cabinet must return before managed-folder resolution",
-  );
+  assert.match(connect, /googleDriveConnection\.connect\(\{ loginHint: options\?\.loginHint \}\)/);
+  assert.match(connect, /return connectedAccessToken/);
+  assert.doesNotMatch(connect, /activeCabinetScope|savedCabinetLocation|getSharedWorkspaceCabinetLocation/);
+  assert.doesNotMatch(connect, /resolveManagedMyDriveCabinetFolder|resolveGoogleDriveSharedCabinetLocation|googleDriveCabinet\.resolve/);
 
   const card = fs.readFileSync(new URL("../components/SharedWorkspaceCabinetCard.tsx", import.meta.url), "utf8");
   const explicitMyDriveAction = card.slice(
     card.indexOf("const useManagedMyDrive"),
     card.indexOf("const chooseSharedDrive"),
   );
-  assert.match(explicitMyDriveAction, /resolveManagedMyDriveCabinetFolder\(accessToken\)/);
-  assert.match(app, /new GoogleDriveCabinetLocationController/);
-  assert.match(app, /googleDriveCabinet\.resolve\([\s\S]*?googleDriveConnection\.getAccessToken\(\)/);
-  assert.match(app, /savedCabinetLocation\?\.backing === "my_drive"[\s\S]*?savedCabinetLocation\.folderId/);
-  assert.match(app, /if \(activeCanConfigureCabinet && activeCabinetScope\)[\s\S]*?getSharedWorkspaceCabinetLocation/);
+  assert.match(explicitMyDriveAction, /resolveManagedMyDriveCabinetFolder\(actionToken\)/);
 
   const disconnect = app.slice(
     app.indexOf("const disconnectGoogleDrive"),

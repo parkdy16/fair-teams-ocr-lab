@@ -80,6 +80,7 @@ import {
   type PlayerStyleAttributes,
   type PlayerStyleValue,
 } from "@/lib/playerStyleProfile";
+import { fileCabinetGoogleLoginHint } from "@/lib/fileCabinetDriveAccess";
 
 type ClubTabProps = {
   isActive?: boolean;
@@ -95,6 +96,11 @@ type ClubTabProps = {
   onOpenRosterPicker?: () => void;
   onBackTargetChange?: (hasBackTarget: boolean) => void;
   sharedToolsNode?: React.ReactNode;
+  fileCabinetNode?: (options: {
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    googleLoginHint?: string;
+  }) => React.ReactNode;
   equipmentGroupId?: string;
   equipmentHolderLabels?: string[];
   equipmentHolderNamesByEmail?: Record<string, string>;
@@ -826,6 +832,7 @@ export function ClubTab({
   onOpenRosterPicker,
   onBackTargetChange,
   sharedToolsNode,
+  fileCabinetNode,
   equipmentGroupId,
   equipmentHolderLabels = [],
   equipmentHolderNamesByEmail = {},
@@ -950,6 +957,7 @@ export function ClubTab({
     ratingPlayerId: null as string | null,
     ratingBoardOpen: false,
     accountDialogOpen: false,
+    fileCabinetOpen: false,
     attendanceBoardOpen: false,
     attendanceEditorOpen: false,
     attendanceWarningTemplatesOpen: false,
@@ -960,6 +968,7 @@ export function ClubTab({
   const [clubUser, setClubUser] = useState<SharedRosterUser | null>(null);
   const [collaboratorsOpen, setCollaboratorsOpen] = useState(false);
   const [accountDialogOpen, setAccountDialogOpen] = useState(false);
+  const [fileCabinetOpen, setFileCabinetOpen] = useState(false);
   const [playerManagementCollapsed, setPlayerManagementCollapsed] = useState(true);
   const [clubDeskCollapsed, setClubDeskCollapsed] = useState<boolean>(() => {
     if (typeof window === "undefined") return true;
@@ -2418,7 +2427,8 @@ export function ClubTab({
     attendanceWarningBoardOpen ||
     attendanceWarningComposerOpen ||
     attendanceBoardOpen ||
-    accountDialogOpen,
+    accountDialogOpen ||
+    fileCabinetOpen,
   );
 
   useEffect(() => {
@@ -2432,6 +2442,7 @@ export function ClubTab({
       ratingPlayerId,
       ratingBoardOpen,
       accountDialogOpen,
+      fileCabinetOpen,
       attendanceBoardOpen,
       attendanceEditorOpen,
       attendanceWarningTemplatesOpen,
@@ -2440,6 +2451,7 @@ export function ClubTab({
     };
   }, [
     accountDialogOpen,
+    fileCabinetOpen,
     colorPickerOpen,
     contentPeekKitId,
     equipmentBoardOpen,
@@ -2540,6 +2552,11 @@ export function ClubTab({
       if (state.ratingBoardOpen) {
         event.preventDefault();
         setRatingBoardOpen(false);
+        return;
+      }
+      if (state.fileCabinetOpen) {
+        event.preventDefault();
+        setFileCabinetOpen(false);
         return;
       }
       if (state.accountDialogOpen) {
@@ -3089,6 +3106,11 @@ export function ClubTab({
         )}
         </div>
       </section>
+      {fileCabinetNode?.({
+        open: fileCabinetOpen,
+        onOpenChange: setFileCabinetOpen,
+        googleLoginHint: fileCabinetGoogleLoginHint(clubUser),
+      })}
       </div>
 
       <Dialog open={clubNotesOpen} onOpenChange={setClubNotesOpen}>

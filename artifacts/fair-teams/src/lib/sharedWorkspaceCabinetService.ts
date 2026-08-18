@@ -36,7 +36,7 @@ function cabinetConfigRef(scope: SharedWorkspaceCabinetScope) {
 
 function requireCurrentOrganizerUid() {
   const uid = getFairTeamsAuth().currentUser?.uid || "";
-  if (!uid) throw new Error("Sign in to configure the Club Cabinet.");
+  if (!uid) throw new Error("Sign in to configure the File Cabinet.");
   return uid;
 }
 
@@ -46,7 +46,7 @@ export async function getSharedWorkspaceCabinetLocation(
   const snapshot = await getDoc(cabinetConfigRef(scope));
   if (!snapshot.exists()) return null;
   const location = parseSharedWorkspaceCabinetLocation(snapshot.data());
-  if (!location) throw new Error("The saved Cabinet location is invalid.");
+  if (!location) throw new Error("The saved File Cabinet location is invalid.");
   return location;
 }
 
@@ -64,7 +64,7 @@ export function listenToSharedWorkspaceCabinetLocation(
       }
       const location = parseSharedWorkspaceCabinetLocation(snapshot.data());
       if (!location) {
-        onError?.(new Error("The saved Cabinet location is invalid."));
+        onError?.(new Error("The saved File Cabinet location is invalid."));
         return;
       }
       onLocation(location);

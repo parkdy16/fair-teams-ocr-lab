@@ -8,6 +8,7 @@ import {
   parseGoogleDriveScopes,
   type GoogleDriveTokenResult,
 } from "./googleDriveConnection.ts";
+import { normalizeGoogleDriveLoginHint } from "./googleDriveAuthPolicy.ts";
 import { GoogleApiHttpError } from "./googleApiError.ts";
 
 const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
@@ -18,6 +19,7 @@ function connectionHarness(options: {
   revokeAccessToken?: (accessToken: string) => Promise<void>;
 } = {}) {
   const prompts: string[] = [];
+  const loginHints: Array<string | undefined> = [];
   const revokedTokens: string[] = [];
   const scheduled: Array<() => void> = [];
   const tokenResults = [...(options.tokenResults || [{
@@ -28,8 +30,9 @@ function connectionHarness(options: {
 
   const controller = new GoogleDriveConnectionController({
     requestedScope: DRIVE_SCOPE,
-    requestAccessToken: async (prompt) => {
+    requestAccessToken: async (prompt, loginHint) => {
       prompts.push(prompt);
+      loginHints.push(loginHint);
       const result = tokenResults.shift();
       if (!result) throw new Error("No token result configured.");
       return result;
@@ -49,7 +52,7 @@ function connectionHarness(options: {
     cancelSchedule: () => undefined,
   });
 
-  return { controller, prompts, revokedTokens, scheduled };
+  return { controller, prompts, loginHints, revokedTokens, scheduled };
 }
 
 test("Drive connection snapshots never expose the memory-only access token", async () => {
@@ -76,6 +79,19 @@ test("initial connection requests consent and records Drive identity, scope and 
   assert.deepEqual(snapshot.grantedScopes, [DRIVE_SCOPE]);
   assert.equal(snapshot.requiredScopeStatus, "granted");
   assert.equal(snapshot.expiresAt, 4_600_000);
+});
+
+test("a new Drive authorization can safely use a Firebase Google email as a login hint", async () => {
+  const { controller, loginHints } = connectionHarness();
+  await controller.connect({ loginHint: "google-organizer@example.com" });
+
+  assert.deepEqual(loginHints, ["google-organizer@example.com"]);
+  assert.equal(normalizeGoogleDriveLoginHint(" google-organizer@example.com "), "google-organizer@example.com");
+  assert.equal(normalizeGoogleDriveLoginHint("not-an-email"), undefined);
+
+  const auth = fs.readFileSync(new URL("./googleDriveAuth.ts", import.meta.url), "utf8");
+  assert.match(auth, /requestAccessToken\(\{[\s\S]*?login_hint:\s*normalizeGoogleDriveLoginHint\(loginHint\)/);
+  assert.doesNotMatch(auth, /drive\.google|firebase.*scope|localStorage|sessionStorage/i);
 });
 
 test("Drive account identity is independent from any Firebase identity", async () => {

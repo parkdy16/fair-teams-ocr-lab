@@ -38,7 +38,7 @@ export function validateSharedWorkspaceCabinetLocationDraft(
   value: unknown,
 ): SharedWorkspaceCabinetLocationDraft {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error("Choose a valid Cabinet location.");
+    throw new Error("Choose a valid File Cabinet location.");
   }
   const record = value as Record<string, unknown>;
   const allowedKeys = new Set([
@@ -50,16 +50,16 @@ export function validateSharedWorkspaceCabinetLocationDraft(
     "displayName",
   ]);
   if (Object.keys(record).some((key) => !allowedKeys.has(key))) {
-    throw new Error("The Cabinet location contains unsupported fields.");
+    throw new Error("The File Cabinet location contains unsupported fields.");
   }
   if (record.schemaVersion !== SHARED_WORKSPACE_CABINET_SCHEMA_VERSION) {
-    throw new Error("This Cabinet location version is not supported.");
+    throw new Error("This File Cabinet location version is not supported.");
   }
   if (record.provider !== "google_drive") {
-    throw new Error("This Cabinet provider is not supported.");
+    throw new Error("This File Cabinet provider is not supported.");
   }
   if (record.backing !== "my_drive" && record.backing !== "shared_drive") {
-    throw new Error("Choose a supported Cabinet backing.");
+    throw new Error("Choose a supported File Cabinet location.");
   }
 
   const folderId = cleanRequiredId(record.folderId, "Google Drive folder");
@@ -76,7 +76,7 @@ export function validateSharedWorkspaceCabinetLocationDraft(
     };
   }
   if (record.driveId != null && String(record.driveId).trim()) {
-    throw new Error("A My Drive Cabinet cannot include a Shared Drive ID.");
+    throw new Error("A My Drive File Cabinet cannot include a Shared Drive ID.");
   }
   return {
     schemaVersion: SHARED_WORKSPACE_CABINET_SCHEMA_VERSION,
@@ -129,7 +129,7 @@ export function sharedDriveCabinetLocationDraft(
   selection: GoogleDriveSharedCabinetSelection,
 ): SharedWorkspaceCabinetLocationDraft {
   if (selection.status !== "ready") {
-    throw new Error("Choose an available Shared Drive Cabinet folder first.");
+    throw new Error("Choose an available Shared Drive File Cabinet folder first.");
   }
   return validateSharedWorkspaceCabinetLocationDraft({
     schemaVersion: SHARED_WORKSPACE_CABINET_SCHEMA_VERSION,

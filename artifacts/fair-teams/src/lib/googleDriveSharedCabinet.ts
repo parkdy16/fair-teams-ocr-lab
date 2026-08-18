@@ -120,7 +120,7 @@ export async function resolveRecordedGoogleDriveSharedCabinetLocation(
   const expectedFolderId = String(folderId || "").trim();
   const expectedDriveId = String(driveId || "").trim();
   if (!expectedFolderId || !expectedDriveId) {
-    return { status: "unavailable", error: "The configured Shared Drive Cabinet location is invalid." };
+    return { status: "unavailable", error: "The configured Shared Drive File Cabinet location is invalid." };
   }
   const result = await resolveGoogleDriveSharedCabinetSelection(
     { id: expectedFolderId, name: "", mimeType: GOOGLE_DRIVE_FOLDER_MIME_TYPE },

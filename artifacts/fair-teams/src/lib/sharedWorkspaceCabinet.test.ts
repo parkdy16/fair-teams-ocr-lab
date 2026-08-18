@@ -125,8 +125,80 @@ test("Firestore service stores Firebase organizer attribution without Google ide
 
 test("configuration UI requires explicit replacement and removal confirmation", () => {
   const component = fs.readFileSync(new URL("../components/SharedWorkspaceCabinetCard.tsx", import.meta.url), "utf8");
-  assert.match(component, /Change Club Cabinet\?/);
+  assert.match(component, /Change File Cabinet\?/);
   assert.match(component, /Existing folders and files will remain unchanged in Google Drive/);
-  assert.match(component, /Remove Club Cabinet relationship\?/);
+  assert.match(component, /Remove File Cabinet relationship\?/);
   assert.match(component, /will not be changed or deleted/);
+});
+
+test("File Cabinet is a dedicated Club destination outside Club Access", () => {
+  const app = fs.readFileSync(new URL("../App.tsx", import.meta.url), "utf8");
+  const club = fs.readFileSync(new URL("../components/ClubTab.tsx", import.meta.url), "utf8");
+  const component = fs.readFileSync(new URL("../components/SharedWorkspaceCabinetCard.tsx", import.meta.url), "utf8");
+  const sharedTools = app.slice(
+    app.indexOf("sharedToolsNode={("),
+    app.indexOf("fileCabinetNode=", app.indexOf("sharedToolsNode={(")),
+  );
+
+  assert.doesNotMatch(sharedTools, /SharedWorkspaceCabinetCard|File Cabinet/);
+  assert.match(app, /fileCabinetNode=.*SharedWorkspaceCabinetCard/s);
+  assert.match(club, /fileCabinetNode\?\.\(\{[\s\S]*?fileCabinetOpen/);
+  assert.match(component, /aria-label="File Cabinet"/);
+  assert.match(component, /<Dialog open=\{open\} onOpenChange=\{onOpenChange\}>/);
+  assert.match(component, /Club files and documents/);
+  assert.match(component, /location \? \([\s\S]*?!driveReady[\s\S]*?Reconnect Google Drive/);
+  assert.match(component, /location \? \([\s\S]*?: \([\s\S]*?Set up File Cabinet[\s\S]*?Use My Drive[\s\S]*?Choose Shared Drive/);
+});
+
+test("File Cabinet actions resume automatically after Drive authorization", () => {
+  const component = fs.readFileSync(new URL("../components/SharedWorkspaceCabinetCard.tsx", import.meta.url), "utf8");
+  const myDrive = component.slice(
+    component.indexOf("const useManagedMyDrive"),
+    component.indexOf("const chooseSharedDrive"),
+  );
+  const sharedDrive = component.slice(
+    component.indexOf("const chooseSharedDrive"),
+    component.indexOf("const removeLocation"),
+  );
+
+  assert.match(myDrive, /await driveTokenForAction\(\)[\s\S]*?resolveManagedMyDriveCabinetFolder\(actionToken\)[\s\S]*?prepareLocation/);
+  assert.match(sharedDrive, /await driveTokenForAction\(\)[\s\S]*?selectGoogleDriveSharedCabinetLocation\(actionToken\)[\s\S]*?prepareLocation/);
+  assert.doesNotMatch(sharedDrive, /resolveManagedMyDriveCabinetFolder/);
+});
+
+test("connectGoogleDrive remains generic and Cabinet-neutral", () => {
+  const app = fs.readFileSync(new URL("../App.tsx", import.meta.url), "utf8");
+  const connect = app.slice(
+    app.indexOf("const connectGoogleDrive"),
+    app.indexOf("const disconnectGoogleDrive"),
+  );
+
+  assert.doesNotMatch(connect, /getSharedWorkspaceCabinetLocation/);
+  assert.doesNotMatch(connect, /resolveManagedMyDriveCabinetFolder/);
+  assert.doesNotMatch(connect, /resolveGoogleDriveSharedCabinetLocation/);
+  assert.doesNotMatch(connect, /googleDriveCabinet\.resolve/);
+  assert.match(connect, /googleDriveConnection\.connect\(\{ loginHint: options\?\.loginHint \}\)/);
+  assert.match(connect, /void warmUpGoogleDrivePicker\(\)/);
+  assert.match(connect, /showRosterToolsNotice\([\s\S]*?\"Google Drive connected\"[\s\S]*?\"Google Drive is ready to use for backup and sheets\.\"/);
+});
+
+test("File Cabinet continuation remains explicit after authorization", () => {
+  const app = fs.readFileSync(new URL("../App.tsx", import.meta.url), "utf8");
+  const component = fs.readFileSync(new URL("../components/SharedWorkspaceCabinetCard.tsx", import.meta.url), "utf8");
+
+  const myDrive = component.slice(
+    component.indexOf("const useManagedMyDrive"),
+    component.indexOf("const chooseSharedDrive"),
+  );
+  const sharedDrive = component.slice(
+    component.indexOf("const chooseSharedDrive"),
+    component.indexOf("const removeLocation"),
+  );
+  const suite = app.slice(app.indexOf("fileCabinetNode="), app.indexOf("equipmentGroupId="));
+
+  assert.match(myDrive, /const actionToken = await driveTokenForAction\(\);[\s\S]*?resolveManagedMyDriveCabinetFolder\(actionToken\);/);
+  assert.match(sharedDrive, /const actionToken = await driveTokenForAction\(\);[\s\S]*?selectGoogleDriveSharedCabinetLocation\(actionToken\);/);
+  assert.match(suite, /onConnectDrive=\{async \(loginHint\) => \(\s*await connectGoogleDrive\(\{ loginHint \}\) \|\| ""\s*\)\}/);
+  assert.match(suite, /<SharedWorkspaceCabinetCard/);
+  assert.doesNotMatch(suite, /fileCabinetAction:/);
 });

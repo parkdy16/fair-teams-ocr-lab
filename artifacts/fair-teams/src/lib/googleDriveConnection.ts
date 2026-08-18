@@ -30,12 +30,16 @@ export interface GoogleDriveTokenResult {
 
 export interface GoogleDriveConnectionDependencies {
   requestedScope: string;
-  requestAccessToken: (prompt: "consent" | "") => Promise<GoogleDriveTokenResult>;
+  requestAccessToken: (prompt: "consent" | "", loginHint?: string) => Promise<GoogleDriveTokenResult>;
   revokeAccessToken: (accessToken: string) => Promise<void>;
   loadAccount: (accessToken: string) => Promise<GoogleDriveConnectedAccount>;
   now?: () => number;
   schedule?: (callback: () => void, delayMs: number) => unknown;
   cancelSchedule?: (handle: unknown) => void;
+}
+
+export interface GoogleDriveConnectOptions {
+  loginHint?: string;
 }
 
 export interface GoogleDriveDisconnectResult {
@@ -110,7 +114,7 @@ export class GoogleDriveConnectionController {
     return this.snapshot.status === "connected" ? this.accessToken : "";
   }
 
-  async connect() {
+  async connect(options: GoogleDriveConnectOptions = {}) {
     if (this.snapshot.status === "connecting") return this.snapshot;
 
     const requiredScopeMissing = this.snapshot.requiredScopeStatus === "missing";
@@ -126,7 +130,10 @@ export class GoogleDriveConnectionController {
     });
 
     try {
-      const result = await this.dependencies.requestAccessToken(reconnecting ? "" : "consent");
+      const result = await this.dependencies.requestAccessToken(
+        reconnecting ? "" : "consent",
+        options.loginHint,
+      );
       if (operationId !== this.operationId) {
         await this.safeRevoke(result.accessToken);
         return this.snapshot;

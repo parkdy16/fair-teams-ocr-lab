@@ -387,7 +387,7 @@ export async function pickGoogleSharedDriveCabinetFolder(
       builder.setDeveloperKey(config.apiKey);
       applyPickerAppId(builder, config.appId);
       builder.setOAuthToken(accessToken);
-      builder.setTitle("Choose Shared Drive Cabinet folder");
+      builder.setTitle("Choose File Cabinet folder in Shared Drive");
       builder.setOrigin(window.location.origin);
       if (typeof builder.setSelectableMimeTypes === "function") {
         builder.setSelectableMimeTypes(GOOGLE_DRIVE_FOLDER_MIME_TYPE);

@@ -57,7 +57,6 @@ import { allRostersToDriveBackupJson, parseDriveBackupJson } from "@/lib/googleD
 import { requestGoogleDriveAccessToken, revokeGoogleDriveAccessToken } from "@/lib/googleDriveAuth";
 import { GoogleDriveCabinetLocationController } from "@/lib/googleDriveCabinet";
 import { resolveManagedMyDriveCabinetFolder } from "@/lib/googleDriveCabinetApi";
-import { resolveGoogleDriveSharedCabinetLocation } from "@/lib/googleDriveSharedCabinetApi";
 import {
   canDisconnectGoogleDrive,
   GoogleDriveConnectionController,
@@ -90,7 +89,6 @@ import {
   type GoogleSheetRosterFile,
 } from "@/lib/googleSheetsFiles";
 import { pickGoogleSheetRosterFile, warmUpGoogleDrivePicker } from "@/lib/googleDrivePicker";
-import { getSharedWorkspaceCabinetLocation } from "@/lib/sharedWorkspaceCabinetService";
 import { leaveFirebaseSharedRosterAccess, listFirebaseSharedRosters, readFirebaseSharedRoster, type FirebaseSharedRosterSummary } from "@/lib/sharedRosterService";
 import { fetchClubRatingSummaries, type ClubRatingSummary } from "@/lib/clubCollaborationService";
 import { profileFromAveragedAttributes } from "@/lib/playerStyleProfile";
@@ -2161,100 +2159,34 @@ function App() {
     setRosterFilesOpen(false);
   };
 
-  const connectGoogleDrive = async () => {
+  const connectGoogleDrive = async (options?: {
+    loginHint?: string;
+  }) => {
     if (!googleDriveConfig.isConfigured) {
       showRosterToolsNotice("Google Drive not configured", "Add VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_API_KEY before using Google Drive backup.", "warning");
       return;
     }
 
-    const result = await googleDriveConnection.connect();
+    const result = await googleDriveConnection.connect({ loginHint: options?.loginHint });
     if (result.status === "connected") {
       if (currentDriveBackup && result.account?.emailAddress) {
         setCurrentDriveBackup((file) => file ? { ...file, connectedEmail: result.account?.emailAddress } : file);
       }
       void warmUpGoogleDrivePicker();
-      let savedCabinetLocation = null;
-      if (activeCanConfigureCabinet && activeCabinetScope) {
-        try {
-          savedCabinetLocation = await getSharedWorkspaceCabinetLocation(activeCabinetScope);
-        } catch (error) {
-          showRosterToolsNotice(
-            "Google Drive connected",
-            error instanceof Error ? error.message : "Stripes could not check this clubâ€™s saved Cabinet location.",
-            "warning",
-          );
-          return;
-        }
-      }
-      if (savedCabinetLocation?.backing === "shared_drive") {
-        googleDriveCabinet.reset();
-        const sharedCabinet = await resolveGoogleDriveSharedCabinetLocation(
-          googleDriveConnection.getAccessToken(),
-          savedCabinetLocation.folderId,
-          savedCabinetLocation.driveId || "",
-        );
-        if (sharedCabinet.status === "reconnect_required") {
-          googleDriveConnection.markExpired(sharedCabinet.error);
-          showRosterToolsNotice("Reconnect Google Drive", sharedCabinet.error, "warning");
-          return;
-        }
-        showRosterToolsNotice(
-          sharedCabinet.status === "ready" ? "Google Drive connected" : "Club Cabinet unavailable",
-          sharedCabinet.status === "ready"
-            ? `Shared Drive Cabinet ready: ${sharedCabinet.displayName}`
-            : "error" in sharedCabinet
-              ? sharedCabinet.error
-              : "The configured Shared Drive Cabinet is unavailable.",
-          sharedCabinet.status === "ready" ? "success" : "warning",
-        );
-        return;
-      }
-      if (!savedCabinetLocation) {
-        googleDriveCabinet.reset();
-        showRosterToolsNotice(
-          "Google Drive connected",
-          "Google Drive is ready. Club Cabinet setup remains separate.",
-          "success",
-        );
-        return;
-      }
-      const hasSavedMyDriveCabinet = savedCabinetLocation?.backing === "my_drive";
-      if (!hasSavedMyDriveCabinet) return;
-      const cabinet = await googleDriveCabinet.resolve(
-        googleDriveConnection.getAccessToken(),
-        savedCabinetLocation.folderId,
-        true,
-      );
-      if (googleDriveConnection.getSnapshot().status !== "connected") return;
-      if (cabinet.status === "reconnect_required") {
-        googleDriveConnection.markExpired(cabinet.error || undefined);
-        showRosterToolsNotice("Reconnect Google Drive", cabinet.error || "Google Drive access expired. Reconnect to continue.", "warning");
-        return;
-      }
-      if (cabinet.status !== "ready") {
-        showRosterToolsNotice(
-          "Google Drive connected",
-          cabinet.error || "Stripes Cabinet is currently unavailable. Your existing Drive tools remain connected.",
-          "warning",
-        );
-        return;
-      }
+      const connectedAccessToken = googleDriveConnection.getAccessToken();
       showRosterToolsNotice(
-        cabinet.duplicateFolderIds.length ? "Stripes Cabinet ready" : "Google Drive connected",
-        cabinet.duplicateFolderIds.length
-          ? "Stripes is using its preferred managed Cabinet folder. Other marked folders were left untouched."
-          : cabinet.created
-            ? "Your Stripes Cabinet folder was created in My Drive."
-            : "Your existing Stripes Cabinet folder is ready.",
-        cabinet.duplicateFolderIds.length ? "warning" : "success",
+        "Google Drive connected",
+        "Google Drive is ready to use for backup and sheets.",
+        "success",
       );
-      return;
+      return connectedAccessToken;
     }
     showRosterToolsNotice(
       result.status === "expired" ? "Reconnect Google Drive" : "Could not connect Google Drive",
       result.error || "Please try again.",
       result.status === "expired" ? "warning" : "error",
     );
+    return "";
   };
 
   const disconnectGoogleDrive = async () => {
@@ -4286,44 +4218,51 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 tutorialStep={tutorialStep}
                 onTutorialAction={handleTutorialAction}
                 sharedToolsNode={(
-                  <>
-                    <FirebaseSharedRosterPublishCard
-                      variant="compact"
-                      backgroundSync={false}
-                      activeRoster={activeRoster}
-                      rosters={rosters}
-                      isEmptyRoster={isEmptyStarterRoster}
-                      onOpenRoster={openFirebaseSharedRosterAsLocalCopy}
-                      onRosterSaved={markActiveFirebaseRosterSaved}
-                      onRefreshActiveRoster={refreshActiveFirebaseRosterFromRemote}
-                      onRefreshRosterIdentity={refreshFirebaseRosterIdentityFromRemote}
-                      onSharedRosterSummariesUpdated={syncFirebaseRosterBadgesFromSummaries}
-                      onSharedInviteOpened={finishSharedInviteOpen}
-                      openLibraryToken={sharedRosterLibraryOpenToken}
-                      onMakePrivateCopy={activeRosterIsFirebaseShared ? (() => setPrivateCopyConfirmOpen(true)) : undefined}
-                      onHideOnDevice={activeRosterIsFirebaseShared ? openClearRoster : undefined}
-                      onLeaveSharedRoster={activeRosterIsFirebaseShared ? (() => {
-                        setLeaveSharedError("");
-                        setLeaveSharedConfirmOpen(true);
-                      }) : undefined}
-                      onCloseSharedWorkspace={activeRosterIsFirebaseShared ? ((state) => {
-                        setCloseSharedConfirm(state);
-                        setCloseSharedConfirmationName("");
-                        setCloseSharedError("");
-                      }) : undefined}
-                    />
-                    {activeCanConfigureCabinet && activeCabinetScope && (
-                      <SharedWorkspaceCabinetCard
-                        scope={activeCabinetScope}
-                        driveStatus={googleDriveConnectionSnapshot.status}
-                        driveAccountLabel={connectedDriveUser?.emailAddress}
-                        accessToken={googleDriveAccessToken}
-                        onConnectDrive={connectGoogleDrive}
-                        onDriveAuthorizationExpired={(message) => googleDriveConnection.markExpired(message)}
-                      />
-                    )}
-                  </>
+                  <FirebaseSharedRosterPublishCard
+                    variant="compact"
+                    backgroundSync={false}
+                    activeRoster={activeRoster}
+                    rosters={rosters}
+                    isEmptyRoster={isEmptyStarterRoster}
+                    onOpenRoster={openFirebaseSharedRosterAsLocalCopy}
+                    onRosterSaved={markActiveFirebaseRosterSaved}
+                    onRefreshActiveRoster={refreshActiveFirebaseRosterFromRemote}
+                    onRefreshRosterIdentity={refreshFirebaseRosterIdentityFromRemote}
+                    onSharedRosterSummariesUpdated={syncFirebaseRosterBadgesFromSummaries}
+                    onSharedInviteOpened={finishSharedInviteOpen}
+                    openLibraryToken={sharedRosterLibraryOpenToken}
+                    onMakePrivateCopy={activeRosterIsFirebaseShared ? (() => setPrivateCopyConfirmOpen(true)) : undefined}
+                    onHideOnDevice={activeRosterIsFirebaseShared ? openClearRoster : undefined}
+                    onLeaveSharedRoster={activeRosterIsFirebaseShared ? (() => {
+                      setLeaveSharedError("");
+                      setLeaveSharedConfirmOpen(true);
+                    }) : undefined}
+                    onCloseSharedWorkspace={activeRosterIsFirebaseShared ? ((state) => {
+                      setCloseSharedConfirm(state);
+                      setCloseSharedConfirmationName("");
+                      setCloseSharedError("");
+                    }) : undefined}
+                  />
                 )}
+                fileCabinetNode={activeCanConfigureCabinet && activeCabinetScope ? (({
+                  open,
+                  onOpenChange,
+                  googleLoginHint,
+                }) => (
+                  <SharedWorkspaceCabinetCard
+                    scope={activeCabinetScope}
+                    driveStatus={googleDriveConnectionSnapshot.status}
+                    driveAccountLabel={connectedDriveUser?.emailAddress}
+                    googleLoginHint={googleLoginHint}
+                    accessToken={googleDriveAccessToken}
+                    open={open}
+                    onOpenChange={onOpenChange}
+                    onConnectDrive={async (loginHint) => (
+                      await connectGoogleDrive({ loginHint }) || ""
+                    )}
+                    onDriveAuthorizationExpired={(message) => googleDriveConnection.markExpired(message)}
+                  />
+                )) : undefined}
                 equipmentGroupId={activeFirebaseSource?.firebaseRosterId ? `roster:${activeFirebaseSource.firebaseRosterId}` : undefined}
                 equipmentHolderLabels={activeFirebaseEquipmentHolderLabels}
                 equipmentHolderNamesByEmail={activeFirebaseEquipmentHolderNamesByEmail}
@@ -4984,7 +4923,7 @@ This is a shared roster. Local Backup can only remove/disassociate this deviceâ€
                           type="button"
                           variant={googleDriveConnected ? "ghost" : "default"}
                           className={`h-9 shrink-0 rounded-2xl px-3 text-xs font-black ${googleDriveConnected ? "text-slate-500 hover:bg-white hover:text-slate-700" : "bg-[#102A43] text-white hover:bg-[#0b2036]"}`}
-                          onClick={googleDriveConnected ? disconnectGoogleDrive : connectGoogleDrive}
+                          onClick={() => void (googleDriveConnected ? disconnectGoogleDrive() : connectGoogleDrive())}
                           disabled={!googleDriveConfig.isConfigured || googleDriveConnecting}
                         >
                           {googleDriveActionLabel}
@@ -5129,7 +5068,7 @@ This is a shared roster. Local Backup can only remove/disassociate this deviceâ€
                           type="button"
                           variant={googleDriveConnected ? "ghost" : "default"}
                           className={`h-9 shrink-0 rounded-2xl px-3 text-xs font-black ${googleDriveConnected ? "text-slate-500 hover:bg-white hover:text-slate-700" : "bg-[#102A43] text-white hover:bg-[#0b2036]"}`}
-                          onClick={googleDriveConnected ? disconnectGoogleDrive : connectGoogleDrive}
+                          onClick={() => void (googleDriveConnected ? disconnectGoogleDrive() : connectGoogleDrive())}
                           disabled={!googleDriveConfig.isConfigured || googleDriveConnecting}
                         >
                           {googleDriveActionLabel}

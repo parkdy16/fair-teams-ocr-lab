@@ -963,7 +963,8 @@ three organizers:
 - voting
 - shared Club Attendance/conduct records
 - notifications
-- Club Notes
+- existing Club Notes access during transition
+- future deterministic Club Activity when implemented
 
 Do not create artificial basic-voting or basic-Action-Board restrictions.
 
@@ -1028,22 +1029,51 @@ Do not turn Equipment into:
 A receipt is supporting documentation for warranty, replacement, reimbursement
 or reference—not the beginning of an accounting system.
 
-### Club Notes → Club Cabinet
+### Legacy Club Notes → Club Activity + Club Cabinet
 
-Club Notes remain free as a lightweight shared organizer tool.
+Club Notes are now a **legacy shared-organizer feature to preserve**, not a
+destination feature to expand.
 
-Primary purpose:
+Do not delete existing notes or break access to them during transition. Do not
+spend a major implementation phase turning Club Notes into a richer document
+editor or repairing it beyond what is required for safe continuity.
 
-- quick notes
-- reminders
-- lightweight institutional memory
-- useful links
+The proposed operational successor is deterministic **Club Activity**.
 
-Do not overbuild Club Notes into a document editor.
+Club Activity should provide a quiet, compressed view of meaningful current
+state and recent changes from systems such as:
 
-The paid tier may evolve this area into a more substantial:
+- Action Board;
+- Equipment;
+- Attendance / conduct;
+- organizer membership/governance;
+- later Cabinet resources.
 
-**Club Cabinet**
+It should not become a raw chronological audit feed. Repeated low-value events
+should collapse into useful state/result summaries with drill-down history.
+
+Example direction:
+
+- Equipment bag → `Now with Joon · changed Aug 15 ›`
+- Action Board vote → `Match-ball purchase approved 4–1 ›`
+- Attendance → `3 incidents this month ›`
+
+Club Activity must remain useful without AI and should remain available to the
+same small Free organizer team.
+
+A future paid **AI Club Brief** may summarize the already-curated Activity
+state into roughly 3–5 short grounded bullets. It should be cached, should not
+run on every Club open, and must never replace the deterministic Activity rows
+as the authoritative state.
+
+Do **not** implement Club Activity until its event categories,
+suppression/compression rules, ranking/importance behavior, history semantics,
+resolved-item behavior and notification relationship have been explicitly
+designed.
+
+**Club Cabinet remains a separate Google-backed file/context organization
+layer.** It is not the evolution of manual Notes and should not depend on the
+old Notes UX.
 
 Club Cabinet should become the central lightweight document/file layer for
 organizers.
@@ -1468,8 +1498,8 @@ storage/ownership wording conflicts with it.
   `61b3079` with its Firestore rules and callable Functions deployed.
 - G1 Shared Workspace Governance is complete and released.
 - Current major implementation phase: G2 Unified Google Connection.
-- Next atomic implementation target: G2.1a Drive connection-state/auth
-  foundation.
+- G2.1a Drive connection-state/auth foundation is implemented locally and
+  awaiting review and real-account verification before G2.2 begins.
 
 ## Shared workspace governance
 
@@ -2971,6 +3001,17 @@ First atomic implementation slice:
 
 **G2.1a — Drive connection-state/auth foundation only.**
 
+Implementation checkpoint — 2026-08-18:
+
+- implemented locally with a reusable memory-only Drive connection controller;
+- records explicit Drive account, requested/granted scope, expiry, reconnect
+  and error state without coupling Drive authorization to Firebase identity;
+- Disconnect discards live authorization and uses Google Identity Services
+  revocation while preserving Cloud Backup references and Google/Stripes data;
+- focused automated tests and the production build pass;
+- real Google-account connection, expiry/reconnect and revocation behavior still
+  require manual verification before G2.2.
+
 #### G2.2 — Managed My Drive Cabinet location
 
 Establish a dedicated Stripes-managed My Drive folder/location without adding
@@ -3094,7 +3135,8 @@ folder/files must remain untouched.
 
 #### Current next implementation target
 
-**Next: G2.1a — Drive connection-state/auth foundation.**
+**Current gate: review and real-account verification of the local G2.1a
+implementation. Do not begin G2.2 until that gate is approved.**
 
 Scope:
 
@@ -3151,6 +3193,271 @@ Action Board attachments remain until the later G4 migration/retirement phase.
 
 Each G phase must remain atomic and independently revertible according to
 AGENTS.md.
+
+## 2026-08-18 Implementation Strategy — Codex-first, architecture-first
+
+**Status:** AUTHORITATIVE CURRENT EXECUTION STRATEGY.
+
+This section governs implementation order and engineering workflow from the
+2026-08-18 checkpoint onward.
+
+Where older roadmap checkpoint text says a phase is still “in progress,” that
+historical wording records the state at that earlier date. **Current Phase
+Status, later release checkpoints and this dated implementation strategy
+govern current execution.**
+
+### Engineering operating model
+
+Stripes is now interconnected enough that most remaining structural repo-level
+implementation should be performed with Codex rather than through ad-hoc
+manual changes.
+
+Core workflow:
+
+**design/decide → define dependencies/order → tightly scoped implementation →
+build/test → inspect diff → commit → deploy where appropriate → verify on
+phone → continue**
+
+Rules:
+
+- resolve product and architecture decisions before asking Codex to code;
+- use Codex for repo-aware implementation, dependency tracing, refactoring,
+  tests and architectural work;
+- do not use Codex for open-ended product brainstorming;
+- prefer small atomic, reversible, extensible changes;
+- every substantial patch must remain independently reviewable/revertible;
+- stop at genuine phase boundaries or unresolved product/architecture
+  decisions;
+- do not implement a temporary architecture when a known upcoming dependency
+  would require substantial rework;
+- treat Codex allowance as an engineering resource: additional planning is
+  worthwhile when it avoids unnecessary implementation/refactoring cycles.
+
+### Full Codex vs Spark vs direct patch
+
+Use **Full Codex** when repo-wide awareness or deeper reasoning materially
+reduces risk, including:
+
+- authentication/security;
+- Firebase rules/Functions;
+- Google OAuth / Drive lifecycle;
+- permissions;
+- persistence/schema work;
+- migrations/backward compatibility;
+- cross-cutting refactors;
+- structured evaluator / Best Completion Engine;
+- Generate replacement;
+- Live Split engine integration.
+
+Use **Codex Spark** for well-specified lower-risk execution where the solution
+is already decided, including:
+
+- focused regression tests with known expected behavior;
+- mechanical type/interface propagation;
+- bounded component extraction;
+- straightforward follow-up implementation;
+- small isolated code changes that still benefit from repo awareness.
+
+Use **direct patch / local iteration** when repo-wide analysis adds little
+value, including:
+
+- isolated CSS/layout/copy changes;
+- rapid visual prototypes;
+- small UI polish after architecture is settled;
+- documentation-only edits.
+
+Do not choose Spark merely because it is cheaper if a task has hidden
+architecture/security consequences.
+
+### Authoritative remaining implementation sequence
+
+G2.1a is implemented locally. The current gate is review and real-account
+verification; G2.2 is the next atomic implementation target only after that
+gate is approved.
+
+Complete the G-track in order before building the full Cabinet UI:
+
+1. **G2.1a — Drive connection-state/auth foundation** — Full Codex.
+   - reusable Drive connection lifecycle;
+   - explicit connected Google account;
+   - requested/granted scope state;
+   - expiry;
+   - reconnect;
+   - true disconnect/revoke semantics;
+   - memory-only Drive token;
+   - Firebase Google identity remains separate;
+   - preserve existing Cloud Backup;
+   - no Cabinet folder, Firestore Cabinet metadata or Shared Drive behavior.
+
+2. **G2.2 — Managed My Drive Cabinet location** — Full Codex.
+   - idempotent create/find;
+   - stable marker/ID;
+   - renamed/moved/trashed/duplicate handling;
+   - compatible Drive API parameters for future Shared Drive work.
+
+3. **G2.3 — Multi-organizer Google permission foundation** — Full Codex.
+   - Google permissions remain authoritative;
+   - do not duplicate Google ACLs in Stripes;
+   - real multi-account testing required.
+
+4. **G2.4 — Optional Shared Drive capability** — Full Codex.
+   - remain within approved narrow scope/Picker architecture;
+   - if `drive.file` cannot truthfully support the promised behavior, STOP for
+     architecture review;
+   - never silently broaden OAuth scope.
+
+5. **G2.5 — Provider-neutral Cabinet-location metadata** — Full Codex.
+   - Firestore records Stripes location/context metadata only;
+   - no credentials/tokens;
+   - Google remains authoritative for the actual file/folder.
+
+Then complete a **minimal G3 Google Resource + Cabinet foundation** while the
+Google architecture is still loaded in engineering context:
+
+- provider-neutral resource references;
+- minimal Cabinet root/index;
+- contextual Action Board / Equipment resource relationships;
+- unavailable / permission / reconnect states;
+- removing a Stripes relationship must not silently delete the Google file;
+- do not recreate Firebase general document hosting;
+- stop before broad Cabinet polish/folder UX if it is not required by the
+  foundation.
+
+After the G-track foundation is stable, proceed through T1 in this order:
+
+6. **T1.0 — Current-generator regression/scenario foundation** — Spark is
+   preferred if the scope remains test-only and behavior is already specified.
+
+7. **T1.1 — Versioned SportDefinition + Basic/Detailed profile schema** — Full
+   Codex.
+   - backward compatible;
+   - no silent legacy reinterpretation;
+   - no generator replacement yet.
+
+8. **T1.2 — Detailed Profile persistence/compatibility** — Full Codex.
+   - establish the data-truth model before visual UX;
+   - preserve legacy roster behavior.
+
+9. **T1.3 — Detailed Profile six-row / one-swipe prototype** — Spark or direct
+   patch.
+   - optimize for rapid real-phone iteration;
+   - validate gesture, snap behavior, scrolling and finger visibility before
+     locking details.
+
+10. **T1.4 — Card/radar / Playing Profile integration** — Spark initially once
+    persistence is stable.
+
+11. **T1.5 — Structured evaluator** — Full Codex.
+    - score arbitrary teams before replacing Generate;
+    - machine-readable Overall/composition/constraint metrics.
+
+12. **T1.6 — Balance Priorities** — Full Codex for evaluator integration;
+    Spark/direct patch for simple UI follow-up.
+    - replaces future Field Size weighting semantics;
+    - Overall fairness remains the primary guardrail.
+
+13. **T1.7 — Best Completion Engine / Generate v2** — Full Codex.
+    - compare against legacy generator using regression/scenario tests;
+    - do not replace production behavior until verified.
+
+14. **T1.8 — Live Split** — Full Codex for engine integration; Spark/direct
+    patch for UI iteration.
+    - same Best Completion/evaluator foundation;
+    - manual assignments become locks;
+    - future-aware suggestions;
+    - Undo;
+    - late/no-show minimal correction.
+
+15. **T1.9 — AI team controls and explanations.**
+    - only after the deterministic evaluator exists;
+    - natural language → visible structured interpretation → deterministic
+      action → grounded explanation;
+    - AI must not invent sport attributes or bypass the evaluator.
+
+### Club Activity sequence
+
+Do not implement Club Activity merely because legacy Club Notes exists.
+
+First stabilize the relevant source systems:
+
+- Action Board;
+- Equipment;
+- Attendance/conduct;
+- organizer membership/governance;
+- Cabinet/resource metadata.
+
+Then explicitly design:
+
+- event categories;
+- meaningful-change thresholds;
+- suppression/compression;
+- ranking/importance;
+- current state vs historical result;
+- drill-down history;
+- resolved/old activity behavior;
+- relationship with notifications.
+
+After deterministic Club Activity is useful, a paid AI Club Brief may be added
+as a convenience layer.
+
+### Meetup
+
+Meetup remains waiting on API access.
+
+When access is granted:
+
+- verify live API capabilities/scopes first;
+- implement the approved read-only RSVP workflow;
+- keep Meetup import Free;
+- connect Meetup/Today participant state cleanly into Generate and Live Split;
+- Meetup approval must not block store launch.
+
+### Explicitly postponed
+
+Do not spend current structural implementation capacity on:
+
+- expanding legacy Club Notes;
+- AI Club Brief before deterministic Club Activity;
+- Quick Teams before structural launch work unless used as a deliberately
+  isolated acquisition/polish task;
+- Google Calendar;
+- Notion OAuth/integration;
+- Dropbox/OneDrive-specific integrations;
+- broad Google Drive scopes;
+- native Stripes general document hosting;
+- complex Custom Sport weighting/configuration;
+- final Playing Profile vocabulary before real profile testing;
+- general chat;
+- accounting/expense-management expansion inside Equipment;
+- major Team Generator ↔ Club navigation restructuring while that product
+  concept remains exploratory.
+
+### Launch-ready versus post-launch
+
+Do not make every approved future feature a blocker for the
+2026-09-30 Google Play launch.
+
+Launch-critical concerns include:
+
+- security/governance remains stable;
+- authentication remains reliable;
+- no destructive migration/data-loss behavior;
+- current core Roster / Today / Teams workflow remains reliable;
+- exposed Google functionality is truthful and safe;
+- production/mobile regression checks pass;
+- required legal/store readiness is complete.
+
+The following may ship after the first store release if necessary:
+
+- full Generate v2;
+- Live Split;
+- full Club Activity;
+- AI Club Brief;
+- Quick Teams;
+- broad/polished Cabinet expansion.
+
+Do not rush architectural work merely to include every approved future feature
+in the first store build.
 
 ### T1 — Multi-Sport Team Generation Architecture
 

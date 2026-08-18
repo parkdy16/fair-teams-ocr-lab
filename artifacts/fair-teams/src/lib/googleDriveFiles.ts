@@ -1,5 +1,5 @@
-import { FAIR_TEAMS_DRIVE_MIME_TYPE } from "@/lib/googleDriveConfig";
-import { GoogleApiHttpError } from "@/lib/googleApiError";
+import { FAIR_TEAMS_DRIVE_MIME_TYPE } from "./googleDriveConfig.ts";
+import { GoogleApiHttpError } from "./googleApiError.ts";
 
 export interface GoogleDriveUserSummary {
   displayName?: string;
@@ -377,7 +377,7 @@ export async function shareGoogleDriveFileWithEditor(
       throw new GoogleApiHttpError(401, "Google Drive connection expired. Disconnect and connect Google Drive again, then retry.");
     }
     if (response.status === 403) {
-      throw new Error("Stripes cannot share this Drive file. Open the file from Drive again, or make sure you own it or have permission to share it.");
+      throw new GoogleApiHttpError(403, "Stripes cannot share this Drive file. Open the file from Drive again, or make sure you own it or have permission to share it.");
     }
     throw new Error(message);
   }
@@ -459,7 +459,7 @@ export async function listGoogleDriveFilePermissions(
       throw new GoogleApiHttpError(401, "Google Drive connection expired. Disconnect and connect Google Drive again, then retry.");
     }
     if (response.status === 403) {
-      throw new Error("Stripes cannot read sharing access for this Drive file. Open the file from Drive again, or check your sharing permission.");
+      throw new GoogleApiHttpError(403, "Stripes cannot read sharing access for this Drive file. Open the file from Drive again, or check your sharing permission.");
     }
     throw new Error(message);
   }
@@ -490,8 +490,48 @@ export async function deleteGoogleDriveFilePermission(
       throw new GoogleApiHttpError(401, "Google Drive connection expired. Disconnect and connect Google Drive again, then retry.");
     }
     if (response.status === 403) {
-      throw new Error("Stripes cannot remove this access. It may belong to the file owner or come from a shared Drive folder.");
+      throw new GoogleApiHttpError(403, "Stripes cannot remove this access. It may belong to the file owner or come from a shared Drive folder.");
     }
     throw new Error(message);
   }
+}
+
+export async function updateGoogleDriveFilePermissionRole(
+  accessToken: string,
+  fileId: string,
+  permissionId: string,
+  role: "writer" | "commenter" | "reader",
+): Promise<GoogleDrivePermissionResult> {
+  const params = new URLSearchParams({
+    supportsAllDrives: "true",
+    fields: "id,type,emailAddress,displayName,role,deleted,permissionDetails(inherited,inheritedFrom,permissionType,role)",
+  });
+  const response = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}/permissions/${encodeURIComponent(permissionId)}?${params.toString()}`,
+    {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json; charset=UTF-8",
+      },
+      body: JSON.stringify({ role }),
+    },
+  );
+
+  if (!response.ok) {
+    const message = await readDriveError(response);
+    if (response.status === 401) {
+      throw new GoogleApiHttpError(401, "Google Drive connection expired. Disconnect and connect Google Drive again, then retry.");
+    }
+    if (response.status === 403) {
+      throw new GoogleApiHttpError(403, "Stripes cannot change this access. It may belong to the file owner or come from a parent Drive folder.");
+    }
+    throw new Error(message);
+  }
+
+  const result = await response.json();
+  if (!result?.id) {
+    throw new Error("Google Drive changed the access role but did not return permission details.");
+  }
+  return result as GoogleDrivePermissionResult;
 }

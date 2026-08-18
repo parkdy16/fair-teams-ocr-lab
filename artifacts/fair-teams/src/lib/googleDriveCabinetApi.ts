@@ -105,9 +105,13 @@ export async function createManagedMyDriveCabinetFolder(accessToken: string) {
   return (await response.json()) as GoogleDriveCabinetFolder;
 }
 
-export function resolveManagedMyDriveCabinetFolder(accessToken: string, preferredFolderId?: string) {
+export function resolveManagedMyDriveCabinetFolder(
+  accessToken: string,
+  preferredFolderId?: string,
+  requirePreferredFolder = false,
+) {
   return ensureManagedMyDriveCabinetFolder({
     listManagedFolders: () => listManagedMyDriveCabinetFolders(accessToken),
     createManagedFolder: () => createManagedMyDriveCabinetFolder(accessToken),
-  }, preferredFolderId);
+  }, preferredFolderId, requirePreferredFolder);
 }

@@ -34,6 +34,7 @@ import type { PairingRule } from "@/lib/types";
 import type { AiSmartCommandAction } from "@/lib/aiSmartCommandTypes";
 import { FirebaseSharedRosterAuthCard } from "@/components/FirebaseSharedRosterAuthCard";
 import { FirebaseSharedRosterPublishCard } from "@/components/FirebaseSharedRosterPublishCard";
+import { SharedWorkspaceCabinetCard } from "@/components/SharedWorkspaceCabinetCard";
 import { Button } from "@/components/ui/button";
 import stripesLogo from "@/assets/stripes-logo-mark.png";
 import {
@@ -56,6 +57,7 @@ import { allRostersToDriveBackupJson, parseDriveBackupJson } from "@/lib/googleD
 import { requestGoogleDriveAccessToken, revokeGoogleDriveAccessToken } from "@/lib/googleDriveAuth";
 import { GoogleDriveCabinetLocationController } from "@/lib/googleDriveCabinet";
 import { resolveManagedMyDriveCabinetFolder } from "@/lib/googleDriveCabinetApi";
+import { resolveGoogleDriveSharedCabinetLocation } from "@/lib/googleDriveSharedCabinetApi";
 import {
   canDisconnectGoogleDrive,
   GoogleDriveConnectionController,
@@ -88,6 +90,7 @@ import {
   type GoogleSheetRosterFile,
 } from "@/lib/googleSheetsFiles";
 import { pickGoogleSheetRosterFile, warmUpGoogleDrivePicker } from "@/lib/googleDrivePicker";
+import { getSharedWorkspaceCabinetLocation } from "@/lib/sharedWorkspaceCabinetService";
 import { leaveFirebaseSharedRosterAccess, listFirebaseSharedRosters, readFirebaseSharedRoster, type FirebaseSharedRosterSummary } from "@/lib/sharedRosterService";
 import { fetchClubRatingSummaries, type ClubRatingSummary } from "@/lib/clubCollaborationService";
 import { profileFromAveragedAttributes } from "@/lib/playerStyleProfile";
@@ -684,6 +687,16 @@ function App() {
     activeRoster?.cloudSource?.provider === "firebase"
       ? activeRoster.cloudSource
       : null;
+  const activeCabinetScope = activeFirebaseSource?.firebaseGroupId
+    ? { kind: "group" as const, id: activeFirebaseSource.firebaseGroupId }
+    : activeFirebaseSource?.firebaseRosterId
+      ? { kind: "roster" as const, id: activeFirebaseSource.firebaseRosterId }
+      : null;
+  const activeCanConfigureCabinet = Boolean(
+    activeCabinetScope
+    && activeFirebaseSource?.firebaseRole
+    && ["owner", "editor", "organizer"].includes(activeFirebaseSource.firebaseRole),
+  );
   const activeRosterIsShared = Boolean(activeGoogleSheetSource?.spreadsheetId || activeFirebaseSource?.firebaseRosterId);
   const activeRosterIsFirebaseShared = Boolean(activeFirebaseSource?.firebaseRosterId);
   const localRosterPickerChoices = rosters.filter((roster) => !isRosterCloudShared(roster));
@@ -2160,7 +2173,58 @@ function App() {
         setCurrentDriveBackup((file) => file ? { ...file, connectedEmail: result.account?.emailAddress } : file);
       }
       void warmUpGoogleDrivePicker();
-      const cabinet = await googleDriveCabinet.resolve(googleDriveConnection.getAccessToken());
+      let savedCabinetLocation = null;
+      if (activeCanConfigureCabinet && activeCabinetScope) {
+        try {
+          savedCabinetLocation = await getSharedWorkspaceCabinetLocation(activeCabinetScope);
+        } catch (error) {
+          showRosterToolsNotice(
+            "Google Drive connected",
+            error instanceof Error ? error.message : "Stripes could not check this club’s saved Cabinet location.",
+            "warning",
+          );
+          return;
+        }
+      }
+      if (savedCabinetLocation?.backing === "shared_drive") {
+        googleDriveCabinet.reset();
+        const sharedCabinet = await resolveGoogleDriveSharedCabinetLocation(
+          googleDriveConnection.getAccessToken(),
+          savedCabinetLocation.folderId,
+          savedCabinetLocation.driveId || "",
+        );
+        if (sharedCabinet.status === "reconnect_required") {
+          googleDriveConnection.markExpired(sharedCabinet.error);
+          showRosterToolsNotice("Reconnect Google Drive", sharedCabinet.error, "warning");
+          return;
+        }
+        showRosterToolsNotice(
+          sharedCabinet.status === "ready" ? "Google Drive connected" : "Club Cabinet unavailable",
+          sharedCabinet.status === "ready"
+            ? `Shared Drive Cabinet ready: ${sharedCabinet.displayName}`
+            : "error" in sharedCabinet
+              ? sharedCabinet.error
+              : "The configured Shared Drive Cabinet is unavailable.",
+          sharedCabinet.status === "ready" ? "success" : "warning",
+        );
+        return;
+      }
+      if (!savedCabinetLocation) {
+        googleDriveCabinet.reset();
+        showRosterToolsNotice(
+          "Google Drive connected",
+          "Google Drive is ready. Club Cabinet setup remains separate.",
+          "success",
+        );
+        return;
+      }
+      const hasSavedMyDriveCabinet = savedCabinetLocation?.backing === "my_drive";
+      if (!hasSavedMyDriveCabinet) return;
+      const cabinet = await googleDriveCabinet.resolve(
+        googleDriveConnection.getAccessToken(),
+        savedCabinetLocation.folderId,
+        true,
+      );
       if (googleDriveConnection.getSnapshot().status !== "connected") return;
       if (cabinet.status === "reconnect_required") {
         googleDriveConnection.markExpired(cabinet.error || undefined);
@@ -4222,31 +4286,43 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 tutorialStep={tutorialStep}
                 onTutorialAction={handleTutorialAction}
                 sharedToolsNode={(
-                  <FirebaseSharedRosterPublishCard
-                    variant="compact"
-                    backgroundSync={false}
-                    activeRoster={activeRoster}
-                    rosters={rosters}
-                    isEmptyRoster={isEmptyStarterRoster}
-                    onOpenRoster={openFirebaseSharedRosterAsLocalCopy}
-                    onRosterSaved={markActiveFirebaseRosterSaved}
-                    onRefreshActiveRoster={refreshActiveFirebaseRosterFromRemote}
-          onRefreshRosterIdentity={refreshFirebaseRosterIdentityFromRemote}
-                    onSharedRosterSummariesUpdated={syncFirebaseRosterBadgesFromSummaries}
-                    onSharedInviteOpened={finishSharedInviteOpen}
-                    openLibraryToken={sharedRosterLibraryOpenToken}
-                    onMakePrivateCopy={activeRosterIsFirebaseShared ? (() => setPrivateCopyConfirmOpen(true)) : undefined}
-                    onHideOnDevice={activeRosterIsFirebaseShared ? openClearRoster : undefined}
-                    onLeaveSharedRoster={activeRosterIsFirebaseShared ? (() => {
-                      setLeaveSharedError("");
-                      setLeaveSharedConfirmOpen(true);
-                    }) : undefined}
-                    onCloseSharedWorkspace={activeRosterIsFirebaseShared ? ((state) => {
-                      setCloseSharedConfirm(state);
-                      setCloseSharedConfirmationName("");
-                      setCloseSharedError("");
-                    }) : undefined}
-                  />
+                  <>
+                    <FirebaseSharedRosterPublishCard
+                      variant="compact"
+                      backgroundSync={false}
+                      activeRoster={activeRoster}
+                      rosters={rosters}
+                      isEmptyRoster={isEmptyStarterRoster}
+                      onOpenRoster={openFirebaseSharedRosterAsLocalCopy}
+                      onRosterSaved={markActiveFirebaseRosterSaved}
+                      onRefreshActiveRoster={refreshActiveFirebaseRosterFromRemote}
+                      onRefreshRosterIdentity={refreshFirebaseRosterIdentityFromRemote}
+                      onSharedRosterSummariesUpdated={syncFirebaseRosterBadgesFromSummaries}
+                      onSharedInviteOpened={finishSharedInviteOpen}
+                      openLibraryToken={sharedRosterLibraryOpenToken}
+                      onMakePrivateCopy={activeRosterIsFirebaseShared ? (() => setPrivateCopyConfirmOpen(true)) : undefined}
+                      onHideOnDevice={activeRosterIsFirebaseShared ? openClearRoster : undefined}
+                      onLeaveSharedRoster={activeRosterIsFirebaseShared ? (() => {
+                        setLeaveSharedError("");
+                        setLeaveSharedConfirmOpen(true);
+                      }) : undefined}
+                      onCloseSharedWorkspace={activeRosterIsFirebaseShared ? ((state) => {
+                        setCloseSharedConfirm(state);
+                        setCloseSharedConfirmationName("");
+                        setCloseSharedError("");
+                      }) : undefined}
+                    />
+                    {activeCanConfigureCabinet && activeCabinetScope && (
+                      <SharedWorkspaceCabinetCard
+                        scope={activeCabinetScope}
+                        driveStatus={googleDriveConnectionSnapshot.status}
+                        driveAccountLabel={connectedDriveUser?.emailAddress}
+                        accessToken={googleDriveAccessToken}
+                        onConnectDrive={connectGoogleDrive}
+                        onDriveAuthorizationExpired={(message) => googleDriveConnection.markExpired(message)}
+                      />
+                    )}
+                  </>
                 )}
                 equipmentGroupId={activeFirebaseSource?.firebaseRosterId ? `roster:${activeFirebaseSource.firebaseRosterId}` : undefined}
                 equipmentHolderLabels={activeFirebaseEquipmentHolderLabels}

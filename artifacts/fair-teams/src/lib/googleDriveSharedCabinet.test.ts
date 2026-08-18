@@ -6,6 +6,7 @@ import { GOOGLE_DRIVE_FOLDER_MIME_TYPE } from "./googleDriveCabinet.ts";
 import { GOOGLE_DRIVE_FILE_SCOPE } from "./googleDriveConfig.ts";
 import { getGoogleDriveSharedCabinetFolderMetadata } from "./googleDriveSharedCabinetApi.ts";
 import {
+  resolveRecordedGoogleDriveSharedCabinetLocation,
   resolveGoogleDriveSharedCabinetSelection,
   type GoogleDriveSharedCabinetFolderMetadata,
 } from "./googleDriveSharedCabinet.ts";
@@ -117,6 +118,43 @@ test("returns cancellation without calling Drive metadata", async () => {
   });
   assert.deepEqual(result, { status: "selection_cancelled" });
   assert.equal(metadataCalls, 0);
+});
+
+test("recorded Shared Drive location resolves by exact folder and drive IDs", async () => {
+  const result = await resolveRecordedGoogleDriveSharedCabinetLocation(
+    "shared-folder-1",
+    "shared-drive-1",
+    async (folderId) => {
+      assert.equal(folderId, "shared-folder-1");
+      return sharedFolder();
+    },
+  );
+  assert.equal(result.status, "ready");
+});
+
+test("recorded Shared Drive location does not fall back when drive identity changes", async () => {
+  const result = await resolveRecordedGoogleDriveSharedCabinetLocation(
+    "shared-folder-1",
+    "expected-drive",
+    async () => sharedFolder({ driveId: "different-drive" }),
+  );
+  assert.equal(result.status, "unavailable");
+});
+
+test("recorded Shared Drive insufficient access remains truthful", async () => {
+  const result = await resolveRecordedGoogleDriveSharedCabinetLocation(
+    "shared-folder-1",
+    "shared-drive-1",
+    async () => sharedFolder({
+      capabilities: {
+        canReadDrive: true,
+        canListChildren: true,
+        canAddChildren: false,
+        canEdit: false,
+      },
+    }),
+  );
+  assert.equal(result.status, "insufficient_permission");
 });
 
 test("selected-folder metadata request is ID-scoped and Shared-Drive-aware", async () => {

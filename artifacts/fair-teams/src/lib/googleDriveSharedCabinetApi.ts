@@ -1,6 +1,7 @@
 import { GoogleApiHttpError } from "./googleApiError.ts";
 import { pickGoogleSharedDriveCabinetFolder } from "./googleDrivePicker.ts";
 import {
+  resolveRecordedGoogleDriveSharedCabinetLocation,
   resolveGoogleDriveSharedCabinetSelection,
   type GoogleDriveSharedCabinetFolderMetadata,
 } from "./googleDriveSharedCabinet.ts";
@@ -48,5 +49,17 @@ export async function selectGoogleDriveSharedCabinetLocation(accessToken: string
   return resolveGoogleDriveSharedCabinetSelection(
     pickedFolder,
     (folderId) => getGoogleDriveSharedCabinetFolderMetadata(accessToken, folderId),
+  );
+}
+
+export function resolveGoogleDriveSharedCabinetLocation(
+  accessToken: string,
+  folderId: string,
+  driveId: string,
+) {
+  return resolveRecordedGoogleDriveSharedCabinetLocation(
+    folderId,
+    driveId,
+    (id) => getGoogleDriveSharedCabinetFolderMetadata(accessToken, id),
   );
 }

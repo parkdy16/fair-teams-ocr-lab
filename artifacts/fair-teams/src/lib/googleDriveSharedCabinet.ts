@@ -111,3 +111,26 @@ export async function resolveGoogleDriveSharedCabinetSelection(
     },
   };
 }
+
+export async function resolveRecordedGoogleDriveSharedCabinetLocation(
+  folderId: string,
+  driveId: string,
+  loadMetadata: (folderId: string) => Promise<GoogleDriveSharedCabinetFolderMetadata>,
+): Promise<GoogleDriveSharedCabinetSelection> {
+  const expectedFolderId = String(folderId || "").trim();
+  const expectedDriveId = String(driveId || "").trim();
+  if (!expectedFolderId || !expectedDriveId) {
+    return { status: "unavailable", error: "The configured Shared Drive Cabinet location is invalid." };
+  }
+  const result = await resolveGoogleDriveSharedCabinetSelection(
+    { id: expectedFolderId, name: "", mimeType: GOOGLE_DRIVE_FOLDER_MIME_TYPE },
+    loadMetadata,
+  );
+  if (result.status === "ready" && result.driveId !== expectedDriveId) {
+    return {
+      status: "unavailable",
+      error: "The configured folder no longer belongs to the expected Shared Drive.",
+    };
+  }
+  return result;
+}

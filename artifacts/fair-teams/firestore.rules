@@ -217,6 +217,67 @@ service cloud.firestore {
         );
     }
 
+    function isStandaloneRosterById(rosterId) {
+      return exists(rosterPath(rosterId))
+        && get(rosterPath(rosterId)).data.get("groupId", "") == "";
+    }
+
+    function validCabinetLocationConfig() {
+      let keys = request.resource.data.keys();
+      let backing = request.resource.data.get("backing", "");
+      return keys.hasAll([
+          "schemaVersion",
+          "provider",
+          "backing",
+          "folderId",
+          "configuredByUid",
+          "configuredAt",
+          "updatedAt"
+        ])
+        && keys.hasOnly([
+          "schemaVersion",
+          "provider",
+          "backing",
+          "folderId",
+          "driveId",
+          "displayName",
+          "configuredByUid",
+          "configuredAt",
+          "updatedAt"
+        ])
+        && request.resource.data.schemaVersion == 1
+        && request.resource.data.provider == "google_drive"
+        && backing in ["my_drive", "shared_drive"]
+        && request.resource.data.folderId is string
+        && request.resource.data.folderId.size() > 0
+        && request.resource.data.folderId.size() <= 200
+        && !request.resource.data.folderId.matches(".*\\/.*")
+        && request.resource.data.configuredByUid == request.auth.uid
+        && request.resource.data.configuredAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && (
+          !keys.hasAny(["displayName"])
+          || (
+            request.resource.data.displayName is string
+            && request.resource.data.displayName.size() > 0
+            && request.resource.data.displayName.size() <= 200
+          )
+        )
+        && (
+          (
+            backing == "my_drive"
+            && !keys.hasAny(["driveId"])
+          )
+          || (
+            backing == "shared_drive"
+            && request.resource.data.driveId is string
+            && request.resource.data.driveId.size() > 0
+            && request.resource.data.driveId.size() <= 200
+            && !request.resource.data.driveId.matches(".*\\/.*")
+          )
+        );
+    }
+
     match /sharedWorkspaceInvitationLocks/{lockId} {
       allow read, write: if false;
     }
@@ -280,6 +341,14 @@ service cloud.firestore {
         allow create, update, delete: if canEditGroupById(groupId);
       }
 
+      match /cabinet/{configDoc} {
+        allow read: if configDoc == "config" && canEditGroupById(groupId);
+        allow create, update: if configDoc == "config"
+          && canEditGroupById(groupId)
+          && validCabinetLocationConfig();
+        allow delete: if configDoc == "config" && canEditGroupById(groupId);
+      }
+
       // Fair Teams v1.50 Tasks Board
       match /taskBoard/{boardDoc} {
         allow read: if isGroupMemberById(groupId);
@@ -315,6 +384,21 @@ service cloud.firestore {
       match /equipmentBags/{bagId} {
         allow read: if isRosterMemberById(rosterId);
         allow create, update, delete: if canEditRosterById(rosterId);
+      }
+
+      // Legacy standalone shared rosters keep the same Cabinet contract when
+      // no shared-group parent exists.
+      match /cabinet/{configDoc} {
+        allow read: if configDoc == "config"
+          && isStandaloneRosterById(rosterId)
+          && canEditRosterById(rosterId);
+        allow create, update: if configDoc == "config"
+          && isStandaloneRosterById(rosterId)
+          && canEditRosterById(rosterId)
+          && validCabinetLocationConfig();
+        allow delete: if configDoc == "config"
+          && isStandaloneRosterById(rosterId)
+          && canEditRosterById(rosterId);
       }
 
       // Fair Teams v1.50 Tasks Board

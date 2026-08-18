@@ -40,6 +40,12 @@ export type GoogleDriveCabinetResolution =
       folder: null;
       created: false;
       duplicateFolderIds: string[];
+    }
+  | {
+      status: "unavailable";
+      folder: null;
+      created: false;
+      duplicateFolderIds: string[];
     };
 
 export interface GoogleDriveCabinetDependencies {
@@ -80,6 +86,7 @@ export function isManagedMyDriveCabinetFolder(folder: GoogleDriveCabinetFolder) 
 export async function ensureManagedMyDriveCabinetFolder(
   dependencies: GoogleDriveCabinetDependencies,
   preferredFolderId?: string,
+  requirePreferredFolder = false,
 ): Promise<GoogleDriveCabinetResolution> {
   const folders = (await dependencies.listManagedFolders())
     .filter(isManagedMyDriveCabinetFolder);
@@ -87,6 +94,15 @@ export async function ensureManagedMyDriveCabinetFolder(
   const preferredFolder = preferredId
     ? folders.find((folder) => folder.id === preferredId)
     : undefined;
+
+  if (requirePreferredFolder && preferredId && !preferredFolder) {
+    return {
+      status: "unavailable",
+      folder: null,
+      created: false,
+      duplicateFolderIds: folders.map((folder) => folder.id).sort(),
+    };
+  }
 
   if (preferredFolder || folders.length === 1) {
     const folder = preferredFolder || folders[0];
@@ -121,6 +137,7 @@ export class GoogleDriveCabinetLocationController {
   private readonly resolveLocation: (
     accessToken: string,
     preferredFolderId?: string,
+    requirePreferredFolder?: boolean,
   ) => Promise<GoogleDriveCabinetResolution>;
   private readonly listeners = new Set<CabinetListener>();
   private operationId = 0;
@@ -137,6 +154,7 @@ export class GoogleDriveCabinetLocationController {
   constructor(resolveLocation: (
     accessToken: string,
     preferredFolderId?: string,
+    requirePreferredFolder?: boolean,
   ) => Promise<GoogleDriveCabinetResolution>) {
     this.resolveLocation = resolveLocation;
   }
@@ -150,7 +168,7 @@ export class GoogleDriveCabinetLocationController {
     };
   };
 
-  async resolve(accessToken: string, preferredFolderId?: string) {
+  async resolve(accessToken: string, preferredFolderId?: string, requirePreferredFolder = false) {
     const token = accessToken.trim();
     if (!token) {
       this.reset();
@@ -162,6 +180,7 @@ export class GoogleDriveCabinetLocationController {
     const task = this.resolveOnce(
       token,
       String(preferredFolderId || "").trim() || this.sessionPreferredFolderId || undefined,
+      requirePreferredFolder,
     );
     this.inFlight = task;
     const snapshot = await task;
@@ -169,7 +188,11 @@ export class GoogleDriveCabinetLocationController {
     return snapshot;
   }
 
-  private async resolveOnce(accessToken: string, preferredFolderId?: string) {
+  private async resolveOnce(
+    accessToken: string,
+    preferredFolderId?: string,
+    requirePreferredFolder = false,
+  ) {
     const operationId = ++this.operationId;
     this.update({
       status: "resolving",
@@ -180,8 +203,22 @@ export class GoogleDriveCabinetLocationController {
     });
 
     try {
-      const resolution = await this.resolveLocation(accessToken, preferredFolderId);
+      const resolution = await this.resolveLocation(
+        accessToken,
+        preferredFolderId,
+        requirePreferredFolder,
+      );
       if (operationId !== this.operationId) return this.snapshot;
+      if (resolution.status === "unavailable") {
+        this.update({
+          status: "unavailable",
+          folder: null,
+          created: false,
+          duplicateFolderIds: resolution.duplicateFolderIds,
+          error: "The configured My Drive Cabinet folder is unavailable. Choose a new Cabinet location to continue.",
+        });
+        return this.snapshot;
+      }
       if (resolution.status === "ambiguous") {
         this.update({
           status: "ambiguous",

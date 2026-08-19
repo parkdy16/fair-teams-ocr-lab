@@ -518,7 +518,7 @@ function App() {
   const [openPairingRulesToken, setOpenPairingRulesToken] = useState(0);
   const [externalAddPlayerRequest, setExternalAddPlayerRequest] = useState<{ token: number; name?: string } | null>(null);
   const activeTabRef = useRef<AppTab>("teams");
-  const tabHistoryRef = useRef<AppTab[]>(["today"]);
+  const tabHistoryRef = useRef<AppTab[]>(["teams"]);
   const restoringTabFromBackRef = useRef(false);
   const fairTeamsBackTrapArmedRef = useRef(false);
   const [todayRosterChosen, setTodayRosterChosen] = useState(false);
@@ -905,7 +905,8 @@ function App() {
     setTodayRosterChosen(true);
     closeRosterToolsPanel();
     setRosterFilesOpen(false);
-    setActiveTab(openedRoster.players.length > 0 ? "today" : "players");
+    setTeamsWorkspaceView("setup");
+    setActiveTab(openedRoster.players.length > 0 ? "teams" : "players");
   };
 
   const showRosterToolsNotice = (title: string, message: string, tone: RosterToolsNotice["tone"] = "info") => {
@@ -3465,9 +3466,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
   const openSharedRostersFromLocalFlow = () => {
     closeClearRoster();
     setRosterFilesOpen(false);
-    setRosterToolsOpen(false);
-    setRosterSharedToolsOpen(false);
-    setRosterLocalBackupToolsOpen(false);
+    closeRosterToolsPanel();
     setActiveTab("club");
     setSharedRosterLibraryOpenToken((token) => token + 1);
   };

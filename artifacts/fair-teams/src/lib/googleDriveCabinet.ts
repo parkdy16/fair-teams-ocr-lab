@@ -75,12 +75,117 @@ function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message.trim() ? error.message : fallback;
 }
 
-export function isManagedMyDriveCabinetFolder(folder: GoogleDriveCabinetFolder) {
-  if (!folder.id || folder.trashed || folder.driveId || folder.ownedByMe === false) return false;
-  if (folder.mimeType !== GOOGLE_DRIVE_FOLDER_MIME_TYPE) return false;
+function errorStatus(error: unknown) {
+  if (!error || typeof error !== "object") return undefined;
+  const record = error as { status?: unknown; code?: unknown };
+  const status = Number(record.status ?? record.code);
+  return Number.isFinite(status) ? status : undefined;
+}
+
+function hasStripesCabinetMarkers(folder: GoogleDriveCabinetFolder) {
   return Object.entries(STRIPES_CABINET_APP_PROPERTIES).every(
     ([key, value]) => folder.appProperties?.[key] === value,
   );
+}
+
+export function isManagedMyDriveCabinetFolder(folder: GoogleDriveCabinetFolder) {
+  if (!folder.id || folder.trashed || folder.driveId || folder.ownedByMe === false) return false;
+  if (folder.mimeType !== GOOGLE_DRIVE_FOLDER_MIME_TYPE) return false;
+  return hasStripesCabinetMarkers(folder);
+}
+
+export type RecordedMyDriveCabinetFolderValidation =
+  | "ready"
+  | "wrong_folder"
+  | "unavailable"
+  | "not_a_folder"
+  | "not_my_drive"
+  | "not_managed"
+  | "insufficient_permission";
+
+export function validateRecordedMyDriveCabinetFolder(
+  folder: GoogleDriveCabinetFolder,
+  expectedFolderId: string,
+): RecordedMyDriveCabinetFolderValidation {
+  const expectedId = String(expectedFolderId || "").trim();
+  if (!expectedId || folder.id !== expectedId) return "wrong_folder";
+  if (folder.trashed) return "unavailable";
+  if (folder.mimeType !== GOOGLE_DRIVE_FOLDER_MIME_TYPE) return "not_a_folder";
+  if (folder.driveId) return "not_my_drive";
+  if (!hasStripesCabinetMarkers(folder)) return "not_managed";
+  if (folder.capabilities?.canAddChildren !== true) return "insufficient_permission";
+  return "ready";
+}
+
+export type RecordedMyDriveCabinetAuthorization =
+  | { status: "ready"; folder: GoogleDriveCabinetFolder }
+  | { status: "selection_cancelled" }
+  | { status: "wrong_folder"; error: string }
+  | { status: "invalid"; reason: "not_a_folder" | "not_my_drive" | "not_managed"; error: string }
+  | { status: "insufficient_permission"; error: string }
+  | { status: "reconnect_required"; error: string }
+  | { status: "unavailable"; error: string };
+
+export async function resolveRecordedMyDriveCabinetAuthorization(
+  pickedFolder: { id: string; name?: string; mimeType?: string } | null,
+  expectedFolderId: string,
+  loadMetadata: (folderId: string) => Promise<GoogleDriveCabinetFolder>,
+): Promise<RecordedMyDriveCabinetAuthorization> {
+  const expectedId = String(expectedFolderId || "").trim();
+  if (!expectedId) {
+    return { status: "unavailable", error: "The saved My Drive File Cabinet location is invalid." };
+  }
+  if (!pickedFolder) return { status: "selection_cancelled" };
+  if (String(pickedFolder.id || "").trim() !== expectedId) {
+    return {
+      status: "wrong_folder",
+      error: "Choose the folder already recorded as this club's File Cabinet. The saved location was not changed.",
+    };
+  }
+
+  let folder: GoogleDriveCabinetFolder;
+  try {
+    folder = await loadMetadata(expectedId);
+  } catch (error) {
+    const status = errorStatus(error);
+    if (status === 401) {
+      return {
+        status: "reconnect_required",
+        error: errorMessage(error, "Reconnect Google Drive, then authorize the File Cabinet again."),
+      };
+    }
+    if (status === 403) {
+      return {
+        status: "insufficient_permission",
+        error: errorMessage(error, "Google did not allow this account to use the saved File Cabinet folder."),
+      };
+    }
+    return {
+      status: "unavailable",
+      error: errorMessage(error, "The saved File Cabinet folder is unavailable to this Google account."),
+    };
+  }
+
+  const validation = validateRecordedMyDriveCabinetFolder(folder, expectedId);
+  if (validation === "ready") return { status: "ready", folder };
+  if (validation === "wrong_folder") {
+    return { status: "wrong_folder", error: "Google returned a different folder. The saved File Cabinet location was not changed." };
+  }
+  if (validation === "insufficient_permission") {
+    return {
+      status: "insufficient_permission",
+      error: "This Google account cannot add content to the saved File Cabinet folder.",
+    };
+  }
+  if (validation === "unavailable") {
+    return { status: "unavailable", error: "The saved File Cabinet folder is in trash or unavailable." };
+  }
+  const invalidMessages = {
+    not_a_folder: "The saved File Cabinet location is not a Google Drive folder.",
+    not_my_drive: "The saved File Cabinet location is not the recorded My Drive folder.",
+    not_managed: "The selected folder is not the Stripes-managed File Cabinet recorded for this club.",
+  } as const;
+  return { status: "invalid", reason: validation, error: invalidMessages[validation] };
 }
 
 export async function ensureManagedMyDriveCabinetFolder(

@@ -18,7 +18,10 @@ import {
 } from "@/components/ui/dialog";
 import { StripesConfirmContent, StripesWorkspaceContent } from "@/components/ui/stripes-modal";
 import { fileCabinetDriveAccessToken } from "@/lib/fileCabinetDriveAccess";
-import { resolveManagedMyDriveCabinetFolder } from "@/lib/googleDriveCabinetApi";
+import {
+  authorizeRecordedMyDriveCabinetFolder,
+  resolveManagedMyDriveCabinetFolder,
+} from "@/lib/googleDriveCabinetApi";
 import { isGoogleDriveAuthorizationExpiredError } from "@/lib/googleDriveConnection";
 import {
   resolveGoogleDriveSharedCabinetLocation,
@@ -71,7 +74,7 @@ export function SharedWorkspaceCabinetCard({
   const [loadingLocation, setLoadingLocation] = useState(true);
   const [liveState, setLiveState] = useState<LiveState>("unchecked");
   const [notice, setNotice] = useState("");
-  const [busy, setBusy] = useState<"connect" | "my_drive" | "shared_drive" | "save" | "remove" | "">("");
+  const [busy, setBusy] = useState<"connect" | "authorize_my_drive" | "my_drive" | "shared_drive" | "save" | "remove" | "">("");
   const [pendingReplacement, setPendingReplacement] = useState<SharedWorkspaceCabinetLocationDraft | null>(null);
   const [removeConfirmOpen, setRemoveConfirmOpen] = useState(false);
 
@@ -165,6 +168,45 @@ export function SharedWorkspaceCabinetCard({
       if (actionToken) setNotice("Google Drive connected. Checking the saved File Cabinet location…");
     } finally {
       setBusy((current) => current === "connect" ? "" : current);
+    }
+  };
+
+  const authorizeRecordedMyDrive = async () => {
+    if (!location || location.backing !== "my_drive") return;
+    setBusy("authorize_my_drive");
+    setNotice("");
+    try {
+      const actionToken = await driveTokenForAction();
+      if (!actionToken) return;
+      const result = await authorizeRecordedMyDriveCabinetFolder(actionToken, location.folderId);
+      if (result.status === "selection_cancelled") {
+        setNotice("Authorization cancelled. The saved File Cabinet location was not changed.");
+        return;
+      }
+      if (result.status === "ready") {
+        setLiveState("available");
+        setNotice("This Google account can now use the saved File Cabinet. The club’s Cabinet location was not changed.");
+        return;
+      }
+      if (result.status === "reconnect_required") {
+        setLiveState("reconnect");
+        onDriveAuthorizationExpired(result.error);
+      } else if (result.status === "insufficient_permission") {
+        setLiveState("insufficient");
+      } else {
+        setLiveState("unavailable");
+      }
+      setNotice(result.error);
+    } catch (error) {
+      if (isGoogleDriveAuthorizationExpiredError(error)) {
+        setLiveState("reconnect");
+        onDriveAuthorizationExpired("Reconnect Google Drive, then authorize the saved File Cabinet again.");
+      } else {
+        setLiveState("unavailable");
+      }
+      setNotice(error instanceof Error ? error.message : "Could not authorize the saved File Cabinet folder.");
+    } finally {
+      setBusy((current) => current === "authorize_my_drive" ? "" : current);
     }
   };
 
@@ -307,6 +349,23 @@ export function SharedWorkspaceCabinetCard({
                         {busy === "connect" || driveStatus === "connecting" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                         {driveStatus === "expired" ? "Reconnect Google Drive" : "Connect Google Drive"}
                       </Button>
+                    )}
+                    {location.backing === "my_drive" && driveReady && liveState === "unavailable" && (
+                      <div className="mt-3 rounded-2xl border border-blue-100 bg-white/80 p-3">
+                        <p className="text-[11px] font-semibold leading-relaxed text-slate-600">
+                          Already have access in Google Drive? Let Stripes use this club’s existing folder without changing the saved location.
+                        </p>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="mt-2 h-9 rounded-xl border-blue-100 bg-white px-3 text-xs font-black text-blue-800"
+                          onClick={() => void authorizeRecordedMyDrive()}
+                          disabled={actionDisabled}
+                        >
+                          {busy === "authorize_my_drive" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FolderOpen className="mr-2 h-4 w-4" />}
+                          {busy === "authorize_my_drive" ? "Authorizing…" : "Authorize this File Cabinet"}
+                        </Button>
+                      </div>
                     )}
                   </div>
                 ) : (

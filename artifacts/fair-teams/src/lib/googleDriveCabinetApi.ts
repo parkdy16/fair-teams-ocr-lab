@@ -2,10 +2,13 @@ import { GoogleApiHttpError } from "./googleApiError.ts";
 import {
   ensureManagedMyDriveCabinetFolder,
   GOOGLE_DRIVE_FOLDER_MIME_TYPE,
+  resolveRecordedMyDriveCabinetAuthorization,
   STRIPES_CABINET_APP_PROPERTIES,
   STRIPES_CABINET_FOLDER_NAME,
+  validateRecordedMyDriveCabinetFolder,
   type GoogleDriveCabinetFolder,
 } from "./googleDriveCabinet.ts";
+import { pickGoogleMyDriveCabinetFolder } from "./googleDrivePicker.ts";
 
 const CABINET_FIELDS = [
   "id",
@@ -105,11 +108,65 @@ export async function createManagedMyDriveCabinetFolder(accessToken: string) {
   return (await response.json()) as GoogleDriveCabinetFolder;
 }
 
-export function resolveManagedMyDriveCabinetFolder(
+export async function getGoogleDriveMyDriveCabinetFolderMetadata(
+  accessToken: string,
+  folderId: string,
+): Promise<GoogleDriveCabinetFolder> {
+  const params = new URLSearchParams({
+    supportsAllDrives: "true",
+    fields: CABINET_FIELDS,
+  });
+  const response = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(folderId)}?${params.toString()}`,
+    { headers: { Authorization: `Bearer ${accessToken}` } },
+  );
+  if (!response.ok) {
+    const message = await readGoogleApiError(response, "Google Drive could not inspect the saved File Cabinet folder.");
+    throw new GoogleApiHttpError(response.status, message);
+  }
+  return (await response.json()) as GoogleDriveCabinetFolder;
+}
+
+export async function authorizeRecordedMyDriveCabinetFolder(
+  accessToken: string,
+  expectedFolderId: string,
+) {
+  const pickedFolder = await pickGoogleMyDriveCabinetFolder(accessToken);
+  return resolveRecordedMyDriveCabinetAuthorization(
+    pickedFolder,
+    expectedFolderId,
+    (folderId) => getGoogleDriveMyDriveCabinetFolderMetadata(accessToken, folderId),
+  );
+}
+
+export async function resolveManagedMyDriveCabinetFolder(
   accessToken: string,
   preferredFolderId?: string,
   requirePreferredFolder = false,
 ) {
+  const preferredId = String(preferredFolderId || "").trim();
+  if (requirePreferredFolder && preferredId) {
+    try {
+      const folder = await getGoogleDriveMyDriveCabinetFolderMetadata(accessToken, preferredId);
+      if (validateRecordedMyDriveCabinetFolder(folder, preferredId) === "ready") {
+        return {
+          status: "ready" as const,
+          folder,
+          created: false,
+          duplicateFolderIds: [],
+        };
+      }
+    } catch (error) {
+      if (error instanceof GoogleApiHttpError && error.status === 401) throw error;
+    }
+    return {
+      status: "unavailable" as const,
+      folder: null,
+      created: false,
+      duplicateFolderIds: [],
+    };
+  }
+
   return ensureManagedMyDriveCabinetFolder({
     listManagedFolders: () => listManagedMyDriveCabinetFolders(accessToken),
     createManagedFolder: () => createManagedMyDriveCabinetFolder(accessToken),

@@ -3349,6 +3349,26 @@ Implementation checkpoint — 2026-08-18:
 - focused G2 and rule tests, production build and Firestore rules dry-run pass;
   manual multi-organizer and real Google-account verification remains required.
 
+Bounded G2 closure repair checkpoint — 2026-08-19:
+
+- real multi-organizer verification exposed a `drive.file` per-file
+  authorization gap: ordinary Google Editor sharing let the collaborator use
+  the recorded My Drive folder in Google Drive, but did not by itself authorize
+  that exact folder to the collaborator's Stripes Drive token;
+- strict recorded-folder resolution now reads only the authoritative saved
+  folder ID and accepts a non-owner only after Google returns the exact marked
+  My Drive folder with current add-child capability. Owner-only marked-folder
+  discovery and creation remain unchanged;
+- an unavailable recorded My Drive Cabinet now offers an explicit bounded
+  Picker authorization action. Cancellation or selection of any other folder
+  leaves the saved Cabinet relationship untouched and fails closed;
+- OAuth remains exactly `drive.file`; no organizer-to-Google identity mapping,
+  automatic sharing, copied ACL, token persistence, metadata replacement or
+  Google file mutation was added;
+- focused Cabinet, Drive connection and Shared Drive regression tests pass.
+  The original two-organizer scenario and remaining G2 closure matrix still
+  require live verification; this checkpoint does not close G2.
+
 #### Permanent G2 security regression requirements
 
 - Firebase Google login contains no Drive scopes;

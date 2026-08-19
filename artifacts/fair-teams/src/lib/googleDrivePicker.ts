@@ -157,6 +157,27 @@ function createSharedDriveCabinetFolderView() {
   return view;
 }
 
+function createRecordedMyDriveCabinetFolderViews() {
+  const picker = getPicker();
+  if (!picker) throw new Error("Google Picker is not ready.");
+
+  const makeFolderView = (ownedByMe: boolean) => {
+    const view = new picker.DocsView(picker.ViewId.DOCS);
+    if (typeof view.setEnableDrives === "function") view.setEnableDrives(false);
+    view.setIncludeFolders(true);
+    view.setSelectFolderEnabled(true);
+    view.setMimeTypes(GOOGLE_DRIVE_FOLDER_MIME_TYPE);
+    if (typeof view.setOwnedByMe === "function") view.setOwnedByMe(ownedByMe);
+    if (picker.DocsViewMode?.LIST) view.setMode(picker.DocsViewMode.LIST);
+    return view;
+  };
+
+  // The first view exposes folders shared directly with this Google account;
+  // the second preserves recovery for the original My Drive owner. The caller
+  // still validates the selected ID against the saved Cabinet relationship.
+  return [makeFolderView(false), makeFolderView(true)];
+}
+
 export async function warmUpGoogleDrivePicker() {
   try {
     await ensurePickerApi();
@@ -335,6 +356,88 @@ export async function pickGoogleSheetRosterFile(accessToken: string): Promise<Go
     } catch (error) {
       activePickerInstance = null;
       fail(error instanceof Error ? error : new Error("Could not open Google Drive picker."));
+    }
+  });
+}
+
+export async function pickGoogleMyDriveCabinetFolder(
+  accessToken: string,
+): Promise<GoogleDrivePickedFile | null> {
+  const config = getGoogleDriveConfig();
+  if (!config.isConfigured) {
+    throw new Error("Google Drive keys are missing. Check VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_API_KEY in .env.local.");
+  }
+
+  await ensurePickerApi();
+  const picker = getPicker();
+  if (!picker) throw new Error("Google Picker is not ready.");
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const settle = (folder: GoogleDrivePickedFile | null) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeoutId);
+      try {
+        activePickerInstance?.setVisible?.(false);
+      } catch {
+        // Picker cleanup must not change the authorization result.
+      }
+      activePickerInstance = null;
+      resolve(folder);
+    };
+    const fail = (error: Error) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeoutId);
+      try {
+        activePickerInstance?.setVisible?.(false);
+      } catch {
+        // Picker cleanup must not change the authorization result.
+      }
+      activePickerInstance = null;
+      reject(error);
+    };
+    const timeoutId = window.setTimeout(() => {
+      fail(new Error("Google Picker did not respond. Try again and make sure pop-ups are allowed for Stripes."));
+    }, 25000);
+
+    try {
+      const builder = new picker.PickerBuilder();
+      createRecordedMyDriveCabinetFolderViews().forEach((view) => builder.addView(view));
+      builder.setDeveloperKey(config.apiKey);
+      applyPickerAppId(builder, config.appId);
+      builder.setOAuthToken(accessToken);
+      builder.setTitle("Authorize the saved File Cabinet folder");
+      builder.setOrigin(window.location.origin);
+      if (typeof builder.setSelectableMimeTypes === "function") {
+        builder.setSelectableMimeTypes(GOOGLE_DRIVE_FOLDER_MIME_TYPE);
+      }
+      if (typeof builder.setMaxItems === "function") builder.setMaxItems(1);
+      if (typeof builder.setSize === "function") builder.setSize(1051, 650);
+      builder.setCallback((response: PickerResponse) => {
+        if (response.action === picker.Action.CANCEL) {
+          settle(null);
+          return;
+        }
+        if (response.action !== picker.Action.PICKED) return;
+
+        const picked = response.docs?.[0];
+        if (!picked?.id) {
+          fail(new Error("Google Picker did not return a folder."));
+          return;
+        }
+        settle({
+          id: picked.id,
+          name: picked.name || "File Cabinet folder",
+          mimeType: picked.mimeType || "",
+        });
+      });
+      activePickerInstance = builder.build();
+      activePickerInstance.setVisible(true);
+    } catch (error) {
+      activePickerInstance = null;
+      fail(error instanceof Error ? error : new Error("Could not open Google Picker."));
     }
   });
 }

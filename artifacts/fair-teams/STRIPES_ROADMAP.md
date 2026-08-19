@@ -3407,8 +3407,18 @@ Bounded G2 closure repair checkpoint — 2026-08-19:
 
 #### Current next implementation target
 
-**Current gate: bounded G2 closure verification. Do not begin G3 until every
-mandatory item below is recorded as passed.**
+**G2 core closure: ACCEPTED — 2026-08-19.**
+
+The mandatory production linkage audit, real two-organizer My Drive/Cabinet
+flows, permission revocation/recovery, preferred-ID continuity, equal-organizer
+configuration boundaries, Firebase/Drive identity separation and production
+Google configuration evidence are accepted.
+
+Shared Drive remains implemented but its remaining real Workspace
+collaborator/reconnect/unavailable matrix is a **feature-specific conditional
+release gate**, not a blocker for the rest of G2/G3. Stripes must not claim
+Shared Drive is fully release-verified until that matrix passes with an eligible
+Google Workspace account.
 
 Scope:
 
@@ -3465,12 +3475,15 @@ Live verification evidence - 2026-08-19:
   authority;
 - Shared Drive collaborator, reconnect and unavailable-state verification
   remains blocked until an eligible Google Workspace account with Shared Drive
-  access is available;
-- remaining live configuration/identity evidence must still be reviewed.
-  This checkpoint does not close G2.
+  access is available. This blocks claiming Shared Drive fully release-verified,
+  but no longer blocks G2 core closure or G3;
+- the remaining required G2 core live configuration/identity evidence has been
+  accepted. Shared Drive's conditional release gate remains explicitly open.
 
-G2 is complete only when that matrix and the linkage audit have evidence. If
-verification finds a code or rules defect, stop and open one atomic repair that
+G2 core closure is accepted from the recorded matrix and linkage-audit evidence.
+The remaining Shared Drive Workspace matrix is tracked as a feature-specific
+release condition. If future verification finds a code or rules defect, stop
+and open one atomic repair that
 must pass feature tests, `npm run test:core-regression`, adversarial audit and
 the manual release gate. A read-only pass with no code change does not require
 manufacturing another implementation commit.
@@ -3500,10 +3513,10 @@ preserve current product behavior unless an explicit task says otherwise.
 `docs/architecture/SYSTEM_INVARIANTS.md` is the durable invariant reference.
 `AGENTS.md` tells Codex when it must read and preserve those constraints.
 
-If the only remaining G2 blocker is access to an external eligible Shared Drive
-test account, H1 may proceed while that verification remains blocked. This does
-**not** close G2 and does **not** authorize G3. G3 remains gated by the required
-G2 closure decision plus H1 completion.
+G2 core closure was accepted on 2026-08-19. The remaining Shared Drive
+Workspace verification is a feature-specific conditional release gate and does
+not block H1/H2/G3 work. Shared Drive must remain truthfully marked as not fully
+release-verified until that real-account matrix passes.
 
 #### H1 — Core preventive engineering rails
 
@@ -3601,10 +3614,10 @@ Manual follow-ups remain: provision a genuinely isolated staging stack;
 approve/configure backup retention, PITR and Storage protection; and complete a
 synthetic cloud restore rehearsal.
 
-H1 completion does **not** close G2. Eligible Shared Drive collaborator,
-reconnect and unavailable-state verification remains blocked pending an
-eligible Google Workspace account. G3 remains blocked until the roadmap's G2
-closure decision is accepted in addition to this H1 gate.
+H1 is complete and the G2 core closure decision is accepted. Eligible Shared
+Drive collaborator, reconnect and unavailable-state verification remains
+pending as a feature-specific release gate. H2/G3 may now proceed without
+claiming that Shared Drive verification has passed.
 
 #### H2 — Data and architecture safety
 
@@ -3777,25 +3790,25 @@ These are completed implementation checkpoints, not work to repeat.
 
 Proceed in this order:
 
-1. **Close G2 through bounded verification only.**
-   - run the mandatory read-only production linkage-consistency audit;
-   - complete the real multi-organizer, My Drive, Shared Drive and permission
-     matrix in the Current next implementation target;
-   - repair only a defect actually exposed by that verification, as a separate
-     atomic task;
-   - do not begin G3 until the evidence is accepted;
-   - if eligible Shared Drive verification is the only remaining external
-     blocker, H1 may proceed while that blocker remains documented, but G3
-     remains blocked.
+1. **G2 core closure — COMPLETE.**
+   - the mandatory production linkage-consistency audit passed;
+   - the required real multi-organizer My Drive/Cabinet and permission evidence
+     is recorded;
+   - Firebase/Drive identity separation and production configuration boundaries
+     passed;
+   - the remaining eligible-Workspace Shared Drive matrix is a conditional
+     Shared Drive release gate, not a blocker for G3;
+   - any later defect exposed by that verification must still be repaired as a
+     separate atomic task before Shared Drive is considered fully verified.
 
-**Mandatory preventive gate before step 2 — complete H1.**
+**Mandatory preventive gate before step 2 — H1 COMPLETE.**
 
-- establish CI, invariant integration, the truthful live-source type gate,
-  minimal browser smoke coverage and the staging/backup baseline;
-- keep H1 bounded to preventive rails rather than feature/refactor work;
-- H1 completion does not itself close G2;
-- do not begin G3 until both the required G2 closure decision and H1 gate are
-  satisfied.
+- CI, invariant integration, the truthful live-source type gate, minimal browser
+  smoke coverage and the staging/backup baseline are established;
+- the first hosted GitHub preventive-gates run passed;
+- H1 remains preventive infrastructure rather than feature/refactor permission;
+- G2 core closure plus H1 now authorize proceeding to H2/G3, while Shared Drive
+  retains its separate conditional release gate.
 
 2. **Implement the minimal G3 provider-neutral File Cabinet resource/index
    foundation.**

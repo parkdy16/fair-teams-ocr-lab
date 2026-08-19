@@ -159,6 +159,35 @@ test("normal local edit advances scheduled -> saving -> confirmed synced", async
   }), true);
 });
 
+test("representative shared player skill mutation changes material sync identity", () => {
+  const player = {
+    id: "player-a",
+    roomId: 1,
+    name: "Regression Player",
+    gender: "other" as const,
+    skill: 6,
+    attack: 6,
+    defense: 6,
+    speed: 6,
+    passing: 6,
+    stamina: 6,
+    physical: 6,
+    teamPlay: 2,
+    todayStatus: "here" as const,
+    attending: true,
+    createdAt: FIRST_SYNC,
+  };
+  const before = roster({ players: [player] });
+  const after = roster({
+    players: [{ ...player, skill: 7, attack: 7 }],
+    updatedAt: FIRST_EDIT,
+  });
+  assert.notEqual(
+    firebaseSharedRosterMaterialRevisionKey(before),
+    firebaseSharedRosterMaterialRevisionKey(after),
+  );
+});
+
 test("legacy timestamp equality cannot certify material without a matching server snapshot", () => {
   const { controller, applied } = harness(async () => summary(2));
   const clean = roster();

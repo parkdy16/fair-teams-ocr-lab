@@ -111,6 +111,29 @@ test("authoritative viewer overrides a cached organizer", () => {
   assert.equal(result.capabilities.canUseFileCabinet, false);
 });
 
+test("linked ordinary member receives only current member capabilities", () => {
+  const result = resolveActiveSharedWorkspaceAuthority(
+    reference(),
+    userA,
+    { userUid: userA.uid, rosters: [roster("member")], groups: [group("member")] },
+  );
+  assert.equal(result.status, "authorized");
+  assert.equal(result.capabilities.canReadSharedRoster, true);
+  assert.equal(result.capabilities.canReadEquipment, true);
+  assert.equal(result.capabilities.canReadAttendance, true);
+  assert.equal(result.capabilities.canReadClubRatings, true);
+  assert.equal(result.capabilities.canRatePlayer, true);
+  assert.equal(result.capabilities.canReadActionBoard, true);
+  assert.equal(result.capabilities.canUseClubNotes, true);
+  assert.equal(result.capabilities.canEditSharedRoster, false);
+  assert.equal(result.capabilities.canManageOrganizers, false);
+  assert.equal(result.capabilities.canEditEquipment, false);
+  assert.equal(result.capabilities.canEditAttendance, false);
+  assert.equal(result.capabilities.canEditActionBoard, false);
+  assert.equal(result.capabilities.canVoteActionBoard, false);
+  assert.equal(result.capabilities.canUseFileCabinet, false);
+});
+
 test("authority loading fails closed despite cached organizer metadata", () => {
   const result = unresolvedActiveSharedWorkspaceAuthority(reference(), true, userA);
   assert.equal(result.status, "loading");

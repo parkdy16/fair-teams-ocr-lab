@@ -1,5 +1,5 @@
-import { FunBadge, Gender, PairingRule, PairingRuleKind, TodayStatus } from "@/lib/types";
-import { getSpecialSkillStatBoosts } from "@/lib/playerAbilityEffects";
+import type { FunBadge, Gender, PairingRule, PairingRuleKind, TodayStatus } from "./types.ts";
+import { getSpecialSkillStatBoosts } from "./playerAbilityEffects.ts";
 
 export interface RoomPlayer {
   id: string;

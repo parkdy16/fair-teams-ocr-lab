@@ -218,6 +218,17 @@ for (const branch of ["open", "failed", "membership-changed", "passed"]) {
   });
 }
 
+test("the protected-removal target cannot cast a ballot", async () => {
+  const scenario = createScenario("open");
+  scenario.actorUid = TARGET_UID;
+  await assert.rejects(executeScenario(scenario), (error) => {
+    assert.equal(error.code, "permission-denied");
+    assert.match(error.message, /not eligible to vote/i);
+    return true;
+  });
+  assert.deepEqual(mutations(scenario.events), []);
+});
+
 test("open ballot branch mutates only after complete valid linkage preflight", async () => {
   const scenario = createScenario("open");
   const result = await executeScenario(scenario);

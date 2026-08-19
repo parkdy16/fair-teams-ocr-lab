@@ -1,5 +1,5 @@
-import { getSpecialSkillStatBoosts } from "./playerAbilityEffects";
-import { FieldSize, PairingRule, Player, Team, TeamColor } from "./types";
+import { getSpecialSkillStatBoosts } from "./playerAbilityEffects.ts";
+import type { FieldSize, PairingRule, Player, Team, TeamColor } from "./types.ts";
 
 const DEFAULT_COLORS: TeamColor[] = ["red", "blue", "lime", "yellow", "orange", "black"];
 

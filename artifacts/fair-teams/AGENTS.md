@@ -96,6 +96,26 @@ first:
 
 Never perform broad speculative cleanup while implementing a bounded task.
 
+## Core regression gate
+
+Before implementing a cross-cutting change, record its blast radius across
+authentication, authority, data models, persistence, navigation and mature Club
+features. Feature-specific tests alone are not sufficient for such changes.
+
+Run `npm run test:core-regression` before a cross-cutting patch is approved. The
+gate protects mature Stripes invariants independently of the feature currently
+being developed.
+
+If the gate fails, stop and determine whether the cause is a product regression,
+a test defect or an explicitly intended product change. Never casually change
+an expectation merely to make the gate green. Include production-like legacy or
+long-lived data shapes when they are relevant.
+
+After security, data-model or authentication changes, perform an adversarial
+read-only audit in addition to the gate. Codex implementation, testing and audit
+remain separate from release approval: selective staging, commit, push and
+deployment require explicit authorization.
+
 ---
 
 ## Scope discipline
@@ -449,7 +469,10 @@ If a visual change appears to require persistence/backend changes, stop and expl
 
 ## Verification
 
-The repository currently has build and typecheck commands but no automated lint or test suite.
+The permanent automated core gate is `npm run test:core-regression`. The full
+project TypeScript check remains informational until the existing live and stale
+tree baseline is repaired in a separate phase; do not hide or count-match its
+diagnostics to manufacture a green type gate.
 
 For relevant changes, use the existing commands discovered from the repository.
 
@@ -457,14 +480,15 @@ On the current Windows/PowerShell environment, prefer `pnpm.cmd` where PowerShel
 
 After implementation:
 
-1. run TypeScript verification
-2. run production build
-3. run `git diff --check`
-4. inspect `git status --short`
-5. inspect the complete git diff
-6. report every changed file and why
-7. report uncertainty explicitly
-8. do not claim visual correctness unless it was actually verified
+1. run the core regression gate for cross-cutting changes
+2. run TypeScript verification as an explicit informational check while its baseline is nonzero
+3. run production build if the gate was not applicable
+4. run `git diff --check`
+5. inspect `git status --short`
+6. inspect the complete git diff
+7. report every changed file and why
+8. report uncertainty explicitly
+9. do not claim visual correctness unless it was actually verified
 
 P5 is the ongoing regression gate.
 

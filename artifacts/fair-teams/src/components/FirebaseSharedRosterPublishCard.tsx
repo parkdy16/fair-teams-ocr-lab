@@ -11,23 +11,24 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { SharedRosterAutosyncStatus } from "@/components/SharedRosterAutosyncStatus";
 import { StripesConfirmContent } from "@/components/ui/stripes-modal";
 import type { RoomRoster } from "@/lib/localRoster";
 import {
   adoptFirebaseSharedRosterCreation,
   createFirebaseSharedRoster,
-  listenToFirebaseSharedRoster,
   listFirebaseSharedGroups,
   listFirebaseSharedRosters,
   listFirebaseSharedRosterBackups,
   readFirebaseSharedRoster,
   restoreFirebaseSharedRosterBackup,
-  saveFirebaseSharedRoster,
   type FirebaseSharedRosterBackup,
   type FirebaseSharedGroupSummary,
   type FirebaseSharedRosterSummary,
   type SharedRosterUser,
 } from "@/lib/sharedRosterService";
+import type { ActiveSharedRosterAutosync } from "@/lib/sharedRosterAutosync";
+import { LOCAL_ONLY_SHARED_ROSTER_AUTOSYNC_SNAPSHOT } from "@/lib/sharedRosterAutosyncController";
 import {
   activeSharedWorkspaceAuthorityMessage,
   unresolvedActiveSharedWorkspaceAuthority,
@@ -77,11 +78,14 @@ type Props = {
   variant?: "full" | "compact";
   activeRoster: RoomRoster | undefined;
   activeAuthority?: ActiveSharedWorkspaceAuthority;
+  autosync?: ActiveSharedRosterAutosync;
   rosters?: RoomRoster[];
   isEmptyRoster: boolean;
   onOpenRoster?: (roster: RoomRoster, sourceName: string, summary: FirebaseSharedRosterSummary) => void;
+  // Kept as type-only compatibility for the tracked stale src/src callers.
   onRosterSaved?: (summary: FirebaseSharedRosterSummary, localRosterId?: string) => void;
   onRefreshActiveRoster?: (roster: RoomRoster, sourceName: string, summary: FirebaseSharedRosterSummary, localRosterId?: string) => void;
+  // Kept as type-only compatibility for the tracked stale src/src callers.
   onRefreshRosterIdentity?: (roster: RoomRoster, sourceName: string, summary: FirebaseSharedRosterSummary, localRosterId?: string) => void;
   onSharedRosterSummariesUpdated?: (summaries: FirebaseSharedRosterSummary[]) => void;
   onSharedInviteOpened?: (roster: RoomRoster) => void;
@@ -153,7 +157,7 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
   localRosterId: activeRoster?.id || "",
   firebaseRosterId: activeRoster?.cloudSource?.provider === "firebase" ? activeRoster.cloudSource.firebaseRosterId : undefined,
   cachedFirebaseGroupId: activeRoster?.cloudSource?.provider === "firebase" ? activeRoster.cloudSource.firebaseGroupId : undefined,
-}, false, null), rosters = [], isEmptyRoster, onOpenRoster, onRosterSaved, onRefreshActiveRoster, onRefreshRosterIdentity, onSharedRosterSummariesUpdated, onSharedInviteOpened, openLibraryToken = 0, onMakePrivateCopy, onHideOnDevice, onLeaveSharedRoster, onCloseSharedWorkspace, backgroundSync = true, headless = false }: Props) {
+}, false, null), autosync, rosters = [], isEmptyRoster, onOpenRoster, onRefreshActiveRoster, onSharedRosterSummariesUpdated, onSharedInviteOpened, openLibraryToken = 0, onMakePrivateCopy, onHideOnDevice, onLeaveSharedRoster, onCloseSharedWorkspace, backgroundSync = true, headless = false }: Props) {
   const user = activeAuthority.user;
   const [busy, setBusy] = useState<string>("");
   const [sharedGroups, setSharedGroups] = useState<FirebaseSharedGroupSummary[]>([]);
@@ -183,8 +187,10 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
     | null
   >(null);
   const [notice, setNotice] = useState<{ tone: "success" | "error" | "info"; text: string } | null>(null);
-  const [autoSyncStatus, setAutoSyncStatus] = useState<"idle" | "saving" | "saved" | "syncing" | "error">("idle");
-  const lastLiveRosterVersionRef = useRef(0);
+  const activeAutosync = autosync || {
+    ...LOCAL_ONLY_SHARED_ROSTER_AUTOSYNC_SNAPSHOT,
+    retry: async () => false,
+  };
   const sharedDataRequestRef = useRef(0);
   const currentUserUidRef = useRef(user?.uid || "");
   currentUserUidRef.current = user?.uid || "";
@@ -265,7 +271,6 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
     const localVersion = typeof source.firebaseVersion === "number" ? source.firebaseVersion : 0;
     return Boolean(remoteSummary && remoteSummary.version > localVersion);
   }), [linkedRosters, sharedRosterById]);
-  const activeCanSave = activeAuthority.capabilities.canEditSharedRoster;
   const canOpenRosterOrganizers = (
     roster: FirebaseSharedRosterSummary,
     group?: FirebaseSharedGroupSummary,
@@ -274,27 +279,6 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
     : roster.groupId
       ? Boolean(group && canRoleSave(group.currentUserRole))
       : canRoleSave(roster.currentUserRole);
-  const activeHasLocalChanges = (() => {
-    if (!activeRoster || !activeFirebaseSource) return false;
-    const localTime = Date.parse(activeRoster.updatedAt || activeRoster.createdAt || "");
-    const syncedTime = Date.parse(activeFirebaseSource.lastSyncedAt || "");
-    if (!Number.isFinite(localTime)) return false;
-    if (!Number.isFinite(syncedTime)) return true;
-    return localTime > syncedTime;
-  })();
-  const autoStatusText = activeSharedRoster
-    ? autoSyncStatus === "saving"
-      ? "Saving online…"
-      : autoSyncStatus === "syncing"
-        ? "Live update received…"
-        : autoSyncStatus === "error"
-          ? "Couldn’t update online."
-          : activeHasLocalChanges
-            ? "Saving online…"
-            : "Live · saved online"
-    : "";
-  const AutoStatusIcon = autoSyncStatus === "saving" || autoSyncStatus === "syncing" || activeHasLocalChanges ? Loader2 : CheckCircle2;
-
   const refreshSharedData = async () => {
     const expectedUserUid = user?.uid || "";
     if (!expectedUserUid) return;
@@ -469,13 +453,13 @@ Your local roster will stay local. Stripes will copy shared identity fields only
     if (!user || busy || !targets.length) return;
     const expectedUserUid = user.uid;
     setBusy("autosync");
-    setAutoSyncStatus("syncing");
     try {
       let refreshed = 0;
       for (const localRoster of targets) {
         const rosterId = localRoster.cloudSource?.provider === "firebase" ? localRoster.cloudSource.firebaseRosterId : undefined;
         if (!rosterId) continue;
-        if (localRoster.id === activeRoster?.id && activeHasLocalChanges) continue;
+        // Active-roster remote state is owned by the canonical autosync controller.
+        if (localRoster.id === activeRoster?.id) continue;
         const snapshot = await readFirebaseSharedRoster(rosterId);
         if (currentUserUidRef.current !== expectedUserUid) return;
         onRefreshActiveRoster?.(snapshot.roster, snapshot.name, snapshot, localRoster.id);
@@ -483,13 +467,9 @@ Your local roster will stay local. Stripes will copy shared identity fields only
       }
       await refreshSharedData();
       if (refreshed > 0) {
-        setAutoSyncStatus("saved");
         setNotice(null);
-      } else {
-        setAutoSyncStatus("idle");
       }
     } catch (error) {
-      setAutoSyncStatus("error");
       setNotice({ tone: "error", text: friendlyFirestoreError(error) });
     } finally {
       setBusy((current) => current === "autosync" ? "" : current);
@@ -497,73 +477,15 @@ Your local roster will stay local. Stripes will copy shared identity fields only
   };
 
   useEffect(() => {
-    if (!backgroundSync || !user || !activeRoster || !activeFirebaseSource || !activeSharedRosterId || !activeCanSave || !activeHasLocalChanges || busy) return;
-    let cancelled = false;
-    const timeout = window.setTimeout(() => {
-      setBusy("autosave");
-      setAutoSyncStatus("saving");
-      setNotice(null);
-      void saveFirebaseSharedRoster(activeRoster)
-        .then(async (saved) => {
-          if (cancelled) return;
-          onRosterSaved?.(saved, activeRoster.id);
-          await refreshSharedData();
-          if (cancelled) return;
-          setAutoSyncStatus("saved");
-          setNotice(null);
-        })
-        .catch((error) => {
-          if (cancelled) return;
-          setAutoSyncStatus("error");
-          setNotice({ tone: "error", text: friendlyFirestoreError(error) });
-        })
-        .finally(() => {
-          if (cancelled) return;
-          setBusy((current) => current === "autosave" ? "" : current);
-        });
-    }, 900);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timeout);
-      setBusy((current) => current === "autosave" ? "" : current);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [backgroundSync, user?.uid, activeRoster?.id, activeRoster?.updatedAt, activeFirebaseSource?.firebaseVersion, activeFirebaseSource?.lastSyncedAt, activeCanSave, activeHasLocalChanges, busy]);
-
-  useEffect(() => {
-    if (!backgroundSync || !user || !activeAuthority.capabilities.canReadSharedRoster || !activeSharedRosterId || !activeRoster || !activeFirebaseSource) return;
-    lastLiveRosterVersionRef.current = typeof activeFirebaseSource.firebaseVersion === "number" ? activeFirebaseSource.firebaseVersion : 0;
-    return listenToFirebaseSharedRoster(activeSharedRosterId, (snapshot) => {
-      const localVersion = lastLiveRosterVersionRef.current;
-      if (snapshot.version <= localVersion) return;
-      lastLiveRosterVersionRef.current = snapshot.version;
-      setAutoSyncStatus("syncing");
-
-      // Roster identity is safe to apply even when this device has unsaved
-      // player/rating edits. This keeps the main header name and theme color
-      // live without replacing local work in progress.
-      onRefreshRosterIdentity?.(snapshot.roster, snapshot.name, snapshot, activeRoster.id);
-      if (!activeHasLocalChanges) {
-        onRefreshActiveRoster?.(snapshot.roster, snapshot.name, snapshot, activeRoster.id);
-      }
-      setAutoSyncStatus("saved");
-    }, (error) => {
-      setAutoSyncStatus("error");
-      setNotice({ tone: "error", text: friendlyFirestoreError(error) });
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [backgroundSync, user?.uid, activeAuthority.capabilities.canReadSharedRoster, activeSharedRosterId, activeRoster?.id, activeFirebaseSource?.firebaseVersion, activeHasLocalChanges]);
-
-  useEffect(() => {
     if (!backgroundSync || !user || busy || remoteUpdatedLinkedRosters.length === 0) return;
-    const safeTargets = remoteUpdatedLinkedRosters.filter((roster) => !(roster.id === activeRoster?.id && activeHasLocalChanges));
+    const safeTargets = remoteUpdatedLinkedRosters.filter((roster) => roster.id !== activeRoster?.id);
     if (!safeTargets.length) return;
     const timeout = window.setTimeout(() => {
       void autoRefreshLinkedRosters(safeTargets);
     }, 1200);
     return () => window.clearTimeout(timeout);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [backgroundSync, user?.uid, busy, remoteUpdatedLinkedRosters.length, activeRoster?.id, activeHasLocalChanges]);
+  }, [backgroundSync, user?.uid, busy, remoteUpdatedLinkedRosters.length, activeRoster?.id]);
 
   const handleOpenRoster = async (rosterId: string) => {
     if (!user || busy) return;
@@ -1417,6 +1339,12 @@ No shared roster is open on this device. Choose one below to open it on this dev
       <div className="grid gap-2">
         {workspaceClosureRecoveryPanel}
         {activeAuthorityPanel}
+        {activeSharedRoster && (
+          <SharedRosterAutosyncStatus
+            snapshot={activeAutosync}
+            onRetry={() => void activeAutosync.retry()}
+          />
+        )}
         {incomingInvites.length > 0 && (
           <div className="grid gap-1.5">
             {incomingInvites.slice(0, 2).map((invite) => (
@@ -1502,10 +1430,10 @@ No shared roster is open on this device. Choose one below to open it on this dev
         </Button>
       ) : (
         <div className="grid gap-2">
-          <div className={`flex h-11 items-center justify-between rounded-2xl border px-3 text-xs font-black ${autoSyncStatus === "error" ? "border-rose-100 bg-rose-50 text-rose-700" : "border-violet-100 bg-violet-50 text-violet-700"}`}>
-            <span>{autoStatusText}</span>
-            <AutoStatusIcon className={`h-4 w-4 ${(autoSyncStatus === "saving" || autoSyncStatus === "syncing" || activeHasLocalChanges) ? "animate-spin" : ""}`} />
-          </div>
+          <SharedRosterAutosyncStatus
+            snapshot={activeAutosync}
+            onRetry={() => void activeAutosync.retry()}
+          />
           {activeAuthority.capabilities.canRestoreSharedRosterBackup && (
             <Button type="button" variant="outline" className="h-10 justify-start rounded-2xl border-violet-100 bg-white px-3 text-xs font-black text-violet-700" onClick={() => void openBackupHistory(activeSharedRosterId)} disabled={Boolean(busy)}>
               <History className="mr-1.5 h-4 w-4" />

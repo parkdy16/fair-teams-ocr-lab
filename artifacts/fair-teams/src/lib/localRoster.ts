@@ -256,6 +256,7 @@ export interface RosterCloudSource {
   firebaseRole?: "owner" | "editor" | "organizer" | "viewer" | "member";
   firebaseLastSavedByEmail?: string;
   firebaseMemberNamesByEmail?: Record<string, string>;
+  firebaseLastSyncedMaterialKey?: string;
 
   lastSyncedAt?: string;
   lastRemoteModifiedAt?: string;
@@ -435,6 +436,9 @@ function cleanRosterCloudSource(value: unknown): RosterCloudSource | undefined {
     }
     if (typeof record.firebaseLastSavedByEmail === "string" && record.firebaseLastSavedByEmail.trim()) {
       source.firebaseLastSavedByEmail = record.firebaseLastSavedByEmail.trim();
+    }
+    if (typeof record.firebaseLastSyncedMaterialKey === "string" && record.firebaseLastSyncedMaterialKey) {
+      source.firebaseLastSyncedMaterialKey = record.firebaseLastSyncedMaterialKey;
     }
     if (typeof record.lastSyncedAt === "string" && record.lastSyncedAt.trim()) {
       source.lastSyncedAt = record.lastSyncedAt.trim();

@@ -23,6 +23,10 @@ import {
   type Timestamp,
 } from "firebase/firestore";
 import { calculateOverall, normalizeRoster, type RoomPlayer, type RoomRoster } from "@/lib/localRoster";
+import {
+  clampFirebaseSharedRosterSkill,
+  makeFirebaseSharedRosterSavePayload,
+} from "@/lib/sharedRosterSyncPayload";
 import { inferPlayerStyleFromAttributes } from "@/lib/playerStyleProfile";
 import { getFirebaseProjectId, getFairTeamsAuth, getFairTeamsFirestore } from "@/lib/firebaseClient";
 import {
@@ -46,6 +50,19 @@ export type SharedRosterRole = "owner" | "editor" | "organizer" | "viewer" | "me
 export type FirebaseSharedRosterSnapshot = FirebaseSharedRosterSummary & {
   roster: RoomRoster;
 };
+
+export class FirebaseSharedRosterVersionConflictError extends Error {
+  readonly code = "shared-roster-version-conflict";
+  readonly remoteVersion: number;
+  readonly localVersion: number;
+
+  constructor(remoteVersion: number, localVersion: number) {
+    super(`This shared roster was already saved by someone else. Remote version is ${remoteVersion}, your local copy is ${localVersion}.`);
+    this.name = "FirebaseSharedRosterVersionConflictError";
+    this.remoteVersion = remoteVersion;
+    this.localVersion = localVersion;
+  }
+}
 
 export type FirebaseSharedRosterBackup = {
   id: string;
@@ -177,78 +194,35 @@ function getCurrentSharedRosterUser() {
   return user;
 }
 
-function clampSharedSkill(value: unknown) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return 5;
-  const rounded = Math.round(n * 2) / 2;
-  return Math.min(10, Math.max(1, Math.round(rounded * 10) / 10));
-}
-
-function makeSharedPlayerSnapshot(player: RoomPlayer): RoomPlayer {
-  const skill = clampSharedSkill(player.skill);
-  const now = new Date().toISOString();
-  return {
-    id: player.id,
-    roomId: 1,
-    name: player.name,
-    aka: player.aka,
-    gender: player.gender,
-    skill,
-    attack: skill,
-    defense: skill,
-    speed: skill,
-    passing: skill,
-    stamina: skill,
-    physical: skill,
-    teamPlay: 2,
-    profilePhoto: undefined,
-    isGoalkeeper: false,
-    isPlaymaker: false,
-    isFinisher: false,
-    isDribbler: false,
-    isSentinel: false,
-    isEngine: false,
-    isVersatile: false,
-    isSpaceFinder: false,
-    isLongPass: false,
-    isTikiTaka: false,
-    isCrossing: false,
-    isAerial: false,
-    isPowerShot: false,
-    isBulldog: false,
-    isOrganizer: false,
-    isNew: Boolean(player.isNew),
-    funBadge: player.funBadge,
-    todayStatus: "here",
-    attending: false,
-    createdAt: player.createdAt || now,
-    updatedAt: now,
-  };
-}
-
 function makeSharedRosterSnapshot(roster: RoomRoster) {
+  const savePayload = makeFirebaseSharedRosterSavePayload(roster);
   const snapshot: Partial<RoomRoster> = {
     ...roster,
-    players: roster.players.map(makeSharedPlayerSnapshot) as RoomPlayer[],
-    pairingRules: roster.pairingRules || [],
+    players: savePayload.players,
+    pairingRules: savePayload.pairingRules,
   };
   delete snapshot.logo;
   delete snapshot.cloudSource;
   return snapshot;
 }
 
-function makeSharedRosterUpdateSnapshot(existingRosterData: unknown, roster: RoomRoster) {
+function makeSharedRosterUpdateSnapshot(
+  existingRosterData: unknown,
+  roster: RoomRoster,
+  generatedAt: string,
+) {
   const existing = existingRosterData && typeof existingRosterData === "object"
     ? existingRosterData as Partial<RoomRoster>
     : {};
+  const savePayload = makeFirebaseSharedRosterSavePayload(roster, generatedAt);
   return cleanForFirestore({
     ...existing,
     // Shared roster identity changes must travel with the same live save as players.
     // Logos stay device-local because image data is intentionally excluded from Firestore.
-    name: roster.name || existing.name || "Shared roster",
-    themeColor: roster.themeColor || existing.themeColor,
-    players: roster.players.map(makeSharedPlayerSnapshot) as RoomPlayer[],
-    pairingRules: roster.pairingRules || [],
+    name: savePayload.name || existing.name || "Shared roster",
+    themeColor: savePayload.themeColor || existing.themeColor,
+    players: savePayload.players,
+    pairingRules: savePayload.pairingRules,
   });
 }
 
@@ -332,7 +306,7 @@ async function seedOwnerClubRatingsFromRoster(rosterId: string, players: RoomPla
 
   for (const player of players) {
     if (!player.id) continue;
-    const skill = clampSharedSkill(calculateOverall(player));
+    const skill = clampFirebaseSharedRosterSkill(calculateOverall(player));
     const playerStyle = inferPlayerStyleFromAttributes({ ...player, skill });
     const teamPlay = Math.min(3, Math.max(1, Math.round(Number(player.teamPlay) || 2)));
     const gkYesCount = player.isGoalkeeper ? 1 : 0;
@@ -994,10 +968,12 @@ export function listenToFirebaseSharedRoster(
   rosterId: string,
   callback: (snapshot: FirebaseSharedRosterSnapshot) => void,
   onError?: (error: unknown) => void,
+  options: { serverOnly?: boolean } = {},
 ): Unsubscribe {
   getCurrentSharedRosterUser();
   const docRef = doc(getFairTeamsFirestore(), "sharedRosters", rosterId);
-  return onSnapshot(docRef, (snapshot) => {
+  return onSnapshot(docRef, { includeMetadataChanges: true }, (snapshot) => {
+    if (options.serverOnly && snapshot.metadata.fromCache) return;
     if (!snapshot.exists()) {
       onError?.(new Error("Shared roster was not found."));
       return;
@@ -1051,7 +1027,7 @@ export async function saveFirebaseSharedRoster(roster: RoomRoster): Promise<Fire
 
     const remoteVersion = typeof data.version === "number" ? data.version : 1;
     if (remoteVersion !== expectedVersion) {
-      throw new Error(`This shared roster was already saved by someone else. Stripes needs the latest online version before saving again. Remote version is ${remoteVersion}, your local copy is ${expectedVersion}.`);
+      throw new FirebaseSharedRosterVersionConflictError(remoteVersion, expectedVersion);
     }
 
     const nextVersion = remoteVersion + 1;
@@ -1063,7 +1039,7 @@ export async function saveFirebaseSharedRoster(roster: RoomRoster): Promise<Fire
       throw new Error("This shared roster has an invalid workspace link and cannot be saved safely.");
     }
     const groupName = groupId && typeof data.groupName === "string" ? data.groupName : undefined;
-    const rosterData = makeSharedRosterUpdateSnapshot(data.rosterData, roster);
+    const rosterData = makeSharedRosterUpdateSnapshot(data.rosterData, roster, now);
     const playerCount = Array.isArray(rosterData.players) ? rosterData.players.length : 0;
     const remoteName = typeof data.name === "string" && data.name.trim() ? data.name.trim() : "";
     const localName = typeof roster.name === "string" && roster.name.trim() ? roster.name.trim() : "";

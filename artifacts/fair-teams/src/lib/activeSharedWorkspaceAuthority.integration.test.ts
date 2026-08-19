@@ -7,13 +7,14 @@ const source = (relativePath: string) => readFileSync(new URL(relativePath, impo
 test("live authority consumers use canonical capabilities instead of cached firebaseRole", () => {
   const app = source("../App.tsx");
   const publishCard = source("../components/FirebaseSharedRosterPublishCard.tsx");
+  const autosync = source("./sharedRosterAutosync.ts");
   const club = source("../components/ClubTab.tsx");
   const taskBoard = source("../components/TaskBoard.tsx");
 
   assert.match(app, /activeSharedCapabilities\.canUseFileCabinet/);
   assert.match(app, /activeSharedCapabilities\.canReadClubRatings/);
   assert.match(app, /activeSharedCapabilities\.canReadEquipment/);
-  assert.match(publishCard, /activeAuthority\.capabilities\.canEditSharedRoster/);
+  assert.match(autosync, /authority\.capabilities\.canEditSharedRoster/);
   assert.match(publishCard, /activeAuthority\.capabilities\.canUseClubAccess/);
   assert.match(club, /sharedCapabilities\.canReadAttendance/);
   assert.match(club, /sharedCapabilities\.canUseClubNotes/);

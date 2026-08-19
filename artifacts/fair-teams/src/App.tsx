@@ -34,6 +34,7 @@ import type { PairingRule } from "@/lib/types";
 import type { AiSmartCommandAction } from "@/lib/aiSmartCommandTypes";
 import { FirebaseSharedRosterAuthCard } from "@/components/FirebaseSharedRosterAuthCard";
 import { FirebaseSharedRosterPublishCard } from "@/components/FirebaseSharedRosterPublishCard";
+import { SharedRosterAutosyncStatus } from "@/components/SharedRosterAutosyncStatus";
 import { SharedWorkspaceCabinetCard } from "@/components/SharedWorkspaceCabinetCard";
 import { Button } from "@/components/ui/button";
 import stripesLogo from "@/assets/stripes-logo-mark.png";
@@ -89,11 +90,14 @@ import {
   type GoogleSheetRosterFile,
 } from "@/lib/googleSheetsFiles";
 import { pickGoogleSheetRosterFile, warmUpGoogleDrivePicker } from "@/lib/googleDrivePicker";
-import { leaveFirebaseSharedRosterAccess, readFirebaseSharedRoster, type FirebaseSharedRosterSummary } from "@/lib/sharedRosterService";
+import { leaveFirebaseSharedRosterAccess, readFirebaseSharedRoster, type FirebaseSharedRosterSnapshot, type FirebaseSharedRosterSummary } from "@/lib/sharedRosterService";
 import {
   activeSharedWorkspaceAuthorityMessage,
   useActiveSharedWorkspaceAuthority,
 } from "@/lib/activeSharedWorkspaceAuthority";
+import { useActiveSharedRosterAutosync } from "@/lib/sharedRosterAutosync";
+import { sharedRosterAutosyncPresentation } from "@/lib/sharedRosterAutosyncController";
+import { firebaseSharedRosterMaterialRevisionKey } from "@/lib/sharedRosterSyncPayload";
 import { fetchClubRatingSummaries, type ClubRatingSummary } from "@/lib/clubCollaborationService";
 import { profileFromAveragedAttributes } from "@/lib/playerStyleProfile";
 import {
@@ -841,8 +845,8 @@ function App() {
   const sharedRosterCountLabel = `${sharedGoogleSheetRosterCount} shared roster${sharedGoogleSheetRosterCount === 1 ? "" : "s"}`;
   const activeRosterUpdatedAt = new Date(activeRoster?.updatedAt || "").getTime();
   const activeRosterLastSyncedAt = new Date(activeGoogleSheetSource?.lastSyncedAt || "").getTime();
-  const activeSharedHasUnsavedChanges =
-    activeRosterIsShared &&
+  const activeGoogleSheetHasUnsavedChanges =
+    Boolean(activeGoogleSheetSource) &&
     !Number.isNaN(activeRosterUpdatedAt) &&
     !Number.isNaN(activeRosterLastSyncedAt) &&
     activeRosterUpdatedAt > activeRosterLastSyncedAt + 10000;
@@ -1038,7 +1042,7 @@ function App() {
 
   useEffect(() => {
     if (!rosterSharedToolsOpen || !googleDriveAccessToken || !activeGoogleSheetSource?.spreadsheetId) return;
-    if (!activeGoogleSheetSource.lastRemoteModifiedAt || activeSharedHasUnsavedChanges) return;
+    if (!activeGoogleSheetSource.lastRemoteModifiedAt || activeGoogleSheetHasUnsavedChanges) return;
 
     let cancelled = false;
     const spreadsheetId = activeGoogleSheetSource.spreadsheetId;
@@ -1070,7 +1074,7 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [rosterSharedToolsOpen, googleDriveAccessToken, activeGoogleSheetSource?.spreadsheetId, activeGoogleSheetSource?.lastRemoteModifiedAt, activeSharedHasUnsavedChanges, googleSheetUpdatePromptDismissedKey]);
+  }, [rosterSharedToolsOpen, googleDriveAccessToken, activeGoogleSheetSource?.spreadsheetId, activeGoogleSheetSource?.lastRemoteModifiedAt, activeGoogleSheetHasUnsavedChanges, googleSheetUpdatePromptDismissedKey]);
 
   const describeDriveFileSource = (file: GoogleDriveFileResult, tab: DriveBackupTab) => {
     if (tab === "shared") {
@@ -1692,6 +1696,10 @@ function App() {
             }
           : undefined,
       });
+      if (linkedRoster.cloudSource?.provider === "firebase") {
+        linkedRoster.cloudSource.firebaseLastSyncedMaterialKey =
+          firebaseSharedRosterMaterialRevisionKey(linkedRoster);
+      }
       return {
         rosters: [...current.rosters, linkedRoster],
         activeRosterId: linkedRoster.id,
@@ -1729,7 +1737,12 @@ function App() {
     });
   };
 
-  const markActiveFirebaseRosterSaved = (summary: FirebaseSharedRosterSummary, localRosterId?: string) => {
+  const markActiveFirebaseRosterSaved = (
+    summary: FirebaseSharedRosterSummary,
+    localRosterId: string,
+    _savedRevision?: number,
+    savedRevisionKey?: string,
+  ) => {
     setRosterState((current) => {
       const targetRosterId = localRosterId || current.activeRosterId;
       return {
@@ -1750,11 +1763,13 @@ function App() {
                   firebaseLastSavedByEmail: summary.lastSavedByEmail,
                   firebaseMemberNamesByEmail: firebaseMemberNamesFromSummary(summary),
                   accessLabels: firebaseAccessLabelsFromSummary(summary),
+                  // Keep display timing separate from exact material confirmation.
+                  // A newer local edit may already exist when this save completes.
+                  firebaseLastSyncedMaterialKey: savedRevisionKey,
                   lastSyncedAt: summary.updatedAt || new Date().toISOString(),
                   lastRemoteModifiedAt: summary.updatedAt,
                   syncMode: "manual",
                 },
-                updatedAt: summary.updatedAt || new Date().toISOString(),
               })
             : roster,
         ),
@@ -1763,39 +1778,6 @@ function App() {
   };
 
 
-
-  const refreshFirebaseRosterIdentityFromRemote = (remoteRoster: RoomRoster, sourceName: string, summary: FirebaseSharedRosterSummary, localRosterId?: string) => {
-    setRosterState((current) => {
-      const targetRosterId = localRosterId || current.activeRosterId;
-      return {
-        ...current,
-        rosters: current.rosters.map((roster) => {
-          if (roster.id !== targetRosterId) return roster;
-          return normalizeRoster({
-            ...roster,
-            name: sourceName || remoteRoster.name || roster.name,
-            themeColor: remoteRoster.themeColor || roster.themeColor,
-            cloudSource: {
-              provider: "firebase",
-              firebaseRosterId: summary.id,
-              firebaseGroupId: summary.groupId,
-              firebaseGroupName: summary.groupName,
-              firebaseVersion: summary.version,
-              firebaseOwnerUid: summary.ownerUid,
-              firebaseOwnerEmail: summary.ownerEmail,
-              firebaseRole: summary.currentUserRole,
-              firebaseLastSavedByEmail: summary.lastSavedByEmail,
-              firebaseMemberNamesByEmail: firebaseMemberNamesFromSummary(summary),
-              accessLabels: firebaseAccessLabelsFromSummary(summary),
-              lastSyncedAt: summary.updatedAt || new Date().toISOString(),
-              lastRemoteModifiedAt: summary.updatedAt,
-              syncMode: "manual",
-            },
-          });
-        }),
-      };
-    });
-  };
 
   const refreshActiveFirebaseRosterFromRemote = (remoteRoster: RoomRoster, sourceName: string, summary: FirebaseSharedRosterSummary, localRosterId?: string) => {
     setRosterState((current) => {
@@ -1819,7 +1801,7 @@ function App() {
             }, index),
           );
 
-          return normalizeRoster({
+          const refreshedRoster = normalizeRoster({
             ...roster,
             // Shared identity must refresh together with players so roster renames
             // and theme changes appear on every connected device.
@@ -1845,6 +1827,11 @@ function App() {
             },
             updatedAt: summary.updatedAt || new Date().toISOString(),
           });
+          if (refreshedRoster.cloudSource?.provider === "firebase") {
+            refreshedRoster.cloudSource.firebaseLastSyncedMaterialKey =
+              firebaseSharedRosterMaterialRevisionKey(refreshedRoster);
+          }
+          return refreshedRoster;
         }),
       };
     });
@@ -2008,6 +1995,23 @@ function App() {
       setLeaveSharedBusy(false);
     }
   };
+
+  const activeSharedRosterAutosync = useActiveSharedRosterAutosync({
+    roster: activeRoster,
+    authority: activeSharedWorkspaceAuthority,
+    onSaveConfirmed: markActiveFirebaseRosterSaved,
+    onRemoteApplied: (snapshot: FirebaseSharedRosterSnapshot, localRosterId: string) => {
+      refreshActiveFirebaseRosterFromRemote(
+        snapshot.roster,
+        snapshot.name,
+        snapshot,
+        localRosterId,
+      );
+    },
+  });
+  const activeSharedRosterAutosyncPresentation = sharedRosterAutosyncPresentation(
+    activeSharedRosterAutosync,
+  );
 
 
   const closeActiveSharedWorkspace = async () => {
@@ -3838,12 +3842,11 @@ They will no longer be able to open or edit this shared roster unless it is shar
           backgroundSync
           activeRoster={activeRoster}
           activeAuthority={activeSharedWorkspaceAuthority}
+          autosync={activeSharedRosterAutosync}
           rosters={rosters}
           isEmptyRoster={isEmptyStarterRoster}
           onOpenRoster={openFirebaseSharedRosterAsLocalCopy}
-          onRosterSaved={markActiveFirebaseRosterSaved}
           onRefreshActiveRoster={refreshActiveFirebaseRosterFromRemote}
-          onRefreshRosterIdentity={refreshFirebaseRosterIdentityFromRemote}
           onSharedRosterSummariesUpdated={syncFirebaseRosterBadgesFromSummaries}
           onSharedInviteOpened={finishSharedInviteOpen}
         />
@@ -4063,6 +4066,16 @@ They will no longer be able to open or edit this shared roster unless it is shar
           </div>
         </header>
 
+        {activeRosterIsFirebaseShared && activeSharedRosterAutosync.status !== "synced" && (
+          <div className="fixed inset-x-3 bottom-[calc(5.25rem+env(safe-area-inset-bottom))] z-[68] overflow-hidden rounded-2xl shadow-lg lg:bottom-4 lg:left-[220px] lg:right-4">
+            <SharedRosterAutosyncStatus
+              variant="inline"
+              snapshot={activeSharedRosterAutosync}
+              onRetry={() => void activeSharedRosterAutosync.retry()}
+            />
+          </div>
+        )}
+
         {headerSharedPeopleOpen && activeSharedCapabilities.canUseClubAccess && (
           <div className="fixed inset-0 z-[75] flex items-end justify-center bg-slate-950/20 p-3 sm:items-center" onClick={() => setHeaderSharedPeopleOpen(false)}>
             <div className="w-full max-w-xs rounded-3xl border border-slate-100 bg-white p-3 shadow-[0_14px_40px_rgba(15,23,42,0.16)]" onClick={(event) => event.stopPropagation()}>
@@ -4223,12 +4236,11 @@ They will no longer be able to open or edit this shared roster unless it is shar
                     backgroundSync={false}
                     activeRoster={activeRoster}
                     activeAuthority={activeSharedWorkspaceAuthority}
+                    autosync={activeSharedRosterAutosync}
                     rosters={rosters}
                     isEmptyRoster={isEmptyStarterRoster}
                     onOpenRoster={openFirebaseSharedRosterAsLocalCopy}
-                    onRosterSaved={markActiveFirebaseRosterSaved}
                     onRefreshActiveRoster={refreshActiveFirebaseRosterFromRemote}
-                    onRefreshRosterIdentity={refreshFirebaseRosterIdentityFromRemote}
                     onSharedRosterSummariesUpdated={syncFirebaseRosterBadgesFromSummaries}
                     onSharedInviteOpened={finishSharedInviteOpen}
                     openLibraryToken={sharedRosterLibraryOpenToken}
@@ -4722,8 +4734,10 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   <div className={`mt-0.5 block w-full text-left text-[11px] font-semibold leading-snug whitespace-normal min-[310px]:truncate ${!isEmptyStarterRoster && rosters.length > 1 ? "text-slate-500" : "text-slate-500"}`}>
                     {isEmptyStarterRoster
                       ? "Create one below or import a roster"
-                      : activeRosterIsShared
-                        ? `${players.length} player${players.length === 1 ? "" : "s"} Â· ${activeSharedHasUnsavedChanges ? "Shared changes not saved" : "Shared roster"}`
+                      : activeRosterIsFirebaseShared
+                        ? `${players.length} player${players.length === 1 ? "" : "s"} Â· ${activeSharedRosterAutosyncPresentation.label}`
+                        : activeRosterIsShared
+                          ? `${players.length} player${players.length === 1 ? "" : "s"} Â· ${activeGoogleSheetHasUnsavedChanges ? "Shared changes not saved" : "Shared roster"}`
                         : `${players.length} player${players.length === 1 ? "" : "s"}`}
                   </div>
                 </div>
@@ -5029,12 +5043,11 @@ This is a shared roster. Local Backup can only remove/disassociate this deviceâ€
                       backgroundSync={false}
                       activeRoster={activeRoster}
                       activeAuthority={activeSharedWorkspaceAuthority}
+                      autosync={activeSharedRosterAutosync}
                       rosters={rosters}
                       isEmptyRoster={isEmptyStarterRoster}
                       onOpenRoster={openFirebaseSharedRosterAsLocalCopy}
-                      onRosterSaved={markActiveFirebaseRosterSaved}
                       onRefreshActiveRoster={refreshActiveFirebaseRosterFromRemote}
-          onRefreshRosterIdentity={refreshFirebaseRosterIdentityFromRemote}
                       onSharedRosterSummariesUpdated={syncFirebaseRosterBadgesFromSummaries}
                       onSharedInviteOpened={finishSharedInviteOpen}
                       openLibraryToken={sharedRosterLibraryOpenToken}
@@ -5093,13 +5106,13 @@ This is a shared roster. Local Backup can only remove/disassociate this deviceâ€
                       className={`grid gap-3 transition ${!googleDriveConnected ? "pointer-events-none opacity-40 grayscale" : ""}`}
                       aria-disabled={!googleDriveConnected}
                     >
-                      <div className={`rounded-2xl border px-3 py-2 ${activeSharedHasUnsavedChanges ? "border-amber-100 bg-amber-50/80" : activeRosterIsShared ? "border-emerald-100 bg-emerald-50/70" : "border-slate-100 bg-white/85"}`}>
-                        <div className={`text-[10px] font-black uppercase tracking-wide ${activeSharedHasUnsavedChanges ? "text-amber-700" : activeRosterIsShared ? "text-emerald-700" : "text-slate-400"}`}>
-                          {activeRosterIsShared ? activeSharedHasUnsavedChanges ? "Unsaved changes" : "Shared" : "Not shared"}
+                      <div className={`rounded-2xl border px-3 py-2 ${activeGoogleSheetHasUnsavedChanges ? "border-amber-100 bg-amber-50/80" : activeRosterIsShared ? "border-emerald-100 bg-emerald-50/70" : "border-slate-100 bg-white/85"}`}>
+                        <div className={`text-[10px] font-black uppercase tracking-wide ${activeGoogleSheetHasUnsavedChanges ? "text-amber-700" : activeRosterIsShared ? "text-emerald-700" : "text-slate-400"}`}>
+                          {activeRosterIsShared ? activeGoogleSheetHasUnsavedChanges ? "Unsaved changes" : "Shared" : "Not shared"}
                         </div>
                         <div className="mt-1 text-[11px] font-semibold leading-snug text-slate-600">
                           {activeRosterIsShared
-                            ? activeSharedHasUnsavedChanges
+                            ? activeGoogleSheetHasUnsavedChanges
                               ? "Save shared when you finish editing."
                               : `Saved ${formatSheetSyncTime(activeGoogleSheetSource?.lastSyncedAt).replace("Synced ", "")}`
                             : "This roster is saved only on this device."}

@@ -1477,7 +1477,7 @@ obviously reasonable.**
 Status: APPROVED PRODUCT / ARCHITECTURE DIRECTION
 
 Recorded after the 2026-08-13 storage, Google Drive and shared-roster
-governance review, and updated after the 2026-08-15 G2 preflight.
+governance review, and updated through the 2026-08-19 stabilization closure.
 
 This section is the authoritative current direction where older roadmap
 storage/ownership wording conflicts with it.
@@ -1497,15 +1497,163 @@ storage/ownership wording conflicts with it.
 - G1.6 Workspace closure / last-organizer behavior is released on `main` as
   `61b3079` with its Firestore rules and callable Functions deployed.
 - G1 Shared Workspace Governance is complete and released.
-- Current major implementation phase: G2 Unified Google Connection.
+- Current major implementation phase: bounded G2 closure and verification.
 - G2.1a Drive connection-state/auth foundation is released as `023d15d` and
   has passed production real-account verification.
 - G2.2 Managed My Drive Cabinet location is released as `a861c56`, documented
   by `20f93dc` and has passed production real-account verification.
 - G2.3 Multi-organizer Google permission foundation is committed as `97d803a`,
-  documented by `f15d8de` and has passed implementation review.
-- G2.4 Optional Shared Drive capability is implemented locally and awaiting
-  real Workspace/Shared Drive verification before G2.5 begins.
+  documented by `f15d8de` and has passed implementation review. Its remaining
+  live multi-account permission cases belong to the common G2 closure matrix.
+- G2.4 Optional Shared Drive capability is released as `d5aa313`, documented
+  by `dd2f9c5` and accepted after review and real Workspace/Shared Drive
+  verification.
+- G2.5 persisted File Cabinet relationship metadata is committed as `e0c2f13`;
+  the simplified dedicated File Cabinet setup UX is committed as `c38ba83`.
+  The implementation is on `main`, but G2 is not closed until the bounded live
+  multi-organizer/Google verification and production linkage check below pass.
+- The user-facing product name is **File Cabinet**. Internal Cabinet schema,
+  service and roadmap terminology may remain where renaming would add migration
+  risk, but released UI should present File Cabinet as a dedicated Club
+  destination rather than part of Club Access.
+
+### Emergency/full-app P0 stabilization closure — 2026-08-19
+
+**Status: COMPLETE.** The stabilization detour is closed at `8d6a267`; HEAD
+and `origin/main` matched at that accepted checkpoint.
+
+- **P0-S1 — trusted roster/group linkage (`e4d90bd`):** affected trusted
+  Functions no longer accept group `rosterIds` alone as ownership proof. They
+  preflight referenced roster documents and require authoritative
+  `roster.groupId` agreement before trusted use or mutation.
+- **P0-S2 — atomic shared-roster creation (`f2a9c89`):** linked-roster creation
+  is one organizer-only trusted transaction; group `rosterIds` are
+  client-immutable, request-level idempotency is enforced and the flow is
+  Firestore-emulator verified.
+- **P0-A1 — authoritative workspace capability/session model (`ec52f93`):**
+  one active server-resolved model owns shared-workspace authority. Cached
+  `firebaseRole`, `firebaseGroupId` and `firebaseRosterId` values cannot grant
+  capabilities.
+- **P0-A2 — truthful and recoverable shared autosync (`9262b08`):** one
+  canonical controller owns save state, visible unsynced/failure/retry/conflict
+  status and material-payload revision identity. An older save, including the
+  confirmed same-millisecond race, cannot certify newer local content.
+- **P0-N1 — valid navigation handoffs (`d123f50`):** invitation continuation
+  enters the Teams/setup workflow and the obsolete shared-roster navigation
+  setter is removed.
+- **CRG-1 — permanent Core Regression Gate (`8d6a267`):**
+  `npm run test:core-regression` runs the representative Firestore regression
+  fixture plus mature Club, generator, governance and P0 coverage. The
+  checkpoint passed 351/351 automated tests; the short human smoke checklist
+  is in `docs/testing/CORE_REGRESSION_GATE.md`, and `AGENTS.md` owns the
+  permanent execution policy.
+
+The historical production-linkage question is not an open P0 repair or a
+condition for re-accepting these commits. It is a mandatory G2-closure/pre-G3
+check for legacy production documents because fail-closed code prevents unsafe
+use and new unsafe creation but does not rewrite old data.
+
+#### Permanent cross-cutting engineering gate
+
+Every future cross-cutting change requires, in order:
+
+1. blast-radius analysis before implementation;
+2. feature-specific tests for the intended change;
+3. a passing `npm run test:core-regression`;
+4. an adversarial read-only audit for security, authorization or data-model
+   work;
+5. a separate explicit manual release gate.
+
+The detailed command contents and smoke procedure live in
+`docs/testing/CORE_REGRESSION_GATE.md`; do not duplicate or weaken them in
+feature plans.
+
+#### Deferred non-P0 findings from the full-app audit
+
+No remaining item below is a currently confirmed launch-blocking P0 defect.
+Normal release approval still requires the Core Regression Gate and relevant
+manual smoke; any future evidence of authorization failure, data loss or
+cross-workspace exposure must be re-triaged rather than left at P1.
+
+**Mandatory architecture boundaries before G3 or T1:**
+
+- the bounded historical production linkage-consistency audit below is a
+  mandatory pre-G3 check;
+- legacy organizer-role predicate drift is a pre-G3 architecture constraint:
+  G3 must use the P0-A1 capability model, and any legacy predicate reached by
+  new G3 code must be retired or explicitly proven equivalent before release;
+- Firestore schema-hardening opportunities affecting shared-workspace
+  authority, Cabinet configuration or the new G3 resource/index documents must
+  be resolved as part of that schema design; unrelated hardening remains P1;
+- the current team-history store is still global/non-roster-scoped. T1 must
+  define roster/definition/session scoping before history can influence the
+  evaluator, generation or variation logic;
+- the stale `src/src` tree and noisy repository-wide TypeScript baseline remain
+  separate pre-T1 engineering debt. Establish a truthful live-source type gate
+  before T1.1 schema/type expansion rather than modifying the stale tree during
+  unrelated work.
+
+**Post-launch/P1 cleanup, not a blocker for bounded G2 closure:**
+
+- Action Board shared/local fallback risk;
+- ordinary Action Board anonymity/pseudonymity weakness (do not claim stronger
+  anonymity until the storage/security model supports it);
+- client-trusted Club rating aggregate;
+- incomplete Browser/PWA Back coverage;
+- hidden/discarded success-notice behavior;
+- the AI `late` status path, which still writes a value rejected by current
+  roster normalization;
+- no browser E2E/component-render harness; this remains a future CRG-2-style
+  coverage improvement, not part of the completed CRG-1 gate;
+- Firestore schema-hardening opportunities outside the G3 authority/resource
+  boundary.
+
+#### Mandatory pre-G3 production linkage-consistency audit
+
+**Decision: still required.** Current P0-S1/P0-S2 code fails closed and blocks
+new unsafe linkage, but no commit proves that every historical production
+`sharedGroups`/`sharedRosters` pair was already consistent. The repository has
+no existing bounded, authenticated, read-only production audit command; do not
+improvise credentials, create production writes or repurpose deployment code.
+
+The audit's mandatory read set is limited to document IDs plus `groupId`,
+`rosterIds`, `memberUids`, `roleByUid` and the legacy `ownerUid` compatibility
+field. It must enumerate both collections so reverse links are checked, while
+avoiding roster content, player data, emails, Cabinet contents and file data.
+
+For every group-linked roster, verify:
+
+1. `roster.groupId` is a valid existing group ID and equals the group being
+   checked;
+2. the raw group `rosterIds` array contains the roster ID exactly once, with no
+   malformed or duplicate entries;
+3. every group `rosterIds` entry resolves to an existing roster document;
+4. no entry resolves to a roster whose `groupId` names another group, and every
+   roster with a non-empty `groupId` has the corresponding reverse group link;
+5. each `memberUids` value is a unique non-empty UID, each `roleByUid` key is an
+   active member and each explicit role is a currently recognized
+   `owner`/`editor`/`organizer`/`viewer` value. For each linked pair, the group
+   and roster member sets must match and every UID must have the same
+   organizer-versus-non-organizer classification required by the P0-A1
+   dual-authority workflow. A legacy `ownerUid` fallback is valid only when that
+   UID is an active member with no conflicting explicit role.
+
+Smallest safe later procedure: use an already approved production Firebase
+operator session limited to Firestore read/list permissions, in the Firestore
+console, to exhaustively inspect those fields and record aggregate counts plus
+failing document IDs. The console may display whole documents; do not copy or
+export unrelated values. If no read-limited session exists, or the collection
+is too large for a reliable manual pass, stop and approve a separate audit-only
+diagnostic task; that diagnostic must expose no write/batch/transaction path,
+must be code-reviewed before receiving read-only credentials and must emit
+counts and document IDs only. Any mandatory invariant failure keeps G3 blocked
+and starts a separately approved backup/migration plan—never an inline repair.
+
+Optional historical cleanup includes display names, ordering, timestamps,
+legacy creator/email/name maps and stale non-authority presentation metadata
+once the mandatory invariants pass. Those fields must not be mixed into the
+pre-G3 pass/fail result unless current approved access or workflow behavior
+depends on them.
 
 ## Shared workspace governance
 
@@ -3009,14 +3157,16 @@ First atomic implementation slice:
 
 Implementation checkpoint — 2026-08-18:
 
-- implemented locally with a reusable memory-only Drive connection controller;
+- released as `023d15d` with a reusable memory-only Drive connection
+  controller;
 - records explicit Drive account, requested/granted scope, expiry, reconnect
   and error state without coupling Drive authorization to Firebase identity;
 - Disconnect discards live authorization and uses Google Identity Services
   revocation while preserving Cloud Backup references and Google/Stripes data;
 - focused automated tests and the production build pass;
-- real Google-account connection, expiry/reconnect and revocation behavior still
-  require manual verification before G2.2.
+- production real-account connection and base lifecycle verification passed.
+  The broader reconnect/account-separation cases remain part of the common G2
+  closure matrix rather than an unimplemented G2.1 foundation.
 
 #### G2.2 — Managed My Drive Cabinet location
 
@@ -3065,8 +3215,9 @@ creation, ownership/inheritance, permission revocation and organizer turnover.
 
 Implementation checkpoint — 2026-08-18:
 
-- implemented locally as a reusable Cabinet-root permission controller over
-  Google Drive's live permission list, with no Stripes ACL or identity mapping;
+- committed as `97d803a` with a reusable Cabinet-root permission controller
+  over Google Drive's live permission list, with no Stripes ACL or identity
+  mapping; the checkpoint is documented by `f15d8de`;
 - explicit Google-account email input grants My Drive `writer` access,
   reuses owner/writer access and upgrades an existing direct lower role;
 - permission inspection normalizes owner/editor/commenter/viewer plus direct,
@@ -3078,9 +3229,10 @@ Implementation checkpoint — 2026-08-18:
   inherited access may continue;
 - same-folder mutations are serialized in memory, and results explicitly state
   that child-file access may differ from Cabinet-root access;
-- focused tests and the production build pass; real multi-account sharing,
+- focused tests and the production build pass. Real multi-account sharing,
   inheritance, revocation and collaborator file-creation verification remains
-  required before G2.4.
+  required before G2 can close; it is not missing implementation work and no
+  longer blocks the already accepted G2.4 checkpoint.
 
 #### G2.4 — Optional Shared Drive capability
 
@@ -3104,8 +3256,9 @@ Implementation checkpoint — 2026-08-18:
 - cancelled, invalid/My Drive, insufficient-permission, reconnect and
   unavailable states are explicit; no membership or permission mutation is
   attempted;
-- focused tests and the production build pass; real Shared Drive Picker,
-  Workspace policy and collaborator content tests remain required;
+- focused tests and the production build pass; the Shared Drive Picker and
+  Workspace capability foundation passed real-account verification. Remaining
+  collaborator permission/content cases stay in the common G2 closure matrix;
 - production requires Shared Drive support enabled in the Google Drive API UI
   integration configuration in addition to the existing Picker/API setup.
 
@@ -3154,6 +3307,39 @@ equal-organizer governance, with explicit replacement confirmation. No new
 secret-ballot system is required for this change, and the previous Google
 folder/files must remain untouched.
 
+Implementation checkpoint — 2026-08-18:
+
+- committed as `e0c2f13` with strict provider-neutral metadata at
+  `sharedGroups/{groupId}/cabinet/config`, with a matching standalone-roster
+  compatibility path only when no group link exists; the simplified dedicated
+  File Cabinet setup flow is committed as `c38ba83`;
+- stores Google Drive backing plus stable folder/drive identity, presentation
+  name and Firebase organizer/timestamp attribution only—never OAuth tokens,
+  Google-account mappings, copied ACLs or file bytes;
+- active organizers may read/create/update/remove the relationship under the
+  existing equal-organizer semantics, while ordinary members and unrelated
+  users are denied and client writes are constrained to the exact schema;
+- recorded My Drive IDs resolve through the G2.2 preferred-folder seam in
+  strict mode and never silently switch/create when the authoritative folder
+  is unavailable;
+- recorded Shared Drive IDs are revalidated live against both folderId,
+  driveId and current capabilities without My Drive fallback;
+- File Cabinet is a dedicated Club destination with a simple first-use My
+  Drive or Shared Drive choice; Club Access remains limited to account,
+  organizer, invitation and governance controls;
+- selecting a File Cabinet action authorizes Drive only when needed and then
+  resumes that pending action automatically, while Drive connections created
+  elsewhere never create or configure a File Cabinet;
+- Google-authenticated Stripes users supply their existing Google email only
+  as the supported GIS `login_hint` for a new Drive authorization; Firebase
+  identity and Drive authorization remain technically separate, an existing
+  explicit Drive account is never replaced, and email/password users connect
+  Google only after requesting File Cabinet functionality;
+- explicit replacement/removal confirmation remains required; changing
+  metadata never deletes or mutates the old Google folder/files;
+- focused G2 and rule tests, production build and Firestore rules dry-run pass;
+  manual multi-organizer and real Google-account verification remains required.
+
 #### Permanent G2 security regression requirements
 
 - Firebase Google login contains no Drive scopes;
@@ -3192,29 +3378,41 @@ folder/files must remain untouched.
 
 #### Current next implementation target
 
-**Current gate: review and real Workspace/Shared Drive verification of the
-local G2.4 implementation. Do not begin G2.5 until that gate is approved.**
+**Current gate: bounded G2 closure verification. Do not begin G3 until every
+mandatory item below is recorded as passed.**
 
 Scope:
 
-- explicit Shared-Drive-only Picker folder selection;
-- selected-item metadata lookup by stable ID with `supportsAllDrives`;
-- actual `driveId`, folder MIME and live capability validation;
-- in-memory provider-neutral location result for the G2.5 seam;
-- explicit cancelled, invalid, insufficient, reconnect and unavailable states.
+- complete the mandatory read-only production roster/group linkage audit
+  defined in the stabilization closure checkpoint;
+- verify with at least two real organizers that Cabinet configuration can be
+  read, created, replaced and removed only with the approved organizer
+  authority and explicit confirmation boundaries;
+- verify the G2.3 live permission matrix: direct sharing, inherited/mixed
+  access, revocation, collaborator file creation and truthful residual access;
+- verify My Drive preferred-ID continuity and unavailable/missing/reconnect
+  behavior with a normal personal account;
+- verify Shared Drive folder/drive identity, current capabilities, collaborator
+  behavior and reconnect/unavailable states with an eligible Workspace account;
+- confirm Firebase identity remains separate from the displayed Drive account,
+  no scope broadened beyond the approved architecture, old Google files remain
+  untouched on replacement/removal and the production configuration checklist
+  is satisfied.
+
+G2 is complete only when that matrix and the linkage audit have evidence. If
+verification finds a code or rules defect, stop and open one atomic repair that
+must pass feature tests, `npm run test:core-regression`, adversarial audit and
+the manual release gate. A read-only pass with no code change does not require
+manufacturing another implementation commit.
 
 Explicitly excluded:
 
-- broader Drive scopes or automatic Shared Drive enumeration;
-- Shared Drive creation or membership/permission administration;
-- Cabinet Firestore metadata;
-- Cabinet UI;
+- broader Drive scopes, automatic Shared Drive enumeration or membership
+  administration;
+- full Cabinet browser/index, resource model or folder/category UX;
 - attachment migration;
 - automatic Firebase/organizer-to-Google identity mapping;
 - Cabinet file creation or child-file permission rewriting.
-
-The flexible club-role architecture is recorded, but its UI is not part of
-G2.4.
 
 ### G3 — Google Resource + Club Cabinet Foundation
 
@@ -3325,107 +3523,89 @@ value, including:
 Do not choose Spark merely because it is cheaper if a task has hidden
 architecture/security consequences.
 
-### Authoritative remaining implementation sequence
+### Authoritative next implementation sequence
 
-G2.1a and G2.2 are released and production-verified. G2.3 is committed and
-reviewed. G2.4 is implemented locally; the current gate is review and real
-Workspace/Shared Drive verification. G2.5 begins only after that gate is
-approved.
+The stabilization detour and CRG-1 are complete. G2.1a through G2.4 are
+accepted foundations, and both G2.5 implementation commits are on `main`.
+These are completed implementation checkpoints, not work to repeat.
 
-Complete the G-track in order before building the full Cabinet UI:
+Proceed in this order:
 
-1. **G2.1a — Drive connection-state/auth foundation** — Full Codex.
-   - reusable Drive connection lifecycle;
-   - explicit connected Google account;
-   - requested/granted scope state;
-   - expiry;
-   - reconnect;
-   - true disconnect/revoke semantics;
-   - memory-only Drive token;
-   - Firebase Google identity remains separate;
-   - preserve existing Cloud Backup;
-   - no Cabinet folder, Firestore Cabinet metadata or Shared Drive behavior.
+1. **Close G2 through bounded verification only.**
+   - run the mandatory read-only production linkage-consistency audit;
+   - complete the real multi-organizer, My Drive, Shared Drive and permission
+     matrix in the Current next implementation target;
+   - repair only a defect actually exposed by that verification, as a separate
+     atomic task;
+   - do not begin G3 until the evidence is accepted.
 
-2. **G2.2 — Managed My Drive Cabinet location** — Full Codex.
-   - idempotent create/find;
-   - stable marker/ID;
-   - renamed/moved/trashed/duplicate handling;
-   - compatible Drive API parameters for future Shared Drive work.
+2. **Implement the minimal G3 provider-neutral File Cabinet resource/index
+   foundation.**
+   - provider-neutral resource references and a minimal Cabinet root/index;
+   - truthful permission, unavailable and reconnect states;
+   - contextual Action Board/Equipment relationships only where required by
+     the foundation;
+   - removing a Stripes relationship must not delete the Google file;
+   - do not recreate Firebase general document hosting or expand into broad
+     Cabinet polish/folder UX.
 
-3. **G2.3 — Multi-organizer Google permission foundation** — Full Codex.
-   - Google permissions remain authoritative;
-   - do not duplicate Google ACLs in Stripes;
-   - real multi-account testing required.
+3. **Pass the pre-T1 architecture boundary.**
+   - keep global team history out of evaluator/generation inputs until it has
+     explicit roster/definition/session scope;
+   - establish a truthful live-source TypeScript gate before T1.1 rather than
+     changing the stale `src/src` tree inside T1;
+   - complete T1.0 scenario coverage. CRG-1 now supplies a permanent generator
+     smoke baseline, but it does not replace the richer comparison scenarios
+     needed before Generate v2.
 
-4. **G2.4 — Optional Shared Drive capability** — Full Codex.
-   - remain within approved narrow scope/Picker architecture;
-   - if `drive.file` cannot truthfully support the promised behavior, STOP for
-     architecture review;
-   - never silently broaden OAuth scope.
+4. **Execute T1 in the approved internal order below.**
 
-5. **G2.5 — Provider-neutral Cabinet-location metadata** — Full Codex.
-   - Firestore records Stripes location/context metadata only;
-   - no credentials/tokens;
-   - Google remains authoritative for the actual file/folder.
+#### T1 internal order after G3 and the pre-T1 boundary
 
-Then complete a **minimal G3 Google Resource + Cabinet foundation** while the
-Google architecture is still loaded in engineering context:
-
-- provider-neutral resource references;
-- minimal Cabinet root/index;
-- contextual Action Board / Equipment resource relationships;
-- unavailable / permission / reconnect states;
-- removing a Stripes relationship must not silently delete the Google file;
-- do not recreate Firebase general document hosting;
-- stop before broad Cabinet polish/folder UX if it is not required by the
-  foundation.
-
-After the G-track foundation is stable, proceed through T1 in this order:
-
-6. **T1.0 — Current-generator regression/scenario foundation** — Spark is
+1. **T1.0 — Current-generator regression/scenario foundation** — Spark is
    preferred if the scope remains test-only and behavior is already specified.
 
-7. **T1.1 — Versioned SportDefinition + Basic/Detailed profile schema** — Full
+2. **T1.1 — Versioned SportDefinition + Basic/Detailed profile schema** — Full
    Codex.
    - backward compatible;
    - no silent legacy reinterpretation;
    - no generator replacement yet.
 
-8. **T1.2 — Detailed Profile persistence/compatibility** — Full Codex.
+3. **T1.2 — Detailed Profile persistence/compatibility** — Full Codex.
    - establish the data-truth model before visual UX;
    - preserve legacy roster behavior.
 
-9. **T1.3 — Detailed Profile six-row / one-swipe prototype** — Spark or direct
+4. **T1.3 — Detailed Profile six-row / one-swipe prototype** — Spark or direct
    patch.
    - optimize for rapid real-phone iteration;
    - validate gesture, snap behavior, scrolling and finger visibility before
      locking details.
 
-10. **T1.4 — Card/radar / Playing Profile integration** — Spark initially once
-    persistence is stable.
+5. **T1.4 — Card/radar / Playing Profile integration** — Spark initially once
+   persistence is stable.
 
-11. **T1.5 — Structured evaluator** — Full Codex.
-    - score arbitrary teams before replacing Generate;
-    - machine-readable Overall/composition/constraint metrics.
+6. **T1.5 — Structured evaluator** — Full Codex.
+   - score arbitrary teams before replacing Generate;
+   - machine-readable Overall/composition/constraint metrics.
 
-12. **T1.6 — Balance Priorities** — Full Codex for evaluator integration;
-    Spark/direct patch for simple UI follow-up.
-    - replaces future Field Size weighting semantics;
-    - Overall fairness remains the primary guardrail.
+7. **T1.6 — Balance Priorities** — Full Codex for evaluator integration;
+   Spark/direct patch for simple UI follow-up.
+   - replaces future Field Size weighting semantics;
+   - Overall fairness remains the primary guardrail.
 
-13. **T1.7 — Best Completion Engine / Generate v2** — Full Codex.
-    - compare against legacy generator using regression/scenario tests;
-    - do not replace production behavior until verified.
+8. **T1.7 — Best Completion Engine / Generate v2** — Full Codex.
+   - compare against legacy generator using regression/scenario tests;
+   - do not replace production behavior until verified.
 
-14. **T1.8 — Live Split** — Full Codex for engine integration; Spark/direct
-    patch for UI iteration.
-    - same Best Completion/evaluator foundation;
-    - manual assignments become locks;
-    - future-aware suggestions;
-    - Undo;
-    - late/no-show minimal correction.
+9. **T1.8 — Live Split** — Full Codex for engine integration; Spark/direct
+   patch for UI iteration.
+   - same Best Completion/evaluator foundation;
+   - manual assignments become locks;
+   - future-aware suggestions;
+   - Undo;
+   - late/no-show minimal correction.
 
-15. **T1.9 — AI team controls and explanations.**
+10. **T1.9 — AI team controls and explanations.**
     - only after the deterministic evaluator exists;
     - natural language → visible structured interpretation → deterministic
       action → grounded explanation;

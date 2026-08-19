@@ -1610,7 +1610,16 @@ cross-workspace exposure must be re-triaged rather than left at P1.
 
 #### Mandatory pre-G3 production linkage-consistency audit
 
-**Decision: still required.** Current P0-S1/P0-S2 code fails closed and blocks
+**Status: PASSED — 2026-08-19.** A keyless, read-only production audit was run
+against `fair-teams-dev` by impersonating the dedicated
+`stripes-linkage-audit@fair-teams-drive-499320.iam.gserviceaccount.com` service
+account with `roles/datastore.viewer`. The audit enumerated only the approved
+fields from `sharedGroups` and `sharedRosters`. Results: 8 shared groups,
+7 shared rosters, 7 linked rosters, 7 group-to-roster references, 0 failing
+categories and 0 failing references. No production writes were performed and
+the service account has no user-managed keys.
+
+Historical rationale retained below. Current P0-S1/P0-S2 code fails closed and blocks
 new unsafe linkage, but no commit proves that every historical production
 `sharedGroups`/`sharedRosters` pair was already consistent. The repository has
 no existing bounded, authenticated, read-only production audit command; do not

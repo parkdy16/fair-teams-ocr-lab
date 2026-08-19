@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Building2, FolderOpen, HardDrive, Loader2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Building2, ExternalLink, FileText, FolderOpen, HardDrive, Link2, Loader2, Trash2 } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -16,7 +16,24 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { StripesConfirmContent, StripesWorkspaceContent } from "@/components/ui/stripes-modal";
+import {
+  checkFileCabinetResourceRemoval,
+  createExternalLinkFileCabinetResourceDraft,
+  createGoogleDriveFileCabinetResourceDraft,
+  type FileCabinetResource,
+} from "@/lib/fileCabinetResource";
+import {
+  resolveFileCabinetResourceProvider,
+  selectFileCabinetGoogleDriveResource,
+  type FileCabinetResourceProviderResolution,
+} from "@/lib/fileCabinetResourceProvider";
+import {
+  createFileCabinetResource,
+  listenToFileCabinetResources,
+  removeFileCabinetResource,
+} from "@/lib/fileCabinetResourceService";
 import { fileCabinetDriveAccessToken } from "@/lib/fileCabinetDriveAccess";
 import {
   authorizeRecordedMyDriveCabinetFolder,
@@ -59,6 +76,23 @@ function locationLabel(location: SharedWorkspaceCabinetLocation) {
   return location.displayName || (location.backing === "my_drive" ? "Stripes Cabinet" : "Shared Drive folder");
 }
 
+function externalLinkDefaultName(value: string) {
+  try {
+    return new URL(value.trim()).hostname.replace(/^www\./, "") || "Web link";
+  } catch {
+    return "Web link";
+  }
+}
+
+function resourceStateText(state?: FileCabinetResourceProviderResolution) {
+  if (!state) return "Checking…";
+  if (state.status === "ready") return "Ready to open";
+  if (state.status === "reconnect_required") return "Reconnect Drive";
+  if (state.status === "insufficient_permission") return "Insufficient Google access";
+  if (state.status === "unsupported") return "Unsupported metadata";
+  return "Unavailable";
+}
+
 export function SharedWorkspaceCabinetCard({
   scope,
   driveStatus,
@@ -77,6 +111,20 @@ export function SharedWorkspaceCabinetCard({
   const [busy, setBusy] = useState<"connect" | "authorize_my_drive" | "my_drive" | "shared_drive" | "save" | "remove" | "">("");
   const [pendingReplacement, setPendingReplacement] = useState<SharedWorkspaceCabinetLocationDraft | null>(null);
   const [removeConfirmOpen, setRemoveConfirmOpen] = useState(false);
+  const [resources, setResources] = useState<FileCabinetResource[]>([]);
+  const [loadingResources, setLoadingResources] = useState(true);
+  const [resourceStates, setResourceStates] = useState<Record<string, FileCabinetResourceProviderResolution>>({});
+  const [resourceNotice, setResourceNotice] = useState("");
+  const [resourceBusy, setResourceBusy] = useState("");
+  const [externalLinkEditorOpen, setExternalLinkEditorOpen] = useState(false);
+  const [externalLinkUrl, setExternalLinkUrl] = useState("");
+  const [externalLinkName, setExternalLinkName] = useState("");
+  const [pendingResourceRemoval, setPendingResourceRemoval] = useState<FileCabinetResource | null>(null);
+  const driveAuthorizationExpiredRef = useRef(onDriveAuthorizationExpired);
+
+  useEffect(() => {
+    driveAuthorizationExpiredRef.current = onDriveAuthorizationExpired;
+  }, [onDriveAuthorizationExpired]);
 
   useEffect(() => {
     setLoadingLocation(true);
@@ -93,6 +141,38 @@ export function SharedWorkspaceCabinetCard({
       },
     );
   }, [scope.kind, scope.id]);
+
+  useEffect(() => {
+    setLoadingResources(true);
+    setResourceNotice("");
+    setResources([]);
+    setResourceStates({});
+    setExternalLinkEditorOpen(false);
+    setExternalLinkUrl("");
+    setExternalLinkName("");
+    setPendingResourceRemoval(null);
+    try {
+      return listenToFileCabinetResources(
+        scope,
+        (next) => {
+          setResources(next);
+          setLoadingResources(false);
+        },
+        (error) => {
+          setResourceNotice(error.message || "Could not load File Cabinet items.");
+          setLoadingResources(false);
+        },
+      );
+    } catch (error) {
+      setResourceNotice(error instanceof Error ? error.message : "Could not load File Cabinet items.");
+      setLoadingResources(false);
+      return undefined;
+    }
+  }, [scope.kind, scope.id]);
+
+  useEffect(() => {
+    if (!location) setExternalLinkEditorOpen(false);
+  }, [location]);
 
   useEffect(() => {
     let active = true;
@@ -129,6 +209,26 @@ export function SharedWorkspaceCabinetCard({
     });
     return () => { active = false; };
   }, [accessToken, driveStatus, location, onDriveAuthorizationExpired]);
+
+  useEffect(() => {
+    let active = true;
+    setResourceStates({});
+    if (!open || !resources.length) return () => { active = false; };
+    const providerAccessToken = driveStatus === "connected" ? accessToken : "";
+
+    void Promise.all(resources.map(async (resource) => ({
+      resourceId: resource.resourceId,
+      state: await resolveFileCabinetResourceProvider(resource, providerAccessToken),
+    }))).then((resolved) => {
+      if (!active) return;
+      setResourceStates(Object.fromEntries(resolved.map(({ resourceId, state }) => [resourceId, state])));
+      if (providerAccessToken && resolved.some(({ state }) => state.status === "reconnect_required")) {
+        driveAuthorizationExpiredRef.current("Reconnect Google Drive to verify File Cabinet items.");
+      }
+    });
+
+    return () => { active = false; };
+  }, [accessToken, driveStatus, open, resources]);
 
   const saveLocation = async (next: SharedWorkspaceCabinetLocationDraft) => {
     setBusy("save");
@@ -271,6 +371,97 @@ export function SharedWorkspaceCabinetCard({
     }
   };
 
+  const addGoogleDriveResource = async () => {
+    if (!location || busy || resourceBusy || driveStatus === "connecting") return;
+    setResourceBusy("drive");
+    setResourceNotice("");
+    try {
+      const actionToken = await driveTokenForAction();
+      const result = await selectFileCabinetGoogleDriveResource(actionToken);
+      if (result.status === "selection_cancelled") return;
+      if (result.status !== "ready") {
+        if (result.status === "reconnect_required" && actionToken) {
+          onDriveAuthorizationExpired(result.message);
+        }
+        setResourceNotice(result.message);
+        return;
+      }
+      await createFileCabinetResource(scope, createGoogleDriveFileCabinetResourceDraft(
+        result.providerResourceId,
+        result.displayName,
+        result.resourceKind,
+        result.mimeType,
+      ));
+      setResourceNotice("Google Drive item added. Its file and Google permissions were not changed.");
+    } catch (error) {
+      setResourceNotice(error instanceof Error ? error.message : "Could not add the Google Drive item.");
+    } finally {
+      setResourceBusy("");
+    }
+  };
+
+  const addExternalLink = async () => {
+    if (!location || busy || resourceBusy) return;
+    setResourceBusy("link");
+    setResourceNotice("");
+    try {
+      const draft = createExternalLinkFileCabinetResourceDraft(
+        externalLinkUrl,
+        externalLinkName.trim() || externalLinkDefaultName(externalLinkUrl),
+      );
+      await createFileCabinetResource(scope, draft);
+      setExternalLinkUrl("");
+      setExternalLinkName("");
+      setExternalLinkEditorOpen(false);
+      setResourceNotice("Web link added to File Cabinet.");
+    } catch (error) {
+      setResourceNotice(error instanceof Error ? error.message : "Could not add the web link.");
+    } finally {
+      setResourceBusy("");
+    }
+  };
+
+  const openResource = (resource: FileCabinetResource) => {
+    const state = resourceStates[resource.resourceId];
+    if (state?.status !== "ready") return;
+    const opened = window.open(state.openUrl, "_blank", "noopener,noreferrer");
+    if (opened) opened.opener = null;
+  };
+
+  const requestResourceRemoval = (resource: FileCabinetResource) => {
+    const removal = checkFileCabinetResourceRemoval(resource);
+    if (removal.status === "blocked_by_relationships") {
+      setResourceNotice(removal.message);
+      return;
+    }
+    setResourceNotice("");
+    setPendingResourceRemoval(resource);
+  };
+
+  const removeResource = async () => {
+    if (!pendingResourceRemoval || resourceBusy) return;
+    setResourceBusy(`remove:${pendingResourceRemoval.resourceId}`);
+    setResourceNotice("");
+    try {
+      const result = await removeFileCabinetResource(
+        scope,
+        pendingResourceRemoval.resourceId,
+      );
+      if (result.status === "blocked_by_relationships") {
+        setResourceNotice(result.message);
+      } else if (result.status === "removed") {
+        setResourceNotice("File Cabinet entry removed. The external file or link target was not changed or deleted.");
+      } else {
+        setResourceNotice("The File Cabinet entry was already removed. No external file or link target was changed or deleted.");
+      }
+      setPendingResourceRemoval(null);
+    } catch (error) {
+      setResourceNotice(error instanceof Error ? error.message : "Could not remove the File Cabinet entry.");
+    } finally {
+      setResourceBusy("");
+    }
+  };
+
   const backingText = location?.backing === "shared_drive" ? "Shared Drive" : "My Drive";
   const availabilityText = liveState === "available"
     ? "Available"
@@ -409,6 +600,169 @@ export function SharedWorkspaceCabinetCard({
                   </button>
                 )}
                 {notice && <div className="mt-3 rounded-2xl bg-slate-50 px-3 py-2.5 text-xs font-bold leading-snug text-slate-700" role="status">{notice}</div>}
+
+                <section className="mt-5 border-t border-slate-100 pt-4" aria-label="File Cabinet items">
+                  <div className="flex min-w-0 items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-sm font-black text-[#102A43]">Cabinet items</div>
+                      <div className="text-[11px] font-semibold text-slate-500">
+                        Providers keep the originals. Stripes keeps this shared index.
+                      </div>
+                    </div>
+                    {!loadingResources && resources.length > 0 && (
+                      <span className="shrink-0 rounded-full bg-blue-50 px-2 py-1 text-[10px] font-black text-blue-700">
+                        {resources.length}
+                      </span>
+                    )}
+                  </div>
+
+                  {location && (
+                    <div className="mt-3 grid grid-cols-1 gap-2 min-[390px]:grid-cols-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-10 min-w-0 rounded-xl border-blue-100 bg-white px-3 text-xs font-black text-blue-800"
+                        onClick={() => void addGoogleDriveResource()}
+                        disabled={actionDisabled || Boolean(resourceBusy)}
+                      >
+                        {resourceBusy === "drive" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FolderOpen className="mr-2 h-4 w-4" />}
+                        {resourceBusy === "drive" ? "Adding…" : "Add from Drive"}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-10 min-w-0 rounded-xl border-blue-100 bg-white px-3 text-xs font-black text-blue-800"
+                        onClick={() => setExternalLinkEditorOpen((current) => !current)}
+                        disabled={Boolean(busy) || Boolean(resourceBusy)}
+                      >
+                        <Link2 className="mr-2 h-4 w-4" />
+                        Add web link
+                      </Button>
+                    </div>
+                  )}
+
+                  {location && externalLinkEditorOpen && (
+                    <div className="mt-3 rounded-2xl border border-blue-100 bg-blue-50/50 p-3">
+                      <label className="block text-[10px] font-black uppercase tracking-wide text-slate-500" htmlFor="file-cabinet-link-url">
+                        Web address
+                      </label>
+                      <Input
+                        id="file-cabinet-link-url"
+                        type="url"
+                        inputMode="url"
+                        value={externalLinkUrl}
+                        onChange={(event) => setExternalLinkUrl(event.target.value)}
+                        placeholder="https://…"
+                        className="mt-1 h-10 rounded-xl border-blue-100 bg-white text-sm"
+                      />
+                      <label className="mt-3 block text-[10px] font-black uppercase tracking-wide text-slate-500" htmlFor="file-cabinet-link-name">
+                        Name <span className="normal-case text-slate-400">optional</span>
+                      </label>
+                      <Input
+                        id="file-cabinet-link-name"
+                        value={externalLinkName}
+                        onChange={(event) => setExternalLinkName(event.target.value)}
+                        maxLength={200}
+                        placeholder="Club website"
+                        className="mt-1 h-10 rounded-xl border-blue-100 bg-white text-sm"
+                      />
+                      <div className="mt-3 flex flex-wrap justify-end gap-2">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          className="h-9 rounded-xl px-3 text-xs font-black text-slate-500"
+                          onClick={() => setExternalLinkEditorOpen(false)}
+                          disabled={Boolean(busy) || Boolean(resourceBusy)}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          type="button"
+                          className="h-9 rounded-xl bg-blue-700 px-3 text-xs font-black text-white hover:bg-blue-800"
+                          onClick={() => void addExternalLink()}
+                          disabled={!externalLinkUrl.trim() || Boolean(busy) || Boolean(resourceBusy)}
+                        >
+                          {resourceBusy === "link" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Link2 className="mr-2 h-4 w-4" />}
+                          {resourceBusy === "link" ? "Adding…" : "Add link"}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {loadingResources ? (
+                    <div className="mt-3 flex min-h-20 items-center justify-center rounded-2xl bg-slate-50 text-xs font-bold text-slate-500">
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Loading Cabinet items…
+                    </div>
+                  ) : resources.length === 0 ? (
+                    <div className="mt-3 rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-3 py-5 text-center">
+                      <div className="text-sm font-black text-[#102A43]">No Cabinet items yet</div>
+                      <div className="mt-1 text-[11px] font-semibold text-slate-500">
+                        {location ? "Add one Drive item or web link to start the shared index." : "Set up a File Cabinet location before adding items."}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mt-3 grid gap-2">
+                      {resources.map((resource) => {
+                        const state = resourceStates[resource.resourceId];
+                        const ResourceIcon = resource.provider === "external_link"
+                          ? Link2
+                          : resource.resourceKind === "folder"
+                            ? FolderOpen
+                            : FileText;
+                        return (
+                          <div key={resource.resourceId} className="flex min-w-0 flex-wrap items-center gap-2 rounded-2xl border border-slate-100 bg-white p-2.5 shadow-sm">
+                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
+                              <ResourceIcon className="h-4 w-4" />
+                            </span>
+                            <span className="min-w-0 flex-[1_1_9rem]">
+                              <span className="block truncate text-xs font-black text-[#102A43]">{resource.displayName}</span>
+                              <span className="block truncate text-[10px] font-semibold text-slate-500">
+                                {resource.provider === "google_drive" ? "Google Drive" : "Web link"} · {resourceStateText(state)}
+                              </span>
+                            </span>
+                            <span className="ml-auto flex shrink-0 items-center gap-1">
+                              {state?.status === "ready" ? (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  className="h-8 rounded-lg px-2 text-[10px] font-black text-blue-700"
+                                  onClick={() => openResource(resource)}
+                                >
+                                  Open <ExternalLink className="ml-1 h-3 w-3" />
+                                </Button>
+                              ) : state?.status === "reconnect_required" && resource.provider === "google_drive" ? (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  className="h-8 rounded-lg px-2 text-[10px] font-black text-blue-700"
+                                  onClick={() => void reconnectForVerification()}
+                                  disabled={actionDisabled}
+                                >
+                                  Connect
+                                </Button>
+                              ) : null}
+                              <button
+                                type="button"
+                                className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
+                                onClick={() => requestResourceRemoval(resource)}
+                                disabled={Boolean(resourceBusy)}
+                                aria-label={`Remove ${resource.displayName} from File Cabinet`}
+                              >
+                                {resourceBusy === `remove:${resource.resourceId}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                              </button>
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {resourceNotice && (
+                    <div className="mt-3 rounded-2xl bg-slate-50 px-3 py-2.5 text-xs font-bold leading-snug text-slate-700" role="status">
+                      {resourceNotice}
+                    </div>
+                  )}
+                </section>
               </div>
             )}
           </div>
@@ -441,6 +795,21 @@ export function SharedWorkspaceCabinetCard({
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={() => void removeLocation()} disabled={busy === "remove"}>Remove relationship</AlertDialogAction>
+          </AlertDialogFooter>
+        </StripesConfirmContent>
+      </AlertDialog>
+
+      <AlertDialog open={Boolean(pendingResourceRemoval)} onOpenChange={(nextOpen) => { if (!nextOpen) setPendingResourceRemoval(null); }}>
+        <StripesConfirmContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove from File Cabinet?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Stripes will remove this Cabinet-only shared index record. The original Google Drive item or external link target will not be changed or deleted. Items tied to Action Board or Equipment cannot be removed here.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void removeResource()} disabled={resourceBusy.startsWith("remove:")}>Remove entry</AlertDialogAction>
           </AlertDialogFooter>
         </StripesConfirmContent>
       </AlertDialog>

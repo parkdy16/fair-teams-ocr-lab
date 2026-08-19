@@ -18,6 +18,14 @@ export interface GoogleDriveFileResult {
   owners?: GoogleDriveUserSummary[];
 }
 
+export interface GoogleDriveFileCabinetResourceMetadata {
+  id: string;
+  name: string;
+  mimeType: string;
+  webViewLink?: string;
+  trashed?: boolean;
+}
+
 export interface GoogleDriveBackupFileGroups {
   mine: GoogleDriveFileResult[];
   shared: GoogleDriveFileResult[];
@@ -174,6 +182,24 @@ export async function readGoogleDriveJsonFile(accessToken: string, fileId: strin
   }
 
   return { file, text: await contentResponse.text() };
+}
+
+export async function getGoogleDriveFileCabinetResourceMetadata(
+  accessToken: string,
+  fileId: string,
+): Promise<GoogleDriveFileCabinetResourceMetadata> {
+  const params = new URLSearchParams({
+    supportsAllDrives: "true",
+    fields: "id,name,mimeType,webViewLink,trashed",
+  });
+  const response = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?${params.toString()}`,
+    { headers: { Authorization: `Bearer ${accessToken}` } },
+  );
+  if (!response.ok) {
+    throw new GoogleApiHttpError(response.status, await readDriveError(response));
+  }
+  return (await response.json()) as GoogleDriveFileCabinetResourceMetadata;
 }
 
 async function fetchGoogleDriveBackupList(accessToken: string, query: string): Promise<GoogleDriveFileResult[]> {

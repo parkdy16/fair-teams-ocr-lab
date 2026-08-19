@@ -286,6 +286,148 @@ service cloud.firestore {
         );
     }
 
+    function validCabinetResourceId(value) {
+      return value is string
+        && value.size() > 0
+        && value.size() <= 200
+        && value.matches("\\S(.*\\S)?")
+        && !value.matches(".*\\/.*")
+        && !value.matches(".*[\\x00-\\x1f\\x7f].*");
+    }
+
+    function validCabinetResourceContext(value) {
+      let keys = value.keys();
+      return value is map
+        && keys.hasOnly(["kind", "entityId"])
+        && (
+          (
+            keys.size() == 1
+            && value.kind == "cabinet"
+          )
+          ||
+          (
+            keys.size() == 2
+            && value.kind in ["action_board", "equipment"]
+            && validCabinetResourceId(value.entityId)
+          )
+        );
+    }
+
+    // Firestore Rules has no list iteration, so the bounded context list is
+    // deliberately checked one index at a time. The path supplies workspace
+    // scope; context values can never name another workspace.
+    function validCabinetResourceContexts(contexts) {
+      let size = contexts.size();
+      return contexts is list
+        && size <= 4
+        && contexts.toSet().size() == size
+        && (size <= 0 || validCabinetResourceContext(contexts[0]))
+        && (size <= 1 || validCabinetResourceContext(contexts[1]))
+        && (size <= 2 || validCabinetResourceContext(contexts[2]))
+        && (size <= 3 || validCabinetResourceContext(contexts[3]));
+    }
+
+    function validCabinetResourceData(resourceId) {
+      let data = request.resource.data;
+      let keys = data.keys();
+      let provider = data.provider;
+      let resourceKind = data.resourceKind;
+      return keys.hasOnly([
+          "schemaVersion",
+          "resourceId",
+          "provider",
+          "resourceKind",
+          "providerResourceId",
+          "externalUrl",
+          "displayName",
+          "mimeType",
+          "origin",
+          "contexts",
+          "createdByUid",
+          "createdAt",
+          "updatedByUid",
+          "updatedAt"
+        ])
+        && data.schemaVersion == 1
+        && data.resourceId == resourceId
+        && validCabinetResourceId(data.resourceId)
+        && data.displayName is string
+        && data.displayName.size() <= 200
+        && data.displayName.matches(".*\\S.*")
+        && validCabinetResourceContext(data.origin)
+        && validCabinetResourceContexts(data.contexts)
+        && validCabinetResourceId(data.createdByUid)
+        && data.createdAt is timestamp
+        && validCabinetResourceId(data.updatedByUid)
+        && data.updatedAt is timestamp
+        && (
+          (
+            provider == "google_drive"
+            && resourceKind in ["file", "folder"]
+            && validCabinetResourceId(data.providerResourceId)
+            && data.externalUrl == null
+            && (
+              data.mimeType == null
+              || (
+                data.mimeType is string
+                && data.mimeType.size() <= 200
+                && data.mimeType.matches("[a-z0-9][a-z0-9!#$&^_.+\\-]*\\/[a-z0-9][a-z0-9!#$&^_.+\\-]*")
+              )
+            )
+          )
+          ||
+          (
+            provider == "external_link"
+            && resourceKind == "link"
+            && data.providerResourceId == null
+            && data.externalUrl is string
+            && data.externalUrl.size() <= 2048
+            && data.externalUrl.matches("https?:\\/\\/[^\\s\\/?#@]+[^\\s]*")
+            && !data.externalUrl.matches("https?:\\/\\/[^\\/?#]*@.*")
+            && data.mimeType == null
+          )
+        );
+    }
+
+    function validCabinetResourceCreate(resourceId) {
+      let data = request.resource.data;
+      return validCabinetResourceData(resourceId)
+        && data.createdByUid == request.auth.uid
+        && data.createdAt == request.time
+        && data.updatedByUid == request.auth.uid
+        && data.updatedAt == request.time;
+    }
+
+    function validCabinetResourceUpdate(resourceId) {
+      let data = request.resource.data;
+      return validCabinetResourceData(resourceId)
+        && resource.data.schemaVersion == 1
+        && resource.data.resourceId == resourceId
+        && data.diff(resource.data).affectedKeys().hasOnly([
+          "displayName",
+          "contexts",
+          "updatedByUid",
+          "updatedAt"
+        ])
+        && data.updatedByUid == request.auth.uid
+        && data.updatedAt == request.time;
+    }
+
+    function validCabinetResourceDelete() {
+      let data = resource.data;
+      let origin = data.origin;
+      let contexts = data.contexts;
+      let size = contexts.size();
+      return data.schemaVersion == 1
+        && validCabinetResourceContext(origin)
+        && origin.kind == "cabinet"
+        && validCabinetResourceContexts(contexts)
+        && (size <= 0 || contexts[0].kind == "cabinet")
+        && (size <= 1 || contexts[1].kind == "cabinet")
+        && (size <= 2 || contexts[2].kind == "cabinet")
+        && (size <= 3 || contexts[3].kind == "cabinet");
+    }
+
     match /sharedWorkspaceInvitationLocks/{lockId} {
       allow read, write: if false;
     }
@@ -360,6 +502,18 @@ service cloud.firestore {
         allow delete: if configDoc == "config" && canEditGroupById(groupId);
       }
 
+      // Provider-neutral File Cabinet resource/index metadata. Google or the
+      // external provider remains authoritative for the referenced resource.
+      match /cabinetResources/{resourceId} {
+        allow read: if canEditGroupById(groupId);
+        allow create: if canEditGroupById(groupId)
+          && validCabinetResourceCreate(resourceId);
+        allow update: if canEditGroupById(groupId)
+          && validCabinetResourceUpdate(resourceId);
+        allow delete: if canEditGroupById(groupId)
+          && validCabinetResourceDelete();
+      }
+
       // Fair Teams v1.50 Tasks Board
       match /taskBoard/{boardDoc} {
         allow read: if isGroupMemberById(groupId);
@@ -411,6 +565,22 @@ service cloud.firestore {
         allow delete: if configDoc == "config"
           && isStandaloneRosterById(rosterId)
           && canEditRosterById(rosterId);
+      }
+
+      // Legacy standalone workspaces use the same strict resource contract.
+      // Group-linked rosters must use their authoritative group path instead.
+      match /cabinetResources/{resourceId} {
+        allow read: if isStandaloneRosterById(rosterId)
+          && canEditRosterById(rosterId);
+        allow create: if isStandaloneRosterById(rosterId)
+          && canEditRosterById(rosterId)
+          && validCabinetResourceCreate(resourceId);
+        allow update: if isStandaloneRosterById(rosterId)
+          && canEditRosterById(rosterId)
+          && validCabinetResourceUpdate(resourceId);
+        allow delete: if isStandaloneRosterById(rosterId)
+          && canEditRosterById(rosterId)
+          && validCabinetResourceDelete();
       }
 
       // Fair Teams v1.50 Tasks Board

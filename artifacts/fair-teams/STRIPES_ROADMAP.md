@@ -1497,7 +1497,10 @@ storage/ownership wording conflicts with it.
 - G1.6 Workspace closure / last-organizer behavior is released on `main` as
   `61b3079` with its Firestore rules and callable Functions deployed.
 - G1 Shared Workspace Governance is complete and released.
-- Current major implementation phase: bounded G2 closure and verification.
+- Current major implementation phase: the bounded G3 provider-neutral File
+  Cabinet resource/index foundation. G2 core, H1 and H2 are complete; the
+  eligible-Workspace Shared Drive matrix remains a separate conditional
+  release gate.
 - G2.1a Drive connection-state/auth foundation is released as `023d15d` and
   has passed production real-account verification.
 - G2.2 Managed My Drive Cabinet location is released as `a861c56`, documented
@@ -1510,8 +1513,8 @@ storage/ownership wording conflicts with it.
   verification.
 - G2.5 persisted File Cabinet relationship metadata is committed as `e0c2f13`;
   the simplified dedicated File Cabinet setup UX is committed as `c38ba83`.
-  The implementation is on `main`, but G2 is not closed until the bounded live
-  multi-organizer/Google verification and production linkage check below pass.
+  The implementation is on `main` and G2 core is closed. The remaining Shared
+  Drive account matrix does not reopen that core checkpoint.
 - The user-facing product name is **File Cabinet**. Internal Cabinet schema,
   service and roadmap terminology may remain where renaming would add migration
   risk, but released UI should present File Cabinet as a dedicated Club
@@ -3739,6 +3742,67 @@ meaningful class of production failure requires one.
 
 Implement only after G2 connection/location/permission foundations are
 verified. G3 builds the actual user-facing Club Cabinet/resource experience.
+
+**G3 minimal resource/index repository checkpoint — 2026-08-19: IMPLEMENTED
+LOCALLY; NOT COMMITTED OR HOSTED-CI VERIFIED.**
+
+- `src/lib/fileCabinetResource.ts` defines a strict, current-only version-1
+  provider-neutral reference schema. It stores the generated resource/document
+  ID, provider and kind, one stable provider ID or external HTTP(S) URL,
+  display/MIME metadata, immutable origin, bounded contexts and Firebase UID /
+  server-timestamp attribution. Tokens, emails, permission lists, bytes and
+  durable capability state are not part of the allow-listed shape.
+- The primary flat index is
+  `sharedGroups/{groupId}/cabinetResources/{resourceId}`. The same contract is
+  available at `sharedRosters/{rosterId}/cabinetResources/{resourceId}` only for
+  genuinely standalone shared rosters. Current Cabinet organizer authority is
+  preserved: equal organizers may read and mutate index metadata; viewers,
+  pending/removed users, unrelated users and group-linked roster fallbacks are
+  denied by Firestore rules.
+- Origin is exactly Cabinet, Action Board or Equipment; the latter two require
+  a local entity ID. Contexts use the same workspace-inherited relationship
+  shape, are bounded to four and cannot contain workspace IDs. Origin,
+  provider identity and creation attribution are immutable; only display name,
+  contexts and current-user update attribution can change.
+- Collection membership is the flat workspace registry; origin is immutable
+  provenance and contexts are current feature relationships. Removing one
+  future Action Board/Equipment context is a metadata update. Generic
+  Cabinet-level whole-record removal is allowed only when no Action Board or
+  Equipment origin/context must survive; linked records must first be unlinked
+  from the owning feature. Every permitted removal leaves the external target
+  untouched.
+- `src/lib/fileCabinetResourceService.ts` owns create/list/listen/update/remove
+  Firestore operations. The domain, service and Firestore rules all enforce the
+  relationship-safe whole-record removal boundary. Removing an eligible record
+  deletes only Stripes metadata and never calls Google or Firebase Storage.
+- `src/lib/fileCabinetResourceProvider.ts` resolves external links locally and
+  Google Drive references through the existing connected session. Google
+  selection is a single user-driven Picker choice followed by an exact-ID
+  metadata read under the unchanged `drive.file` scope. Ready, reconnect,
+  insufficient-permission, unavailable and unsupported states are transient
+  provider results; none is persisted or satisfied by another file ID.
+- The existing File Cabinet workspace now shows the flat index, supports one
+  Drive file/folder or HTTP(S) link registration, opens only resolver-ready items
+  and confirms metadata-only removal. Location setup remains recognizable;
+  adding requires a configured location, while already-indexed records remain
+  visible if the location relationship is removed. Requiring the location for
+  new additions is an intentional UI/setup workflow condition, not a durable
+  resource-schema or Firestore-authority precondition.
+- The transitional `sharedRosters/{rosterId}/resources` / Firebase Storage
+  Action Board system is unchanged and explicitly isolated from G3. No existing
+  metadata or bytes are migrated, rewritten or deleted.
+- Emulator coverage proves the strict lifecycle and organizer/cross-workspace
+  boundaries. The demo-only recovery fixture now retains both one legacy
+  resource and one strict G3 index record across a fresh export/import without
+  making an external provider call.
+
+Deferred beyond this minimal checkpoint: folder/category organization,
+search/filter, previews, bulk actions, general Drive browsing, Club Note
+relationships, Action Board/Equipment integration or attachment migration,
+legacy native-resource retirement (G4), an explicit per-collaborator Picker
+authorization flow for already-indexed Drive resources, and authenticated
+real-provider visual verification. The eligible-Workspace Shared Drive
+real-account matrix remains open as its existing conditional release gate.
 
 Initial goals:
 

@@ -13,6 +13,7 @@ const {
   doc,
   getDoc,
   getDocs,
+  serverTimestamp,
   setDoc,
   Timestamp,
   updateDoc,
@@ -32,6 +33,8 @@ const RECOVERY_AT_MILLIS = Date.parse(RECOVERY_AT_ISO);
 const INVITATION_EXPIRES_AT_ISO = "2026-08-26T10:00:00.000Z";
 const INVITATION_EXPIRES_AT_MILLIS = Date.parse(INVITATION_EXPIRES_AT_ISO);
 const RECOVERY_RESOURCE_ID = "regression-resource";
+const RECOVERY_CABINET_RESOURCE_ID = "regression-cabinet-resource";
+const RECOVERY_PROVIDER_RESOURCE_ID = "regression-google-file";
 const RECOVERY_INVITATION_ID = "regression-invitation";
 const RECOVERY_INVITATION_EMAIL = "pending-recovery@stripes.invalid";
 const RECOVERY_INVITATION_LOCK_ID = invitationLockId(
@@ -95,6 +98,11 @@ function recoveryRefs(db) {
   return {
     ...base,
     resource: doc(base.roster, "resources", RECOVERY_RESOURCE_ID),
+    cabinetResource: doc(
+      base.group,
+      "cabinetResources",
+      RECOVERY_CABINET_RESOURCE_ID,
+    ),
     invitation: doc(db, "sharedWorkspaceInvitations", RECOVERY_INVITATION_ID),
     invitationLock: doc(
       db,
@@ -120,6 +128,28 @@ function recoveryResource() {
     folderId: null,
     pinned: false,
     updatedAt: RECOVERY_AT_MILLIS,
+  };
+}
+
+function recoveryCabinetResource() {
+  return {
+    schemaVersion: 1,
+    resourceId: RECOVERY_CABINET_RESOURCE_ID,
+    provider: "google_drive",
+    resourceKind: "file",
+    providerResourceId: RECOVERY_PROVIDER_RESOURCE_ID,
+    externalUrl: null,
+    displayName: "Synthetic recovery handbook",
+    mimeType: "application/pdf",
+    origin: { kind: "cabinet" },
+    contexts: [
+      { kind: "cabinet" },
+      { kind: "action_board", entityId: IDS.taskCard },
+    ],
+    createdByUid: IDS.organizerA,
+    createdAt: Timestamp.fromMillis(RECOVERY_AT_MILLIS),
+    updatedByUid: IDS.organizerA,
+    updatedAt: Timestamp.fromMillis(RECOVERY_AT_MILLIS),
   };
 }
 
@@ -174,6 +204,7 @@ async function seedRecoveryFixture(environment) {
         updatedAtIso: RECOVERY_AT_ISO,
       }),
       setDoc(refs.resource, recoveryResource()),
+      setDoc(refs.cabinetResource, recoveryCabinetResource()),
       setDoc(refs.invitation, recoveryInvitation()),
       setDoc(refs.invitationLock, recoveryInvitationLock()),
     ]);
@@ -256,6 +287,7 @@ async function assertExactCollectionCounts(db) {
     [1, "sharedWorkspaceInvitationLocks"],
     [1, "sharedGroups", IDS.group, "equipmentBags"],
     [1, "sharedGroups", IDS.group, "cabinet"],
+    [1, "sharedGroups", IDS.group, "cabinetResources"],
     [1, "sharedGroups", IDS.group, "taskBoard"],
     [1, "sharedGroups", IDS.group, "taskBoard", "config", "columns"],
     [1, "sharedGroups", IDS.group, "taskBoard", "config", "cards"],
@@ -282,7 +314,7 @@ async function assertExactCollectionCounts(db) {
   );
   assert.equal(
     counts.reduce((total, count) => total + count, 0),
-    18,
+    19,
     "Synthetic recovery fixture document count changed.",
   );
 }
@@ -356,6 +388,65 @@ async function verifyRestoredData(environment) {
     assert.equal(data.proposalBallot.choice, "yes");
 
     assert.deepEqual(data.resource, recoveryResource());
+    assert.deepEqual(
+      Object.keys(data.cabinetResource).sort(),
+      [
+        "schemaVersion",
+        "resourceId",
+        "provider",
+        "resourceKind",
+        "providerResourceId",
+        "externalUrl",
+        "displayName",
+        "mimeType",
+        "origin",
+        "contexts",
+        "createdByUid",
+        "createdAt",
+        "updatedByUid",
+        "updatedAt",
+      ].sort(),
+      "Restored G3 Cabinet resource fields changed.",
+    );
+    assert.equal(data.cabinetResource.schemaVersion, 1);
+    assert.equal(data.cabinetResource.resourceId, RECOVERY_CABINET_RESOURCE_ID);
+    assert.equal(data.cabinetResource.provider, "google_drive");
+    assert.equal(data.cabinetResource.resourceKind, "file");
+    assert.equal(data.cabinetResource.providerResourceId, RECOVERY_PROVIDER_RESOURCE_ID);
+    assert.equal(data.cabinetResource.externalUrl, null);
+    assert.equal(data.cabinetResource.displayName, "Synthetic recovery handbook");
+    assert.equal(data.cabinetResource.mimeType, "application/pdf");
+    assert.deepEqual(data.cabinetResource.origin, { kind: "cabinet" });
+    assert.deepEqual(data.cabinetResource.contexts, [
+      { kind: "cabinet" },
+      { kind: "action_board", entityId: IDS.taskCard },
+    ]);
+    assert.equal(data.cabinetResource.createdByUid, IDS.organizerA);
+    assert.equal(data.cabinetResource.updatedByUid, IDS.organizerA);
+    assertTimestampMillis(
+      data.cabinetResource.createdAt,
+      RECOVERY_AT_MILLIS,
+      "cabinetResource.createdAt",
+    );
+    assertTimestampMillis(
+      data.cabinetResource.updatedAt,
+      RECOVERY_AT_MILLIS,
+      "cabinetResource.updatedAt",
+    );
+    for (const forbiddenField of [
+      "accessToken",
+      "refreshToken",
+      "oauthCredential",
+      "createdByEmail",
+      "permissionIds",
+      "fileBytes",
+    ]) {
+      assert.equal(
+        data.cabinetResource[forbiddenField],
+        undefined,
+        `Restored G3 Cabinet resource contains forbidden field ${forbiddenField}.`,
+      );
+    }
     assert.equal(data.invitation.schemaVersion, 1);
     assert.equal(data.invitation.groupId, IDS.group);
     assert.equal(data.invitation.normalizedEmail, RECOVERY_INVITATION_EMAIL);
@@ -386,19 +477,24 @@ async function verifyRestoredData(environment) {
 }
 
 async function verifyRestoredAuthority(environment) {
-  const organizer = authenticatedFirestore(environment, IDENTITIES.organizerA);
+  const organizerA = authenticatedFirestore(environment, IDENTITIES.organizerA);
+  const organizerB = authenticatedFirestore(environment, IDENTITIES.organizerB);
   const member = authenticatedFirestore(environment, IDENTITIES.member);
+  const pending = authenticatedFirestore(environment, {
+    uid: "regression-pending",
+    email: RECOVERY_INVITATION_EMAIL,
+  });
   const unrelated = authenticatedFirestore(environment, IDENTITIES.unrelated);
 
   assert.equal(
-    (await assertSucceeds(getDoc(recoveryRefs(organizer).group))).data().rosterIds[0],
+    (await assertSucceeds(getDoc(recoveryRefs(organizerA).group))).data().rosterIds[0],
     IDS.roster,
   );
   assert.equal(
     (await assertSucceeds(getDoc(recoveryRefs(member).resource))).data().name,
     "Synthetic recovery guide",
   );
-  await assertSucceeds(updateDoc(recoveryRefs(organizer).resource, {
+  await assertSucceeds(updateDoc(recoveryRefs(organizerA).resource, {
     pinned: true,
     updatedAt: RECOVERY_AT_MILLIS + 1,
   }));
@@ -406,7 +502,50 @@ async function verifyRestoredAuthority(environment) {
   await assertFails(getDoc(recoveryRefs(unrelated).resource));
   await assertFails(getDoc(recoveryRefs(member).cabinet));
 
-  for (const db of [organizer, member, unrelated]) {
+  for (const organizer of [organizerA, organizerB]) {
+    assert.equal(
+      (await assertSucceeds(getDoc(recoveryRefs(organizer).cabinetResource)))
+        .data().providerResourceId,
+      RECOVERY_PROVIDER_RESOURCE_ID,
+    );
+  }
+  await assertSucceeds(updateDoc(recoveryRefs(organizerB).cabinetResource, {
+    displayName: "Recovered Cabinet handbook",
+    contexts: [{ kind: "equipment", entityId: IDS.equipment }],
+    updatedByUid: IDS.organizerB,
+    updatedAt: serverTimestamp(),
+  }));
+  assert.equal(
+    (await assertSucceeds(getDoc(recoveryRefs(organizerA).cabinetResource)))
+      .data().displayName,
+    "Recovered Cabinet handbook",
+  );
+  for (const denied of [member, pending, unrelated]) {
+    await assertFails(getDoc(recoveryRefs(denied).cabinetResource));
+    await assertFails(updateDoc(recoveryRefs(denied).cabinetResource, {
+      displayName: "Unauthorized Cabinet update",
+      contexts: [],
+      updatedByUid: "unauthorized",
+      updatedAt: serverTimestamp(),
+    }));
+  }
+  await assertFails(updateDoc(recoveryRefs(organizerB).cabinetResource, {
+    providerResourceId: "replacement-google-file",
+    updatedByUid: IDS.organizerB,
+    updatedAt: serverTimestamp(),
+  }));
+  await assertFails(updateDoc(recoveryRefs(organizerB).cabinetResource, {
+    createdByUid: IDS.organizerB,
+    updatedByUid: IDS.organizerB,
+    updatedAt: serverTimestamp(),
+  }));
+  await assertFails(updateDoc(recoveryRefs(organizerB).cabinetResource, {
+    createdAt: serverTimestamp(),
+    updatedByUid: IDS.organizerB,
+    updatedAt: serverTimestamp(),
+  }));
+
+  for (const db of [organizerA, organizerB, member, pending, unrelated]) {
     const refs = recoveryRefs(db);
     await assertFails(getDoc(refs.invitation));
     await assertFails(getDoc(refs.invitationLock));

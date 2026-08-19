@@ -65,6 +65,20 @@ team-engine changes.
 
 - Changing or removing a Stripes Cabinet relationship must not silently delete,
   move or modify the previous Google folder/files.
+- File Cabinet resource records contain Stripes metadata and stable external
+  references only. Removing an index entry or one of its Stripes contexts must
+  not delete, trash, move, copy or re-permission the provider resource.
+- The flat `cabinetResources` collection is the workspace resource registry.
+  Origin records where an item entered Stripes; contexts record current feature
+  relationships. Removing one context updates that relationship rather than
+  deleting the registry record. Generic Cabinet-level whole-record removal is a
+  separate explicit metadata action and must fail while an Action Board or
+  Equipment origin/context still needs the record. The owning feature must
+  remove its relationship first.
+- A recorded provider resource ID is authoritative. Live availability and
+  permission state must be re-read from the connected provider and must not be
+  persisted as durable capability truth or satisfied by substituting another
+  resource.
 - Stripes metadata replacement is not Google resource deletion.
 - Destructive operations affecting external Google resources require a separate
   explicit product/security decision.

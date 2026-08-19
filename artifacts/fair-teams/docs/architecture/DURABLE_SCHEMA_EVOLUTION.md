@@ -53,9 +53,12 @@ The resolver deliberately does not parse document fields, migrate data, write
 back a newer shape or choose a fallback. Those decisions stay beside the
 document-specific model where reviewers can see the supported history.
 
-The File Cabinet location is the first existing adopter. It continues to accept
-only schema version 1 and to reject missing or future versions with the same
-runtime behavior and user message as before.
+The File Cabinet location was the first existing adopter. It continues to
+accept only schema version 1 and to reject missing or future versions with the
+same runtime behavior and user message as before. The separate G3 File Cabinet
+resource/index contract also starts at strict version 1: its writer emits only
+that shape, its reader has no unversioned fallback, and malformed or future
+records fail closed rather than being interpreted as current resources.
 
 ## Existing durable-shape inventory
 
@@ -67,21 +70,23 @@ numbers are already enforced contracts.
 | `sharedGroups/{groupId}` | Version 2 | Compatibility parser accepts older or unversioned field sets; it does not dispatch on `schemaVersion`. |
 | `sharedRosters/{rosterId}` | Version 2 | Compatibility parser accepts historical field sets; `version` separately controls optimistic save conflicts. |
 | Cabinet `cabinet/config` | Version 1 | Strict version and field validation in the live client and Firestore rules. |
+| G3 Cabinet `cabinetResources/{resourceId}` | Version 1 | Strict provider/reference, origin/context and attribution parsing; missing, malformed and future versions are rejected. Group scope is primary, with the same contract only for genuinely standalone shared rosters. |
 | Action Board config/cards | Version 7 | Compatibility parser adapts legacy vote, action, assignee and timestamp mirrors without version dispatch. |
 | Action Board columns | Version 4 | Compatibility parser reads the current fields without version dispatch. |
 | Equipment bags | Version 4 | Compatibility parser supports legacy `contents` and current structured `items` without version dispatch. |
 | Attendance issues | Version 1 | Shape-based compatibility parser; warning-template sentinel documents use version 2 in the same collection. |
 | Club rating submissions and summaries | Version 2 | Compatibility logic derives missing profile and aggregate fields from older skill/average data. |
 | Club notes | Version 1 | Shape validation only; no version dispatch. |
-| Club resources | Version 1 | Resource type/context validation only; no version dispatch. A materially expanded G3 resource/index schema must adopt the explicit convention before its first write. |
+| Legacy Club resources `sharedRosters/{rosterId}/resources` | Version 1 | Transitional Action Board/Firebase Storage compatibility reader validates resource type/context but does not dispatch on version. It is intentionally isolated from the strict G3 Cabinet index until a separately approved G4 migration. |
 | Trusted invitation, closure and governance documents | Versions 1 or 2 by document kind | Server helpers validate operational invariants, while most recovery and governance readers do not dispatch on `schemaVersion`. Shared-roster creation request version 1 is checked strictly on replay. |
 
 ## Current limitations and non-goals
 
 - This convention does not migrate or rewrite existing production data.
 - It does not add strict version rejection to mature compatibility readers.
-- Firestore currently enforces an exact `schemaVersion` only for the Cabinet
-  configuration schema.
+- Firestore currently enforces an exact `schemaVersion` for the Cabinet
+  configuration and G3 Cabinet resource schemas. Other mature compatibility
+  readers have not been opportunistically tightened.
 - The live resolver is an outer-frontend TypeScript module. Firebase Functions
   remain CommonJS and must use an explicit server-side version switch, or a
   small equivalent helper when a new server-owned durable schema requires one.

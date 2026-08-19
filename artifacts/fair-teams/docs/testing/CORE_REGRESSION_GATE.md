@@ -47,8 +47,9 @@ The recovery command invokes the Functions-local pinned Firebase CLI, removes
 inherited cloud target/credential variables, and explicitly uses only
 `demo-stripes-recovery-rehearsal`. It exports a fixed synthetic workspace from
 one Firestore emulator lifecycle and imports it into a fresh lifecycle before
-checking linkage, membership/roles, representative Club data, Cabinet metadata,
-private/server-only records and current Firestore authority.
+  checking linkage, membership/roles, representative Club data, Cabinet
+   location and strict G3 resource metadata, private/server-only records and
+   current Firestore authority.
 
 ## H1 companion gates
 
@@ -80,6 +81,8 @@ also contain source assertions.
 
 - `activeSharedWorkspaceAuthorityState.test.ts`
 - `fileCabinetDriveAccess.test.ts`
+- `fileCabinetResource.test.ts`
+- `fileCabinetResourceProvider.test.ts`
 - `googleDriveCabinet.test.ts`
 - `googleDriveCabinetPermissions.test.ts`
 - `googleDriveConnection.test.ts`
@@ -104,6 +107,7 @@ also contain source assertions.
 - `sharedRosterAutosync.integration.test.ts`
 - `sharedRosterLeaveUi.test.ts`
 - `sharedWorkspaceCabinet.test.ts` (mixed unit/static)
+- `fileCabinetResourceService.test.ts`
 - `sharedWorkspaceClosureService.test.ts` (mixed unit/static)
 - Functions rule/wiring suites `cabinetRules.test.js`,
   `workspaceClosureRules.test.js`, and `workspaceInvitationRules.test.js`.
@@ -122,10 +126,12 @@ also contain source assertions.
 - `sharedRosterCreation.emulator.test.js`
 - `sharedRosterLinkageRules.emulator.test.js`
 
-The H2 recovery rehearsal separately exercises the emulator's on-disk
+The recovery rehearsal separately exercises the emulator's on-disk
 export/import path across fresh processes. It reuses the representative fixture
-and adds a resource plus invitation/lock records; it is not another security
-rules suite or a managed-cloud restore claim.
+and retains 19 deterministic documents, including separate legacy Club-resource
+metadata and strict G3 Cabinet resource records plus invitation/lock state. It verifies
+restored G3 authority and immutable-provider/creation fields without calling an
+external provider; it is not a managed-cloud restore claim.
 
 ### 5. Functions/backend
 

@@ -103,7 +103,8 @@ All steps in this subsection are manual external work:
 6. Deploy the frontend only to the staging Vercel target and verify the built
    bundle identifies the staging Firebase project.
 7. Seed synthetic rosters, organizers, attendance, equipment, Action Board,
-   resources, and Cabinet metadata. Do not clone ordinary production data.
+   legacy native resources, strict Cabinet resource references, and Cabinet
+   location metadata. Do not clone ordinary production data.
 8. Verify staging cannot reach production Firestore, Storage, Functions,
    Google files, email, push, or Vercel environment values.
 
@@ -130,8 +131,9 @@ with data implications, or workspace cleanup change, preserve:
 - non-secret configuration identifiers needed to reconstruct the environment.
 
 Firestore backup/export does not contain Firebase Storage objects or external
-Google Drive/Sheets files. Cabinet records are metadata; do not copy organizers'
-external Google files without a separate privacy and recovery decision.
+Google Drive/Sheets files. Cabinet location and resource-index records are
+metadata/references only; do not copy organizers' external Google files without
+a separate privacy and recovery decision.
 
 Firestore backup/export also does not preserve Firebase Auth users or provider
 configuration, Functions secrets, Vercel variables or Google OAuth clients.
@@ -239,7 +241,8 @@ Perform this before relying on the procedure during an incident.
    accounts.
 2. Seed staging with synthetic records covering linked groups/rosters,
    organizer roles, invitations, attendance/conduct, ratings, Equipment, Action
-   Board, notes/resources, Cabinet metadata, and representative subcollections.
+   Board, notes/legacy resources, strict Cabinet resource references, Cabinet
+   location metadata, and representative subcollections.
    Create synthetic staging Auth users with fixed test UIDs that match the
    seeded membership records; never copy production users.
 3. If scheduled backups are part of the approved production baseline, first
@@ -265,11 +268,15 @@ Perform this before relying on the procedure during an incident.
    do not include Auth identities or index definitions; scheduled backups
    include index configurations but still omit Auth, Rules and TTL policies.
 7. Restore or relink only synthetic Storage objects using the separately
-   rehearsed Storage procedure. Confirm every resource reference resolves.
+   rehearsed Storage procedure. Confirm native references resolve. Validate
+   external Cabinet references against deliberately synthetic/test provider
+   resources when those providers are part of the rehearsal; a Firestore
+   restore does not recreate or guarantee external provider access.
 8. Validate counts and application invariants: authoritative roster/group
    linkage, organizer capabilities, Firebase/Google separation, attendance,
    ratings, Equipment, Action Board, notes/resources, Cabinet folder metadata,
-   and no unexpected writes to any other project.
+   Cabinet resource/index shape and authority, and no unexpected writes to any
+   other project.
 9. Record recovery point, elapsed recovery time, operation IDs, validation
    evidence, missing assets/configuration, achieved RPO/RTO, and follow-up work.
 10. Deleting the recovery environment or its exports is a separate destructive
@@ -297,8 +304,10 @@ then removes the temporary export and emulator logs.
 
 The automated checks cover mutual group/roster linkage, organizer/member role
 shape, representative Equipment, Attendance, Action Board, ratings, Notes and
-resource data, Cabinet metadata, invitation/lock state, timestamps, expected
-document counts and representative current Firestore access denials.
+legacy Club-resource metadata, Cabinet location metadata, the strict provider-neutral
+Cabinet resource/index record, invitation/lock state, timestamps, expected
+document counts and representative current Firestore access denials. It checks
+reference metadata only and never calls an external provider.
 
 This proves only the application-data/invariant portion of a Firestore emulator
 export/import. It does **not** prove managed Firestore export, scheduled backup,

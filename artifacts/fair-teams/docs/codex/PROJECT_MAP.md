@@ -1,7 +1,7 @@
 # Stripes project map
 
 Verified: 2026-08-19
-Accepted H2 starting checkpoint: `9e1a2fe`
+Accepted G3 starting checkpoint: `ef94645`
 
 ## Source boundaries
 
@@ -22,6 +22,27 @@ Accepted H2 starting checkpoint: `9e1a2fe`
 ## Backend and persistence boundaries
 
 Ordinary UI work should avoid Firebase initialization, shared-roster services, Action Board services, equipment and attendance persistence, Firebase Functions, API handlers, the messaging service worker, Google integration code, and their listeners/autosave flows.
+
+## File Cabinet resource boundary
+
+- Durable provider-neutral resource/reference contract:
+  `src/lib/fileCabinetResource.ts`
+- Workspace-scoped Firestore index service:
+  `src/lib/fileCabinetResourceService.ts`
+- Live exact-ID provider resolution and Picker facade:
+  `src/lib/fileCabinetResourceProvider.ts`
+- Existing location/setup and minimal index UI:
+  `src/components/SharedWorkspaceCabinetCard.tsx`
+- Primary index path:
+  `sharedGroups/{groupId}/cabinetResources/{resourceId}`
+- Standalone compatibility path:
+  `sharedRosters/{rosterId}/cabinetResources/{resourceId}` only when the roster
+  has no group link.
+
+The older `src/lib/clubResourceService.ts` and
+`sharedRosters/{rosterId}/resources` path remain the transitional native
+Firebase Storage attachment system. They are not the G3 Cabinet index and must
+not be migrated, tightened or deleted as incidental Cabinet work.
 
 ## Verification
 

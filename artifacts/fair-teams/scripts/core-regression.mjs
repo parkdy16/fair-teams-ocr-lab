@@ -109,6 +109,11 @@ export function createCoreRegressionStages() {
       command: process.execPath,
       args: ["--test", "scripts/core-regression-runner.test.mjs"],
     },
+    packageStage(
+      "Live architecture boundaries",
+      "pnpm",
+      ["--filter", "@workspace/fair-teams", "run", "check:architecture"],
+    ),
     {
       name: "Outer-source production logic and integration tests",
       command: process.execPath,
@@ -129,6 +134,12 @@ export function createCoreRegressionStages() {
       "Firestore emulator core behavior",
       "npm",
       ["run", "test:rules:core"],
+      join(REPOSITORY_ROOT, "functions"),
+    ),
+    packageStage(
+      "Synthetic Firestore recovery rehearsal",
+      "npm",
+      ["run", "test:recovery:emulator"],
       join(REPOSITORY_ROOT, "functions"),
     ),
     packageStage(

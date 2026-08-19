@@ -71,6 +71,7 @@ const {
   createLinkedSharedRosterTransaction,
   SharedRosterCreationError,
 } = require("./sharedRosterCreation");
+const { logPrivacySafeFailure } = require("./privacySafeDiagnostics");
 
 initializeApp();
 
@@ -380,7 +381,7 @@ exports.sendStripesEmailVerification = onCall({
       await releaseVerificationAttempt(db, throttleRef, attemptId).catch(() => undefined);
     }
     if (!(error instanceof EmailVerificationError) && !(error instanceof HttpsError)) {
-      console.error("Could not send Stripes verification email");
+      logPrivacySafeFailure(console, "auth-verification/delivery-failed", error);
       if (plan && deliveryAttempted) {
         throw new HttpsError(
           "internal",
@@ -459,7 +460,7 @@ function invitationHttpsError(error, fallbackMessage) {
   if (error instanceof WorkspaceInvitationError) {
     return new HttpsError(error.code, error.message);
   }
-  console.error(fallbackMessage, error);
+  logPrivacySafeFailure(console, "workspace-invitation/operation-failed", error);
   return new HttpsError("internal", fallbackMessage);
 }
 
@@ -468,7 +469,7 @@ function closureHttpsError(error, fallbackMessage) {
   if (error instanceof WorkspaceClosureError) {
     return new HttpsError(error.code, error.message);
   }
-  console.error(fallbackMessage, error);
+  logPrivacySafeFailure(console, "workspace-closure/operation-failed", error);
   return new HttpsError("internal", fallbackMessage);
 }
 
@@ -666,9 +667,8 @@ async function deliverWorkspaceInvitation(db, invitationRef, invitation, sendAtt
     emailSent = true;
     deliveryStatus = "sent";
   } catch (error) {
-    deliveryError = cleanText(error instanceof Error ? error.message : error, 180)
-      || "Invitation email could not be sent.";
-    console.error("Could not send workspace invitation email", error);
+    deliveryError = "Invitation email could not be sent.";
+    logPrivacySafeFailure(console, "workspace-invitation/delivery-failed", error);
   }
 
   const completedAt = Date.now();
@@ -728,7 +728,7 @@ exports.createLinkedSharedRoster = onCall({ region: REGION, timeoutSeconds: 60 }
       || error instanceof WorkspaceRosterLinkageError) {
       throw new HttpsError(error.code, error.message);
     }
-    console.error("Could not create linked shared roster", error);
+    logPrivacySafeFailure(console, "shared-roster/creation-failed", error);
     throw new HttpsError("internal", "Could not create this shared roster.");
   }
 });
@@ -1328,7 +1328,7 @@ exports.closeSharedWorkspace = onCall({
     await finishWorkspaceClosureCleanup(db, cleanup);
     await closureRef.delete();
   } catch (error) {
-    console.error("Could not finish shared-workspace closure cleanup", error);
+    logPrivacySafeFailure(console, "workspace-closure/cleanup-failed", error);
     await closureRef.set({
       cleanupStatus: "failed",
       cleanupFailedAt: FieldValue.serverTimestamp(),
@@ -1568,7 +1568,7 @@ exports.acceptWorkspaceOrganizerInvitation = onCall({
       sendResendEmail,
     );
   } catch (error) {
-    console.error("Could not deliver new-organizer governance notification", error);
+    logPrivacySafeFailure(console, "workspace-invitation/join-notification-failed", error);
   }
 
   try {
@@ -1581,7 +1581,7 @@ exports.acceptWorkspaceOrganizerInvitation = onCall({
       organizerJoinedNotificationUpdatedAtIso: new Date().toISOString(),
     }, { merge: true });
   } catch (error) {
-    console.error("Could not record new-organizer notification delivery state", error);
+    logPrivacySafeFailure(console, "workspace-invitation/notification-state-failed", error);
   }
 
   return {
@@ -1803,7 +1803,7 @@ exports.startOrganizerRemovalProposal = onCall({ region: REGION }, async (reques
     if (error instanceof WorkspaceRosterLinkageError) {
       throw new HttpsError(error.code, error.message);
     }
-    console.error("Could not create organizer-removal proposal", error);
+    logPrivacySafeFailure(console, "organizer-removal/proposal-failed", error);
     throw new HttpsError("internal", "Could not start the organizer-removal vote.");
   }
 });
@@ -1903,7 +1903,7 @@ exports.castOrganizerRemovalBallot = onCall({ region: REGION }, async (request) 
     if (error instanceof WorkspaceRosterLinkageError) {
       throw new HttpsError(error.code, error.message);
     }
-    console.error("Could not cast organizer-removal ballot", error);
+    logPrivacySafeFailure(console, "organizer-removal/ballot-failed", error);
     throw new HttpsError("internal", "Could not record the organizer-removal ballot.");
   }
 });
@@ -2088,12 +2088,11 @@ exports.notifyActionBoardStep = onCall({ region: REGION, timeoutSeconds: 60, sec
               const failedFid = String(fids[index] || "");
               const code = response.error?.code || "";
               const message = response.error?.message || "";
-              console.error("Stripes push failed", {
-                index,
-                fidSuffix: failedFid.slice(-8),
-                code,
-                message,
-              });
+              logPrivacySafeFailure(
+                console,
+                "action-board/push-delivery-failed",
+                response.error,
+              );
               if (failedFid && (code === "messaging/registration-token-not-registered" || message === "NotRegistered")) {
                 staleFids.push(failedFid);
               }

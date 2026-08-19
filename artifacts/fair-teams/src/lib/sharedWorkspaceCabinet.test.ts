@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   isSameSharedWorkspaceCabinetLocation,
   myDriveCabinetLocationDraft,
+  parseSharedWorkspaceCabinetLocation,
   sharedDriveCabinetLocationDraft,
   validateSharedWorkspaceCabinetLocationDraft,
   type SharedWorkspaceCabinetLocation,
@@ -60,6 +61,35 @@ test("rejects unknown and credential-like fields", () => {
     folderId: "my-folder-1",
     driveId: "not-allowed",
   }), /cannot include/);
+});
+
+test("rejects missing and future File Cabinet schema versions", () => {
+  const cabinet = {
+    provider: "google_drive",
+    backing: "my_drive",
+    folderId: "my-folder-1",
+  };
+
+  assert.throws(
+    () => validateSharedWorkspaceCabinetLocationDraft(cabinet),
+    /location version is not supported/,
+  );
+  assert.throws(
+    () => validateSharedWorkspaceCabinetLocationDraft({
+      ...cabinet,
+      schemaVersion: 2,
+    }),
+    /location version is not supported/,
+  );
+  assert.equal(parseSharedWorkspaceCabinetLocation({
+    ...cabinet,
+    configuredByUid: "firebase-organizer",
+  }), null);
+  assert.equal(parseSharedWorkspaceCabinetLocation({
+    ...cabinet,
+    schemaVersion: 2,
+    configuredByUid: "firebase-organizer",
+  }), null);
 });
 
 test("normalizes the accepted G2.2 and G2.4 results into one metadata model", () => {

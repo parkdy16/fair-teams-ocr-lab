@@ -3,6 +3,9 @@ import fs from "node:fs";
 import test from "node:test";
 import { GoogleApiHttpError } from "./googleApiError.ts";
 import {
+  deleteGoogleDriveFilePermission,
+  listGoogleDriveFilePermissions,
+  shareGoogleDriveFileWithEditor,
   updateGoogleDriveFilePermissionRole,
   type GoogleDrivePermissionResult,
 } from "./googleDriveFiles.ts";
@@ -311,6 +314,127 @@ test("Drive permission role updates preserve structured 403 responses", async ()
     assert.equal(request?.init?.method, "PATCH");
     assert.equal(request?.init?.body, JSON.stringify({ role: "writer" }));
     assert.match(request?.url || "", /cabinet-root\/permissions\/permission-1/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Drive permission REST adapters preserve their exact request contracts", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests: { url: string; init?: RequestInit }[] = [];
+  globalThis.fetch = async (input, init) => {
+    requests.push({ url: String(input), init });
+    if (init?.method === "POST") {
+      return new Response(JSON.stringify(permission({ id: "created-permission" })), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    if (init?.method === "DELETE") return new Response(null, { status: 204 });
+    return new Response(JSON.stringify({ permissions: [permission()] }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  };
+
+  try {
+    const listed = await listGoogleDriveFilePermissions("memory-token", "cabinet/root");
+    const created = await shareGoogleDriveFileWithEditor(
+      "memory-token",
+      "cabinet/root",
+      "organizer@example.com",
+    );
+    await deleteGoogleDriveFilePermission(
+      "memory-token",
+      "cabinet/root",
+      "permission/1",
+    );
+
+    assert.equal(listed[0]?.id, "permission-1");
+    assert.equal(created.id, "created-permission");
+    assert.equal(requests.length, 3);
+
+    const [listRequest, createRequest, deleteRequest] = requests;
+    for (const request of requests) {
+      const headers = request.init?.headers as Record<string, string> | undefined;
+      assert.equal(headers?.Authorization, "Bearer memory-token");
+      assert.doesNotMatch(request.url, /memory-token/);
+      assert.equal(new URL(request.url).searchParams.get("supportsAllDrives"), "true");
+    }
+
+    const listUrl = new URL(listRequest.url);
+    assert.equal(listRequest.init?.method, undefined);
+    assert.match(listUrl.pathname, /\/files\/cabinet%2Froot\/permissions$/);
+    assert.match(listUrl.searchParams.get("fields") || "", /permissionDetails/);
+
+    const createUrl = new URL(createRequest.url);
+    assert.equal(createRequest.init?.method, "POST");
+    assert.match(createUrl.pathname, /\/files\/cabinet%2Froot\/permissions$/);
+    assert.equal(createUrl.searchParams.get("sendNotificationEmail"), "true");
+    assert.equal(
+      createRequest.init?.body,
+      JSON.stringify({
+        type: "user",
+        role: "writer",
+        emailAddress: "organizer@example.com",
+      }),
+    );
+    assert.equal(
+      (createRequest.init?.headers as Record<string, string>)["Content-Type"],
+      "application/json; charset=UTF-8",
+    );
+
+    const deleteUrl = new URL(deleteRequest.url);
+    assert.equal(deleteRequest.init?.method, "DELETE");
+    assert.match(
+      deleteUrl.pathname,
+      /\/files\/cabinet%2Froot\/permissions\/permission%2F1$/,
+    );
+    assert.equal(deleteRequest.init?.body, undefined);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Drive permission REST adapters preserve structured 401 and 403 failures", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    const cases = [
+      ["list", 401, () => listGoogleDriveFilePermissions("token", "cabinet-root")],
+      ["list", 403, () => listGoogleDriveFilePermissions("token", "cabinet-root")],
+      [
+        "create",
+        401,
+        () => shareGoogleDriveFileWithEditor("token", "cabinet-root", "organizer@example.com"),
+      ],
+      [
+        "create",
+        403,
+        () => shareGoogleDriveFileWithEditor("token", "cabinet-root", "organizer@example.com"),
+      ],
+      [
+        "delete",
+        401,
+        () => deleteGoogleDriveFilePermission("token", "cabinet-root", "permission-1"),
+      ],
+      [
+        "delete",
+        403,
+        () => deleteGoogleDriveFilePermission("token", "cabinet-root", "permission-1"),
+      ],
+    ] as const;
+
+    for (const [adapter, status, invoke] of cases) {
+      globalThis.fetch = async () => new Response(
+        JSON.stringify({ error: { message: `${adapter} failed` } }),
+        { status, headers: { "Content-Type": "application/json" } },
+      );
+      await assert.rejects(
+        invoke,
+        (error: unknown) => error instanceof GoogleApiHttpError && error.status === status,
+        `${adapter} should preserve HTTP ${status}`,
+      );
+    }
   } finally {
     globalThis.fetch = originalFetch;
   }

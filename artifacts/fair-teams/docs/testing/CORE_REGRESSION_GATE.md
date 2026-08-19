@@ -14,16 +14,41 @@ before and after execution.
 ## Mandatory stages
 
 1. fail-closed runner self-test;
-2. every outer `src/lib/**/*.test.ts` production-logic and integration suite;
-3. syntax checks for Functions JavaScript and test support;
-4. existing Functions/backend and governance tests;
-5. Firestore emulator behavior, including P0-S2, Cabinet and the representative
+2. live architecture/import boundary checks, including their synthetic
+   fail-closed self-tests;
+3. every outer `src/lib/**/*.test.ts` production-logic and integration suite;
+4. syntax checks for Functions JavaScript and test support;
+5. existing Functions/backend, governance and privacy-safe-diagnostic tests;
+6. Firestore emulator behavior, including P0-S2, Cabinet and the representative
    Stripes Regression Club fixture;
-6. production frontend build;
-7. `git diff --check HEAD`.
+7. a fresh-process, demo-project Firestore emulator export/import recovery
+   rehearsal with restored-data and authority checks;
+8. production frontend build;
+9. `git diff --check HEAD`.
 
 The emulator uses deterministic test-only identities and a Firebase demo project.
 It neither reads nor writes production Firebase data.
+
+H2 added two discoverable focused commands which Core now owns:
+
+```text
+npm run check:architecture
+npm --prefix functions run test:recovery:emulator
+```
+
+The architecture checker uses the existing TypeScript compiler AST. It keeps
+the stale `src/src` tree quarantined, preserves the outer browser entry, blocks
+live-source escapes and reverse UI/domain imports, prevents new direct UI
+Firebase/fetch shortcuts, and freezes the small set of currently reviewed
+low-level Google UI adapter imports. Failures identify the file, line, column
+and rule.
+
+The recovery command invokes the Functions-local pinned Firebase CLI, removes
+inherited cloud target/credential variables, and explicitly uses only
+`demo-stripes-recovery-rehearsal`. It exports a fixed synthetic workspace from
+one Firestore emulator lifecycle and imports it into a fresh lifecycle before
+checking linkage, membership/roles, representative Club data, Cabinet metadata,
+private/server-only records and current Firestore authority.
 
 ## H1 companion gates
 
@@ -97,12 +122,19 @@ also contain source assertions.
 - `sharedRosterCreation.emulator.test.js`
 - `sharedRosterLinkageRules.emulator.test.js`
 
+The H2 recovery rehearsal separately exercises the emulator's on-disk
+export/import path across fresh processes. It reuses the representative fixture
+and adds a resource plus invitation/lock records; it is not another security
+rules suite or a managed-cloud restore claim.
+
 ### 5. Functions/backend
 
-The ten non-emulator Functions suites invoked by `functions/package.json` execute
+The non-emulator Functions suites invoked by `functions/package.json` execute
 production helpers and callable transaction seams. They cover invitation and
 email authorization, organizer removal, workspace closure, trusted linkage and
-atomic shared-roster creation.
+atomic shared-roster creation. The H2 diagnostic suite also proves that backend
+failure logging emits only stable, allow-listed machine fields rather than raw
+errors or installation-token suffixes.
 
 ### 6. Component/UI
 
@@ -133,6 +165,8 @@ real-provider/manual verification.
 
 - production Vite build: mandatory;
 - Functions `node --check`: mandatory;
+- live architecture/import boundary check: mandatory;
+- demo-only synthetic recovery export/import: mandatory;
 - patch whitespace check: mandatory;
 - live outer-source TypeScript check: mandatory in CI and zero-error;
 - full TypeScript project check: informational, because it intentionally still

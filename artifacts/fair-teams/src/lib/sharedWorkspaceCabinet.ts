@@ -1,7 +1,14 @@
 import type { GoogleDriveCabinetFolder } from "./googleDriveCabinet.ts";
 import type { GoogleDriveSharedCabinetSelection } from "./googleDriveSharedCabinet.ts";
+import { resolveDurableSchemaVersion } from "./durableSchema.ts";
 
 export const SHARED_WORKSPACE_CABINET_SCHEMA_VERSION = 1 as const;
+
+const SHARED_WORKSPACE_CABINET_SCHEMA = {
+  currentVersion: SHARED_WORKSPACE_CABINET_SCHEMA_VERSION,
+  supportedVersions: [SHARED_WORKSPACE_CABINET_SCHEMA_VERSION],
+  unversionedVersion: null,
+} as const;
 
 export type SharedWorkspaceCabinetBacking = "my_drive" | "shared_drive";
 
@@ -52,7 +59,10 @@ export function validateSharedWorkspaceCabinetLocationDraft(
   if (Object.keys(record).some((key) => !allowedKeys.has(key))) {
     throw new Error("The File Cabinet location contains unsupported fields.");
   }
-  if (record.schemaVersion !== SHARED_WORKSPACE_CABINET_SCHEMA_VERSION) {
+  if (resolveDurableSchemaVersion(
+    record.schemaVersion,
+    SHARED_WORKSPACE_CABINET_SCHEMA,
+  ).status !== "supported") {
     throw new Error("This File Cabinet location version is not supported.");
   }
   if (record.provider !== "google_drive") {

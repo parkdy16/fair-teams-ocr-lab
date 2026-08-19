@@ -3642,6 +3642,64 @@ Implement as one bounded Codex milestone where practical:
 Do not introduce enterprise infrastructure whose complexity exceeds the
 failure class it prevents.
 
+**H2 repository checkpoint — 2026-08-19: COMPLETE LOCALLY.**
+
+- `docs/architecture/DURABLE_SCHEMA_EVOLUTION.md` establishes the forward
+  convention for new durable documents: positive-integer `schemaVersion`, an
+  explicit current/supported-history/unversioned policy, current-only writers,
+  version-specific readers/adapters and fail-closed unknown versions. The
+  shared roster's optimistic `version` remains a content revision rather than
+  a schema marker. No production documents were migrated or rewritten.
+- `src/lib/durableSchema.ts` is the deliberately small reusable resolver. The
+  already-strict File Cabinet configuration is its first existing adopter and
+  retains exactly the prior version-1 behavior and user-facing error. Mature
+  compatibility readers were inventoried, not opportunistically tightened.
+- `npm run check:architecture` uses the existing TypeScript compiler AST and
+  self-tests to enforce the live outer entry/source quarantine, layer direction,
+  UI Firebase/fetch boundary and only the reviewed existing low-level Google UI
+  adapter exceptions. It reports actionable file/line/column/rule failures.
+- `npm --prefix functions run test:recovery:emulator` performs a two-lifecycle
+  export/import using only `demo-stripes-recovery-rehearsal`. The deterministic
+  synthetic fixture verifies linkage, authority shape, representative Club and
+  Cabinet data, resources, invitation/lock/private records, timestamps and
+  current rules. It cannot target `fair-teams-dev` and strips inherited cloud
+  credentials/project selection.
+- Functions now use one privacy-safe structured failure envelope with a stable
+  `diagnosticCode` and only allow-listed provider code, HTTP status and retryable
+  fields. Raw errors and Firebase installation-token suffixes are no longer
+  logged; invitation delivery stores a fixed safe failure message. Callable
+  behavior and user-facing messages remain unchanged.
+- External-provider contracts now cover Drive permission list/create/delete
+  request shape, encoded identifiers, `supportsAllDrives`, token placement and
+  structured 401/403 propagation. Existing Cabinet, Shared Drive, connection
+  and permission-policy suites remain the broader deterministic contract layer;
+  no live provider was called.
+- The Core Regression Gate now owns nine stages, including architecture and
+  recovery, so the existing hosted workflow inherits H2 without a parallel CI
+  system or duplicate build.
+
+Required H2 repository gates are:
+
+```text
+npm run check:architecture
+npm --prefix functions run test:recovery:emulator
+npm run typecheck:live
+npm run test:core-regression
+npm run test:browser-smoke
+git diff --check HEAD
+```
+
+Local completion does not claim a hosted GitHub result. H2 remains uncommitted
+and unpushed until separately authorized; the hosted preventive workflow can be
+claimed only after a later push succeeds.
+
+The local recovery rehearsal does not prove managed export, scheduled backup,
+PITR, cross-project restore, IAM, bucket controls, indexes/TTL, Auth, Storage,
+Functions secrets, Google files, production scale or RPO/RTO. Isolated staging,
+the first synthetic managed cloud restore rehearsal and its retained evidence
+remain manual work. Shared Drive's eligible-Workspace real-account matrix also
+remains a separate conditional release gate and is not marked passed by H2.
+
 #### H3 — Team-engine safety
 
 **Mandatory before T1 materially replaces or expands mature generation/evaluator

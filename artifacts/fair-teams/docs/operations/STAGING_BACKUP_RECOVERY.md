@@ -1,8 +1,8 @@
 # Stripes staging, backup, and recovery baseline
 
-Status: H1 runbook only. No cloud project, bucket, IAM binding, backup, restore,
-deployment, secret, or production setting was created or changed when this file
-was added.
+Status: H1 runbook plus H2 local recovery validation. No cloud project, bucket,
+IAM binding, backup, restore, deployment, secret, or production setting was
+created or changed by either milestone.
 
 ## Safety boundary
 
@@ -279,6 +279,35 @@ The Firebase emulator import/export feature remains useful for deterministic
 local tests, but it does not rehearse managed cloud backup formats, IAM, bucket
 access, or production-scale recovery.
 
+### Automated H2 local recovery validation
+
+Run from `C:\V38OCR\artifacts\fair-teams`:
+
+```text
+npm --prefix functions run test:recovery:emulator
+```
+
+The command is also a mandatory Core Regression Gate stage. It uses the exact
+Firebase demo project ID `demo-stripes-recovery-rehearsal`, the pinned
+Functions-local Firebase CLI and two fresh Firestore emulator lifecycles. It
+strips inherited cloud project, credential and emulator variables, seeds only
+fixed `.invalid` identities and synthetic Stripes records, exports them to a
+validated temporary directory, imports that export into the fresh lifecycle,
+then removes the temporary export and emulator logs.
+
+The automated checks cover mutual group/roster linkage, organizer/member role
+shape, representative Equipment, Attendance, Action Board, ratings, Notes and
+resource data, Cabinet metadata, invitation/lock state, timestamps, expected
+document counts and representative current Firestore access denials.
+
+This proves only the application-data/invariant portion of a Firestore emulator
+export/import. It does **not** prove managed Firestore export, scheduled backup,
+PITR, cross-project restore, IAM/service-agent or bucket permissions, location,
+retention, indexes/TTL, Firebase Auth, Storage objects, Functions/secrets,
+external Google files, production scale or achieved RPO/RTO. The synthetic
+cloud/staging rehearsal above remains a manual prerequisite before relying on
+those systems during an incident.
+
 ## Manual follow-ups established by H1
 
 - Provision and approve a genuinely isolated staging stack.
@@ -288,5 +317,6 @@ access, or production-scale recovery.
 - Choose retention/RPO/RTO, approve scheduled backups and PITR, and configure
   them manually.
 - Define and rehearse Firebase Storage protection for resource files.
-- Run the first synthetic non-production restore rehearsal and retain evidence.
+- Run the first synthetic cloud/staging managed restore rehearsal and retain
+  evidence; the local emulator rehearsal does not close this item.
 - Separately authorize any future production backup/export or restore action.

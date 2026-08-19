@@ -82,9 +82,18 @@ team-engine changes.
 
 ## 8. Persistence and schema evolution
 
+- The forward convention is defined in
+  `docs/architecture/DURABLE_SCHEMA_EVOLUTION.md`.
+- New durable document shapes use a positive-integer `schemaVersion`, and each
+  reader must explicitly name its current, supported historical and
+  unversioned-legacy policy.
 - New durable schemas must have an explicit evolution/versioning strategy before
   incompatible production shapes are introduced.
 - Readers must handle supported historical shapes deliberately.
+- Missing, malformed or unknown future versions must fail closed when no
+  explicit compatibility parser makes them safe.
+- A content revision such as the shared roster's optimistic-concurrency
+  `version` is not a schema version.
 - Migrations must be explicit, bounded and independently reviewable.
 - Do not assume all production documents have the newest shape.
 - Protected authority fields must not be migrated opportunistically during
@@ -121,6 +130,11 @@ team-engine changes.
 - No service-account private key should be introduced where keyless short-lived
   impersonation is sufficient.
 - Sensitive credentials and production data must not enter the repository.
+- Production Firebase Functions failure logs must use stable diagnostic codes
+  and explicitly allow-listed machine fields. At that trusted backend boundary,
+  raw provider errors, messages, stacks, OAuth tokens, installation-token
+  fragments, emails and user content must not be emitted merely for
+  troubleshooting.
 
 ## 12. Regression discipline
 
@@ -143,3 +157,7 @@ Each hardening task must:
 - avoid unrelated cleanup;
 - add the smallest durable rail that prevents a meaningful class of failure;
 - remain independently reviewable and revertible.
+
+The live import/layer checks in `npm run check:architecture` are part of the
+permanent Core Regression Gate. New exceptions require deliberate architecture
+review; the check must not be weakened as an implementation shortcut.

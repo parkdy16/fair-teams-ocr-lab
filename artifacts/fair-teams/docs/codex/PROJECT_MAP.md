@@ -1,7 +1,7 @@
 # Stripes project map
 
 Verified: 2026-08-19
-Accepted pre-H1 checkpoint: `ca55bf0`
+Accepted H2 starting checkpoint: `9e1a2fe`
 
 ## Source boundaries
 
@@ -26,7 +26,10 @@ Ordinary UI work should avoid Firebase initialization, shared-roster services, A
 ## Verification
 
 - Live shipping-source TypeScript: `npm run typecheck:live`
+- Architecture/import boundaries: `npm run check:architecture`
 - Core integration gate, including the production build: `npm run test:core-regression`
+- Focused demo-only recovery rehearsal:
+  `npm --prefix functions run test:recovery:emulator`
 - Browser smoke: `npm run test:browser-smoke`
 - Full live-plus-stale TypeScript debt check (informational): `npm run typecheck`
 - Standalone production build when specifically needed: `pnpm.cmd --filter @workspace/fair-teams run build`
@@ -41,10 +44,15 @@ The root CI workflow is `.github/workflows/stripes-ci.yml`. It runs the live
 typecheck, Core Regression Gate and five-scenario Playwright smoke suite without
 deployment or production credentials. See `docs/testing/CORE_REGRESSION_GATE.md`.
 
+The architecture and recovery commands are mandatory stages inside Core, so CI
+inherits them without a second workflow or duplicate stage.
+
 ## Durable architecture and operations references
 
 - Sequencing and phase truth: `STRIPES_ROADMAP.md`
 - Cross-system constraints: `docs/architecture/SYSTEM_INVARIANTS.md`
+- Forward durable schema convention:
+  `docs/architecture/DURABLE_SCHEMA_EVOLUTION.md`
 - Integration/browser gate details: `docs/testing/CORE_REGRESSION_GATE.md`
 - Staging, backup and recovery boundaries:
   `docs/operations/STAGING_BACKUP_RECOVERY.md`

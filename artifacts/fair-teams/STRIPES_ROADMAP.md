@@ -3642,7 +3642,7 @@ Implement as one bounded Codex milestone where practical:
 Do not introduce enterprise infrastructure whose complexity exceeds the
 failure class it prevents.
 
-**H2 repository checkpoint — 2026-08-19: COMPLETE LOCALLY.**
+**H2 repository checkpoint — 2026-08-19: COMPLETE AND HOSTED-CI VERIFIED.**
 
 - `docs/architecture/DURABLE_SCHEMA_EVOLUTION.md` establishes the forward
   convention for new durable documents: positive-integer `schemaVersion`, an
@@ -3689,9 +3689,13 @@ npm run test:browser-smoke
 git diff --check HEAD
 ```
 
-Local completion does not claim a hosted GitHub result. H2 remains uncommitted
-and unpushed until separately authorized; the hosted preventive workflow can be
-claimed only after a later push succeeds.
+Hosted CI verification — 2026-08-19:
+
+- H2 commit `8ccb97a` passed the GitHub-hosted `Stripes preventive gates`;
+- the hosted run exercised the expanded nine-stage Core Regression Gate,
+  including architecture-boundary enforcement and the synthetic Firestore
+  recovery rehearsal, plus the live-source type gate and browser smoke suite;
+- H2 is therefore accepted as a completed preventive architecture checkpoint.
 
 The local recovery rehearsal does not prove managed export, scheduled backup,
 PITR, cross-project restore, IAM, bucket controls, indexes/TTL, Auth, Storage,

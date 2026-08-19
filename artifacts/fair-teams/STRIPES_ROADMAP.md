@@ -3459,6 +3459,10 @@ Live verification evidence - 2026-08-19:
   reconnects Google Drive, while previously authorized folder access persists.
   Repeated Google consent/Continue friction and overall Cabinet-flow clarity
   remain UX follow-ups rather than access-control failures;
+- Firebase and Google Drive identity separation passed with a real organizer:
+  connecting/reconnecting the organizer's Google Drive account did not change
+  the signed-in Stripes/Firebase account, workspace selection or organizer
+  authority;
 - Shared Drive collaborator, reconnect and unavailable-state verification
   remains blocked until an eligible Google Workspace account with Shared Drive
   access is available;

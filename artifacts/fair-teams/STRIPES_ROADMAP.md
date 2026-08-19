@@ -3484,6 +3484,124 @@ Explicitly excluded:
 - automatic Firebase/organizer-to-Google identity mapping;
 - Cabinet file creation or child-file permission rewriting.
 
+### H — Preventive Architecture Hardening
+
+**Approved direction — 2026-08-19.**
+
+Stripes is now interconnected enough that preventive engineering rails must be
+added before substantially expanding the architecture. The purpose of H is to
+make future Codex feature/UI work safer, easier to review and less likely to
+damage mature behavior.
+
+H is not a product feature phase and is not general refactoring permission.
+Each H milestone must remain bounded, independently reviewable/revertible and
+preserve current product behavior unless an explicit task says otherwise.
+
+`docs/architecture/SYSTEM_INVARIANTS.md` is the durable invariant reference.
+`AGENTS.md` tells Codex when it must read and preserve those constraints.
+
+If the only remaining G2 blocker is access to an external eligible Shared Drive
+test account, H1 may proceed while that verification remains blocked. This does
+**not** close G2 and does **not** authorize G3. G3 remains gated by the required
+G2 closure decision plus H1 completion.
+
+#### H1 — Core preventive engineering rails
+
+**Mandatory before G3 implementation expands the resource architecture.**
+
+Implement as one bounded Codex milestone where practical:
+
+1. **Automated CI gate**
+   - automatically run the permanent Core Regression Gate and required
+     production build checks for integration-bound changes;
+   - fail rather than silently weaken expectations;
+   - keep release/deployment approval separate from CI success.
+
+2. **Architecture invariant integration**
+   - maintain `docs/architecture/SYSTEM_INVARIANTS.md`;
+   - ensure Codex/repository guidance points to it;
+   - do not duplicate the entire invariant document in `AGENTS.md`.
+
+3. **Truthful live-source TypeScript gate**
+   - establish a typecheck that represents the actual outer live `src/` tree;
+   - do not manufacture a green result by count-matching existing diagnostics;
+   - quarantine the stale `src/src/` tree from the live-source gate;
+   - delete/synchronize stale source only in a separately justified task.
+
+4. **Minimal browser smoke harness**
+   - add a small high-value browser/E2E smoke layer rather than a large UI test
+     suite;
+   - initially protect representative critical flows such as app boot,
+     roster/workspace switching, shared authority resolution, Club access and
+     team generation;
+   - automated smoke does not replace real-device/provider verification where
+     browser automation cannot prove behavior.
+
+5. **Staging / backup baseline**
+   - document the required isolated staging and backup/restore workflow;
+   - identify any external Firebase/Google configuration still requiring manual
+     provisioning;
+   - Codex may prepare repo configuration/runbooks, but must not create
+     production IAM, secrets or destructive cloud resources without explicit
+     authorization.
+
+H1 should reduce future review effort. It must not turn into a broad framework,
+state-management or application rewrite.
+
+#### H2 — Data and architecture safety
+
+**Begin at the G3 boundary before new durable resource/index schemas materially
+expand.**
+
+Implement as one bounded Codex milestone where practical:
+
+1. establish a simple explicit schema-version/evolution convention for new
+   durable documents and supported historical shapes;
+2. add machine-enforced architecture/import boundaries only where they prevent
+   meaningful unsafe shortcuts, especially UI-to-protected-mutation or
+   provider-boundary bypasses;
+3. validate the staging/backup/restore procedure using non-production data
+   before relying on it for migrations or destructive schema work;
+4. add privacy-safe structured failure/diagnostic codes where they materially
+   improve production support without logging tokens, unnecessary emails,
+   player content or other sensitive data;
+5. strengthen external-provider contract tests as Google/Firebase integration
+   surfaces are changed.
+
+Do not introduce enterprise infrastructure whose complexity exceeds the
+failure class it prevents.
+
+#### H3 — Team-engine safety
+
+**Mandatory before T1 materially replaces or expands mature generation/evaluator
+behavior.**
+
+Create canonical/golden team-generation scenarios covering important product
+semantics, including at minimum:
+
+- normal equal-size teams;
+- unequal on-field team sizes with no substitutes;
+- equal on-field numbers with rotating substitutes;
+- goalkeeper constraints/coverage;
+- avoid-pairing and related social constraints;
+- extreme skill outliers;
+- attacker/defender distribution where represented by the model;
+- repeat-pairing/history behavior once scoped history participates in
+  generation;
+- deterministic repeatability for identical normalized inputs/configuration.
+
+Golden scenarios should primarily assert product properties/invariants rather
+than freeze incidental implementation details. Intentional evaluator changes
+must update expected behavior explicitly rather than weakening the harness.
+
+#### Incremental hardening after H1-H3
+
+Privacy-safe observability, provider contract coverage and architecture-boundary
+checks should continue to improve as affected systems are touched.
+
+Do not create additional blocking hardening phases without evidence that a
+meaningful class of production failure requires one.
+
 ### G3 — Google Resource + Club Cabinet Foundation
 
 Implement only after G2 connection/location/permission foundations are
@@ -3607,7 +3725,19 @@ Proceed in this order:
      matrix in the Current next implementation target;
    - repair only a defect actually exposed by that verification, as a separate
      atomic task;
-   - do not begin G3 until the evidence is accepted.
+   - do not begin G3 until the evidence is accepted;
+   - if eligible Shared Drive verification is the only remaining external
+     blocker, H1 may proceed while that blocker remains documented, but G3
+     remains blocked.
+
+**Mandatory preventive gate before step 2 — complete H1.**
+
+- establish CI, invariant integration, the truthful live-source type gate,
+  minimal browser smoke coverage and the staging/backup baseline;
+- keep H1 bounded to preventive rails rather than feature/refactor work;
+- H1 completion does not itself close G2;
+- do not begin G3 until both the required G2 closure decision and H1 gate are
+  satisfied.
 
 2. **Implement the minimal G3 provider-neutral File Cabinet resource/index
    foundation.**

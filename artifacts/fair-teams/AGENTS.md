@@ -559,4 +559,43 @@ Important working rules:
 Do not duplicate detailed product architecture in `AGENTS.md`; keep those
 decisions in `STRIPES_ROADMAP.md`.
 
+### Architecture invariants and preventive hardening
+
+`docs/architecture/SYSTEM_INVARIANTS.md` defines durable architecture and safety
+constraints that future work must preserve.
+
+Before security, persistence, schema, shared-workspace authority, Google
+integration, cross-cutting architecture or team-engine work:
+
+1. read the current roadmap phase;
+2. read `docs/architecture/SYSTEM_INVARIANTS.md`;
+3. identify the relevant regression/release gates;
+4. preserve those invariants unless the task explicitly approves an
+   architecture change and updates the documentation/tests together.
+
+The roadmap H-track defines when preventive architecture hardening is required.
+Do not bypass an H gate merely because later feature work is attractive.
+
+Hardening is not permission for broad cleanup or redesign.
+
+For an approved, well-scoped H milestone, Codex should normally execute the
+whole bounded milestone in one run: inspect, implement, test, inspect its diff
+and report. Do not fragment an H milestone into unnecessary micro-tasks or ask
+for routine implementation decisions that can be resolved safely from the
+repository.
+
+Stop and request a decision only when the work encounters:
+
+- genuinely undefined product behavior;
+- conflicting architecture requirements;
+- material security/privacy authority expansion;
+- broader OAuth scope;
+- production data/configuration/IAM changes;
+- destructive or irreversible operations;
+- a material scope expansion;
+- an unexpected defect that makes the approved task unsafe.
+
+Production commit, push, deployment, migrations, IAM and external cloud-resource
+changes still require explicit authorization.
+
 <!-- ROADMAP_DISCIPLINE_END -->

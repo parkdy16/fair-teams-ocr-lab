@@ -103,6 +103,13 @@ type Props = {
   scopeId?: string;
   isSharedRoster: boolean;
   user: SharedRosterUser | null;
+  sharedAuthorityMessage?: string;
+  canReadSharedBoard?: boolean;
+  canEditSharedBoard?: boolean;
+  canVoteSharedBoard?: boolean;
+  canNotifySharedBoard?: boolean;
+  canReadClubResources?: boolean;
+  canEditClubResources?: boolean;
   eligibleVoterCount?: number;
   organizerPeople?: TaskBoardPerson[];
   players?: RoomPlayer[];
@@ -769,6 +776,13 @@ export function TaskBoard({
   scopeId,
   isSharedRoster,
   user,
+  sharedAuthorityMessage = "",
+  canReadSharedBoard = false,
+  canEditSharedBoard = false,
+  canVoteSharedBoard = false,
+  canNotifySharedBoard = false,
+  canReadClubResources = false,
+  canEditClubResources = false,
   eligibleVoterCount = 1,
   organizerPeople = [],
   players = [],
@@ -776,7 +790,10 @@ export function TaskBoard({
   equipmentSnapshot,
   onOpenEquipmentInventory,
 }: Props) {
-  const online = Boolean(scopeId && user?.email);
+  const online = Boolean(scopeId && user?.email && canReadSharedBoard);
+  const canEditBoard = !isSharedRoster || canEditSharedBoard;
+  const canVoteBoard = !isSharedRoster || canVoteSharedBoard;
+  const canNotifyBoard = Boolean(online && canNotifySharedBoard);
   // Action Board has a fixed semantic blue identity. Roster color is intentionally ignored
   // so white or very light custom roster colors cannot erase board controls.
   const accent = "#2563eb";
@@ -927,7 +944,7 @@ export function TaskBoard({
     setError("");
     let initialized = false;
     return listenToTaskBoard(scopeId!, (snapshot) => {
-      if (!snapshot.meta && snapshot.columns.length === 0 && !initialized) {
+      if (!snapshot.meta && snapshot.columns.length === 0 && !initialized && canEditBoard) {
         initialized = true;
         const fresh = createDefaultBoard(rosterName);
         setBoard(fresh);
@@ -949,21 +966,21 @@ export function TaskBoard({
           if (column.name === target.name && column.kind === target.kind) return null;
           return { ...column, name: target.name, kind: target.kind, position: (index + 1) * 1000, updatedAt: Date.now() };
         }).filter(Boolean) as TaskBoardColumn[];
-        if (columnFixes.length) Promise.all(columnFixes.map((column) => saveTaskBoardColumn(scopeId!, column))).catch(() => undefined);
+        if (canEditBoard && columnFixes.length) Promise.all(columnFixes.map((column) => saveTaskBoardColumn(scopeId!, column))).catch(() => undefined);
       }
       setLoading(false);
     }, (nextError) => {
       setLoading(false);
       setError(nextError.message || "Could not load Action Board.");
     });
-  }, [online, rosterName, scopeId, workspaceKey]);
+  }, [canEditBoard, online, rosterName, scopeId, workspaceKey]);
 
   useEffect(() => {
     let cancelled = false;
 
     setClubResources([]);
 
-    if (!online || !isSharedRoster || !scopeId) {
+    if (!online || !isSharedRoster || !scopeId || !canReadClubResources) {
       return;
     }
 
@@ -984,7 +1001,7 @@ export function TaskBoard({
     return () => {
       cancelled = true;
     };
-  }, [isSharedRoster, online, scopeId]);
+  }, [canReadClubResources, isSharedRoster, online, scopeId]);
 
   useEffect(() => {
     if (!online) writeLocalBoard(workspaceKey, board);
@@ -1015,12 +1032,14 @@ export function TaskBoard({
   };
 
   const persistCard = async (card: TaskBoardCard) => {
+    if (!canEditBoard) throw new Error("This account cannot edit the shared Action Board.");
     updateBoardCard(card);
     if (online) await saveTaskBoardCard(scopeId!, card);
     return card;
   };
 
   const persistMeta = async (meta: TaskBoardMeta) => {
+    if (!canEditBoard) throw new Error("This account cannot edit the shared Action Board.");
     setBoard((current) => ({ ...current, meta }));
     if (online) await saveTaskBoardMeta(scopeId!, meta);
   };
@@ -1034,7 +1053,7 @@ export function TaskBoard({
 
   const submitComment = async (card: TaskBoardCard) => {
     const text = (commentDrafts[card.id] || "").trim();
-    if (!text || commentSavingCardId) return;
+    if (!canEditBoard || !text || commentSavingCardId) return;
     setCommentSavingCardId(card.id);
     setError("");
     try {
@@ -1060,7 +1079,7 @@ export function TaskBoard({
 
   const saveEditedComment = async (card: TaskBoardCard, comment: TaskBoardComment) => {
     const text = editingCommentText.trim();
-    if (!text || commentSavingCardId) return;
+    if (!canEditBoard || !text || commentSavingCardId) return;
     setCommentSavingCardId(card.id);
     setError("");
     try {
@@ -1081,7 +1100,7 @@ export function TaskBoard({
   };
 
   const removeComment = async (card: TaskBoardCard, comment: TaskBoardComment) => {
-    if (!commentIsMine(comment) || commentSavingCardId) return;
+    if (!canEditBoard || !commentIsMine(comment) || commentSavingCardId) return;
     setCommentSavingCardId(card.id);
     setError("");
     try {
@@ -1270,7 +1289,7 @@ export function TaskBoard({
 
   const openNotify = (card: TaskBoardCard) => {
     const target = currentNotifyTarget(card);
-    if (!online || !target || target.notification?.status === "sent" || target.notification?.status === "queued") return;
+    if (!canNotifyBoard || !target || target.notification?.status === "sent" || target.notification?.status === "queued") return;
     const allEmails = otherOrganizerPeople.map((person) => person.email!).filter(Boolean);
     const suggested = Array.from(new Set((target.suggestedEmails || []).map((email) => email.trim().toLowerCase()).filter((email) => allEmails.includes(email))));
     setNotifyCardId(card.id);
@@ -1298,7 +1317,7 @@ export function TaskBoard({
   };
 
   const sendNotification = async () => {
-    if (!scopeId || !notifyCardId || !notifyTarget || notifySending) return;
+    if (!canNotifyBoard || !scopeId || !notifyCardId || !notifyTarget || notifySending) return;
     if (!notifyEmailsToSend.length) {
       setNotifyError("Choose at least one organizer.");
       return;
@@ -1482,7 +1501,7 @@ export function TaskBoard({
   };
 
   const removeCard = async () => {
-    if (!editingCardId || !window.confirm("Delete this topic?")) return;
+    if (!canEditBoard || !editingCardId || !window.confirm("Delete this topic?")) return;
     const previous = board;
     setBoard((current) => ({ ...current, cards: current.cards.filter((card) => card.id !== editingCardId) }));
     try {
@@ -1618,6 +1637,7 @@ export function TaskBoard({
   };
 
   const createScheduleForHost = async (card: TaskBoardCard, host: TaskBoardPerson, requestDecisionId?: string) => {
+    if (!canEditBoard) return;
     const now = Date.now();
     const hostRequest = requestDecisionId ? (card.decisions || []).find((item) => item.id === requestDecisionId) : undefined;
     const scheduleDecision: TaskBoardVote = {
@@ -1672,6 +1692,7 @@ export function TaskBoard({
   };
 
   const requestScheduleHost = async (mode: "person" | "group") => {
+    if (!canEditBoard) return;
     const card = board.cards.find((item) => item.id === decisionCardId);
     if (!card) return;
     const requested = mode === "person" ? availablePeople.find((person) => personKey(person) === scheduleRequestedHostKey) : undefined;
@@ -1734,6 +1755,7 @@ export function TaskBoard({
   };
 
   const claimScheduleHost = async (card: TaskBoardCard, requestDecision: TaskBoardVote) => {
+    if (!canEditBoard) return;
     const canClaim = requestDecision.hostRequestMode === "group"
       || (requestDecision.requestedHostEmail && currentActor.email && requestDecision.requestedHostEmail.toLowerCase() === currentActor.email.toLowerCase())
       || (!requestDecision.requestedHostEmail && requestDecision.requestedHostName?.toLowerCase() === currentActor.name.toLowerCase());
@@ -2131,7 +2153,7 @@ export function TaskBoard({
   };
 
   const openAddFile = (card: TaskBoardCard) => {
-    if (!isSharedRoster || !scopeId || !user?.email) {
+    if (!canEditClubResources || !isSharedRoster || !scopeId || !user?.email) {
       setError("Sign in to a shared roster to add files.");
       return;
     }
@@ -2159,7 +2181,7 @@ export function TaskBoard({
 
     const cardId = fileUploadTargetCardIdRef.current;
 
-    if (!file || !cardId || !scopeId) {
+    if (!canEditClubResources || !file || !cardId || !scopeId) {
       fileUploadTargetCardIdRef.current = null;
       return;
     }
@@ -2205,7 +2227,7 @@ export function TaskBoard({
   };
 
   const openCardFile = async (resource: ClubResource) => {
-    if (!scopeId || fileOpeningResourceId) return;
+    if (!canReadClubResources || !scopeId || fileOpeningResourceId) return;
 
     const popup =
       typeof window !== "undefined"
@@ -2252,7 +2274,7 @@ export function TaskBoard({
   };
 
   const removeCardFile = async (resource: ClubResource) => {
-    if (!scopeId || fileDeletingResourceId) return;
+    if (!canEditClubResources || !scopeId || fileDeletingResourceId) return;
 
     if (
       typeof window !== "undefined"
@@ -2441,6 +2463,7 @@ export function TaskBoard({
   };
 
   const canCurrentUserVote = (decision: TaskBoardVote) => {
+    if (!canVoteBoard) return false;
     const emails = decision.participantEmails || [];
     const names = decision.participantNames || [];
     if (!emails.length && !names.length) return true;
@@ -2482,7 +2505,7 @@ export function TaskBoard({
   };
 
   const submitVote = async () => {
-    if (!votingCard || !votingDecision || !votingDecisionId || !currentVoterHash) return;
+    if (!canVoteBoard || !votingCard || !votingDecision || !votingDecisionId || !currentVoterHash) return;
     const questions = decisionQuestions(votingDecision);
     const answers: TaskBoardVoteAnswer[] = questions.map((question) => ({
       questionId: question.id,
@@ -2895,6 +2918,7 @@ export function TaskBoard({
   };
 
   const renderStageTools = (card: TaskBoardCard, stage: TopicStage) => {
+    if (!canEditBoard) return null;
     const openDecision = latestOpenDecision(card);
     const currentDecision = latestDecisionInCurrentStage(card);
 
@@ -2954,7 +2978,7 @@ export function TaskBoard({
                       <span className="text-[10px] font-normal text-slate-400">{formatTime(comment.createdAt)}{comment.updatedAt ? " · edited" : ""}</span>
                     </div>
                   </div>
-                  {mine && !editing && <div className="flex shrink-0 items-center gap-0.5 opacity-70 transition group-hover:opacity-100">
+                  {canEditBoard && mine && !editing && <div className="flex shrink-0 items-center gap-0.5 opacity-70 transition group-hover:opacity-100">
                     <button type="button" className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:bg-white hover:text-slate-600" onClick={() => beginEditComment(comment)} aria-label="Edit comment"><Pencil className="h-3.5 w-3.5" /></button>
                     <button type="button" className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:bg-white hover:text-red-600" onClick={() => void removeComment(card, comment)} aria-label="Delete comment"><Trash2 className="h-3.5 w-3.5" /></button>
                   </div>}
@@ -2973,7 +2997,7 @@ export function TaskBoard({
           })}
         </div>
 
-        <div className={`${detail ? "sticky bottom-0 z-[5] -mx-4 mt-4 border-t border-slate-200 bg-white/95 px-4 pb-[max(.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur" : "mt-4"}`}>
+        {canEditBoard && <div className={`${detail ? "sticky bottom-0 z-[5] -mx-4 mt-4 border-t border-slate-200 bg-white/95 px-4 pb-[max(.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur" : "mt-4"}`}>
           <div className="flex items-end gap-2">
             <Textarea
               value={draft}
@@ -2986,7 +3010,7 @@ export function TaskBoard({
             />
             <button type="button" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#102A43] text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-40" disabled={!draft.trim() || busy} onClick={() => void submitComment(card)} aria-label="Post comment"><Send className="h-4 w-4" /></button>
           </div>
-        </div>
+        </div>}
       </section>
     );
   };
@@ -3020,8 +3044,8 @@ export function TaskBoard({
     return (
       <article
         key={card.id}
-        draggable={!detail && !isMobileBoardViewport()}
-        onDragStart={(event) => { if (detail) return; setDraggingCardId(card.id); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", card.id); }}
+        draggable={canEditBoard && !detail && !isMobileBoardViewport()}
+        onDragStart={(event) => { if (!canEditBoard || detail) return; setDraggingCardId(card.id); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", card.id); }}
         onDragEnd={() => { setDraggingCardId(null); setDragOverStage(null); }}
         className={detail ? "min-h-full bg-white" : `overflow-hidden rounded-2xl border bg-white shadow-sm transition lg:shadow-[0_2px_9px_rgba(15,23,42,0.12)] ${stageStyle} ${compact ? "" : "lg:rounded-[1.35rem]"} ${draggingCardId === card.id ? "opacity-25 ring-2 ring-slate-300" : ""}`}
       >
@@ -3040,7 +3064,7 @@ export function TaskBoard({
               </div>}
             </button>
             <div className="flex shrink-0 flex-col items-center gap-0.5">
-              {online && cardNotifyTarget && (
+              {canNotifyBoard && cardNotifyTarget && (
                 cardNotificationSent ? (
                   <span className="relative rounded-full bg-emerald-50 p-1.5 text-emerald-700" title={notificationSummary(cardNotification)} aria-label={notificationSummary(cardNotification) || "Notified"}>
                     <Bell className="h-3.5 w-3.5 fill-emerald-100" /><span className="absolute -right-0.5 -top-0.5 flex h-3 w-3 items-center justify-center rounded-full bg-emerald-600 text-white"><Check className="h-2 w-2" /></span>
@@ -3049,7 +3073,7 @@ export function TaskBoard({
                   <button type="button" className={`rounded-full p-1.5 ${cardNotificationQueued ? "cursor-wait bg-amber-50 text-amber-600" : "text-slate-400 hover:bg-amber-50 hover:text-amber-700"}`} onClick={() => openNotify(card)} disabled={cardNotificationQueued} aria-label={cardNotificationQueued ? "Notification is being sent" : `Notify organizers about ${cardNotifyTarget.label.toLowerCase()}`} title={cardNotificationQueued ? "Sending notification…" : "Notify organizers"}><Bell className={`h-3.5 w-3.5 ${cardNotificationQueued ? "animate-pulse" : ""}`} /></button>
                 )
               )}
-              <button type="button" className="rounded-full px-1.5 py-1 text-[9px] font-semibold text-slate-400 hover:bg-slate-50 hover:text-slate-600 lg:text-[11px]" onClick={() => openMoveCard(card)} aria-label={`Move ${card.title}`}>Move</button>
+              {canEditBoard && <button type="button" className="rounded-full px-1.5 py-1 text-[9px] font-semibold text-slate-400 hover:bg-slate-50 hover:text-slate-600 lg:text-[11px]" onClick={() => openMoveCard(card)} aria-label={`Move ${card.title}`}>Move</button>}
               <button type="button" className="hidden rounded-full p-1.5 text-slate-400 hover:bg-slate-50 lg:block" onClick={() => toggleExpanded(card.id)} aria-label={expanded ? "Collapse topic" : "Expand topic"}>{expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}</button>
             </div>
           </div>
@@ -3062,7 +3086,7 @@ export function TaskBoard({
 
           {card.note?.trim() && <div className="mb-3 rounded-2xl bg-slate-50 px-3 py-3"><div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Note</div><p className="mt-1 whitespace-pre-wrap break-words text-sm font-normal leading-relaxed text-slate-700">{card.note.trim()}</p></div>}
 
-          {stage !== "done" && (
+          {canEditBoard && stage !== "done" && (
             <div className="mb-3">
               <button
                 type="button"
@@ -3076,7 +3100,7 @@ export function TaskBoard({
           )}
 
           {(card.links?.length || 0) > 0 && <div className="mb-3 grid gap-1.5">
-            {card.links?.map((link) => <div key={link.id} className="flex min-w-0 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2"><a href={link.url} target="_blank" rel="noreferrer" className="inline-flex min-w-0 flex-1 items-center gap-2 text-xs font-medium text-slate-700"><Link2 className="h-3.5 w-3.5 shrink-0 text-slate-400" /><span className="truncate">{link.label}</span><ExternalLink className="h-3 w-3 shrink-0 text-slate-400" /></a>{stage !== "done" && <button type="button" className="rounded-lg p-1 text-slate-300 hover:bg-red-50 hover:text-red-600" onClick={() => void removeLink(card, link.id)} aria-label={`Remove ${link.label}`}><Trash2 className="h-3.5 w-3.5" /></button>}</div>)}
+            {card.links?.map((link) => <div key={link.id} className="flex min-w-0 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2"><a href={link.url} target="_blank" rel="noreferrer" className="inline-flex min-w-0 flex-1 items-center gap-2 text-xs font-medium text-slate-700"><Link2 className="h-3.5 w-3.5 shrink-0 text-slate-400" /><span className="truncate">{link.label}</span><ExternalLink className="h-3 w-3 shrink-0 text-slate-400" /></a>{canEditBoard && stage !== "done" && <button type="button" className="rounded-lg p-1 text-slate-300 hover:bg-red-50 hover:text-red-600" onClick={() => void removeLink(card, link.id)} aria-label={`Remove ${link.label}`}><Trash2 className="h-3.5 w-3.5" /></button>}</div>)}
           </div>}
 
           {fileUploadingCardId === card.id && (
@@ -3116,7 +3140,7 @@ export function TaskBoard({
                     <ExternalLink className="h-3 w-3 shrink-0 text-slate-400" />
                   </button>
 
-                  {stage !== "done" && (
+                  {canEditClubResources && stage !== "done" && (
                     <button
                       type="button"
                       className="rounded-lg p-1 text-slate-300 hover:bg-red-50 hover:text-red-600 disabled:cursor-wait disabled:opacity-40"
@@ -3135,7 +3159,7 @@ export function TaskBoard({
           {(decisions.length > 0 || actions.length > 0) && <div className="mb-3 flex justify-end"><button type="button" className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-[11px] font-medium text-slate-600 hover:bg-slate-50" onClick={() => setEvolutionCardId(card.id)}><History className="h-3.5 w-3.5" />Evolution · {evolutionStepCount(card)}</button></div>}
           {renderCurrentChapter(card)}
           {renderStageTools(card, stage)}
-          {!(stage === "deciding" && !openDecision && Boolean(currentDecision)) && <button type="button" className="mt-3 inline-flex h-10 w-full items-center justify-center rounded-2xl border border-slate-200 bg-white text-xs font-semibold text-slate-600" onClick={() => openMoveCard(card)}>Move card</button>}
+          {canEditBoard && !(stage === "deciding" && !openDecision && Boolean(currentDecision)) && <button type="button" className="mt-3 inline-flex h-10 w-full items-center justify-center rounded-2xl border border-slate-200 bg-white text-xs font-semibold text-slate-600" onClick={() => openMoveCard(card)}>Move card</button>}
           {renderComments(card, detail)}
         </div>}
       </article>
@@ -3143,7 +3167,7 @@ export function TaskBoard({
   };
 
   const boardColumn = (stage: TopicStage, title: string, Icon: React.ComponentType<{ className?: string }>, mobile = false) => {
-    const canAdd = stage !== "done";
+    const canAdd = canEditBoard && stage !== "done";
     const addPlaceholder = stage === "ideas"
       ? "Add an idea…"
       : stage === "deciding"
@@ -3154,9 +3178,10 @@ export function TaskBoard({
       <section
         ref={mobile ? (element) => { mobileColumnRefs.current[stage] = element; } : undefined}
         data-board-stage={stage}
-        onDragOver={(event) => { event.preventDefault(); setDragOverStage(stage); }}
+        onDragOver={(event) => { if (!canEditBoard) return; event.preventDefault(); setDragOverStage(stage); }}
         onDragLeave={() => { if (dragOverStage === stage) setDragOverStage(null); }}
         onDrop={(event) => {
+          if (!canEditBoard) return;
           event.preventDefault();
           const cardId = event.dataTransfer.getData("text/plain") || draggingCardId;
           const card = board.cards.find((item) => item.id === cardId);
@@ -3243,7 +3268,7 @@ export function TaskBoard({
             <span className="min-w-0">
               <span className="block text-[17px] font-black leading-tight text-white lg:text-[22px]">Action Board</span>
               <span className="mt-0.5 block truncate text-[10px] font-bold text-blue-100/85 lg:text-[13px]">
-                {customBoardName || (online ? "Tasks · Votes · Decisions · Shared" : isSharedRoster ? "Tasks · Votes · Decisions · Sign in" : "Tasks · Votes · Decisions")}
+                {customBoardName || (online ? "Tasks · Votes · Decisions · Shared" : isSharedRoster ? `Tasks · Votes · Decisions · ${sharedAuthorityMessage || "Access unavailable"}` : "Tasks · Votes · Decisions")}
               </span>
             </span>
           </button>
@@ -3254,7 +3279,7 @@ export function TaskBoard({
         </div>
         <div className="mt-3 hidden items-center gap-2 text-[10px] font-black text-blue-100/90 lg:flex lg:text-[13px]">
           {hasNewActivity && <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-amber-700"><span className="h-1.5 w-1.5 rounded-full bg-amber-500" />New activity</span>}
-          <span className="rounded-full bg-white/15 px-2.5 py-1 text-white ring-1 ring-white/20">{online ? "Shared" : isSharedRoster ? "Sign in" : "Private"}</span>
+          <span className="rounded-full bg-white/15 px-2.5 py-1 text-white ring-1 ring-white/20">{online ? (canEditBoard ? "Shared" : "Shared · view only") : isSharedRoster ? (sharedAuthorityMessage || "Access unavailable") : "Private"}</span>
         </div>
         {latestActivity && <div className="mt-2 hidden truncate text-[10px] font-bold text-blue-100/80 lg:block lg:text-[13px]">Last: “{latestActivity.card.title}” · {activityText(latestActivity.activity)}</div>}
       </section>
@@ -3270,7 +3295,7 @@ export function TaskBoard({
                 </div>
                 <p className="mt-0.5 text-[10px] font-medium text-blue-100/80 lg:text-[12px]"><span className="lg:hidden">Tap <span className="font-semibold text-white">Move</span> to change a card’s column.</span><span className="hidden lg:inline">Drag cards between columns, or use <span className="font-semibold text-white">Move</span>.</span></p>
               </div>
-              <Button type="button" variant="outline" className="h-8 w-8 shrink-0 rounded-xl border-white/30 bg-white/90 p-0 text-[#102A43] lg:h-9 lg:w-9" onClick={() => { setNotifyError(""); setBoardNameDraft(customBoardName || ""); setBoardSettingsOpen(true); }} aria-label="Board settings" title="Board settings"><Settings className="h-4 w-4" /></Button>
+              {canEditBoard && <Button type="button" variant="outline" className="h-8 w-8 shrink-0 rounded-xl border-white/30 bg-white/90 p-0 text-[#102A43] lg:h-9 lg:w-9" onClick={() => { setNotifyError(""); setBoardNameDraft(customBoardName || ""); setBoardSettingsOpen(true); }} aria-label="Board settings" title="Board settings"><Settings className="h-4 w-4" /></Button>}
             </div>
           </DialogHeader>
 
@@ -3313,9 +3338,9 @@ export function TaskBoard({
                   <div className="min-w-0 flex-1">
                     <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{stageLabel}</div>
                   </div>
-                  <button type="button" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-slate-500 active:bg-slate-100" onClick={() => openEditCard(activeCard)} aria-label="Edit card">
+                  {canEditBoard && <button type="button" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-slate-500 active:bg-slate-100" onClick={() => openEditCard(activeCard)} aria-label="Edit card">
                     <Pencil className="h-4 w-4" />
-                  </button>
+                  </button>}
                 </div>
                 <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-white">
                   {renderCard(activeCard, false, true)}
@@ -3343,14 +3368,14 @@ export function TaskBoard({
                   <div className="min-w-0 flex-1">
                     <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{stageLabel}</div>
                   </div>
-                  <button
+                  {canEditBoard && <button
                     type="button"
                     className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-slate-500 hover:bg-slate-100"
                     onClick={() => openEditCard(activeCard)}
                     aria-label="Edit card"
                   >
                     <Pencil className="h-4 w-4" />
-                  </button>
+                  </button>}
                 </div>
                 <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-white">
                   {renderCard(activeCard, false, true)}

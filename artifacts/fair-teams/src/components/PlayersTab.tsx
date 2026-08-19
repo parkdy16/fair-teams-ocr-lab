@@ -27,7 +27,6 @@ import {
   type ClubRatingProfile,
   type ClubRatingSummary,
 } from "@/lib/clubCollaborationService";
-import { listenToSharedRosterUser } from "@/lib/sharedRosterService";
 
 
 
@@ -1633,6 +1632,7 @@ export function PlayersTab({
   openAddPlayerRequest = null,
   isSharedRoster = false,
   sharedRosterId,
+  canReadClubRatings = false,
   sharedOrganizerCount = 1,
   tutorialStep,
   onTutorialAction,
@@ -1653,6 +1653,7 @@ export function PlayersTab({
   openAddPlayerRequest?: { token: number; name?: string } | null;
   isSharedRoster?: boolean;
   sharedRosterId?: string;
+  canReadClubRatings?: boolean;
   sharedOrganizerCount?: number;
   tutorialStep?: string | null;
   onTutorialAction?: (action: string, playerId?: string) => void;
@@ -1697,8 +1698,6 @@ export function PlayersTab({
   const [clubRatingLegendOpen, setClubRatingLegendOpen] = useState(false);
   const [clubRatingSummaries, setClubRatingSummaries] = useState<ClubRatingSummary[]>([]);
   const [myClubRatings, setMyClubRatings] = useState<ClubMyRating[]>([]);
-  const [sharedRosterAuthReady, setSharedRosterAuthReady] = useState(false);
-  const [sharedRosterUserUid, setSharedRosterUserUid] = useState<string | null>(null);
   const lastOpenPairingRulesTokenRef = useRef(0);
   const lastExternalAddPlayerTokenRef = useRef(0);
 
@@ -1711,20 +1710,7 @@ export function PlayersTab({
   }, [openPairingRulesToken, players.length, setPairingRules]);
 
   useEffect(() => {
-    return listenToSharedRosterUser((user) => {
-      setSharedRosterAuthReady(true);
-      setSharedRosterUserUid(user?.uid || null);
-    });
-  }, []);
-
-  useEffect(() => {
-    if (!isSharedRoster || !sharedRosterId) {
-      setClubRatingSummaries([]);
-      setMyClubRatings([]);
-      return;
-    }
-    if (!sharedRosterAuthReady) return;
-    if (!sharedRosterUserUid) {
+    if (!isSharedRoster || !sharedRosterId || !canReadClubRatings) {
       setClubRatingSummaries([]);
       setMyClubRatings([]);
       return;
@@ -1750,7 +1736,7 @@ export function PlayersTab({
       setMyClubRatings([]);
       return;
     }
-  }, [isSharedRoster, sharedRosterId, sharedRosterAuthReady, sharedRosterUserUid]);
+  }, [canReadClubRatings, isSharedRoster, sharedRosterId]);
 
   useEffect(() => {
     const hasRosterDialogOpen =

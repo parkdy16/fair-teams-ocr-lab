@@ -25,10 +25,14 @@ import { TaskBoard } from "@/components/TaskBoard";
 import type { AiSmartCommandAction } from "@/lib/aiSmartCommandTypes";
 import { getFairTeamsAuth } from "@/lib/firebaseClient";
 import {
-  listenToSharedRosterUser,
   signOutOfSharedRosters,
   type SharedRosterUser,
 } from "@/lib/sharedRosterService";
+import type {
+  ActiveSharedWorkspaceAuthorityStatus,
+  ActiveSharedWorkspaceCapabilities,
+} from "@/lib/activeSharedWorkspaceAuthority";
+import { NO_ACTIVE_SHARED_WORKSPACE_CAPABILITIES } from "@/lib/activeSharedWorkspaceAuthority";
 import {
   Dialog,
   DialogContent,
@@ -92,6 +96,10 @@ type ClubTabProps = {
   isSharedRoster: boolean;
   sharedRosterId?: string;
   sharedPeopleCount: number;
+  user?: SharedRosterUser | null;
+  sharedAuthorityStatus?: ActiveSharedWorkspaceAuthorityStatus;
+  sharedAuthorityMessage?: string;
+  sharedCapabilities?: ActiveSharedWorkspaceCapabilities;
   canSwitchRoster?: boolean;
   onOpenRosterPicker?: () => void;
   onBackTargetChange?: (hasBackTarget: boolean) => void;
@@ -828,6 +836,10 @@ export function ClubTab({
   isSharedRoster,
   sharedRosterId,
   sharedPeopleCount,
+  user = null,
+  sharedAuthorityStatus = "local_only",
+  sharedAuthorityMessage = "",
+  sharedCapabilities = NO_ACTIVE_SHARED_WORKSPACE_CAPABILITIES,
   canSwitchRoster = false,
   onOpenRosterPicker,
   onBackTargetChange,
@@ -964,8 +976,8 @@ export function ClubTab({
     attendanceWarningBoardOpen: false,
     attendanceWarningComposerOpen: false,
   });
-  const [authReady, setAuthReady] = useState(false);
-  const [clubUser, setClubUser] = useState<SharedRosterUser | null>(null);
+  const clubUser = user;
+  const authReady = sharedAuthorityStatus !== "loading";
   const [collaboratorsOpen, setCollaboratorsOpen] = useState(false);
   const [accountDialogOpen, setAccountDialogOpen] = useState(false);
   const [fileCabinetOpen, setFileCabinetOpen] = useState(false);
@@ -980,26 +992,16 @@ export function ClubTab({
     }
   });
 
-  useEffect(
-    () =>
-      listenToSharedRosterUser((nextUser) => {
-        setClubUser(nextUser);
-        setAuthReady(true);
-      }),
-    [],
-  );
-
   useEffect(() => {
     if (clubUser) setAccountDialogOpen(false);
   }, [clubUser]);
 
 
-  const equipmentRealtimeEnabled = Boolean(equipmentGroupId);
-  const equipmentCanSyncOnline = Boolean(equipmentGroupId && clubUser?.email);
-  const equipmentWaitingForAccount = Boolean(equipmentGroupId && !authReady);
-  const equipmentNeedsSignIn = Boolean(
-    equipmentGroupId && authReady && !clubUser?.email,
-  );
+  const equipmentRealtimeEnabled = Boolean(equipmentGroupId && sharedCapabilities.canReadEquipment);
+  const equipmentCanSyncOnline = equipmentRealtimeEnabled;
+  const equipmentCanEdit = !isSharedRoster || sharedCapabilities.canEditEquipment;
+  const equipmentWaitingForAccount = Boolean(isSharedRoster && sharedAuthorityStatus === "loading");
+  const equipmentNeedsSignIn = Boolean(isSharedRoster && sharedAuthorityStatus === "signed_out");
   const equipmentSharedConnecting = isSharedRoster && !equipmentRealtimeEnabled;
   const equipmentStatusText = equipmentCanSyncOnline
     ? equipmentError
@@ -1016,7 +1018,7 @@ export function ClubTab({
       : equipmentNeedsSignIn
         ? "Sign in for online equipment"
         : equipmentSharedConnecting
-          ? "Connecting shared equipment…"
+          ? sharedAuthorityMessage || "Connecting shared equipment…"
           : "Local preview";
   const equipmentBoardStatusText = equipmentMoveNotice
     ? `${equipmentMoveNotice}${equipmentCanSyncOnline ? " · saved online" : ""}`
@@ -1035,7 +1037,7 @@ export function ClubTab({
         : equipmentNeedsSignIn
           ? "Sign in to use the shared equipment board online."
           : equipmentSharedConnecting
-            ? "Connecting shared equipment…"
+            ? sharedAuthorityMessage || "Connecting shared equipment…"
             : "Local preview · drag bags to move";
   const equipmentHolders = useMemo<EquipmentHolder[]>(() => {
     if (!isSharedRoster && !equipmentRealtimeEnabled)
@@ -1123,19 +1125,6 @@ export function ClubTab({
       setEquipmentKits(cachedBags);
     }
 
-    if (!authReady) {
-      setEquipmentLoading(true);
-      setEquipmentError("");
-      return;
-    }
-
-    if (!clubUser?.email) {
-      setEquipmentLoading(false);
-      setEquipmentError("");
-      setEquipmentLastSyncedAt(null);
-      return;
-    }
-
     setEquipmentLoading(true);
     setEquipmentError("");
     try {
@@ -1164,13 +1153,19 @@ export function ClubTab({
           ? error.message
           : "Could not connect equipment board.",
       );
+      return undefined;
     }
-  }, [authReady, clubUser?.email, equipmentGroupId, isSharedRoster]);
+  }, [equipmentGroupId, isSharedRoster]);
 
-  const attendanceEnabled = Boolean(isSharedRoster && sharedRosterId && clubUser?.email);
+  const attendanceReadEnabled = Boolean(
+    isSharedRoster && sharedRosterId && sharedCapabilities.canReadAttendance,
+  );
+  const attendanceEnabled = Boolean(
+    attendanceReadEnabled && sharedCapabilities.canEditAttendance,
+  );
 
   useEffect(() => {
-    if (!attendanceEnabled || !sharedRosterId) {
+    if (!attendanceReadEnabled || !sharedRosterId) {
       setAttendanceRecords([]);
       setAttendanceError("");
       setAttendanceLoading(false);
@@ -1194,11 +1189,12 @@ export function ClubTab({
     } catch (error) {
       setAttendanceLoading(false);
       setAttendanceError(error instanceof Error ? error.message : "Could not connect Club attendance.");
+      return undefined;
     }
-  }, [attendanceEnabled, sharedRosterId]);
+  }, [attendanceReadEnabled, sharedRosterId]);
 
   useEffect(() => {
-    if (!attendanceEnabled || !sharedRosterId) {
+    if (!attendanceReadEnabled || !sharedRosterId) {
       setAttendanceWarningTemplates({ ...DEFAULT_ATTENDANCE_WARNING_TEMPLATES });
       setAttendanceWarningTemplatesLoading(false);
       setAttendanceWarningTemplatesError("");
@@ -1222,11 +1218,15 @@ export function ClubTab({
     } catch (error) {
       setAttendanceWarningTemplatesLoading(false);
       setAttendanceWarningTemplatesError(error instanceof Error ? error.message : "Could not connect warning templates.");
+      return undefined;
     }
-  }, [attendanceEnabled, sharedRosterId]);
+  }, [attendanceReadEnabled, sharedRosterId]);
 
   const clubRatingsEnabled = Boolean(
-    isSharedRoster && sharedRosterId && clubUser?.email,
+    isSharedRoster
+    && sharedRosterId
+    && sharedCapabilities.canReadClubRatings
+    && sharedCapabilities.canRatePlayer,
   );
 
   useEffect(() => {
@@ -1235,6 +1235,8 @@ export function ClubTab({
       setMyClubRatings([]);
       setClubRatingError("");
       setClubRatingLoading(false);
+      setRatingPlayerId(null);
+      setRatingBoardOpen(false);
       return;
     }
 
@@ -1279,9 +1281,8 @@ export function ClubTab({
   }, [clubRatingsEnabled, sharedRosterId]);
 
   useEffect(() => {
-    const authUser = getFairTeamsAuth().currentUser;
     const notesReady = Boolean(
-      isSharedRoster && sharedRosterId && (clubUser?.email || authUser?.email),
+      isSharedRoster && sharedRosterId && sharedCapabilities.canUseClubNotes,
     );
 
     if (!notesReady || !sharedRosterId) {
@@ -1303,7 +1304,7 @@ export function ClubTab({
       );
       return;
     }
-  }, [clubUser?.email, isSharedRoster, sharedRosterId]);
+  }, [isSharedRoster, sharedCapabilities.canUseClubNotes, sharedRosterId]);
 
   const myRatingByPlayerId = useMemo(() => {
     return new Map(myClubRatings.map((rating) => [rating.playerId, rating]));
@@ -1368,23 +1369,22 @@ export function ClubTab({
   const clubRatingProgressText = clubRatingsEnabled
     ? `${clubRatedCount} of ${players.length} rated${clubSkippedCount ? ` · ${clubSkippedCount} skipped` : ""}`
     : isSharedRoster
-      ? "Sign in to rate this shared roster."
+      ? sharedAuthorityMessage || "Sign in to rate this shared roster."
       : "Available when this roster is shared.";
   const previewClubNotes = clubNotes.slice(0, 3);
-  const authUser = getFairTeamsAuth().currentUser;
-  const currentUserUid = authUser?.uid || "";
+  const currentUserUid = clubUser?.uid || "";
   const clubNotesEnabled = Boolean(
-    isSharedRoster && sharedRosterId && (clubUser?.email || authUser?.email),
+    isSharedRoster && sharedRosterId && sharedCapabilities.canUseClubNotes,
   );
   const clubNotesUnavailableReason = !isSharedRoster
     ? "Club Notes belong to shared rosters. Open or create a shared roster first."
-    : !sharedRosterId
+    : sharedAuthorityMessage || (!sharedRosterId
       ? "This shared roster is still connecting. Try again in a moment."
       : !authReady
         ? "Connecting your Stripes account. Try again in a moment."
-        : !(clubUser?.email || authUser?.email)
+        : !clubUser?.email
           ? "Sign in to add Club Notes."
-          : "";
+          : "Club Notes are unavailable for this account.");
   const canAddClubNote =
     clubNotesEnabled && clubNoteDraft.trim().length > 0 && !clubNoteSaving;
   const canRemoveClubNote = (note: ClubNote) =>
@@ -1432,6 +1432,7 @@ export function ClubTab({
 
   const seedClubRatingsFromRosterSkills = async () => {
     if (
+      !clubRatingsEnabled ||
       !sharedRosterId ||
       ratingSeedSaving ||
       legacySkillSeedPlayers.length === 0
@@ -1474,7 +1475,7 @@ export function ClubTab({
   };
 
   const saveClubRating = async () => {
-    if (!sharedRosterId || !ratingDialogPlayer || ratingSaving) return;
+    if (!clubRatingsEnabled || !sharedRosterId || !ratingDialogPlayer || ratingSaving) return;
     setRatingSaving(true);
     setClubRatingError("");
     try {
@@ -1511,7 +1512,7 @@ export function ClubTab({
   };
 
   const skipClubRating = async () => {
-    if (!sharedRosterId || !ratingDialogPlayer || ratingSaving) return;
+    if (!clubRatingsEnabled || !sharedRosterId || !ratingDialogPlayer || ratingSaving) return;
     setRatingSaving(true);
     setClubRatingError("");
     try {
@@ -1850,6 +1851,7 @@ export function ClubTab({
   };
 
   const openNewEquipmentKit = () => {
+    if (!equipmentCanEdit) return;
     openEquipmentEditor(() => {
       equipmentDraftBagIdRef.current = null;
       resetEquipmentForm();
@@ -1858,6 +1860,7 @@ export function ClubTab({
   };
 
   const openEditEquipmentKit = (kit: ClubEquipmentKit) => {
+    if (!equipmentCanEdit) return;
     openEquipmentEditor(() => {
       const existingItems = equipmentItemsForKit(kit);
       const normalizedHolderId = normalizeEquipmentHolderId(kit.holderId);
@@ -1906,6 +1909,7 @@ export function ClubTab({
   }
 
   async function persistEquipmentDraft() {
+    if (!equipmentCanEdit) return;
     const trimmedName = kitName.trim();
     const normalizedHolderId = normalizeEquipmentHolderId(kitHolderId);
     const hasMeaningfulDraft = Boolean(
@@ -1926,15 +1930,8 @@ export function ClubTab({
     if (!equipmentDraftBagIdRef.current) equipmentDraftBagIdRef.current = bagId;
     const now = Date.now();
     const existingKit = equipmentKits.find((kit) => kit.id === bagId) || null;
-    let actorEmail = clubUser?.email || undefined;
-    let actorName = actorEmail || "Organizer";
-    try {
-      const firebaseUser = getFairTeamsAuth().currentUser;
-      actorEmail = firebaseUser?.email || actorEmail;
-      actorName = firebaseUser?.displayName || actorEmail || "Organizer";
-    } catch {
-      // Local preview can run without Firebase auth ready.
-    }
+    const actorEmail = clubUser?.email || undefined;
+    const actorName = clubUser?.displayName || actorEmail || "Organizer";
     const cleanedItems = kitItems
       .filter((item) => item.label.trim() && item.quantity > 0)
       .map((item) => ({
@@ -1992,7 +1989,7 @@ export function ClubTab({
   }
 
   useEffect(() => {
-    if (!equipmentDialogOpen || !equipmentAutosaveReadyRef.current) return;
+    if (!equipmentCanEdit || !equipmentDialogOpen || !equipmentAutosaveReadyRef.current) return;
     if (equipmentAutosaveTimerRef.current !== null) {
       window.clearTimeout(equipmentAutosaveTimerRef.current);
     }
@@ -2006,21 +2003,29 @@ export function ClubTab({
         equipmentAutosaveTimerRef.current = null;
       }
     };
-  }, [equipmentDialogOpen, kitName, kitHolderId, kitColor, kitItems]);
+  }, [equipmentCanEdit, equipmentDialogOpen, kitName, kitHolderId, kitColor, kitItems]);
+
+  useEffect(() => {
+    if (!isSharedRoster || equipmentCanEdit || !equipmentDialogOpen) return;
+    if (equipmentAutosaveTimerRef.current !== null) {
+      window.clearTimeout(equipmentAutosaveTimerRef.current);
+      equipmentAutosaveTimerRef.current = null;
+    }
+    equipmentAutosaveReadyRef.current = false;
+    setColorPickerOpen(false);
+    setEquipmentItemPickerOpen(false);
+    setDeleteConfirmOpen(false);
+    setEquipmentDialogOpen(false);
+    resetEquipmentForm();
+  }, [equipmentCanEdit, equipmentDialogOpen, isSharedRoster]);
 
   const moveEquipmentKit = async (kitId: string, holderId: string) => {
+    if (!equipmentCanEdit) return;
     const currentKit = equipmentKits.find((kit) => kit.id === kitId);
     if (!currentKit) return;
     const now = Date.now();
-    let actorEmail = clubUser?.email || undefined;
-    let actorName = actorEmail || "Organizer";
-    try {
-      const firebaseUser = getFairTeamsAuth().currentUser;
-      actorEmail = firebaseUser?.email || actorEmail;
-      actorName = firebaseUser?.displayName || actorEmail || "Organizer";
-    } catch {
-      // Local preview can run without Firebase auth ready.
-    }
+    const actorEmail = clubUser?.email || undefined;
+    const actorName = clubUser?.displayName || actorEmail || "Organizer";
     const nextKit = {
       ...currentKit,
       holderId,
@@ -2066,6 +2071,7 @@ export function ClubTab({
     event: React.PointerEvent<HTMLElement>,
     kit: ClubEquipmentKit,
   ) => {
+    if (!equipmentCanEdit) return;
     if (event.pointerType === "mouse" && event.button !== 0) return;
     event.currentTarget.setPointerCapture?.(event.pointerId);
     clearEquipmentDragTimer();
@@ -2130,6 +2136,7 @@ export function ClubTab({
   };
 
   const deleteEquipmentKit = async (kitId: string) => {
+    if (!equipmentCanEdit) return;
     const previous = equipmentKits;
     const nextKits = previous.filter((kit) => kit.id !== kitId);
     setEquipmentKits(nextKits);
@@ -2275,7 +2282,7 @@ export function ClubTab({
   };
 
   const saveCurrentAttendanceWarningTemplate = async () => {
-    if (!sharedRosterId || attendanceWarningTemplateSaving) return;
+    if (!attendanceEnabled || !sharedRosterId || attendanceWarningTemplateSaving) return;
     setAttendanceWarningTemplateSaving(true);
     setAttendanceWarningTemplateNotice("");
     setAttendanceWarningTemplatesError("");
@@ -2338,11 +2345,13 @@ export function ClubTab({
   };
 
   const openNewAttendanceIssue = () => {
+    if (!attendanceEnabled) return;
     resetAttendanceEditor();
     setAttendanceEditorOpen(true);
   };
 
   const openAttendanceRecord = (record: AttendanceIssueRecord) => {
+    if (!attendanceEnabled) return;
     const matched = resolveAttendancePlayer(record);
     setAttendanceEditingId(record.id);
     setAttendancePlayerId(matched?.id || record.playerId);
@@ -2393,7 +2402,7 @@ export function ClubTab({
   };
 
   const removeAttendanceRecord = async () => {
-    if (!sharedRosterId || !attendanceEditingId || attendanceSaving) return;
+    if (!attendanceEnabled || !sharedRosterId || !attendanceEditingId || attendanceSaving) return;
     setAttendanceSaving(true);
     setAttendanceError("");
     try {
@@ -2701,14 +2710,14 @@ export function ClubTab({
               <button
                 type="button"
                 className="flex min-h-[3.25rem] lg:min-h-[3.75rem] w-full items-center gap-2.5 border-t border-slate-100 px-3 py-2 text-left transition hover:bg-[#f4f9f7] active:bg-[#eaf4f1] disabled:opacity-45"
-                disabled={!attendanceEnabled}
+                disabled={!attendanceReadEnabled}
                 onClick={() => { setAttendanceHistoryPlayerId(null); setAttendanceBoardOpen(true); }}
               >
                 <Clock3 className="h-4 w-4 shrink-0 text-[#3f756b] lg:h-5 lg:w-5" />
                 <span className="min-w-0 flex-1">
                   <span className="block text-[12px] font-black text-[#102A43] lg:text-[15px]">Attendance</span>
                   <span className="block truncate text-[10px] font-bold text-slate-500 lg:text-[13px]">
-                    {attendanceEnabled ? "Shared organizer log" : isSharedRoster ? "Sign in to record" : "Shared rosters only"}
+                    {attendanceReadEnabled ? (attendanceEnabled ? "Shared organizer log" : "Shared attendance · view only") : isSharedRoster ? (sharedAuthorityMessage || "Sign in to view") : "Shared rosters only"}
                   </span>
                 </span>
                 <ChevronRight className="h-4 w-4 shrink-0 text-slate-300" />
@@ -2733,14 +2742,14 @@ export function ClubTab({
               <button
                 type="button"
                 className="flex min-h-[3.25rem] lg:min-h-[3.75rem] w-full items-center gap-2.5 border-t border-slate-100 px-3 py-2 text-left transition hover:bg-[#f4f9f7] active:bg-[#eaf4f1] disabled:opacity-45"
-                disabled={!attendanceEnabled}
+                disabled={!attendanceReadEnabled}
                 onClick={() => { setAttendanceWarningPlayerSearch(""); setAttendanceWarningBoardOpen(true); }}
               >
                 <AlertTriangle className="h-4 w-4 shrink-0 text-[#3f756b] lg:h-5 lg:w-5" />
                 <span className="min-w-0 flex-1">
                   <span className="block text-[12px] font-black text-[#102A43] lg:text-[15px]">Warnings</span>
                   <span className="block truncate text-[10px] font-bold text-slate-500 lg:text-[13px]">
-                    {attendanceEnabled ? `${attendanceOverview.length} player${attendanceOverview.length === 1 ? "" : "s"} with recorded issues` : isSharedRoster ? "Sign in to use warnings" : "Shared rosters only"}
+                    {attendanceReadEnabled ? `${attendanceOverview.length} player${attendanceOverview.length === 1 ? "" : "s"} with recorded issues` : isSharedRoster ? (sharedAuthorityMessage || "Sign in to view warnings") : "Shared rosters only"}
                   </span>
                 </span>
                 <ChevronRight className="h-4 w-4 shrink-0 text-slate-300" />
@@ -2905,6 +2914,13 @@ export function ClubTab({
           scopeId={equipmentGroupId}
           isSharedRoster={isSharedRoster}
           user={clubUser}
+          sharedAuthorityMessage={sharedAuthorityMessage}
+          canReadSharedBoard={sharedCapabilities.canReadActionBoard}
+          canEditSharedBoard={sharedCapabilities.canEditActionBoard}
+          canVoteSharedBoard={sharedCapabilities.canVoteActionBoard}
+          canNotifySharedBoard={sharedCapabilities.canNotifyActionBoard}
+          canReadClubResources={sharedCapabilities.canReadClubResources}
+          canEditClubResources={sharedCapabilities.canEditClubResources}
           eligibleVoterCount={isSharedRoster ? Math.max(1, sharedPeopleCount) : 1}
           organizerPeople={actionBoardOrganizerPeople}
           players={players}
@@ -3062,6 +3078,7 @@ export function ClubTab({
                           <button
                             key={`dashboard-kit-${kit.id}`}
                             type="button"
+                            disabled={!equipmentCanEdit}
                             className={`touch-none select-none rounded-2xl border border-slate-200 bg-white px-2 py-1 text-left shadow-sm transition active:scale-[0.98] lg:px-2.5 lg:py-1.5 ${isDragging ? "scale-95 opacity-45 ring-2 ring-emerald-200" : ""}`}
                             onPointerDown={(event) =>
                               startEquipmentPointerDrag(event, kit)
@@ -3070,7 +3087,7 @@ export function ClubTab({
                             onPointerUp={finishEquipmentPointerDrag}
                             onPointerCancel={finishEquipmentPointerDrag}
                             onClick={() => openEquipmentKitFromBoard(kit)}
-                            aria-label={`Edit ${kit.name}`}
+                            aria-label={equipmentCanEdit ? `Edit ${kit.name}` : kit.name}
                           >
                             <span className="flex max-w-[7.4rem] items-center gap-1.5">
                               <DuffleBagIcon
@@ -3111,6 +3128,14 @@ export function ClubTab({
         onOpenChange: setFileCabinetOpen,
         googleLoginHint: fileCabinetGoogleLoginHint(clubUser),
       })}
+      {isSharedRoster && !fileCabinetNode && sharedAuthorityMessage && (
+        <section className="rounded-[1.75rem] border border-violet-100 bg-violet-50/60 p-3 shadow-sm" role="status">
+          <div className="text-sm font-black text-[#102A43]">File Cabinet</div>
+          <div className="mt-1 text-[11px] font-semibold leading-snug text-violet-800">
+            {sharedAuthorityMessage}
+          </div>
+        </section>
+      )}
       </div>
 
       <Dialog open={clubNotesOpen} onOpenChange={setClubNotesOpen}>
@@ -3270,7 +3295,7 @@ export function ClubTab({
           ) : (
             <div className="max-h-[68dvh] overflow-y-auto p-4" style={{ WebkitOverflowScrolling: "touch" }}>
               <Button type="button" className="mb-3 h-10 w-full rounded-2xl bg-[#102A43] text-sm font-black text-white hover:bg-[#0b2036]" onClick={() => openAttendanceWarningComposer()}><Copy className="mr-1.5 h-4 w-4" />Copy warning</Button>
-              <div className="grid gap-2">{(attendanceHistoryRow?.records || []).map((record) => <button key={record.id} type="button" className="rounded-2xl border border-slate-100 bg-white px-3 py-3 text-left shadow-sm active:scale-[0.99]" onClick={() => openAttendanceRecord(record)}><div className="flex items-start justify-between gap-2"><span className="text-sm font-black text-[#102A43]">{attendanceIssueLabel(record.issueType)}</span><span className="text-[10px] font-black text-slate-400">{formatAttendanceDate(record.incidentDate)}</span></div>{record.note && <div className="mt-1 text-[11px] font-semibold leading-snug text-slate-600">{record.note}</div>}{(record.createdByName || record.createdByEmail) && <div className="mt-1.5 text-[10px] font-semibold text-slate-400">Recorded by {record.createdByName || record.createdByEmail}</div>}</button>)}</div>
+              <div className="grid gap-2">{(attendanceHistoryRow?.records || []).map((record) => <button key={record.id} type="button" className="rounded-2xl border border-slate-100 bg-white px-3 py-3 text-left shadow-sm active:scale-[0.99] disabled:cursor-default disabled:active:scale-100" disabled={!attendanceEnabled} onClick={() => openAttendanceRecord(record)}><div className="flex items-start justify-between gap-2"><span className="text-sm font-black text-[#102A43]">{attendanceIssueLabel(record.issueType)}</span><span className="text-[10px] font-black text-slate-400">{formatAttendanceDate(record.incidentDate)}</span></div>{record.note && <div className="mt-1 text-[11px] font-semibold leading-snug text-slate-600">{record.note}</div>}{(record.createdByName || record.createdByEmail) && <div className="mt-1.5 text-[10px] font-semibold text-slate-400">Recorded by {record.createdByName || record.createdByEmail}</div>}</button>)}</div>
             </div>
           )}
         </DialogContent>
@@ -3442,7 +3467,7 @@ export function ClubTab({
             <div className="rounded-2xl bg-slate-50 px-3 py-2 text-[10px] font-semibold leading-snug text-slate-500">Session “Late” only keeps someone out of team generation. It does not create an attendance record.</div>
             {attendanceDuplicate && <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3"><div className="flex items-start gap-2 text-[11px] font-bold leading-snug text-amber-900"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /><span>{attendanceIssueLabel(attendanceDuplicate.issueType)} is already recorded for this player on {formatAttendanceDate(attendanceDuplicate.incidentDate)}.</span></div><div className="mt-2 grid grid-cols-2 gap-2"><Button type="button" variant="outline" className="h-9 rounded-xl border-amber-200 bg-white text-[11px] font-black text-amber-800" onClick={() => setAttendanceDuplicate(null)}>Cancel</Button><Button type="button" className="h-9 rounded-xl bg-amber-700 text-[11px] font-black text-white hover:bg-amber-800" onClick={() => saveAttendanceRecord(true)}>Record another</Button></div></div>}
             {attendanceError && <div className="rounded-2xl border border-amber-100 bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-800">{attendanceError}</div>}
-            <div className={`grid gap-2 ${attendanceEditingId ? "grid-cols-[0.8fr_1.2fr]" : "grid-cols-1"}`}>{attendanceEditingId && <Button type="button" variant="outline" className="h-10 rounded-2xl border-red-200 text-sm font-black text-red-500 hover:bg-red-50" disabled={attendanceSaving} onClick={removeAttendanceRecord}><Trash2 className="mr-1.5 h-4 w-4" />Delete</Button>}<Button type="button" className="h-10 rounded-2xl bg-[#102A43] text-sm font-black text-white hover:bg-[#0b2036]" disabled={!attendancePlayerId || !attendanceDate || attendanceSaving} onClick={() => { blurActiveField(); saveAttendanceRecord(false); }}>{attendanceSaving ? "Saving…" : attendanceEditingId ? "Save changes" : "Save record"}</Button></div>
+            <div className={`grid gap-2 ${attendanceEditingId ? "grid-cols-[0.8fr_1.2fr]" : "grid-cols-1"}`}>{attendanceEditingId && <Button type="button" variant="outline" className="h-10 rounded-2xl border-red-200 text-sm font-black text-red-500 hover:bg-red-50" disabled={!attendanceEnabled || attendanceSaving} onClick={removeAttendanceRecord}><Trash2 className="mr-1.5 h-4 w-4" />Delete</Button>}<Button type="button" className="h-10 rounded-2xl bg-[#102A43] text-sm font-black text-white hover:bg-[#0b2036]" disabled={!attendanceEnabled || !attendancePlayerId || !attendanceDate || attendanceSaving} onClick={() => { blurActiveField(); saveAttendanceRecord(false); }}>{attendanceSaving ? "Saving…" : attendanceEditingId ? "Save changes" : "Save record"}</Button></div>
           </div>
         </DialogContent>
       </Dialog>
@@ -3869,8 +3894,9 @@ export function ClubTab({
                   Equipment board
                 </DialogTitle>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500 lg:text-sm">
-                  Drag bags between holders. Tap a bag to edit its name and
-                  contents.
+                  {equipmentCanEdit
+                    ? "Drag bags between holders. Tap a bag to edit its name and contents."
+                    : "Shared equipment is view-only for this account."}
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -3882,14 +3908,16 @@ export function ClubTab({
                 >
                   View club inventory
                 </Button>
-                <Button
-                  type="button"
-                  className="h-9 rounded-2xl bg-[#102A43] px-3 text-xs font-black text-white hover:bg-[#0b2036]"
-                  onClick={openNewEquipmentKit}
-                >
-                  <Plus className="mr-1.5 h-4 w-4" />
-                  Add bag
-                </Button>
+                {equipmentCanEdit && (
+                  <Button
+                    type="button"
+                    className="h-9 rounded-2xl bg-[#102A43] px-3 text-xs font-black text-white hover:bg-[#0b2036]"
+                    onClick={openNewEquipmentKit}
+                  >
+                    <Plus className="mr-1.5 h-4 w-4" />
+                    Add bag
+                  </Button>
+                )}
               </div>
             </div>
           </DialogHeader>
@@ -3949,8 +3977,8 @@ export function ClubTab({
                               className="flex w-full flex-wrap items-center gap-1.5"
                             >
                               <div
-                                role="button"
-                                tabIndex={0}
+                                role={equipmentCanEdit ? "button" : undefined}
+                                tabIndex={equipmentCanEdit ? 0 : -1}
                                 className={`min-w-0 flex-[1_1_9rem] touch-none select-none rounded-2xl border border-slate-200 bg-white px-2.5 py-1.5 text-left shadow-sm transition hover:border-emerald-200 hover:bg-white active:scale-[0.98] ${isDragging ? "scale-95 opacity-45 ring-2 ring-emerald-200" : ""}`}
                                 onPointerDown={(event) =>
                                   startEquipmentPointerDrag(event, kit)
@@ -3979,12 +4007,14 @@ export function ClubTab({
                                       <span className="truncate text-xs font-black text-[#102A43]">
                                         {kit.name}
                                       </span>
-                                      <span
-                                        className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-400"
-                                        aria-hidden="true"
-                                      >
-                                        <Pencil className="h-3 w-3" />
-                                      </span>
+                                      {equipmentCanEdit && (
+                                        <span
+                                          className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-400"
+                                          aria-hidden="true"
+                                        >
+                                          <Pencil className="h-3 w-3" />
+                                        </span>
+                                      )}
                                     </div>
                                   </div>
                                 </div>

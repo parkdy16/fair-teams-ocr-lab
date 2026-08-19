@@ -89,7 +89,11 @@ import {
   type GoogleSheetRosterFile,
 } from "@/lib/googleSheetsFiles";
 import { pickGoogleSheetRosterFile, warmUpGoogleDrivePicker } from "@/lib/googleDrivePicker";
-import { leaveFirebaseSharedRosterAccess, listFirebaseSharedRosters, readFirebaseSharedRoster, type FirebaseSharedRosterSummary } from "@/lib/sharedRosterService";
+import { leaveFirebaseSharedRosterAccess, readFirebaseSharedRoster, type FirebaseSharedRosterSummary } from "@/lib/sharedRosterService";
+import {
+  activeSharedWorkspaceAuthorityMessage,
+  useActiveSharedWorkspaceAuthority,
+} from "@/lib/activeSharedWorkspaceAuthority";
 import { fetchClubRatingSummaries, type ClubRatingSummary } from "@/lib/clubCollaborationService";
 import { profileFromAveragedAttributes } from "@/lib/playerStyleProfile";
 import {
@@ -580,7 +584,6 @@ function App() {
   const hasPrivateBackupRosters = privateBackupRosters.some((roster) => roster.players.length > 0 || roster.name !== EMPTY_ROSTER_NAME);
   const privateBackupSummary = hasPrivateBackupRosters ? countBackupRosters(privateBackupRosters) : { rosterCount: 0, playerCount: 0 };
   const deviceBackupSummary = privateBackupSummary;
-  const [firebaseNotificationMemberEmailsByRosterId, setFirebaseNotificationMemberEmailsByRosterId] = useState<Record<string, string[]>>({});
   const googleDriveConfig = getGoogleDriveConfig();
   const googleDriveConnectionRef = useRef<GoogleDriveConnectionController | null>(null);
   if (!googleDriveConnectionRef.current) {
@@ -685,16 +688,23 @@ function App() {
     activeRoster?.cloudSource?.provider === "firebase"
       ? activeRoster.cloudSource
       : null;
-  const activeCabinetScope = activeFirebaseSource?.firebaseGroupId
-    ? { kind: "group" as const, id: activeFirebaseSource.firebaseGroupId }
-    : activeFirebaseSource?.firebaseRosterId
-      ? { kind: "roster" as const, id: activeFirebaseSource.firebaseRosterId }
+  const activeSharedWorkspaceAuthority = useActiveSharedWorkspaceAuthority({
+    localRosterId: activeRoster?.id || "",
+    firebaseRosterId: activeFirebaseSource?.firebaseRosterId,
+    cachedFirebaseGroupId: activeFirebaseSource?.firebaseGroupId,
+  });
+  const activeSharedCapabilities = activeSharedWorkspaceAuthority.capabilities;
+  const activeAuthoritativeRoster = activeSharedWorkspaceAuthority.roster;
+  const activeAuthoritativeGroup = activeSharedWorkspaceAuthority.group;
+  const activeAuthoritativeRosterId = activeSharedWorkspaceAuthority.authoritativeRosterId;
+  const activeCabinetScope = activeSharedCapabilities.canUseFileCabinet
+    ? activeSharedWorkspaceAuthority.authoritativeGroupId
+      ? { kind: "group" as const, id: activeSharedWorkspaceAuthority.authoritativeGroupId }
+      : activeAuthoritativeRosterId
+        ? { kind: "roster" as const, id: activeAuthoritativeRosterId }
+        : null
       : null;
-  const activeCanConfigureCabinet = Boolean(
-    activeCabinetScope
-    && activeFirebaseSource?.firebaseRole
-    && ["owner", "editor", "organizer"].includes(activeFirebaseSource.firebaseRole),
-  );
+  const activeCanConfigureCabinet = Boolean(activeCabinetScope && activeSharedCapabilities.canUseFileCabinet);
   const activeRosterIsShared = Boolean(activeGoogleSheetSource?.spreadsheetId || activeFirebaseSource?.firebaseRosterId);
   const activeRosterIsFirebaseShared = Boolean(activeFirebaseSource?.firebaseRosterId);
   const localRosterPickerChoices = rosters.filter((roster) => !isRosterCloudShared(roster));
@@ -724,18 +734,22 @@ function App() {
     return emails.size || 1;
   };
 
-  const activeFirebaseEquipmentHolderLabels = activeFirebaseSource
+  const activeFirebaseEquipmentHolderLabels = activeAuthoritativeRoster
     ? Array.from(new Set([
-        activeFirebaseSource.firebaseOwnerEmail,
-        ...Object.keys(activeFirebaseSource.accessLabels || {}),
+        activeAuthoritativeRoster.ownerEmail,
+        ...(activeAuthoritativeRoster.memberEmails || []),
       ]
         .map((email) => (email || "").trim().toLowerCase())
         .filter((email) => email.includes("@"))))
     : [];
-  const activeFirebaseEquipmentHolderNamesByEmail = activeFirebaseSource?.firebaseMemberNamesByEmail || {};
-  const activeFirebaseNotificationMemberEmails = activeFirebaseSource?.firebaseRosterId
-    ? firebaseNotificationMemberEmailsByRosterId[activeFirebaseSource.firebaseRosterId] || []
-    : [];
+  const activeFirebaseEquipmentHolderNamesByEmail = {
+    ...(activeAuthoritativeRoster?.memberNamesByEmail || {}),
+    ...(activeAuthoritativeGroup?.memberNamesByEmail || {}),
+  };
+  const activeFirebaseNotificationMemberEmails = activeAuthoritativeRoster?.memberEmails || [];
+  const activeFirebaseSharedPeopleCount = activeAuthoritativeGroup?.memberCount
+    || activeAuthoritativeRoster?.memberEmails?.length
+    || 0;
   const cleanFirebasePersonLabel = (email: string) => {
     const normalized = email.trim().toLowerCase();
     const savedName = activeFirebaseEquipmentHolderNamesByEmail[normalized] || activeFirebaseEquipmentHolderNamesByEmail[email];
@@ -751,14 +765,6 @@ function App() {
     .filter((label, index, all) => Boolean(label) && all.indexOf(label) === index);
 
   const syncFirebaseRosterBadgesFromSummaries = (summaries: FirebaseSharedRosterSummary[]) => {
-    setFirebaseNotificationMemberEmailsByRosterId(Object.fromEntries(
-      summaries.map((summary) => [
-        summary.id,
-        Array.from(new Set((summary.memberEmails || [])
-          .map((email) => email.trim().toLowerCase())
-          .filter((email) => email.includes("@")))),
-      ]),
-    ));
     if (!summaries.length) return;
     const summaryById = new Map(summaries.map((summary) => [summary.id, summary]));
     setRosterState((current) => {
@@ -777,9 +783,9 @@ function App() {
         const nextLabelSignature = JSON.stringify(Object.keys(nextAccessLabels).sort().map((email) => [email, nextAccessLabels[email]]));
         const currentMemberNameSignature = JSON.stringify(Object.keys(currentMemberNamesByEmail).sort().map((email) => [email, currentMemberNamesByEmail[email]]));
         const nextMemberNameSignature = JSON.stringify(Object.keys(nextMemberNamesByEmail).sort().map((email) => [email, nextMemberNamesByEmail[email]]));
-        const nextGroupId = summary.groupId || source.firebaseGroupId;
+        const nextGroupId = summary.groupId;
         const nextGroupName = summary.groupName || source.firebaseGroupName;
-        const nextRole = summary.currentUserRole || source.firebaseRole;
+        const nextRole = summary.currentUserRole;
         const nextOwnerUid = summary.ownerUid || source.firebaseOwnerUid;
         const nextOwnerEmail = summary.ownerEmail || source.firebaseOwnerEmail;
         const nextLastSavedByEmail = summary.lastSavedByEmail || source.firebaseLastSavedByEmail;
@@ -816,37 +822,17 @@ function App() {
 
 
   useEffect(() => {
-    const rosterId = activeFirebaseSource?.firebaseRosterId;
-    const missingFirebaseGroupLink = Boolean(rosterId && !activeFirebaseSource?.firebaseGroupId);
-    if (!missingFirebaseGroupLink || !rosterId) return;
-    let cancelled = false;
-
-    const attachMissingGroupMetadata = async () => {
-      try {
-        const summaries = await listFirebaseSharedRosters();
-        if (cancelled) return;
-        const matchingSummary = summaries.find((summary) => summary.id === rosterId);
-        if (matchingSummary?.groupId) {
-          syncFirebaseRosterBadgesFromSummaries([matchingSummary]);
-          return;
-        }
-
-        // Some older linked local rosters have the shared roster ID but not the
-        // group metadata needed by the Club Equipment board. If the summary list
-        // did not restore it, read the exact shared roster document as a fallback.
-        const snapshot = await readFirebaseSharedRoster(rosterId);
-        if (!cancelled) syncFirebaseRosterBadgesFromSummaries([snapshot]);
-      } catch {
-        // The Shared Roster tools will show detailed sign-in/permission errors.
-        // Club stays in its safe reconnecting state until the group link is restored.
-      }
-    };
-
-    attachMissingGroupMetadata();
-    return () => {
-      cancelled = true;
-    };
-  }, [activeFirebaseSource?.firebaseRosterId, activeFirebaseSource?.firebaseGroupId]);
+    if (activeSharedWorkspaceAuthority.status !== "authorized" || !activeAuthoritativeRoster) return;
+    syncFirebaseRosterBadgesFromSummaries([activeAuthoritativeRoster]);
+    // Cached cloud metadata is refreshed only after current-UID authority is confirmed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    activeSharedWorkspaceAuthority.contextKey,
+    activeSharedWorkspaceAuthority.status,
+    activeAuthoritativeRoster?.groupId,
+    activeAuthoritativeRoster?.currentUserRole,
+    activeAuthoritativeRoster?.updatedAt,
+  ]);
   const sharedGoogleSheetRosters = rosters.filter(
     (roster) => roster.cloudSource?.provider === "google-sheets" && Boolean(roster.cloudSource.spreadsheetId),
   );
@@ -885,6 +871,11 @@ function App() {
   const [closeSharedConfirmationName, setCloseSharedConfirmationName] = useState("");
   const [closeSharedBusy, setCloseSharedBusy] = useState(false);
   const [closeSharedError, setCloseSharedError] = useState("");
+
+  useEffect(() => {
+    if (!activeSharedCapabilities.canUseClubAccess) setHeaderSharedPeopleOpen(false);
+    if (!activeSharedCapabilities.canLeaveWorkspace) setLeaveSharedConfirmOpen(false);
+  }, [activeSharedCapabilities.canLeaveWorkspace, activeSharedCapabilities.canUseClubAccess]);
   const [newRosterName, setNewRosterName] = useState("");
   const [fileImportMode, setFileImportMode] = useState<"shared" | "backup">(
     "shared",
@@ -1867,7 +1858,9 @@ function App() {
 
   const makePrivateCopyOfActiveSharedRoster = async () => {
     if (!activeRoster || !activeRosterIsFirebaseShared || privateCopyCreating) return;
-    const sharedRosterId = activeRoster.cloudSource?.firebaseRosterId;
+    const sharedRosterId = activeSharedCapabilities.canReadClubRatings
+      ? activeAuthoritativeRosterId
+      : undefined;
     setPrivateCopyCreating(true);
     try {
       const clubSummaryByPlayerId = new Map<string, ClubRatingSummary>();
@@ -1974,15 +1967,15 @@ function App() {
 
 
   const leaveActiveSharedRoster = async () => {
-    if (!activeRoster || !activeRosterIsFirebaseShared || leaveSharedBusy) return;
-    const firebaseRosterId = activeRoster.cloudSource?.firebaseRosterId;
+    if (!activeRoster || !activeRosterIsFirebaseShared || leaveSharedBusy || !activeSharedCapabilities.canLeaveWorkspace) return;
+    const firebaseRosterId = activeAuthoritativeRosterId;
     if (!firebaseRosterId) return;
     setLeaveSharedError("");
     setLeaveSharedBusy(true);
     try {
       const result = await leaveFirebaseSharedRosterAccess(firebaseRosterId);
       const affectedRosterIds = new Set(result.rosterIds);
-      const affectedGroupId = result.groupId || activeRoster.cloudSource?.firebaseGroupId;
+      const affectedGroupId = result.groupId;
       setRosterState((current) => {
         const remaining = current.rosters.filter((roster) => {
           const source = roster.cloudSource?.provider === "firebase" ? roster.cloudSource : undefined;
@@ -3844,6 +3837,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
           headless
           backgroundSync
           activeRoster={activeRoster}
+          activeAuthority={activeSharedWorkspaceAuthority}
           rosters={rosters}
           isEmptyRoster={isEmptyStarterRoster}
           onOpenRoster={openFirebaseSharedRosterAsLocalCopy}
@@ -3979,7 +3973,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                       {activeRosterIsShared ? "Shared" : "Local"}
                     </span>
                   )}
-                  {activeRosterIsFirebaseShared && !shouldShowTodayStartHeader && (
+                  {activeSharedCapabilities.canUseClubAccess && !shouldShowTodayStartHeader && (
                     <span
                       role="button"
                       tabIndex={0}
@@ -3999,7 +3993,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                       }}
                     >
                       <Users className="h-3 w-3" />
-                      {rosterFirebaseSharedPeopleCount(activeRoster)}
+                      {activeFirebaseSharedPeopleCount}
                     </span>
                   )}
                   {activeTab === "players" && (
@@ -4069,7 +4063,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
           </div>
         </header>
 
-        {headerSharedPeopleOpen && (
+        {headerSharedPeopleOpen && activeSharedCapabilities.canUseClubAccess && (
           <div className="fixed inset-0 z-[75] flex items-end justify-center bg-slate-950/20 p-3 sm:items-center" onClick={() => setHeaderSharedPeopleOpen(false)}>
             <div className="w-full max-w-xs rounded-3xl border border-slate-100 bg-white p-3 shadow-[0_14px_40px_rgba(15,23,42,0.16)]" onClick={(event) => event.stopPropagation()}>
               <div className="mb-2 flex items-center justify-between gap-3 px-1">
@@ -4120,8 +4114,9 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 openPairingRulesToken={openPairingRulesToken}
                 openAddPlayerRequest={externalAddPlayerRequest}
                 isSharedRoster={activeRosterIsFirebaseShared}
-                sharedRosterId={activeFirebaseSource?.firebaseRosterId}
-                sharedOrganizerCount={rosterFirebaseSharedPeopleCount(activeRoster)}
+                sharedRosterId={activeSharedCapabilities.canReadClubRatings ? activeAuthoritativeRosterId : undefined}
+                canReadClubRatings={activeSharedCapabilities.canReadClubRatings}
+                sharedOrganizerCount={activeFirebaseSharedPeopleCount || 1}
                 tutorialStep={tutorialStep}
                 onTutorialAction={handleTutorialAction}
               />
@@ -4165,7 +4160,8 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   players={players}
                   pairingRules={pairingRules}
                   isSharedRoster={activeRosterIsFirebaseShared}
-                  sharedRosterId={activeFirebaseSource?.firebaseRosterId}
+                  sharedRosterId={activeSharedCapabilities.canReadClubRatings ? activeAuthoritativeRosterId : undefined}
+                  canReadClubRatings={activeSharedCapabilities.canReadClubRatings}
                   onOpenClubRatings={() => setActiveTab("club")}
                   onEditPlayers={() => setTeamsWorkspaceView("setup")}
                   aiTeamSetupToken={aiTeamSetup.token}
@@ -4190,8 +4186,12 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 playerCount={players.length}
                 players={players}
                 isSharedRoster={activeRosterIsFirebaseShared}
-                sharedRosterId={activeFirebaseSource?.firebaseRosterId}
-                sharedPeopleCount={rosterFirebaseSharedPeopleCount(activeRoster)}
+                sharedRosterId={activeSharedCapabilities.canReadSharedRoster ? activeAuthoritativeRosterId : undefined}
+                sharedPeopleCount={activeFirebaseSharedPeopleCount}
+                user={activeSharedWorkspaceAuthority.user}
+                sharedAuthorityStatus={activeSharedWorkspaceAuthority.status}
+                sharedAuthorityMessage={activeSharedWorkspaceAuthorityMessage(activeSharedWorkspaceAuthority)}
+                sharedCapabilities={activeSharedCapabilities}
                 canSwitchRoster={!isEmptyStarterRoster && rosters.length > 1}
                 onOpenRosterPicker={() => setRosterPickerOpen(true)}
                 onBackTargetChange={setClubBackTargetOpen}
@@ -4222,6 +4222,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                     variant="compact"
                     backgroundSync={false}
                     activeRoster={activeRoster}
+                    activeAuthority={activeSharedWorkspaceAuthority}
                     rosters={rosters}
                     isEmptyRoster={isEmptyStarterRoster}
                     onOpenRoster={openFirebaseSharedRosterAsLocalCopy}
@@ -4263,7 +4264,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                     onDriveAuthorizationExpired={(message) => googleDriveConnection.markExpired(message)}
                   />
                 )) : undefined}
-                equipmentGroupId={activeFirebaseSource?.firebaseRosterId ? `roster:${activeFirebaseSource.firebaseRosterId}` : undefined}
+                equipmentGroupId={activeSharedCapabilities.canReadEquipment && activeAuthoritativeRosterId ? `roster:${activeAuthoritativeRosterId}` : undefined}
                 equipmentHolderLabels={activeFirebaseEquipmentHolderLabels}
                 equipmentHolderNamesByEmail={activeFirebaseEquipmentHolderNamesByEmail}
                 notificationRecipientEmails={activeFirebaseNotificationMemberEmails}
@@ -5027,6 +5028,7 @@ This is a shared roster. Local Backup can only remove/disassociate this deviceâ€
                     <FirebaseSharedRosterPublishCard
                       backgroundSync={false}
                       activeRoster={activeRoster}
+                      activeAuthority={activeSharedWorkspaceAuthority}
                       rosters={rosters}
                       isEmptyRoster={isEmptyStarterRoster}
                       onOpenRoster={openFirebaseSharedRosterAsLocalCopy}
@@ -6599,7 +6601,7 @@ This is a shared roster. Local Backup can only remove/disassociate this deviceâ€
         </div>
       )}
 
-      {leaveSharedConfirmOpen && activeRosterIsFirebaseShared && (
+      {leaveSharedConfirmOpen && activeRosterIsFirebaseShared && activeSharedCapabilities.canLeaveWorkspace && (
         <div
           className="fixed inset-0 z-[86] flex items-end justify-center bg-black/45 p-0 sm:items-center sm:p-4"
           role="dialog"

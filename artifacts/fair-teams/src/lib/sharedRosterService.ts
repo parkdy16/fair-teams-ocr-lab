@@ -419,17 +419,20 @@ function cleanTimestampMap(value: unknown) {
   ) as Record<string, string>;
 }
 
-function currentUserRoleFromData(data: DocumentData): SharedRosterRole | undefined {
-  const user = toSharedRosterUser(getFairTeamsAuth().currentUser);
-  if (!user) return undefined;
+function currentUserRoleFromData(
+  data: DocumentData,
+  expectedUserUid?: string,
+): SharedRosterRole | undefined {
+  const userUid = expectedUserUid || toSharedRosterUser(getFairTeamsAuth().currentUser)?.uid;
+  if (!userUid) return undefined;
 
   const memberUids = Array.isArray(data.memberUids) ? data.memberUids : [];
-  if (!memberUids.includes(user.uid)) return undefined;
+  if (!memberUids.includes(userUid)) return undefined;
 
   const roleByUid = data.roleByUid && typeof data.roleByUid === "object"
     ? data.roleByUid as Record<string, unknown>
     : {};
-  const role = roleByUid[user.uid];
+  const role = roleByUid[userUid];
 
   if (role === "owner" || role === "editor" || role === "organizer" || role === "viewer") {
     return role;
@@ -437,7 +440,7 @@ function currentUserRoleFromData(data: DocumentData): SharedRosterRole | undefin
 
   // Backward compatibility only for an existing member whose old record
   // identifies them as the creator/owner.
-  if (data.ownerUid === user.uid) return "owner";
+  if (data.ownerUid === userUid) return "owner";
 
   return "member";
 }
@@ -461,7 +464,11 @@ function organizerCountFromData(data: DocumentData): number {
   }).length;
 }
 
-function toGroupSummary(id: string, data: DocumentData): FirebaseSharedGroupSummary {
+function toGroupSummary(
+  id: string,
+  data: DocumentData,
+  expectedUserUid?: string,
+): FirebaseSharedGroupSummary {
   const rosterIds = Array.isArray(data.rosterIds) ? data.rosterIds.filter((value) => typeof value === "string") : [];
   const memberUids = Array.isArray(data.memberUids) ? data.memberUids : [];
   const memberEmails = Array.isArray(data.memberEmails) ? data.memberEmails.filter((value): value is string => typeof value === "string") : [];
@@ -475,7 +482,7 @@ function toGroupSummary(id: string, data: DocumentData): FirebaseSharedGroupSumm
     ownerEmail: typeof data.ownerEmail === "string" ? data.ownerEmail : "",
     rosterCount: rosterIds.length,
     memberCount: memberUids.length,
-    currentUserRole: currentUserRoleFromData(data),
+    currentUserRole: currentUserRoleFromData(data, expectedUserUid),
     memberEmails,
     pendingInviteEmails,
     memberNamesByEmail,
@@ -492,7 +499,11 @@ function toGroupSummary(id: string, data: DocumentData): FirebaseSharedGroupSumm
   };
 }
 
-function toRosterSummary(id: string, data: DocumentData): FirebaseSharedRosterSummary {
+function toRosterSummary(
+  id: string,
+  data: DocumentData,
+  expectedUserUid?: string,
+): FirebaseSharedRosterSummary {
   const rosterData = data.rosterData && typeof data.rosterData === "object" ? data.rosterData as { players?: unknown[] } : undefined;
   const playerCount = typeof data.playerCount === "number"
     ? data.playerCount
@@ -511,7 +522,7 @@ function toRosterSummary(id: string, data: DocumentData): FirebaseSharedRosterSu
     playerCount,
     createdAt: timestampToIso(data.createdAt) || (typeof data.createdAtIso === "string" ? data.createdAtIso : undefined),
     updatedAt: timestampToIso(data.updatedAt) || (typeof data.updatedAtIso === "string" ? data.updatedAtIso : undefined),
-    currentUserRole: currentUserRoleFromData(data),
+    currentUserRole: currentUserRoleFromData(data, expectedUserUid),
     memberEmails: Array.isArray(data.memberEmails) ? data.memberEmails.filter((value): value is string => typeof value === "string") : [],
     pendingInviteEmails: Array.isArray(data.pendingInviteEmails) ? data.pendingInviteEmails.filter((value): value is string => typeof value === "string") : [],
     memberNamesByEmail: cleanNameMap(data.memberNamesByEmail),
@@ -524,6 +535,84 @@ export function listenToSharedRosterUser(callback: (user: SharedRosterUser | nul
   return onIdTokenChanged(getFairTeamsAuth(), (user) => {
     callback(toSharedRosterUser(user));
   });
+}
+
+export type FirebaseSharedWorkspaceAuthoritySnapshot = {
+  userUid: string;
+  rosters: FirebaseSharedRosterSummary[];
+  groups: FirebaseSharedGroupSummary[];
+};
+
+export function listenToFirebaseSharedWorkspaceAuthority(
+  expectedUserUid: string,
+  callback: (snapshot: FirebaseSharedWorkspaceAuthoritySnapshot) => void,
+  onError?: (error: Error) => void,
+): Unsubscribe {
+  const user = getCurrentSharedRosterUser();
+  if (user.uid !== expectedUserUid) {
+    throw new Error("The Firebase account changed while shared workspace access was being checked.");
+  }
+
+  const firestore = getFairTeamsFirestore();
+  const rosterQuery = query(
+    collection(firestore, "sharedRosters"),
+    where("memberUids", "array-contains", expectedUserUid),
+  );
+  const groupQuery = query(
+    collection(firestore, "sharedGroups"),
+    where("memberUids", "array-contains", expectedUserUid),
+  );
+  let rosterReady = false;
+  let groupReady = false;
+  let rosters: FirebaseSharedRosterSummary[] = [];
+  let groups: FirebaseSharedGroupSummary[] = [];
+  let stopped = false;
+
+  const emit = () => {
+    if (stopped || !rosterReady || !groupReady) return;
+    callback({ userUid: expectedUserUid, rosters, groups });
+  };
+  const fail = (error: unknown) => {
+    if (stopped) return;
+    onError?.(error instanceof Error ? error : new Error("Could not verify shared workspace access."));
+  };
+  const failRosters = (error: unknown) => {
+    rosterReady = false;
+    fail(error);
+  };
+  const failGroups = (error: unknown) => {
+    groupReady = false;
+    fail(error);
+  };
+
+  const unsubscribeRosters = onSnapshot(rosterQuery, { includeMetadataChanges: true }, (snapshot) => {
+    if (snapshot.metadata.fromCache) {
+      failRosters(new Error("Shared workspace authority is not yet available from Firebase."));
+      return;
+    }
+    rosters = snapshot.docs
+      .map((docSnap) => toRosterSummary(docSnap.id, docSnap.data(), expectedUserUid))
+      .sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime());
+    rosterReady = true;
+    emit();
+  }, failRosters);
+  const unsubscribeGroups = onSnapshot(groupQuery, { includeMetadataChanges: true }, (snapshot) => {
+    if (snapshot.metadata.fromCache) {
+      failGroups(new Error("Shared workspace authority is not yet available from Firebase."));
+      return;
+    }
+    groups = snapshot.docs
+      .map((docSnap) => toGroupSummary(docSnap.id, docSnap.data(), expectedUserUid))
+      .sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime());
+    groupReady = true;
+    emit();
+  }, failGroups);
+
+  return () => {
+    stopped = true;
+    unsubscribeRosters();
+    unsubscribeGroups();
+  };
 }
 
 export async function createSharedRosterAccount(email: string, password: string, displayName?: string): Promise<SharedRosterUser> {
@@ -620,7 +709,7 @@ export async function listFirebaseSharedGroups(): Promise<FirebaseSharedGroupSum
   );
   const snapshot = await getDocs(groupsQuery);
   return snapshot.docs
-    .map((docSnap) => toGroupSummary(docSnap.id, docSnap.data()))
+    .map((docSnap) => toGroupSummary(docSnap.id, docSnap.data(), user.uid))
     .sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime());
 }
 
@@ -851,7 +940,7 @@ export async function listFirebaseSharedRosters(groupId?: string): Promise<Fireb
   );
   const snapshot = await getDocs(sharedRosterQuery);
   return snapshot.docs
-    .map((docSnap) => toRosterSummary(docSnap.id, docSnap.data()))
+    .map((docSnap) => toRosterSummary(docSnap.id, docSnap.data(), user.uid))
     .filter((summary) => !groupId || summary.groupId === groupId)
     .sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime());
 }
@@ -955,8 +1044,7 @@ export async function saveFirebaseSharedRoster(roster: RoomRoster): Promise<Fire
       throw new Error("You are not a member of this Firebase shared roster.");
     }
 
-    const roleByUid = data.roleByUid && typeof data.roleByUid === "object" ? data.roleByUid as Record<string, unknown> : {};
-    const role = roleByUid[user.uid];
+    const role = currentUserRoleFromData(data, user.uid);
     if (role !== "owner" && role !== "editor" && role !== "organizer") {
       throw new Error("You can open this roster, but you do not have edit permission yet.");
     }
@@ -967,8 +1055,14 @@ export async function saveFirebaseSharedRoster(roster: RoomRoster): Promise<Fire
     }
 
     const nextVersion = remoteVersion + 1;
-    const groupId = typeof data.groupId === "string" ? data.groupId : source.firebaseGroupId;
-    const groupName = typeof data.groupName === "string" ? data.groupName : source.firebaseGroupName;
+    // The live roster document is the only authority for workspace linkage.
+    // Cached local cloudSource metadata may be stale and must never select a group write path.
+    const rawGroupId = typeof data.groupId === "string" ? data.groupId : "";
+    const groupId = rawGroupId.trim();
+    if (rawGroupId !== groupId) {
+      throw new Error("This shared roster has an invalid workspace link and cannot be saved safely.");
+    }
+    const groupName = groupId && typeof data.groupName === "string" ? data.groupName : undefined;
     const rosterData = makeSharedRosterUpdateSnapshot(data.rosterData, roster);
     const playerCount = Array.isArray(rosterData.players) ? rosterData.players.length : 0;
     const remoteName = typeof data.name === "string" && data.name.trim() ? data.name.trim() : "";
@@ -986,7 +1080,7 @@ export async function saveFirebaseSharedRoster(roster: RoomRoster): Promise<Fire
     const payload = {
       name: syncedName,
       groupId,
-      groupName,
+      ...(groupName ? { groupName } : {}),
       version: nextVersion,
       playerCount,
       rosterData,
@@ -1064,8 +1158,7 @@ export async function restoreFirebaseSharedRosterBackup(rosterId: string, backup
     const data = snapshot.data();
     const memberUids = Array.isArray(data.memberUids) ? data.memberUids : [];
     if (!memberUids.includes(user.uid)) throw new Error("You are not a member of this shared roster.");
-    const roleByUid = data.roleByUid && typeof data.roleByUid === "object" ? data.roleByUid as Record<string, unknown> : {};
-    const role = roleByUid[user.uid];
+    const role = currentUserRoleFromData(data, user.uid);
     if (role !== "owner" && role !== "editor" && role !== "organizer") throw new Error("Only organizers can restore shared-roster backups.");
 
     const backups = normalizeSharedRosterBackups(data.backupHistory);

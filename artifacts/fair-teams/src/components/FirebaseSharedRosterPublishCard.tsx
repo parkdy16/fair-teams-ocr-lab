@@ -17,7 +17,6 @@ import {
   adoptFirebaseSharedRosterCreation,
   createFirebaseSharedRoster,
   listenToFirebaseSharedRoster,
-  listenToSharedRosterUser,
   listFirebaseSharedGroups,
   listFirebaseSharedRosters,
   listFirebaseSharedRosterBackups,
@@ -29,6 +28,11 @@ import {
   type FirebaseSharedRosterSummary,
   type SharedRosterUser,
 } from "@/lib/sharedRosterService";
+import {
+  activeSharedWorkspaceAuthorityMessage,
+  unresolvedActiveSharedWorkspaceAuthority,
+  type ActiveSharedWorkspaceAuthority,
+} from "@/lib/activeSharedWorkspaceAuthority";
 import {
   acceptWorkspaceOrganizerInvitation,
   cancelWorkspaceOrganizerInvitation,
@@ -72,6 +76,7 @@ import {
 type Props = {
   variant?: "full" | "compact";
   activeRoster: RoomRoster | undefined;
+  activeAuthority?: ActiveSharedWorkspaceAuthority;
   rosters?: RoomRoster[];
   isEmptyRoster: boolean;
   onOpenRoster?: (roster: RoomRoster, sourceName: string, summary: FirebaseSharedRosterSummary) => void;
@@ -144,8 +149,12 @@ function modalShell(title: string, onClose: () => void, body: React.ReactNode) {
   );
 }
 
-export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster, rosters = [], isEmptyRoster, onOpenRoster, onRosterSaved, onRefreshActiveRoster, onRefreshRosterIdentity, onSharedRosterSummariesUpdated, onSharedInviteOpened, openLibraryToken = 0, onMakePrivateCopy, onHideOnDevice, onLeaveSharedRoster, onCloseSharedWorkspace, backgroundSync = true, headless = false }: Props) {
-  const [user, setUser] = useState<SharedRosterUser | null>(null);
+export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster, activeAuthority = unresolvedActiveSharedWorkspaceAuthority({
+  localRosterId: activeRoster?.id || "",
+  firebaseRosterId: activeRoster?.cloudSource?.provider === "firebase" ? activeRoster.cloudSource.firebaseRosterId : undefined,
+  cachedFirebaseGroupId: activeRoster?.cloudSource?.provider === "firebase" ? activeRoster.cloudSource.firebaseGroupId : undefined,
+}, false, null), rosters = [], isEmptyRoster, onOpenRoster, onRosterSaved, onRefreshActiveRoster, onRefreshRosterIdentity, onSharedRosterSummariesUpdated, onSharedInviteOpened, openLibraryToken = 0, onMakePrivateCopy, onHideOnDevice, onLeaveSharedRoster, onCloseSharedWorkspace, backgroundSync = true, headless = false }: Props) {
+  const user = activeAuthority.user;
   const [busy, setBusy] = useState<string>("");
   const [sharedGroups, setSharedGroups] = useState<FirebaseSharedGroupSummary[]>([]);
   const [sharedRosters, setSharedRosters] = useState<FirebaseSharedRosterSummary[]>([]);
@@ -176,6 +185,9 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
   const [notice, setNotice] = useState<{ tone: "success" | "error" | "info"; text: string } | null>(null);
   const [autoSyncStatus, setAutoSyncStatus] = useState<"idle" | "saving" | "saved" | "syncing" | "error">("idle");
   const lastLiveRosterVersionRef = useRef(0);
+  const sharedDataRequestRef = useRef(0);
+  const currentUserUidRef = useRef(user?.uid || "");
+  currentUserUidRef.current = user?.uid || "";
   const senderInvitationStatus = workspaceInvitationSenderStatus(user);
   const senderVerificationCooldownLabel = verificationResendLabel(senderVerificationResendAt, senderVerificationClock);
 
@@ -189,44 +201,50 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
     return () => window.clearInterval(interval);
   }, [senderVerificationResendAt]);
 
-  useEffect(() => listenToSharedRosterUser((nextUser) => {
-    setUser(nextUser);
-    if (!nextUser) {
-      setSharedGroups([]);
-      setSharedRosters([]);
-      setIncomingInvites([]);
-      setWorkspaceInvitations([]);
-      setInvitationListGroupId("");
-      setInvitationLoadError("");
-    }
-  }), []);
-
   const activeFirebaseSource = activeRoster?.cloudSource?.provider === "firebase" ? activeRoster.cloudSource : null;
   const activeSharedRosterId = activeFirebaseSource?.firebaseRosterId || "";
-  const activeSharedRoster = useMemo(
-    () => sharedRosters.find((roster) => roster.id === activeSharedRosterId) || null,
-    [sharedRosters, activeSharedRosterId],
-  );
-  const activeGroup = useMemo(
-    () => sharedGroups.find((group) => group.id === (activeSharedRoster?.groupId || activeFirebaseSource?.firebaseGroupId)) || null,
-    [sharedGroups, activeSharedRoster?.groupId, activeFirebaseSource?.firebaseGroupId],
-  );
+  const activeSharedRoster = activeAuthority.status === "authorized"
+    ? activeAuthority.roster
+    : null;
+  const activeGroup = activeAuthority.status === "authorized"
+    ? activeAuthority.group
+    : null;
   const collaboratorRoster = useMemo(
-    () => collaboratorRosterId ? sharedRosters.find((roster) => roster.id === collaboratorRosterId) || activeSharedRoster : null,
+    () => collaboratorRosterId
+      ? collaboratorRosterId === activeSharedRosterId
+        ? activeSharedRoster
+        : sharedRosters.find((roster) => roster.id === collaboratorRosterId) || null
+      : null,
     [sharedRosters, collaboratorRosterId, activeSharedRoster],
   );
   const collaboratorGroup = useMemo(
-    () => sharedGroups.find((group) => group.id === collaboratorRoster?.groupId)
-      || (collaboratorRoster?.id === activeSharedRosterId ? activeGroup : null),
+    () => collaboratorRoster?.id === activeSharedRosterId
+      ? activeGroup
+      : sharedGroups.find((group) => group.id === collaboratorRoster?.groupId) || null,
     [sharedGroups, collaboratorRoster?.groupId, collaboratorRoster?.id, activeSharedRosterId, activeGroup],
   );
   const collaboratorGroupId = resolveWorkspaceInvitationManagementGroupId({
     loadedGroupId: collaboratorGroup?.id,
     rosterGroupId: collaboratorRoster?.groupId,
-    sourceGroupId: collaboratorRoster?.id === activeSharedRosterId
-      ? activeFirebaseSource?.firebaseGroupId
-      : null,
+    sourceGroupId: null,
   });
+  const collaboratorIsActive = collaboratorRoster?.id === activeSharedRosterId;
+  const collaboratorRosterOrganizer = canRoleSave(collaboratorRoster?.currentUserRole);
+  const collaboratorGroupOrganizer = canRoleSave(collaboratorGroup?.currentUserRole);
+  const canManageCollaborators = collaboratorIsActive
+    ? activeAuthority.capabilities.canManageOrganizers
+    : collaboratorRoster?.groupId
+      ? collaboratorGroupOrganizer
+      : collaboratorRosterOrganizer;
+  const canManageInvitations = (
+    collaboratorIsActive
+      ? activeAuthority.capabilities.canManageInvitations
+      : Boolean(collaboratorRoster?.groupId && collaboratorGroupOrganizer)
+  ) && senderInvitationStatus === "ready";
+  const canLeaveActiveWorkspace = collaboratorIsActive && activeAuthority.capabilities.canLeaveWorkspace;
+  const canUseActiveGovernance = collaboratorIsActive
+    ? activeAuthority.capabilities.canUseProtectedGovernance
+    : Boolean(collaboratorGroup && collaboratorGroupOrganizer);
   const activeRemovalProposal = useMemo(
     () => removalProposals.find((proposal) => proposal.status === "open") || null,
     [removalProposals],
@@ -247,8 +265,15 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
     const localVersion = typeof source.firebaseVersion === "number" ? source.firebaseVersion : 0;
     return Boolean(remoteSummary && remoteSummary.version > localVersion);
   }), [linkedRosters, sharedRosterById]);
-  const activeRole = activeFirebaseSource?.firebaseRole || activeSharedRoster?.currentUserRole;
-  const activeCanSave = canRoleSave(activeRole);
+  const activeCanSave = activeAuthority.capabilities.canEditSharedRoster;
+  const canOpenRosterOrganizers = (
+    roster: FirebaseSharedRosterSummary,
+    group?: FirebaseSharedGroupSummary,
+  ) => roster.id === activeSharedRosterId
+    ? activeAuthority.capabilities.canUseClubAccess
+    : roster.groupId
+      ? Boolean(group && canRoleSave(group.currentUserRole))
+      : canRoleSave(roster.currentUserRole);
   const activeHasLocalChanges = (() => {
     if (!activeRoster || !activeFirebaseSource) return false;
     const localTime = Date.parse(activeRoster.updatedAt || activeRoster.createdAt || "");
@@ -271,7 +296,10 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
   const AutoStatusIcon = autoSyncStatus === "saving" || autoSyncStatus === "syncing" || activeHasLocalChanges ? Loader2 : CheckCircle2;
 
   const refreshSharedData = async () => {
-    if (!user) return;
+    const expectedUserUid = user?.uid || "";
+    if (!expectedUserUid) return;
+    const requestGeneration = sharedDataRequestRef.current + 1;
+    sharedDataRequestRef.current = requestGeneration;
     setBusy((current) => current || "refresh");
     try {
       const [groups, rosters, invites] = await Promise.all([
@@ -279,14 +307,20 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
         listFirebaseSharedRosters(),
         listWorkspaceRecipientInvitations().catch(() => []),
       ]);
-      setSharedGroups(groups);
-      setSharedRosters(rosters);
-      setIncomingInvites(invites);
-      onSharedRosterSummariesUpdated?.(rosters);
+      if (currentUserUidRef.current === expectedUserUid && sharedDataRequestRef.current === requestGeneration) {
+        setSharedGroups(groups);
+        setSharedRosters(rosters);
+        setIncomingInvites(invites);
+        onSharedRosterSummariesUpdated?.(rosters);
+      }
     } catch (error) {
-      setNotice({ tone: "error", text: friendlyFirestoreError(error) });
+      if (currentUserUidRef.current === expectedUserUid && sharedDataRequestRef.current === requestGeneration) {
+        setNotice({ tone: "error", text: friendlyFirestoreError(error) });
+      }
     } finally {
-      setBusy((current) => current === "refresh" ? "" : current);
+      if (currentUserUidRef.current === expectedUserUid && sharedDataRequestRef.current === requestGeneration) {
+        setBusy((current) => current === "refresh" ? "" : current);
+      }
     }
   };
 
@@ -299,8 +333,7 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
 
   useEffect(() => {
     const groupId = collaboratorGroupId;
-    const role = collaboratorGroup?.currentUserRole || collaboratorRoster?.currentUserRole;
-    if (!user || senderInvitationStatus !== "ready" || !groupId || !collaboratorRosterId || !canRoleSave(role)) {
+    if (!user || !groupId || !collaboratorRosterId || !canManageInvitations) {
       setWorkspaceInvitations([]);
       setInvitationListGroupId("");
       setInvitationLoadError("");
@@ -325,14 +358,13 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
     user,
     senderInvitationStatus,
     collaboratorGroupId,
-    collaboratorGroup?.currentUserRole,
-    collaboratorRoster?.currentUserRole,
+    canManageInvitations,
     collaboratorRosterId,
   ]);
 
   useEffect(() => {
     const groupId = collaboratorGroup?.id;
-    if (!user || !groupId || !collaboratorRosterId) {
+    if (!user || !groupId || !collaboratorRosterId || !canUseActiveGovernance) {
       setRemovalProposals([]);
       setRemovalParticipation(null);
       setRemovalError("");
@@ -342,12 +374,12 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
     return listenToOrganizerRemovalProposals(groupId, setRemovalProposals, (error) => {
       setRemovalError(friendlyFirestoreError(error));
     });
-  }, [user, collaboratorGroup?.id, collaboratorRosterId]);
+  }, [user, collaboratorGroup?.id, collaboratorRosterId, canUseActiveGovernance]);
 
   useEffect(() => {
     const groupId = collaboratorGroup?.id;
     const proposalId = activeRemovalProposal?.id;
-    if (!user || !groupId || !proposalId || !collaboratorRosterId) return;
+    if (!user || !groupId || !proposalId || !collaboratorRosterId || !canUseActiveGovernance) return;
     return listenToOrganizerRemovalProposal(groupId, proposalId, (proposal) => {
       if (!proposal) return;
       setRemovalError("");
@@ -355,11 +387,11 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
     }, (error) => {
       setRemovalError(friendlyFirestoreError(error));
     });
-  }, [user, collaboratorGroup?.id, collaboratorRosterId, activeRemovalProposal?.id]);
+  }, [user, collaboratorGroup?.id, collaboratorRosterId, activeRemovalProposal?.id, canUseActiveGovernance]);
 
   useEffect(() => {
     const groupId = collaboratorGroup?.id;
-    if (!user || !groupId || !activeRemovalProposal || activeRemovalProposal.status !== "open") {
+    if (!user || !groupId || !canUseActiveGovernance || !activeRemovalProposal || activeRemovalProposal.status !== "open") {
       setRemovalParticipation(null);
       return;
     }
@@ -376,9 +408,16 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
     return () => {
       cancelled = true;
     };
-  }, [user, collaboratorGroup?.id, activeRemovalProposal?.id, activeRemovalProposal?.status]);
+  }, [user, collaboratorGroup?.id, canUseActiveGovernance, activeRemovalProposal?.id, activeRemovalProposal?.status]);
 
   useEffect(() => {
+    sharedDataRequestRef.current += 1;
+    setSharedGroups([]);
+    setSharedRosters([]);
+    setIncomingInvites([]);
+    setWorkspaceInvitations([]);
+    setInvitationListGroupId("");
+    setInvitationLoadError("");
     if (user) void refreshSharedData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.uid]);
@@ -428,6 +467,7 @@ Your local roster will stay local. Stripes will copy shared identity fields only
 
   const autoRefreshLinkedRosters = async (targets: RoomRoster[] = remoteUpdatedLinkedRosters) => {
     if (!user || busy || !targets.length) return;
+    const expectedUserUid = user.uid;
     setBusy("autosync");
     setAutoSyncStatus("syncing");
     try {
@@ -437,6 +477,7 @@ Your local roster will stay local. Stripes will copy shared identity fields only
         if (!rosterId) continue;
         if (localRoster.id === activeRoster?.id && activeHasLocalChanges) continue;
         const snapshot = await readFirebaseSharedRoster(rosterId);
+        if (currentUserUidRef.current !== expectedUserUid) return;
         onRefreshActiveRoster?.(snapshot.roster, snapshot.name, snapshot, localRoster.id);
         refreshed += 1;
       }
@@ -457,31 +498,40 @@ Your local roster will stay local. Stripes will copy shared identity fields only
 
   useEffect(() => {
     if (!backgroundSync || !user || !activeRoster || !activeFirebaseSource || !activeSharedRosterId || !activeCanSave || !activeHasLocalChanges || busy) return;
+    let cancelled = false;
     const timeout = window.setTimeout(() => {
       setBusy("autosave");
       setAutoSyncStatus("saving");
       setNotice(null);
       void saveFirebaseSharedRoster(activeRoster)
         .then(async (saved) => {
+          if (cancelled) return;
           onRosterSaved?.(saved, activeRoster.id);
           await refreshSharedData();
+          if (cancelled) return;
           setAutoSyncStatus("saved");
           setNotice(null);
         })
         .catch((error) => {
+          if (cancelled) return;
           setAutoSyncStatus("error");
           setNotice({ tone: "error", text: friendlyFirestoreError(error) });
         })
         .finally(() => {
+          if (cancelled) return;
           setBusy((current) => current === "autosave" ? "" : current);
         });
     }, 900);
-    return () => window.clearTimeout(timeout);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+      setBusy((current) => current === "autosave" ? "" : current);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [backgroundSync, user?.uid, activeRoster?.id, activeRoster?.updatedAt, activeFirebaseSource?.firebaseVersion, activeFirebaseSource?.lastSyncedAt, activeCanSave, activeHasLocalChanges, busy]);
 
   useEffect(() => {
-    if (!backgroundSync || !user || !activeSharedRosterId || !activeRoster || !activeFirebaseSource) return;
+    if (!backgroundSync || !user || !activeAuthority.capabilities.canReadSharedRoster || !activeSharedRosterId || !activeRoster || !activeFirebaseSource) return;
     lastLiveRosterVersionRef.current = typeof activeFirebaseSource.firebaseVersion === "number" ? activeFirebaseSource.firebaseVersion : 0;
     return listenToFirebaseSharedRoster(activeSharedRosterId, (snapshot) => {
       const localVersion = lastLiveRosterVersionRef.current;
@@ -502,7 +552,7 @@ Your local roster will stay local. Stripes will copy shared identity fields only
       setNotice({ tone: "error", text: friendlyFirestoreError(error) });
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [backgroundSync, user?.uid, activeSharedRosterId, activeRoster?.id, activeFirebaseSource?.firebaseVersion, activeHasLocalChanges]);
+  }, [backgroundSync, user?.uid, activeAuthority.capabilities.canReadSharedRoster, activeSharedRosterId, activeRoster?.id, activeFirebaseSource?.firebaseVersion, activeHasLocalChanges]);
 
   useEffect(() => {
     if (!backgroundSync || !user || busy || remoteUpdatedLinkedRosters.length === 0) return;
@@ -531,13 +581,12 @@ Your local roster will stay local. Stripes will copy shared identity fields only
 
   const refreshInvitationSenderForAction = () => requireRefreshedWorkspaceInvitationSender(async () => {
     const refreshedUser = await reloadAndRefreshStripesAuthIdentity();
-    setUser(refreshedUser);
     return refreshedUser;
   });
 
   const handleInvite = async (emailOverride?: string) => {
     const emailToInvite = (emailOverride || inviteEmail).trim();
-    if (!user || !emailToInvite || busy) return;
+    if (!canManageInvitations || !user || !emailToInvite || busy) return;
     if (!collaboratorGroupId) {
       setInvitationNotice({ tone: "error", text: "This shared roster is missing its workspace link. Refresh shared rosters and try again." });
       return;
@@ -565,7 +614,7 @@ Your local roster will stay local. Stripes will copy shared identity fields only
   };
 
   const handleCancelInvite = async (invitation: WorkspaceOrganizerInvitation) => {
-    if (busy) return;
+    if (!canManageInvitations || busy) return;
     if (!collaboratorGroupId) {
       setInvitationNotice({ tone: "error", text: "This shared roster is missing its workspace link. Refresh shared rosters and try again." });
       return;
@@ -612,7 +661,6 @@ Your local roster will stay local. Stripes will copy shared identity fields only
     setSenderVerificationNotice(null);
     try {
       const refreshedUser = await reloadAndRefreshStripesAuthIdentity();
-      setUser(refreshedUser);
       setSenderVerificationNotice(refreshedUser.emailVerified
         ? { tone: "success", text: "Email verified. You can invite organizers now." }
         : { tone: "info", text: "Verification is not confirmed yet. Open the email link, then try again." });
@@ -624,7 +672,7 @@ Your local roster will stay local. Stripes will copy shared identity fields only
   };
 
   const handleResendInvite = async (invitation: WorkspaceOrganizerInvitation) => {
-    if (!invitation.invitationId || busy) return;
+    if (!canManageInvitations || !invitation.invitationId || busy) return;
     if (!collaboratorGroupId) {
       setInvitationNotice({ tone: "error", text: "This shared roster is missing its workspace link. Refresh shared rosters and try again." });
       return;
@@ -646,7 +694,7 @@ Your local roster will stay local. Stripes will copy shared identity fields only
   };
 
   const handleStartOrganizerRemoval = async (targetEmail: string, targetName: string) => {
-    if (!collaboratorGroup || busy) return;
+    if (!canUseActiveGovernance || !collaboratorGroup || busy) return;
     if (!currentRemovalEligibility.eligible) {
       setRemovalError(removalEligibilityLabel
         ? `Removal voting is available ${removalEligibilityLabel}.`
@@ -675,7 +723,7 @@ Your local roster will stay local. Stripes will copy shared identity fields only
     proposalId: string,
     choice: OrganizerRemovalBallotChoice,
   ) => {
-    if (!collaboratorGroup || busy) return;
+    if (!canUseActiveGovernance || !collaboratorGroup || busy) return;
     setBusy(`removal-ballot:${proposalId}`);
     setRemovalError("");
     setNotice(null);
@@ -741,7 +789,7 @@ Your local roster will stay local. Stripes will copy shared identity fields only
   };
 
   const openBackupHistory = async (rosterId: string) => {
-    if (!user || busy) return;
+    if (!user || busy || (rosterId === activeSharedRosterId && !activeAuthority.capabilities.canRestoreSharedRosterBackup)) return;
     setBusy(`backups:${rosterId}`);
     setNotice(null);
     try {
@@ -756,7 +804,7 @@ Your local roster will stay local. Stripes will copy shared identity fields only
   };
 
   const handleRestoreBackup = async (backup: FirebaseSharedRosterBackup) => {
-    if (!backupRosterId || busy) return;
+    if (!backupRosterId || busy || (backupRosterId === activeSharedRosterId && !activeAuthority.capabilities.canRestoreSharedRosterBackup)) return;
     const label = backup.savedAtIso ? new Date(backup.savedAtIso).toLocaleString() : `Version ${backup.version}`;
     const confirmed = window.confirm(`Restore the shared roster backup from ${label}?\n\nThe current live roster will be saved as another backup first.`);
     if (!confirmed) return;
@@ -780,19 +828,20 @@ Your local roster will stay local. Stripes will copy shared identity fields only
 
 
   const openCollaborators = (rosterId?: string) => {
+    const targetRosterId = rosterId || activeSharedRosterId || "";
+    const targetRoster = targetRosterId === activeSharedRosterId
+      ? activeSharedRoster
+      : sharedRosters.find((roster) => roster.id === targetRosterId) || null;
+    const targetGroup = targetRosterId === activeSharedRosterId
+      ? activeGroup
+      : sharedGroups.find((group) => group.id === targetRoster?.groupId);
+    if (!targetRoster || !canOpenRosterOrganizers(targetRoster, targetGroup || undefined)) return;
     setInvitationNotice(null);
     setWorkspaceClosureState(null);
     setWorkspaceClosureError("");
-    setCollaboratorRosterId(rosterId || activeSharedRosterId || "");
+    setCollaboratorRosterId(targetRosterId);
   };
 
-  const canManageCollaborators = collaboratorGroup?.currentUserRole === "organizer"
-    || collaboratorGroup?.currentUserRole === "owner"
-    || collaboratorGroup?.currentUserRole === "editor"
-    || collaboratorRoster?.currentUserRole === "organizer"
-    || collaboratorRoster?.currentUserRole === "owner"
-    || collaboratorRoster?.currentUserRole === "editor";
-  const canManageInvitations = canManageCollaborators && senderInvitationStatus === "ready";
   const canRequestWorkspaceClosure = Boolean(onCloseSharedWorkspace);
 
   useEffect(() => {
@@ -802,7 +851,7 @@ Your local roster will stay local. Stripes will copy shared identity fields only
     const checkingRecovery = Boolean(activeSharedRosterId && !activeSharedRoster);
     if (!canRequestWorkspaceClosure
       || !user
-      || (!checkingRecovery && (!canManageCollaborators || !checkingCollaborators))) {
+      || (!checkingRecovery && (!canLeaveActiveWorkspace || !checkingCollaborators))) {
       setWorkspaceClosureState(null);
       setWorkspaceClosureError("");
       setWorkspaceClosureLoading(false);
@@ -831,7 +880,7 @@ Your local roster will stay local. Stripes will copy shared identity fields only
   }, [
     canRequestWorkspaceClosure,
     user,
-    canManageCollaborators,
+    canLeaveActiveWorkspace,
     collaboratorRosterId,
     collaboratorRoster?.id,
     activeSharedRosterId,
@@ -841,7 +890,7 @@ Your local roster will stay local. Stripes will copy shared identity fields only
   const recentRemovalResults = removalProposals
     .filter((proposal) => proposal.status !== "open")
     .slice(0, 3);
-  const removalGovernancePanel = collaboratorGroup && canManageCollaborators ? (
+  const removalGovernancePanel = collaboratorGroup && canUseActiveGovernance ? (
     <div className="grid gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
       <div className="flex items-start gap-2">
         <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-violet-600" />
@@ -1155,7 +1204,7 @@ Your local roster will stay local. Stripes will copy shared identity fields only
         })()}
       </div>
 
-      {(onLeaveSharedRoster || onCloseSharedWorkspace) && canManageCollaborators && collaboratorRoster.id === activeSharedRosterId && (
+      {(onLeaveSharedRoster || onCloseSharedWorkspace) && canLeaveActiveWorkspace && (
         <div className="grid gap-2 rounded-2xl border border-rose-100 bg-rose-50/60 p-3">
           <div>
             <div className="text-xs font-black text-rose-800">Workspace membership</div>
@@ -1289,10 +1338,12 @@ No shared roster is open on this device. Choose one below to open it on this dev
                     <span className="block truncate text-xs font-black text-[#102A43]">{roster.name}</span>
                     <span className="block truncate text-[10px] font-semibold text-slate-500">{linked ? "Open on this device" : "Open shared roster"} · saved by {savedByName}</span>
                   </button>
-                  <button type="button" onClick={() => openCollaborators(roster.id)} className="flex h-8 items-center gap-1 rounded-xl border border-violet-100 bg-white px-2 text-[10px] font-black text-violet-700 shadow-sm hover:bg-violet-50">
-                    <Users className="h-3.5 w-3.5" />
-                    {collaboratorCount}
-                  </button>
+                  {canOpenRosterOrganizers(roster, group) ? (
+                    <button type="button" onClick={() => openCollaborators(roster.id)} className="flex h-8 items-center gap-1 rounded-xl border border-violet-100 bg-white px-2 text-[10px] font-black text-violet-700 shadow-sm hover:bg-violet-50">
+                      <Users className="h-3.5 w-3.5" />
+                      {collaboratorCount}
+                    </button>
+                  ) : <span className="text-[10px] font-black text-slate-400">{collaboratorCount}</span>}
                 </div>
               );
             })}
@@ -1350,11 +1401,22 @@ No shared roster is open on this device. Choose one below to open it on this dev
     </div>
   ) : null;
 
+  const activeAuthorityText = activeSharedWorkspaceAuthorityMessage(activeAuthority);
+  const activeSharedReferenceUnresolved = Boolean(
+    activeSharedRosterId && activeAuthority.status !== "authorized",
+  );
+  const activeAuthorityPanel = activeSharedReferenceUnresolved ? (
+    <div className="rounded-2xl border border-violet-100 bg-violet-50/70 px-3 py-2 text-[11px] font-bold leading-snug text-violet-800" role="status">
+      {activeAuthorityText || "Shared workspace access is not confirmed for this account."}
+    </div>
+  ) : null;
+
 
   if (variant === "compact") {
     return (
       <div className="grid gap-2">
         {workspaceClosureRecoveryPanel}
+        {activeAuthorityPanel}
         {incomingInvites.length > 0 && (
           <div className="grid gap-1.5">
             {incomingInvites.slice(0, 2).map((invite) => (
@@ -1368,7 +1430,12 @@ No shared roster is open on this device. Choose one below to open it on this dev
           </div>
         )}
 
-        {!activeSharedRoster ? (
+        {!activeSharedRoster ? activeSharedReferenceUnresolved ? (
+          <Button type="button" variant="outline" className="h-9 justify-start rounded-2xl border-violet-100 bg-white/70 px-3 text-left text-[11px] font-black text-violet-700 shadow-sm hover:bg-white" onClick={() => setSharedRosterLibraryOpen(true)} disabled={!user || Boolean(busy)}>
+            <FolderOpen className="mr-1.5 h-4 w-4" />
+            Rosters
+          </Button>
+        ) : (
           <div className="grid gap-2">
             <Button type="button" variant="outline" className="h-9 justify-start rounded-2xl border-violet-100 bg-white/70 px-3 text-left text-[11px] font-black text-violet-700 shadow-sm hover:bg-white" onClick={() => setSharedRosterLibraryOpen(true)} disabled={!user || Boolean(busy)}>
               <FolderOpen className="mr-1.5 h-4 w-4" />
@@ -1385,11 +1452,13 @@ No shared roster is open on this device. Choose one below to open it on this dev
               <FolderOpen className="mr-1 h-4 w-4" />
               Rosters
             </Button>
-            <Button type="button" variant="outline" className="h-full min-h-11 justify-start rounded-2xl border-violet-100 bg-white/70 px-3 text-left text-[11px] font-black text-violet-700 shadow-sm hover:bg-white" onClick={() => openCollaborators(activeSharedRosterId)} disabled={!user || Boolean(busy)}>
-              <Users className="mr-1 h-4 w-4" />
-              Organizers
-            </Button>
-            {activeCanSave && (
+            {activeAuthority.capabilities.canUseClubAccess ? (
+              <Button type="button" variant="outline" className="h-full min-h-11 justify-start rounded-2xl border-violet-100 bg-white/70 px-3 text-left text-[11px] font-black text-violet-700 shadow-sm hover:bg-white" onClick={() => openCollaborators(activeSharedRosterId)} disabled={!user || Boolean(busy)}>
+                <Users className="mr-1 h-4 w-4" />
+                Organizers
+              </Button>
+            ) : <div />}
+            {activeAuthority.capabilities.canRestoreSharedRosterBackup && (
               <Button type="button" variant="outline" className="col-span-2 h-10 justify-start rounded-2xl border-violet-100 bg-white/70 px-3 text-left text-[11px] font-black text-violet-700 shadow-sm hover:bg-white" onClick={() => void openBackupHistory(activeSharedRosterId)} disabled={!user || Boolean(busy)}>
                 <History className="mr-1.5 h-4 w-4" />
                 Restore backup
@@ -1412,6 +1481,7 @@ No shared roster is open on this device. Choose one below to open it on this dev
   return (
     <div className="grid gap-3">
       {workspaceClosureRecoveryPanel}
+      {activeAuthorityPanel}
       {incomingInvites.length > 0 && (
         <div className="grid gap-1.5 rounded-2xl border border-violet-100 bg-violet-50/70 p-2">
           {incomingInvites.slice(0, 3).map((invite) => (
@@ -1425,7 +1495,7 @@ No shared roster is open on this device. Choose one below to open it on this dev
         </div>
       )}
 
-      {!activeSharedRoster ? (
+      {!activeSharedRoster ? activeSharedReferenceUnresolved ? null : (
         <Button type="button" className="h-11 rounded-2xl bg-violet-600 text-xs font-black text-white hover:bg-violet-700" onClick={handleShareActiveRoster} disabled={!user || isEmptyRoster || Boolean(busy)}>
           <Share2 className="mr-1.5 h-4 w-4" />
           {busy === "publish" ? "Creating…" : "Create shared copy"}
@@ -1436,7 +1506,7 @@ No shared roster is open on this device. Choose one below to open it on this dev
             <span>{autoStatusText}</span>
             <AutoStatusIcon className={`h-4 w-4 ${(autoSyncStatus === "saving" || autoSyncStatus === "syncing" || activeHasLocalChanges) ? "animate-spin" : ""}`} />
           </div>
-          {activeCanSave && (
+          {activeAuthority.capabilities.canRestoreSharedRosterBackup && (
             <Button type="button" variant="outline" className="h-10 justify-start rounded-2xl border-violet-100 bg-white px-3 text-xs font-black text-violet-700" onClick={() => void openBackupHistory(activeSharedRosterId)} disabled={Boolean(busy)}>
               <History className="mr-1.5 h-4 w-4" />
               Restore backup
@@ -1471,10 +1541,12 @@ No shared roster is open on this device. Choose an online shared roster below to
                     <span className="block truncate text-xs font-black text-[#102A43]">{roster.name}</span>
                     <span className="block truncate text-[10px] font-semibold text-slate-500">saved by {savedByName}</span>
                   </button>
-                  <button type="button" onClick={() => openCollaborators(roster.id)} className="flex h-8 items-center gap-1 rounded-xl border border-violet-100 bg-white px-2 text-[10px] font-black text-violet-700 shadow-sm hover:bg-violet-50">
-                    <Users className="h-3.5 w-3.5" />
-                    {collaboratorCount}
-                  </button>
+                  {canOpenRosterOrganizers(roster, group) ? (
+                    <button type="button" onClick={() => openCollaborators(roster.id)} className="flex h-8 items-center gap-1 rounded-xl border border-violet-100 bg-white px-2 text-[10px] font-black text-violet-700 shadow-sm hover:bg-violet-50">
+                      <Users className="h-3.5 w-3.5" />
+                      {collaboratorCount}
+                    </button>
+                  ) : <span className="text-[10px] font-black text-slate-400">{collaboratorCount}</span>}
                 </div>
               );
             })}

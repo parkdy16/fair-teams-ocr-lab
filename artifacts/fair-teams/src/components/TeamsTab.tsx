@@ -221,6 +221,7 @@ type TeamsTabProps = {
   pairingRules?: PairingRule[];
   isSharedRoster?: boolean;
   sharedRosterId?: string;
+  canReadClubRatings?: boolean;
   onOpenClubRatings?: () => void;
   onEditPlayers?: () => void;
   aiTeamSetupToken?: number;
@@ -465,7 +466,7 @@ function drawTextBadge(
 }
 
 
-export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, sharedRosterId, onOpenClubRatings, onEditPlayers, aiTeamSetupToken = 0, aiTeamCount = null, aiAutoGenerate = false, aiShuffleEquals = false, onAiTeamStateChange, tutorialStep, onTutorialAction }: TeamsTabProps) {
+export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, sharedRosterId, canReadClubRatings = false, onOpenClubRatings, onEditPlayers, aiTeamSetupToken = 0, aiTeamCount = null, aiAutoGenerate = false, aiShuffleEquals = false, onAiTeamStateChange, tutorialStep, onTutorialAction }: TeamsTabProps) {
   const [numTeams, setNumTeams] = useState<number>(2);
   const [fieldSize, setFieldSize] = useState<FieldSize>(() => loadFieldSize());
   const [showFieldHelp, setShowFieldHelp] = useState(false);
@@ -497,7 +498,7 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
   }, [fieldSize]);
 
   useEffect(() => {
-    if (!isSharedRoster || !sharedRosterId) {
+    if (!isSharedRoster || !sharedRosterId || !canReadClubRatings) {
       setClubRatingSummaries([]);
       return;
     }
@@ -516,7 +517,7 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
       setClubRatingSummaries([]);
       return;
     }
-  }, [isSharedRoster, sharedRosterId]);
+  }, [canReadClubRatings, isSharedRoster, sharedRosterId]);
 
   useEffect(() => {
     saveTeamHistory(history);

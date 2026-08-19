@@ -98,7 +98,7 @@ export function parseDriveBackupJson(text: string): FairTeamsDriveBackup {
     throw new Error("Drive backup does not contain rosters.");
   }
 
-  const rosters = parsed.rosters.map((roster: Partial<RoomRoster>, index: number) =>
+  const rosters: RoomRoster[] = parsed.rosters.map((roster: Partial<RoomRoster>, index: number) =>
     stripRosterImages(normalizeRoster(roster, index)),
   );
   const activeRosterId =

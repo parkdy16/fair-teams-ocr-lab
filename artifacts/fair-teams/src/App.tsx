@@ -52,6 +52,7 @@ import {
   rosterToShareJson,
   rostersToBackupJson,
   saveRosterState,
+  type RoomPlayerNormalizationInput,
 } from "@/lib/localRoster";
 import { getGoogleDriveConfig } from "@/lib/googleDriveConfig";
 import { allRostersToDriveBackupJson, parseDriveBackupJson } from "@/lib/googleDriveBackup";
@@ -1336,7 +1337,7 @@ function App() {
     setDraftGroupLogo(groupLogo);
   }, [activeRosterName, headerColor, groupLogo]);
 
-  const replacePlayers = (nextPlayers: RoomPlayer[]) => {
+  const replacePlayers = (nextPlayers: RoomPlayerNormalizationInput[]) => {
     const normalizedPlayers = nextPlayers.map((player, index) => normalizePlayer(player, index));
     const safePlayerIds = new Set(normalizedPlayers.map((player) => player.id));
     setRosterState((current) => ({
@@ -6849,8 +6850,8 @@ This is a shared roster. Local Backup can only remove/disassociate this deviceâ€
         >
           <div className="w-full max-w-sm rounded-3xl border border-slate-200 bg-white p-4 shadow-2xl">
             <div className="flex items-start gap-3">
-              <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl ${rosterToolsNotice.tone === "success" ? "bg-emerald-50 text-emerald-600" : rosterToolsNotice.tone === "warning" ? "bg-amber-50 text-amber-600" : rosterToolsNotice.tone === "error" ? "bg-red-50 text-red-600" : "bg-blue-50 text-blue-600"}`}>
-                {rosterToolsNotice.tone === "success" ? <Check className="h-5 w-5" /> : <AlertTriangle className="h-5 w-5" />}
+              <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl ${(rosterToolsNotice.tone as RosterToolsNotice["tone"]) === "success" ? "bg-emerald-50 text-emerald-600" : rosterToolsNotice.tone === "warning" ? "bg-amber-50 text-amber-600" : rosterToolsNotice.tone === "error" ? "bg-red-50 text-red-600" : "bg-blue-50 text-blue-600"}`}>
+                {(rosterToolsNotice.tone as RosterToolsNotice["tone"]) === "success" ? <Check className="h-5 w-5" /> : <AlertTriangle className="h-5 w-5" />}
               </div>
               <div className="min-w-0 flex-1">
                 <h2 className="text-base font-black tracking-tight text-[#102A43]">

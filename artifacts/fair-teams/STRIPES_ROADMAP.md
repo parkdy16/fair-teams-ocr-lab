@@ -3548,6 +3548,56 @@ Implement as one bounded Codex milestone where practical:
 H1 should reduce future review effort. It must not turn into a broad framework,
 state-management or application rewrite.
 
+**H1 repository checkpoint — 2026-08-19: COMPLETE.**
+
+- Root GitHub Actions CI now runs one non-deploying sequential job for pull
+  requests and pushes to `main`: frozen parent-workspace installation, the
+  separate Functions npm install, Node 22/Java 21, a pinned Firebase CLI, the
+  live-source type gate, the permanent Core Regression Gate and Playwright
+  Chromium smoke. The Core gate already owns the production build, so CI does
+  not duplicate it.
+- `npm run typecheck:live` checks the shipping outer `src/` with non-incremental
+  TypeScript and excludes only tests plus the explicitly stale `src/src/` tree.
+  The live gate is zero-error. `npm run typecheck` remains available and
+  honestly nonzero because it continues to inspect the stale tree.
+- `npm run test:browser-smoke` covers five deterministic browser paths: app
+  boot, Roster/Teams/Club entry, local-roster switching, signed-out cached
+  shared-workspace fail-closed authority and complete two-team generation. The
+  harness uses demo Firebase values and rejects every non-loopback request.
+- Positive signed-in organizer authority and Google/provider behavior are not
+  claimed by browser automation. Existing production-logic, Functions and
+  Firestore-emulator suites protect those boundaries; real-account/provider
+  evidence remains part of the manual release and G2 gates.
+- Existing invariant integration was already structurally correct: `AGENTS.md`
+  governs execution, this roadmap governs sequencing and
+  `docs/architecture/SYSTEM_INVARIANTS.md` governs durable constraints.
+  `docs/testing/CORE_REGRESSION_GATE.md` and `docs/codex/PROJECT_MAP.md` now
+  link the H1 commands and references without creating a competing document.
+- `docs/operations/STAGING_BACKUP_RECOVERY.md` defines isolated staging,
+  layered Firestore/Storage protection, explicit production targeting and a
+  synthetic non-production restore rehearsal. No external environment, backup,
+  IAM, secret or production setting was created or changed.
+
+Required repository gates are:
+
+```text
+npm run typecheck:live
+npm run test:core-regression
+npm run test:browser-smoke
+git diff --check HEAD
+```
+
+Manual follow-ups remain: observe the first hosted GitHub run and make its
+stable check required through repository settings; provision a genuinely
+isolated staging stack; approve/configure backup retention, PITR and Storage
+protection; and complete a synthetic cloud restore rehearsal. Hosted CI is not
+claimed as passed until a future commit runs it on GitHub.
+
+H1 completion does **not** close G2. Eligible Shared Drive collaborator,
+reconnect and unavailable-state verification remains blocked pending an
+eligible Google Workspace account. G3 remains blocked until the roadmap's G2
+closure decision is accepted in addition to this H1 gate.
+
 #### H2 — Data and architecture safety
 
 **Begin at the G3 boundary before new durable resource/index schemas materially

@@ -87,7 +87,7 @@ async function registerCurrentInstallation(markEnabled: boolean): Promise<void> 
 
   await new Promise<void>((resolve, reject) => {
     let settled = false;
-    let unsubscribe = () => undefined;
+    let unsubscribe: () => void = () => undefined;
     const finish = (callback: () => void) => {
       if (settled) return;
       settled = true;

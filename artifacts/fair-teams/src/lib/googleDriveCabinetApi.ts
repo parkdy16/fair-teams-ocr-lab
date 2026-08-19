@@ -7,6 +7,7 @@ import {
   STRIPES_CABINET_FOLDER_NAME,
   validateRecordedMyDriveCabinetFolder,
   type GoogleDriveCabinetFolder,
+  type GoogleDriveCabinetResolution,
 } from "./googleDriveCabinet.ts";
 import { pickGoogleMyDriveCabinetFolder } from "./googleDrivePicker.ts";
 
@@ -143,7 +144,7 @@ export async function resolveManagedMyDriveCabinetFolder(
   accessToken: string,
   preferredFolderId?: string,
   requirePreferredFolder = false,
-) {
+): Promise<GoogleDriveCabinetResolution> {
   const preferredId = String(preferredFolderId || "").trim();
   if (requirePreferredFolder && preferredId) {
     try {

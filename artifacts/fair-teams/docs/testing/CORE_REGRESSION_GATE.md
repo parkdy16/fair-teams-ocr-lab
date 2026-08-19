@@ -25,6 +25,26 @@ before and after execution.
 The emulator uses deterministic test-only identities and a Firebase demo project.
 It neither reads nor writes production Firebase data.
 
+## H1 companion gates
+
+The root workflow at `.github/workflows/stripes-ci.yml` composes three mandatory
+Stripes checks in one sequential CI job:
+
+```text
+npm run typecheck:live
+npm run test:core-regression
+npm run test:browser-smoke
+```
+
+`typecheck:live` checks the shipping outer `src/` tree without the tracked stale
+`src/src/` tree. The Core Regression Gate remains the integration command and
+already includes the production build. The browser command adds five semantic
+Chromium smoke scenarios without production credentials or data.
+
+These gates preserve the constraints in
+`docs/architecture/SYSTEM_INVARIANTS.md`. CI success is not deployment approval
+and does not replace provider/account or real-device release verification.
+
 ## Test inventory and CRG-1 gap map
 
 The inventory below classifies the primary behavior each suite actually executes.
@@ -88,20 +108,35 @@ atomic shared-roster creation.
 
 No component-render harness exists. Focused source assertions protect live
 capability wiring and navigation, while the production capability helper and
-rules behavior are exercised separately.
+rules behavior are exercised separately. The small browser layer below covers
+whole-app shell integration rather than introducing a second component-test
+architecture.
 
 ### 7. Browser/E2E
 
-None. The short human smoke check below covers the remaining browser-visible
-integration risk without repeating emulator behavior.
+`tests/browser/app.smoke.spec.ts` uses Playwright Chromium with deterministic
+local-storage fixtures and covers:
+
+- application boot into the saved-roster chooser without a page error;
+- entry into the Roster, Teams and Club shell surfaces;
+- switching between two local rosters through the real picker;
+- fail-closed Club authority for a cached shared roster while signed out;
+- generation of two complete teams with every selected player exactly once.
+
+The harness injects explicit demo-only Firebase values, blocks service workers
+and aborts every non-loopback request. It does not claim positive signed-in
+organizer authority, Google-provider behavior, mobile interaction fidelity or
+visual correctness. Those would require a larger safe auth/emulator fixture or
+real-provider/manual verification.
 
 ### 8. Build/type/static verification
 
 - production Vite build: mandatory;
 - Functions `node --check`: mandatory;
 - patch whitespace check: mandatory;
-- full TypeScript project check: informational, because the repository has a
-  known nonzero baseline in both live outer source and stale `src/src`.
+- live outer-source TypeScript check: mandatory in CI and zero-error;
+- full TypeScript project check: informational, because it intentionally still
+  includes the divergent stale `src/src` tree and remains nonzero.
 
 ### Baseline gaps closed by CRG-1
 
@@ -134,10 +169,11 @@ rules-enabled contexts against that same workspace consistency model.
 
 ## Mandatory versus informational
 
-Mandatory failures stop the gate and return nonzero. The full-project TypeScript
-check is deliberately visible as debt but is not part of pass/fail until a
-separate cleanup establishes a real zero-error baseline. Browser/component E2E is
-also not claimed by this gate.
+Mandatory failures stop their command and return nonzero. The full-project
+TypeScript check remains visible debt but is not part of CI pass/fail; the
+zero-error `typecheck:live` command is the shipping-source gate. Browser smoke is
+a mandatory H1 companion command in CI, not an internal stage of
+`test:core-regression`. No component-render suite is claimed.
 
 ## Five-minute human release smoke check
 

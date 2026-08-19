@@ -39,6 +39,10 @@ export interface RoomPlayer {
   updatedAt?: string;
 }
 
+export type RoomPlayerNormalizationInput = Omit<Partial<RoomPlayer>, "todayStatus"> & {
+  todayStatus?: TodayStatus | "" | "late";
+};
+
 const STORAGE_KEY = "fair-teams-local-roster-v1-profiles";
 const LEGACY_STORAGE_KEY = "lazy-lousy-local-roster-v2-profiles";
 const LEGACY_STORAGE_KEY_V1 = "lazy-lousy-local-roster-v1";
@@ -173,7 +177,7 @@ function cleanPlayerPhoto(player: unknown) {
   return photo;
 }
 
-export function normalizePlayer(player: Partial<RoomPlayer> & { name?: string }, index = 0): RoomPlayer {
+export function normalizePlayer(player: RoomPlayerNormalizationInput, index = 0): RoomPlayer {
   const baseSkill = clamp(player.skill, 0, 10, 5, 0.5);
   const normalized: RoomPlayer = {
     id: player.id || createLocalPlayerId(),

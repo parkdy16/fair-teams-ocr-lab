@@ -353,7 +353,7 @@ export function bestPlayerNameMatch<T extends PlayerNameLike>(inputName: string,
     })),
   );
 
-  let best: { player: T; candidate: string; score: number } | null = null;
+  let best = null as { player: T; candidate: string; score: number } | null;
   let secondBestScore = 0;
   rows.forEach((row) => {
     if (row.score > (best?.score || 0)) {

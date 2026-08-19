@@ -1,7 +1,7 @@
 # Stripes project map
 
-Verified: 2026-08-13
-Baseline commit: `364df454bbf9238f0d936aab511ae41f2758d3ee`
+Verified: 2026-08-19
+Accepted pre-H1 checkpoint: `ca55bf0`
 
 ## Source boundaries
 
@@ -25,12 +25,29 @@ Ordinary UI work should avoid Firebase initialization, shared-roster services, A
 
 ## Verification
 
-- TypeScript: `pnpm.cmd --filter @workspace/fair-teams run typecheck -- --incremental false`
-- Production build: `pnpm.cmd --filter @workspace/fair-teams run build`
+- Live shipping-source TypeScript: `npm run typecheck:live`
+- Core integration gate, including the production build: `npm run test:core-regression`
+- Browser smoke: `npm run test:browser-smoke`
+- Full live-plus-stale TypeScript debt check (informational): `npm run typecheck`
+- Standalone production build when specifically needed: `pnpm.cmd --filter @workspace/fair-teams run build`
 - Diff check: `git -C C:\V38OCR\artifacts\fair-teams diff --check`
 - Status: `git -C C:\V38OCR\artifacts\fair-teams status --short`
-- No automated lint or test suite is currently configured.
-- The TypeScript command is currently blocked in this workspace because `tsc` is not resolvable; report this rather than installing packages.
+
+The live TypeScript gate explicitly excludes stale `src/src/` and disables
+incremental caching so it cannot hide current diagnostics. Do not substitute
+the known-nonzero full-project check for that mandatory gate.
+
+The root CI workflow is `.github/workflows/stripes-ci.yml`. It runs the live
+typecheck, Core Regression Gate and five-scenario Playwright smoke suite without
+deployment or production credentials. See `docs/testing/CORE_REGRESSION_GATE.md`.
+
+## Durable architecture and operations references
+
+- Sequencing and phase truth: `STRIPES_ROADMAP.md`
+- Cross-system constraints: `docs/architecture/SYSTEM_INVARIANTS.md`
+- Integration/browser gate details: `docs/testing/CORE_REGRESSION_GATE.md`
+- Staging, backup and recovery boundaries:
+  `docs/operations/STAGING_BACKUP_RECOVERY.md`
 
 ## Current UI checkpoint
 

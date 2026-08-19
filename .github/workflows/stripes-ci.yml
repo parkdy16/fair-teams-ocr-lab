@@ -1,0 +1,71 @@
+name: Stripes preventive gates
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stripes-preventive-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  preventive-gates:
+    name: Stripes preventive gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      CI: "true"
+      FIREBASE_CLI_DISABLE_TELEMETRY: "1"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.24.0
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Use Java 21 for the Firestore emulator
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Restore Firebase emulator cache
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/firebase/emulators
+          key: ${{ runner.os }}-firebase-emulators-15.27.0-${{ hashFiles('artifacts/fair-teams/functions/package-lock.json') }}
+
+      - name: Install workspace dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Functions dependencies
+        run: npm ci --prefix artifacts/fair-teams/functions
+
+      - name: Typecheck live Stripes source
+        run: pnpm --filter @workspace/fair-teams run typecheck:live
+
+      - name: Run the Core Regression Gate
+        run: pnpm --filter @workspace/fair-teams run test:core-regression
+
+      - name: Install Playwright Chromium
+        run: pnpm --filter @workspace/fair-teams exec playwright install --with-deps chromium
+
+      - name: Run browser smoke tests
+        run: pnpm --filter @workspace/fair-teams run test:browser-smoke

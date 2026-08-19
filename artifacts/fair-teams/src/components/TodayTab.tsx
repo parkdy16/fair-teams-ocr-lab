@@ -1563,7 +1563,7 @@ function extractOcrNames(
     return { name, status: "new" as const, suggestions: ranked.slice(0, 5) };
   });
 
-  const expandedCandidates = candidates.flatMap((candidate) => {
+  const expandedCandidates = candidates.flatMap<OcrNameCandidate>((candidate) => {
     if (candidate.status !== "suggest") return [candidate];
 
     const closeSuggestions = candidate.suggestions.filter(
@@ -3331,7 +3331,7 @@ export function TodayTab({
               ? ({
                   tessedit_pageseg_mode: "6",
                   preserve_interword_spaces: "1",
-                  logger: (message) => {
+                  logger: (message: Tesseract.LoggerMessage) => {
                     if (message.status)
                       setOcrStatus(
                         `${message.status} (${index + 1}/${selectedScreenshots.length})`,
@@ -3351,7 +3351,7 @@ export function TodayTab({
                   },
                 } as any)
               : {
-                  logger: (message) => {
+                  logger: (message: Tesseract.LoggerMessage) => {
                     if (message.status) {
                       setOcrStatus(
                         label
@@ -3531,9 +3531,9 @@ export function TodayTab({
     candidates: OcrNameCandidate[],
   ) => {
     const names = Array.from(
-      new Map(
+      new Map<string, OcrNameCandidate>(
         candidates
-          .map((candidate) => [normalizeForMatch(candidate.name), candidate])
+          .map((candidate) => [normalizeForMatch(candidate.name), candidate] as const)
           .filter(([key]) => Boolean(key)),
       ).values(),
     ).sort((a, b) => b.name.length - a.name.length);
@@ -3545,7 +3545,7 @@ export function TodayTab({
       const escapedName = escapeRegExp(candidate.name.trim());
       if (!escapedName) return;
       const pattern = new RegExp(`(${escapedName})`, "gi");
-      parts = parts.flatMap((part, index) => {
+      parts = parts.flatMap<React.ReactNode>((part, index) => {
         if (typeof part !== "string") return [part];
         return part.split(pattern).map((piece, pieceIndex) => {
           if (piece.toLowerCase() !== candidate.name.toLowerCase())
@@ -3622,7 +3622,7 @@ export function TodayTab({
     );
 
     const nextPlayers = [
-      ...players.map((player) =>
+      ...players.map<RoomPlayer>((player) =>
         playerIds.has(player.id)
           ? { ...player, attending: true, todayStatus: "here" }
           : player,

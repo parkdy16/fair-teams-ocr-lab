@@ -242,7 +242,7 @@ function parseClubResource(
 
   const contexts = Array.isArray(data.contexts)
     ? data.contexts
-        .map((value: unknown) => {
+        .map((value: unknown): ClubResourceContext | null => {
           const row =
             value && typeof value === "object"
               ? (value as Record<string, unknown>)

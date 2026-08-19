@@ -938,7 +938,7 @@ export function ClubTab({
   const [editingKitId, setEditingKitId] = useState<string | null>(null);
   const [kitName, setKitName] = useState("");
   const [kitHolderId, setKitHolderId] = useState("storage");
-  const [kitColor, setKitColor] = useState(DEFAULT_EQUIPMENT_COLOR);
+  const [kitColor, setKitColor] = useState<string>(DEFAULT_EQUIPMENT_COLOR);
   const [colorPickerOpen, setColorPickerOpen] = useState(false);
   const [deleteBagSlide, setDeleteBagSlide] = useState(0);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);

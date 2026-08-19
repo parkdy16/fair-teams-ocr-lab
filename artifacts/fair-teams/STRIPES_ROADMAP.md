@@ -3428,6 +3428,43 @@ Scope:
   untouched on replacement/removal and the production configuration checklist
   is satisfied.
 
+Live verification evidence - 2026-08-19:
+
+- production linkage-consistency audit passed and is recorded by `2df4e7e`:
+  8 shared groups, 7 shared rosters, 7 linked rosters and zero failing
+  categories/references;
+- two real organizers on the same workspace verified Cabinet configuration
+  read, initial My Drive setup, replacement and removal under equal-organizer
+  authority. Replacement/removal required explicit confirmation and prior
+  Google folders/files remained untouched;
+- the My Drive collaborator repair `c514c34` passed the original real-account
+  scenario: direct Google Editor access plus collaborator child-file creation
+  worked, exact-folder Picker authorization made the recorded Cabinet
+  available, and that authorization persisted across reload/reconnection;
+- Google permission revocation immediately made the collaborator Cabinet
+  unavailable. Restoring Google access recovered the same recorded Cabinet
+  without requiring another folder authorization;
+- stable preferred-folder-ID continuity passed for both organizers after the
+  Cabinet was renamed and moved elsewhere within the host organizer's My Drive;
+- mixed parent/direct access remained usable while Google reported effective
+  access. Normal Google Drive UI did not permit us to isolate a clean
+  inherited-only child state: removing the parent permission also removed
+  effective child access, after which Stripes correctly became unavailable.
+  Therefore inherited-only access is not claimed as manually verified;
+- production Picker testing exposed a missing browser-key referrer.
+  `https://stripes.work/*` and `https://www.stripes.work/*` are now allowed;
+  adding the `www` production referrer resolved the Picker developer-key error
+  while Drive and Picker API restrictions remained enabled;
+- Drive access tokens remain session-memory only. After reload the organizer
+  reconnects Google Drive, while previously authorized folder access persists.
+  Repeated Google consent/Continue friction and overall Cabinet-flow clarity
+  remain UX follow-ups rather than access-control failures;
+- Shared Drive collaborator, reconnect and unavailable-state verification
+  remains blocked until an eligible Google Workspace account with Shared Drive
+  access is available;
+- remaining live configuration/identity evidence must still be reviewed.
+  This checkpoint does not close G2.
+
 G2 is complete only when that matrix and the linkage audit have evidence. If
 verification finds a code or rules defect, stop and open one atomic repair that
 must pass feature tests, `npm run test:core-regression`, adversarial audit and

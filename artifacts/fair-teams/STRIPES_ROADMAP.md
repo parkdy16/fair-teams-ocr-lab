@@ -3587,11 +3587,19 @@ npm run test:browser-smoke
 git diff --check HEAD
 ```
 
-Manual follow-ups remain: observe the first hosted GitHub run and make its
-stable check required through repository settings; provision a genuinely
-isolated staging stack; approve/configure backup retention, PITR and Storage
-protection; and complete a synthetic cloud restore rehearsal. Hosted CI is not
-claimed as passed until a future commit runs it on GitHub.
+Hosted CI verification — 2026-08-19:
+
+- the first GitHub-hosted `Stripes preventive gates` run passed successfully
+  for H1 commit `de8cca8`;
+- the hosted run exercised the live-source TypeScript gate, permanent Core
+  Regression Gate, production build and Playwright browser smoke suite outside
+  the local Windows/Codex environment;
+- branch protection / required-status-check policy remains a separate workflow
+  decision and has not been enabled.
+
+Manual follow-ups remain: provision a genuinely isolated staging stack;
+approve/configure backup retention, PITR and Storage protection; and complete a
+synthetic cloud restore rehearsal.
 
 H1 completion does **not** close G2. Eligible Shared Drive collaborator,
 reconnect and unavailable-state verification remains blocked pending an

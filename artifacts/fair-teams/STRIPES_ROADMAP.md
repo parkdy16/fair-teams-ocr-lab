@@ -3735,7 +3735,7 @@ invariant-only golden safety test expansion in `src/lib/teamGenerator.test.ts`,
 including a deterministic 9-player 4v5 characterization fixture and the first
 team-engine architecture note in `docs/architecture/H3_TEAM_ENGINE.md`.
 
-**H3-C progress — 2026-08-20 (local, uncommitted):** Added an isolated pure
+**H3-C completed - 2026-08-20 (`58299ba`):** Added an isolated pure
 OVR-first experiment harness with explicit match formats, replaceable
 numerical-advantage policy, separately reported profile/constraint/disruption
 dimensions and deterministic 9-player 4v5 parameter sweeps. It is not connected
@@ -6171,3 +6171,233 @@ creative brief and direction selection first, then schedule the bounded QT1
 implementation independently from T1 and G2.
 
 <!-- STRIPES_CURRENT_ARCHITECTURE_END -->
+
+### LATEST launch / T1 / UX execution authority - 2026-08-20
+
+**THIS IS THE LATEST SUPERSEDING PRODUCT / EXECUTION CHECKPOINT.**
+
+Where older roadmap material conflicts with this section, this section controls.
+Older design material may remain for history and useful detail, but must not be
+implemented when it contradicts this checkpoint.
+
+Operational progress, runway and credit accounting live in:
+
+`docs/planning/STRIPES_LAUNCH_TRACKER.md`
+
+Codex-compatible tool research lives in:
+
+`docs/planning/CODEX_ADDON_STRATEGY.md`
+
+#### Launch execution
+
+- target feature completion around 2026-09-15;
+- preserve meaningful verification/release buffer before 2026-09-30;
+- current remaining-work planning estimate is approximately 1.7-2.3 full
+  strong-Codex cycles including reasonable integration/correction overhead;
+- three full future cycles therefore provide contingency if scope stays
+  controlled;
+- expensive Codex reasoning should implement prepared production packages, not
+  perform broad reconnaissance that can be done through chat or bounded Spark.
+
+#### Current T1 player-model authority
+
+`Overall Skill / OVR` is an independent holistic player-strength rating.
+
+It is the primary competitive-strength anchor.
+
+It is **not** mathematically derived from Detailed Profile/radar averages.
+
+Football v2 profile dimensions remain:
+
+1. Attack
+2. Passing
+3. Stamina
+4. Defense
+5. Technique
+6. Pace
+
+Current authority:
+
+- Speed -> Pace is primarily terminology/presentation evolution and may retain
+  compatible internal storage identity initially;
+- Physical/Strength -> Technique is a real semantic replacement and old Physical
+  values must never be blindly relabeled as Technique;
+- Team Play must leave the future numerical fairness/Overall model;
+- legacy Small/Medium/Large hidden attribute-weight matrices are not the future
+  fairness contract;
+- profile attributes describe player composition/style separately from Overall
+  strength;
+- profile average does not have to equal OVR;
+- Overall-only remains a valid player model.
+
+Any older roadmap statement saying detailed attributes **must determine Overall
+Skill** is superseded by this checkpoint.
+
+#### Radar / Detailed Profile authority
+
+- radar values are absolute ratings on a stable fixed scale;
+- substantially stronger players should generally produce visibly larger radar
+  polygons than substantially weaker players;
+- do not normalize every player's radar to visually fill the chart;
+- profile values remain real stored ratings rather than display-only invented
+  transforms;
+- radar/profile values help future team-composition evaluation without
+  re-deriving Overall strength;
+- avoid unnecessary card/radar clutter;
+- an Overall reference ring/polygon is not required.
+
+#### Special Abilities + Player Vibe authority
+
+The current local Special Abilities and Player Vibe UI is approved.
+
+Preserve that interaction/presentation rather than redesigning it.
+
+- no automatic trait generation;
+- no automatic radar-derived trait suggestions;
+- traits/vibe are manually organizer-selected descriptive/cosmetic metadata;
+- traits/vibe must not modify OVR, radar values, fairness scoring, constraints or
+  team generation;
+- they should later be available on shared rosters using the same established UI
+  pattern;
+- different sports may supply different Special Ability / Player Vibe vocabulary
+  while preserving the same interaction;
+- Custom Sport/Game may later provide suitable generic/custom vocabularies.
+
+Older auto-derived Playing Profile proposals are not current authority where
+they conflict with this organizer-selected cosmetic-trait direction.
+
+#### Multi-sport launch scope
+
+The future architecture should provide generic seams for:
+
+- Overall Skill;
+- sport-specific profile dimensions;
+- sport-specific roles;
+- match-format policy;
+- sport-specific Special Ability / Player Vibe vocabulary;
+- future Custom profile definitions.
+
+Launch-critical T1 should establish sound generic seams while shipping Football
+first.
+
+Full basketball, volleyball and Custom implementations are not required for the
+first launch unless explicitly reprioritized.
+
+#### H3 / future fairness authority
+
+H3 checkpoints:
+
+- `01fdcc9` — team-generator safety baseline;
+- `58299ba` — isolated fairness experiment harness.
+
+H3 safety tests protect assignment integrity and meaningful constraints without
+freezing the legacy weighted-skill formula as future fairness truth.
+
+Future generation direction:
+
+1. valid assignments / hard constraints;
+2. Overall/effective competitive strength;
+3. sport-specific profile composition;
+4. important role coverage and approved organizer priorities.
+
+Permanent unequal-on-field formats such as no-subs 4v5 may intentionally place
+greater raw strength on the numerically disadvantaged side.
+
+Do not overstate mathematical precision. Teams will never be perfectly
+predictable; Stripes should return a sensible best-available split rather than
+pretend to know an objectively perfect result.
+
+Equal-on-field substitution/rotation formats must remain distinguishable from
+permanent numerical disadvantage.
+
+#### Live Split
+
+Generate and Live Split should share the same underlying fairness evaluation.
+
+Live Split additionally values continuity / minimum disruption to existing
+assignments.
+
+Treat these as separate implementation checkpoints:
+
+1. structured Live Split engine/recommendation output;
+2. Live Split UX/UI exploration and design;
+3. production integration and device verification.
+
+Do not blindly regenerate every existing player when a small placement or swap
+produces a sufficiently good result.
+
+#### Design early, audit late
+
+For major new interaction surfaces, perform design/reference exploration before
+expensive production implementation.
+
+High-value current candidates:
+
+- Live Split;
+- File Cabinet Explorer/Finder-style UX.
+
+21st.dev, Figma and other approved direct Codex-compatible tools may be used to
+compare patterns/directions before implementation.
+
+Product decisions remain ours.
+
+After feature freeze, perform a systematic app-wide audit.
+
+The final audit may result in a **controlled app-wide UX/UI reconsideration**,
+not merely tiny cosmetic polish, because much of the original Stripes interface
+predates the current Codex/design-tool workflow.
+
+Planning budget:
+
+- reserve roughly 30-50% of the final strong-Codex cycle;
+- spend less if the finished app is already cohesive;
+- allow up to one full cycle only if genuinely valuable changes remain and
+  launch runway supports them.
+
+Do not permit an uncontrolled redesign.
+
+#### Final UI audit workflow
+
+1. inventory major screens/states;
+2. mobile-first inspection;
+3. desktop/tablet inspection where layouts differ;
+4. browser-agent/accessibility/responsive/consistency audit;
+5. human/ChatGPT design/product review;
+6. classify Keep / Polish / Restructure / Redesign;
+7. approve work before coding;
+8. batch related fixes through Codex;
+9. rerun regression and real-device verification.
+
+#### SEO / ASO
+
+SEO and app-store optimization are launch-completion work and should not consume
+a dedicated major credit cycle.
+
+Focus technical SEO on public/indexable Stripes pages rather than attempting to
+turn the authenticated `/app` product into the primary search surface.
+
+Avoid an unnecessary framework migration solely for SEO.
+
+#### Codex-compatible add-on research
+
+Continue personally researching external tools that can materially improve
+quality or reduce iteration.
+
+Prefer direct Codex compatibility via plugins, MCP, agent skills or
+vendor-supported CLI.
+
+Current priority evaluations:
+
+1. 21st.dev;
+2. Chrome DevTools for agents;
+3. official Firebase Codex plugin / skills / MCP;
+4. Figma MCP pilot;
+5. Context7/current-doc tooling;
+6. existing Playwright + useful agent skills;
+7. targeted Vercel / Resend / GitHub / runtime-monitoring integrations where
+   they clearly solve a launch problem.
+
+Do not install tools merely because they exist.
+
+Pilot each one against a concrete Stripes workflow and retain it only if the
+value is meaningful.

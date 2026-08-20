@@ -67,8 +67,15 @@ export function verificationEmailError(error: unknown) {
 }
 
 export function verificationResendLabel(resendAvailableAt: string | null, nowMillis = Date.now()) {
+  const seconds = verificationResendSeconds(resendAvailableAt, nowMillis);
+  return seconds == null ? "" : `Resend available in ${seconds} seconds.`;
+}
+
+export function verificationResendSeconds(
+  resendAvailableAt: string | null,
+  nowMillis = Date.now(),
+): number | null {
   const availableAt = resendAvailableAt ? Date.parse(resendAvailableAt) : NaN;
-  if (!Number.isFinite(availableAt) || availableAt <= nowMillis) return "";
-  const seconds = Math.max(1, Math.ceil((availableAt - nowMillis) / 1000));
-  return `Resend available in ${seconds} seconds.`;
+  if (!Number.isFinite(availableAt) || availableAt <= nowMillis) return null;
+  return Math.max(1, Math.ceil((availableAt - nowMillis) / 1000));
 }

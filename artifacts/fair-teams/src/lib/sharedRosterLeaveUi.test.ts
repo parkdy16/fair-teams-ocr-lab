@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
+import { getEnglishCatalogMessage } from "../i18n/resources/en.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../", import.meta.url));
 const appSource = readFileSync(new URL("../App.tsx", import.meta.url), "utf8");
@@ -33,7 +34,11 @@ test("Organizer Club shell exposes the existing Leave shared roster flow", () =>
   assert.match(clubShell, /onLeaveSharedRoster=/);
   assert.match(clubShell, /setLeaveSharedConfirmOpen\(true\)/);
   assert.match(organizerModal, /\(onLeaveSharedRoster \|\| onCloseSharedWorkspace\) && canLeaveActiveWorkspace/);
-  assert.match(organizerModal, />\s*Leave shared roster\s*</);
+  assert.match(organizerModal, /t\("shared\.publish\.closure\.leave"\)/);
+  assert.equal(
+    getEnglishCatalogMessage("shared.publish.closure.leave"),
+    "Leave shared roster",
+  );
   assert.match(organizerModal, /onLeaveSharedRoster\(\)/);
 });
 
@@ -46,7 +51,11 @@ test("leave confirmation reuses membership removal and never deletes workspace d
 
   assert.match(leaveHandler, /leaveFirebaseSharedRosterAccess\(firebaseRosterId\)/);
   assert.doesNotMatch(leaveHandler, /deleteFirebaseSharedRoster|deleteFirebaseSharedGroup/);
-  assert.match(appSource, /It does not delete the shared roster or club data\./);
+  assert.match(appSource, /t\("app\.leaveShared\.safetyDescription"\)/);
+  assert.equal(
+    getEnglishCatalogMessage("app.leaveShared.safetyDescription"),
+    "It does not delete the shared roster or club data. Other organizers keep access and the shared workspace stays online.",
+  );
 });
 
 test("last-organizer protection remains authoritative and visible", () => {
@@ -59,7 +68,11 @@ test("last-organizer protection remains authoritative and visible", () => {
   assert.match(leaveService, /organizerCountFromData\(groupData\) <= 1/);
   assert.match(leaveService, /organizerCountFromData\(rosterData\) <= 1/);
   assert.match(leaveService, /The last organizer cannot leave\./);
-  assert.match(appSource, /The last organizer cannot leave this way\. Invite another organizer first\./);
+  assert.match(appSource, /t\("app\.leaveShared\.lastOrganizerWarning"\)/);
+  assert.equal(
+    getEnglishCatalogMessage("app.leaveShared.lastOrganizerWarning"),
+    "The last organizer cannot leave this way. Invite another organizer first.",
+  );
   assert.match(appSource, /role="alert"/);
 });
 

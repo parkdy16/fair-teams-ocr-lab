@@ -4,6 +4,31 @@ import type {
   AiSmartCommandResponse,
 } from "./aiSmartCommandTypes";
 
+export type AiSmartCommandTrustGuardMessageId =
+  | "backup.currentRoster"
+  | "backup.namedRoster"
+  | "backup.intent"
+  | "backup.summaryBeforeAi"
+  | "backup.summaryAfterAi"
+  | "backup.targetName"
+  | "backup.targetArea"
+  | "backup.reasonBeforeAi"
+  | "backup.reasonAfterAi"
+  | "backup.unresolved"
+  | "font.intent"
+  | "font.summaryBeforeAi"
+  | "font.summaryAfterAi"
+  | "ui.intent"
+  | "ui.summary"
+  | "unsupported.defaultSummary"
+  | "unsupported.summarySuffix"
+  | "unsupported.unresolved";
+
+export type AiSmartCommandTrustGuardPresenter = (
+  messageId: AiSmartCommandTrustGuardMessageId,
+  values?: Record<string, unknown>,
+) => string;
+
 function normalizeCommandText(value: string) {
   return String(value || "")
     .toLowerCase()
@@ -99,37 +124,40 @@ function suspiciousGenericFeatureClaim(summary: string) {
 export function guardFairTeamsSmartCommandBeforeAi(
   commandText: string,
   context: AiSmartCommandContext = {},
+  present: AiSmartCommandTrustGuardPresenter,
 ): AiSmartCommandResponse | null {
   const text = normalizeCommandText(commandText);
   if (!text) return null;
 
   if (isLocalSaveOrBackupRequest(text)) {
-    const rosterName = context.rosterName ? `“${context.rosterName}”` : "the current roster";
+    const rosterName = context.rosterName
+      ? present("backup.namedRoster", { name: context.rosterName })
+      : present("backup.currentRoster");
     return guardResponse({
-      normalizedIntent: "Save or back up the current roster locally",
-      assistantSummary: `I understand this as a save/backup action for ${rosterName}. I can’t trigger Local Backup from the assistant yet. Your local roster edits are normally stored on this device automatically, but for a real backup file use Roster Tools → Local Backup.`,
+      normalizedIntent: present("backup.intent"),
+      assistantSummary: present("backup.summaryBeforeAi", { rosterName }),
       actions: [emptyAction({
-        targetName: "Local roster backup",
-        targetArea: "Roster Tools → Local Backup",
-        reason: "The assistant can explain where this is, but it is not wired to create or export a local backup file yet.",
+        targetName: present("backup.targetName"),
+        targetArea: present("backup.targetArea"),
+        reason: present("backup.reasonBeforeAi"),
       })],
-      unresolvedMessage: "Manual path: Roster Tools → Local Backup.",
+      unresolvedMessage: present("backup.unresolved"),
       debugWarning: "Guarded unsupported local save/backup action before AI parser.",
     });
   }
 
   if (isFontOrTextSizeFeedback(text)) {
     return guardResponse({
-      normalizedIntent: "Font size or readability feedback",
-      assistantSummary: "There is no font-size setting in Stripes right now. If the text feels too small on your phone, that is useful design feedback, not something hidden in Settings. The UI would need to be adjusted in the app design.",
+      normalizedIntent: present("font.intent"),
+      assistantSummary: present("font.summaryBeforeAi"),
       debugWarning: "Guarded font/readability question to prevent invented settings.",
     });
   }
 
   if (isGenericUiFeedback(text) && isQuestion(text)) {
     return guardResponse({
-      normalizedIntent: "UI/UX feedback question",
-      assistantSummary: "That sounds like UI feedback rather than an app action. I should not invent a setting or feature here. If something feels too small, crowded, or confusing, it probably needs a design adjustment in Stripes itself.",
+      normalizedIntent: present("ui.intent"),
+      assistantSummary: present("ui.summary"),
       debugWarning: "Guarded generic UI feedback question to avoid generic app advice.",
     });
   }
@@ -140,28 +168,29 @@ export function guardFairTeamsSmartCommandBeforeAi(
 export function applyFairTeamsAiTruthGuard(
   commandText: string,
   response: AiSmartCommandResponse,
+  present: AiSmartCommandTrustGuardPresenter,
 ): AiSmartCommandResponse {
   const text = normalizeCommandText(commandText);
   const summary = response.assistantSummary || "";
 
   if (isFontOrTextSizeFeedback(text) && suspiciousGenericFeatureClaim(summary)) {
     return guardResponse({
-      normalizedIntent: "Font size or readability feedback",
-      assistantSummary: "There is no font-size setting in Stripes right now. If the text feels too small, that is valid feedback for improving the UI. I should not suggest a setting that does not exist.",
+      normalizedIntent: present("font.intent"),
+      assistantSummary: present("font.summaryAfterAi"),
       debugWarning: "Replaced AI response that invented a font/settings feature.",
     });
   }
 
   if (isLocalSaveOrBackupRequest(text) && response.actions.length === 0) {
     return guardResponse({
-      normalizedIntent: "Save or back up the current roster locally",
-      assistantSummary: "I understand this as an action request, but the assistant cannot create a local backup file yet. Local roster edits are stored on this device automatically; for a real backup/export file, use Roster Tools → Local Backup.",
+      normalizedIntent: present("backup.intent"),
+      assistantSummary: present("backup.summaryAfterAi"),
       actions: [emptyAction({
-        targetName: "Local roster backup",
-        targetArea: "Roster Tools → Local Backup",
-        reason: "This is a real Stripes workflow, but it is not wired as an AI action yet.",
+        targetName: present("backup.targetName"),
+        targetArea: present("backup.targetArea"),
+        reason: present("backup.reasonAfterAi"),
       })],
-      unresolvedMessage: "Manual path: Roster Tools → Local Backup.",
+      unresolvedMessage: present("backup.unresolved"),
       debugWarning: "Replaced informational AI answer for local save/backup action request.",
     });
   }
@@ -169,11 +198,11 @@ export function applyFairTeamsAiTruthGuard(
   if (looksLikeActionRequest(text) && response.actions.length === 0 && response.unresolved.length === 0) {
     return {
       ...response,
-      assistantSummary: `${response.assistantSummary || "I understood the request."}\n\nI should be clear: I do not have an action card for this yet, so I did not change anything in the app.`,
+      assistantSummary: `${response.assistantSummary || present("unsupported.defaultSummary")}${present("unsupported.summarySuffix")}`,
       unresolved: [{
         text: commandText,
         issue: "unsupported_action",
-        message: "No supported action is wired for this request yet.",
+        message: present("unsupported.unresolved"),
       }],
       debugWarnings: [...(response.debugWarnings || []), "Truth guard added unsupported-action notice after AI returned no actions."],
     };

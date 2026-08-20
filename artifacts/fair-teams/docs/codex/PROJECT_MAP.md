@@ -1,7 +1,8 @@
 # Stripes project map
 
-Verified: 2026-08-19
-Accepted G3 starting checkpoint: `ef94645`
+Verified: 2026-08-20
+I1 implementation base: `1632da3` (local gates verified; worktree remains
+uncommitted and no hosted-CI or release claim is made)
 
 ## Source boundaries
 
@@ -44,10 +45,39 @@ The older `src/lib/clubResourceService.ts` and
 Firebase Storage attachment system. They are not the G3 Cabinet index and must
 not be migrated, tightened or deleted as incidental Cabinet work.
 
+## Internationalization boundary
+
+- Durable architecture and contribution guide:
+  `docs/architecture/INTERNATIONALIZATION.md`
+- Frontend bootstrap, locale policy, formatting helpers and React provider:
+  `src/i18n/`
+- Canonical bundled English feature segments:
+  `src/i18n/resources/`
+- Functions-local backend adapter/catalog: `functions/i18n.js` and
+  `functions/i18n/en.js`
+- Zero-baseline live UI-string policy:
+  `scripts/check-i18n-ui-strings.mjs`
+- High-value stable-code presentation adapters:
+  `src/i18n/activeSharedWorkspaceAuthority.ts`,
+  `src/components/SharedRosterAutosyncStatus.tsx`,
+  `src/components/SharedWorkspaceCabinetCard.tsx`,
+  `src/i18n/emailVerification.ts`, `src/i18n/googleAuth.ts`,
+  `src/i18n/aiSmartCommandPresentation.ts` and
+  `src/i18n/aiSmartCommandTrustGuard.ts`
+
+English is the only shipped I1 locale. Device-local locale preference is not
+workspace authority or durable cloud data. Frontend and Functions catalogs are
+separate runtime bundles with one logical canonical English language contract.
+The Google-auth adapter maps the currently distinct stable reasons but
+deliberately retains the mature raw compatibility message for the broad
+`unavailable` reason. Backend recipient-locale authority and actual German or
+Korean catalogs are I2 decisions.
+
 ## Verification
 
 - Live shipping-source TypeScript: `npm run typecheck:live`
 - Architecture/import boundaries: `npm run check:architecture`
+- Hard-coded live UI-string policy: `npm run check:i18n`
 - Core integration gate, including the production build: `npm run test:core-regression`
 - Focused demo-only recovery rehearsal:
   `npm --prefix functions run test:recovery:emulator`
@@ -62,11 +92,11 @@ incremental caching so it cannot hide current diagnostics. Do not substitute
 the known-nonzero full-project check for that mandatory gate.
 
 The root CI workflow is `.github/workflows/stripes-ci.yml`. It runs the live
-typecheck, Core Regression Gate and five-scenario Playwright smoke suite without
+typecheck, Core Regression Gate and six-scenario Playwright smoke suite without
 deployment or production credentials. See `docs/testing/CORE_REGRESSION_GATE.md`.
 
-The architecture and recovery commands are mandatory stages inside Core, so CI
-inherits them without a second workflow or duplicate stage.
+The architecture, i18n and recovery commands are mandatory stages inside Core,
+so CI inherits them without a second workflow or duplicate stage.
 
 ## Durable architecture and operations references
 
@@ -74,6 +104,8 @@ inherits them without a second workflow or duplicate stage.
 - Cross-system constraints: `docs/architecture/SYSTEM_INVARIANTS.md`
 - Forward durable schema convention:
   `docs/architecture/DURABLE_SCHEMA_EVOLUTION.md`
+- English-only i18n and future-locale convention:
+  `docs/architecture/INTERNATIONALIZATION.md`
 - Integration/browser gate details: `docs/testing/CORE_REGRESSION_GATE.md`
 - Staging, backup and recovery boundaries:
   `docs/operations/STAGING_BACKUP_RECOVERY.md`

@@ -3,6 +3,7 @@ import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 const rosterStorageKey = "fair-teams-rosters-v1";
 const activeRosterStorageKey = "fair-teams-active-roster-id-v1";
 const onboardingStorageKey = "fairteams-onboarding-v140-complete";
+const uiLocaleStorageKey = "stripes-ui-locale-v1";
 const expectedStaticExternalHosts = new Set(["fonts.googleapis.com", "fonts.gstatic.com"]);
 const unexpectedExternalRequests = new WeakMap<BrowserContext, string[]>();
 
@@ -169,6 +170,36 @@ test("the start workspace can switch between deterministic local rosters", async
   await picker.locator("button").filter({ hasText: "Beta FC" }).click();
 
   await expect(page.getByRole("button", { name: /Last used Beta FC Local 4 players/ })).toBeVisible();
+});
+
+test("an unsupported persisted locale falls back to complete English UI", async ({ page }) => {
+  await page.addInitScript(({ localeKey }) => {
+    window.localStorage.setItem(localeKey, "unsupported-test-locale");
+  }, { localeKey: uiLocaleStorageKey });
+  await seedLocalApp(page);
+
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  await expect(page.getByRole("heading", { name: "Hey," })).toBeVisible();
+  await expect(page.getByText("Choose your roster.", { exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: /Change roster/ }).click();
+  const picker = page.getByRole("dialog");
+  await expect(picker.getByRole("heading", { name: "Change roster" })).toBeVisible();
+  await picker.locator("button").filter({ hasText: "Alpha FC" }).click();
+
+  await enterActiveRoster(page);
+  const sidebar = page.locator("aside");
+  await expect(sidebar.getByRole("tab", { name: "Roster", exact: true })).toBeVisible();
+  await expect(sidebar.getByRole("tab", { name: "Teams", exact: true })).toBeVisible();
+  const clubTab = sidebar.getByRole("tab", { name: "Club", exact: true });
+  await expect(clubTab).toBeVisible();
+  await clubTab.click();
+  await expect(page.getByText("Club Access", { exact: true })).toBeVisible();
+
+  const visibleText = await page.locator("body").innerText();
+  expect(visibleText).not.toMatch(
+    /\b(?:app|common|navigation|roster|today|teams|club|actionBoard|equipment|cabinet|auth|onboarding)\.[a-z][A-Za-z0-9_.-]*/,
+  );
 });
 
 test("a cached shared workspace remains fail-closed while signed out", async ({ page }) => {

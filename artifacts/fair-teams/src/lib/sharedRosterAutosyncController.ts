@@ -22,6 +22,13 @@ export type SharedRosterAutosyncErrorKind =
   | "conflict"
   | "unknown";
 
+export type SharedRosterAutosyncErrorReason =
+  | "online_changed"
+  | "access_changed"
+  | "network_unavailable"
+  | "sync_failed"
+  | "online_state_unconfirmed";
+
 export type SharedRosterAutosyncBlockReason =
   | "signed_out"
   | "loading"
@@ -39,6 +46,7 @@ export type SharedRosterAutosyncSnapshot = {
   lastConfirmedAt: string | null;
   errorKind: SharedRosterAutosyncErrorKind | null;
   errorCode: string | null;
+  errorReason: SharedRosterAutosyncErrorReason | null;
   errorMessage: string | null;
   blockReason: SharedRosterAutosyncBlockReason | null;
   retryable: boolean;
@@ -54,6 +62,7 @@ export const LOCAL_ONLY_SHARED_ROSTER_AUTOSYNC_SNAPSHOT: SharedRosterAutosyncSna
   lastConfirmedAt: null,
   errorKind: null,
   errorCode: null,
+  errorReason: null,
   errorMessage: null,
   blockReason: null,
   retryable: false,
@@ -74,6 +83,7 @@ export type SharedRosterAutosyncContext = SharedRosterAutosyncAvailability & {
 export type SharedRosterAutosyncFailure = {
   kind: SharedRosterAutosyncErrorKind;
   code: string;
+  reason?: SharedRosterAutosyncErrorReason;
   message: string;
 };
 
@@ -123,6 +133,7 @@ export function classifySharedRosterAutosyncError(error: unknown): SharedRosterA
     return {
       kind: "conflict",
       code: code || "shared-roster-version-conflict",
+      reason: "online_changed",
       message: "The online roster changed. Your edits are still saved on this device.",
     };
   }
@@ -133,6 +144,7 @@ export function classifySharedRosterAutosyncError(error: unknown): SharedRosterA
     return {
       kind: "authority",
       code: code || "shared-roster-access-changed",
+      reason: "access_changed",
       message: "Shared roster access changed. Your edits are still saved on this device.",
     };
   }
@@ -143,12 +155,14 @@ export function classifySharedRosterAutosyncError(error: unknown): SharedRosterA
     return {
       kind: "network",
       code: code || "shared-roster-network-unavailable",
+      reason: "network_unavailable",
       message: "Stripes could not reach Firebase. Your edits are saved on this device.",
     };
   }
   return {
     kind: "unknown",
     code: code || "shared-roster-sync-failed",
+    reason: "sync_failed",
     message: "Stripes could not sync this roster. Your edits are saved on this device.",
   };
 }
@@ -343,6 +357,7 @@ export class SharedRosterAutosyncController {
         lastConfirmedAt: source?.lastSyncedAt || null,
         errorKind: null,
         errorCode: null,
+        errorReason: null,
         errorMessage: null,
         blockReason: isShared ? blockReasonForAvailability(nextContext) : null,
         retryable: false,
@@ -375,6 +390,7 @@ export class SharedRosterAutosyncController {
         hasUnsyncedChanges: false,
         errorKind: null,
         errorCode: null,
+        errorReason: null,
         errorMessage: null,
         blockReason: null,
       });
@@ -418,6 +434,7 @@ export class SharedRosterAutosyncController {
       inFlightRevision: revision,
       errorKind: null,
       errorCode: null,
+      errorReason: null,
       errorMessage: null,
       blockReason: null,
     });
@@ -444,6 +461,7 @@ export class SharedRosterAutosyncController {
           lastConfirmedAt: summary.updatedAt || new Date().toISOString(),
           errorKind: null,
           errorCode: null,
+          errorReason: null,
           errorMessage: null,
           blockReason: null,
         };
@@ -490,6 +508,7 @@ export class SharedRosterAutosyncController {
           inFlightRevision: null,
           errorKind: failure.kind,
           errorCode: failure.code,
+          errorReason: failure.reason ?? null,
           errorMessage: failure.message,
           blockReason: failure.kind === "authority"
             ? blockReasonForAvailability(this.context!) || "unavailable"
@@ -548,6 +567,7 @@ export class SharedRosterAutosyncController {
           status: this.availableStatus(this.snapshot.hasUnsyncedChanges, this.context),
           errorKind: null,
           errorCode: null,
+          errorReason: null,
           errorMessage: null,
           blockReason: blockReasonForAvailability(this.context),
         });
@@ -582,6 +602,9 @@ export class SharedRosterAutosyncController {
           : "failed",
       errorKind: failure.kind,
       errorCode: failure.code,
+      errorReason: this.snapshot.hasUnsyncedChanges
+        ? failure.reason ?? null
+        : "online_state_unconfirmed",
       errorMessage: this.snapshot.hasUnsyncedChanges
         ? failure.message
         : "Stripes could not confirm the current online roster state.",
@@ -634,6 +657,7 @@ export class SharedRosterAutosyncController {
       status: this.availableStatus(true, this.context!),
       errorKind: null,
       errorCode: null,
+      errorReason: null,
       errorMessage: null,
       blockReason: blockReasonForAvailability(this.context!),
     };
@@ -700,6 +724,7 @@ export class SharedRosterAutosyncController {
       status: dirty ? "scheduled" : "synced",
       errorKind: dirty && !mayAutomaticallyResume ? this.snapshot.errorKind : null,
       errorCode: dirty && !mayAutomaticallyResume ? this.snapshot.errorCode : null,
+      errorReason: dirty && !mayAutomaticallyResume ? this.snapshot.errorReason : null,
       errorMessage: dirty && !mayAutomaticallyResume ? this.snapshot.errorMessage : null,
       blockReason: null,
     });
@@ -724,6 +749,7 @@ export class SharedRosterAutosyncController {
       inFlightRevision: null,
       errorKind: "conflict",
       errorCode: "shared-roster-version-conflict",
+      errorReason: "online_changed",
       errorMessage: "The online roster changed. Your edits are still saved on this device.",
       blockReason: null,
     });
@@ -748,6 +774,7 @@ export class SharedRosterAutosyncController {
       lastConfirmedAt: remote.updatedAt || new Date().toISOString(),
       errorKind: null,
       errorCode: null,
+      errorReason: null,
       errorMessage: null,
       blockReason: blockReasonForAvailability(context),
     });

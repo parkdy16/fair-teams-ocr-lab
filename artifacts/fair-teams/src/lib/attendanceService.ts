@@ -152,12 +152,13 @@ export function listenToAttendanceWarningTemplates(
   rosterId: string,
   callback: (templates: AttendanceWarningTemplates) => void,
   onError?: (error: Error) => void,
+  defaults: AttendanceWarningTemplates = DEFAULT_ATTENDANCE_WARNING_TEMPLATES,
 ): Unsubscribe {
   requireSignedInUser();
   return onSnapshot(
     attendanceCollection(rosterId),
     (snapshot) => {
-      const next: AttendanceWarningTemplates = { ...DEFAULT_ATTENDANCE_WARNING_TEMPLATES };
+      const next: AttendanceWarningTemplates = { ...defaults };
       snapshot.docs.forEach((snapshotDoc) => {
         const prefix = "_warning_template_";
         if (!snapshotDoc.id.startsWith(prefix)) return;

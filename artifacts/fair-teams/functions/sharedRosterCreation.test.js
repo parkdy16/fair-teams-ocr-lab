@@ -466,6 +466,10 @@ test("live client creation uses only the callable and no longer mutates group li
     path.join(__dirname, "..", "src", "components", "FirebaseSharedRosterPublishCard.tsx"),
     "utf8",
   );
+  const sharedCatalogSource = fs.readFileSync(
+    path.join(__dirname, "..", "src", "i18n", "resources", "shared.ts"),
+    "utf8",
+  );
   const createBody = serviceSource.slice(
     serviceSource.indexOf("async function createFirebaseSharedRosterAttempt"),
     serviceSource.indexOf("export async function deleteFirebaseSharedRoster"),
@@ -486,7 +490,8 @@ test("live client creation uses only the callable and no longer mutates group li
   assert.doesNotMatch(callableSource, /addDoc|setDoc|updateDoc|writeBatch|arrayUnion/);
   assert.match(attemptSource, /localStorage/);
   assert.match(cardSource, /adoptFirebaseSharedRosterCreation\(activeRoster\.id, created\.id\)/);
-  assert.match(cardSource, /refreshWarning = "The shared-roster list could not refresh yet\."/);
+  assert.match(cardSource, /refreshWarning = t\("shared\.publish\.notices\.listRefreshFailed"\)/);
+  assert.match(sharedCatalogSource, /"shared\.publish\.notices\.listRefreshFailed": "The shared-roster list could not refresh yet\."/);
   assert.doesNotMatch(deleteBody, /arrayRemove|rosterIds|writeBatch|deleteDoc/);
   assert.match(deleteBody, /workspace closure/);
 });

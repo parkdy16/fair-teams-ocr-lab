@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { getEnglishCatalogMessage } from "../i18n/resources/en.ts";
 import { workspaceClosureConfirmationMatches } from "./sharedWorkspaceClosure.ts";
 
 const serviceSource = readFileSync(new URL("./sharedWorkspaceClosureService.ts", import.meta.url), "utf8");
@@ -40,9 +41,15 @@ test("Organizer Club shell exposes distinct leave and closure actions", () => {
     "const collaboratorsModal",
     "const backupHistoryModal",
   );
-  assert.match(organizerModal, />\s*Leave shared roster\s*</);
-  assert.match(organizerModal, /Close shared workspace/);
-  assert.match(organizerModal, /You are the last organizer\. Invite another organizer before leaving, or close this shared workspace\./);
+  assert.match(organizerModal, /t\("shared\.publish\.closure\.leave"\)/);
+  assert.match(organizerModal, /t\("shared\.publish\.closure\.close"\)/);
+  assert.match(organizerModal, /t\("shared\.publish\.closure\.lastOrganizer"\)/);
+  assert.equal(getEnglishCatalogMessage("shared.publish.closure.leave"), "Leave shared roster");
+  assert.equal(getEnglishCatalogMessage("shared.publish.closure.close"), "Close shared workspace");
+  assert.equal(
+    getEnglishCatalogMessage("shared.publish.closure.lastOrganizer"),
+    "You are the last organizer. Invite another organizer before leaving, or close this shared workspace.",
+  );
 });
 
 test("successful closure removes only linked local copies and returns to a safe local state", () => {
@@ -51,15 +58,25 @@ test("successful closure removes only linked local copies and returns to a safe 
   assert.match(closeHandler, /affectedRosterIds\.has/);
   assert.match(closeHandler, /source\.firebaseGroupId === affectedGroupId/);
   assert.match(closeHandler, /createRoster\(EMPTY_ROSTER_NAME, \[\]\)/);
-  assert.match(closeHandler, /Shared workspace closed\./);
+  assert.match(appSource, /const EMPTY_ROSTER_NAME = "New roster"/);
+  assert.match(appSource, /isDefaultEmptyRosterName\(value: string\)[\s\S]*?value === EMPTY_ROSTER_NAME/);
+  assert.match(closeHandler, /t\("app\.notices\.sharedWorkspaceClosed\.title"\)/);
+  assert.equal(
+    getEnglishCatalogMessage("app.notices.sharedWorkspaceClosed.title"),
+    "Shared workspace closed.",
+  );
+  assert.equal(getEnglishCatalogMessage("app.defaults.emptyRosterName"), "New roster");
   assert.doesNotMatch(closeHandler, /localStorage\.clear|deleteFirebaseSharedRoster|deleteFirebaseSharedGroup/);
 });
 
 test("reload recovery presents a distinct finish-cleanup flow", () => {
   assert.match(organizerShellSource, /const checkingRecovery = Boolean\(activeSharedRosterId && !activeSharedRoster\)/);
-  assert.match(organizerShellSource, /Workspace cleanup pending/);
-  assert.match(organizerShellSource, /Finish workspace cleanup/);
-  assert.match(appSource, /closeSharedConfirm\.cleanupPending \? "Finish workspace cleanup\?"/);
+  assert.match(organizerShellSource, /t\("shared\.publish\.closure\.cleanupPending"\)/);
+  assert.match(organizerShellSource, /t\("shared\.publish\.closure\.finishCleanup"\)/);
+  assert.match(appSource, /closeSharedConfirm\.cleanupPending[\s\S]*?t\("app\.workspaceClosure\.finishHeading"\)/);
+  assert.equal(getEnglishCatalogMessage("shared.publish.closure.cleanupPending"), "Workspace cleanup pending");
+  assert.equal(getEnglishCatalogMessage("shared.publish.closure.finishCleanup"), "Finish workspace cleanup");
+  assert.equal(getEnglishCatalogMessage("app.workspaceClosure.finishHeading"), "Finish workspace cleanup?");
   assert.match(appSource, /!closeSharedConfirm\.cleanupPending && !workspaceClosureConfirmationMatches/);
   assert.match(appSource, /closeSharedWorkspace\(closeSharedConfirm, closeSharedConfirmationName\)/);
 });

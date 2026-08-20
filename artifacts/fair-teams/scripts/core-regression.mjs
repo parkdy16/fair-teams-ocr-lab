@@ -99,9 +99,13 @@ function packageStage(name, command, args, cwd = REPOSITORY_ROOT) {
 }
 
 export function createCoreRegressionStages() {
-  const frontendTests = discoverFiles(join(REPOSITORY_ROOT, "src", "lib"), (file) =>
-    file.endsWith(".test.ts") && !file.includes(`${join("src", "src")}\\`),
-  ).map(repositoryPath);
+  const frontendTestRoots = [
+    join(REPOSITORY_ROOT, "src", "lib"),
+    join(REPOSITORY_ROOT, "src", "i18n"),
+  ];
+  const frontendTests = frontendTestRoots
+    .flatMap((directory) => discoverFiles(directory, (file) => file.endsWith(".test.ts")))
+    .map(repositoryPath);
 
   return [
     {
@@ -113,6 +117,11 @@ export function createCoreRegressionStages() {
       "Live architecture boundaries",
       "pnpm",
       ["--filter", "@workspace/fair-teams", "run", "check:architecture"],
+    ),
+    packageStage(
+      "I18n hard-coded UI-string policy",
+      "pnpm",
+      ["--filter", "@workspace/fair-teams", "run", "check:i18n"],
     ),
     {
       name: "Outer-source production logic and integration tests",

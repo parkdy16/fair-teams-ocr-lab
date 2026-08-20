@@ -39,10 +39,23 @@ export type FileCabinetResourceProviderResolution =
       mimeType: string | null;
       openUrl: string;
     }
-  | { status: "reconnect_required"; message: string }
-  | { status: "unavailable"; message: string }
-  | { status: "insufficient_permission"; message: string }
-  | { status: "unsupported"; message: string };
+  | { status: "reconnect_required"; reason: FileCabinetResourceProviderFailureReason; message: string }
+  | { status: "unavailable"; reason: FileCabinetResourceProviderFailureReason; message: string }
+  | { status: "insufficient_permission"; reason: FileCabinetResourceProviderFailureReason; message: string }
+  | { status: "unsupported"; reason: FileCabinetResourceProviderFailureReason; message: string };
+
+export type FileCabinetResourceProviderFailureReason =
+  | "drive_reconnect_verify"
+  | "drive_insufficient_permission"
+  | "drive_item_unavailable"
+  | "unsupported_metadata"
+  | "invalid_external_link"
+  | "unsupported_provider"
+  | "drive_connect_verify"
+  | "recorded_drive_item_unavailable"
+  | "drive_connect_choose"
+  | "picker_unsupported_metadata"
+  | "selected_drive_item_unavailable";
 
 export type FileCabinetGoogleDriveSelection =
   | {
@@ -85,17 +98,20 @@ function providerFailure(error: unknown): Exclude<
   if (status === 401) {
     return {
       status: "reconnect_required",
+      reason: "drive_reconnect_verify",
       message: "Reconnect Google Drive to verify this File Cabinet item.",
     };
   }
   if (status === 403) {
     return {
       status: "insufficient_permission",
+      reason: "drive_insufficient_permission",
       message: "This Google account does not have permission to open this File Cabinet item.",
     };
   }
   return {
     status: "unavailable",
+    reason: "drive_item_unavailable",
     message: "This Google Drive item is unavailable.",
   };
 }
@@ -184,6 +200,7 @@ export async function resolveFileCabinetResourceProvider(
   } catch {
     return {
       status: "unsupported",
+      reason: "unsupported_metadata",
       message: "This File Cabinet item uses unsupported metadata.",
     };
   }
@@ -193,6 +210,7 @@ export async function resolveFileCabinetResourceProvider(
     if (!openUrl) {
       return {
         status: "unsupported",
+        reason: "invalid_external_link",
         message: "This File Cabinet link is invalid.",
       };
     }
@@ -209,12 +227,14 @@ export async function resolveFileCabinetResourceProvider(
   if (durable.provider !== "google_drive" || !durable.providerResourceId) {
     return {
       status: "unsupported",
+      reason: "unsupported_provider",
       message: "This File Cabinet provider is not supported.",
     };
   }
   if (!accessToken) {
     return {
       status: "reconnect_required",
+      reason: "drive_connect_verify",
       message: "Connect Google Drive to verify this File Cabinet item.",
     };
   }
@@ -228,6 +248,7 @@ export async function resolveFileCabinetResourceProvider(
     if (!valid) {
       return {
         status: "unavailable",
+        reason: "recorded_drive_item_unavailable",
         message: "The recorded Google Drive item is unavailable.",
       };
     }
@@ -251,6 +272,7 @@ export async function selectFileCabinetGoogleDriveResource(
   if (!accessToken) {
     return {
       status: "reconnect_required",
+      reason: "drive_connect_choose",
       message: "Connect Google Drive to choose a File Cabinet item.",
     };
   }
@@ -267,6 +289,7 @@ export async function selectFileCabinetGoogleDriveResource(
   if (!expectedId) {
     return {
       status: "unsupported",
+      reason: "picker_unsupported_metadata",
       message: "Google Picker returned unsupported item metadata.",
     };
   }
@@ -277,6 +300,7 @@ export async function selectFileCabinetGoogleDriveResource(
     if (!valid) {
       return {
         status: "unavailable",
+        reason: "selected_drive_item_unavailable",
         message: "The selected Google Drive item is unavailable.",
       };
     }

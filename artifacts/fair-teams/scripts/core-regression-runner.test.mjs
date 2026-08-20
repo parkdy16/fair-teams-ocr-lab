@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  createCoreRegressionStages,
   MandatoryStageError,
   runMandatoryStage,
 } from "./core-regression.mjs";
@@ -34,4 +35,13 @@ test("mandatory stage propagates a failing subprocess exit code", () => {
       return true;
     },
   );
+});
+
+test("Core keeps the i18n UI-string policy immediately after architecture boundaries", () => {
+  const stageNames = createCoreRegressionStages().map(({ name }) => name);
+  const architectureIndex = stageNames.indexOf("Live architecture boundaries");
+  const i18nIndex = stageNames.indexOf("I18n hard-coded UI-string policy");
+
+  assert.notEqual(architectureIndex, -1);
+  assert.equal(i18nIndex, architectureIndex + 1);
 });

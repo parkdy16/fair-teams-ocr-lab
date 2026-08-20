@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
+import { getEnglishCatalogMessage } from "../i18n/resources/en.ts";
 import { GoogleApiHttpError } from "./googleApiError.ts";
 import {
   ensureManagedMyDriveCabinetFolder,
@@ -542,7 +543,11 @@ test("recorded Cabinet authorization UI cannot replace metadata or mutate Drive 
   assert.match(authorizationAction, /authorizeRecordedMyDriveCabinetFolder\(actionToken, location\.folderId\)/);
   assert.doesNotMatch(authorizationAction, /saveLocation|prepareLocation|saveSharedWorkspaceCabinetLocation/);
   assert.doesNotMatch(authorizationAction, /permissions|share|organizer/i);
-  assert.match(card, /Authorize this File Cabinet/);
+  assert.match(card, /t\("cabinet\.authorize"\)/);
+  assert.equal(
+    getEnglishCatalogMessage("cabinet.authorize"),
+    "Authorize this File Cabinet",
+  );
 });
 
 test("generic Drive connection does not resolve or validate Cabinet state", () => {

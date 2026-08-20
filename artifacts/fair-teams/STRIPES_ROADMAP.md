@@ -3954,7 +3954,11 @@ separate phases.
 
 #### I1 — Internationalization foundation
 
-**Mandatory before the next large wave of user-facing feature/UI expansion.**
+**Mandatory before the next large wave of user-facing feature/UI expansion —
+IMPLEMENTED AND LOCALLY VERIFIED ON 2026-08-20.**
+
+This worktree checkpoint is not yet a committed, hosted-CI or released
+checkpoint.
 
 Build the language architecture while keeping the released product English-only.
 
@@ -3977,6 +3981,42 @@ I1 does **not** require German or Korean translations. The purpose is to make
 future feature work i18n-ready without forcing active development to maintain
 multiple changing translations.
 
+Local implementation checkpoint:
+
+- the frontend uses pinned `i18next` / `react-i18next` with one synchronous,
+  bundled canonical English catalog split into semantic feature segments;
+- the supported-locale allowlist currently contains only `en`; resolution uses
+  a valid device-local preference, then supported browser language, then
+  canonical English, and synchronizes the resolved `<html lang>` without
+  adding Firestore or workspace authority state;
+- shared i18next plural rules and `Intl` helpers cover locale-sensitive counts,
+  numbers, percentages, lists and displayed dates/times without changing the
+  stored values;
+- live Stripes-authored UI text is catalog-backed while user/model/provider
+  content, names, URLs, persisted enums, protocol values and diagnostics remain
+  outside translation;
+- high-value stable-code presentation seams cover shared-workspace authority,
+  shared-roster autosync, File Cabinet provider resolution, email verification,
+  the known Google-auth reasons and AI capability/router/truth-guard copy. The
+  broad Google-auth `unavailable` compatibility message remains deliberately
+  raw until the domain exposes narrower stable reasons;
+- deterministic local-assistant and trust-guard prose uses an explicit
+  canonical-English conversation presenter, including its own list/number
+  formatting locale, while AI-panel chrome continues to follow the UI locale;
+  I2 must deliberately choose any future conversation-language policy;
+- Firebase Functions use their own deploy-local CommonJS adapter and English
+  catalog for current verification, invitation, organizer-joined and Action
+  Board email/push text. English remains the backend default because I1 has no
+  authoritative recipient-locale source;
+- the AST-based zero-baseline UI-string policy is a mandatory stage in the
+  ten-stage Core Regression Gate, with focused locale/catalog/formatting tests
+  and a sixth unsupported-locale browser smoke scenario.
+
+The requested local architecture, i18n, type, Functions, Core, browser and
+whitespace gates pass, and the live-source behavioral diff review found no I1
+product/runtime regression. No hosted CI result is claimed for this uncommitted
+and unreleased worktree.
+
 #### I2 — Localization
 
 Perform later, once major product wording and flows are sufficiently stable and
@@ -3993,16 +4033,21 @@ testing, Korean typography/layout checks, plural/date/number verification,
 missing-key/fallback coverage and approved localization of system-generated
 emails/notifications.
 
+I2 also owns the product/data decision for an explicit authoritative recipient
+locale. Until that authority exists, backend-generated recipient content must
+default to English and must not infer language from email, domain, name or
+another device's local preference.
+
 Future languages should then be primarily catalog/localization work rather than
 another application-wide architecture migration.
 
 ### Authoritative next implementation sequence
 
-I1 is the next mandatory architecture checkpoint before substantial new user-facing UI
-expansion. Existing bounded verification, bug fixes and documentation may
-continue, but new major user-facing feature surfaces should be built on the I1
-internationalization foundation rather than adding another large body of
-hard-coded English UI.
+The I1 foundation is implemented and locally verified but remains uncommitted
+and unreleased. New major user-facing feature surfaces must use this foundation
+rather than adding another large body of hard-coded English UI.
+Actual German/Korean catalogs and recipient-locale authority remain deferred to
+I2; I2 is not automatically the next implementation phase.
 
 
 The stabilization detour and CRG-1 are complete. G2.1a through G2.4 are

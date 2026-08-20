@@ -130,15 +130,18 @@ test("Picker selection is followed by one exact-ID metadata read and never subst
     }),
   );
   assert.equal(mismatch.status, "unavailable");
+  assert.equal(mismatch.status !== "ready" && mismatch.status !== "selection_cancelled" && mismatch.reason, "selected_drive_item_unavailable");
 });
 
 test("provider states distinguish reconnect, insufficient access, unavailable and unsupported", async () => {
-  assert.equal((await resolveFileCabinetResourceProvider(resource(), "", dependencies())).status, "reconnect_required");
+  const disconnected = await resolveFileCabinetResourceProvider(resource(), "", dependencies());
+  assert.equal(disconnected.status, "reconnect_required");
+  assert.equal(disconnected.status !== "ready" && disconnected.reason, "drive_connect_verify");
 
-  for (const [status, expected] of [
-    [401, "reconnect_required"],
-    [403, "insufficient_permission"],
-    [404, "unavailable"],
+  for (const [status, expected, reason] of [
+    [401, "reconnect_required", "drive_reconnect_verify"],
+    [403, "insufficient_permission", "drive_insufficient_permission"],
+    [404, "unavailable", "drive_item_unavailable"],
   ] as const) {
     const result = await resolveFileCabinetResourceProvider(
       resource(),
@@ -150,13 +153,16 @@ test("provider states distinguish reconnect, insufficient access, unavailable an
       }),
     );
     assert.equal(result.status, expected);
+    assert.equal(result.status !== "ready" && result.reason, reason);
   }
 
-  assert.equal((await resolveFileCabinetResourceProvider(
+  const unsupported = await resolveFileCabinetResourceProvider(
     resource({ schemaVersion: 2 as 1 }),
     "memory-only-token",
     dependencies(),
-  )).status, "unsupported");
+  );
+  assert.equal(unsupported.status, "unsupported");
+  assert.equal(unsupported.status !== "ready" && unsupported.reason, "unsupported_metadata");
   assert.equal((await resolveFileCabinetResourceProvider(
     { ...resource(), accessToken: "must-not-be-accepted" },
     "memory-only-token",
@@ -288,10 +294,10 @@ test("Cabinet UI uses the provider-neutral seam and removes only Stripes metadat
 
   assert.match(component, /resolveFileCabinetResourceProvider/);
   assert.match(component, /selectFileCabinetGoogleDriveResource/);
-  assert.match(component, /Cabinet items/);
-  assert.match(component, /Add from Drive/);
-  assert.match(component, /Add web link/);
-  assert.match(component, /original Google Drive item or external link target will not be changed or deleted/i);
+  assert.match(component, /t\("cabinet\.itemsTitle"\)/);
+  assert.match(component, /t\("cabinet\.addFromDrive"\)/);
+  assert.match(component, /t\("cabinet\.addWebLink"\)/);
+  assert.match(component, /t\("cabinet\.confirm\.removeEntryDescription"\)/);
   assert.match(removeResource, /removeFileCabinetResource/);
   assert.doesNotMatch(removeResource, /googleDrive|trash|deleteObject|permission/i);
 

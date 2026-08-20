@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
+import { getEnglishCatalogMessage } from "../i18n/resources/en.ts";
 import {
   isSameSharedWorkspaceCabinetLocation,
   myDriveCabinetLocationDraft,
@@ -155,10 +156,20 @@ test("Firestore service stores Firebase organizer attribution without Google ide
 
 test("configuration UI requires explicit replacement and removal confirmation", () => {
   const component = fs.readFileSync(new URL("../components/SharedWorkspaceCabinetCard.tsx", import.meta.url), "utf8");
-  assert.match(component, /Change File Cabinet\?/);
-  assert.match(component, /Existing folders and files will remain unchanged in Google Drive/);
-  assert.match(component, /Remove File Cabinet relationship\?/);
-  assert.match(component, /will not be changed or deleted/);
+  assert.match(component, /t\("cabinet\.confirm\.changeTitle"\)/);
+  assert.match(component, /t\("cabinet\.confirm\.changeDescription"\)/);
+  assert.match(component, /t\("cabinet\.confirm\.removeRelationshipTitle"\)/);
+  assert.match(component, /t\("cabinet\.confirm\.removeRelationshipDescription"\)/);
+  assert.equal(getEnglishCatalogMessage("cabinet.confirm.changeTitle"), "Change File Cabinet?");
+  assert.equal(
+    getEnglishCatalogMessage("cabinet.confirm.changeDescription"),
+    "Stripes will stop using the current Google folder as this club’s File Cabinet. Existing folders and files will remain unchanged in Google Drive.",
+  );
+  assert.equal(getEnglishCatalogMessage("cabinet.confirm.removeRelationshipTitle"), "Remove File Cabinet relationship?");
+  assert.equal(
+    getEnglishCatalogMessage("cabinet.confirm.removeRelationshipDescription"),
+    "Stripes will forget this club’s File Cabinet location. The Google folder, files and Google permissions will not be changed or deleted.",
+  );
 });
 
 test("File Cabinet is a dedicated Club destination outside Club Access", () => {
@@ -173,11 +184,17 @@ test("File Cabinet is a dedicated Club destination outside Club Access", () => {
   assert.doesNotMatch(sharedTools, /SharedWorkspaceCabinetCard|File Cabinet/);
   assert.match(app, /fileCabinetNode=.*SharedWorkspaceCabinetCard/s);
   assert.match(club, /fileCabinetNode\?\.\(\{[\s\S]*?fileCabinetOpen/);
-  assert.match(component, /aria-label="File Cabinet"/);
+  assert.match(component, /aria-label=\{t\("cabinet\.title"\)\}/);
   assert.match(component, /<Dialog open=\{open\} onOpenChange=\{onOpenChange\}>/);
-  assert.match(component, /Club files and documents/);
-  assert.match(component, /location \? \([\s\S]*?!driveReady[\s\S]*?Reconnect Google Drive/);
-  assert.match(component, /location \? \([\s\S]*?: \([\s\S]*?Set up File Cabinet[\s\S]*?Use My Drive[\s\S]*?Choose Shared Drive/);
+  assert.match(component, /t\("cabinet\.subtitle"\)/);
+  assert.match(component, /location \? \([\s\S]*?!driveReady[\s\S]*?t\("cabinet\.reconnectGoogleDrive"\)/);
+  assert.match(component, /location \? \([\s\S]*?: \([\s\S]*?t\("cabinet\.setup"\)[\s\S]*?t\("cabinet\.useMyDrive"\)[\s\S]*?t\("cabinet\.chooseSharedDrive"\)/);
+  assert.equal(getEnglishCatalogMessage("cabinet.title"), "File Cabinet");
+  assert.equal(getEnglishCatalogMessage("cabinet.subtitle"), "Club files and documents");
+  assert.equal(getEnglishCatalogMessage("cabinet.reconnectGoogleDrive"), "Reconnect Google Drive");
+  assert.equal(getEnglishCatalogMessage("cabinet.setup"), "Set up File Cabinet");
+  assert.equal(getEnglishCatalogMessage("cabinet.useMyDrive"), "Use My Drive");
+  assert.equal(getEnglishCatalogMessage("cabinet.chooseSharedDrive"), "Choose Shared Drive");
 });
 
 test("File Cabinet actions resume automatically after Drive authorization", () => {
@@ -209,7 +226,9 @@ test("connectGoogleDrive remains generic and Cabinet-neutral", () => {
   assert.doesNotMatch(connect, /googleDriveCabinet\.resolve/);
   assert.match(connect, /googleDriveConnection\.connect\(\{ loginHint: options\?\.loginHint \}\)/);
   assert.match(connect, /void warmUpGoogleDrivePicker\(\)/);
-  assert.match(connect, /showRosterToolsNotice\([\s\S]*?\"Google Drive connected\"[\s\S]*?\"Google Drive is ready to use for backup and sheets\.\"/);
+  assert.match(connect, /showRosterToolsNotice\([\s\S]*?t\("app\.notices\.googleDriveConnected\.title"\)[\s\S]*?t\("app\.notices\.googleDriveConnected\.message"\)/);
+  assert.equal(getEnglishCatalogMessage("app.notices.googleDriveConnected.title"), "Google Drive connected");
+  assert.equal(getEnglishCatalogMessage("app.notices.googleDriveConnected.message"), "Google Drive is ready to use for backup and sheets.");
 });
 
 test("File Cabinet continuation remains explicit after authorization", () => {

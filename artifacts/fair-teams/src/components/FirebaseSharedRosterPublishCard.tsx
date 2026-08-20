@@ -17,6 +17,7 @@ import type { RoomRoster } from "@/lib/localRoster";
 import {
   adoptFirebaseSharedRosterCreation,
   createFirebaseSharedRoster,
+  DEFAULT_FIREBASE_SHARED_ROSTER_NAME,
   listFirebaseSharedGroups,
   listFirebaseSharedRosters,
   listFirebaseSharedRosterBackups,
@@ -30,7 +31,6 @@ import {
 import type { ActiveSharedRosterAutosync } from "@/lib/sharedRosterAutosync";
 import { LOCAL_ONLY_SHARED_ROSTER_AUTOSYNC_SNAPSHOT } from "@/lib/sharedRosterAutosyncController";
 import {
-  activeSharedWorkspaceAuthorityMessage,
   unresolvedActiveSharedWorkspaceAuthority,
   type ActiveSharedWorkspaceAuthority,
 } from "@/lib/activeSharedWorkspaceAuthority";
@@ -67,12 +67,21 @@ import {
 import { resolveWorkspaceInvitationManagementGroupId } from "@/lib/workspaceInvitationOnboardingState";
 import {
   verificationEmailError,
-  verificationResendLabel,
 } from "@/lib/stripesEmailVerificationService";
 import {
   getSharedWorkspaceClosureState,
   type SharedWorkspaceClosureState,
 } from "@/lib/sharedWorkspaceClosureService";
+import {
+  activeSharedWorkspaceAuthorityText,
+  formatDateTime,
+  formatNumber,
+  sharedRosterSummaryNameText,
+  useStripesTranslation,
+  verificationEmailErrorText,
+  verificationResendText,
+  type StripesTranslator,
+} from "@/i18n";
 
 type Props = {
   variant?: "full" | "compact";
@@ -98,11 +107,11 @@ type Props = {
   headless?: boolean;
 };
 
-function friendlyFirestoreError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error || "Something went wrong.");
-  if (/permission-denied|Missing or insufficient permissions/i.test(message)) return "Permission denied.";
-  if (/network/i.test(message)) return "Network error.";
-  if (/saved by someone else|changed elsewhere|Remote version/i.test(message)) return "Online roster changed. Stripes will update and try again.";
+function friendlyFirestoreError(error: unknown, t: StripesTranslator) {
+  const message = error instanceof Error ? error.message : String(error || t("shared.publish.errors.generic"));
+  if (/permission-denied|Missing or insufficient permissions/i.test(message)) return t("shared.publish.errors.permissionDenied");
+  if (/network/i.test(message)) return t("shared.publish.errors.network");
+  if (/saved by someone else|changed elsewhere|Remote version/i.test(message)) return t("shared.publish.errors.remoteChanged");
   return message.replace(/^Firebase:\s*/i, "");
 }
 
@@ -116,10 +125,10 @@ function fallbackNameFromEmail(email?: string) {
     .replace(/\w/g, (char) => char.toUpperCase()) || email;
 }
 
-function displayNameForEmail(email: string | undefined, memberNamesByEmail?: Record<string, string>, currentUserEmail?: string) {
+function displayNameForEmail(email: string | undefined, memberNamesByEmail: Record<string, string> | undefined, currentUserEmail: string | undefined, t: StripesTranslator) {
   if (!email) return "—";
   const normalized = email.trim().toLowerCase();
-  if (currentUserEmail && normalized === currentUserEmail.trim().toLowerCase()) return "You";
+  if (currentUserEmail && normalized === currentUserEmail.trim().toLowerCase()) return t("shared.publish.you");
   const savedName = memberNamesByEmail?.[normalized] || memberNamesByEmail?.[email];
   return savedName || fallbackNameFromEmail(email);
 }
@@ -158,6 +167,7 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
   firebaseRosterId: activeRoster?.cloudSource?.provider === "firebase" ? activeRoster.cloudSource.firebaseRosterId : undefined,
   cachedFirebaseGroupId: activeRoster?.cloudSource?.provider === "firebase" ? activeRoster.cloudSource.firebaseGroupId : undefined,
 }, false, null), autosync, rosters = [], isEmptyRoster, onOpenRoster, onRefreshActiveRoster, onSharedRosterSummariesUpdated, onSharedInviteOpened, openLibraryToken = 0, onMakePrivateCopy, onHideOnDevice, onLeaveSharedRoster, onCloseSharedWorkspace, backgroundSync = true, headless = false }: Props) {
+  const { t, locale } = useStripesTranslation();
   const user = activeAuthority.user;
   const [busy, setBusy] = useState<string>("");
   const [sharedGroups, setSharedGroups] = useState<FirebaseSharedGroupSummary[]>([]);
@@ -195,7 +205,7 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
   const currentUserUidRef = useRef(user?.uid || "");
   currentUserUidRef.current = user?.uid || "";
   const senderInvitationStatus = workspaceInvitationSenderStatus(user);
-  const senderVerificationCooldownLabel = verificationResendLabel(senderVerificationResendAt, senderVerificationClock);
+  const senderVerificationCooldownLabel = verificationResendText(senderVerificationResendAt, senderVerificationClock, t);
 
   useEffect(() => {
     if (!senderVerificationResendAt || Date.parse(senderVerificationResendAt) <= Date.now()) return;
@@ -261,7 +271,7 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
   ), [collaboratorGroup?.organizerGovernanceEligibleAtByUid, user?.uid]);
   const removalEligibilityLabel = currentRemovalEligibility.eligibleAt == null
     ? ""
-    : governanceEligibilityDateLabel(currentRemovalEligibility.eligibleAt);
+    : governanceEligibilityDateLabel(currentRemovalEligibility.eligibleAt, locale);
   const sharedRosterById = useMemo(() => new Map(sharedRosters.map((roster) => [roster.id, roster])), [sharedRosters]);
   const linkedRosters = useMemo(() => rosters.filter((roster) => roster.cloudSource?.provider === "firebase" && roster.cloudSource.firebaseRosterId), [rosters]);
   const remoteUpdatedLinkedRosters = useMemo(() => linkedRosters.filter((roster) => {
@@ -299,7 +309,7 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
       }
     } catch (error) {
       if (currentUserUidRef.current === expectedUserUid && sharedDataRequestRef.current === requestGeneration) {
-        setNotice({ tone: "error", text: friendlyFirestoreError(error) });
+        setNotice({ tone: "error", text: friendlyFirestoreError(error, t) });
       }
     } finally {
       if (currentUserUidRef.current === expectedUserUid && sharedDataRequestRef.current === requestGeneration) {
@@ -333,7 +343,7 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
       })
       .catch((error) => {
         if (cancelled) return;
-        setInvitationLoadError(friendlyFirestoreError(error));
+        setInvitationLoadError(friendlyFirestoreError(error, t));
       });
     return () => {
       cancelled = true;
@@ -356,7 +366,7 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
     }
     setRemovalError("");
     return listenToOrganizerRemovalProposals(groupId, setRemovalProposals, (error) => {
-      setRemovalError(friendlyFirestoreError(error));
+      setRemovalError(friendlyFirestoreError(error, t));
     });
   }, [user, collaboratorGroup?.id, collaboratorRosterId, canUseActiveGovernance]);
 
@@ -369,7 +379,7 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
       setRemovalError("");
       setRemovalProposals((current) => [proposal, ...current.filter((item) => item.id !== proposal.id)]);
     }, (error) => {
-      setRemovalError(friendlyFirestoreError(error));
+      setRemovalError(friendlyFirestoreError(error, t));
     });
   }, [user, collaboratorGroup?.id, collaboratorRosterId, activeRemovalProposal?.id, canUseActiveGovernance]);
 
@@ -387,7 +397,7 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
         if (!cancelled) setRemovalParticipation(participation);
       })
       .catch((error) => {
-        if (!cancelled) setRemovalError(friendlyFirestoreError(error));
+        if (!cancelled) setRemovalError(friendlyFirestoreError(error, t));
       });
     return () => {
       cancelled = true;
@@ -414,36 +424,42 @@ export function FirebaseSharedRosterPublishCard({ variant = "full", activeRoster
   const handleShareActiveRoster = async () => {
     if (!user || !activeRoster || isEmptyRoster || busy) return;
     const confirmed = window.confirm(
-      `Create a shared copy of ${activeRoster.name || "this roster"}?
-
-Your local roster will stay local. Stripes will copy shared identity fields only, reset private extras, and use your current skill numbers as your first Club ratings.`,
+      t("shared.publish.confirmCreate", { name: activeRoster.name || t("shared.publish.thisRoster") }),
     );
     if (!confirmed) return;
 
     setBusy("publish");
     setNotice(null);
     try {
-      const created = await createFirebaseSharedRoster(activeRoster, undefined, activeRoster.name || "Shared roster");
+      const created = await createFirebaseSharedRoster(
+        activeRoster,
+        undefined,
+        activeRoster.name || DEFAULT_FIREBASE_SHARED_ROSTER_NAME,
+      );
       const snapshot = await readFirebaseSharedRoster(created.id);
       if (onOpenRoster) {
-        onOpenRoster(snapshot.roster, snapshot.name || created.name || "Shared roster", snapshot);
+        onOpenRoster(
+          snapshot.roster,
+          snapshot.name || created.name || t("shared.publish.sharedRoster"),
+          snapshot,
+        );
         adoptFirebaseSharedRosterCreation(activeRoster.id, created.id);
       }
       let refreshWarning = "";
       try {
         await refreshSharedData();
       } catch {
-        refreshWarning = "The shared-roster list could not refresh yet.";
+        refreshWarning = t("shared.publish.notices.listRefreshFailed");
       }
       const secondaryWarnings = [created.creationWarning, refreshWarning].filter(Boolean).join(" ");
       setNotice({
         tone: secondaryWarnings ? "info" : "success",
         text: secondaryWarnings
-          ? `Shared copy created. ${secondaryWarnings}`
-          : "Shared copy created. Your local roster stayed local. Current skills became your first Club ratings.",
+          ? t("shared.publish.notices.createdWithWarnings", { warnings: secondaryWarnings })
+          : t("shared.publish.notices.created"),
       });
     } catch (error) {
-      setNotice({ tone: "error", text: friendlyFirestoreError(error) });
+      setNotice({ tone: "error", text: friendlyFirestoreError(error, t) });
     } finally {
       setBusy("");
     }
@@ -470,7 +486,7 @@ Your local roster will stay local. Stripes will copy shared identity fields only
         setNotice(null);
       }
     } catch (error) {
-      setNotice({ tone: "error", text: friendlyFirestoreError(error) });
+      setNotice({ tone: "error", text: friendlyFirestoreError(error, t) });
     } finally {
       setBusy((current) => current === "autosync" ? "" : current);
     }
@@ -495,7 +511,7 @@ Your local roster will stay local. Stripes will copy shared identity fields only
       const snapshot = await readFirebaseSharedRoster(rosterId);
       onOpenRoster?.(snapshot.roster, snapshot.name, snapshot);
     } catch (error) {
-      setNotice({ tone: "error", text: friendlyFirestoreError(error) });
+      setNotice({ tone: "error", text: friendlyFirestoreError(error, t) });
     } finally {
       setBusy("");
     }
@@ -510,7 +526,7 @@ Your local roster will stay local. Stripes will copy shared identity fields only
     const emailToInvite = (emailOverride || inviteEmail).trim();
     if (!canManageInvitations || !user || !emailToInvite || busy) return;
     if (!collaboratorGroupId) {
-      setInvitationNotice({ tone: "error", text: "This shared roster is missing its workspace link. Refresh shared rosters and try again." });
+      setInvitationNotice({ tone: "error", text: t("shared.publish.errors.missingWorkspaceLink") });
       return;
     }
     setBusy("invite");
@@ -524,12 +540,12 @@ Your local roster will stay local. Stripes will copy shared identity fields only
         refreshWorkspaceInvitations(collaboratorGroupId),
       ]);
       setInvitationNotice(result.reused
-        ? { tone: "info", text: "That invitation is already pending. Use Resend if another email is needed." }
+        ? { tone: "info", text: t("shared.publish.invitation.alreadyPending") }
         : result.emailSent
-          ? { tone: "success", text: "Invitation email sent." }
-          : { tone: "error", text: "The invitation is pending, but the email could not be sent. Try Resend." });
+          ? { tone: "success", text: t("shared.publish.invitation.emailSent") }
+          : { tone: "error", text: t("shared.publish.invitation.emailFailed") });
     } catch (error) {
-      setInvitationNotice({ tone: "error", text: friendlyFirestoreError(error) });
+      setInvitationNotice({ tone: "error", text: friendlyFirestoreError(error, t) });
     } finally {
       setBusy("");
     }
@@ -538,7 +554,7 @@ Your local roster will stay local. Stripes will copy shared identity fields only
   const handleCancelInvite = async (invitation: WorkspaceOrganizerInvitation) => {
     if (!canManageInvitations || busy) return;
     if (!collaboratorGroupId) {
-      setInvitationNotice({ tone: "error", text: "This shared roster is missing its workspace link. Refresh shared rosters and try again." });
+      setInvitationNotice({ tone: "error", text: t("shared.publish.errors.missingWorkspaceLink") });
       return;
     }
     setBusy(`cancel:${invitation.invitedEmail}`);
@@ -550,9 +566,9 @@ Your local roster will stay local. Stripes will copy shared identity fields only
         refreshSharedData(),
         refreshWorkspaceInvitations(collaboratorGroupId),
       ]);
-      setInvitationNotice({ tone: "success", text: "Invitation cancelled." });
+      setInvitationNotice({ tone: "success", text: t("shared.publish.invitation.cancelled") });
     } catch (error) {
-      setInvitationNotice({ tone: "error", text: friendlyFirestoreError(error) });
+      setInvitationNotice({ tone: "error", text: friendlyFirestoreError(error, t) });
     } finally {
       setBusy("");
     }
@@ -566,12 +582,12 @@ Your local roster will stay local. Stripes will copy shared identity fields only
       const verification = await sendStripesEmailVerification();
       setSenderVerificationResendAt(verification.resendAvailableAt);
       setSenderVerificationClock(Date.now());
-      setSenderVerificationNotice({ tone: "success", text: "Verification email sent. Check your inbox." });
+      setSenderVerificationNotice({ tone: "success", text: t("shared.publish.invitation.verificationSent") });
     } catch (error) {
       const safeError = verificationEmailError(error);
       setSenderVerificationResendAt(safeError.resendAvailableAt);
       setSenderVerificationClock(Date.now());
-      setSenderVerificationNotice({ tone: "error", text: safeError.message });
+      setSenderVerificationNotice({ tone: "error", text: verificationEmailErrorText(safeError, t) });
     } finally {
       setBusy("");
     }
@@ -584,10 +600,10 @@ Your local roster will stay local. Stripes will copy shared identity fields only
     try {
       const refreshedUser = await reloadAndRefreshStripesAuthIdentity();
       setSenderVerificationNotice(refreshedUser.emailVerified
-        ? { tone: "success", text: "Email verified. You can invite organizers now." }
-        : { tone: "info", text: "Verification is not confirmed yet. Open the email link, then try again." });
+        ? { tone: "success", text: t("shared.publish.invitation.emailVerified") }
+        : { tone: "info", text: t("shared.publish.invitation.verificationPending") });
     } catch (error) {
-      setSenderVerificationNotice({ tone: "error", text: "Stripes could not refresh email verification. Try again." });
+      setSenderVerificationNotice({ tone: "error", text: t("shared.publish.invitation.verificationRefreshFailed") });
     } finally {
       setBusy("");
     }
@@ -596,7 +612,7 @@ Your local roster will stay local. Stripes will copy shared identity fields only
   const handleResendInvite = async (invitation: WorkspaceOrganizerInvitation) => {
     if (!canManageInvitations || !invitation.invitationId || busy) return;
     if (!collaboratorGroupId) {
-      setInvitationNotice({ tone: "error", text: "This shared roster is missing its workspace link. Refresh shared rosters and try again." });
+      setInvitationNotice({ tone: "error", text: t("shared.publish.errors.missingWorkspaceLink") });
       return;
     }
     setBusy(`resend:${invitation.invitationId}`);
@@ -606,10 +622,10 @@ Your local roster will stay local. Stripes will copy shared identity fields only
       const result = await resendWorkspaceOrganizerInvitation(invitation.invitationId);
       await refreshWorkspaceInvitations(collaboratorGroupId);
       setInvitationNotice(result.emailSent
-        ? { tone: "success", text: "Invitation email resent." }
-        : { tone: "error", text: "The invitation remains pending, but the email could not be sent." });
+        ? { tone: "success", text: t("shared.publish.invitation.emailResent") }
+        : { tone: "error", text: t("shared.publish.invitation.emailResendFailed") });
     } catch (error) {
-      setInvitationNotice({ tone: "error", text: friendlyFirestoreError(error) });
+      setInvitationNotice({ tone: "error", text: friendlyFirestoreError(error, t) });
     } finally {
       setBusy("");
     }
@@ -619,8 +635,8 @@ Your local roster will stay local. Stripes will copy shared identity fields only
     if (!canUseActiveGovernance || !collaboratorGroup || busy) return;
     if (!currentRemovalEligibility.eligible) {
       setRemovalError(removalEligibilityLabel
-        ? `Removal voting is available ${removalEligibilityLabel}.`
-        : "Removal voting is not available to this organizer yet.");
+        ? t("shared.publish.governance.availableOn", { date: removalEligibilityLabel })
+        : t("shared.publish.governance.unavailable"));
       return;
     }
     setBusy(`removal-proposal:${targetEmail}`);
@@ -631,11 +647,11 @@ Your local roster will stay local. Stripes will copy shared identity fields only
       setNotice({
         tone: "info",
         text: result.status === "failed"
-          ? `${targetName} was not removed because the required Yes threshold cannot be reached.`
-          : `Protected organizer vote started for ${targetName}.`,
+          ? t("shared.publish.governance.thresholdUnreachable", { name: targetName })
+          : t("shared.publish.governance.voteStarted", { name: targetName }),
       });
     } catch (error) {
-      setRemovalError(friendlyFirestoreError(error));
+      setRemovalError(friendlyFirestoreError(error, t));
     } finally {
       setBusy("");
     }
@@ -659,16 +675,16 @@ Your local roster will stay local. Stripes will copy shared identity fields only
       setNotice({
         tone: result.status === "cancelled" ? "info" : "success",
         text: result.status === "passed"
-          ? "The vote passed. Organizer access was removed."
+          ? t("shared.publish.governance.votePassed")
           : result.status === "failed"
-            ? "The vote closed without removing the organizer."
+            ? t("shared.publish.governance.voteFailed")
             : result.status === "cancelled"
-              ? "The vote was cancelled because organizer membership changed."
-              : "Your secret ballot was recorded.",
+              ? t("shared.publish.governance.voteCancelled")
+              : t("shared.publish.governance.ballotRecorded"),
       });
       if (result.status === "passed") await refreshSharedData();
     } catch (error) {
-      setRemovalError(friendlyFirestoreError(error));
+      setRemovalError(friendlyFirestoreError(error, t));
     } finally {
       setBusy("");
     }
@@ -698,13 +714,18 @@ Your local roster will stay local. Stripes will copy shared identity fields only
         const snapshot = await readFirebaseSharedRoster(rosterToOpen.id);
         onOpenRoster?.(snapshot.roster, snapshot.name, snapshot);
         onSharedInviteOpened?.(snapshot.roster);
-        setNotice({ tone: "success", text: `${snapshot.name || acceptedInvitation.workspaceName || "Shared roster"} opened.` });
+        setNotice({
+          tone: "success",
+          text: t("shared.publish.invitation.rosterOpened", {
+            name: sharedRosterSummaryNameText(snapshot, t) || acceptedInvitation.workspaceName,
+          }),
+        });
       } else {
         await refreshSharedData();
-        setNotice({ tone: "success", text: "Shared roster added." });
+        setNotice({ tone: "success", text: t("shared.publish.invitation.rosterAdded") });
       }
     } catch (error) {
-      setNotice({ tone: "error", text: friendlyFirestoreError(error) });
+      setNotice({ tone: "error", text: friendlyFirestoreError(error, t) });
     } finally {
       setBusy("");
     }
@@ -719,7 +740,7 @@ Your local roster will stay local. Stripes will copy shared identity fields only
       setSharedRosterBackups(backups);
       setBackupRosterId(rosterId);
     } catch (error) {
-      setNotice({ tone: "error", text: friendlyFirestoreError(error) });
+      setNotice({ tone: "error", text: friendlyFirestoreError(error, t) });
     } finally {
       setBusy("");
     }
@@ -727,8 +748,17 @@ Your local roster will stay local. Stripes will copy shared identity fields only
 
   const handleRestoreBackup = async (backup: FirebaseSharedRosterBackup) => {
     if (!backupRosterId || busy || (backupRosterId === activeSharedRosterId && !activeAuthority.capabilities.canRestoreSharedRosterBackup)) return;
-    const label = backup.savedAtIso ? new Date(backup.savedAtIso).toLocaleString() : `Version ${backup.version}`;
-    const confirmed = window.confirm(`Restore the shared roster backup from ${label}?\n\nThe current live roster will be saved as another backup first.`);
+    const label = backup.savedAtIso
+      ? formatDateTime(locale, new Date(backup.savedAtIso), {
+          year: "numeric",
+          month: "numeric",
+          day: "numeric",
+          hour: "numeric",
+          minute: "numeric",
+          second: "numeric",
+        })
+      : t("shared.publish.backup.version", { version: backup.version });
+    const confirmed = window.confirm(t("shared.publish.backup.confirmRestore", { label }));
     if (!confirmed) return;
     setBusy(`restore:${backup.id}`);
     setNotice(null);
@@ -740,9 +770,9 @@ Your local roster will stay local. Stripes will copy shared identity fields only
       await refreshSharedData();
       setBackupRosterId("");
       setSharedRosterBackups([]);
-      setNotice({ tone: "success", text: `Backup restored · ${restored.playerCount} players.` });
+      setNotice({ tone: "success", text: t("shared.publish.backup.restored", { count: restored.playerCount }) });
     } catch (error) {
-      setNotice({ tone: "error", text: friendlyFirestoreError(error) });
+      setNotice({ tone: "error", text: friendlyFirestoreError(error, t) });
     } finally {
       setBusy("");
     }
@@ -790,7 +820,7 @@ Your local roster will stay local. Stripes will copy shared identity fields only
       .catch((error) => {
         if (!cancelled) {
           setWorkspaceClosureState(null);
-          setWorkspaceClosureError(checkingRecovery ? "" : friendlyFirestoreError(error));
+          setWorkspaceClosureError(checkingRecovery ? "" : friendlyFirestoreError(error, t));
         }
       })
       .finally(() => {
@@ -817,9 +847,9 @@ Your local roster will stay local. Stripes will copy shared identity fields only
       <div className="flex items-start gap-2">
         <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-violet-600" />
         <div className="min-w-0">
-          <div className="text-xs font-black text-[#102A43]">Protected organizer removal</div>
+          <div className="text-xs font-black text-[#102A43]">{t("shared.publish.governance.title")}</div>
           <div className="mt-0.5 text-[10px] font-semibold leading-snug text-slate-500">
-            Ballots are secret and immutable. Live Yes and No totals stay hidden until the vote closes.
+            {t("shared.publish.governance.secretBallotHelp")}
           </div>
         </div>
       </div>
@@ -833,8 +863,8 @@ Your local roster will stay local. Stripes will copy shared identity fields only
       {!currentRemovalEligibility.eligible && (
         <div className="rounded-xl bg-slate-50 px-2.5 py-2 text-[10px] font-bold leading-snug text-slate-600">
           {removalEligibilityLabel
-            ? `Removal voting available ${removalEligibilityLabel}.`
-            : "Removal voting is not available to this organizer yet."}
+            ? t("shared.publish.governance.availableOn", { date: removalEligibilityLabel })
+            : t("shared.publish.governance.unavailable")}
         </div>
       )}
 
@@ -842,10 +872,15 @@ Your local roster will stay local. Stripes will copy shared identity fields only
         <div className="grid gap-2 rounded-xl bg-violet-50/80 p-2.5">
           <div className="min-w-0">
             <div className="break-words text-xs font-black text-[#102A43]">
-              Remove {activeRemovalProposal.targetDisplayNameSnapshot}?
+              {t("shared.publish.governance.removeTarget", { name: activeRemovalProposal.targetDisplayNameSnapshot })}
             </div>
             <div className="mt-0.5 text-[10px] font-semibold leading-snug text-violet-800">
-              {activeRemovalProposal.castCount} of {activeRemovalProposal.eligibleOrganizerCount} eligible voters responded. {activeRemovalProposal.requiredYes} Yes votes are required from {activeRemovalProposal.totalOrganizerCount} governance-eligible organizers.
+              {t("shared.publish.governance.turnout", {
+                cast: activeRemovalProposal.castCount,
+                eligible: activeRemovalProposal.eligibleOrganizerCount,
+                required: activeRemovalProposal.requiredYes,
+                total: activeRemovalProposal.totalOrganizerCount,
+              })}
             </div>
           </div>
           <div className="h-1.5 overflow-hidden rounded-full bg-violet-100" aria-hidden="true">
@@ -856,16 +891,16 @@ Your local roster will stay local. Stripes will copy shared identity fields only
           </div>
           {activeRemovalProposal.targetUid === user?.uid ? (
             <div className="rounded-xl bg-white px-2.5 py-2 text-[10px] font-bold leading-snug text-slate-600">
-              You are the target of this proposal and cannot vote. Only aggregate turnout and the final result are visible.
+              {t("shared.publish.governance.targetCannotVote")}
             </div>
           ) : removalParticipation == null ? (
             <div className="flex items-center gap-2 rounded-xl bg-white px-2.5 py-2 text-[10px] font-bold text-slate-500">
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              Checking voting eligibility...
+              {t("shared.publish.governance.checkingEligibility")}
             </div>
           ) : removalParticipation.hasVoted ? (
             <div className="rounded-xl bg-white px-2.5 py-2 text-[10px] font-bold leading-snug text-emerald-700">
-              Your secret ballot is recorded. It cannot be changed.
+              {t("shared.publish.governance.ballotRecordedImmutable")}
             </div>
           ) : removalParticipation.eligible ? (
             <div className="grid grid-cols-2 gap-2">
@@ -880,7 +915,7 @@ Your local roster will stay local. Stripes will copy shared identity fields only
                   choice: "yes",
                 })}
               >
-                Yes, remove
+                {t("shared.publish.governance.yesRemove")}
               </Button>
               <Button
                 type="button"
@@ -894,35 +929,48 @@ Your local roster will stay local. Stripes will copy shared identity fields only
                   choice: "no",
                 })}
               >
-                No, keep
+                {t("shared.publish.governance.noKeep")}
               </Button>
             </div>
           ) : (
             <div className="rounded-xl bg-white px-2.5 py-2 text-[10px] font-bold leading-snug text-slate-600">
-              You are not eligible to vote on this proposal.
+              {t("shared.publish.governance.notEligible")}
             </div>
           )}
         </div>
       ) : (
         <div className="rounded-xl bg-slate-50 px-2.5 py-2 text-[10px] font-semibold leading-snug text-slate-500">
           {currentRemovalEligibility.eligible
-            ? "To remove another organizer, start a proposal from their organizer row. The target cannot vote."
-            : "Protected removal proposal and voting controls activate automatically on your eligibility date."}
+            ? t("shared.publish.governance.startHelp")
+            : t("shared.publish.governance.activationHelp")}
         </div>
       )}
 
       {recentRemovalResults.length > 0 && (
         <div className="grid gap-1.5">
-          <div className="text-[9px] font-black uppercase tracking-wide text-slate-400">Recent results</div>
+          <div className="text-[9px] font-black uppercase tracking-wide text-slate-400">{t("shared.publish.governance.recentResults")}</div>
           {recentRemovalResults.map((proposal) => (
             <div key={proposal.id} className="rounded-xl bg-slate-50 px-2.5 py-2">
               <div className="break-words text-[10px] font-black text-[#102A43]">
-                {proposal.targetDisplayNameSnapshot} - {proposal.status === "passed" ? "Removed" : proposal.status === "failed" ? "Not removed" : "Cancelled"}
+                {t("shared.publish.governance.resultLabel", {
+                  name: proposal.targetDisplayNameSnapshot,
+                  status: proposal.status === "passed"
+                    ? t("shared.publish.governance.resultRemoved")
+                    : proposal.status === "failed"
+                      ? t("shared.publish.governance.resultNotRemoved")
+                      : t("shared.publish.governance.resultCancelled"),
+                })}
               </div>
               <div className="mt-0.5 text-[9px] font-semibold leading-snug text-slate-500">
                 {proposal.status === "cancelled"
-                  ? `Organizer membership changed / ${proposal.castCount} ballot${proposal.castCount === 1 ? "" : "s"} cast`
-                  : `${proposal.yesCount ?? 0} Yes / ${proposal.noCount ?? 0} No / ${proposal.requiredYes} Yes required`}
+                  ? t("shared.publish.governance.cancelledBallots", {
+                      ballots: t("shared.publish.governance.ballotCount", { count: proposal.castCount }),
+                    })
+                  : t("shared.publish.governance.resultCounts", {
+                      yes: proposal.yesCount ?? 0,
+                      no: proposal.noCount ?? 0,
+                      required: proposal.requiredYes,
+                    })}
               </div>
             </div>
           ))}
@@ -939,19 +987,25 @@ Your local roster will stay local. Stripes will copy shared identity fields only
         <AlertDialogHeader>
           <AlertDialogTitle>
             {removalConfirm?.kind === "propose"
-              ? `Start a vote about ${removalConfirm.targetName}?`
-              : `Record a ${removalConfirm?.choice === "yes" ? "Yes" : "No"} ballot?`}
+              ? t("shared.publish.governance.confirmProposalTitle", { name: removalConfirm.targetName })
+              : t("shared.publish.governance.confirmBallotTitle", {
+                  choice: removalConfirm?.choice === "yes" ? t("common.yes") : t("common.no"),
+                })}
           </AlertDialogTitle>
           <AlertDialogDescription>
             {removalConfirm?.kind === "propose" ? (
-              "This starts a protected secret ballot. The target cannot vote. Stripes will freeze the governance-eligible electorate and calculate the required Yes threshold from that set."
+              t("shared.publish.governance.confirmProposalDescription")
             ) : (
-              `Your ${removalConfirm?.choice === "yes" ? "Yes vote supports removal" : "No vote keeps the organizer"}. Your choice is secret and cannot be changed after it is recorded.`
+              t("shared.publish.governance.confirmBallotDescription", {
+                effect: removalConfirm?.choice === "yes"
+                  ? t("shared.publish.governance.yesVoteEffect")
+                  : t("shared.publish.governance.noVoteEffect"),
+              })
             )}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
           <AlertDialogAction
             onClick={confirmOrganizerRemovalAction}
             className={removalConfirm?.kind === "propose" || removalConfirm?.choice === "yes"
@@ -959,10 +1013,10 @@ Your local roster will stay local. Stripes will copy shared identity fields only
               : "bg-violet-600 text-white hover:bg-violet-700"}
           >
             {removalConfirm?.kind === "propose"
-              ? "Start vote"
+              ? t("shared.publish.governance.startVote")
               : removalConfirm?.choice === "yes"
-                ? "Record Yes"
-                : "Record No"}
+                ? t("shared.publish.governance.recordYes")
+                : t("shared.publish.governance.recordNo")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </StripesConfirmContent>
@@ -970,41 +1024,41 @@ Your local roster will stay local. Stripes will copy shared identity fields only
   );
 
 
-  const collaboratorsModal = collaboratorRoster ? modalShell("Organizers", () => setCollaboratorRosterId(""), (
+  const collaboratorsModal = collaboratorRoster ? modalShell(t("shared.publish.organizers.title"), () => setCollaboratorRosterId(""), (
     <div className="grid gap-3">
       <div className="rounded-2xl border border-violet-100 bg-violet-50/80 px-3 py-2 text-[11px] font-bold leading-snug text-violet-800">
-        Organizers can open this shared roster, submit their own Club ratings, and help keep shared player info up to date.
+        {t("shared.publish.organizers.description")}
       </div>
 
       {canManageInvitations ? (
         <div className="grid grid-cols-[1fr_auto] gap-2">
-          <input value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} type="email" className="h-10 rounded-2xl border border-violet-100 bg-white px-3 text-sm font-bold outline-none" placeholder="email@example.com" />
+          <input value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} type="email" className="h-10 rounded-2xl border border-violet-100 bg-white px-3 text-sm font-bold outline-none" placeholder={t("shared.publish.organizers.emailPlaceholder")} />
           <Button type="button" className="h-10 rounded-2xl bg-violet-600 px-3 text-xs font-black text-white hover:bg-violet-700" onClick={() => void handleInvite()} disabled={!inviteEmail.trim() || Boolean(busy)}>
             <UserPlus className="mr-1.5 h-4 w-4" />
-            Invite
+            {t("shared.publish.organizers.invite")}
           </Button>
         </div>
       ) : canManageCollaborators && senderInvitationStatus === "verification_required" ? (
         <div className="grid gap-2 rounded-2xl border border-amber-200 bg-amber-50 p-3">
-          <div className="text-xs font-black text-amber-900">Verify your email before inviting another organizer.</div>
+          <div className="text-xs font-black text-amber-900">{t("shared.publish.organizers.verifyBeforeInvite")}</div>
           <div className="text-[10px] font-semibold leading-snug text-amber-800">
-            Stripes will return you to the normal app after Firebase verifies your account.
+            {t("shared.publish.organizers.verificationReturnHelp")}
           </div>
           <div className="grid gap-2 sm:grid-cols-2">
             <Button type="button" variant="outline" className="min-h-9 whitespace-normal rounded-xl border-amber-200 bg-white px-2 text-[10px] font-black text-amber-900" onClick={() => void handleSendOrganizerVerification()} disabled={Boolean(busy) || Boolean(senderVerificationCooldownLabel)}>
               <Mail className="h-3.5 w-3.5" />
-              {busy === "organizer-verification-email" ? "Sending…" : "Send verification email"}
+              {busy === "organizer-verification-email" ? t("shared.publish.organizers.sending") : t("shared.publish.organizers.sendVerification")}
             </Button>
             <Button type="button" className="min-h-9 whitespace-normal rounded-xl bg-violet-600 px-2 text-[10px] font-black text-white hover:bg-violet-700" onClick={() => void handleRefreshOrganizerVerification()} disabled={Boolean(busy)}>
               {busy === "organizer-verification-refresh" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-              I’ve verified — continue
+              {t("shared.publish.organizers.verifiedContinue")}
             </Button>
           </div>
           {senderVerificationCooldownLabel && <div className="text-[10px] font-bold text-amber-800">{senderVerificationCooldownLabel}</div>}
         </div>
       ) : (
         <div className="rounded-2xl bg-slate-50 px-3 py-2 text-[11px] font-bold leading-snug text-slate-500">
-          You can view organizers here. Only an active organizer can manage workspace membership.
+          {t("shared.publish.organizers.readOnlyHelp")}
         </div>
       )}
       {senderVerificationNotice && (
@@ -1021,7 +1075,7 @@ Your local roster will stay local. Stripes will copy shared identity fields only
       <div className="grid gap-1.5">
         {canManageCollaborators && (
           <div className="rounded-2xl bg-white px-3 py-2 text-[11px] font-bold leading-snug text-slate-500 shadow-sm">
-            Organizers have equal access. One organizer cannot remove another without the protected vote below.
+            {t("shared.publish.organizers.equalAccessHelp")}
           </div>
         )}
         {removalGovernancePanel}
@@ -1049,7 +1103,7 @@ Your local roster will stay local. Stripes will copy shared identity fields only
             <>
               {memberEmails.map((email) => {
                 const normalizedEmail = email.trim().toLowerCase();
-                const label = displayNameForEmail(email, memberNamesByEmail, user?.email);
+                const label = displayNameForEmail(email, memberNamesByEmail, user?.email, t);
                 const isCurrentUser = normalizedEmail === (user?.email || "").trim().toLowerCase();
                 return (
                   <div key={email} className="grid gap-2 rounded-2xl bg-slate-50 px-3 py-2 text-xs font-bold text-[#102A43] sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
@@ -1059,7 +1113,7 @@ Your local roster will stay local. Stripes will copy shared identity fields only
                     </div>
                     <div className="flex min-w-0 items-center gap-1.5 sm:justify-end">
                       <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black ${isCurrentUser ? "bg-violet-100 text-violet-700" : "bg-white text-slate-500"}`}>
-                        {isCurrentUser ? "You" : "Organizer"}
+                        {isCurrentUser ? t("shared.publish.you") : t("shared.publish.organizer")}
                       </span>
                       {canManageCollaborators && collaboratorGroup && !isCurrentUser && (
                         <Button
@@ -1075,10 +1129,10 @@ Your local roster will stay local. Stripes will copy shared identity fields only
                         >
                           <UserMinus className="h-3.5 w-3.5" />
                           {activeRemovalProposal
-                            ? "Vote open"
+                            ? t("shared.publish.organizers.voteOpen")
                             : currentRemovalEligibility.eligible
-                              ? "Propose removal"
-                              : "Removal unavailable"}
+                              ? t("shared.publish.organizers.proposeRemoval")
+                              : t("shared.publish.organizers.removalUnavailable")}
                         </Button>
                       )}
                     </div>
@@ -1087,36 +1141,36 @@ Your local roster will stay local. Stripes will copy shared identity fields only
               })}
               {pendingInvitations.map((invitation) => {
                 const deliveryLabel = invitation.state === "expired"
-                  ? "Expired"
+                  ? t("shared.publish.organizers.expired")
                   : invitation.deliveryStatus === "sent"
-                    ? "Email sent"
+                    ? t("shared.publish.organizers.emailSent")
                     : invitation.deliveryStatus === "failed"
-                      ? "Email delivery failed"
+                      ? t("shared.publish.organizers.emailDeliveryFailed")
                       : invitation.deliveryStatus === "sending"
-                        ? "Sending email…"
-                        : "Email not sent yet";
+                        ? t("shared.publish.organizers.sendingEmail")
+                        : t("shared.publish.organizers.emailNotSent");
                 return (
                   <div key={invitation.invitationId || invitation.invitedEmail} className="flex items-center justify-between gap-2 rounded-2xl bg-amber-50 px-3 py-2 text-xs font-bold text-[#102A43]">
                     <div className="min-w-0">
-                      <div className="truncate">{displayNameForEmail(invitation.invitedEmail, memberNamesByEmail, user?.email)}</div>
-                      <div className="truncate text-[10px] text-amber-700">Pending invite · {invitation.invitedEmail}</div>
+                      <div className="truncate">{displayNameForEmail(invitation.invitedEmail, memberNamesByEmail, user?.email, t)}</div>
+                      <div className="truncate text-[10px] text-amber-700">{t("shared.publish.organizers.pendingInvite", { email: invitation.invitedEmail })}</div>
                       <div className="text-[9px] font-black text-amber-600">{deliveryLabel}</div>
                     </div>
                     {canManageInvitations ? (
                       <div className="flex shrink-0 items-center gap-1">
                         {invitation.state === "expired" || !invitation.invitationId ? (
                           <Button type="button" variant="outline" className="h-8 rounded-xl border-amber-200 bg-white px-2 text-[9px] font-black text-amber-800" onClick={() => void handleInvite(invitation.invitedEmail)} disabled={Boolean(busy)}>
-                            Send email
+                            {t("shared.publish.organizers.sendEmail")}
                           </Button>
                         ) : (
                           <Button type="button" variant="outline" className="h-8 rounded-xl border-amber-200 bg-white px-2 text-[9px] font-black text-amber-800" onClick={() => void handleResendInvite(invitation)} disabled={Boolean(busy)}>
-                            Resend
+                            {t("shared.publish.organizers.resend")}
                           </Button>
                         )}
-                        <button type="button" onClick={() => void handleCancelInvite(invitation)} className="rounded-full bg-white p-1.5 text-amber-700" disabled={Boolean(busy)} aria-label={`Cancel invite for ${invitation.invitedEmail}`}><X className="h-3.5 w-3.5" /></button>
+                        <button type="button" onClick={() => void handleCancelInvite(invitation)} className="rounded-full bg-white p-1.5 text-amber-700" disabled={Boolean(busy)} aria-label={t("shared.publish.organizers.cancelInvite", { email: invitation.invitedEmail })}><X className="h-3.5 w-3.5" /></button>
                       </div>
                     ) : (
-                      <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-amber-700">Pending</span>
+                      <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-amber-700">{t("shared.publish.organizers.pending")}</span>
                     )}
                   </div>
                 );
@@ -1129,18 +1183,18 @@ Your local roster will stay local. Stripes will copy shared identity fields only
       {(onLeaveSharedRoster || onCloseSharedWorkspace) && canLeaveActiveWorkspace && (
         <div className="grid gap-2 rounded-2xl border border-rose-100 bg-rose-50/60 p-3">
           <div>
-            <div className="text-xs font-black text-rose-800">Workspace membership</div>
+            <div className="text-xs font-black text-rose-800">{t("shared.publish.closure.membershipTitle")}</div>
             <p className="mt-0.5 text-[10px] font-semibold leading-snug text-rose-700">
-              Leaving removes only your organizer access. It does not delete the shared roster or club data.
+              {t("shared.publish.closure.leaveHelp")}
             </p>
           </div>
           {workspaceClosureState?.cleanupPending ? (
             <div className="rounded-xl bg-white px-2.5 py-2 text-[10px] font-black leading-snug text-rose-800">
-              This workspace is already closed. Finish the remaining cleanup to remove its outstanding Stripes-owned data.
+              {t("shared.publish.closure.alreadyClosed")}
             </div>
           ) : workspaceClosureState?.isLastOrganizer && (
             <div className="rounded-xl bg-white px-2.5 py-2 text-[10px] font-black leading-snug text-rose-800">
-              You are the last organizer. Invite another organizer before leaving, or close this shared workspace.
+              {t("shared.publish.closure.lastOrganizer")}
             </div>
           )}
           {workspaceClosureError && (
@@ -1160,14 +1214,14 @@ Your local roster will stay local. Stripes will copy shared identity fields only
               disabled={workspaceClosureLoading || workspaceClosureState?.isLastOrganizer || workspaceClosureState?.cleanupPending}
             >
               <UserMinus className="h-4 w-4" />
-              Leave shared roster
+              {t("shared.publish.closure.leave")}
             </Button>
           )}
           {onCloseSharedWorkspace && (
             <>
               {!workspaceClosureLoading && workspaceClosureState && !workspaceClosureState.canClose && (
                 <p className="text-[10px] font-semibold leading-snug text-rose-700">
-                  Close is available only when one organizer remains.
+                  {t("shared.publish.closure.closeRequirement")}
                 </p>
               )}
               <Button
@@ -1181,7 +1235,7 @@ Your local roster will stay local. Stripes will copy shared identity fields only
                 disabled={workspaceClosureLoading || !workspaceClosureState?.canClose}
               >
                 {workspaceClosureLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                {workspaceClosureState?.cleanupPending ? "Finish workspace cleanup" : "Close shared workspace"}
+                {workspaceClosureState?.cleanupPending ? t("shared.publish.closure.finishCleanup") : t("shared.publish.closure.close")}
               </Button>
             </>
           )}
@@ -1192,15 +1246,15 @@ Your local roster will stay local. Stripes will copy shared identity fields only
 
 
   const backupHistoryModal = backupRosterId ? modalShell(
-    "Restore backup",
+    t("shared.publish.backup.restoreTitle"),
     () => { setBackupRosterId(""); setSharedRosterBackups([]); },
     <div className="grid gap-2">
       <div className="rounded-2xl border border-violet-100 bg-violet-50/70 px-3 py-2 text-[11px] font-bold leading-snug text-violet-800">
-        Stripes keeps up to 10 automatic backups. Restoring also saves the current live roster first.
+        {t("shared.publish.backup.description")}
       </div>
       {sharedRosterBackups.length === 0 ? (
         <div className="rounded-2xl bg-slate-50 px-3 py-3 text-xs font-bold text-slate-500">
-          No backups yet. The first backup is created before the next shared-roster change.
+          {t("shared.publish.backup.empty")}
         </div>
       ) : (
         <div className="grid max-h-[56svh] gap-1.5 overflow-y-auto pr-1">
@@ -1214,10 +1268,20 @@ Your local roster will stay local. Stripes will copy shared identity fields only
             >
               <span className="min-w-0">
                 <span className="block truncate text-xs font-black text-[#102A43]">
-                  {backup.savedAtIso ? new Date(backup.savedAtIso).toLocaleString([], { dateStyle: "short", timeStyle: "short" }) : `Version ${backup.version}`}
+                  {backup.savedAtIso
+                    ? formatDateTime(locale, new Date(backup.savedAtIso), {
+                        dateStyle: "short",
+                        timeStyle: "short",
+                      })
+                    : t("shared.publish.backup.version", { version: backup.version })}
                 </span>
                 <span className="mt-0.5 block truncate text-[10px] font-semibold text-slate-500">
-                  {backup.playerCount} player{backup.playerCount === 1 ? "" : "s"}{backup.savedByEmail ? ` · ${displayNameForEmail(backup.savedByEmail, activeSharedRoster?.memberNamesByEmail, user?.email)}` : ""}
+                  {backup.savedByEmail
+                    ? t("shared.publish.backup.playersAndSaver", {
+                        players: t("common.playerCount", { count: backup.playerCount }),
+                        name: displayNameForEmail(backup.savedByEmail, activeSharedRoster?.memberNamesByEmail, user?.email, t),
+                      })
+                    : t("common.playerCount", { count: backup.playerCount })}
                 </span>
               </span>
               <RotateCcw className="h-4 w-4 shrink-0 text-violet-600" />
@@ -1229,22 +1293,22 @@ Your local roster will stay local. Stripes will copy shared identity fields only
   ) : null;
 
   const sharedRosterLibraryModal = sharedRosterLibraryOpen ? modalShell(
-    "Shared rosters",
+    t("shared.publish.library.title"),
     () => setSharedRosterLibraryOpen(false),
     <div className="grid gap-2">
       {!user ? (
         <div className="rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3 text-xs font-bold leading-snug text-slate-500">
-          Sign in to open shared rosters.
+          {t("shared.publish.library.signIn")}
         </div>
       ) : sharedRosters.length === 0 ? (
         <div className="rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3 text-xs font-bold leading-snug text-slate-500">
-          No online shared rosters found for this account yet.
+          {t("shared.publish.library.empty")}
         </div>
       ) : (
         <>
           {linkedRosters.length === 0 ? (
             <div className="rounded-2xl border border-violet-100 bg-violet-50/80 px-3 py-2 text-[11px] font-bold leading-snug text-violet-800">
-No shared roster is open on this device. Choose one below to open it on this device.
+              {t("shared.publish.library.notOpenOnDevice")}
             </div>
           ) : null}
           <div className="grid max-h-[52svh] gap-1.5 overflow-y-auto pr-1">
@@ -1253,19 +1317,22 @@ No shared roster is open on this device. Choose one below to open it on this dev
               const collaboratorCount = group ? Math.max(0, group.memberCount - 1) + (group.pendingInviteEmails?.length || 0) : Math.max(0, (roster.memberEmails?.length || 1) - 1) + (roster.pendingInviteEmails?.length || 0);
               const linked = linkedRosters.some((local) => local.cloudSource?.provider === "firebase" && local.cloudSource.firebaseRosterId === roster.id);
               const memberNamesByEmail = mergedMemberNames(group, roster);
-              const savedByName = displayNameForEmail(roster.lastSavedByEmail || roster.ownerEmail, memberNamesByEmail, user?.email);
+              const savedByName = displayNameForEmail(roster.lastSavedByEmail || roster.ownerEmail, memberNamesByEmail, user?.email, t);
               return (
                 <div key={`modal-${roster.id}`} className={`grid grid-cols-[1fr_auto] items-center gap-2 rounded-2xl px-3 py-2 ${linked ? "bg-violet-50" : "bg-slate-50"}`}>
                   <button type="button" onClick={() => { void handleOpenRoster(roster.id); setSharedRosterLibraryOpen(false); }} disabled={Boolean(busy)} className="min-w-0 text-left active:scale-[0.99]">
-                    <span className="block truncate text-xs font-black text-[#102A43]">{roster.name}</span>
-                    <span className="block truncate text-[10px] font-semibold text-slate-500">{linked ? "Open on this device" : "Open shared roster"} · saved by {savedByName}</span>
+                    <span className="block truncate text-xs font-black text-[#102A43]">{sharedRosterSummaryNameText(roster, t)}</span>
+                    <span className="block truncate text-[10px] font-semibold text-slate-500">{t("shared.publish.library.savedBy", {
+                      action: linked ? t("shared.publish.library.openOnDevice") : t("shared.publish.library.openSharedRoster"),
+                      name: savedByName,
+                    })}</span>
                   </button>
                   {canOpenRosterOrganizers(roster, group) ? (
                     <button type="button" onClick={() => openCollaborators(roster.id)} className="flex h-8 items-center gap-1 rounded-xl border border-violet-100 bg-white px-2 text-[10px] font-black text-violet-700 shadow-sm hover:bg-violet-50">
                       <Users className="h-3.5 w-3.5" />
-                      {collaboratorCount}
+                      {formatNumber(locale, collaboratorCount)}
                     </button>
-                  ) : <span className="text-[10px] font-black text-slate-400">{collaboratorCount}</span>}
+                  ) : <span className="text-[10px] font-black text-slate-400">{formatNumber(locale, collaboratorCount)}</span>}
                 </div>
               );
             })}
@@ -1273,7 +1340,7 @@ No shared roster is open on this device. Choose one below to open it on this dev
           {activeSharedRoster && (onMakePrivateCopy || onHideOnDevice) ? (
             <div className="grid gap-2 rounded-2xl border border-violet-100 bg-violet-50/70 p-3">
               <div className="truncate text-[11px] font-black text-violet-800">
-                Current roster: {activeSharedRoster.name || "Shared roster"}
+                {t("shared.publish.library.currentRoster", { name: sharedRosterSummaryNameText(activeSharedRoster, t) })}
               </div>
               <div className="grid grid-cols-2 gap-2">
                 {onMakePrivateCopy ? (
@@ -1283,7 +1350,7 @@ No shared roster is open on this device. Choose one below to open it on this dev
                     className="h-10 rounded-2xl border-violet-100 bg-white px-3 text-xs font-black text-violet-700 hover:bg-violet-50 hover:text-violet-800"
                     onClick={() => { setSharedRosterLibraryOpen(false); onMakePrivateCopy?.(); }}
                   >
-                    Private copy
+                    {t("shared.publish.library.privateCopy")}
                   </Button>
                 ) : <div />}
                 {onHideOnDevice ? (
@@ -1293,7 +1360,7 @@ No shared roster is open on this device. Choose one below to open it on this dev
                     className="h-10 rounded-2xl border-violet-100 bg-white px-3 text-xs font-black text-violet-700 hover:bg-violet-50 hover:text-violet-800"
                     onClick={() => { setSharedRosterLibraryOpen(false); onHideOnDevice?.(); }}
                   >
-                    Hide on device
+                    {t("shared.publish.library.hideOnDevice")}
                   </Button>
                 ) : <div />}
               </div>
@@ -1307,9 +1374,9 @@ No shared roster is open on this device. Choose one below to open it on this dev
   const workspaceClosureRecoveryPanel = workspaceClosureState?.cleanupPending && onCloseSharedWorkspace ? (
     <div className="grid gap-2 rounded-2xl border border-rose-200 bg-rose-50 p-3">
       <div>
-        <div className="text-xs font-black text-rose-900">Workspace cleanup pending</div>
+        <div className="text-xs font-black text-rose-900">{t("shared.publish.closure.cleanupPending")}</div>
         <p className="mt-0.5 text-[10px] font-semibold leading-snug text-rose-800">
-          “{workspaceClosureState.workspaceName}” is already closed. Finish cleanup of its remaining Stripes-owned data.
+          {t("shared.publish.closure.cleanupWorkspace", { name: workspaceClosureState.workspaceName })}
         </p>
       </div>
       <Button
@@ -1318,18 +1385,18 @@ No shared roster is open on this device. Choose one below to open it on this dev
         onClick={() => onCloseSharedWorkspace(workspaceClosureState)}
       >
         <Trash2 className="h-4 w-4" />
-        Finish workspace cleanup
+        {t("shared.publish.closure.finishCleanup")}
       </Button>
     </div>
   ) : null;
 
-  const activeAuthorityText = activeSharedWorkspaceAuthorityMessage(activeAuthority);
+  const activeAuthorityText = activeSharedWorkspaceAuthorityText(activeAuthority, t);
   const activeSharedReferenceUnresolved = Boolean(
     activeSharedRosterId && activeAuthority.status !== "authorized",
   );
   const activeAuthorityPanel = activeSharedReferenceUnresolved ? (
     <div className="rounded-2xl border border-violet-100 bg-violet-50/70 px-3 py-2 text-[11px] font-bold leading-snug text-violet-800" role="status">
-      {activeAuthorityText || "Shared workspace access is not confirmed for this account."}
+      {activeAuthorityText || t("shared.publish.authorityUnconfirmed")}
     </div>
   ) : null;
 
@@ -1349,9 +1416,9 @@ No shared roster is open on this device. Choose one below to open it on this dev
           <div className="grid gap-1.5">
             {incomingInvites.slice(0, 2).map((invite) => (
               <div key={invite.invitationId} className="flex items-center justify-between gap-2 rounded-2xl border border-violet-100 bg-violet-50/80 px-3 py-2">
-                <div className="min-w-0 truncate text-xs font-black text-[#102A43]">Invite: {invite.workspaceName}</div>
+                <div className="min-w-0 truncate text-xs font-black text-[#102A43]">{t("shared.publish.invitation.compactTitle", { workspace: invite.workspaceName })}</div>
                 <Button type="button" variant="outline" className="h-8 rounded-xl border-violet-100 bg-white px-2 text-[10px] font-black text-violet-700" onClick={() => handleAcceptInvite(invite.invitationId)} disabled={Boolean(busy) || invite.state !== "pending"}>
-                  {busy === `accept:${invite.invitationId}` ? "…" : invite.state === "expired" ? "Expired" : "Accept"}
+                  {busy === `accept:${invite.invitationId}` ? "…" : invite.state === "expired" ? t("shared.publish.organizers.expired") : t("shared.publish.invitation.accept")}
                 </Button>
               </div>
             ))}
@@ -1361,35 +1428,35 @@ No shared roster is open on this device. Choose one below to open it on this dev
         {!activeSharedRoster ? activeSharedReferenceUnresolved ? (
           <Button type="button" variant="outline" className="h-9 justify-start rounded-2xl border-violet-100 bg-white/70 px-3 text-left text-[11px] font-black text-violet-700 shadow-sm hover:bg-white" onClick={() => setSharedRosterLibraryOpen(true)} disabled={!user || Boolean(busy)}>
             <FolderOpen className="mr-1.5 h-4 w-4" />
-            Rosters
+            {t("shared.publish.rosters")}
           </Button>
         ) : (
           <div className="grid gap-2">
             <Button type="button" variant="outline" className="h-9 justify-start rounded-2xl border-violet-100 bg-white/70 px-3 text-left text-[11px] font-black text-violet-700 shadow-sm hover:bg-white" onClick={() => setSharedRosterLibraryOpen(true)} disabled={!user || Boolean(busy)}>
               <FolderOpen className="mr-1.5 h-4 w-4" />
-              Rosters
+              {t("shared.publish.rosters")}
             </Button>
             <Button type="button" className="h-9 justify-start rounded-2xl bg-violet-600 px-3 text-left text-[11px] font-black text-white hover:bg-violet-700" onClick={handleShareActiveRoster} disabled={!user || isEmptyRoster || Boolean(busy)}>
               <Share2 className="mr-1.5 h-4 w-4" />
-              {busy === "publish" ? "Creating…" : "Create shared copy"}
+              {busy === "publish" ? t("shared.publish.creating") : t("shared.publish.createSharedCopy")}
             </Button>
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-2">
             <Button type="button" variant="outline" className="h-full min-h-11 justify-start rounded-2xl border-violet-100 bg-white/70 px-3 text-left text-[11px] font-black text-violet-700 shadow-sm hover:bg-white" onClick={() => setSharedRosterLibraryOpen(true)} disabled={!user || Boolean(busy)}>
               <FolderOpen className="mr-1 h-4 w-4" />
-              Rosters
+              {t("shared.publish.rosters")}
             </Button>
             {activeAuthority.capabilities.canUseClubAccess ? (
               <Button type="button" variant="outline" className="h-full min-h-11 justify-start rounded-2xl border-violet-100 bg-white/70 px-3 text-left text-[11px] font-black text-violet-700 shadow-sm hover:bg-white" onClick={() => openCollaborators(activeSharedRosterId)} disabled={!user || Boolean(busy)}>
                 <Users className="mr-1 h-4 w-4" />
-                Organizers
+                {t("shared.publish.organizers.title")}
               </Button>
             ) : <div />}
             {activeAuthority.capabilities.canRestoreSharedRosterBackup && (
               <Button type="button" variant="outline" className="col-span-2 h-10 justify-start rounded-2xl border-violet-100 bg-white/70 px-3 text-left text-[11px] font-black text-violet-700 shadow-sm hover:bg-white" onClick={() => void openBackupHistory(activeSharedRosterId)} disabled={!user || Boolean(busy)}>
                 <History className="mr-1.5 h-4 w-4" />
-                Restore backup
+                {t("shared.publish.backup.restoreTitle")}
               </Button>
             )}
           </div>
@@ -1416,7 +1483,7 @@ No shared roster is open on this device. Choose one below to open it on this dev
             <div key={invite.invitationId} className="flex items-center justify-between gap-2 rounded-xl bg-white px-2 py-2">
               <div className="min-w-0 truncate text-xs font-black text-[#102A43]">{invite.workspaceName}</div>
               <Button type="button" variant="outline" className="h-8 rounded-xl border-violet-100 px-2 text-[10px] font-black text-violet-700" onClick={() => handleAcceptInvite(invite.invitationId)} disabled={Boolean(busy) || invite.state !== "pending"}>
-                {busy === `accept:${invite.invitationId}` ? "Accepting…" : invite.state === "expired" ? "Expired" : "Accept"}
+                {busy === `accept:${invite.invitationId}` ? t("shared.publish.invitation.accepting") : invite.state === "expired" ? t("shared.publish.organizers.expired") : t("shared.publish.invitation.accept")}
               </Button>
             </div>
           ))}
@@ -1426,7 +1493,7 @@ No shared roster is open on this device. Choose one below to open it on this dev
       {!activeSharedRoster ? activeSharedReferenceUnresolved ? null : (
         <Button type="button" className="h-11 rounded-2xl bg-violet-600 text-xs font-black text-white hover:bg-violet-700" onClick={handleShareActiveRoster} disabled={!user || isEmptyRoster || Boolean(busy)}>
           <Share2 className="mr-1.5 h-4 w-4" />
-          {busy === "publish" ? "Creating…" : "Create shared copy"}
+          {busy === "publish" ? t("shared.publish.creating") : t("shared.publish.createSharedCopy")}
         </Button>
       ) : (
         <div className="grid gap-2">
@@ -1437,23 +1504,23 @@ No shared roster is open on this device. Choose one below to open it on this dev
           {activeAuthority.capabilities.canRestoreSharedRosterBackup && (
             <Button type="button" variant="outline" className="h-10 justify-start rounded-2xl border-violet-100 bg-white px-3 text-xs font-black text-violet-700" onClick={() => void openBackupHistory(activeSharedRosterId)} disabled={Boolean(busy)}>
               <History className="mr-1.5 h-4 w-4" />
-              Restore backup
+              {t("shared.publish.backup.restoreTitle")}
             </Button>
           )}
         </div>
       )}
 
       <div className="grid gap-2">
-        <div className="px-1 text-[10px] font-black uppercase tracking-wide text-slate-400">Shared rosters</div>
+        <div className="px-1 text-[10px] font-black uppercase tracking-wide text-slate-400">{t("shared.publish.library.title")}</div>
         {sharedRosters.length === 0 ? (
           <div className="rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2 text-[11px] font-bold leading-snug text-slate-500">
-            No online shared rosters found for this account. If you just removed a local copy, make sure you are signed in with the same organizer account.
+            {t("shared.publish.full.empty")}
           </div>
         ) : (
           <>
             {linkedRosters.length === 0 ? (
               <div className="mb-2 rounded-2xl border border-violet-100 bg-violet-50/70 px-3 py-2 text-[11px] font-bold leading-snug text-violet-800">
-No shared roster is open on this device. Choose an online shared roster below to open it here.
+                {t("shared.publish.full.notOpenOnDevice")}
               </div>
             ) : null}
             <div className="grid gap-1.5">
@@ -1462,19 +1529,19 @@ No shared roster is open on this device. Choose an online shared roster below to
               const collaboratorCount = group ? Math.max(0, group.memberCount - 1) + (group.pendingInviteEmails?.length || 0) : Math.max(0, (roster.memberEmails?.length || 1) - 1) + (roster.pendingInviteEmails?.length || 0);
               const linked = linkedRosters.some((local) => local.cloudSource?.provider === "firebase" && local.cloudSource.firebaseRosterId === roster.id);
               const memberNamesByEmail = mergedMemberNames(group, roster);
-              const savedByName = displayNameForEmail(roster.lastSavedByEmail || roster.ownerEmail, memberNamesByEmail, user?.email);
+              const savedByName = displayNameForEmail(roster.lastSavedByEmail || roster.ownerEmail, memberNamesByEmail, user?.email, t);
               return (
                 <div key={roster.id} className={`grid grid-cols-[1fr_auto] items-center gap-2 rounded-2xl px-3 py-2 ${linked ? "bg-violet-50" : "bg-slate-50"}`}>
                   <button type="button" onClick={() => handleOpenRoster(roster.id)} disabled={Boolean(busy)} className="min-w-0 text-left active:scale-[0.99]">
-                    <span className="block truncate text-xs font-black text-[#102A43]">{roster.name}</span>
-                    <span className="block truncate text-[10px] font-semibold text-slate-500">saved by {savedByName}</span>
+                    <span className="block truncate text-xs font-black text-[#102A43]">{sharedRosterSummaryNameText(roster, t)}</span>
+                    <span className="block truncate text-[10px] font-semibold text-slate-500">{t("shared.publish.full.savedBy", { name: savedByName })}</span>
                   </button>
                   {canOpenRosterOrganizers(roster, group) ? (
                     <button type="button" onClick={() => openCollaborators(roster.id)} className="flex h-8 items-center gap-1 rounded-xl border border-violet-100 bg-white px-2 text-[10px] font-black text-violet-700 shadow-sm hover:bg-violet-50">
                       <Users className="h-3.5 w-3.5" />
-                      {collaboratorCount}
+                      {formatNumber(locale, collaboratorCount)}
                     </button>
-                  ) : <span className="text-[10px] font-black text-slate-400">{collaboratorCount}</span>}
+                  ) : <span className="text-[10px] font-black text-slate-400">{formatNumber(locale, collaboratorCount)}</span>}
                 </div>
               );
             })}

@@ -1,5 +1,7 @@
 "use strict";
 
+const { backendT } = require("./i18n");
+
 const crypto = require("node:crypto");
 const {
   activeWorkspaceNotificationRecipients,
@@ -443,28 +445,52 @@ function escapeHtml(value) {
     .replace(/'/g, "&#039;");
 }
 
-function invitationEmail({ invitationId, workspaceName, inviterDisplayName, expiresAtIso }) {
-  const name = cleanInvitationText(workspaceName, "Stripes workspace", 120);
-  const inviter = cleanInvitationText(inviterDisplayName, "An organizer", 80);
+function invitationEmail({ invitationId, workspaceName, inviterDisplayName, expiresAtIso, locale }) {
+  const name = cleanInvitationText(
+    workspaceName,
+    backendT("common.fallbackWorkspace", {}, locale),
+    120,
+  );
+  const inviter = cleanInvitationText(
+    inviterDisplayName,
+    backendT("common.fallbackInviter", {}, locale),
+    80,
+  );
   const link = officialInvitationUrl(invitationId);
   const expiry = new Date(expiresAtIso);
   if (!Number.isFinite(expiry.getTime())) throw new TypeError("expiresAtIso must be valid.");
   const expiryLabel = expiry.toISOString().slice(0, 10);
-  const subject = `Join ${name} in Stripes`;
+  const subject = backendT(
+    "emails.workspaceInvitation.subject",
+    { workspaceName: name },
+    locale,
+  );
   const text = [
-    `${inviter} invited you to join ${name} in Stripes.`,
+    backendT(
+      "emails.workspaceInvitation.textIntro",
+      { inviterName: inviter, workspaceName: name },
+      locale,
+    ),
     "",
-    `Join ${name}: ${link}`,
+    backendT(
+      "emails.workspaceInvitation.textJoin",
+      { workspaceName: name, link },
+      locale,
+    ),
     "",
-    `This invitation expires on ${expiryLabel}. Sign in with and verify the invited email before joining.`,
+    backendT(
+      "emails.workspaceInvitation.expiry",
+      { expiryDate: expiryLabel },
+      locale,
+    ),
   ].join("\n");
   const html = `
     <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#102A43;line-height:1.5">
-      <div style="font-size:13px;font-weight:800;color:#7c3aed;margin-bottom:10px">Stripes</div>
-      <h2 style="font-size:22px;line-height:1.25;margin:0 0 12px">Join ${escapeHtml(name)}</h2>
-      <p style="margin:0 0 18px">${escapeHtml(inviter)} invited you to join this workspace as an organizer.</p>
-      <p style="margin:0 0 20px"><a href="${escapeHtml(link)}" style="display:inline-block;background:#102A43;color:#fff;text-decoration:none;padding:11px 17px;border-radius:12px;font-weight:700">Join ${escapeHtml(name)}</a></p>
-      <p style="font-size:12px;color:#64748b;margin:0">This invitation expires on ${escapeHtml(expiryLabel)}. Sign in with and verify the invited email before joining.</p>
+      <div style="font-size:13px;font-weight:800;color:#7c3aed;margin-bottom:10px">${backendT("common.brand", {}, locale)}</div>
+      <h2 style="font-size:22px;line-height:1.25;margin:0 0 12px">${backendT("emails.workspaceInvitation.htmlHeading", { workspaceName: escapeHtml(name) }, locale)}</h2>
+      <p style="margin:0 0 18px">${backendT("emails.workspaceInvitation.htmlIntro", { inviterName: escapeHtml(inviter) }, locale)}</p>
+      <p style="margin:0 0 20px"><a href="${escapeHtml(link)}" style="display:inline-block;background:#102A43;color:#fff;text-decoration:none;padding:11px 17px;border-radius:12px;font-weight:700">${backendT("emails.workspaceInvitation.button", { workspaceName: escapeHtml(name) }, locale)}</a></p>
+      <p style="font-size:12px;color:#64748b;margin:0">${backendT("emails.workspaceInvitation.expiry", { expiryDate: escapeHtml(expiryLabel) }, locale)}</p>
     </div>`;
   return { subject, text, html, link };
 }
@@ -477,6 +503,7 @@ function organizerJoinedNotification({
   newOrganizerDisplayName,
   acceptedAtIso,
   governanceEligibleAtIso,
+  locale,
 }) {
   if (invitation?.status !== "accepted") return null;
   const acceptedAt = new Date(acceptedAtIso);
@@ -491,32 +518,50 @@ function organizerJoinedNotification({
   const workspaceName = invitationWorkspaceName(workspace, invitation);
   const organizerName = cleanInvitationText(
     newOrganizerDisplayName,
-    normalizeInvitationEmail(newOrganizerEmail).split("@")[0] || "Organizer",
+    normalizeInvitationEmail(newOrganizerEmail).split("@")[0]
+      || backendT("common.fallbackOrganizer", {}, locale),
     80,
   );
   const organizerEmail = normalizeInvitationEmail(newOrganizerEmail);
   const inviterName = cleanInvitationText(
     invitation?.inviterDisplayNameSnapshot,
-    "An organizer",
+    backendT("common.fallbackInviter", {}, locale),
     80,
   );
   const acceptanceDate = acceptedAt.toISOString().slice(0, 10);
   const eligibilityDate = governanceEligibleAt.toISOString().slice(0, 10);
-  const subject = `${organizerName} joined ${workspaceName} in Stripes`;
+  const subject = backendT(
+    "emails.organizerJoined.subject",
+    { organizerName, workspaceName },
+    locale,
+  );
   const text = [
-    `${organizerName} (${organizerEmail}) joined ${workspaceName} as an organizer on ${acceptanceDate}.`,
-    `Invited by: ${inviterName}.`,
-    "Normal organizer access is available immediately.",
-    `Protected organizer-removal proposal and voting rights begin on ${eligibilityDate}.`,
+    backendT(
+      "emails.organizerJoined.joinedBody",
+      { organizerName, organizerEmail, workspaceName, acceptanceDate },
+      locale,
+    ),
+    backendT("emails.organizerJoined.invitedBy", { inviterName }, locale),
+    backendT("emails.organizerJoined.accessImmediate", {}, locale),
+    backendT(
+      "emails.organizerJoined.governanceEligible",
+      { eligibilityDate },
+      locale,
+    ),
   ].join("\n");
   const html = `
     <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#102A43;line-height:1.5">
-      <div style="font-size:13px;font-weight:800;color:#7c3aed;margin-bottom:10px">Stripes</div>
-      <h2 style="font-size:22px;line-height:1.25;margin:0 0 12px">New organizer joined</h2>
-      <p style="margin:0 0 12px"><strong>${escapeHtml(organizerName)}</strong> (${escapeHtml(organizerEmail)}) joined <strong>${escapeHtml(workspaceName)}</strong> as an organizer on ${escapeHtml(acceptanceDate)}.</p>
-      <p style="margin:0 0 12px">Invited by: ${escapeHtml(inviterName)}.</p>
-      <p style="margin:0 0 8px">Normal organizer access is available immediately.</p>
-      <p style="font-size:13px;color:#64748b;margin:0">Protected organizer-removal proposal and voting rights begin on ${escapeHtml(eligibilityDate)}.</p>
+      <div style="font-size:13px;font-weight:800;color:#7c3aed;margin-bottom:10px">${backendT("common.brand", {}, locale)}</div>
+      <h2 style="font-size:22px;line-height:1.25;margin:0 0 12px">${backendT("emails.organizerJoined.heading", {}, locale)}</h2>
+      <p style="margin:0 0 12px">${backendT("emails.organizerJoined.joinedBody", {
+        organizerName: `<strong>${escapeHtml(organizerName)}</strong>`,
+        organizerEmail: escapeHtml(organizerEmail),
+        workspaceName: `<strong>${escapeHtml(workspaceName)}</strong>`,
+        acceptanceDate: escapeHtml(acceptanceDate),
+      }, locale)}</p>
+      <p style="margin:0 0 12px">${backendT("emails.organizerJoined.invitedBy", { inviterName: escapeHtml(inviterName) }, locale)}</p>
+      <p style="margin:0 0 8px">${backendT("emails.organizerJoined.accessImmediate", {}, locale)}</p>
+      <p style="font-size:13px;color:#64748b;margin:0">${backendT("emails.organizerJoined.governanceEligible", { eligibilityDate: escapeHtml(eligibilityDate) }, locale)}</p>
     </div>`;
   return { recipientEmails, subject, text, html };
 }

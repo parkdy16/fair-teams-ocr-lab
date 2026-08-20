@@ -455,6 +455,17 @@ If a visual change appears to require persistence/backend changes, stop and expl
 
 ---
 
+## Internationalization
+
+Stripes currently ships only English, but live user-facing product text must
+follow `docs/architecture/INTERNATIONALIZATION.md`. Add semantic canonical
+English catalog keys, use the shared plural/`Intl` patterns, and keep
+user/provider content plus persisted machine values untranslated. Run
+`npm run check:i18n` for user-facing frontend work; narrowly reasoned technical
+exemptions are allowed, broad hard-coded-string bypasses are not.
+
+---
+
 ## Context efficiency
 
 * Avoid redundant repository-wide discovery.

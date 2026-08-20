@@ -3,6 +3,11 @@ import { CircleHelp } from "lucide-react";
 import { parseFairTeamsSmartCommand, createAiSmartCommandContext, transcribeFairTeamsVoiceCommand } from "@/lib/aiSmartCommandClient";
 import { applyFairTeamsAiTruthGuard, guardFairTeamsSmartCommandBeforeAi } from "@/lib/aiSmartCommandTrustGuard";
 import { parseFairTeamsLocalSmartCommand } from "@/lib/aiSmartCommandLocalRouter";
+import {
+  bulkRosterSelectionExcludedText,
+  isUseExistingPlayerAction,
+  USE_EXISTING_PLAYER_DISTRIBUTION,
+} from "@/lib/aiSmartCommandActionSemantics";
 import { bestPlayerNameMatch, candidateNamesForRosterPlayer, normalizePlayerNameForMatch, scorePlayerNameMatch } from "@/lib/playerNameMatching";
 import {
   isAiSmartCommandEnabled,
@@ -12,9 +17,23 @@ import {
 } from "@/lib/aiSmartCommandTypes";
 import {
   aiCommandActionCanApply,
+  aiCommandCapabilityLabel,
   aiCommandSupportLabel,
   getAiCommandCapability,
 } from "@/lib/aiSmartCommandCapabilities";
+import {
+  aiTargetAreaText,
+  canonicalAiSmartCommandConversationPresenter,
+  createAiSmartCommandTrustGuardPresenter,
+  formatPercent,
+  getResolvedUiLocale,
+  translate,
+  type AiSmartCommandConversationPresenter,
+  useStripesTranslation,
+} from "@/i18n";
+
+const AI_CONVERSATION = canonicalAiSmartCommandConversationPresenter;
+const AI_CONVERSATION_TRUST_GUARD = createAiSmartCommandTrustGuardPresenter(AI_CONVERSATION);
 
 type AiSmartCommandPanelProps = {
   players: AiSmartCommandRosterPlayer[];
@@ -30,6 +49,13 @@ type AiSmartCommandPanelProps = {
   tutorialActive?: boolean;
   tutorialQuestion?: string;
 };
+
+function formatAiUnitList(
+  values: readonly string[],
+  conversation: AiSmartCommandConversationPresenter,
+) {
+  return conversation.formatList(values, { type: "unit" });
+}
 
 
 function actionLabel(actionType: string) {
@@ -55,19 +81,23 @@ function actionDetails(action: AiSmartCommandAction) {
   return details.join(" · ");
 }
 
+function aiErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error || "");
+}
+
 function friendlyAiError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error || "");
+  const message = aiErrorMessage(error);
   if (/json|structured|parse|schema/i.test(message)) {
-    return "Stripes understood part of this, but the AI answer was not clean enough. Try again or use a shorter command.";
+    return translate("ai.error.invalidAnswer");
   }
   if (/disabled|branch|configured|key/i.test(message)) return message;
   if (/openai|request failed|502|network|fetch/i.test(message)) {
-    return "Stripes AI could not connect cleanly. Try again in a moment.";
+    return translate("ai.error.connection");
   }
   if (/fair teams ai command failed|ai command failed/i.test(message)) {
-    return "I could not answer that cleanly, but I can still help with basic Stripes questions. Try asking: “How do I add a player?” or “How do I edit a player?”";
+    return translate("ai.error.unableToAnswerWithExamples");
   }
-  return message || "I could not answer that cleanly. Try asking again in a shorter way.";
+  return message || translate("ai.error.unableToAnswer");
 }
 
 
@@ -147,12 +177,13 @@ function looksLikePlayerRatingHowToHelpRequest(commandText: string) {
 function buildPlayerRatingHowToHelpAnswer(
   commandText: string,
   rosterMode: "local" | "shared",
+  translate: AiSmartCommandConversationPresenter,
 ): AiSmartCommandResponse | null {
   if (!looksLikePlayerRatingHowToHelpRequest(commandText)) return null;
 
   const assistantSummary = rosterMode === "shared"
-    ? "To rate a player in a shared roster, open the shared roster’s Club area and use the player rating/review section. Your rating is private: other organizers should not see your individual score. Stripes combines submitted ratings into the Club average for shared team generation. If you do not know a player yet, you can skip them and rate them later."
-    : "To rate a player in a local roster, open the Roster tab, tap the player card, then edit their rating/player details. Local roster ratings are your own private ratings and are used directly when Stripes generates balanced teams. In a local roster, you can use the normal player profile; shared/Club ratings only appear after you create, join, or open a shared roster.";
+    ? translate("ai.panel.help.sharedPlayerRating")
+    : translate("ai.panel.help.localPlayerRating");
 
   return {
     schemaVersion: 1,
@@ -180,12 +211,13 @@ function looksLikeSharedRosterRatingHelpRequest(commandText: string) {
 function buildSharedRosterRatingHelpAnswer(
   commandText: string,
   rosterMode: "local" | "shared",
+  translate: AiSmartCommandConversationPresenter,
 ): AiSmartCommandResponse | null {
   if (!looksLikeSharedRosterRatingHelpRequest(commandText)) return null;
 
   const assistantSummary = rosterMode === "shared"
-    ? "You are already in a shared roster. To rate players for this shared roster, open the Club area and use the rating/review section there. Your rating is private: other organizers should not see your individual score, and Stripes uses the Club average for shared team generation."
-    : "You are on a local/private roster right now, so shared roster ratings are not available here. Local rosters use your own normal ratings directly. To rate for a shared roster, first create or open a shared roster from the Club/shared roster area, then use the shared rating flow there. Your original local roster stays private.";
+    ? translate("ai.panel.help.sharedRosterRatings")
+    : translate("ai.panel.help.localRosterSharedRatings");
 
   return {
     schemaVersion: 1,
@@ -202,7 +234,10 @@ function buildSharedRosterRatingHelpAnswer(
   } as any;
 }
 
-function buildActionBoardHelpAnswer(commandText: string): AiSmartCommandResponse | null {
+function buildActionBoardHelpAnswer(
+  commandText: string,
+  translate: AiSmartCommandConversationPresenter,
+): AiSmartCommandResponse | null {
   const text = String(commandText || "").trim();
   if (!text || !/\b(action board|task board|tasks and votes|tasks & votes|decision board)\b/i.test(text)) return null;
   const isQuestion = /\?|\b(what|how|why|where|explain|help|can i|can we|does|do)\b/i.test(text);
@@ -212,7 +247,7 @@ function buildActionBoardHelpAnswer(commandText: string): AiSmartCommandResponse
     ok: true,
     detectedLanguage: "unknown",
     normalizedIntent: text.slice(0, 300),
-    assistantSummary: "Action Board is the Club workspace for things chat handles poorly: durable topics, decisions, ownership, and follow-through. A topic can move through Ideas, Decide, Action, and Done while keeping its history. Organizers can run anonymous votes, record decisions, find a meeting time, choose players or equipment, assign one or more people to an action, add due dates and links, and mark work complete. The Bell sends a deliberate one-time organizer email for the current step; Stripes does not send automatic activity spam. Action Board is not meant to replace Signal or other group chat.",
+    assistantSummary: translate("ai.panel.help.actionBoard"),
     confidence: 0.99,
     actions: [],
     confirmations: [],
@@ -222,7 +257,10 @@ function buildActionBoardHelpAnswer(commandText: string): AiSmartCommandResponse
   } as any;
 }
 
-function buildClubAttendanceHelpAnswer(commandText: string): AiSmartCommandResponse | null {
+function buildClubAttendanceHelpAnswer(
+  commandText: string,
+  translate: AiSmartCommandConversationPresenter,
+): AiSmartCommandResponse | null {
   const text = String(commandText || "").trim();
   if (!text || !/\b(club attendance|attendance issue|attendance issues|no-show|no show|last-minute cancellation|last minute cancellation|warning template|warning templates|copy warning|dismissal from group|tardy record)\b/i.test(text)) return null;
   const isQuestion = /\?|\b(what|how|why|where|explain|help|can i|can we|does|do)\b/i.test(text);
@@ -232,7 +270,7 @@ function buildClubAttendanceHelpAnswer(commandText: string): AiSmartCommandRespo
     ok: true,
     detectedLanguage: "unknown",
     normalizedIntent: text.slice(0, 300),
-    assistantSummary: "Club Attendance is an organizer memory for Tardy, Last-minute cancellation, No-show, and Conduct issue records. It is separate from Session selection and team generation. Player Management also has a Warnings shortcut that shows a quick attendance-based overview for every player. From there an organizer can open a player, choose a shared Club template, review the wording, and copy it. Last-minute cancellation and no-show templates can include the actual issue dates; repeated tardy warnings can use a period and count. Stripes never decides to warn or dismiss someone and never sends a warning automatically.",
+    assistantSummary: translate("ai.panel.help.clubAttendance"),
     confidence: 0.99,
     actions: [],
     confirmations: [],
@@ -252,13 +290,16 @@ function looksLikeBasicPlayerHelpQuestion(commandText: string) {
   return null;
 }
 
-function buildBasicPlayerHelpAnswer(commandText: string): AiSmartCommandResponse | null {
+function buildBasicPlayerHelpAnswer(
+  commandText: string,
+  translate: AiSmartCommandConversationPresenter,
+): AiSmartCommandResponse | null {
   const topic = looksLikeBasicPlayerHelpQuestion(commandText);
   if (!topic) return null;
 
   const assistantSummary = topic === "add_player"
-    ? "To add a player, go to the Roster tab and tap Add Player. Add the player’s name first, then you can fill in rating/details if you want. After adding them, they become part of this roster and can be selected in Session for team generation."
-    : "To edit a player, go to the Roster tab and tap that player’s card. From there you can update their name, AKA/aliases, rating/details, visible traits, notes/category, and local photo if your roster uses those fields. Local roster edits stay private on your device; shared rosters only sync shared-safe player info.";
+    ? translate("ai.panel.help.addPlayer")
+    : translate("ai.panel.help.editPlayer");
 
   return {
     schemaVersion: 1,
@@ -278,6 +319,7 @@ function buildBasicPlayerHelpAnswer(commandText: string): AiSmartCommandResponse
 function buildLocalRosterStatFallbackAnswer(
   commandText: string,
   players: AiSmartCommandRosterPlayer[],
+  translate: AiSmartCommandConversationPresenter,
 ): AiSmartCommandResponse | null {
   const request = detectRosterStatQuestionForFallback(commandText);
   if (!request || !Array.isArray(players) || players.length === 0) return null;
@@ -300,13 +342,21 @@ function buildLocalRosterStatFallbackAnswer(
     return request.direction === "lowest" ? av - bv : bv - av;
   });
   const shown = sorted.slice(0, Math.min(5, sorted.length));
-  const fieldLabel = hasSpecificField ? request.field : "OVR/skill";
+  const fieldLabel = hasSpecificField ? request.field : translate("ai.panel.rosterStats.fallbackField");
   const names = shown
-    .map((row, index) => `${index + 1}. ${row.player.name || "Player"} (${fieldLabel} ${Number((row as any)[valueKey])})`)
+    .map((row, index) => translate("ai.panel.rosterStats.row", {
+      index: index + 1,
+      player: row.player.name || translate("ai.panel.rosterStats.playerFallback"),
+      field: fieldLabel,
+      value: Number((row as any)[valueKey]),
+    }))
     .join("\n");
   const prefix = hasSpecificField
-    ? `Based on the visible ${request.field} values I can see, here are the ${request.direction} players:`
-    : `I cannot see a separate ${request.field} value for this roster here, so I will answer from the visible OVR/skill instead:`;
+    ? translate("ai.panel.rosterStats.visibleSummary", {
+      field: request.field,
+      direction: request.direction,
+    })
+    : translate("ai.panel.rosterStats.fallbackSummary", { field: request.field });
 
   return {
     schemaVersion: 1,
@@ -325,18 +375,25 @@ function buildLocalRosterStatFallbackAnswer(
 
 
 function isRankedRosterSelectionAction(action: AiSmartCommandAction | null | undefined) {
-  return Boolean(
-    action?.type === "select_players" &&
-      /(ranked_roster_selection|bulk_all_except|bulk_all_roster)/i.test(String(action.distribution || "") + " " + String(action.reason || "")),
-  );
+  if (action?.type !== "select_players") return false;
+  if (/(ranked_roster_selection|bulk_all_except|bulk_all_roster)/i.test(String(action.distribution || ""))) {
+    return true;
+  }
+
+  // Compatibility for older/provider actions that encoded the marker in an
+  // English reason before current actions supplied a structured distribution.
+  return /(ranked_roster_selection|bulk_all_except|bulk_all_roster)/i.test(String(action.reason || ""));
 }
 
-function bulkRosterSelectionExcludedText(action: AiSmartCommandAction) {
-  const reason = String(action.reason || "");
-  const match = reason.match(/excluding (.+?)\.?$/i);
-  return match?.[1]?.trim() || "";
-}
+function actionRequestsShuffle(action: AiSmartCommandAction) {
+  if (/shuffle|different|mix|fresh|reroll/i.test(String(action.distribution || ""))) {
+    return true;
+  }
 
+  // Compatibility for older/provider actions without a structured shuffle
+  // distribution. Current local conversation prose is not parsed here.
+  return /shuffle|different|mix|fresh|reroll/i.test(String(action.reason || ""));
+}
 
 const BULK_TEAM_WORDS: Record<string, number> = {
   one: 1,
@@ -448,13 +505,17 @@ function makeLocalBulkSelectAction(
   players: AiSmartCommandRosterPlayer[],
   excludedPlayers: AiSmartCommandRosterPlayer[],
   commandText: string,
+  translate: AiSmartCommandConversationPresenter,
   candidateLabel?: string,
 ): AiSmartCommandAction {
   const excludedIds = new Set(excludedPlayers.map((player) => player.id).filter(Boolean));
   const selectedRefs = players
     .filter((player) => player?.id && !excludedIds.has(player.id))
     .map((player) => localBulkPlayerRef(player));
-  const excludedNames = excludedPlayers.map((player) => player.name).filter(Boolean).join(", ");
+  const excludedNames = formatAiUnitList(
+    excludedPlayers.map((player) => player.name).filter(Boolean),
+    translate,
+  );
   const teamCount = localBulkTeamCount(commandText);
   const thenGenerate = localBulkShouldGenerate(commandText);
   return {
@@ -471,31 +532,40 @@ function makeLocalBulkSelectAction(
     distribution: `replace_today_selection:${excludedPlayers.length > 0 ? "bulk_all_except" : "bulk_all_roster"}:local_fast${thenGenerate ? ":then_generate" : ""}`,
     noteText: null,
     colorName: null,
-    targetName: null,
+    targetName: excludedPlayers.length > 0 ? candidateLabel || excludedNames : null,
     targetArea: null,
     capabilityId: "today.select_players",
     supportStatus: "executable",
     requiresConfirmation: false,
     reason: excludedPlayers.length > 0
-      ? `Select ${selectedRefs.length} of ${players.length} roster players, excluding ${candidateLabel || excludedNames}.`
-      : `Select every player in the current roster (${players.length} players).`,
+      ? translate("ai.panel.bulk.reasonExcluding", {
+        count: players.length,
+        selectedCount: selectedRefs.length,
+        playerCount: players.length,
+        names: candidateLabel || excludedNames,
+      })
+      : translate("ai.panel.bulk.reasonAll", { count: players.length }),
   };
 }
 
-function buildLocalBulkRosterSelectionAnswer(commandText: string, players: AiSmartCommandRosterPlayer[]): AiSmartCommandResponse | null {
+function buildLocalBulkRosterSelectionAnswer(
+  commandText: string,
+  players: AiSmartCommandRosterPlayer[],
+  translate: AiSmartCommandConversationPresenter,
+): AiSmartCommandResponse | null {
   if (!looksLikeLocalBulkRosterCommand(commandText) || !Array.isArray(players) || players.length === 0) return null;
   const excludedNames = localBulkExcludedNames(commandText);
 
   if (excludedNames.length === 0) {
-    const action = makeLocalBulkSelectAction(players, [], commandText);
+    const action = makeLocalBulkSelectAction(players, [], commandText, translate);
     return {
       schemaVersion: 1,
       ok: true,
       detectedLanguage: "unknown",
       normalizedIntent: commandText.slice(0, 300),
       assistantSummary: localBulkShouldGenerate(commandText)
-        ? `I’ll select all ${players.length} roster players locally, then set up the requested teams.`
-        : `I’ll select all ${players.length} roster players locally.`,
+        ? translate("ai.panel.bulk.selectAllWithTeams", { count: players.length })
+        : translate("ai.panel.bulk.selectAll", { count: players.length }),
       confidence: 0.94,
       actions: [action],
       confirmations: [],
@@ -509,13 +579,16 @@ function buildLocalBulkRosterSelectionAnswer(commandText: string, players: AiSma
     const heardName = excludedNames[0];
     const matches = localBulkCandidateMatches(heardName, players);
     if (matches.length === 1) {
-      const action = makeLocalBulkSelectAction(players, [matches[0]], commandText, matches[0].name || heardName);
+      const action = makeLocalBulkSelectAction(players, [matches[0]], commandText, translate, matches[0].name || heardName);
       return {
         schemaVersion: 1,
         ok: true,
         detectedLanguage: "unknown",
         normalizedIntent: commandText.slice(0, 300),
-        assistantSummary: `I heard “${heardName}” as the player to leave out. I found ${matches[0].name}. Tap below and I’ll select everyone else locally — no long name review.`,
+        assistantSummary: translate("ai.panel.bulk.singleMatch", {
+          heardName,
+          playerName: matches[0].name,
+        }),
         confidence: 0.92,
         actions: [action],
         confirmations: [],
@@ -525,13 +598,13 @@ function buildLocalBulkRosterSelectionAnswer(commandText: string, players: AiSma
       } as any;
     }
     if (matches.length > 1) {
-      const actions = matches.map((player) => makeLocalBulkSelectAction(players, [player], commandText, player.name || heardName));
+      const actions = matches.map((player) => makeLocalBulkSelectAction(players, [player], commandText, translate, player.name || heardName));
       return {
         schemaVersion: 1,
         ok: true,
         detectedLanguage: "unknown",
         normalizedIntent: commandText.slice(0, 300),
-        assistantSummary: `I heard “${heardName}” as the player to leave out. Choose the right player below; then I’ll select everyone else locally.`,
+        assistantSummary: translate("ai.panel.bulk.chooseMatch", { heardName }),
         confidence: 0.86,
         actions,
         confirmations: [],
@@ -545,11 +618,15 @@ function buildLocalBulkRosterSelectionAnswer(commandText: string, players: AiSma
       ok: true,
       detectedLanguage: "unknown",
       normalizedIntent: commandText.slice(0, 300),
-      assistantSummary: `I heard “${heardName}” as the player to leave out, but I couldn’t match that to this roster. I didn’t change anything.`,
+      assistantSummary: translate("ai.panel.bulk.noMatch", { heardName }),
       confidence: 0.7,
       actions: [],
       confirmations: [],
-      unresolved: [{ text: heardName, issue: "unknown_player", message: `Choose which roster player to leave out for “${heardName}”.` }],
+      unresolved: [{
+        text: heardName,
+        issue: "unknown_player",
+        message: translate("ai.panel.bulk.choosePlayer", { name: heardName }),
+      }],
       parseMode: "local_fallback" as any,
       debugWarnings: ["All-except roster command stopped locally because the excluded player was unknown."],
     } as any;
@@ -568,24 +645,30 @@ function buildLocalBulkRosterSelectionAnswer(commandText: string, players: AiSma
       ok: true,
       detectedLanguage: "unknown",
       normalizedIntent: commandText.slice(0, 300),
-      assistantSummary: `I understood this as a select-all-except command, but I need clearer matches for: ${unresolved.join(", ")}. I didn’t change anything.`,
+      assistantSummary: translate("ai.panel.bulk.unclearMatches", { names: formatAiUnitList(unresolved, translate) }),
       confidence: 0.72,
       actions: [],
       confirmations: [],
-      unresolved: unresolved.map((name) => ({ text: name, issue: "unknown_player", message: `Choose which roster player to leave out for “${name}”.` })),
+      unresolved: unresolved.map((name) => ({
+        text: name,
+        issue: "unknown_player",
+        message: translate("ai.panel.bulk.choosePlayer", { name }),
+      })),
       parseMode: "local_fallback" as any,
       debugWarnings: ["All-except roster command stopped locally because one or more excluded players were unclear."],
     } as any;
   }
 
   const uniqueResolved = resolved.filter((player, index, rows) => player?.id && rows.findIndex((row) => row.id === player.id) === index);
-  const action = makeLocalBulkSelectAction(players, uniqueResolved, commandText);
+  const action = makeLocalBulkSelectAction(players, uniqueResolved, commandText, translate);
   return {
     schemaVersion: 1,
     ok: true,
     detectedLanguage: "unknown",
     normalizedIntent: commandText.slice(0, 300),
-    assistantSummary: `I’ll select everyone except ${uniqueResolved.map((player) => player.name).join(", ")} locally — no long name review.`,
+    assistantSummary: translate("ai.panel.bulk.selectedExcept", {
+      names: formatAiUnitList(uniqueResolved.map((player) => player.name), translate),
+    }),
     confidence: 0.9,
     actions: [action],
     confirmations: [],
@@ -596,32 +679,34 @@ function buildLocalBulkRosterSelectionAnswer(commandText: string, players: AiSma
 }
 
 function parseModeLabel(mode?: AiSmartCommandResponse["parseMode"]) {
-  if (mode === "local_fallback") return "Local reply / safety fallback";
-  if (mode === "ai_with_local_hints") return "AI + app rules";
-  if (mode === "ai") return "AI parser";
-  return "AI beta";
+  if (mode === "local_fallback") return translate("ai.parseMode.localFallback");
+  if (mode === "ai_with_local_hints") return translate("ai.parseMode.aiWithRules");
+  if (mode === "ai") return translate("ai.parseMode.ai");
+  return translate("ai.parseMode.beta");
 }
 
 function actionCardTitle(action: AiSmartCommandAction) {
   if (action.type === "select_players") {
     if (isRankedRosterSelectionAction(action)) {
       const excluded = bulkRosterSelectionExcludedText(action);
-      return excluded ? `Leave out ${excluded}` : "Use roster selection";
+      return excluded ? translate("ai.action.leaveOut", { names: excluded }) : translate("ai.action.useRosterSelection");
     }
-    if (/possible existing match/i.test(String(action.reason || ""))) return "Use existing player";
-    if (/then_generate/i.test(String(action.distribution || "")) || action.teamCount) return "Replace Session + generate";
-    if (/replace|exact|only/i.test(String(action.distribution || ""))) return "Replace Session selection";
-    return "Add to Session";
+    if (isUseExistingPlayerAction(action)) return translate("ai.action.useExistingPlayer");
+    if (/then_generate/i.test(String(action.distribution || "")) || action.teamCount) return translate("ai.action.replaceAndGenerate");
+    if (/replace|exact|only/i.test(String(action.distribution || ""))) return translate("ai.action.replaceSessionSelection");
+    return translate("ai.action.addToSession");
   }
-  if (action.type === "unselect_players") return "Remove from Session";
-  if (action.type === "mark_players_late") return "Mark late";
-  if (action.type === "add_new_player_suggestion") return "Add new player";
-  if (action.type === "open_app_area") return action.targetArea ? `Open ${action.targetArea}` : "Open app area";
-  if (action.type === "generate_teams" && /shuffle|different|mix|fresh|reroll/i.test(String(action.distribution || "") + " " + String(action.reason || ""))) return "Shuffle teams";
+  if (action.type === "unselect_players") return translate("ai.action.removeFromSession");
+  if (action.type === "mark_players_late") return translate("ai.action.markLate");
+  if (action.type === "add_new_player_suggestion") return translate("ai.action.addNewPlayer");
+  if (action.type === "open_app_area") return action.targetArea
+    ? translate("ai.action.openArea", { area: aiTargetAreaText(action.targetArea, translate) })
+    : translate("ai.action.openAppArea");
+  if (action.type === "generate_teams" && actionRequestsShuffle(action)) return translate("ai.action.shuffleTeams");
   const capability = getAiCommandCapability(action);
-  if (capability?.label) return capability.label;
-  if (action.type === "no_action") return "No app action needed";
-  if (action.type === "unsupported_action") return action.targetName || "Not available yet";
+  if (capability) return aiCommandCapabilityLabel(capability);
+  if (action.type === "no_action") return translate("ai.action.noActionNeeded");
+  if (action.type === "unsupported_action") return action.targetName || translate("ai.action.notAvailable");
   return actionLabel(action.type);
 }
 
@@ -635,22 +720,20 @@ function actionCardTone(action: AiSmartCommandAction) {
 }
 
 function actionPrimaryVerb(action: AiSmartCommandAction) {
-  if (action.type === "club_add_note") return "Add note";
-  if (action.type === "add_new_player_suggestion") return "Add player";
+  if (action.type === "club_add_note") return translate("ai.verb.addNote");
+  if (action.type === "add_new_player_suggestion") return translate("ai.verb.addPlayer");
   if (action.type === "select_players") {
-    if (isRankedRosterSelectionAction(action)) return "Use players";
-    if (/then_generate/i.test(String(action.distribution || "")) || action.teamCount) return "Replace + Generate";
-    return /replace|exact|only/i.test(String(action.distribution || "")) ? "Replace Session" : "Add to Session";
+    if (isRankedRosterSelectionAction(action)) return translate("ai.verb.usePlayers");
+    if (/then_generate/i.test(String(action.distribution || "")) || action.teamCount) return translate("ai.verb.replaceAndGenerate");
+    return /replace|exact|only/i.test(String(action.distribution || "")) ? translate("ai.verb.replaceSession") : translate("ai.verb.addToSession");
   }
-  if (action.type === "unselect_players") return "Remove";
-  if (action.type === "mark_players_late") return "Mark late";
-  if (action.type === "open_app_area") return "Open";
-  if (action.type === "set_team_size" || action.type === "set_team_count") return "Set";
-  if (action.type === "generate_teams") return /shuffle|different|mix|fresh|reroll/i.test(String(action.distribution || "") + " " + String(action.reason || "")) ? "Shuffle" : "Generate";
-  return "Apply";
+  if (action.type === "unselect_players") return translate("common.remove");
+  if (action.type === "mark_players_late") return translate("ai.action.markLate");
+  if (action.type === "open_app_area") return translate("common.open");
+  if (action.type === "set_team_size" || action.type === "set_team_count") return translate("ai.verb.set");
+  if (action.type === "generate_teams") return actionRequestsShuffle(action) ? translate("ai.verb.shuffle") : translate("ai.verb.generate");
+  return translate("ai.verb.apply");
 }
-
-const AI_ASSISTANT_VERSION_LABEL = "Help beta";
 
 type AiRosterMatch = {
   player: AiSmartCommandRosterPlayer;
@@ -952,6 +1035,7 @@ function isAmbiguousRosterName(spokenName: string | null | undefined, players: A
 function makeExistingPlayerActionFromAiName(
   spokenName: string,
   match: AiRosterMatch,
+  translate: AiSmartCommandConversationPresenter,
   template?: AiSmartCommandAction,
 ): AiSmartCommandAction {
   return {
@@ -970,7 +1054,7 @@ function makeExistingPlayerActionFromAiName(
     teamLabel: null,
     role: null,
     attribute: null,
-    distribution: "add_today_selection",
+    distribution: USE_EXISTING_PLAYER_DISTRIBUTION,
     noteText: null,
     colorName: null,
     targetName: null,
@@ -978,7 +1062,10 @@ function makeExistingPlayerActionFromAiName(
     capabilityId: "today.select_players",
     supportStatus: "executable",
     requiresConfirmation: false,
-    reason: `Possible existing match from the roster matcher: “${cleanAiSpokenName(spokenName) || spokenName}” → ${match.player.name}.`,
+    reason: translate("ai.panel.match.possibleReason", {
+      spokenName: cleanAiSpokenName(spokenName) || spokenName,
+      playerName: match.player.name,
+    }),
   };
 }
 
@@ -1012,6 +1099,7 @@ function repairAiPlayerRefsWithRosterMatcher(
 function enhanceAiResultWithOcrStyleRosterMatching(
   response: AiSmartCommandResponse,
   players: AiSmartCommandRosterPlayer[],
+  translate: AiSmartCommandConversationPresenter,
 ): AiSmartCommandResponse {
   if (!players.length || !response?.actions) return response;
 
@@ -1022,7 +1110,7 @@ function enhanceAiResultWithOcrStyleRosterMatching(
       const matches = rankedOcrStyleRosterMatches(action.newPlayerName, players, 5);
       if (matches.length > 0) {
         resolvedNames.add(aiNameKey(action.newPlayerName));
-        return matches.map((match) => makeExistingPlayerActionFromAiName(action.newPlayerName!, match, action));
+        return matches.map((match) => makeExistingPlayerActionFromAiName(action.newPlayerName!, match, translate, action));
       }
     }
     return [repairAiPlayerRefsWithRosterMatcher(action, players, resolvedNames)];
@@ -1035,7 +1123,7 @@ function enhanceAiResultWithOcrStyleRosterMatching(
     const matches = rankedOcrStyleRosterMatches(item.text, players, 5);
     if (matches.length === 0) continue;
     resolvedNames.add(key);
-    matches.forEach((match) => extraActions.push(makeExistingPlayerActionFromAiName(item.text, match)));
+    matches.forEach((match) => extraActions.push(makeExistingPlayerActionFromAiName(item.text, match, translate)));
   }
 
   if (resolvedNames.size === 0 && extraActions.length === 0) return response;
@@ -1060,7 +1148,7 @@ function enhanceAiResultWithOcrStyleRosterMatching(
     confirmations,
     unresolved,
     parseMode: response.parseMode === "local_fallback" ? response.parseMode : "ai_with_local_hints",
-    assistantSummary: `${response.assistantSummary} I also checked close roster-name matches and kept close alternatives when names were ambiguous.`,
+    assistantSummary: `${response.assistantSummary}${translate("ai.panel.match.alternativesSuffix")}`,
     debugWarnings: [...(response.debugWarnings || []), "AI names repaired with OCR-style roster matcher and ranked alternatives before display."],
   };
 }
@@ -1199,10 +1287,17 @@ function getAiReviewDefaultSelections(items: AiReviewItem[]) {
 }
 
 function reviewOptionLabel(option: AiReviewOption) {
-  if (option.kind === "skip") return "Skip";
-  if (option.kind === "new") return `Add “${option.heardName}”`;
-  const scoreText = typeof option.score === "number" ? ` · ${Math.round(option.score)}%` : "";
-  return `${option.rosterName || "Player"}${scoreText}`;
+  if (option.kind === "skip") return translate("ai.review.skip");
+  if (option.kind === "new") return translate("ai.review.addName", { name: option.heardName });
+  const player = option.rosterName || translate("ai.review.playerFallback");
+  return typeof option.score === "number"
+    ? translate("ai.review.playerWithScore", {
+        player,
+        score: formatPercent(getResolvedUiLocale(), option.score / 100, {
+          maximumFractionDigits: 0,
+        }),
+      })
+    : translate("ai.review.playerWithoutScore", { player });
 }
 
 function reviewItemNeedsAttention(item: AiReviewItem) {
@@ -1242,7 +1337,10 @@ function getSelectedPlayerIdCounts(items: AiReviewItem[], selections: Record<str
   return counts;
 }
 
-function makeReviewAddNewPlayerAction(item: AiReviewItem): AiSmartCommandAction | null {
+function makeReviewAddNewPlayerAction(
+  item: AiReviewItem,
+  translate: AiSmartCommandConversationPresenter,
+): AiSmartCommandAction | null {
   const newPlayerName = displayAiHeardName(item.heardName);
   if (!newPlayerName || newPlayerName.length < 2) return null;
   return {
@@ -1264,11 +1362,14 @@ function makeReviewAddNewPlayerAction(item: AiReviewItem): AiSmartCommandAction 
     capabilityId: "roster.add_new_player",
     supportStatus: "executable",
     requiresConfirmation: false,
-    reason: `Reviewed AI name as a new roster player: “${newPlayerName}”.`,
+    reason: translate("ai.panel.review.newPlayerReason", { name: newPlayerName }),
   };
 }
 
-function makeReviewGenerateTeamsAction(teamAction?: AiSmartCommandAction | null): AiSmartCommandAction {
+function makeReviewGenerateTeamsAction(
+  translate: AiSmartCommandConversationPresenter,
+  teamAction?: AiSmartCommandAction | null,
+): AiSmartCommandAction {
   return {
     type: "generate_teams",
     playerRefs: [],
@@ -1288,7 +1389,7 @@ function makeReviewGenerateTeamsAction(teamAction?: AiSmartCommandAction | null)
     capabilityId: "teams.generate",
     supportStatus: "executable",
     requiresConfirmation: false,
-    reason: "Generate teams after applying reviewed AI names.",
+    reason: translate("ai.panel.review.generateReason"),
   };
 }
 
@@ -1296,6 +1397,7 @@ function buildActionsFromReviewSelections(
   result: AiSmartCommandResponse,
   items: AiReviewItem[],
   selections: Record<string, string>,
+  translate: AiSmartCommandConversationPresenter,
 ): AiSmartCommandAction[] {
   const seenPlayerIds = new Set<string>();
   const playerRefs = items.flatMap((item) => {
@@ -1313,6 +1415,9 @@ function buildActionsFromReviewSelections(
 
   const actions: AiSmartCommandAction[] = [];
   const teamAction = result.actions.find(actionHasTeamFollowup);
+  // Current responses carry a structured team action. The English normalized-
+  // intent fallback remains only for older/provider responses that predate that
+  // structure; current localized presentation never depends on this branch.
   const shouldGenerate = Boolean(teamAction) || /generate|make|team/i.test(result.normalizedIntent || "");
 
   if (playerRefs.length > 0) {
@@ -1335,7 +1440,7 @@ function buildActionsFromReviewSelections(
       capabilityId: "today.select_players",
       supportStatus: "executable",
       requiresConfirmation: false,
-      reason: "Reviewed AI names, then replace Session with confirmed existing players.",
+      reason: translate("ai.panel.review.replaceReason"),
     });
   }
 
@@ -1345,12 +1450,12 @@ function buildActionsFromReviewSelections(
     const newKey = aiNameKey(item.heardName);
     if (!newKey || seenNewNames.has(newKey)) continue;
     seenNewNames.add(newKey);
-    const addAction = makeReviewAddNewPlayerAction(item);
+    const addAction = makeReviewAddNewPlayerAction(item, translate);
     if (addAction) actions.push(addAction);
   }
 
   if (shouldGenerate && actions.length > 0) {
-    actions.push(makeReviewGenerateTeamsAction(teamAction));
+    actions.push(makeReviewGenerateTeamsAction(translate, teamAction));
   }
 
   return actions;
@@ -1370,7 +1475,7 @@ function compactNameForCompare(value?: string | null) {
 }
 
 function playerRefLabel(ref: AiSmartCommandAction["playerRefs"][number]) {
-  const rosterName = ref.rosterName || ref.spokenName || "Player";
+  const rosterName = ref.rosterName || ref.spokenName || translate("ai.review.playerFallback");
   const spokenName = ref.spokenName || rosterName;
   const heard = compactNameForCompare(spokenName);
   const roster = compactNameForCompare(rosterName);
@@ -1391,88 +1496,90 @@ function actionImpactLine(action: AiSmartCommandAction) {
   const count = action.type === "add_new_player_suggestion" && action.newPlayerName
     ? 1
     : action.playerRefs.length;
-  const playerWord = count === 1 ? "player" : "players";
-
   if (action.type === "select_players") {
     if (isRankedRosterSelectionAction(action)) {
       const excluded = bulkRosterSelectionExcludedText(action);
       const teamFollowup = action.teamCount
-        ? ` Then make ${action.teamCount} team${action.teamCount === 1 ? "" : "s"}.`
+        ? translate("ai.impact.thenMakeTeams", { count: action.teamCount })
         : /then_generate/i.test(String(action.distribution || ""))
-          ? " Then generate teams."
+          ? translate("ai.impact.thenGenerateTeams")
           : "";
-      if (excluded) return `Will clear Session and select ${count} roster players, leaving out ${excluded}.${teamFollowup}`;
-      return `Will clear Session and select ${count} ${playerWord} from the roster.${teamFollowup}`;
+      if (excluded) return translate("ai.impact.selectRosterExcept", { count, excluded, teamFollowup });
+      return translate("ai.impact.selectFromRoster", { count, teamFollowup });
     }
     if (/then_generate/i.test(String(action.distribution || "")) || action.teamCount) {
       const teamText = action.teamCount
-        ? `${action.teamCount} team${action.teamCount === 1 ? "" : "s"}`
+        ? translate("ai.impact.teamCountText", { count: action.teamCount })
         : action.playersPerTeam
-          ? `${action.playersPerTeam}v${action.playersPerTeam} teams`
-          : "balanced teams";
-      return `Will clear Session, select ${count} ${playerWord}, then generate ${teamText}.`;
+          ? translate("ai.impact.teamSizeText", { count: action.playersPerTeam })
+          : translate("ai.impact.balancedTeams");
+      return translate("ai.impact.selectThenGenerate", { count, teamText });
     }
     if (/replace|exact|only/i.test(String(action.distribution || ""))) {
-      return `Will clear Session and select ${count} ${playerWord}.`;
+      return translate("ai.impact.replaceSession", { count });
     }
-    if (/possible existing match/i.test(String(action.reason || ""))) {
-      return `Will use this existing roster player and mark them present Session.`;
+    if (isUseExistingPlayerAction(action)) {
+      return translate("ai.impact.useExistingPlayer");
     }
-    return `Will add/select ${count} ${playerWord} for Session without clearing anyone else.`;
+    return translate("ai.impact.addToSession", { count });
   }
   if (action.type === "unselect_players") {
-    return `Will remove ${count} ${playerWord} from Session without changing anyone else.`;
+    return translate("ai.impact.removeFromSession", { count });
   }
   if (action.type === "mark_players_late") {
-    return `Will mark ${count} ${playerWord} as late in Session and keep them selected.`;
+    return translate("ai.impact.markLate", { count });
   }
   if (action.type === "add_new_player_suggestion") {
-    return `Will add this as a new roster player and mark them present Session.`;
+    return translate("ai.impact.addNewPlayer");
   }
   if (action.type === "set_team_size" && action.playersPerTeam) {
-    return `Will set team size to ${action.playersPerTeam}v${action.playersPerTeam}.`;
+    return translate("ai.impact.setTeamSize", { count: action.playersPerTeam });
   }
   if (action.type === "set_team_count" && action.teamCount) {
-    return `Will set up ${action.teamCount} teams.`;
+    return translate("ai.impact.setTeamCount", { count: action.teamCount });
   }
   if (action.type === "generate_teams") {
-    const isShuffle = /shuffle|different|mix|fresh|reroll/i.test(String(action.distribution || "") + " " + String(action.reason || ""));
+    const isShuffle = actionRequestsShuffle(action);
     if (action.teamCount) return isShuffle
-      ? `Will reshuffle ${action.teamCount} team${action.teamCount === 1 ? "" : "s"} from the current Session selection.`
-      : `Will generate ${action.teamCount} balanced team${action.teamCount === 1 ? "" : "s"} from the current Session selection.`;
+      ? translate("ai.impact.reshuffleTeamCount", { count: action.teamCount })
+      : translate("ai.impact.generateTeamCount", { count: action.teamCount });
     if (action.playersPerTeam) return isShuffle
-      ? `Will reshuffle ${action.playersPerTeam}v${action.playersPerTeam} teams from the current Session selection.`
-      : `Will generate ${action.playersPerTeam}v${action.playersPerTeam} teams from the current Session selection.`;
-    return isShuffle ? "Will reshuffle teams from the current Session selection." : "Will generate balanced teams from the current Session selection.";
+      ? translate("ai.impact.reshuffleTeamSize", { count: action.playersPerTeam })
+      : translate("ai.impact.generateTeamSize", { count: action.playersPerTeam });
+    return isShuffle ? translate("ai.impact.reshuffleTeams") : translate("ai.impact.generateTeams");
   }
   if (action.type === "club_add_note") {
-    return "Will add this as a Club note.";
+    return translate("ai.impact.addClubNote");
   }
   if (action.type === "open_app_area") {
-    return action.targetArea ? `Will open ${action.targetArea}.` : "Will open the requested Stripes area.";
+    return action.targetArea
+      ? translate("ai.impact.openArea", { area: aiTargetAreaText(action.targetArea, translate) })
+      : translate("ai.impact.openRequestedArea");
   }
   if (action.type === "unsupported_action") {
-    return action.targetArea ? `Manual path: ${action.targetArea}` : "I understood this, but it is not wired as an app action yet.";
+    return action.targetArea
+      ? translate("ai.impact.manualPath", { area: aiTargetAreaText(action.targetArea, translate) })
+      : translate("ai.impact.notWired");
   }
-  return action.reason || "Ready to apply.";
+  return action.reason || translate("ai.impact.ready");
 }
 
 function secondaryActionDetails(action: AiSmartCommandAction) {
   const details: string[] = [];
-  if (action.newPlayerName && action.type !== "add_new_player_suggestion") details.push(`new player: ${action.newPlayerName}`);
-  if (action.suggestedSkill && action.type === "add_new_player_suggestion") details.push(`starting skill ${action.suggestedSkill}`);
-  if (action.teamLabel) details.push(`team: ${action.teamLabel}`);
+  if (action.newPlayerName && action.type !== "add_new_player_suggestion") details.push(translate("ai.details.newPlayer", { name: action.newPlayerName }));
+  if (action.suggestedSkill && action.type === "add_new_player_suggestion") details.push(translate("ai.details.startingSkill", { skill: action.suggestedSkill }));
+  if (action.teamLabel) details.push(translate("ai.details.team", { team: action.teamLabel }));
   if (action.pairingKind) details.push(action.pairingKind.replace(/_/g, " "));
-  if (action.role) details.push(`role: ${action.role.replace(/_/g, " ")}`);
-  if (action.noteText) details.push(`note: “${action.noteText}”`);
-  if (action.colorName) details.push(`color: ${action.colorName}`);
+  if (action.role) details.push(translate("ai.details.role", { role: action.role.replace(/_/g, " ") }));
+  if (action.noteText) details.push(translate("ai.details.note", { note: action.noteText }));
+  if (action.colorName) details.push(translate("ai.details.color", { color: action.colorName }));
   return details.join(" · ");
 }
 
 function unresolvedTitle(result: AiSmartCommandResponse) {
   const hasUnknownPlayers = result.unresolved.some((item) => item.issue === "unknown_player" || item.issue === "ambiguous_player");
-  if (hasUnknownPlayers) return "Could not match";
-  return "Follow-up needed";
+  if (hasUnknownPlayers) return translate("ai.unresolved.couldNotMatch");
+  return translate("ai.unresolved.followUpNeeded");
 }
 
 type PersistedAiAssistantState = {
@@ -1550,8 +1657,9 @@ export function AiSmartCommandPanel({
   onOpenToday,
   onQuestionSubmitted,
   tutorialActive = false,
-  tutorialQuestion = "How do shared rosters work?",
+  tutorialQuestion = translate("ai.panel.tutorial.question"),
 }: AiSmartCommandPanelProps) {
+  const { t, locale } = useStripesTranslation();
   const enabled = isAiSmartCommandEnabled();
   const storageKey = useMemo(() => safeStorageKey(rosterMode, rosterName), [rosterMode, rosterName]);
   const [commandText, setCommandText] = useState("");
@@ -1573,9 +1681,7 @@ export function AiSmartCommandPanel({
   const [reviewNameEdits, setReviewNameEdits] = useState<Record<string, string>>({});
   const [helpExpanded, setHelpExpanded] = useState(Boolean(tutorialActive));
 
-  const placeholder = useMemo(() => {
-    return "Ask Stripes… e.g. How does Action Board work?";
-  }, []);
+  const placeholder = t("ai.input.placeholder");
 
   useEffect(() => {
     if (!tutorialActive) {
@@ -1664,9 +1770,9 @@ export function AiSmartCommandPanel({
 
   const applyReviewedAiNames = async () => {
     if (!result || !onApplyAction) return;
-    const actions = buildActionsFromReviewSelections(result, aiReviewItems, reviewSelections);
+    const actions = buildActionsFromReviewSelections(result, aiReviewItems, reviewSelections, AI_CONVERSATION);
     if (actions.length === 0) {
-      setError("Choose at least one roster player or add a new player before applying.");
+      setError(t("ai.error.chooseReviewPlayer"));
       return;
     }
 
@@ -1696,7 +1802,7 @@ export function AiSmartCommandPanel({
         ok: true,
         detectedLanguage: "en",
         normalizedIntent: trimmedCommand.slice(0, 300),
-        assistantSummary: "A shared roster lets several organizers work on the same player list in real time. Organizers can collaborate on attendance and shared ratings, while each person’s private local rating stays separate. If you manage teams alone, a local roster is usually enough.",
+        assistantSummary: AI_CONVERSATION("ai.panel.tutorial.answer"),
         confidence: 1,
         actions: [],
         confirmations: [],
@@ -1728,19 +1834,19 @@ export function AiSmartCommandPanel({
         currentTeamsGenerated,
       });
 
-      const directBasicHelp = buildActionBoardHelpAnswer(trimmedCommand)
-        || buildClubAttendanceHelpAnswer(trimmedCommand)
-        || buildBasicPlayerHelpAnswer(trimmedCommand)
-        || buildPlayerRatingHowToHelpAnswer(trimmedCommand, rosterMode)
-        || buildSharedRosterRatingHelpAnswer(trimmedCommand, rosterMode)
-        || buildLocalRosterStatFallbackAnswer(trimmedCommand, players);
+      const directBasicHelp = buildActionBoardHelpAnswer(trimmedCommand, AI_CONVERSATION)
+        || buildClubAttendanceHelpAnswer(trimmedCommand, AI_CONVERSATION)
+        || buildBasicPlayerHelpAnswer(trimmedCommand, AI_CONVERSATION)
+        || buildPlayerRatingHowToHelpAnswer(trimmedCommand, rosterMode, AI_CONVERSATION)
+        || buildSharedRosterRatingHelpAnswer(trimmedCommand, rosterMode, AI_CONVERSATION)
+        || buildLocalRosterStatFallbackAnswer(trimmedCommand, players, AI_CONVERSATION);
       if (directBasicHelp) {
         setResult(directBasicHelp);
         onParsed?.(directBasicHelp);
         return;
       }
 
-      const directBulkRosterSelection = buildLocalBulkRosterSelectionAnswer(trimmedCommand, players);
+      const directBulkRosterSelection = buildLocalBulkRosterSelectionAnswer(trimmedCommand, players, AI_CONVERSATION);
       if (directBulkRosterSelection) {
         setResult(directBulkRosterSelection);
         onParsed?.(directBulkRosterSelection);
@@ -1758,21 +1864,30 @@ export function AiSmartCommandPanel({
         });
         const guardedRaw = isAiAnswerOnlyResult(parsedRaw)
           ? parsedRaw
-          : applyFairTeamsAiTruthGuard(trimmedCommand, parsedRaw);
-        const parsed = enhanceAiResultWithOcrStyleRosterMatching(guardedRaw, players);
+          : applyFairTeamsAiTruthGuard(trimmedCommand, parsedRaw, AI_CONVERSATION_TRUST_GUARD);
+        const parsed = enhanceAiResultWithOcrStyleRosterMatching(guardedRaw, players, AI_CONVERSATION);
         setResult(parsed);
         onParsed?.(parsed);
         return;
       } catch (aiErr) {
-        const localTrustGuard = guardFairTeamsSmartCommandBeforeAi(trimmedCommand, commandContext);
+        const localTrustGuard = guardFairTeamsSmartCommandBeforeAi(
+          trimmedCommand,
+          commandContext,
+          AI_CONVERSATION_TRUST_GUARD,
+        );
         if (localTrustGuard) {
-          const enhanced = enhanceAiResultWithOcrStyleRosterMatching(localTrustGuard, players);
+          const enhanced = enhanceAiResultWithOcrStyleRosterMatching(localTrustGuard, players, AI_CONVERSATION);
           setResult(enhanced);
           onParsed?.(enhanced);
           return;
         }
 
-        const localSmartCommand = parseFairTeamsLocalSmartCommand(trimmedCommand, players, commandContext);
+        const localSmartCommand = parseFairTeamsLocalSmartCommand(
+          trimmedCommand,
+          players,
+          commandContext,
+          AI_CONVERSATION,
+        );
         if (localSmartCommand) {
           const enhancedLocal = enhanceAiResultWithOcrStyleRosterMatching({
             ...localSmartCommand,
@@ -1780,7 +1895,7 @@ export function AiSmartCommandPanel({
               ...((localSmartCommand as any).debugWarnings || []),
               `AI planner unavailable; used local fallback: ${aiErr instanceof Error ? aiErr.message : String(aiErr || "unknown error")}`,
             ],
-          }, players);
+          }, players, AI_CONVERSATION);
           setResult(enhancedLocal);
           onParsed?.(enhancedLocal);
           return;
@@ -1788,22 +1903,22 @@ export function AiSmartCommandPanel({
         throw aiErr;
       }
     } catch (err) {
-      const ratingHowToHelp = buildPlayerRatingHowToHelpAnswer(trimmedCommand, rosterMode);
+      const ratingHowToHelp = buildPlayerRatingHowToHelpAnswer(trimmedCommand, rosterMode, AI_CONVERSATION);
       if (ratingHowToHelp) {
         setResult(ratingHowToHelp);
         onParsed?.(ratingHowToHelp);
       } else {
-        const sharedRatingHelp = buildSharedRosterRatingHelpAnswer(trimmedCommand, rosterMode);
+        const sharedRatingHelp = buildSharedRosterRatingHelpAnswer(trimmedCommand, rosterMode, AI_CONVERSATION);
         if (sharedRatingHelp) {
           setResult(sharedRatingHelp);
           onParsed?.(sharedRatingHelp);
         } else {
-          const localStatAnswer = buildLocalRosterStatFallbackAnswer(trimmedCommand, players);
+          const localStatAnswer = buildLocalRosterStatFallbackAnswer(trimmedCommand, players, AI_CONVERSATION);
           if (localStatAnswer) {
             setResult(localStatAnswer);
             onParsed?.(localStatAnswer);
-          } else if (/Stripes AI command failed|AI command failed/i.test(friendlyAiError(err)) && /\b(rate|rating|ratings|skill|ovr)\b/i.test(trimmedCommand)) {
-            const safeRatingHelp = buildPlayerRatingHowToHelpAnswer("How do I rate a player?", rosterMode);
+          } else if (/Stripes AI command failed|AI command failed/i.test(aiErrorMessage(err)) && /\b(rate|rating|ratings|skill|ovr)\b/i.test(trimmedCommand)) {
+            const safeRatingHelp = buildPlayerRatingHowToHelpAnswer("How do I rate a player?", rosterMode, AI_CONVERSATION);
             if (safeRatingHelp) {
               setResult({
                 ...safeRatingHelp,
@@ -1812,7 +1927,7 @@ export function AiSmartCommandPanel({
               });
               onParsed?.(safeRatingHelp);
             } else {
-              setError("I can explain ratings, but I could not handle that exact wording. In a local roster, open Roster, tap a player card, and edit the player rating/details there.");
+              setError(t("ai.error.ratingHelpFallback"));
             }
           } else {
             setError(friendlyAiError(err));
@@ -1836,7 +1951,7 @@ export function AiSmartCommandPanel({
   const startVoiceRecording = async () => {
     if (busy || voiceBusy || recording) return;
     if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
-      setError("Voice recording is not available in this browser yet.");
+      setError(t("ai.error.voiceUnavailable"));
       return;
     }
 
@@ -1856,7 +1971,7 @@ export function AiSmartCommandPanel({
         if (event.data && event.data.size > 0) audioChunksRef.current.push(event.data);
       };
       recorder.onerror = () => {
-        setError("Voice recording failed. Try again in a moment.");
+        setError(t("ai.error.voiceFailed"));
         setRecording(false);
         stopVoiceTracks();
       };
@@ -1883,7 +1998,9 @@ export function AiSmartCommandPanel({
     } catch (err) {
       stopVoiceTracks();
       setRecording(false);
-      setError(err instanceof Error && /permission|denied/i.test(err.message) ? "Microphone permission was blocked. Allow microphone access and try again." : "Could not start voice recording.");
+      setError(err instanceof Error && /permission|denied/i.test(err.message)
+        ? t("ai.error.microphonePermission")
+        : t("ai.error.voiceStart"));
     }
   };
 
@@ -1906,13 +2023,13 @@ export function AiSmartCommandPanel({
     setShowTodayShortcut(false);
     try {
       const message = await onApplyAction(action);
-      setApplyMessage(typeof message === "string" && message.trim() ? message : "Applied.");
+        setApplyMessage(typeof message === "string" && message.trim() ? message : t("ai.status.applied"));
       if (action.type === "select_players" || action.type === "unselect_players" || action.type === "mark_players_late" || action.type === "add_new_player_suggestion") {
         setShowTodayShortcut(true);
       }
       return true;
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not apply this action yet.");
+      setError(err instanceof Error ? err.message : t("ai.error.applyAction"));
       return false;
     } finally {
       setApplyingKey(null);
@@ -1929,11 +2046,11 @@ export function AiSmartCommandPanel({
             </div>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <h3 className="text-[17px] font-black leading-tight text-[#102A43] lg:text-[22px]">Help</h3>
-                <span className="hidden rounded-full bg-white px-2 py-0.5 text-[9px] font-black text-slate-500 shadow-sm ring-1 ring-slate-200 lg:inline-flex">{AI_ASSISTANT_VERSION_LABEL}</span>
+                <h3 className="text-[17px] font-black leading-tight text-[#102A43] lg:text-[22px]">{t("ai.header.title")}</h3>
+                <span className="hidden rounded-full bg-white px-2 py-0.5 text-[9px] font-black text-slate-500 shadow-sm ring-1 ring-slate-200 lg:inline-flex">{t("ai.header.version")}</span>
               </div>
               <p className="mt-0.5 truncate text-[10px] font-bold text-slate-500 lg:text-[13px]">
-                Ask Stripes how anything works.
+                {t("ai.header.description")}
               </p>
             </div>
           </div>
@@ -1943,7 +2060,7 @@ export function AiSmartCommandPanel({
               onClick={clearAssistantSession}
               className="shrink-0 rounded-full px-2 py-1 text-[10px] font-black uppercase tracking-wide text-slate-500 active:scale-[0.98]"
             >
-              Clear
+              {t("ai.actions.clear")}
             </button>
           )}
         </div>
@@ -1965,7 +2082,7 @@ export function AiSmartCommandPanel({
               disabled={busy || voiceBusy || !commandText.trim()}
               className={`h-10 rounded-2xl bg-[#102A43] px-3 text-[11px] font-black uppercase tracking-wide text-white disabled:opacity-45 lg:h-11 lg:px-4 lg:text-[13px] ${tutorialActive ? "fairteams-tutorial-pulse" : ""}`}
             >
-              {busy ? "Thinking…" : "Ask"}
+              {busy ? t("ai.status.thinking") : t("ai.actions.ask")}
             </button>
             <button
               type="button"
@@ -1973,19 +2090,19 @@ export function AiSmartCommandPanel({
               disabled={busy || voiceBusy}
               className={`h-10 rounded-2xl px-3 text-[11px] font-black uppercase tracking-wide text-white disabled:opacity-45 lg:h-11 lg:px-4 lg:text-[13px] ${recording ? "bg-rose-600" : "bg-slate-600"}`}
             >
-              {voiceBusy ? "Hearing…" : recording ? "Done" : "Voice"}
+              {voiceBusy ? t("ai.status.hearing") : recording ? t("common.done") : t("ai.actions.voice")}
             </button>
           </div>
         </div>
       </div>
       {recording && (
         <div className="mt-2 rounded-2xl border border-rose-100 bg-rose-50 px-3 py-2 text-xs font-black text-rose-700">
-          Listening… tap Done when you finish speaking.
+          {t("ai.voice.listeningHelp")}
         </div>
       )}
       {voiceTranscript && !recording && (
         <div className="mt-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600">
-          I heard: “{voiceTranscript}”
+          {t("ai.voice.heard", { transcript: voiceTranscript })}
         </div>
       )}
 
@@ -2003,7 +2120,7 @@ export function AiSmartCommandPanel({
               onClick={onOpenToday}
               className="mt-2 rounded-full bg-emerald-600 px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-white"
             >
-              View Session
+              {t("ai.actions.viewSession")}
             </button>
           )}
         </div>
@@ -2016,15 +2133,18 @@ export function AiSmartCommandPanel({
         >
           {tutorialAnswerReady && (
             <div className="mb-2 inline-flex rounded-full bg-violet-100 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-violet-700">
-              Answer ready
+              {t("ai.status.answerReady")}
             </div>
           )}
           <div className="rounded-2xl bg-violet-50 px-3 py-2 text-sm font-bold leading-snug text-[#102A43] lg:px-4 lg:py-3 lg:text-[15px] lg:leading-relaxed">
-            {result.assistantSummary || "I’m listening."}
+            {result.assistantSummary || t("ai.status.listening")}
           </div>
           {(result.actions.length > 0 || result.confirmations.length > 0 || result.unresolved.length > 0) && (
-            <div className="mt-2 flex items-center justify-between gap-2 text-[10px] font-black uppercase tracking-wide text-slate-400" title={`${result.detectedLanguage} · ${Math.round(result.confidence * 100)}% · ${parseModeLabel(result.parseMode)}`}>
-              <span>Review before applying</span>
+            <div
+              className="mt-2 flex items-center justify-between gap-2 text-[10px] font-black uppercase tracking-wide text-slate-400"
+              title={`${result.detectedLanguage} · ${formatPercent(locale, result.confidence, { maximumFractionDigits: 0 })} · ${parseModeLabel(result.parseMode)}`}
+            >
+              <span>{t("ai.review.beforeApplying")}</span>
               <span className="normal-case tracking-normal text-slate-300">{parseModeLabel(result.parseMode)}</span>
             </div>
           )}
@@ -2032,13 +2152,13 @@ export function AiSmartCommandPanel({
             <div className="mt-2 rounded-2xl border border-amber-100 bg-amber-50 px-3 py-2.5 font-bold text-amber-900 shadow-sm">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <div className="text-[13px] leading-tight">Review AI names</div>
+                  <div className="text-[13px] leading-tight">{t("ai.review.title")}</div>
                   <div className="mt-1 text-[11px] font-semibold leading-snug opacity-80">
-                    {aiReviewStats.heard} names heard · {aiReviewStats.selected} selected · {aiReviewStats.needsReview} need your check
+                    {t("ai.review.summary", aiReviewStats)}
                   </div>
                   {aiReviewSourceStats.transcript > aiReviewSourceStats.ai && (
                     <div className="mt-1 text-[10px] font-bold leading-snug opacity-70">
-                      Checking transcript order: {aiReviewSourceStats.transcript} possible names · AI returned {aiReviewSourceStats.ai}.
+                      {t("ai.review.transcriptComparison", aiReviewSourceStats)}
                     </div>
                   )}
                 </div>
@@ -2047,7 +2167,7 @@ export function AiSmartCommandPanel({
                   onClick={() => setReviewOpen(true)}
                   className="shrink-0 rounded-full bg-amber-600 px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-white"
                 >
-                  Review
+                  {t("ai.review.open")}
                 </button>
               </div>
               <div className="mt-2 flex flex-wrap gap-1.5">
@@ -2063,7 +2183,7 @@ export function AiSmartCommandPanel({
                   );
                 })}
                 {aiReviewItems.length > 10 && (
-                  <span className="rounded-full bg-white/75 px-2 py-1 text-[10px] font-black leading-none shadow-sm">+{aiReviewItems.length - 10} more</span>
+                  <span className="rounded-full bg-white/75 px-2 py-1 text-[10px] font-black leading-none shadow-sm">{t("ai.review.more", { count: aiReviewItems.length - 10 })}</span>
                 )}
               </div>
             </div>
@@ -2091,7 +2211,7 @@ export function AiSmartCommandPanel({
                         disabled={applyingKey === key}
                         onClick={() => applyAction(action, index)}
                       >
-                        {applyingKey === key ? "Applying…" : actionPrimaryVerb(action)}
+                        {applyingKey === key ? t("ai.status.applying") : actionPrimaryVerb(action)}
                       </button>
                     )}
                   </div>
@@ -2104,7 +2224,7 @@ export function AiSmartCommandPanel({
                       ))}
                       {playerLabels.length > 12 && (
                         <span className="rounded-full bg-white/70 px-2 py-1 text-[10px] font-black leading-none shadow-sm">
-                          +{playerLabels.length - 12} more
+                          {t("ai.review.more", { count: playerLabels.length - 12 })}
                         </span>
                       )}
                     </div>
@@ -2129,7 +2249,7 @@ export function AiSmartCommandPanel({
           )}
           {result.confirmations.length > 0 && (
             <div className="mt-3 grid gap-1.5">
-              <div className="text-[10px] font-black uppercase tracking-wide text-amber-600">Check before choosing</div>
+              <div className="text-[10px] font-black uppercase tracking-wide text-amber-600">{t("ai.review.checkBeforeChoosing")}</div>
               {result.confirmations.map((confirmation) => (
                 <div key={confirmation.id} className="rounded-xl bg-amber-50 px-3 py-2 font-bold text-amber-800">
                   {confirmation.message}
@@ -2154,19 +2274,19 @@ export function AiSmartCommandPanel({
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/35 px-3 py-6">
           <div className="max-h-[88vh] w-full max-w-lg overflow-hidden rounded-[28px] bg-white shadow-2xl">
             <div className="border-b border-slate-100 px-4 py-3">
-              <div className="text-[10px] font-black uppercase tracking-wide text-violet-500">Stripes Assistant</div>
-              <div className="mt-0.5 text-lg font-black text-[#102A43]">Review AI names</div>
+              <div className="text-[10px] font-black uppercase tracking-wide text-violet-500">{t("ai.review.assistantName")}</div>
+              <div className="mt-0.5 text-lg font-black text-[#102A43]">{t("ai.review.title")}</div>
               <div className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                {aiReviewStats.heard} names heard · {aiReviewStats.selected} selected · {aiReviewStats.needsReview} need your check
+                {t("ai.review.summary", aiReviewStats)}
               </div>
               {aiReviewSourceStats.transcript > aiReviewSourceStats.ai && (
                 <div className="mt-1 text-[10px] font-bold leading-snug text-amber-600">
-                  I added possible missed transcript names in the original spoken order.
+                  {t("ai.review.addedTranscriptNames")}
                 </div>
               )}
               {aiReviewStats.duplicateSelected > 0 && (
                 <div className="mt-2 rounded-2xl bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-800">
-                  {aiReviewStats.duplicateSelected} duplicate selection{aiReviewStats.duplicateSelected === 1 ? "" : "s"} found. Duplicates will only be applied once.
+                  {t("ai.review.duplicateSelections", { count: aiReviewStats.duplicateSelected })}
                 </div>
               )}
             </div>
@@ -2178,7 +2298,7 @@ export function AiSmartCommandPanel({
                       <div>
                         <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wide text-slate-400">
                           <span className="rounded-full bg-white px-1.5 py-0.5 text-slate-500 shadow-sm">{itemIndex + 1}</span>
-                          <span>Heard · tap to correct</span>
+                          <span>{t("ai.review.heardCorrect")}</span>
                         </div>
                         <input
                           type="text"
@@ -2191,7 +2311,7 @@ export function AiSmartCommandPanel({
                             }
                           }}
                           className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-sm font-black text-[#102A43] outline-none focus:border-violet-300 focus:ring-2 focus:ring-violet-100"
-                          placeholder="Correct heard name"
+                          placeholder={t("ai.review.correctNamePlaceholder")}
                         />
                       </div>
                       <button
@@ -2199,7 +2319,7 @@ export function AiSmartCommandPanel({
                         onClick={() => setReviewSelections((current) => ({ ...current, [item.key]: "skip" }))}
                         className="rounded-full bg-white px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-slate-500 shadow-sm"
                       >
-                        Skip
+                        {t("ai.review.skip")}
                       </button>
                     </div>
                     {(() => {
@@ -2207,12 +2327,12 @@ export function AiSmartCommandPanel({
                       const duplicate = Boolean(selected && selected !== "new" && selected !== "skip" && (selectedPlayerIdCounts.get(selected) || 0) > 1);
                       return duplicate ? (
                         <div className="mt-2 rounded-xl bg-amber-100 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wide text-amber-800">
-                          Duplicate match — this player will only be selected once
+                          {t("ai.review.duplicateMatch")}
                         </div>
                       ) : null;
                     })()}
                     <div className="mt-2 text-[10px] font-bold leading-snug text-slate-400">
-                      Edit the heard name to refresh roster suggestions.
+                      {t("ai.review.editNameHelp")}
                     </div>
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       {item.options.map((option) => {
@@ -2226,7 +2346,7 @@ export function AiSmartCommandPanel({
                             disabled={disabled}
                             onClick={() => setReviewSelections((current) => ({ ...current, [item.key]: value }))}
                             className={`rounded-full px-2.5 py-1.5 text-[10px] font-black leading-none shadow-sm disabled:opacity-45 ${selected ? "bg-violet-600 text-white" : "bg-white text-slate-700"}`}
-                            title={option.kind === "new" ? "Add this as a new roster player and mark them present Session." : undefined}
+                            title={option.kind === "new" ? t("ai.impact.addNewPlayer") : undefined}
                           >
                             {reviewOptionLabel(option)}
                           </button>
@@ -2243,7 +2363,7 @@ export function AiSmartCommandPanel({
                 onClick={() => setReviewOpen(false)}
                 className="h-11 rounded-2xl bg-slate-100 text-xs font-black uppercase tracking-wide text-slate-600"
               >
-                Cancel
+                {t("common.cancel")}
               </button>
               <button
                 type="button"
@@ -2251,7 +2371,7 @@ export function AiSmartCommandPanel({
                 disabled={!onApplyAction || applyingKey === "select_players--1"}
                 className="h-11 rounded-2xl bg-[#102A43] text-xs font-black uppercase tracking-wide text-white disabled:opacity-45"
               >
-                {applyingKey === "select_players--1" ? "Applying…" : `Apply ${aiReviewStats.selected} player${aiReviewStats.selected === 1 ? "" : "s"}`}
+                {applyingKey === "select_players--1" ? t("ai.status.applying") : t("ai.review.applyPlayers", { count: aiReviewStats.selected })}
               </button>
             </div>
           </div>

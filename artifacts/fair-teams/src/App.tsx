@@ -34,7 +34,10 @@ import type { PairingRule } from "@/lib/types";
 import type { AiSmartCommandAction } from "@/lib/aiSmartCommandTypes";
 import { FirebaseSharedRosterAuthCard } from "@/components/FirebaseSharedRosterAuthCard";
 import { FirebaseSharedRosterPublishCard } from "@/components/FirebaseSharedRosterPublishCard";
-import { SharedRosterAutosyncStatus } from "@/components/SharedRosterAutosyncStatus";
+import {
+  SharedRosterAutosyncStatus,
+  sharedRosterAutosyncCatalogPresentation,
+} from "@/components/SharedRosterAutosyncStatus";
 import { SharedWorkspaceCabinetCard } from "@/components/SharedWorkspaceCabinetCard";
 import { Button } from "@/components/ui/button";
 import stripesLogo from "@/assets/stripes-logo-mark.png";
@@ -93,11 +96,9 @@ import {
 import { pickGoogleSheetRosterFile, warmUpGoogleDrivePicker } from "@/lib/googleDrivePicker";
 import { leaveFirebaseSharedRosterAccess, readFirebaseSharedRoster, type FirebaseSharedRosterSnapshot, type FirebaseSharedRosterSummary } from "@/lib/sharedRosterService";
 import {
-  activeSharedWorkspaceAuthorityMessage,
   useActiveSharedWorkspaceAuthority,
 } from "@/lib/activeSharedWorkspaceAuthority";
 import { useActiveSharedRosterAutosync } from "@/lib/sharedRosterAutosync";
-import { sharedRosterAutosyncPresentation } from "@/lib/sharedRosterAutosyncController";
 import { firebaseSharedRosterMaterialRevisionKey } from "@/lib/sharedRosterSyncPayload";
 import { fetchClubRatingSummaries, type ClubRatingSummary } from "@/lib/clubCollaborationService";
 import { profileFromAveragedAttributes } from "@/lib/playerStyleProfile";
@@ -113,6 +114,18 @@ import {
   workspaceClosureConfirmationMatches,
   type SharedWorkspaceClosureState,
 } from "@/lib/sharedWorkspaceClosureService";
+import {
+  formatDateTime,
+  formatList,
+  formatNumber,
+  formatPercent,
+  getResolvedUiLocale,
+  activeSharedWorkspaceAuthorityText,
+  sharedRosterGroupNameText,
+  sharedRosterSummaryNameText,
+  translate,
+  useStripesTranslation,
+} from "@/i18n";
 
 const GROUP_NAME_STORAGE_KEY = "fair-teams-group-name";
 const HEADER_COLOR_STORAGE_KEY = "fair-teams-header-color-v2";
@@ -120,6 +133,7 @@ const GROUP_LOGO_STORAGE_KEY = "fair-teams-group-logo";
 const DEFAULT_GROUP_NAME = "My Group";
 const DEFAULT_HEADER_COLOR = "#FFFFFF";
 const EMPTY_ROSTER_NAME = "New roster";
+const DEFAULT_SHARED_ROSTER_NAME = "Shared roster";
 const ROSTERS_STORAGE_KEY = "fair-teams-rosters-v1";
 const DRIVE_RECIPIENTS_STORAGE_KEY = "fair-teams-drive-backup-recipients-v1";
 const DRIVE_ACTIVE_BACKUP_STORAGE_KEY = "fair-teams-drive-active-backup-v1";
@@ -141,6 +155,10 @@ function readStoredGroupName() {
   } catch {
     return DEFAULT_GROUP_NAME;
   }
+}
+
+function isDefaultEmptyRosterName(value: string) {
+  return value === EMPTY_ROSTER_NAME;
 }
 
 function readStoredHeaderColor() {
@@ -186,12 +204,14 @@ function timestampForFilename(date = new Date()) {
 }
 
 function allRostersDriveBackupFilename(rosters: RoomRoster[]) {
-  const readableName = rosters.length === 1 ? rosters[0]?.name || "Roster" : "All rosters";
+  const readableName = rosters.length === 1
+    ? rosters[0]?.name || translate("app.defaults.rosterName")
+    : translate("app.defaults.allRostersName");
   return `Stripes - ${slugifyFilename(readableName)} - ${timestampForFilename()}.json`;
 }
 
 function uniqueRosterName(name: string, rosters: RoomRoster[]) {
-  const base = name.replace(/\s+/g, " ").trim() || "New roster";
+  const base = name.replace(/\s+/g, " ").trim() || EMPTY_ROSTER_NAME;
   const taken = new Set(rosters.map((roster) => roster.name.toLowerCase()));
   if (!taken.has(base.toLowerCase())) return base;
   let index = 2;
@@ -200,30 +220,31 @@ function uniqueRosterName(name: string, rosters: RoomRoster[]) {
 }
 
 function RosterKindBadge({ roster }: { roster: RoomRoster }) {
+  const { t } = useStripesTranslation();
   const shared = isRosterCloudShared(roster);
   return (
     <span
       className={`inline-flex h-5 shrink-0 items-center rounded-full px-1.5 text-[11px] font-black uppercase tracking-wide ${shared ? "bg-violet-50 text-violet-700 ring-1 ring-violet-100" : "bg-slate-100 text-slate-500"}`}
-      title={shared ? "Shared roster" : "Local roster"}
+      title={shared ? t("app.rosterKind.sharedTitle") : t("app.rosterKind.localTitle")}
     >
-      {shared ? "Shared" : "Local"}
+      {shared ? t("app.rosterKind.shared") : t("app.rosterKind.local")}
     </span>
   );
 }
 
 const GROUP_COLOR_THEMES = [
-  { name: "White", value: "#FFFFFF" },
-  { name: "Blue", value: "#3B82F6" },
-  { name: "Teal", value: "#14B8A6" },
-  { name: "Green", value: "#22C55E" },
-  { name: "Lime", value: "#84CC16" },
-  { name: "Yellow", value: "#FACC15" },
-  { name: "Orange", value: "#F97316" },
-  { name: "Red", value: "#EF4444" },
-  { name: "Pink", value: "#EC4899" },
-  { name: "Purple", value: "#8B5CF6" },
-  { name: "Gray", value: "#64748B" },
-];
+  { name: "White", labelKey: "app.rosterColor.white", value: "#FFFFFF" },
+  { name: "Blue", labelKey: "app.rosterColor.blue", value: "#3B82F6" },
+  { name: "Teal", labelKey: "app.rosterColor.teal", value: "#14B8A6" },
+  { name: "Green", labelKey: "app.rosterColor.green", value: "#22C55E" },
+  { name: "Lime", labelKey: "app.rosterColor.lime", value: "#84CC16" },
+  { name: "Yellow", labelKey: "app.rosterColor.yellow", value: "#FACC15" },
+  { name: "Orange", labelKey: "app.rosterColor.orange", value: "#F97316" },
+  { name: "Red", labelKey: "app.rosterColor.red", value: "#EF4444" },
+  { name: "Pink", labelKey: "app.rosterColor.pink", value: "#EC4899" },
+  { name: "Purple", labelKey: "app.rosterColor.purple", value: "#8B5CF6" },
+  { name: "Gray", labelKey: "app.rosterColor.gray", value: "#64748B" },
+] as const;
 
 function hexToRgba(hex: string, alpha: number) {
   const normalized = /^#[0-9A-Fa-f]{6}$/.test(hex) ? hex : DEFAULT_HEADER_COLOR;
@@ -376,28 +397,31 @@ function countBackupRosters(rosters: RoomRoster[]): DriveBackupSummary {
 }
 
 function formatBackupSummary(summary: DriveBackupSummary | null | undefined) {
-  if (!summary) return "Unknown";
-  return `${summary.rosterCount} roster${summary.rosterCount === 1 ? "" : "s"} ¬∑ ${summary.playerCount} player${summary.playerCount === 1 ? "" : "s"}`;
+  if (!summary) return translate("app.backup.summaryUnknown");
+  return translate("app.backup.summary", {
+    rosterCount: summary.rosterCount,
+    rosterLabel: translate("app.count.roster", { count: summary.rosterCount }),
+    playerCount: summary.playerCount,
+    playerLabel: translate("common.playerCount", { count: summary.playerCount }),
+  });
 }
 
 function formatTodayStartDateLabel(date = new Date()) {
-  const weekday = new Intl.DateTimeFormat("en-US", { weekday: "short" })
-    .format(date)
-    .toUpperCase();
-  const month = new Intl.DateTimeFormat("en-US", { month: "short" })
-    .format(date)
-    .toUpperCase();
-  const day = new Intl.DateTimeFormat("en-US", { day: "numeric" }).format(date);
+  const locale = getResolvedUiLocale();
+  const weekday = formatDateTime(locale, date, { weekday: "short" }).toUpperCase();
+  const month = formatDateTime(locale, date, { month: "short" }).toUpperCase();
+  const day = formatDateTime(locale, date, { day: "numeric" });
 
-  return `${weekday} ¬∑ ${month} ${day}`;
+  return translate("app.date.sessionLabel", { weekday, month, day });
 }
 
 function formatTeamsSessionDateLabel(date = new Date()) {
-  const weekday = new Intl.DateTimeFormat("en-US", { weekday: "short" }).format(date);
-  const month = new Intl.DateTimeFormat("en-US", { month: "short" }).format(date);
-  const day = new Intl.DateTimeFormat("en-US", { day: "numeric" }).format(date);
+  const locale = getResolvedUiLocale();
+  const weekday = formatDateTime(locale, date, { weekday: "short" });
+  const month = formatDateTime(locale, date, { month: "short" });
+  const day = formatDateTime(locale, date, { day: "numeric" });
 
-  return `${weekday} ¬∑ ${month} ${day}`;
+  return translate("app.date.sessionLabel", { weekday, month, day });
 }
 
 const APP_TAB_VALUES = ["players", "teams", "club"] as const;
@@ -419,6 +443,7 @@ function TeamStripesIcon({ className = "h-5 w-5" }: { className?: string }) {
 }
 
 function App() {
+  const { t, locale } = useStripesTranslation();
   const [showSplash, setShowSplash] = useState(true);
   const [workspaceInvitationQuery, setWorkspaceInvitationQuery] = useState(() =>
     workspaceInvitationQueryFromUrl(window.location.href),
@@ -491,26 +516,26 @@ function App() {
   const tutorialActive = Boolean(tutorialStep);
 
   const tutorialCopy: Record<string, { title: string; body: string }> = {
-    "open-add": { title: "Build your roster", body: "Tap the glowing Add Player button." },
-    "add-manual": { title: "Add the player", body: "Choose Add manually. We filled in the practice player for you." },
-    "submit-player": { title: "Add the player", body: "Tap Add Player to add Heung-min to the practice roster." },
-    "open-edit": { title: "Edit the player", body: "Open Heung-min‚Äôs edit button." },
-    "advanced-edit": { title: "Advanced Edit", body: "Open Advanced Edit. It is optional, but useful when you know a player well." },
-    "save-edit": { title: "Save the profile", body: "You have seen the detailed controls. Save the player profile." },
-    "flip-card": { title: "See the other side", body: "Tap Heung-min‚Äôs card to flip it and see more player information." },
-    "today-tab": { title: "Teams", body: "Open Teams to choose who is playing today." },
-    "select-today": { title: "Who is playing?", body: "Select Heung-min for this Session." },
+    "open-add": { title: t("app.tutorial.openAdd.title"), body: t("app.tutorial.openAdd.body") },
+    "add-manual": { title: t("app.tutorial.addManual.title"), body: t("app.tutorial.addManual.body") },
+    "submit-player": { title: t("app.tutorial.submitPlayer.title"), body: t("app.tutorial.submitPlayer.body") },
+    "open-edit": { title: t("app.tutorial.openEdit.title"), body: t("app.tutorial.openEdit.body") },
+    "advanced-edit": { title: t("app.tutorial.advancedEdit.title"), body: t("app.tutorial.advancedEdit.body") },
+    "save-edit": { title: t("app.tutorial.saveEdit.title"), body: t("app.tutorial.saveEdit.body") },
+    "flip-card": { title: t("app.tutorial.flipCard.title"), body: t("app.tutorial.flipCard.body") },
+    "today-tab": { title: t("app.tutorial.todayTab.title"), body: t("app.tutorial.todayTab.body") },
+    "select-today": { title: t("app.tutorial.selectToday.title"), body: t("app.tutorial.selectToday.body") },
 
-    "generate": { title: "Create the teams", body: "Tap Generate. Stripes will balance the selected players." },
-    "magic-wait": { title: "Balancing the session‚Ä¶", body: "Stripes is comparing the selected players and building even teams." },
-    "magic-reveal": { title: "That‚Äôs the magic", body: "Each stripe is a team ‚Äî balanced and ready to play." },
-    "club-tab": { title: "Organize together", body: "Open Club to see the tools shared by co-organizers." },
-    "club-intro": { title: "Club is for shared rosters", body: "Use Club when several organizers work on one roster together. If you use local rosters, you can skip this tab." },
-    "help-question": { title: "Ask Stripes Help", body: "The question is ready. Tap Ask to see how in-app help works." },
-    "roster-return": { title: "Back to your roster", body: "Return to Roster for the final setup step." },
-    "settings-button": { title: "Roster controls", body: "Tap Settings to switch rosters, create new ones, and manage the app." },
-    "recap": { title: "Your roster is ready", body: "One last look at the four main areas." },
-    "create-roster": { title: "Now make it yours", body: "Name your real roster and tap New." },
+    "generate": { title: t("app.tutorial.generate.title"), body: t("app.tutorial.generate.body") },
+    "magic-wait": { title: t("app.tutorial.magicWait.title"), body: t("app.tutorial.magicWait.body") },
+    "magic-reveal": { title: t("app.tutorial.magicReveal.title"), body: t("app.tutorial.magicReveal.body") },
+    "club-tab": { title: t("app.tutorial.clubTab.title"), body: t("app.tutorial.clubTab.body") },
+    "club-intro": { title: t("app.tutorial.clubIntro.title"), body: t("app.tutorial.clubIntro.body") },
+    "help-question": { title: t("app.tutorial.helpQuestion.title"), body: t("app.tutorial.helpQuestion.body") },
+    "roster-return": { title: t("app.tutorial.rosterReturn.title"), body: t("app.tutorial.rosterReturn.body") },
+    "settings-button": { title: t("app.tutorial.settingsButton.title"), body: t("app.tutorial.settingsButton.body") },
+    "recap": { title: t("app.tutorial.recap.title"), body: t("app.tutorial.recap.body") },
+    "create-roster": { title: t("app.tutorial.createRoster.title"), body: t("app.tutorial.createRoster.body") },
   };
 
   const [aiTeamSetup, setAiTeamSetup] = useState<{ token: number; teamCount: number | null; autoGenerate?: boolean; shuffleEquals?: boolean }>({ token: 0, teamCount: null, autoGenerate: false, shuffleEquals: false });
@@ -580,13 +605,18 @@ function App() {
     rosters.find((roster) => roster.id === activeRosterId) || rosters[0];
   const players = activeRoster?.players || [];
   const pairingRules = activeRoster?.pairingRules || [];
-  const activeRosterName = activeRoster?.name || "Default roster";
+  const activeRosterName = activeRoster?.name || t("app.defaults.defaultRosterName");
   const headerColor = rosterThemeColor(activeRoster);
   const groupLogo = rosterLogo(activeRoster);
   const isEmptyStarterRoster =
-    rosters.length === 1 && players.length === 0 && activeRosterName === EMPTY_ROSTER_NAME;
+    rosters.length === 1 && players.length === 0 && isDefaultEmptyRosterName(activeRosterName);
+  const activeRosterDisplayName = isEmptyStarterRoster
+    ? t("app.defaults.emptyRosterName")
+    : activeRosterName;
   const privateBackupRosters = privateLocalRosters(rosters);
-  const hasPrivateBackupRosters = privateBackupRosters.some((roster) => roster.players.length > 0 || roster.name !== EMPTY_ROSTER_NAME);
+  const hasPrivateBackupRosters = privateBackupRosters.some(
+    (roster) => roster.players.length > 0 || !isDefaultEmptyRosterName(roster.name),
+  );
   const privateBackupSummary = hasPrivateBackupRosters ? countBackupRosters(privateBackupRosters) : { rosterCount: 0, playerCount: 0 };
   const deviceBackupSummary = privateBackupSummary;
   const googleDriveConfig = getGoogleDriveConfig();
@@ -664,27 +694,29 @@ function App() {
   const googleDriveReconnectRequired = googleDriveConnectionSnapshot.status === "expired";
   const googleDriveCanDisconnect = canDisconnectGoogleDrive(googleDriveConnectionSnapshot);
   const googleDriveStatusText = !googleDriveConfig.isConfigured
-    ? "Add Google Client ID and API key to .env.local"
+    ? t("app.google.status.notConfigured")
     : googleDriveConnecting
-      ? "Connecting..."
+      ? t("app.google.status.connecting")
       : googleDriveConnected
-        ? connectedDriveUser?.emailAddress || "Connected account unavailable"
+        ? connectedDriveUser?.emailAddress || t("app.google.status.connectedAccountUnavailable")
         : googleDriveReconnectRequired
           ? connectedDriveUser?.emailAddress
-            ? `${connectedDriveUser.emailAddress} ¬∑ Reconnect required`
-            : "Reconnect required"
+            ? t("app.google.status.accountReconnectRequired", {
+                email: connectedDriveUser.emailAddress,
+              })
+            : t("app.google.status.reconnectRequired")
           : googleDriveConnectionSnapshot.status === "error"
-            ? googleDriveConnectionSnapshot.error || "Connection failed"
-            : "Not signed in";
+            ? googleDriveConnectionSnapshot.error || t("app.google.status.connectionFailed")
+            : t("app.google.status.notSignedIn");
   const googleDriveActionLabel = googleDriveConnecting
-    ? "Connecting..."
+    ? t("app.google.status.connecting")
     : googleDriveConnected
-      ? "Disconnect"
+      ? t("app.google.disconnect")
       : googleDriveReconnectRequired || (
           googleDriveConnectionSnapshot.status === "error" && Boolean(connectedDriveUser)
         )
-        ? "Reconnect"
-        : "Sign in";
+        ? t("app.google.action.reconnect")
+        : t("app.google.action.signIn");
   const activeGoogleSheetSource =
     activeRoster?.cloudSource?.provider === "google-sheets"
       ? activeRoster.cloudSource
@@ -759,11 +791,11 @@ function App() {
     const normalized = email.trim().toLowerCase();
     const savedName = activeFirebaseEquipmentHolderNamesByEmail[normalized] || activeFirebaseEquipmentHolderNamesByEmail[email];
     if (savedName?.trim()) return savedName.trim();
-    return (normalized.split("@")[0] || "Organizer")
+    return (normalized.split("@")[0] || t("app.defaults.organizerName"))
       .replace(/[._-]+/g, " ")
       .replace(/\s+/g, " ")
       .trim()
-      .replace(/\b\w/g, (char) => char.toUpperCase()) || "Organizer";
+      .replace(/\b\w/g, (char) => char.toUpperCase()) || t("app.defaults.organizerName");
   };
   const activeFirebaseSharedPersonNames = activeFirebaseEquipmentHolderLabels
     .map(cleanFirebasePersonLabel)
@@ -838,12 +870,6 @@ function App() {
     activeAuthoritativeRoster?.currentUserRole,
     activeAuthoritativeRoster?.updatedAt,
   ]);
-  const sharedGoogleSheetRosters = rosters.filter(
-    (roster) => roster.cloudSource?.provider === "google-sheets" && Boolean(roster.cloudSource.spreadsheetId),
-  );
-  const sharedGoogleSheetRosterCount = sharedGoogleSheetRosters.length;
-  const activeRosterActionName = activeRosterName.length > 18 ? "this roster" : activeRosterName;
-  const sharedRosterCountLabel = `${sharedGoogleSheetRosterCount} shared roster${sharedGoogleSheetRosterCount === 1 ? "" : "s"}`;
   const activeRosterUpdatedAt = new Date(activeRoster?.updatedAt || "").getTime();
   const activeRosterLastSyncedAt = new Date(activeGoogleSheetSource?.lastSyncedAt || "").getTime();
   const activeGoogleSheetHasUnsavedChanges =
@@ -914,7 +940,7 @@ function App() {
     setRosterToolsNotice({ title, message, tone });
   };
 
-  const googleDriveErrorMessage = (error: unknown, fallback = "Please try again.") => {
+  const googleDriveErrorMessage = (error: unknown, fallback = t("app.errors.tryAgain")) => {
     const message = error instanceof Error ? error.message : fallback;
     if (isGoogleDriveAuthorizationExpiredError(error)) {
       googleDriveConnection.markExpired(message);
@@ -935,10 +961,12 @@ function App() {
   };
 
   const formatDriveModifiedTime = (value?: string) => {
-    if (!value) return "Updated time unknown";
+    if (!value) return t("app.drive.updatedUnknown");
     const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return "Updated time unknown";
-    return `Updated ${date.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+    if (Number.isNaN(date.getTime())) return t("app.drive.updatedUnknown");
+    return t("app.drive.updated", {
+      date: formatDateTime(locale, date, { month: "short", day: "numeric" }),
+    });
   };
 
   const cleanPersonName = (value?: string) => {
@@ -969,12 +997,12 @@ function App() {
     const name = cleanPersonName(owner?.displayName || (isGoogleSheetOwnedByMe(file) ? connectedDriveUser?.displayName : ""));
     if (name) return name;
     const email = getGoogleSheetOwnerEmail(file);
-    return email || "Another organizer";
+    return email || t("app.shared.anotherOrganizer");
   };
 
   const getGoogleSheetOwnerLabel = (file?: GoogleSheetRosterFile | null) => {
-    if (!file) return "Owner unknown";
-    return `Owner: ${getGoogleSheetOwnerName(file)}`;
+    if (!file) return t("app.shared.ownerUnknown");
+    return t("app.shared.ownerLabel", { name: getGoogleSheetOwnerName(file) });
   };
 
 
@@ -994,30 +1022,55 @@ function App() {
   };
 
   const getGoogleSheetSharedByLine = (file?: GoogleSheetRosterFile | null) => {
-    if (!file) return "Shared details unknown";
+    if (!file) return t("app.shared.detailsUnknown");
     if (isGoogleSheetOwnedByMe(file)) {
-      return connectedDriveUser?.emailAddress ? `Owned by ${connectedDriveUser.emailAddress}` : "Owned by this Google account";
+      return connectedDriveUser?.emailAddress
+        ? t("app.shared.ownedBy", { owner: connectedDriveUser.emailAddress })
+        : t("app.shared.ownedByCurrentGoogleAccount");
     }
     const sharedByName = getGoogleSheetSharedByName(file);
     const sharedByEmail = getGoogleSheetSharedByEmail(file);
-    if (sharedByName) return `Shared by ${sharedByName}${sharedByEmail && sharedByEmail !== sharedByName ? ` ¬∑ ${sharedByEmail}` : ""}`;
+    if (sharedByName) {
+      return t("app.shared.sharedBy", {
+        person: sharedByName,
+        emailSuffix: sharedByEmail && sharedByEmail !== sharedByName ? ` ¬∑ ${sharedByEmail}` : "",
+      });
+    }
     const ownerName = getGoogleSheetOwnerName(file);
     const ownerEmail = getGoogleSheetOwnerEmail(file);
-    return `Owner: ${ownerName}${ownerEmail && ownerEmail !== ownerName ? ` ¬∑ ${ownerEmail}` : ""}`;
+    return t("app.shared.ownerLabel", {
+      name: `${ownerName}${ownerEmail && ownerEmail !== ownerName ? ` ¬∑ ${ownerEmail}` : ""}`,
+    });
   };
 
   const formatSheetSyncTime = (value?: string) => {
-    if (!value) return "Not synced yet";
+    if (!value) return t("app.shared.notSyncedYet");
     const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return "Sync time unknown";
-    return `Synced ${date.toLocaleDateString(undefined, { month: "short", day: "numeric" })} ${date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`;
+    if (Number.isNaN(date.getTime())) return t("app.shared.syncTimeUnknown");
+    return t("app.shared.syncedAt", {
+      date: formatDateTime(locale, date, { month: "short", day: "numeric" }),
+      time: formatDateTime(locale, date, { hour: "2-digit", minute: "2-digit" }),
+    });
+  };
+
+  const formatSheetSavedTime = (value?: string) => {
+    if (!value) return t("app.shared.savedNotSyncedYet");
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return t("app.shared.savedTimeUnknown");
+    return t("app.shared.savedAt", {
+      date: formatDateTime(locale, date, { month: "short", day: "numeric" }),
+      time: formatDateTime(locale, date, { hour: "2-digit", minute: "2-digit" }),
+    });
   };
 
   const formatSheetModifiedTime = (value?: string) => {
-    if (!value) return "unknown time";
+    if (!value) return t("app.time.unknown");
     const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return "unknown time";
-    return `${date.toLocaleDateString(undefined, { month: "short", day: "numeric" })} ${date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`;
+    if (Number.isNaN(date.getTime())) return t("app.time.unknown");
+    return t("app.time.dateAndTime", {
+      date: formatDateTime(locale, date, { month: "short", day: "numeric" }),
+      time: formatDateTime(locale, date, { hour: "2-digit", minute: "2-digit" }),
+    });
   };
 
   const isGoogleSheetRemoteNewer = (remoteModifiedAt?: string, lastKnownRemoteModifiedAt?: string) => {
@@ -1081,28 +1134,30 @@ function App() {
   const describeDriveFileSource = (file: GoogleDriveFileResult, tab: DriveBackupTab) => {
     if (tab === "shared") {
       const sharedBy = file.sharingUser?.displayName || file.sharingUser?.emailAddress;
-      return sharedBy ? `Shared by ${sharedBy}` : "Shared with me";
+      return sharedBy
+        ? t("app.shared.sharedBy", { person: sharedBy, emailSuffix: "" })
+        : t("app.drive.sharedWithMe");
     }
-    return "My Drive";
+    return t("app.drive.myDrive");
   };
 
   const normalizeShareEmail = (value: string) => value.trim().toLowerCase();
 
   const validateShareEmail = (value: string) => {
     const email = normalizeShareEmail(value);
-    if (!email) return "Enter one email address.";
-    if (email.includes(",") || email.includes(";")) return "Enter only one email address for now.";
-    if (/\s/.test(email)) return "Remove spaces from the email address.";
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return "Enter a valid email address.";
+    if (!email) return t("app.validation.email.required");
+    if (email.includes(",") || email.includes(";")) return t("app.validation.email.oneOnly");
+    if (/\s/.test(email)) return t("app.validation.email.noSpaces");
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return t("app.validation.email.invalid");
     return "";
   };
 
   const formatDrivePermissionRole = (role: string) => {
-    if (role === "owner") return "Owner";
-    if (role === "writer") return "Editor";
-    if (role === "commenter") return "Commenter";
-    if (role === "reader") return "Viewer";
-    return role || "Access";
+    if (role === "owner") return t("app.access.owner");
+    if (role === "writer") return t("app.access.editor");
+    if (role === "commenter") return t("app.access.commenter");
+    if (role === "reader") return t("app.access.viewer");
+    return role || t("app.access.generic");
   };
 
   const drivePermissionIsInherited = (permission: GoogleDrivePermissionResult) =>
@@ -1110,7 +1165,11 @@ function App() {
 
   const drivePermissionLabel = (permission: GoogleDrivePermissionResult) =>
     permission.emailAddress || permission.displayName ||
-    (permission.type === "anyone" ? "Anyone with the link" : permission.type === "domain" ? "Domain access" : "Unknown access");
+    (permission.type === "anyone"
+      ? t("app.access.anyoneWithLink")
+      : permission.type === "domain"
+        ? t("app.access.domain")
+        : t("app.access.unknown"));
 
   const canRemoveDrivePermission = (permission: GoogleDrivePermissionResult) =>
     permission.id &&
@@ -1165,8 +1224,8 @@ function App() {
   const downloadAllRostersBackup = () => {
     if (!hasPrivateBackupRosters) {
       showRosterToolsNotice(
-        "No local rosters to export",
-        "Shared rosters stay online. Open Shared rosters to reopen them, or make a private copy first.",
+        t("app.notices.noLocalRostersToExport.title"),
+        t("app.notices.noLocalRostersToExport.message"),
         "warning",
       );
       return;
@@ -1176,7 +1235,13 @@ function App() {
       rostersToBackupJson(rosters, activeRosterId),
       "application/json;charset=utf-8",
     );
-    showRosterToolsNotice("Local backup exported", `Exported ${formatBackupSummary(privateBackupSummary)}. Shared rosters were not included.`, "success");
+    showRosterToolsNotice(
+      t("app.notices.localBackupExported.title"),
+      t("app.notices.localBackupExported.message", {
+        summary: formatBackupSummary(privateBackupSummary),
+      }),
+      "success",
+    );
   };
 
   useEffect(() => {
@@ -1313,7 +1378,7 @@ function App() {
     activeTab === "teams" && teamsWorkspaceView === "setup" && rosters.length > 0 && !todayRosterChosen;
   const headerDisplayName = shouldShowTodayStartHeader
     ? formatTodayStartDateLabel()
-    : activeRosterName || "Stripes";
+    : activeRosterName || t("common.brand.stripes");
   const isWhiteHeaderColor = headerColor.toLowerCase() === "#ffffff";
   const identityAccentColor = shouldShowTodayStartHeader
     ? "#E2E8F0"
@@ -1402,7 +1467,7 @@ function App() {
           .filter((playerId): playerId is string => Boolean(playerId)),
       );
       if (playerIds.size === 0) {
-        throw new Error("I understood a player-selection request, but could not match any roster players.");
+        throw new Error(t("app.ai.errors.playerSelectionNoMatch"));
       }
 
       const shouldReplaceTodaySelection = /replace|exact|only/i.test(String(action.distribution || ""));
@@ -1427,15 +1492,20 @@ function App() {
           teamCount = playerIds.size / playersPerTeam;
         }
         if (!teamCount || teamCount < 2 || playerIds.size < teamCount) {
-          return `Replaced Session with ${playerIds.size} player${playerIds.size === 1 ? "" : "s"}. I still need a valid team count before generating teams.`;
+          return t("app.ai.results.sessionReplacedNeedsTeamCount", {
+            count: playerIds.size,
+          });
         }
         const safeTeamCount = prepareTeamsFromAi(teamCount, { autoGenerate: true });
-        return `Replaced Session with ${playerIds.size} player${playerIds.size === 1 ? "" : "s"} and generated ${safeTeamCount} balanced team${safeTeamCount === 1 ? "" : "s"}.`;
+        return t("app.ai.results.sessionReplacedAndGenerated", {
+          count: playerIds.size,
+          teamCount: safeTeamCount,
+        });
       }
 
       return shouldReplaceTodaySelection
-        ? `Replaced Session with ${playerIds.size} player${playerIds.size === 1 ? "" : "s"}.`
-        : `Added/selected ${playerIds.size} player${playerIds.size === 1 ? "" : "s"} for Session without clearing the current selection.`;
+        ? t("app.ai.results.sessionReplaced", { count: playerIds.size })
+        : t("app.ai.results.playersSelected", { count: playerIds.size });
     }
 
     if (action.type === "mark_players_late") {
@@ -1445,7 +1515,7 @@ function App() {
           .filter((playerId): playerId is string => Boolean(playerId)),
       );
       if (playerIds.size === 0) {
-        throw new Error("I understood a late-player request, but could not match any roster players.");
+        throw new Error(t("app.ai.errors.latePlayersNoMatch"));
       }
 
       replacePlayers(
@@ -1456,7 +1526,7 @@ function App() {
         ),
       );
       setTodayRosterChosen(true);
-      return `Marked ${playerIds.size} player${playerIds.size === 1 ? "" : "s"} as late in Session.`;
+      return t("app.ai.results.playersMarkedLate", { count: playerIds.size });
     }
 
     if (action.type === "unselect_players") {
@@ -1466,7 +1536,7 @@ function App() {
           .filter((playerId): playerId is string => Boolean(playerId)),
       );
       if (playerIds.size === 0) {
-        throw new Error("I understood a remove-from-Session request, but could not match any roster players.");
+        throw new Error(t("app.ai.errors.removeFromSessionNoMatch"));
       }
 
       replacePlayers(
@@ -1477,13 +1547,13 @@ function App() {
         ),
       );
       setTodayRosterChosen(true);
-      return `Removed ${playerIds.size} player${playerIds.size === 1 ? "" : "s"} from Session without changing anyone else.`;
+      return t("app.ai.results.playersRemovedFromSession", { count: playerIds.size });
     }
 
     if (action.type === "add_new_player_suggestion") {
       const newPlayerName = action.newPlayerName?.trim();
       if (!newPlayerName) {
-        throw new Error("I understood a new-player request, but no player name was found.");
+        throw new Error(t("app.ai.errors.newPlayerNameMissing"));
       }
 
       const normalizeLookupName = (name: string) =>
@@ -1512,7 +1582,7 @@ function App() {
           ),
         );
         setTodayRosterChosen(true);
-        return `${duplicate.name} is already in this roster, so I selected them for Session.`;
+        return t("app.ai.results.existingPlayerSelected", { playerName: duplicate.name });
       }
 
       const suggestedSkill =
@@ -1545,59 +1615,83 @@ function App() {
       setReviewPlayerIndex(0);
       setReviewAutoOpenPlayerId(nextPlayer.id);
       setActiveTab("players");
-      return `Added ${nextPlayer.name} as a new player, selected them for Session, and opened their player profile for review.`;
+      return t("app.ai.results.newPlayerAdded", { playerName: nextPlayer.name });
     }
 
     if (action.type === "set_team_count") {
       if (typeof action.teamCount !== "number") {
-        throw new Error("I understood a team-count request, but no team count was found.");
+        throw new Error(t("app.ai.errors.teamCountMissing"));
       }
       const safeTeamCount = prepareTeamsFromAi(action.teamCount);
-      return `Prepared the Teams tab for ${safeTeamCount} team${safeTeamCount === 1 ? "" : "s"}.`;
+      return t("app.ai.results.teamCountPrepared", { count: safeTeamCount });
     }
 
     if (action.type === "set_team_size") {
       const playersPerTeam = action.playersPerTeam;
       if (typeof playersPerTeam !== "number" || playersPerTeam < 1) {
-        throw new Error("I understood a team-size request, but no team size was found.");
+        throw new Error(t("app.ai.errors.teamSizeMissing"));
       }
       const selectedCount = players.filter((player) => player.attending).length;
       if (selectedCount < playersPerTeam * 2) {
-        throw new Error(`${playersPerTeam}v${playersPerTeam} needs at least ${playersPerTeam * 2} selected players. Select more players first.`);
+        throw new Error(t("app.ai.errors.teamSizeNeedsMorePlayers", {
+          playersPerTeam,
+          minimum: playersPerTeam * 2,
+        }));
       }
       if (selectedCount % playersPerTeam !== 0) {
-        throw new Error(`${playersPerTeam}v${playersPerTeam} does not fit ${selectedCount} selected players evenly. Select ${playersPerTeam * 2}, ${playersPerTeam * 3}, or ${playersPerTeam * 4} players, or use a team-count command instead.`);
+        throw new Error(t("app.ai.errors.teamSizeDoesNotFitWithOptions", {
+          playersPerTeam,
+          selectedCount,
+          firstOption: playersPerTeam * 2,
+          secondOption: playersPerTeam * 3,
+          thirdOption: playersPerTeam * 4,
+        }));
       }
       const safeTeamCount = prepareTeamsFromAi(selectedCount / playersPerTeam);
-      return `Prepared ${safeTeamCount} team${safeTeamCount === 1 ? "" : "s"} for ${playersPerTeam}v${playersPerTeam}.`;
+      return t("app.ai.results.teamSizePrepared", {
+        count: safeTeamCount,
+        playersPerTeam,
+      });
     }
 
     if (action.type === "generate_teams") {
       const selectedCount = players.filter((player) => player.attending).length;
       if (selectedCount < 2) {
-        throw new Error("Select at least two players in Session before generating teams.");
+        throw new Error(t("app.ai.errors.selectTwoBeforeGenerating"));
       }
 
       let teamCount = typeof action.teamCount === "number" ? action.teamCount : null;
       const playersPerTeam = action.playersPerTeam;
       if (!teamCount && typeof playersPerTeam === "number" && playersPerTeam > 0) {
         if (selectedCount < playersPerTeam * 2) {
-          throw new Error(`${playersPerTeam}v${playersPerTeam} needs at least ${playersPerTeam * 2} selected players. Select more players first.`);
+          throw new Error(t("app.ai.errors.teamSizeNeedsMorePlayers", {
+            playersPerTeam,
+            minimum: playersPerTeam * 2,
+          }));
         }
         if (selectedCount % playersPerTeam !== 0) {
-          throw new Error(`${playersPerTeam}v${playersPerTeam} does not fit ${selectedCount} selected players evenly. Ask for a number of teams instead.`);
+          throw new Error(t("app.ai.errors.teamSizeDoesNotFitAskTeamCount", {
+            playersPerTeam,
+            selectedCount,
+          }));
         }
         teamCount = selectedCount / playersPerTeam;
       }
       if (!teamCount) {
-        throw new Error("I understood a generate-teams request, but I need the number of teams first.");
+        throw new Error(t("app.ai.errors.generateNeedsTeamCount"));
       }
       if (teamCount < 2 || selectedCount < teamCount) {
-        throw new Error(`I can‚Äôt make ${teamCount} teams from ${selectedCount} selected player${selectedCount === 1 ? "" : "s"}.`);
+        throw new Error(t("app.ai.errors.cannotMakeTeams", {
+          count: selectedCount,
+          teamCount,
+        }));
       }
       const shuffleEquals = /shuffle|different|mix|fresh|new/i.test(`${action.distribution || ""} ${action.reason || ""}`);
       const safeTeamCount = prepareTeamsFromAi(teamCount, { autoGenerate: true, shuffleEquals });
-      return `Generated ${safeTeamCount} balanced team${safeTeamCount === 1 ? "" : "s"} from ${selectedCount} selected player${selectedCount === 1 ? "" : "s"}.`;
+      return t("app.ai.results.teamsGenerated", {
+        count: selectedCount,
+        teamCount: safeTeamCount,
+      });
     }
 
     if (action.type === "add_pairing_rule") {
@@ -1607,7 +1701,7 @@ function App() {
         .filter((playerId): playerId is string => Boolean(playerId));
       const [playerAId, playerBId] = playerIds;
       if (!kind || !playerAId || !playerBId || playerAId === playerBId) {
-        throw new Error("I understood a pairing rule, but could not match two roster players.");
+        throw new Error(t("app.ai.errors.pairingPlayersNoMatch"));
       }
 
       const duplicate = pairingRules.some((rule) => {
@@ -1617,7 +1711,7 @@ function App() {
         return rule.kind === kind && samePlayers;
       });
       if (duplicate) {
-        return "That pairing rule already exists.";
+        return t("app.ai.results.pairingRuleExists");
       }
 
       const nextRule: PairingRule = {
@@ -1628,7 +1722,9 @@ function App() {
         createdAt: new Date().toISOString(),
       };
       replacePairingRules([...pairingRules, nextRule]);
-      return kind === "together" ? "Added a Keep Together rule." : "Added a Keep Separate rule.";
+      return kind === "together"
+        ? t("app.ai.results.keepTogetherAdded")
+        : t("app.ai.results.keepSeparateAdded");
     }
 
     if (action.type === "open_app_area") {
@@ -1641,19 +1737,32 @@ function App() {
             ? "club"
             : null;
       if (!targetTab || !isAppTab(targetTab)) {
-        throw new Error("I understood an open-area request, but I could not tell which Stripes tab to open.");
+        throw new Error(t("app.ai.errors.openAreaUnknown"));
       }
       if (targetTab === "teams" && (rawArea.includes("today") || rawArea.includes("session") || rawArea.includes("attendance"))) setTeamsWorkspaceView("setup");
       setActiveTab(targetTab);
-      return `Opened ${targetTab === "players" ? "Roster" : targetTab === "teams" ? "Teams" : "Club"}.`;
+      return t("app.ai.results.areaOpened", {
+        area: targetTab === "players"
+          ? t("app.navigation.roster")
+          : targetTab === "teams"
+            ? t("app.navigation.teams")
+            : t("app.navigation.club"),
+      });
     }
 
-    throw new Error("Stripes understands this, but it is not wired to apply yet.");
+    throw new Error(t("app.ai.errors.notWired"));
   };
 
 
   const openFirebaseSharedRosterAsLocalCopy = (sharedRoster: RoomRoster, sourceName: string, firebaseSummary?: FirebaseSharedRosterSummary) => {
     const firebaseRosterId = firebaseSummary?.id;
+    const displayRosterName = firebaseSummary
+      ? sharedRosterSummaryNameText(firebaseSummary, t)
+      : sourceName || sharedRoster.name || t("app.defaults.sharedRosterName");
+    const displayGroupName = firebaseSummary
+      ? sharedRosterGroupNameText(firebaseSummary, t)
+      : undefined;
+    const displayWorkspaceRosterName = `${displayGroupName ? `${displayGroupName} ¬∑ ` : ""}${displayRosterName}`;
     let openedExisting = false;
 
     setRosterState((current) => {
@@ -1671,8 +1780,11 @@ function App() {
 
       const imported = createRoster(
         firebaseSummary
-          ? sourceName || sharedRoster.name || "Shared roster"
-          : uniqueRosterName(sourceName || sharedRoster.name || "Firebase roster", current.rosters),
+          ? sourceName || sharedRoster.name || DEFAULT_SHARED_ROSTER_NAME
+          : uniqueRosterName(
+              sourceName || sharedRoster.name || t("app.defaults.firebaseRosterName"),
+              current.rosters,
+            ),
         sharedRoster.players,
         { themeColor: sharedRoster.themeColor },
       );
@@ -1709,10 +1821,16 @@ function App() {
     });
     setRosterToolsNotice({
       tone: "success",
-      title: openedExisting ? "Shared roster selected" : "Firebase roster opened",
+      title: openedExisting
+        ? t("app.notices.sharedRosterSelected.title")
+        : t("app.notices.firebaseRosterOpened.title"),
       message: openedExisting
-        ? `${firebaseSummary?.groupName ? `${firebaseSummary.groupName} ¬∑ ` : ""}${sourceName || sharedRoster.name || "Shared roster"} is already open on this device.`
-        : `${firebaseSummary?.groupName ? `${firebaseSummary.groupName} ¬∑ ` : ""}${sourceName || sharedRoster.name || "Shared roster"} was opened on this device. It remains an online shared roster connected to your account.`,
+        ? t("app.notices.sharedRosterSelected.message", {
+          rosterName: displayWorkspaceRosterName,
+        })
+        : t("app.notices.firebaseRosterOpened.message", {
+          rosterName: displayWorkspaceRosterName,
+        }),
     });
   };
 
@@ -1782,6 +1900,8 @@ function App() {
 
 
   const refreshActiveFirebaseRosterFromRemote = (remoteRoster: RoomRoster, sourceName: string, summary: FirebaseSharedRosterSummary, localRosterId?: string) => {
+    const displayRosterName = sharedRosterSummaryNameText(summary, t);
+    const displayGroupName = sharedRosterGroupNameText(summary, t);
     setRosterState((current) => {
       const targetRosterId = localRosterId || current.activeRosterId;
       return {
@@ -1839,8 +1959,11 @@ function App() {
     });
     setRosterToolsNotice({
       tone: "success",
-      title: "Shared roster updated",
-      message: `${summary.groupName ? `${summary.groupName} ¬∑ ` : ""}${sourceName || remoteRoster.name || "Shared roster"} shared player info and pairing rules were updated from online version ${summary.version}. Private/local rosters were not affected.`,
+      title: t("app.notices.sharedRosterUpdated.title"),
+      message: t("app.notices.sharedRosterUpdated.message", {
+        rosterName: `${displayGroupName ? `${displayGroupName} ¬∑ ` : ""}${displayRosterName}`,
+        version: summary.version,
+      }),
     });
   };
 
@@ -1925,7 +2048,12 @@ function App() {
         }, index);
       });
 
-      const copyName = uniqueRosterName(`${activeRoster.name || "Shared roster"} private copy`, rosters);
+      const copyName = uniqueRosterName(
+        t("app.defaults.privateCopyName", {
+          name: activeRoster.name || t("app.defaults.sharedRosterName"),
+        }),
+        rosters,
+      );
       const localCopy = normalizeRoster({
         ...createRoster(copyName, copiedPlayers, {
           themeColor: activeRoster.themeColor,
@@ -1945,8 +2073,11 @@ function App() {
       setActiveTab("players");
       const seededCount = copiedPlayers.filter((player) => clubSummaryByPlayerId.has(player.id)).length;
       showRosterToolsNotice(
-        "Private copy created",
-        `‚Äú${localCopy.name}‚Äù is a clean local roster. It copied shared names, Club stat averages, and GK flags for ${seededCount} player${seededCount === 1 ? "" : "s"}; photos and special abilities were reset.`,
+        t("app.notices.privateCopyCreated.title"),
+        t("app.notices.privateCopyCreated.message", {
+          count: seededCount,
+          rosterName: localCopy.name,
+        }),
         "success",
       );
     } finally {
@@ -1985,14 +2116,18 @@ function App() {
       setActiveTab("teams");
       setTodayRosterChosen(false);
       showRosterToolsNotice(
-        "Left shared roster",
+        t("app.notices.leftSharedRoster.title"),
         result.groupName
-          ? `You left ‚Äú${result.groupName}‚Äù. Shared roster copies from that group were removed from this device.`
-          : `You left ‚Äú${activeRosterName}‚Äù. The local opened copy was removed from this device.`,
+          ? t("app.notices.leftSharedRoster.groupMessage", { rosterName: result.groupName })
+          : t("app.notices.leftSharedRoster.rosterMessage", { rosterName: activeRosterName }),
         "success",
       );
     } catch (error) {
-      setLeaveSharedError(error instanceof Error ? error.message : "Could not leave the shared roster. Try again after signing in.");
+      setLeaveSharedError(
+        error instanceof Error
+          ? error.message
+          : t("app.errors.couldNotLeaveSharedRoster"),
+      );
     } finally {
       setLeaveSharedBusy(false);
     }
@@ -2011,8 +2146,9 @@ function App() {
       );
     },
   });
-  const activeSharedRosterAutosyncPresentation = sharedRosterAutosyncPresentation(
+  const activeSharedRosterAutosyncPresentation = sharedRosterAutosyncCatalogPresentation(
     activeSharedRosterAutosync,
+    t,
   );
 
 
@@ -2022,7 +2158,9 @@ function App() {
       closeSharedConfirm.workspaceName,
       closeSharedConfirmationName,
     )) {
-      setCloseSharedError(`Type ‚Äú${closeSharedConfirm.workspaceName}‚Äù exactly to confirm closure.`);
+      setCloseSharedError(t("app.workspaceClosure.typeExactly", {
+        workspaceName: closeSharedConfirm.workspaceName,
+      }));
       return;
     }
     setCloseSharedError("");
@@ -2052,12 +2190,18 @@ function App() {
       setActiveTab("teams");
       setTodayRosterChosen(false);
       showRosterToolsNotice(
-        "Shared workspace closed.",
-        `‚Äú${result.workspaceName}‚Äù and its Stripes-owned shared data were permanently deleted. Linked opened copies were removed from this device.`,
+        t("app.notices.sharedWorkspaceClosed.title"),
+        t("app.notices.sharedWorkspaceClosed.message", {
+          workspaceName: result.workspaceName,
+        }),
         "success",
       );
     } catch (error) {
-      setCloseSharedError(error instanceof Error ? error.message : "Could not close the shared workspace.");
+      setCloseSharedError(
+        error instanceof Error
+          ? error.message
+          : t("app.errors.couldNotCloseSharedWorkspace"),
+      );
     } finally {
       setCloseSharedBusy(false);
     }
@@ -2112,14 +2256,17 @@ function App() {
             {roster.cloudSource?.provider === "firebase" && roster.cloudSource.firebaseRosterId && (
               <span className="inline-flex h-5 shrink-0 items-center gap-0.5 rounded-full bg-white px-1.5 text-[10px] font-black text-violet-700 shadow-sm ring-1 ring-violet-100">
                 <Users className="h-3 w-3" />
-                {rosterFirebaseSharedPeopleCount(roster)}
+                {formatNumber(locale, rosterFirebaseSharedPeopleCount(roster))}
               </span>
             )}
           </span>
           <span className="mt-0.5 block text-[11px] font-bold text-slate-500">
-            {roster.players.length} player
-            {roster.players.length === 1 ? "" : "s"}
-            {shared ? " ¬∑ opens from Shared rosters" : " ¬∑ private on this device"}
+            {t(
+              shared
+                ? "app.rosterPicker.playerSummaryShared"
+                : "app.rosterPicker.playerSummaryLocal",
+              { count: roster.players.length },
+            )}
           </span>
         </span>
         {selected ? (
@@ -2139,9 +2286,11 @@ function App() {
     const isReplacingStarter =
       rosters.length === 1 &&
       players.length === 0 &&
-      activeRosterName === EMPTY_ROSTER_NAME;
+      isDefaultEmptyRosterName(activeRosterName);
     const name = uniqueRosterName(
-      newRosterName || (isReplacingStarter ? "Roster 1" : `Roster ${rosters.length + 1}`),
+      newRosterName || t("app.defaults.numberedRosterName", {
+        number: isReplacingStarter ? 1 : rosters.length + 1,
+      }),
       isReplacingStarter ? [] : rosters,
     );
     const roster = createRoster(name, []);
@@ -2149,7 +2298,7 @@ function App() {
       const currentIsStarter =
         current.rosters.length === 1 &&
         current.rosters[0]?.players.length === 0 &&
-        current.rosters[0]?.name === EMPTY_ROSTER_NAME;
+        isDefaultEmptyRosterName(current.rosters[0]?.name || "");
       return currentIsStarter
         ? { rosters: [roster], activeRosterId: roster.id }
         : { rosters: [...current.rosters, roster], activeRosterId: roster.id };
@@ -2162,7 +2311,11 @@ function App() {
     loginHint?: string;
   }) => {
     if (!googleDriveConfig.isConfigured) {
-      showRosterToolsNotice("Google Drive not configured", "Add VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_API_KEY before using Google Drive backup.", "warning");
+      showRosterToolsNotice(
+        t("app.notices.googleDriveNotConfigured.title"),
+        t("app.notices.googleDriveNotConfigured.backupMessage"),
+        "warning",
+      );
       return;
     }
 
@@ -2174,15 +2327,17 @@ function App() {
       void warmUpGoogleDrivePicker();
       const connectedAccessToken = googleDriveConnection.getAccessToken();
       showRosterToolsNotice(
-        "Google Drive connected",
-        "Google Drive is ready to use for backup and sheets.",
+        t("app.notices.googleDriveConnected.title"),
+        t("app.notices.googleDriveConnected.message"),
         "success",
       );
       return connectedAccessToken;
     }
     showRosterToolsNotice(
-      result.status === "expired" ? "Reconnect Google Drive" : "Could not connect Google Drive",
-      result.error || "Please try again.",
+      result.status === "expired"
+        ? t("app.notices.reconnectGoogleDrive.title")
+        : t("app.notices.couldNotConnectGoogleDrive.title"),
+      result.error || t("app.errors.tryAgain"),
       result.status === "expired" ? "warning" : "error",
     );
     return "";
@@ -2192,10 +2347,10 @@ function App() {
     googleDriveCabinet.reset();
     const result = await googleDriveConnection.disconnect();
     showRosterToolsNotice(
-      "Google Drive disconnected",
+      t("app.notices.googleDriveDisconnected.title"),
       result.revokeError
-        ? "This browser session is disconnected, but Google could not confirm authorization revocation."
-        : "This browser session is disconnected and no Drive token is retained.",
+        ? t("app.notices.googleDriveDisconnected.revokeUnconfirmedMessage")
+        : t("app.notices.googleDriveDisconnected.message"),
       result.revokeError ? "warning" : "info",
     );
   };
@@ -2242,7 +2397,7 @@ function App() {
       const currentIsStarter =
         current.rosters.length === 1 &&
         current.rosters[0]?.players.length === 0 &&
-        current.rosters[0]?.name === EMPTY_ROSTER_NAME;
+        isDefaultEmptyRosterName(current.rosters[0]?.name || "");
       const nextRosters = currentIsStarter ? [] : [...current.rosters];
       const prepared = preserveLocalImagesForDriveRosters(incomingRosters, current.rosters);
       const added = prepared.map((roster) => {
@@ -2278,7 +2433,11 @@ function App() {
 
   const previewGoogleDriveBackupFile = async (picked: { id: string; name: string; mimeType?: string }) => {
     if (!picked.name.toLowerCase().endsWith(".json") && picked.mimeType !== "application/json") {
-      showRosterToolsNotice("Choose a Stripes backup", "Please select a Stripes .json backup file.", "warning");
+      showRosterToolsNotice(
+        t("app.notices.chooseStripesBackup.title"),
+        t("app.notices.chooseStripesBackup.message"),
+        "warning",
+      );
       return;
     }
 
@@ -2299,7 +2458,7 @@ function App() {
         rosterNames: backup.rosters.map((roster) => roster.name),
       });
     } catch (error) {
-      showRosterToolsNotice("Could not open Google Drive backup", googleDriveErrorMessage(error), "error");
+      showRosterToolsNotice(t("app.notices.couldNotOpenDriveBackup.title"), googleDriveErrorMessage(error), "error");
     } finally {
       setGoogleDriveOpening(false);
     }
@@ -2307,11 +2466,19 @@ function App() {
 
   const openGoogleDriveBackup = async () => {
     if (!googleDriveConfig.isConfigured) {
-      showRosterToolsNotice("Google Drive not configured", "Add VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_API_KEY before using Google Drive backup.", "warning");
+      showRosterToolsNotice(
+        t("app.notices.googleDriveNotConfigured.title"),
+        t("app.notices.googleDriveNotConfigured.backupMessage"),
+        "warning",
+      );
       return;
     }
     if (!googleDriveAccessToken) {
-      showRosterToolsNotice("Sign in with Google first", "Sign in with your Google account before using Drive backup.", "warning");
+      showRosterToolsNotice(
+        t("app.notices.signInWithGoogleFirst.title"),
+        t("app.notices.signInWithGoogleFirst.backupMessage"),
+        "warning",
+      );
       return;
     }
 
@@ -2321,7 +2488,7 @@ function App() {
       setDriveBackupChoices(groups);
       setDriveBackupTab("mine");
     } catch (error) {
-      showRosterToolsNotice("Could not list Google Drive backups", googleDriveErrorMessage(error), "error");
+      showRosterToolsNotice(t("app.notices.couldNotListDriveBackups.title"), googleDriveErrorMessage(error), "error");
     } finally {
       setGoogleDriveOpening(false);
     }
@@ -2334,8 +2501,8 @@ function App() {
     if (file.ownedByMe === false) {
       setDriveBackupDeleteConfirm(null);
       showRosterToolsNotice(
-        "Cannot delete received backup",
-        "This backup belongs to someone else. Ask the owner to delete it, or remove it directly from Google Drive.",
+        t("app.notices.cannotDeleteReceivedBackup.title"),
+        t("app.notices.cannotDeleteReceivedBackup.message"),
         "warning",
       );
       return;
@@ -2355,9 +2522,13 @@ function App() {
         setCurrentDriveBackup(null);
       }
       setDriveBackupDeleteConfirm(null);
-      showRosterToolsNotice("Backup moved to trash", `${file.name} was moved to your Google Drive trash.`, "success");
+      showRosterToolsNotice(
+        t("app.notices.backupMovedToTrash.title"),
+        t("app.notices.backupMovedToTrash.message", { fileName: file.name }),
+        "success",
+      );
     } catch (error) {
-      showRosterToolsNotice("Could not delete backup", googleDriveErrorMessage(error), "error");
+      showRosterToolsNotice(t("app.notices.couldNotDeleteBackup.title"), googleDriveErrorMessage(error), "error");
     } finally {
       setGoogleDriveDeletingFileId("");
     }
@@ -2373,7 +2544,11 @@ function App() {
     rememberDriveBackup(driveImportPreview.file, { rosterCount: driveImportPreview.rosterCount, playerCount: driveImportPreview.playerCount });
     const rosterCount = driveImportPreview.rosterCount;
     setDriveImportPreview(null);
-    showRosterToolsNotice("Google Drive import complete", `Added ${rosterCount} roster${rosterCount === 1 ? "" : "s"} from Google Drive.`, "success");
+    showRosterToolsNotice(
+      t("app.notices.driveImportComplete.title"),
+      t("app.notices.driveImportComplete.addedMessage", { count: rosterCount }),
+      "success",
+    );
   };
 
   const confirmReplaceDriveImport = () => {
@@ -2382,21 +2557,37 @@ function App() {
     rememberDriveBackup(driveImportPreview.file, { rosterCount: driveImportPreview.rosterCount, playerCount: driveImportPreview.playerCount });
     const rosterCount = driveImportPreview.rosterCount;
     setDriveImportPreview(null);
-    showRosterToolsNotice("Google Drive import complete", `Replaced local rosters with ${rosterCount} roster${rosterCount === 1 ? "" : "s"} from Google Drive. Shared roster links are not restored from backups.`, "success");
+    showRosterToolsNotice(
+      t("app.notices.driveImportComplete.title"),
+      t("app.notices.driveImportComplete.replacedMessage", { count: rosterCount }),
+      "success",
+    );
   };
 
 
-  const createNewGoogleDriveBackupCopy = async (successTitle = "Saved to Google Drive") => {
+  const createNewGoogleDriveBackupCopy = async (successTitle = t("app.notices.savedToGoogleDrive.title")) => {
     if (!googleDriveConfig.isConfigured) {
-      showRosterToolsNotice("Google Drive not configured", "Add VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_API_KEY before using Google Drive backup.", "warning");
+      showRosterToolsNotice(
+        t("app.notices.googleDriveNotConfigured.title"),
+        t("app.notices.googleDriveNotConfigured.backupMessage"),
+        "warning",
+      );
       return;
     }
     if (!googleDriveAccessToken) {
-      showRosterToolsNotice("Sign in with Google first", "Sign in with your Google account before using Drive backup.", "warning");
+      showRosterToolsNotice(
+        t("app.notices.signInWithGoogleFirst.title"),
+        t("app.notices.signInWithGoogleFirst.backupMessage"),
+        "warning",
+      );
       return;
     }
     if (!hasPrivateBackupRosters) {
-      showRosterToolsNotice("No local rosters to back up", "Shared rosters stay online in Shared rosters. Make a private copy first if you want a local backup version.", "warning");
+      showRosterToolsNotice(
+        t("app.notices.noLocalRostersToBackUp.title"),
+        t("app.notices.noLocalRostersToBackUp.message"),
+        "warning",
+      );
       return;
     }
 
@@ -2409,10 +2600,14 @@ function App() {
         jsonText,
       );
       rememberDriveBackup(file, deviceBackupSummary);
-      const openText = file.webViewLink ? "\n\nThis is now the active Drive backup." : "";
-      showRosterToolsNotice(successTitle, `${file.name}${openText}`, "success");
+      const openText = file.webViewLink ? t("app.notices.savedToGoogleDrive.activeSuffix") : "";
+      showRosterToolsNotice(
+        successTitle,
+        t("app.notices.savedToGoogleDrive.message", { fileName: file.name, activeSuffix: openText }),
+        "success",
+      );
     } catch (error) {
-      showRosterToolsNotice("Could not save to Google Drive", googleDriveErrorMessage(error), "error");
+      showRosterToolsNotice(t("app.notices.couldNotSaveToGoogleDrive.title"), googleDriveErrorMessage(error), "error");
     } finally {
       setGoogleDriveSaving(false);
     }
@@ -2420,11 +2615,19 @@ function App() {
 
   const prepareDriveBackupUpdate = async () => {
     if (!googleDriveConfig.isConfigured) {
-      showRosterToolsNotice("Google Drive not configured", "Add VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_API_KEY before using Google Drive backup.", "warning");
+      showRosterToolsNotice(
+        t("app.notices.googleDriveNotConfigured.title"),
+        t("app.notices.googleDriveNotConfigured.backupMessage"),
+        "warning",
+      );
       return;
     }
     if (!googleDriveAccessToken) {
-      showRosterToolsNotice("Sign in with Google first", "Sign in with your Google account before using Drive backup.", "warning");
+      showRosterToolsNotice(
+        t("app.notices.signInWithGoogleFirst.title"),
+        t("app.notices.signInWithGoogleFirst.backupMessage"),
+        "warning",
+      );
       return;
     }
     if (!currentDriveBackup) {
@@ -2432,7 +2635,11 @@ function App() {
       return;
     }
     if (!hasPrivateBackupRosters) {
-      showRosterToolsNotice("No local rosters to back up", "Shared rosters stay online in Shared rosters. Make a private copy first if you want a local backup version.", "warning");
+      showRosterToolsNotice(
+        t("app.notices.noLocalRostersToBackUp.title"),
+        t("app.notices.noLocalRostersToBackUp.message"),
+        "warning",
+      );
       return;
     }
 
@@ -2481,7 +2688,7 @@ function App() {
   };
 
   const saveDriveBackupAsNewCopy = async () => {
-    await createNewGoogleDriveBackupCopy("Saved as new Drive copy");
+    await createNewGoogleDriveBackupCopy(t("app.notices.savedAsNewDriveCopy.title"));
   };
 
   const confirmUpdateCurrentGoogleDriveBackup = async () => {
@@ -2496,9 +2703,16 @@ function App() {
       );
       rememberDriveBackup(file, deviceBackupSummary);
       setDriveUpdateConfirm(null);
-      showRosterToolsNotice("Drive backup updated", `${file.name}\n\nNow contains ${formatBackupSummary(deviceBackupSummary)}.`, "success");
+      showRosterToolsNotice(
+        t("app.notices.driveBackupUpdated.title"),
+        t("app.notices.driveBackupUpdated.message", {
+          fileName: file.name,
+          summary: formatBackupSummary(deviceBackupSummary),
+        }),
+        "success",
+      );
     } catch (error) {
-      showRosterToolsNotice("Could not update Google Drive backup", googleDriveErrorMessage(error), "error");
+      showRosterToolsNotice(t("app.notices.couldNotUpdateDriveBackup.title"), googleDriveErrorMessage(error), "error");
     } finally {
       setGoogleDriveUpdating(false);
     }
@@ -2528,8 +2742,8 @@ function App() {
   const handleMissingActiveGoogleSheetLink = () => {
     removeActiveRosterGoogleSheetLink();
     showRosterToolsNotice(
-      "Shared file not found",
-      "This Google account cannot find the linked shared roster. It may have been deleted, moved to trash, or not shared with this account. Stripes kept the local roster on this device and removed the broken link. Use Open a shared roster to connect again.",
+      t("app.notices.sharedFileNotFound.title"),
+      t("app.notices.sharedFileNotFound.message"),
       "warning",
     );
   };
@@ -2551,20 +2765,20 @@ function App() {
 
   const disconnectActiveRosterFromGoogleSheet = () => {
     if (!activeGoogleSheetSource?.spreadsheetId) {
-      showRosterToolsNotice("No shared roster linked", "This roster is already saved only on this device.", "info");
+      showRosterToolsNotice(
+        t("app.notices.noSharedRosterLinked.title"),
+        t("app.notices.noSharedRosterLinked.localOnlyMessage"),
+        "info",
+      );
       return false;
     }
-    const confirmed = window.confirm(
-      `Stop syncing this roster?
-
-The shared Google Sheet will not be deleted. This device will keep a local copy only.`,
-    );
+    const confirmed = window.confirm(t("app.shared.stopSyncingConfirm"));
     if (!confirmed) return false;
 
     removeActiveRosterGoogleSheetLink();
     showRosterToolsNotice(
-      "Syncing stopped",
-      "This device now keeps a local copy only. The shared roster still exists and can be opened again later.",
+      t("app.notices.syncingStopped.title"),
+      t("app.notices.syncingStopped.message"),
       "success",
     );
     return true;
@@ -2572,15 +2786,27 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
 
   const makeActiveRosterShared = async () => {
     if (!googleDriveConfig.isConfigured) {
-      showRosterToolsNotice("Google Drive not configured", "Add VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_API_KEY before creating a shared roster.", "warning");
+      showRosterToolsNotice(
+        t("app.notices.googleDriveNotConfigured.title"),
+        t("app.notices.googleDriveNotConfigured.createSharedMessage"),
+        "warning",
+      );
       return;
     }
     if (!googleDriveAccessToken) {
-      showRosterToolsNotice("Sign in with Google first", "Sign in with your Google account before creating a shared roster.", "warning");
+      showRosterToolsNotice(
+        t("app.notices.signInWithGoogleFirst.title"),
+        t("app.notices.signInWithGoogleFirst.createSharedMessage"),
+        "warning",
+      );
       return;
     }
     if (!activeRoster || isEmptyStarterRoster) {
-      showRosterToolsNotice("No roster yet", "Create or import a roster first, then make it shared.", "warning");
+      showRosterToolsNotice(
+        t("app.notices.noRosterYet.title"),
+        t("app.notices.noRosterYet.message"),
+        "warning",
+      );
       return;
     }
 
@@ -2589,12 +2815,12 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
       const file = await createGoogleSheetRoster(googleDriveAccessToken, activeRoster);
       updateActiveRosterGoogleSheetSource(file);
       showRosterToolsNotice(
-        "Shared roster created",
-        `${activeRoster.name} is now linked to a Google Sheet. Photos stay private on this device.`,
+        t("app.notices.sharedRosterCreated.title"),
+        t("app.notices.sharedRosterCreated.message", { rosterName: activeRoster.name }),
         "success",
       );
     } catch (error) {
-      showRosterToolsNotice("Could not create shared roster", googleDriveErrorMessage(error), "error");
+      showRosterToolsNotice(t("app.notices.couldNotCreateSharedRoster.title"), googleDriveErrorMessage(error), "error");
     } finally {
       setGoogleSheetSyncing(false);
     }
@@ -2603,7 +2829,11 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
   const saveActiveRosterToGoogleSheet = async (options: { force?: boolean } = {}) => {
     if (!activeRoster) return;
     if (!googleDriveAccessToken) {
-      showRosterToolsNotice("Sign in with Google first", "Sign in with your Google account before saving a shared roster.", "warning");
+      showRosterToolsNotice(
+        t("app.notices.signInWithGoogleFirst.title"),
+        t("app.notices.signInWithGoogleFirst.saveSharedMessage"),
+        "warning",
+      );
       return;
     }
     if (!activeGoogleSheetSource?.spreadsheetId) {
@@ -2612,8 +2842,8 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
     }
     if (activeRoster.players.length === 0) {
       showRosterToolsNotice(
-        "Save blocked",
-        "This shared roster has no players on this device. To avoid erasing it for everyone, get latest changes or disconnect it first.",
+        t("app.notices.saveBlocked.title"),
+        t("app.notices.saveBlocked.message"),
         "warning",
       );
       return;
@@ -2647,7 +2877,7 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
         handleMissingActiveGoogleSheetLink();
         return;
       }
-      showRosterToolsNotice("Could not save shared roster", googleDriveErrorMessage(error), "error");
+      showRosterToolsNotice(t("app.notices.couldNotSaveSharedRoster.title"), googleDriveErrorMessage(error), "error");
     } finally {
       setGoogleSheetSyncing(false);
     }
@@ -2676,11 +2906,19 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
 
   const reloadActiveRosterFromGoogleSheet = async () => {
     if (!googleDriveAccessToken) {
-      showRosterToolsNotice("Sign in with Google first", "Sign in with your Google account before reloading a shared roster.", "warning");
+      showRosterToolsNotice(
+        t("app.notices.signInWithGoogleFirst.title"),
+        t("app.notices.signInWithGoogleFirst.reloadSharedMessage"),
+        "warning",
+      );
       return;
     }
     if (!activeGoogleSheetSource?.spreadsheetId) {
-      showRosterToolsNotice("No shared roster linked", "Make this roster shared or open a shared roster first.", "warning");
+      showRosterToolsNotice(
+        t("app.notices.noSharedRosterLinked.title"),
+        t("app.notices.noSharedRosterLinked.createOrOpenMessage"),
+        "warning",
+      );
       return;
     }
 
@@ -2704,13 +2942,17 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
           activeRosterId: nextRoster.id,
         };
       });
-      showRosterToolsNotice("Latest changes loaded", "This device now has the latest shared roster. Local photos were preserved.", "success");
+      showRosterToolsNotice(
+        t("app.notices.latestChangesLoaded.title"),
+        t("app.notices.latestChangesLoaded.message"),
+        "success",
+      );
     } catch (error) {
       if (isMissingSharedRosterError(error)) {
         handleMissingActiveGoogleSheetLink();
         return;
       }
-      showRosterToolsNotice("Could not reload shared roster", googleDriveErrorMessage(error), "error");
+      showRosterToolsNotice(t("app.notices.couldNotReloadSharedRoster.title"), googleDriveErrorMessage(error), "error");
     } finally {
       setGoogleSheetOpening(false);
     }
@@ -2718,7 +2960,11 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
 
   const saveAllSharedRostersToGoogleSheets = async () => {
     if (!googleDriveAccessToken) {
-      showRosterToolsNotice("Sign in with Google first", "Sign in with your Google account before saving shared rosters.", "warning");
+      showRosterToolsNotice(
+        t("app.notices.signInWithGoogleFirst.title"),
+        t("app.notices.signInWithGoogleFirst.saveSharedPluralMessage"),
+        "warning",
+      );
       return;
     }
 
@@ -2727,7 +2973,11 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
     );
 
     if (sharedRosters.length === 0) {
-      showRosterToolsNotice("No shared rosters", "Make or open a shared roster first.", "info");
+      showRosterToolsNotice(
+        t("app.notices.noSharedRosters.title"),
+        t("app.notices.noSharedRosters.message"),
+        "info",
+      );
       return;
     }
 
@@ -2786,17 +3036,32 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
       }
 
       const summaryLines = [
-        savedCount > 0 ? `Saved ${savedCount} roster${savedCount === 1 ? "" : "s"}.` : "No rosters were saved.",
-        newerOnlineNames.length > 0 ? `${newerOnlineNames.length} roster${newerOnlineNames.length === 1 ? " has" : "s have"} newer changes online. Get latest before saving: ${newerOnlineNames.slice(0, 3).join(", ")}${newerOnlineNames.length > 3 ? "‚Ä¶" : ""}` : "",
-        skippedEmptyCount > 0 ? `Skipped ${skippedEmptyCount} empty shared roster${skippedEmptyCount === 1 ? "" : "s"} to avoid erasing shared data.` : "",
-        missingRosterIds.size > 0 ? `Removed ${missingRosterIds.size} broken shared link${missingRosterIds.size === 1 ? "" : "s"} from this device.` : "",
-        failedNames.length > 0 ? `Could not save: ${failedNames.slice(0, 3).join(", ")}${failedNames.length > 3 ? "‚Ä¶" : ""}` : "",
+        savedCount > 0
+          ? t("app.shared.summary.saved", { count: savedCount })
+          : t("app.shared.summary.noneSaved"),
+        newerOnlineNames.length > 0
+          ? t("app.shared.summary.newerOnline", {
+            count: newerOnlineNames.length,
+            rosterNames: `${formatList(locale, newerOnlineNames.slice(0, 3), { type: "unit" })}${newerOnlineNames.length > 3 ? "‚Ä¶" : ""}`,
+          })
+          : "",
+        skippedEmptyCount > 0
+          ? t("app.shared.summary.skippedEmpty", { count: skippedEmptyCount })
+          : "",
+        missingRosterIds.size > 0
+          ? t("app.shared.summary.removedBrokenLinks", { count: missingRosterIds.size })
+          : "",
+        failedNames.length > 0
+          ? t("app.shared.summary.couldNotSave", {
+            rosterNames: `${formatList(locale, failedNames.slice(0, 3), { type: "unit" })}${failedNames.length > 3 ? "‚Ä¶" : ""}`,
+          })
+          : "",
       ].filter(Boolean);
 
       const sharedSaveNeedsAttention = newerOnlineNames.length > 0 || failedNames.length > 0 || missingRosterIds.size > 0 || skippedEmptyCount > 0;
       if (sharedSaveNeedsAttention) {
         showRosterToolsNotice(
-          "Shared roster save finished with notes",
+          t("app.notices.sharedSaveFinishedWithNotes.title"),
           summaryLines.join("\n"),
           "warning",
         );
@@ -2808,7 +3073,11 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
 
   const getLatestForAllSharedRosters = async () => {
     if (!googleDriveAccessToken) {
-      showRosterToolsNotice("Sign in with Google first", "Sign in with your Google account before getting latest shared rosters.", "warning");
+      showRosterToolsNotice(
+        t("app.notices.signInWithGoogleFirst.title"),
+        t("app.notices.signInWithGoogleFirst.getLatestSharedMessage"),
+        "warning",
+      );
       return;
     }
 
@@ -2817,7 +3086,11 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
     );
 
     if (sharedRosters.length === 0) {
-      showRosterToolsNotice("No shared rosters", "Make or open a shared roster first.", "info");
+      showRosterToolsNotice(
+        t("app.notices.noSharedRosters.title"),
+        t("app.notices.noSharedRosters.message"),
+        "info",
+      );
       return;
     }
 
@@ -2873,13 +3146,23 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
       }
 
       const summaryLines = [
-        loaded.length > 0 ? `Got latest changes for ${loaded.length} roster${loaded.length === 1 ? "" : "s"}.` : "No rosters were updated.",
-        missingRosterIds.size > 0 ? `Removed ${missingRosterIds.size} broken shared link${missingRosterIds.size === 1 ? "" : "s"} from this device.` : "",
-        failedNames.length > 0 ? `Could not update: ${failedNames.slice(0, 3).join(", ")}${failedNames.length > 3 ? "‚Ä¶" : ""}` : "",
+        loaded.length > 0
+          ? t("app.shared.summary.gotLatest", { count: loaded.length })
+          : t("app.shared.summary.noneUpdated"),
+        missingRosterIds.size > 0
+          ? t("app.shared.summary.removedBrokenLinks", { count: missingRosterIds.size })
+          : "",
+        failedNames.length > 0
+          ? t("app.shared.summary.couldNotUpdate", {
+            rosterNames: `${formatList(locale, failedNames.slice(0, 3), { type: "unit" })}${failedNames.length > 3 ? "‚Ä¶" : ""}`,
+          })
+          : "",
       ].filter(Boolean);
 
       showRosterToolsNotice(
-        failedNames.length > 0 || missingRosterIds.size > 0 ? "Latest changes finished with notes" : "Latest changes received",
+        failedNames.length > 0 || missingRosterIds.size > 0
+          ? t("app.notices.latestChangesFinishedWithNotes.title")
+          : t("app.notices.latestChangesReceived.title"),
         summaryLines.join("\n"),
         failedNames.length > 0 || missingRosterIds.size > 0 ? "warning" : "success",
       );
@@ -2890,11 +3173,19 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
 
   const openGoogleSheetRosterList = async () => {
     if (!googleDriveConfig.isConfigured) {
-      showRosterToolsNotice("Google Drive not configured", "Add VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_API_KEY before opening shared rosters.", "warning");
+      showRosterToolsNotice(
+        t("app.notices.googleDriveNotConfigured.title"),
+        t("app.notices.googleDriveNotConfigured.openSharedMessage"),
+        "warning",
+      );
       return;
     }
     if (!googleDriveAccessToken) {
-      showRosterToolsNotice("Sign in with Google first", "Sign in with your Google account before opening shared rosters.", "warning");
+      showRosterToolsNotice(
+        t("app.notices.signInWithGoogleFirst.title"),
+        t("app.notices.signInWithGoogleFirst.openSharedMessage"),
+        "warning",
+      );
       return;
     }
 
@@ -2903,7 +3194,7 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
       const files = await listGoogleSheetRosterFiles(googleDriveAccessToken);
       setGoogleSheetChoices(files);
     } catch (error) {
-      showRosterToolsNotice("Could not list shared rosters", googleDriveErrorMessage(error), "error");
+      showRosterToolsNotice(t("app.notices.couldNotListSharedRosters.title"), googleDriveErrorMessage(error), "error");
     } finally {
       setGoogleSheetOpening(false);
     }
@@ -2912,11 +3203,19 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
 
   const findGoogleSheetRosterInDrive = async () => {
     if (!googleDriveConfig.isConfigured) {
-      showRosterToolsNotice("Google Drive not configured", "Add VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_API_KEY before opening shared rosters.", "warning");
+      showRosterToolsNotice(
+        t("app.notices.googleDriveNotConfigured.title"),
+        t("app.notices.googleDriveNotConfigured.openSharedMessage"),
+        "warning",
+      );
       return;
     }
     if (!googleDriveAccessToken) {
-      showRosterToolsNotice("Sign in with Google first", "Sign in with your Google account before opening shared rosters.", "warning");
+      showRosterToolsNotice(
+        t("app.notices.signInWithGoogleFirst.title"),
+        t("app.notices.signInWithGoogleFirst.openSharedMessage"),
+        "warning",
+      );
       return;
     }
 
@@ -2937,7 +3236,7 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
       const file = await getGoogleSheetRosterFileMetadata(googleDriveAccessToken, picked.id);
       setGoogleSheetActionFile(file);
     } catch (error) {
-      showRosterToolsNotice("Could not open shared roster file", googleDriveErrorMessage(error), "error");
+      showRosterToolsNotice(t("app.notices.couldNotOpenSharedRosterFile.title"), googleDriveErrorMessage(error), "error");
     } finally {
       setGoogleSheetOpening(false);
     }
@@ -2945,7 +3244,11 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
 
   const openGoogleSheetRosterFile = async (picked: GoogleSheetRosterFile) => {
     if (!googleDriveAccessToken) {
-      showRosterToolsNotice("Sign in with Google first", "Sign in with your Google account before opening shared rosters.", "warning");
+      showRosterToolsNotice(
+        t("app.notices.signInWithGoogleFirst.title"),
+        t("app.notices.signInWithGoogleFirst.openSharedMessage"),
+        "warning",
+      );
       return;
     }
 
@@ -2957,7 +3260,7 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
         const currentIsStarter =
           current.rosters.length === 1 &&
           current.rosters[0]?.players.length === 0 &&
-          current.rosters[0]?.name === EMPTY_ROSTER_NAME;
+          isDefaultEmptyRosterName(current.rosters[0]?.name || "");
         const existingIndex = current.rosters.findIndex(
           (item) =>
             (item.cloudSource?.provider === "google-sheets" && item.cloudSource.spreadsheetId === file.id) ||
@@ -2999,9 +3302,13 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
       setGoogleSheetChoices(null);
       setGoogleSheetActionFile(null);
       setRosterFilesOpen(false);
-      showRosterToolsNotice("Shared roster opened", `${file.name} is now available in Stripes.`, "success");
+      showRosterToolsNotice(
+        t("app.notices.sharedRosterOpened.title"),
+        t("app.notices.sharedRosterOpened.message", { fileName: file.name }),
+        "success",
+      );
     } catch (error) {
-      showRosterToolsNotice("Could not open shared roster", googleDriveErrorMessage(error), "error");
+      showRosterToolsNotice(t("app.notices.couldNotOpenSharedRoster.title"), googleDriveErrorMessage(error), "error");
     } finally {
       setGoogleSheetOpening(false);
     }
@@ -3016,8 +3323,8 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
   const startGoogleSheetDeleteConfirm = (file: GoogleSheetRosterFile) => {
     if (!isGoogleSheetOwnedByMe(file)) {
       showRosterToolsNotice(
-        "Only the owner can delete it",
-        "This shared roster belongs to another Google account. You can open it or remove your local copy, but only the owner can delete the shared Google Sheet.",
+        t("app.notices.onlyOwnerCanDelete.title"),
+        t("app.notices.onlyOwnerCanDelete.message"),
         "warning",
       );
       return;
@@ -3030,7 +3337,11 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
   const confirmDeleteGoogleSheetRoster = async () => {
     if (googleSheetDeleteSlide < 95 || !googleSheetDeleteConfirm || googleSheetDeleting) return;
     if (!googleDriveAccessToken) {
-      showRosterToolsNotice("Sign in with Google first", "Sign in with the owner account before deleting a shared roster.", "warning");
+      showRosterToolsNotice(
+        t("app.notices.signInWithGoogleFirst.title"),
+        t("app.notices.signInWithGoogleFirst.deleteSharedMessage"),
+        "warning",
+      );
       return;
     }
 
@@ -3051,12 +3362,12 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
       setGoogleSheetDeleteConfirm(null);
       setGoogleSheetDeleteSlide(0);
       showRosterToolsNotice(
-        "Shared roster moved to trash",
-        "The Google Sheet was moved to your Google Drive trash. Local copies already on devices are not deleted, but they are no longer linked to that shared roster.",
+        t("app.notices.sharedRosterMovedToTrash.title"),
+        t("app.notices.sharedRosterMovedToTrash.message"),
         "success",
       );
     } catch (error) {
-      showRosterToolsNotice("Could not delete shared roster", googleDriveErrorMessage(error), "error");
+      showRosterToolsNotice(t("app.notices.couldNotDeleteSharedRoster.title"), googleDriveErrorMessage(error), "error");
     } finally {
       setGoogleSheetDeleting(false);
     }
@@ -3075,7 +3386,7 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
         return;
       }
       setGoogleSheetAccessList([]);
-      showRosterToolsNotice("Could not load sharing access", googleDriveErrorMessage(error), "error");
+      showRosterToolsNotice(t("app.notices.couldNotLoadSharingAccess.title"), googleDriveErrorMessage(error), "error");
     } finally {
       setGoogleSheetAccessLoading(false);
     }
@@ -3083,11 +3394,19 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
 
   const openGoogleSheetShareModal = async () => {
     if (!googleDriveAccessToken) {
-      showRosterToolsNotice("Sign in with Google first", "Sign in with your Google account before managing sharing access.", "warning");
+      showRosterToolsNotice(
+        t("app.notices.signInWithGoogleFirst.title"),
+        t("app.notices.signInWithGoogleFirst.manageSharingMessage"),
+        "warning",
+      );
       return;
     }
     if (!activeGoogleSheetSource?.spreadsheetId) {
-      showRosterToolsNotice("Make it shared first", "Create or open a shared roster before managing access.", "warning");
+      showRosterToolsNotice(
+        t("app.notices.makeItSharedFirst.title"),
+        t("app.notices.makeItSharedFirst.message"),
+        "warning",
+      );
       return;
     }
     setGoogleSheetShareName("");
@@ -3100,7 +3419,7 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
   const confirmGoogleSheetShare = async () => {
     const error = validateShareEmail(googleSheetShareEmail);
     if (error) {
-      showRosterToolsNotice("Check email", error, "warning");
+      showRosterToolsNotice(t("app.notices.checkEmail.title"), error, "warning");
       return;
     }
     if (!activeGoogleSheetSource?.spreadsheetId) return;
@@ -3129,14 +3448,18 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
       setGoogleSheetShareName("");
       setGoogleSheetShareEmail("");
       await loadGoogleSheetAccessList();
-      showRosterToolsNotice("Editor added", `${editorName || email} can now edit this shared roster through Stripes.`, "success");
+      showRosterToolsNotice(
+        t("app.notices.editorAdded.title"),
+        t("app.notices.editorAdded.message", { editor: editorName || email }),
+        "success",
+      );
     } catch (error) {
       if (isMissingSharedRosterError(error)) {
         handleMissingActiveGoogleSheetLink();
         setGoogleSheetShareOpen(false);
         return;
       }
-      showRosterToolsNotice("Could not share roster", googleDriveErrorMessage(error), "error");
+      showRosterToolsNotice(t("app.notices.couldNotShareRoster.title"), googleDriveErrorMessage(error), "error");
     } finally {
       setGoogleSheetSharing(false);
     }
@@ -3145,9 +3468,7 @@ The shared Google Sheet will not be deleted. This device will keep a local copy 
   const removeGoogleSheetEditorAccess = async (permission: GoogleDrivePermissionResult) => {
     if (!activeGoogleSheetSource?.spreadsheetId || !permission.id) return;
     const label = drivePermissionLabel(permission);
-    const confirmed = window.confirm(`Remove access for ${label}?
-
-They will no longer be able to open or edit this shared roster unless it is shared with them again.`);
+    const confirmed = window.confirm(t("app.shared.removeAccessConfirm", { label }));
     if (!confirmed) return;
 
     setGoogleSheetRemovingPermissionId(permission.id);
@@ -3165,9 +3486,13 @@ They will no longer be able to open or edit this shared roster unless it is shar
         updateActiveRosterGoogleSheetSource(updatedFile, nextAccessLabels);
       }
       setGoogleSheetAccessList((current) => current ? current.filter((item) => item.id !== permission.id) : current);
-      showRosterToolsNotice("Access removed", `${label} can no longer access this shared roster through this direct file permission.`, "success");
+      showRosterToolsNotice(
+        t("app.notices.accessRemoved.title"),
+        t("app.notices.accessRemoved.sharedRosterMessage", { label }),
+        "success",
+      );
     } catch (error) {
-      showRosterToolsNotice("Could not remove access", googleDriveErrorMessage(error), "error");
+      showRosterToolsNotice(t("app.notices.couldNotRemoveAccess.title"), googleDriveErrorMessage(error), "error");
     } finally {
       setGoogleSheetRemovingPermissionId("");
     }
@@ -3175,11 +3500,19 @@ They will no longer be able to open or edit this shared roster unless it is shar
 
   const openDriveShareModal = () => {
     if (!googleDriveConnected) {
-      showRosterToolsNotice("Sign in with Google first", "Sign in with your Google account before sending a backup copy.", "warning");
+      showRosterToolsNotice(
+        t("app.notices.signInWithGoogleFirst.title"),
+        t("app.notices.signInWithGoogleFirst.sendBackupMessage"),
+        "warning",
+      );
       return;
     }
     if (!hasPrivateBackupRosters) {
-      showRosterToolsNotice("No local rosters to back up", "Shared rosters stay online in Shared rosters. Make a private copy first if you want a local backup version.", "warning");
+      showRosterToolsNotice(
+        t("app.notices.noLocalRostersToBackUp.title"),
+        t("app.notices.noLocalRostersToBackUp.message"),
+        "warning",
+      );
       return;
     }
     setDriveShareEmail("");
@@ -3191,12 +3524,16 @@ They will no longer be able to open or edit this shared roster unless it is shar
   const addDriveRecipient = () => {
     const error = validateShareEmail(driveShareEmail);
     if (error) {
-      showRosterToolsNotice("Check email", error, "warning");
+      showRosterToolsNotice(t("app.notices.checkEmail.title"), error, "warning");
       return;
     }
     const email = normalizeShareEmail(driveShareEmail);
     if (driveRecipients.some((recipient) => recipient.email === email)) {
-      showRosterToolsNotice("Already saved", "That email is already in your send list.", "info");
+      showRosterToolsNotice(
+        t("app.notices.alreadySaved.title"),
+        t("app.notices.alreadySaved.message"),
+        "info",
+      );
       return;
     }
     const fallbackName = email.split("@")[0] || email;
@@ -3227,7 +3564,11 @@ They will no longer be able to open or edit this shared roster unless it is shar
   const prepareDriveShare = () => {
     const recipients = driveRecipients.filter((recipient) => selectedDriveRecipientIds.includes(recipient.id));
     if (recipients.length === 0) {
-      showRosterToolsNotice("Choose recipients", "Select at least one saved person, or add a new email first.", "warning");
+      showRosterToolsNotice(
+        t("app.notices.chooseRecipients.title"),
+        t("app.notices.chooseRecipients.message"),
+        "warning",
+      );
       return;
     }
     setDriveShareConfirm({ recipients });
@@ -3248,16 +3589,20 @@ They will no longer be able to open or edit this shared roster unless it is shar
           shareGoogleDriveFileWithViewer(googleDriveAccessToken, file.id, recipient.email),
         ),
       );
-      const names = driveShareConfirm.recipients.map((recipient) => recipient.name || recipient.email).join(", ");
+      const names = formatList(
+        locale,
+        driveShareConfirm.recipients.map((recipient) => recipient.name || recipient.email),
+        { type: "unit" },
+      );
       setDriveShareOpen(false);
       setDriveShareConfirm(null);
       showRosterToolsNotice(
-        "Backup copy sent",
-        `Created a new Drive backup copy and shared it with ${names}. Recipients can view/import the copy, but cannot edit your active backup file.`,
+        t("app.notices.backupCopySent.title"),
+        t("app.notices.backupCopySent.message", { recipients: names }),
         "success",
       );
     } catch (error) {
-      showRosterToolsNotice("Could not send backup copy", googleDriveErrorMessage(error), "error");
+      showRosterToolsNotice(t("app.notices.couldNotSendBackupCopy.title"), googleDriveErrorMessage(error), "error");
     } finally {
       setGoogleDriveSharing(false);
     }
@@ -3270,7 +3615,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
       const permissions = await listGoogleDriveFilePermissions(googleDriveAccessToken, currentDriveBackup.id);
       setDriveAccessList(permissions.filter((permission) => !permission.deleted));
     } catch (error) {
-      showRosterToolsNotice("Could not load sharing access", googleDriveErrorMessage(error), "error");
+      showRosterToolsNotice(t("app.notices.couldNotLoadSharingAccess.title"), googleDriveErrorMessage(error), "error");
     } finally {
       setDriveAccessLoading(false);
     }
@@ -3278,11 +3623,19 @@ They will no longer be able to open or edit this shared roster unless it is shar
 
   const openDriveAccessManager = async () => {
     if (!googleDriveConnected) {
-      showRosterToolsNotice("Sign in with Google first", "Sign in with your Google account before managing Drive access.", "warning");
+      showRosterToolsNotice(
+        t("app.notices.signInWithGoogleFirst.title"),
+        t("app.notices.signInWithGoogleFirst.manageDriveAccessMessage"),
+        "warning",
+      );
       return;
     }
     if (!currentDriveBackup) {
-      showRosterToolsNotice("No Drive file selected", "Save or open a Drive backup first, then you can manage access to that selected file.", "warning");
+      showRosterToolsNotice(
+        t("app.notices.noDriveFileSelected.title"),
+        t("app.notices.noDriveFileSelected.message"),
+        "warning",
+      );
       return;
     }
     setDriveAccessOpen(true);
@@ -3305,9 +3658,13 @@ They will no longer be able to open or edit this shared roster unless it is shar
       setDriveAccessList((current) =>
         current ? current.filter((permission) => permission.id !== permissionId) : current,
       );
-      showRosterToolsNotice("Access removed", `${removedLabel} can no longer access this Drive backup through this direct file permission.`, "success");
+      showRosterToolsNotice(
+        t("app.notices.accessRemoved.title"),
+        t("app.notices.accessRemoved.driveBackupMessage", { label: removedLabel }),
+        "success",
+      );
     } catch (error) {
-      showRosterToolsNotice("Could not remove access", googleDriveErrorMessage(error), "error");
+      showRosterToolsNotice(t("app.notices.couldNotRemoveAccess.title"), googleDriveErrorMessage(error), "error");
     } finally {
       setDriveRemovingPermissionId("");
     }
@@ -3356,7 +3713,11 @@ They will no longer be able to open or edit this shared roster unless it is shar
       .filter((roster) => roster.players.length > 0 || mode === "backup");
 
     if (normalizedIncoming.length === 0) {
-      showRosterToolsNotice("Nothing to import", "No players or rosters were found in that file.", "warning");
+      showRosterToolsNotice(
+        t("app.notices.nothingToImport.title"),
+        t("app.notices.nothingToImport.message"),
+        "warning",
+      );
       return;
     }
 
@@ -3381,7 +3742,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
       const currentIsStarter =
         current.rosters.length === 1 &&
         current.rosters[0]?.players.length === 0 &&
-        current.rosters[0]?.name === EMPTY_ROSTER_NAME;
+        isDefaultEmptyRosterName(current.rosters[0]?.name || "");
       const nextRosters = currentIsStarter ? [] : [...current.rosters];
       const added = localImportPreview.rosters.map((roster) => {
         const copied = createRoster(
@@ -3402,10 +3763,12 @@ They will no longer be able to open or edit this shared roster unless it is shar
     const mode = localImportPreview.mode;
     setLocalImportPreview(null);
     showRosterToolsNotice(
-      mode === "backup" ? "Backup imported" : "Roster imported",
       mode === "backup"
-        ? `Added ${rosterCount} roster${rosterCount === 1 ? "" : "s"} from the backup file.`
-        : `Added ${rosterCount} imported roster${rosterCount === 1 ? "" : "s"}.`,
+        ? t("app.notices.backupImported.title")
+        : t("app.notices.rosterImported.title"),
+      mode === "backup"
+        ? t("app.notices.backupImported.message", { count: rosterCount })
+        : t("app.notices.rosterImported.message", { count: rosterCount }),
       "success",
     );
   };
@@ -3418,14 +3781,14 @@ They will no longer be able to open or edit this shared roster unless it is shar
 
   const readLogoFile = (file: File) => {
     if (!file.type.startsWith("image/")) {
-      alert("Please choose an image file for the logo.");
+      alert(t("app.rosterEditor.logo.imageOnlyError"));
       return;
     }
     const reader = new FileReader();
     reader.onload = () => {
       if (typeof reader.result === "string") setDraftGroupLogo(reader.result);
     };
-    reader.onerror = () => alert("Could not read that logo image.");
+    reader.onerror = () => alert(t("app.rosterEditor.logo.readError"));
     reader.readAsDataURL(file);
   };
 
@@ -3454,10 +3817,10 @@ They will no longer be able to open or edit this shared roster unless it is shar
     closeClearRoster();
     if (removingSharedRoster) {
       showRosterToolsNotice(
-        "Shared roster removed from this device",
+        t("app.notices.sharedRosterRemovedFromDevice.title"),
         removingFirebaseSharedRoster
-          ? "The online Firebase shared roster was not changed or deleted. Sign in and open it again from Club ‚Üí Shared rosters."
-          : "The online shared roster was not changed or deleted. Open the shared roster again to get the latest version.",
+          ? t("app.notices.sharedRosterRemovedFromDevice.firebaseMessage")
+          : t("app.notices.sharedRosterRemovedFromDevice.googleMessage"),
         "success",
       );
     }
@@ -3771,15 +4134,15 @@ They will no longer be able to open or edit this shared roster unless it is shar
   if (showSplash) {
     return (
       <div className="stripes-splash min-h-[100dvh] flex flex-col items-center justify-center bg-white text-[#102A43]">
-        <div className="stripes-splash-mark" aria-label="Stripes">
+        <div className="stripes-splash-mark" aria-label={t("common.brand.stripes")}>
           <img src={stripesLogo} alt="" className="stripes-splash-final" aria-hidden="true" />
         </div>
         <div className="stripes-splash-copy text-center">
           <h1 className="stripes-display text-[42px] font-semibold tracking-[-0.035em] leading-none text-[#102A43]">
-            Stripes
+            {t("common.brand.stripes")}
           </h1>
           <p className="mt-3 text-sm font-semibold tracking-[0.025em] text-slate-500">
-            Organizer‚Äôs unfair advantage.
+            {t("app.splash.tagline")}
           </p>
         </div>
       </div>
@@ -3790,13 +4153,13 @@ They will no longer be able to open or edit this shared roster unless it is shar
     return (
       <main className="fairteams-visual-refresh stripes-type-ui min-h-[100dvh] w-full overflow-y-auto bg-slate-50 px-4 py-6 text-[#102A43] sm:px-6 sm:py-10">
         <div className="mx-auto grid w-full max-w-lg gap-5">
-          <div className="flex items-center justify-center gap-3" aria-label="Stripes organizer invitation">
+          <div className="flex items-center justify-center gap-3" aria-label={t("app.invitation.ariaLabel")}>
             <span className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
               <img src={stripesLogo} alt="" className="h-12 w-12 object-contain" aria-hidden="true" />
             </span>
             <div>
-              <div className="stripes-display text-2xl font-semibold leading-none">Stripes</div>
-              <div className="mt-1 text-xs font-bold text-slate-500">Organizer invitation</div>
+              <div className="stripes-display text-2xl font-semibold leading-none">{t("common.brand.stripes")}</div>
+              <div className="mt-1 text-xs font-bold text-slate-500">{t("app.invitation.heading")}</div>
             </div>
           </div>
           <WorkspaceInvitationOnboarding
@@ -3855,14 +4218,14 @@ They will no longer be able to open or edit this shared roster unless it is shar
           <aside className="absolute inset-y-0 left-0 z-40 hidden w-[204px] flex-col border-r border-slate-200 bg-white/96 p-4 backdrop-blur lg:flex">
             <div className="flex items-center px-1.5 py-2">
               <span className="flex h-16 w-full items-center justify-center overflow-hidden rounded-[1.35rem] border border-slate-200/90 bg-gradient-to-br from-white to-slate-50 shadow-[0_8px_22px_rgba(15,23,42,0.07)]">
-                <img src={stripesLogo} alt="Stripes" className="h-[3.65rem] w-[3.65rem] object-contain" />
+                <img src={stripesLogo} alt={t("common.brand.stripes")} className="h-[3.65rem] w-[3.65rem] object-contain" />
               </span>
             </div>
             <TabsList className="mt-6 flex h-auto w-full flex-col gap-1.5 rounded-none border-0 bg-transparent p-0 shadow-none">
               {([
-                ["players", "Roster", Users],
-                ["teams", "Teams", RefreshCw],
-                ["club", "Club", Building2],
+                ["players", t("app.navigation.roster"), Users],
+                ["teams", t("app.navigation.teams"), RefreshCw],
+                ["club", t("app.navigation.club"), Building2],
               ] as const).map(([value, label, Icon]) => (
                 <TabsTrigger
                   key={value}
@@ -3887,19 +4250,27 @@ They will no longer be able to open or edit this shared roster unless it is shar
             <div className="flex min-w-0 items-center">
               <div className="min-w-0">
                 <div className="flex min-w-0 items-center gap-2">
-                  <h1 className="stripes-type-ui truncate text-[26px] font-black tracking-tight text-[#102A43]" title={activeRosterName}>{activeRosterName}</h1>
+                  <h1 className="stripes-type-ui truncate text-[26px] font-black tracking-tight text-[#102A43]" title={activeRosterDisplayName}>{activeRosterDisplayName}</h1>
                   {!isEmptyStarterRoster && (
                     <span className={`stripes-type-ui inline-flex h-5 shrink-0 items-center rounded-full px-1.5 text-[11px] font-black uppercase tracking-wide ${activeRosterIsShared ? "bg-violet-50 text-violet-700 ring-1 ring-violet-100" : "bg-slate-100 text-slate-500"}`}>
-                      {activeRosterIsShared ? "Shared" : "Local"}
+                      {activeRosterIsShared
+                        ? t("app.rosterKind.shared")
+                        : t("app.rosterKind.local")}
                     </span>
                   )}
                 </div>
-                <div className="mt-0.5 text-[13px] font-bold text-slate-400">{activeTab === "players" ? "Roster" : activeTab === "teams" ? "Teams" : "Club"}</div>
+                <div className="mt-0.5 text-[13px] font-bold text-slate-400">
+                  {activeTab === "players"
+                    ? t("app.navigation.roster")
+                    : activeTab === "teams"
+                      ? t("app.navigation.teams")
+                      : t("app.navigation.club")}
+                </div>
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-2">
-              <button type="button" onClick={openGroupSettings} className="stripes-type-ui inline-flex h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 text-[15px] font-black text-[#102A43] shadow-sm hover:bg-slate-50" title="Edit roster">
-                <Pencil className="h-[18px] w-[18px]" strokeWidth={2.25} /> Edit
+              <button type="button" onClick={openGroupSettings} className="stripes-type-ui inline-flex h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 text-[15px] font-black text-[#102A43] shadow-sm hover:bg-slate-50" title={t("app.actions.editRoster")}>
+                <Pencil className="h-[18px] w-[18px]" strokeWidth={2.25} /> {t("common.edit")}
               </button>
               <button
                 type="button"
@@ -3916,9 +4287,9 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   }
                 }}
                 className={`stripes-type-ui inline-flex h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 text-[15px] font-black text-[#102A43] shadow-sm hover:bg-slate-50 ${tutorialStep === "settings-button" ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
-                title="Roster tools"
+                title={t("app.rosterTools.title")}
               >
-                <Settings className="h-[18px] w-[18px]" strokeWidth={2.25} /> Settings
+                <Settings className="h-[18px] w-[18px]" strokeWidth={2.25} /> {t("app.actions.settings")}
               </button>
             </div>
           </header>
@@ -3935,15 +4306,15 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 className={`group flex max-w-full min-w-0 items-center gap-2 text-left min-[310px]:gap-2.5 ${activeTab === "players" ? "transition-transform active:scale-[0.99]" : "cursor-default"}`}
                 title={
                   activeTab === "players"
-                    ? "Edit active roster name, logo, and color"
+                    ? t("app.header.editRosterTitle")
                     : headerDisplayName
                 }
                 aria-label={
                   activeTab === "players"
-                    ? "Edit active roster identity"
+                    ? t("app.header.editRosterAria")
                     : shouldShowTodayStartHeader
-                      ? `Session start: ${headerDisplayName}`
-                      : `Current roster: ${activeRosterName}`
+                      ? t("app.header.sessionStartAria", { date: headerDisplayName })
+                      : t("app.header.currentRosterAria", { rosterName: activeRosterDisplayName })
                 }
               >
                 {!shouldShowTodayStartHeader && (
@@ -3971,9 +4342,13 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   {!shouldShowTodayStartHeader && !isEmptyStarterRoster && (
                     <span
                       className={`stripes-type-ui inline-flex h-5 shrink-0 items-center rounded-full px-1.5 text-[10px] font-black uppercase tracking-wide min-[310px]:text-[11px] ${activeRosterIsShared ? "bg-violet-50 text-violet-700 ring-1 ring-violet-100" : "bg-slate-100 text-slate-500"}`}
-                      title={activeRosterIsShared ? "Shared roster" : "Local roster"}
+                      title={activeRosterIsShared
+                        ? t("app.rosterKind.sharedTitle")
+                        : t("app.rosterKind.localTitle")}
                     >
-                      {activeRosterIsShared ? "Shared" : "Local"}
+                      {activeRosterIsShared
+                        ? t("app.rosterKind.shared")
+                        : t("app.rosterKind.local")}
                     </span>
                   )}
                   {activeSharedCapabilities.canUseClubAccess && !shouldShowTodayStartHeader && (
@@ -3981,8 +4356,8 @@ They will no longer be able to open or edit this shared roster unless it is shar
                       role="button"
                       tabIndex={0}
                       className="stripes-type-ui inline-flex h-5 shrink-0 items-center gap-0.5 rounded-full bg-emerald-50 px-1.5 text-[10px] font-black text-emerald-700 active:scale-95"
-                      title="Organizers"
-                      aria-label="Show people with access"
+                      title={t("app.access.organizers")}
+                      aria-label={t("app.access.showPeople")}
                       onClick={(event) => {
                         event.stopPropagation();
                         setHeaderSharedPeopleOpen(true);
@@ -3996,13 +4371,13 @@ They will no longer be able to open or edit this shared roster unless it is shar
                       }}
                     >
                       <Users className="h-3 w-3" />
-                      {activeFirebaseSharedPeopleCount}
+                      {formatNumber(locale, activeFirebaseSharedPeopleCount)}
                     </span>
                   )}
                   {activeTab === "players" && (
                     <span
                       className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-[#102A43]/65 shadow-sm transition-colors group-hover:text-[#102A43] min-[310px]:h-6 min-[310px]:w-6"
-                      title="Edit roster"
+                      title={t("app.actions.editRoster")}
                     >
                       <Pencil className="h-3.5 w-3.5" />
                     </span>
@@ -4014,8 +4389,8 @@ They will no longer be able to open or edit this shared roster unless it is shar
             <div className="flex items-center gap-2 shrink-0">
               {activeTab === "teams" && (
                 <span className="hidden text-right text-[9px] font-extrabold leading-[0.95] text-slate-400 tracking-tight whitespace-nowrap min-[310px]:block">
-                  <span className="block">Balanced teams.</span>
-                  <span className="block">Better games.</span>
+                  <span className="block">{t("app.header.balancedTeams")}</span>
+                  <span className="block">{t("app.header.betterGames")}</span>
                 </span>
               )}
               {activeTab !== "teams" && activeTab !== "club" && !shouldShowTodayStartHeader && (
@@ -4036,8 +4411,8 @@ They will no longer be able to open or edit this shared roster unless it is shar
                       }
                     }
                   }}
-                  title="Roster tools"
-                  aria-label="Roster tools"
+                  title={t("app.rosterTools.title")}
+                  aria-label={t("app.rosterTools.title")}
                 >
                   <Settings className="w-4 h-4" />
                 </Button>
@@ -4055,8 +4430,8 @@ They will no longer be able to open or edit this shared roster unless it is shar
                     await importFile(file);
                   } catch (error) {
                     showRosterToolsNotice(
-                      "Import failed",
-                      error instanceof Error ? error.message : "Import failed.",
+                      t("app.notices.importFailed.title"),
+                      error instanceof Error ? error.message : t("app.notices.importFailed.message"),
                       "error",
                     );
                   }
@@ -4081,10 +4456,10 @@ They will no longer be able to open or edit this shared roster unless it is shar
             <div className="w-full max-w-xs rounded-3xl border border-slate-100 bg-white p-3 shadow-[0_14px_40px_rgba(15,23,42,0.16)]" onClick={(event) => event.stopPropagation()}>
               <div className="mb-2 flex items-center justify-between gap-3 px-1">
                 <div>
-                  <div className="text-sm font-black text-[#102A43]">Organizers</div>
-                  <div className="text-[10px] font-bold text-slate-400">People who can open this shared roster</div>
+                  <div className="text-sm font-black text-[#102A43]">{t("app.access.organizers")}</div>
+                  <div className="text-[10px] font-bold text-slate-400">{t("app.access.peopleDescription")}</div>
                 </div>
-                <button type="button" onClick={() => setHeaderSharedPeopleOpen(false)} className="rounded-full bg-slate-50 p-2 text-slate-500 active:scale-95" aria-label="Close organizers">
+                <button type="button" onClick={() => setHeaderSharedPeopleOpen(false)} className="rounded-full bg-slate-50 p-2 text-slate-500 active:scale-95" aria-label={t("app.access.closeOrganizers")}>
                   <X className="h-4 w-4" />
                 </button>
               </div>
@@ -4092,7 +4467,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 {activeFirebaseSharedPersonNames.length ? activeFirebaseSharedPersonNames.map((name) => (
                   <div key={name} className="rounded-2xl bg-slate-50 px-3 py-2 text-sm font-black text-[#102A43]">{name}</div>
                 )) : (
-                  <div className="rounded-2xl bg-slate-50 px-3 py-2 text-sm font-bold text-slate-500">Only you</div>
+                  <div className="rounded-2xl bg-slate-50 px-3 py-2 text-sm font-bold text-slate-500">{t("app.access.onlyYou")}</div>
                 )}
               </div>
             </div>
@@ -4203,7 +4578,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 sharedPeopleCount={activeFirebaseSharedPeopleCount}
                 user={activeSharedWorkspaceAuthority.user}
                 sharedAuthorityStatus={activeSharedWorkspaceAuthority.status}
-                sharedAuthorityMessage={activeSharedWorkspaceAuthorityMessage(activeSharedWorkspaceAuthority)}
+                sharedAuthorityMessage={activeSharedWorkspaceAuthorityText(activeSharedWorkspaceAuthority, t)}
                 sharedCapabilities={activeSharedCapabilities}
                 canSwitchRoster={!isEmptyStarterRoster && rosters.length > 1}
                 onOpenRosterPicker={() => setRosterPickerOpen(true)}
@@ -4289,10 +4664,10 @@ They will no longer be able to open or edit this shared roster unless it is shar
           <div className="pointer-events-none fixed inset-x-0 bottom-6 z-40 hidden lg:block">
             <div className="mx-auto w-[96vw] max-w-[1760px] pl-[204px]">
               <div className="stripes-generate-dock stripes-type-ui pointer-events-auto mx-auto flex w-full max-w-md items-stretch gap-2 rounded-2xl p-1 shadow-[0_10px_30px_rgba(15,23,42,0.12)]">
-                <label className="relative block h-12 w-[68px] shrink-0" title="Number of teams">
-                  <span className="pointer-events-none absolute left-0 right-0 top-1 text-center text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">Teams</span>
+                <label className="relative block h-12 w-[68px] shrink-0" title={t("app.teams.numberOfTeams")}>
+                  <span className="pointer-events-none absolute left-0 right-0 top-1 text-center text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">{t("app.navigation.teams")}</span>
                   <select
-                    aria-label="Number of teams"
+                    aria-label={t("app.teams.numberOfTeams")}
                     value={sessionTeamCount}
                     onChange={(event) => setSessionTeamCount(Number(event.target.value))}
                     className="stripes-team-count h-12 w-full rounded-xl border border-slate-200 bg-white px-2 pb-0.5 pt-3 text-center text-[19px] font-black leading-none text-[#102A43] shadow-sm outline-none transition active:scale-[0.98] focus:border-slate-300 focus:ring-2 focus:ring-slate-200"
@@ -4308,10 +4683,12 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   onClick={() => { prepareTeamsFromAi(sessionTeamCount, { autoGenerate: true }); if (tutorialStep === "generate") handleTutorialAction("generated"); }}
                   disabled={players.filter((player) => player.attending).length < 2}
                   className={`stripes-generate-button flex h-12 min-w-0 flex-1 items-center justify-center rounded-xl px-4 text-[14px] font-black text-white transition active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 ${tutorialStep === "generate" ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
-                  title={players.filter((player) => player.attending).length < 2 ? "Select at least 2 players" : `Generate ${sessionTeamCount} teams`}
+                  title={players.filter((player) => player.attending).length < 2
+                    ? t("app.teams.selectAtLeastTwo")
+                    : t("app.teams.generateCount", { count: sessionTeamCount })}
                   data-testid="desktop-generate-teams"
                 >
-                  Generate teams
+                  {t("app.teams.generate")}
                 </button>
               </div>
             </div>
@@ -4322,10 +4699,10 @@ They will no longer be able to open or edit this shared roster unless it is shar
           <div className="fixed inset-x-0 bottom-0 z-40 mx-auto w-full max-w-md animate-in fade-in-0 slide-in-from-bottom-2 duration-200 border-t border-slate-200 bg-white/95 px-4 pb-[max(0.65rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-4px_14px_rgba(15,23,42,0.035)] backdrop-blur md:max-w-3xl lg:hidden">
             {activeTab === "teams" && teamsWorkspaceView === "setup" && (
               <div className="stripes-generate-dock stripes-type-ui mx-auto mb-2 flex w-full max-w-md items-stretch gap-2 rounded-2xl p-1">
-                <label className="relative block h-12 w-[68px] shrink-0" title="Number of teams">
-                  <span className="pointer-events-none absolute left-0 right-0 top-1 text-center text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">Teams</span>
+                <label className="relative block h-12 w-[68px] shrink-0" title={t("app.teams.numberOfTeams")}>
+                  <span className="pointer-events-none absolute left-0 right-0 top-1 text-center text-[9px] font-black uppercase tracking-[0.08em] text-slate-400">{t("app.navigation.teams")}</span>
                   <select
-                    aria-label="Number of teams"
+                    aria-label={t("app.teams.numberOfTeams")}
                     value={sessionTeamCount}
                     onChange={(event) => setSessionTeamCount(Number(event.target.value))}
                     className="stripes-team-count h-12 w-full rounded-xl border border-slate-200 bg-white px-2 pb-0.5 pt-3 text-center text-[19px] font-black leading-none text-[#102A43] shadow-sm outline-none transition active:scale-[0.98] focus:border-slate-300 focus:ring-2 focus:ring-slate-200"
@@ -4341,10 +4718,12 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   onClick={() => { prepareTeamsFromAi(sessionTeamCount, { autoGenerate: true }); if (tutorialStep === "generate") handleTutorialAction("generated"); }}
                   disabled={players.filter((player) => player.attending).length < 2}
                   className={`stripes-generate-button flex h-12 min-w-0 flex-1 items-center justify-center rounded-xl px-4 text-[14px] font-black text-white transition active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 ${tutorialStep === "generate" ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
-                  title={players.filter((player) => player.attending).length < 2 ? "Select at least 2 players" : `Generate ${sessionTeamCount} teams`}
+                  title={players.filter((player) => player.attending).length < 2
+                    ? t("app.teams.selectAtLeastTwo")
+                    : t("app.teams.generateCount", { count: sessionTeamCount })}
                   data-testid="session-generate-teams"
                 >
-                  Generate teams
+                  {t("app.teams.generate")}
                 </button>
               </div>
             )}
@@ -4353,19 +4732,19 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 value="players"
                 className={`fairteams-tab-trigger ${tutorialStep === "roster-return" ? "fairteams-tutorial-pulse relative z-[82]" : ""} fairteams-footer-text-tab flex h-full items-center justify-center rounded-xl text-slate-500 transition-all`}
               >
-                <span className="text-[12px] font-semibold leading-none tracking-tight md:text-[14px] md:font-bold">Roster</span>
+                <span className="text-[12px] font-semibold leading-none tracking-tight md:text-[14px] md:font-bold">{t("app.navigation.roster")}</span>
               </TabsTrigger>
               <TabsTrigger
                 value="teams"
                 className={`fairteams-tab-trigger ${tutorialStep === "today-tab" ? "fairteams-tutorial-pulse relative z-[82]" : ""} fairteams-footer-text-tab flex h-full items-center justify-center rounded-xl text-slate-500 transition-all`}
               >
-                <span className="inline-flex items-center gap-1 text-[12px] font-semibold leading-none tracking-tight md:gap-1.5 md:text-[14px] md:font-bold"><TeamStripesIcon className="h-3.5 w-3.5 md:h-[18px] md:w-[18px]" /> Teams</span>
+                <span className="inline-flex items-center gap-1 text-[12px] font-semibold leading-none tracking-tight md:gap-1.5 md:text-[14px] md:font-bold"><TeamStripesIcon className="h-3.5 w-3.5 md:h-[18px] md:w-[18px]" /> {t("app.navigation.teams")}</span>
               </TabsTrigger>
               <TabsTrigger
                 value="club"
                 className={`fairteams-tab-trigger ${tutorialStep === "club-tab" ? "fairteams-tutorial-pulse relative z-[82]" : ""} fairteams-footer-text-tab flex h-full items-center justify-center rounded-xl text-slate-500 transition-all`}
               >
-                <span className="text-[12px] font-semibold leading-none tracking-tight md:text-[14px] md:font-bold">Club</span>
+                <span className="text-[12px] font-semibold leading-none tracking-tight md:text-[14px] md:font-bold">{t("app.navigation.club")}</span>
               </TabsTrigger>
             </TabsList>
           </div>
@@ -4432,10 +4811,10 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 <div className="mt-2 flex items-center justify-between gap-3 lg:mt-4">
                   <div>
                     {tutorialCanGoBack && (
-                      <button type="button" onClick={handleTutorialBack} className="fairteams-tutorial-action text-[11px] font-black text-slate-500 underline decoration-slate-300 underline-offset-2 lg:text-sm">Back</button>
+                      <button type="button" onClick={handleTutorialBack} className="fairteams-tutorial-action text-[11px] font-black text-slate-500 underline decoration-slate-300 underline-offset-2 lg:text-sm">{t("common.back")}</button>
                     )}
                   </div>
-                  <button type="button" onClick={skipGuidedTour} className="fairteams-tutorial-action text-[11px] font-black text-slate-500 underline decoration-slate-300 underline-offset-2 lg:text-sm">Skip tutorial</button>
+                  <button type="button" onClick={skipGuidedTour} className="fairteams-tutorial-action text-[11px] font-black text-slate-500 underline decoration-slate-300 underline-offset-2 lg:text-sm">{t("app.tutorial.skip")}</button>
                 </div>
               </div>
             </div>
@@ -4454,7 +4833,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 ? "w-full max-w-md rounded-[26px] border border-white/90 bg-white p-5 shadow-[0_24px_70px_rgba(15,23,42,.24)] lg:max-w-xl lg:p-8"
                 : "contents"}>
             <div className="flex items-center justify-between gap-3">
-              <div className="text-[11px] font-black uppercase tracking-[0.2em] text-emerald-600">Guided kick-off</div>
+              <div className="text-[11px] font-black uppercase tracking-[0.2em] text-emerald-600">{t("app.tutorial.heading")}</div>
               <div className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-black text-emerald-700">{currentNumber} / {tutorialTotal}</div>
             </div>
             {tutorialStep === "magic-reveal" && <div className="mb-1 text-3xl">‚ú®‚öΩ‚ú®</div>}
@@ -4462,7 +4841,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
             <div className="mt-2 text-[15px] font-semibold leading-relaxed text-slate-600 lg:mt-3 lg:text-[18px]">{tutorialCopy[tutorialStep].body}</div>
             {tutorialStep === "club-intro" && (
               <div className="mt-4 grid grid-cols-[1fr_1.4fr] gap-2">
-                <button type="button" onClick={handleTutorialBack} className="fairteams-tutorial-action h-12 rounded-2xl border border-slate-200 bg-white text-sm font-black text-slate-600">Back</button>
+                <button type="button" onClick={handleTutorialBack} className="fairteams-tutorial-action h-12 rounded-2xl border border-slate-200 bg-white text-sm font-black text-slate-600">{t("common.back")}</button>
               <button
                 type="button"
                 className="fairteams-tutorial-action h-12 flex-[1.4] rounded-2xl bg-[#102A43] text-sm font-black text-white shadow-sm"
@@ -4474,30 +4853,32 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   }, 60);
                 }}
               >
-                Continue
+                {t("common.continue")}
               </button>
-                <button type="button" onClick={skipGuidedTour} className="fairteams-tutorial-action col-span-2 mt-1 text-xs font-black text-slate-500 underline decoration-slate-300 underline-offset-2 lg:text-sm">Skip tutorial</button>
+                <button type="button" onClick={skipGuidedTour} className="fairteams-tutorial-action col-span-2 mt-1 text-xs font-black text-slate-500 underline decoration-slate-300 underline-offset-2 lg:text-sm">{t("app.tutorial.skip")}</button>
               </div>
             )}
             {tutorialStep === "recap" && (
               <div className="mt-4 space-y-2.5">
                 {[
-                  ["Roster", "Your full player list"],
-                  ["Teams", "Choose players, build, and present teams"],
-                  ["Club", "Shared-roster tools"],
-                ].map(([label, detail]) => (
+                  { id: "roster", label: t("app.navigation.roster"), detail: t("app.tutorial.recap.roster") },
+                  { id: "teams", label: t("app.navigation.teams"), detail: t("app.tutorial.recap.teams") },
+                  { id: "club", label: t("app.navigation.club"), detail: t("app.tutorial.recap.club") },
+                ].map(({ id, label, detail }) => (
                   <div
-                    key={label}
-                    className={`flex items-center justify-between gap-3 rounded-2xl border px-3.5 py-3 ${label === "Club" ? "border-violet-100 bg-violet-50/70" : "border-transparent bg-slate-50"}`}
+                    key={id}
+                    className={`flex items-center justify-between gap-3 rounded-2xl border px-3.5 py-3 ${id === "club" ? "border-violet-100 bg-violet-50/70" : "border-transparent bg-slate-50"}`}
                   >
-                    <span className={`text-sm font-black ${label === "Club" ? "text-violet-800" : "text-[#102A43]"}`}>{label}</span>
-                    <span className={`text-right text-xs font-bold ${label === "Club" ? "text-violet-600" : "text-slate-500"}`}>{detail}</span>
+                    <span className={`text-sm font-black ${id === "club" ? "text-violet-800" : "text-[#102A43]"}`}>{label}</span>
+                    <span className={`text-right text-xs font-bold ${id === "club" ? "text-violet-600" : "text-slate-500"}`}>{detail}</span>
                   </div>
                 ))}
                 <button type="button" className="fairteams-tutorial-action mt-2 h-12 w-full rounded-2xl bg-emerald-600 text-sm font-black text-white shadow-sm" onClick={finishGuidedTour}>
-                  {tutorialReplayMode ? "Return to my app" : "Start using Stripes"}
+                  {tutorialReplayMode
+                    ? t("app.tutorial.returnToApp")
+                    : t("app.tutorial.startUsing")}
                 </button>
-                <button type="button" onClick={skipGuidedTour} className="fairteams-tutorial-action w-full py-1 text-xs font-black text-slate-500 underline decoration-slate-300 underline-offset-2 lg:text-sm">Skip tutorial</button>
+                <button type="button" onClick={skipGuidedTour} className="fairteams-tutorial-action w-full py-1 text-xs font-black text-slate-500 underline decoration-slate-300 underline-offset-2 lg:text-sm">{t("app.tutorial.skip")}</button>
               </div>
             )}
             </div>
@@ -4515,10 +4896,10 @@ They will no longer be able to open or edit this shared roster unless it is shar
             <div className="mb-4 flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <h2 className="text-base font-bold tracking-tight text-[#102A43]">
-                  Edit roster
+                  {t("app.actions.editRoster")}
                 </h2>
                 <p className="mt-0.5 text-xs font-medium text-slate-500">
-                  Name, logo, and color
+                  {t("app.rosterEditor.subtitle")}
                 </p>
               </div>
               <Button
@@ -4527,8 +4908,8 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 size="icon"
                 className="h-9 w-9 shrink-0 rounded-xl text-slate-500 hover:text-slate-800"
                 onClick={cancelGroupSettings}
-                title="Close"
-                aria-label="Close edit roster"
+                title={t("common.close")}
+                aria-label={t("app.rosterEditor.closeAria")}
               >
                 <X className="h-4 w-4" />
               </Button>
@@ -4537,7 +4918,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
             <div className="space-y-4">
               <section>
                 <h3 className="text-[13px] font-bold text-[#102A43]">
-                  Roster Name
+                  {t("app.rosterEditor.name")}
                 </h3>
                 <input
                   value={draftGroupName}
@@ -4551,19 +4932,19 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   maxLength={32}
                   enterKeyHint="done"
                   className="mt-2 h-10 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm font-semibold text-[#102A43] outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
-                  placeholder="Stripes"
+                  placeholder={t("common.brand.stripes")}
                 />
               </section>
 
               <section>
                 <h3 className="text-[13px] font-bold text-[#102A43]">
-                  Roster Logo
+                  {t("app.rosterEditor.logo.heading")}
                 </h3>
                 <div className="mt-2 flex items-center gap-3">
                   <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 shadow-sm">
                     <img
                       src={draftGroupLogo || stripesLogo}
-                      alt="Roster logo preview"
+                      alt={t("app.rosterEditor.logo.previewAlt")}
                       className="h-[90%] w-[90%] object-contain"
                     />
                   </div>
@@ -4574,7 +4955,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                       className="h-9 rounded-2xl text-xs font-bold"
                       onClick={() => logoInputRef.current?.click()}
                     >
-                      Choose logo
+                      {t("app.rosterEditor.logo.choose")}
                     </Button>
                     {draftGroupLogo && (
                       <Button
@@ -4583,7 +4964,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                         className="h-9 rounded-2xl text-xs font-bold text-slate-500"
                         onClick={() => setDraftGroupLogo("")}
                       >
-                        Use default
+                        {t("app.rosterEditor.logo.useDefault")}
                       </Button>
                     )}
                     <input
@@ -4603,7 +4984,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
 
               <section>
                 <h3 className="text-[13px] font-bold text-[#102A43]">
-                  Roster Color
+                  {t("app.rosterEditor.colorHeading")}
                 </h3>
                 <div className="mt-2 grid grid-cols-5 gap-2.5">
                   {GROUP_COLOR_THEMES.map((theme) => {
@@ -4616,7 +4997,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                         type="button"
                         onClick={() => setDraftHeaderColor(theme.value)}
                         className="group flex flex-col items-center gap-1 text-[10px] font-bold text-slate-600"
-                        title={theme.name}
+                        title={t(theme.labelKey)}
                       >
                         <span
                           className={`flex h-9 w-full min-w-0 items-center justify-center rounded-2xl border shadow-sm transition-transform group-active:scale-95 ${selected ? "border-blue-500 ring-2 ring-blue-200" : "border-white"}`}
@@ -4633,7 +5014,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                             />
                           )}
                         </span>
-                        <span className="truncate">{theme.name}</span>
+                        <span className="truncate">{t(theme.labelKey)}</span>
                       </button>
                     );
                   })}
@@ -4648,14 +5029,14 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 className="h-11 flex-1 rounded-2xl text-sm font-bold"
                 onClick={cancelGroupSettings}
               >
-                Cancel
+                {t("common.cancel")}
               </Button>
               <Button
                 type="button"
                 className="h-11 flex-[1.4] rounded-2xl bg-[#102A43] text-sm font-bold text-white"
                 onClick={saveGroupSettings}
               >
-                Save
+                {t("common.save")}
               </Button>
             </div>
           </div>
@@ -4672,9 +5053,11 @@ They will no longer be able to open or edit this shared roster unless it is shar
             <div className="flex items-start justify-between gap-3 border-b border-slate-100 p-4 pb-3">
               <div>
                 <h2 className="text-base font-black tracking-tight text-[#102A43]">
-                  Roster Tools
+                  {t("app.rosterTools.heading")}
                 </h2>
-                <p className="mt-0.5 text-[10px] font-bold text-slate-400">Stripes v{APP_VERSION}</p>
+                <p className="mt-0.5 text-[10px] font-bold text-slate-400">
+                  {t("app.rosterTools.version", { version: APP_VERSION })}
+                </p>
               </div>
               <Button
                 type="button"
@@ -4682,7 +5065,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 size="icon"
                 className="h-8 w-8 rounded-xl"
                 onClick={() => setRosterFilesOpen(false)}
-                title="Close"
+                title={t("common.close")}
               >
                 <X className="h-4 w-4" />
               </Button>
@@ -4693,8 +5076,12 @@ They will no longer be able to open or edit this shared roster unless it is shar
                 className={`sticky top-0 z-20 flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white/95 px-3 py-3 text-left shadow-sm backdrop-blur transition ${!isEmptyStarterRoster && rosters.length > 1 ? "cursor-pointer active:scale-[0.995] hover:border-slate-300 hover:bg-white" : ""}`}
                 role={!isEmptyStarterRoster && rosters.length > 1 ? "button" : undefined}
                 tabIndex={!isEmptyStarterRoster && rosters.length > 1 ? 0 : undefined}
-                title={!isEmptyStarterRoster && rosters.length > 1 ? "Change roster" : undefined}
-                aria-label={!isEmptyStarterRoster && rosters.length > 1 ? "Change current roster" : "Current roster"}
+                title={!isEmptyStarterRoster && rosters.length > 1
+                  ? t("app.rosterPicker.changeRoster")
+                  : undefined}
+                aria-label={!isEmptyStarterRoster && rosters.length > 1
+                  ? t("app.rosterPicker.changeCurrentAria")
+                  : t("app.rosterPicker.currentRoster")}
                 onClick={() => {
                   if (!isEmptyStarterRoster && rosters.length > 1) {
                     setRosterPickerOpen(true);
@@ -4709,11 +5096,11 @@ They will no longer be able to open or edit this shared roster unless it is shar
               >
                 <div className="min-w-0 flex-1">
                   <span className="block text-[10px] font-extrabold uppercase tracking-wide text-slate-400">
-                    Current roster
+                    {t("app.rosterPicker.currentRoster")}
                   </span>
                   <div className="mt-1 flex min-w-0 items-center gap-1.5">
                     <span className="min-w-0 truncate text-sm font-black text-[#102A43]">
-                      {isEmptyStarterRoster ? "Make a new roster" : activeRosterName}
+                      {isEmptyStarterRoster ? t("app.rosterPicker.makeNew") : activeRosterName}
                     </span>
                     {!isEmptyStarterRoster && activeRoster && <RosterKindBadge roster={activeRoster} />}
                     {!isEmptyStarterRoster && (
@@ -4724,8 +5111,8 @@ They will no longer be able to open or edit this shared roster unless it is shar
                           openGroupSettings();
                         }}
                         className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-[#102A43]/65 shadow-sm transition active:scale-[0.98] hover:text-[#102A43]"
-                        title="Edit roster"
-                        aria-label="Edit current roster"
+                        title={t("app.actions.editRoster")}
+                        aria-label={t("app.rosterPicker.editCurrentAria")}
                       >
                         <Pencil className="h-3.5 w-3.5" />
                       </button>
@@ -4733,17 +5120,25 @@ They will no longer be able to open or edit this shared roster unless it is shar
                   </div>
                   <div className={`mt-0.5 block w-full text-left text-[11px] font-semibold leading-snug whitespace-normal min-[310px]:truncate ${!isEmptyStarterRoster && rosters.length > 1 ? "text-slate-500" : "text-slate-500"}`}>
                     {isEmptyStarterRoster
-                      ? "Create one below or import a roster"
+                      ? t("app.rosterPicker.emptyHelp")
                       : activeRosterIsFirebaseShared
-                        ? `${players.length} player${players.length === 1 ? "" : "s"} ¬∑ ${activeSharedRosterAutosyncPresentation.label}`
+                        ? t("app.rosterPicker.playerStatus", {
+                          count: players.length,
+                          status: activeSharedRosterAutosyncPresentation.label,
+                        })
                         : activeRosterIsShared
-                          ? `${players.length} player${players.length === 1 ? "" : "s"} ¬∑ ${activeGoogleSheetHasUnsavedChanges ? "Shared changes not saved" : "Shared roster"}`
-                        : `${players.length} player${players.length === 1 ? "" : "s"}`}
+                          ? t("app.rosterPicker.playerStatus", {
+                            count: players.length,
+                            status: activeGoogleSheetHasUnsavedChanges
+                              ? t("app.shared.changesNotSaved")
+                              : t("app.rosterKind.sharedTitle"),
+                          })
+                        : t("common.playerCount", { count: players.length })}
                   </div>
                 </div>
                 {!isEmptyStarterRoster && rosters.length > 1 && (
                   <div className="pointer-events-none flex shrink-0 items-center gap-1 rounded-full px-1 text-[11px] font-black uppercase tracking-wide text-[#102A43]/55">
-                    <span>Change</span>
+                    <span>{t("app.actions.change")}</span>
                     <ChevronRight className="h-4 w-4" strokeWidth={2.6} />
                   </div>
                 )}
@@ -4751,7 +5146,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
 
               <div className={`rounded-2xl border border-slate-100 bg-white p-3 ${rosterToolsActivePanel ? "hidden" : ""}`}>
                 <div className="mb-2 text-[10px] font-black uppercase tracking-wide text-slate-400">
-                  Create roster
+                  {t("app.rosterTools.createRoster")}
                 </div>
                 <div className="flex gap-2">
                   <input
@@ -4768,7 +5163,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                       }
                     }}
                     className={`h-10 min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-bold text-[#102A43] outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100 ${tutorialStep === "create-roster" ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
-                    placeholder="New roster name"
+                    placeholder={t("app.rosterTools.newRosterPlaceholder")}
                     maxLength={36}
                   />
                   <Button
@@ -4777,7 +5172,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                     onClick={() => { createNewRoster(); if (tutorialStep === "create-roster") { setRosterFilesOpen(false); setTutorialStep("recap"); } }}
                   >
                     <Plus className="mr-1.5 h-3.5 w-3.5" />
-                    New
+                    {t("app.rosterTools.new")}
                   </Button>
                 </div>
               </div>
@@ -4794,10 +5189,10 @@ They will no longer be able to open or edit this shared roster unless it is shar
                     </span>
                     <span className="min-w-0">
                       <span className="block text-[10px] font-black uppercase tracking-wide text-slate-500">
-                        Local Backup
+                        {t("app.localBackup.heading")}
                       </span>
                       <span className="mt-0.5 block text-xs font-semibold leading-snug whitespace-normal text-slate-600 min-[310px]:truncate">
-                        Export or import local roster files.
+                        {t("app.localBackup.description")}
                       </span>
                     </span>
                   </span>
@@ -4814,10 +5209,12 @@ They will no longer be able to open or edit this shared roster unless it is shar
                       className="h-11 justify-start rounded-2xl gap-3"
                       onClick={exportSharedRoster}
                       disabled={players.length === 0 || activeRosterIsShared}
-                      title={activeRosterIsShared ? "Shared rosters stay online. Use Make private copy first if you want a local export." : "Export this local roster"}
+                      title={activeRosterIsShared
+                        ? t("app.localBackup.sharedExportDisabledTitle")
+                        : t("app.localBackup.exportRosterTitle")}
                     >
                       <Download className="h-4 w-4" />
-                      <span className="font-black">Export this roster</span>
+                      <span className="font-black">{t("app.localBackup.exportRoster")}</span>
                     </Button>
                     <Button
                       type="button"
@@ -4826,7 +5223,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                       onClick={() => openImportPicker("shared")}
                     >
                       <Upload className="h-4 w-4" />
-                      <span className="font-black">Import one roster</span>
+                      <span className="font-black">{t("app.localBackup.importRoster")}</span>
                     </Button>
                     <div className="grid grid-cols-2 gap-2">
                       <Button
@@ -4835,10 +5232,10 @@ They will no longer be able to open or edit this shared roster unless it is shar
                         className="h-11 justify-start rounded-2xl gap-2 px-3"
                         onClick={exportAllRostersBackup}
                         disabled={!hasPrivateBackupRosters}
-                        title="Exports local/private rosters only. Shared rosters stay online."
+                        title={t("app.localBackup.exportAllTitle")}
                       >
                         <Archive className="h-4 w-4" />
-                        <span className="truncate text-xs font-black">Export all</span>
+                        <span className="truncate text-xs font-black">{t("app.localBackup.exportAll")}</span>
                       </Button>
                       <Button
                         type="button"
@@ -4847,7 +5244,7 @@ They will no longer be able to open or edit this shared roster unless it is shar
                         onClick={() => openImportPicker("backup")}
                       >
                         <ArchiveRestore className="h-4 w-4" />
-                        <span className="truncate text-xs font-black">Import all</span>
+                        <span className="truncate text-xs font-black">{t("app.localBackup.importAll")}</span>
                       </Button>
                     </div>
 
@@ -4859,10 +5256,10 @@ They will no longer be able to open or edit this shared roster unless it is shar
                               <Share2 className="mt-0.5 h-4 w-4 shrink-0 text-violet-600" />
                               <div className="min-w-0 flex-1">
                                 <div className="text-[10px] font-black uppercase tracking-wide text-violet-700">
-                                  Shared roster
+                                  {t("app.rosterKind.sharedTitle")}
                                 </div>
                                 <p className="mt-1 text-[11px] font-semibold leading-snug text-violet-900/80">
-This is a shared roster. Local Backup can only remove/disassociate this device‚Äôs copy. Use Shared rosters to reopen, manage people, or owner-delete online.
+                                  {t("app.localBackup.sharedRosterHelp")}
                                 </p>
                                 <Button
                                   type="button"
@@ -4871,7 +5268,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                                   onClick={openSharedRostersFromLocalFlow}
                                 >
                                   <FolderOpen className="h-3.5 w-3.5" />
-                                  <span className="truncate text-xs font-black">Manage Shared rosters</span>
+                                  <span className="truncate text-xs font-black">{t("app.localBackup.manageShared")}</span>
                                 </Button>
                               </div>
                             </div>
@@ -4886,10 +5283,10 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                           {activeRosterIsShared ? <X className="h-4 w-4" /> : <Trash2 className="h-4 w-4" />}
                           <span className="font-black">
                             {activeRosterIsShared
-                              ? "Remove local copy from this device"
+                              ? t("app.localBackup.removeLocalCopy")
                               : rosters.length > 1
-                                ? "Delete current roster"
-                                : "Clear current roster"}
+                                ? t("app.localBackup.deleteCurrentRoster")
+                                : t("app.localBackup.clearCurrentRoster")}
                           </span>
                         </Button>
                       </div>
@@ -4910,10 +5307,10 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                     </span>
                     <span className="min-w-0">
                       <span className="block text-[10px] font-black uppercase tracking-wide text-blue-500">
-                        Cloud Backup
+                        {t("app.cloudBackup.heading")}
                       </span>
                       <span className="mt-0.5 block text-xs font-semibold leading-snug whitespace-normal text-slate-600 min-[310px]:truncate">
-                        Private backup of local rosters.
+                        {t("app.cloudBackup.description")}
                       </span>
                     </span>
                   </span>
@@ -4927,7 +5324,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                     <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-slate-50/70 p-3">
                       <div className="min-w-0">
                         <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-                          Google
+                          {t("app.google.label")}
                         </div>
                         <div className="mt-0.5 truncate text-xs font-black text-[#102A43]">
                           {googleDriveStatusText}
@@ -4951,7 +5348,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                             onClick={disconnectGoogleDrive}
                             disabled={googleDriveConnecting}
                           >
-                            Disconnect
+                            {t("app.google.disconnect")}
                           </Button>
                         )}
                       </div>
@@ -4963,15 +5360,17 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                     >
                       <div className="rounded-2xl bg-white/80 p-3">
                         <div className="text-[10px] font-black uppercase tracking-wide text-blue-500">
-                          Safety backup
+                          {t("app.cloudBackup.safetyBackup")}
                       </div>
                       <div className="mt-1 truncate text-xs font-black text-[#102A43]">
-                        {currentDriveBackup?.name || "No backup selected"}
+                        {currentDriveBackup?.name || t("app.cloudBackup.noBackupSelected")}
                       </div>
                       <div className="mt-0.5 text-[11px] font-semibold text-slate-500">
                         {currentDriveBackup
-                          ? `Backup has ${formatBackupSummary(currentDriveBackup.rosterCount !== undefined && currentDriveBackup.playerCount !== undefined ? { rosterCount: currentDriveBackup.rosterCount, playerCount: currentDriveBackup.playerCount } : null)}`
-                          : "Optional private backup for local rosters."}
+                          ? t("app.cloudBackup.hasSummary", {
+                            summary: formatBackupSummary(currentDriveBackup.rosterCount !== undefined && currentDriveBackup.playerCount !== undefined ? { rosterCount: currentDriveBackup.rosterCount, playerCount: currentDriveBackup.playerCount } : null),
+                          })
+                          : t("app.cloudBackup.optionalDescription")}
                       </div>
                     </div>
 
@@ -4980,11 +5379,17 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                       className="h-12 justify-start rounded-2xl gap-3 bg-blue-600 text-white shadow-sm hover:bg-blue-700"
                       onClick={saveAllRostersToGoogleDrive}
                       disabled={!hasPrivateBackupRosters || !googleDriveConnected || googleDriveSaving || googleDriveUpdating}
-                      title={currentDriveBackup ? "Update your private local-rosters backup" : "Create a private backup of local rosters"}
+                      title={currentDriveBackup
+                        ? t("app.cloudBackup.updateTitle")
+                        : t("app.cloudBackup.createTitle")}
                     >
                       {currentDriveBackup ? <RefreshCw className={`h-4 w-4 ${googleDriveUpdating ? "animate-spin" : ""}`} /> : <CloudUpload className="h-4 w-4" />}
                       <span className="font-black">
-                        {googleDriveSaving || googleDriveUpdating ? "Saving..." : currentDriveBackup ? "Update backup" : "Back up all rosters"}
+                        {googleDriveSaving || googleDriveUpdating
+                          ? t("app.status.savingDots")
+                          : currentDriveBackup
+                            ? t("app.cloudBackup.update")
+                            : t("app.cloudBackup.backUpAll")}
                       </span>
                     </Button>
 
@@ -4996,7 +5401,9 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                       disabled={!googleDriveConnected || googleDriveOpening}
                     >
                       <CloudDownload className="h-4 w-4" />
-                      <span className="truncate text-xs font-black">{googleDriveOpening ? "Opening..." : "Browse backups"}</span>
+                      <span className="truncate text-xs font-black">
+                        {googleDriveOpening ? t("app.status.openingDots") : t("app.cloudBackup.browse")}
+                      </span>
                     </Button>
 
                       <button
@@ -5005,7 +5412,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                         className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wide text-blue-600"
                       >
                         <Info className="h-3 w-3" />
-                        How cloud backup works
+                        {t("app.cloudBackup.howItWorksLink")}
                       </button>
                     </div>
                   </div>
@@ -5024,10 +5431,12 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                     </span>
                     <span className="min-w-0">
                       <span className="block text-[10px] font-black uppercase tracking-wide text-emerald-600">
-                        Shared Roster
+                        {t("app.shared.heading")}
                       </span>
                       <span className="mt-0.5 block text-xs font-semibold leading-snug whitespace-normal text-slate-600 min-[310px]:truncate">
-                        {activeRoster?.cloudSource?.provider === "firebase" ? "Firebase shared roster." : "Invite and sync online."}
+                        {activeRoster?.cloudSource?.provider === "firebase"
+                          ? t("app.shared.firebaseDescription")
+                          : t("app.shared.inviteDescription")}
                       </span>
                     </span>
                   </span>
@@ -5055,24 +5464,24 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
 
                     <details className="rounded-2xl border border-amber-100 bg-amber-50/60 p-2">
                       <summary className="cursor-pointer list-none rounded-xl px-2 py-1 text-[10px] font-black uppercase tracking-wide text-amber-700">
-                        Legacy Google Sheets tools (temporary)
+                        {t("app.shared.legacy.heading")}
                       </summary>
                       <p className="px-2 pb-2 pt-1 text-[11px] font-semibold leading-snug text-slate-600">
-                        Firebase is now the main shared-roster path. These old tools stay hidden for safety during migration.
+                        {t("app.shared.legacy.description")}
                       </p>
                       <div className="grid gap-3">
                     <div className="rounded-2xl border border-amber-100 bg-amber-50/70 px-3 py-2">
                       <div className="text-[10px] font-black uppercase tracking-wide text-amber-700">
-                        Old Google Sheets sharing
+                        {t("app.shared.legacy.oldSheetsHeading")}
                       </div>
                       <p className="mt-1 text-[11px] font-semibold leading-snug text-slate-600">
-                        Kept temporarily for safety while Firebase shared rosters are built.
+                        {t("app.shared.legacy.oldSheetsDescription")}
                       </p>
                     </div>
                     <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-slate-50/70 p-3">
                       <div className="min-w-0">
                         <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-                          Google
+                          {t("app.google.label")}
                         </div>
                         <div className="mt-0.5 truncate text-xs font-black text-[#102A43]">
                           {googleDriveStatusText}
@@ -5096,7 +5505,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                             onClick={disconnectGoogleDrive}
                             disabled={googleDriveConnecting}
                           >
-                            Disconnect
+                            {t("app.google.disconnect")}
                           </Button>
                         )}
                       </div>
@@ -5108,14 +5517,18 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                     >
                       <div className={`rounded-2xl border px-3 py-2 ${activeGoogleSheetHasUnsavedChanges ? "border-amber-100 bg-amber-50/80" : activeRosterIsShared ? "border-emerald-100 bg-emerald-50/70" : "border-slate-100 bg-white/85"}`}>
                         <div className={`text-[10px] font-black uppercase tracking-wide ${activeGoogleSheetHasUnsavedChanges ? "text-amber-700" : activeRosterIsShared ? "text-emerald-700" : "text-slate-400"}`}>
-                          {activeRosterIsShared ? activeGoogleSheetHasUnsavedChanges ? "Unsaved changes" : "Shared" : "Not shared"}
+                          {activeRosterIsShared
+                            ? activeGoogleSheetHasUnsavedChanges
+                              ? t("app.shared.unsavedChanges")
+                              : t("app.rosterKind.shared")
+                            : t("app.shared.notShared")}
                         </div>
                         <div className="mt-1 text-[11px] font-semibold leading-snug text-slate-600">
                           {activeRosterIsShared
                             ? activeGoogleSheetHasUnsavedChanges
-                              ? "Save shared when you finish editing."
-                              : `Saved ${formatSheetSyncTime(activeGoogleSheetSource?.lastSyncedAt).replace("Synced ", "")}`
-                            : "This roster is saved only on this device."}
+                              ? t("app.shared.saveWhenFinished")
+                              : formatSheetSavedTime(activeGoogleSheetSource?.lastSyncedAt)
+                            : t("app.shared.localOnly")}
                         </div>
                       </div>
 
@@ -5123,7 +5536,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                       <>
                         <div className="grid gap-2">
                           <div className="px-1 text-[10px] font-black uppercase tracking-wide text-emerald-600">
-                            Shared roster
+                            {t("app.rosterKind.sharedTitle")}
                           </div>
                           <Button
                             type="button"
@@ -5133,7 +5546,9 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                           >
                             <CloudUpload className="h-4 w-4" />
                             <span className="min-w-0 truncate font-black">
-                              {googleSheetSyncing ? "Saving..." : "Save to shared roster"}
+                              {googleSheetSyncing
+                                ? t("app.status.savingDots")
+                                : t("app.shared.saveToRoster")}
                             </span>
                           </Button>
                           <Button
@@ -5145,7 +5560,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                           >
                             <CloudDownload className="h-4 w-4" />
                             <span className="truncate text-xs font-black">
-                              {googleSheetOpening ? "Getting..." : "Get latest"}
+                              {googleSheetOpening ? t("app.status.gettingDots") : t("app.shared.getLatest")}
                             </span>
                           </Button>
                         </div>
@@ -5160,7 +5575,9 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                           >
                             <Share2 className="h-4 w-4" />
                             <span className="truncate text-xs font-black">
-                              {googleSheetAccessLoading ? "Loading access..." : "People & access"}
+                              {googleSheetAccessLoading
+                                ? t("app.status.loadingAccessDots")
+                                : t("app.shared.peopleAndAccess")}
                             </span>
                           </Button>
                           <Button
@@ -5172,7 +5589,9 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                           >
                             <FolderOpen className="h-4 w-4" />
                             <span className="truncate text-xs font-black">
-                              {googleSheetOpening ? "Opening..." : "Open shared roster library"}
+                              {googleSheetOpening
+                                ? t("app.status.openingDots")
+                                : t("app.shared.openLibrary")}
                             </span>
                           </Button>
                         </div>
@@ -5187,7 +5606,9 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                         >
                           <Share2 className="h-4 w-4" />
                           <span className="min-w-0 truncate font-black">
-                            {googleSheetSyncing ? "Creating..." : "Make this roster shared"}
+                            {googleSheetSyncing
+                              ? t("app.status.creatingDots")
+                              : t("app.shared.makeShared")}
                           </span>
                         </Button>
                         <Button
@@ -5199,7 +5620,9 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                         >
                           <FolderOpen className="h-4 w-4" />
                           <span className="truncate text-xs font-black">
-                            {googleSheetOpening ? "Opening..." : "Open shared roster library"}
+                            {googleSheetOpening
+                              ? t("app.status.openingDots")
+                              : t("app.shared.openLibrary")}
                           </span>
                         </Button>
                       </>
@@ -5208,8 +5631,8 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                       <div className="rounded-2xl bg-white/70 px-3 py-2">
                         <p className="text-[10px] font-semibold leading-snug text-slate-500">
                           {googleDriveConnected
-                            ? "Get latest before editing. Save to shared roster after editing."
-                            : "Sign in with Google above to share rosters."}
+                            ? t("app.shared.syncInstructions")
+                            : t("app.shared.signInInstructions")}
                         </p>
                       </div>
                     </div>
@@ -5220,7 +5643,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                       className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wide text-emerald-600"
                     >
                       <Info className="h-3 w-3" />
-                      How shared roster works
+                      {t("app.shared.howItWorksLink")}
                     </button>
                       </div>
                     </details>
@@ -5242,7 +5665,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
           <div className="w-full max-w-[240px] rounded-3xl border border-slate-100 bg-white p-4 text-center shadow-2xl">
             <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-4 border-slate-100 border-t-[#102A43]" />
             <div className="text-sm font-black tracking-tight text-[#102A43]">
-              Switching roster‚Ä¶
+              {t("app.rosterPicker.switching")}
             </div>
             <div className="mt-1 truncate text-xs font-semibold text-slate-500">
               {rosterSwitchingName}
@@ -5261,10 +5684,10 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
             <div className="flex items-start justify-between gap-3 border-b border-slate-100 p-4 pb-3">
               <div>
                 <h2 className="text-base font-black tracking-tight text-[#102A43]">
-                  Change roster
+                  {t("app.rosterPicker.changeRoster")}
                 </h2>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  Local rosters stay private. Shared rosters stay connected to your account.
+                  {t("app.rosterPicker.description")}
                 </p>
               </div>
               <Button
@@ -5273,7 +5696,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                 size="icon"
                 className="h-8 w-8 rounded-xl"
                 onClick={() => setRosterPickerOpen(false)}
-                title="Close"
+                title={t("common.close")}
               >
                 <X className="h-4 w-4" />
               </Button>
@@ -5282,8 +5705,8 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
             <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4">
               <div className="space-y-2">
                 <div className="flex items-center justify-between px-1">
-                  <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Local rosters</span>
-                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-500">{localRosterPickerChoices.length}</span>
+                  <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">{t("app.rosterPicker.localHeading")}</span>
+                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-500">{formatNumber(locale, localRosterPickerChoices.length)}</span>
                 </div>
                 {localRosterPickerChoices.length > 0 ? (
                   <div className="space-y-2">
@@ -5291,15 +5714,15 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                   </div>
                 ) : (
                   <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-3 py-3 text-xs font-semibold text-slate-500">
-                    No private local rosters on this device.
+                    {t("app.rosterPicker.noLocal")}
                   </div>
                 )}
               </div>
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between px-1">
-                  <span className="text-[10px] font-black uppercase tracking-wide text-violet-700">Shared rosters opened here</span>
-                  <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-black text-violet-700 ring-1 ring-violet-100">{sharedRosterPickerChoices.length}</span>
+                  <span className="text-[10px] font-black uppercase tracking-wide text-violet-700">{t("app.rosterPicker.sharedHeading")}</span>
+                  <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-black text-violet-700 ring-1 ring-violet-100">{formatNumber(locale, sharedRosterPickerChoices.length)}</span>
                 </div>
                 {sharedRosterPickerChoices.length > 0 ? (
                   <div className="space-y-2">
@@ -5307,7 +5730,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                   </div>
                 ) : (
                   <div className="rounded-2xl border border-dashed border-violet-100 bg-violet-50/60 px-3 py-3 text-xs font-semibold text-violet-800/75">
-                    No shared roster is open on this device. Use Club ‚Üí Shared rosters to open one from your account.
+                    {t("app.rosterPicker.noShared")}
                   </div>
                 )}
               </div>
@@ -5326,15 +5749,17 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
             <div className="flex items-start justify-between gap-3 border-b border-slate-100 p-4 pb-3">
               <div className="min-w-0">
                 <div className="text-[10px] font-black uppercase tracking-wide text-emerald-600">
-                  Shared Roster
+                  {t("app.shared.heading")}
                 </div>
                 <h2 className="mt-1 truncate text-base font-black tracking-tight text-[#102A43]">
-                  Shared roster library
+                  {t("app.shared.libraryHeading")}
                 </h2>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
                   {connectedDriveUser?.emailAddress
-                    ? `Signed in as ${connectedDriveUser.emailAddress}. Rosters you opened in Stripes appear here.`
-                    : "Rosters you opened in Stripes appear here."}
+                    ? t("app.shared.librarySignedInDescription", {
+                      email: connectedDriveUser.emailAddress,
+                    })
+                    : t("app.shared.libraryDescription")}
                 </p>
               </div>
               <Button
@@ -5343,7 +5768,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                 size="icon"
                 className="h-8 w-8 shrink-0 rounded-xl"
                 onClick={() => setGoogleSheetChoices(null)}
-                title="Close"
+                title={t("common.close")}
               >
                 <X className="h-4 w-4" />
               </Button>
@@ -5366,7 +5791,9 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                           {file.name}
                         </span>
                         <span className="mt-0.5 block truncate text-[11px] font-bold text-emerald-700/75">
-                          {isGoogleSheetOwnedByMe(file) ? "Role: Owner" : "Role: Editor"} ¬∑ {formatDriveModifiedTime(file.modifiedTime)}
+                          {isGoogleSheetOwnedByMe(file)
+                            ? t("app.shared.roleOwner")
+                            : t("app.shared.roleEditor")} ¬∑ {formatDriveModifiedTime(file.modifiedTime)}
                         </span>
                         <span className="mt-0.5 block truncate text-[10px] font-semibold text-slate-500">
                           {getGoogleSheetSharedByLine(file)}
@@ -5383,7 +5810,9 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                   <div className="flex gap-2">
                     <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
                     <p className="text-xs font-semibold leading-snug text-amber-800">
-                      No shared rosters opened yet. Ask the owner to share it with {connectedDriveUser?.emailAddress || "this Google account"}, then tap Open shared roster file.
+                      {t("app.shared.noOpenedRosters", {
+                        account: connectedDriveUser?.emailAddress || t("app.shared.thisGoogleAccount"),
+                      })}
                     </p>
                   </div>
                 </div>
@@ -5400,7 +5829,9 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
               >
                 <FolderOpen className="h-4 w-4" />
                 <span className="truncate text-xs font-black">
-                  {googleSheetOpening ? "Opening..." : "Open shared roster file"}
+                  {googleSheetOpening
+                    ? t("app.status.openingDots")
+                    : t("app.shared.openFile")}
                 </span>
               </Button>
               <Button
@@ -5409,7 +5840,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                 className="h-10 rounded-2xl text-slate-500"
                 onClick={() => setGoogleSheetChoices(null)}
               >
-                Cancel
+                {t("common.cancel")}
               </Button>
             </div>
           </div>
@@ -5426,13 +5857,15 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="text-[10px] font-black uppercase tracking-wide text-emerald-600">
-                  Shared Roster
+                  {t("app.shared.heading")}
                 </div>
                 <h2 className="mt-1 truncate text-base font-black tracking-tight text-[#102A43]">
                   {googleSheetActionFile.name}
                 </h2>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  {isGoogleSheetOwnedByMe(googleSheetActionFile) ? "Role: Owner" : "Role: Editor"} ¬∑ {formatDriveModifiedTime(googleSheetActionFile.modifiedTime)}
+                  {isGoogleSheetOwnedByMe(googleSheetActionFile)
+                    ? t("app.shared.roleOwner")
+                    : t("app.shared.roleEditor")} ¬∑ {formatDriveModifiedTime(googleSheetActionFile.modifiedTime)}
                 </p>
               </div>
               <Button
@@ -5443,7 +5876,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                 onClick={() => {
                   setGoogleSheetActionFile(null);
                 }}
-                title="Close"
+                title={t("common.close")}
               >
                 <X className="h-4 w-4" />
               </Button>
@@ -5451,14 +5884,14 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
 
             <div className="mt-4 rounded-2xl border border-emerald-100 bg-emerald-50/70 p-3">
               <p className="text-xs font-semibold leading-snug text-emerald-900/80">
-                Opens this shared roster in Stripes on this device. It does not overwrite the Google Sheet.
+                {t("app.shared.openFileDescription")}
               </p>
             </div>
 
             {!isGoogleSheetOwnedByMe(googleSheetActionFile) && getGoogleSheetSharedByName(googleSheetActionFile) && (
               <div className="mt-3 rounded-2xl border border-emerald-100 bg-emerald-50/70 p-3">
                 <div className="text-[10px] font-black uppercase tracking-wide text-emerald-700">
-                  Shared by
+                  {t("app.shared.sharedByHeading")}
                 </div>
                 <div className="mt-1 truncate text-xs font-black text-[#102A43]">
                   {getGoogleSheetSharedByName(googleSheetActionFile)}
@@ -5473,7 +5906,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
 
             <div className="mt-3 rounded-2xl border border-slate-100 bg-slate-50/80 p-3">
               <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-                Owner
+                {t("app.access.owner")}
               </div>
               <div className="mt-1 truncate text-xs font-black text-[#102A43]">
                 {getGoogleSheetOwnerName(googleSheetActionFile)}
@@ -5492,15 +5925,15 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                 onClick={() => openGoogleSheetRosterFile(googleSheetActionFile)}
                 disabled={googleSheetOpening || googleSheetDeleting}
               >
-                {googleSheetOpening ? "Opening..." : "Open this roster"}
+                {googleSheetOpening ? t("app.status.openingDots") : t("app.shared.openThisRoster")}
               </Button>
               {isGoogleSheetOwnedByMe(googleSheetActionFile) && (
                 <div className="rounded-2xl border border-red-100 bg-red-50/70 p-3">
                   <div className="text-[10px] font-black uppercase tracking-wide text-red-700">
-                    Danger zone
+                    {t("app.dangerZone")}
                   </div>
                   <p className="mt-1 text-xs font-semibold leading-snug text-red-800/85">
-                    Delete shared roster for everyone moves the Google Sheet to trash. Other organizers will lose access to this shared roster.
+                    {t("app.shared.deleteForEveryoneDescription")}
                   </p>
                   <Button
                     type="button"
@@ -5509,7 +5942,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                     onClick={() => startGoogleSheetDeleteConfirm(googleSheetActionFile)}
                     disabled={googleSheetOpening || googleSheetDeleting}
                   >
-                    Delete shared roster for everyone
+                    {t("app.shared.deleteForEveryone")}
                   </Button>
                 </div>
               )}
@@ -5521,7 +5954,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                   setGoogleSheetActionFile(null);
                 }}
               >
-                Cancel
+                {t("common.cancel")}
               </Button>
             </div>
           </div>
@@ -5541,13 +5974,13 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
               </div>
               <div className="min-w-0 flex-1">
                 <div className="text-[10px] font-black uppercase tracking-wide text-red-600">
-                  Delete shared roster for everyone
+                  {t("app.shared.deleteForEveryone")}
                 </div>
                 <h2 className="mt-1 truncate text-base font-black tracking-tight text-[#102A43]">
                   {googleSheetDeleteConfirm.file.name}
                 </h2>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  This moves the Google Sheet to trash. Other organizers will lose access to this shared roster. Local copies already saved on devices are not deleted.
+                  {t("app.shared.deleteConfirmDescription")}
                 </p>
               </div>
             </div>
@@ -5557,7 +5990,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                 <div className="flex items-start gap-2">
                   <Info className="mt-0.5 h-4 w-4 shrink-0 text-violet-600" />
                   <p className="text-[11px] font-semibold leading-snug text-violet-900/80">
-                    Removing the local copy is safe. It does not delete the online shared roster, remove collaborators, or change other organizers‚Äô copies.
+                    {t("app.shared.localRemovalSafe")}
                   </p>
                 </div>
               </div>
@@ -5565,8 +5998,8 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
 
             <div className={`mt-4 rounded-2xl border p-3 ${activeRosterIsShared ? "border-violet-100 bg-violet-50/70" : "border-red-100 bg-red-50/70"}`}>
               <div className={`mb-2 flex items-center justify-between gap-2 text-[11px] font-black uppercase tracking-wide ${activeRosterIsShared ? "text-violet-700" : "text-red-700"}`}>
-                <span>Slide to confirm</span>
-                <span>{googleSheetDeleteSlide >= 95 ? "Ready" : `${googleSheetDeleteSlide}%`}</span>
+                <span>{t("app.confirm.slide")}</span>
+                <span>{googleSheetDeleteSlide >= 95 ? t("app.confirm.ready") : formatPercent(locale, googleSheetDeleteSlide / 100)}</span>
               </div>
               <input
                 type="range"
@@ -5575,11 +6008,11 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                 value={googleSheetDeleteSlide}
                 onChange={(e) => setGoogleSheetDeleteSlide(Number(e.target.value))}
                 className={`w-full ${activeRosterIsShared ? "accent-violet-600" : "accent-red-600"}`}
-                aria-label="Slide to confirm shared roster deletion"
+                aria-label={t("app.shared.deleteSlideAria")}
                 disabled={googleSheetDeleting}
               />
               <p className="mt-2 text-[11px] font-semibold text-red-700/80">
-                Only the owner should do this. You can restore the Sheet from Google Drive trash for a limited time if this was a mistake.
+                {t("app.shared.deleteOwnerWarning")}
               </p>
             </div>
 
@@ -5590,7 +6023,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                 onClick={confirmDeleteGoogleSheetRoster}
                 disabled={googleSheetDeleteSlide < 95 || googleSheetDeleting}
               >
-                {googleSheetDeleting ? "Deleting..." : "Delete shared roster for everyone"}
+                {googleSheetDeleting ? t("app.status.deletingDots") : t("app.shared.deleteForEveryone")}
               </Button>
               <Button
                 type="button"
@@ -5599,7 +6032,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                 onClick={closeGoogleSheetDeleteConfirm}
                 disabled={googleSheetDeleting}
               >
-                Cancel
+                {t("common.cancel")}
               </Button>
             </div>
           </div>
@@ -5619,13 +6052,13 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
               </div>
               <div className="min-w-0 flex-1">
                 <div className="text-[10px] font-black uppercase tracking-wide text-emerald-600">
-                  Shared Roster
+                  {t("app.shared.heading")}
                 </div>
                 <h2 className="mt-1 text-base font-black tracking-tight text-[#102A43]">
-                  Roster changed elsewhere
+                  {t("app.shared.updatePrompt.heading")}
                 </h2>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  This shared roster was changed after your last save. Get the latest changes before editing.
+                  {t("app.shared.updatePrompt.description")}
                 </p>
               </div>
             </div>
@@ -5637,7 +6070,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                 onClick={getLatestAfterGoogleSheetUpdatePrompt}
                 disabled={googleSheetOpening || googleSheetSyncing}
               >
-                Get latest changes
+                {t("app.shared.getLatestChanges")}
               </Button>
               <Button
                 type="button"
@@ -5646,7 +6079,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                 onClick={dismissGoogleSheetUpdatePrompt}
                 disabled={googleSheetOpening || googleSheetSyncing}
               >
-                Not now
+                {t("app.shared.notNow")}
               </Button>
             </div>
           </div>
@@ -5666,13 +6099,13 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
               </div>
               <div className="min-w-0 flex-1">
                 <div className="text-[10px] font-black uppercase tracking-wide text-amber-600">
-                  Shared Roster
+                  {t("app.shared.heading")}
                 </div>
                 <h2 className="mt-1 text-base font-black tracking-tight text-[#102A43]">
-                  Other changes found
+                  {t("app.shared.conflict.heading")}
                 </h2>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  This roster was changed elsewhere after your last save. Get latest first, or overwrite those changes.
+                  {t("app.shared.conflict.description")}
                 </p>
               </div>
             </div>
@@ -5680,7 +6113,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
             <div className="mt-3 grid grid-cols-2 gap-2">
               <div className="rounded-2xl border border-slate-100 bg-slate-50/80 p-3">
                 <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-                  Last sync here
+                  {t("app.shared.conflict.lastSync")}
                 </div>
                 <div className="mt-1 text-xs font-black text-[#102A43]">
                   {formatSheetModifiedTime(googleSheetConflictConfirm.lastKnownRemoteModifiedAt)}
@@ -5688,7 +6121,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
               </div>
               <div className="rounded-2xl border border-amber-100 bg-amber-50/80 p-3">
                 <div className="text-[10px] font-black uppercase tracking-wide text-amber-700">
-                  Sheet updated
+                  {t("app.shared.conflict.sheetUpdated")}
                 </div>
                 <div className="mt-1 text-xs font-black text-[#102A43]">
                   {formatSheetModifiedTime(googleSheetConflictConfirm.file.modifiedTime)}
@@ -5698,7 +6131,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
 
             <div className="mt-3 rounded-2xl border border-amber-100 bg-amber-50/80 p-3">
               <p className="text-xs font-semibold leading-snug text-amber-800">
-                Recommended: get latest first, review the roster, then save again if needed.
+                {t("app.shared.conflict.recommendation")}
               </p>
             </div>
 
@@ -5709,7 +6142,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                 onClick={getLatestAfterGoogleSheetConflict}
                 disabled={googleSheetOpening || googleSheetSyncing}
               >
-                Get latest first
+                {t("app.shared.conflict.getLatestFirst")}
               </Button>
               <Button
                 type="button"
@@ -5718,7 +6151,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                 onClick={overwriteGoogleSheetAfterConflict}
                 disabled={googleSheetSyncing || googleSheetOpening}
               >
-                Overwrite anyway
+                {t("app.shared.conflict.overwrite")}
               </Button>
               <Button
                 type="button"
@@ -5727,7 +6160,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                 onClick={() => setGoogleSheetConflictConfirm(null)}
                 disabled={googleSheetSyncing || googleSheetOpening}
               >
-                Cancel
+                {t("common.cancel")}
               </Button>
             </div>
           </div>
@@ -5744,13 +6177,13 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
             <div className="flex items-start justify-between gap-3 border-b border-slate-100 p-4 pb-3">
               <div className="min-w-0">
                 <div className="text-[10px] font-black uppercase tracking-wide text-emerald-600">
-                  Shared Roster
+                  {t("app.shared.heading")}
                 </div>
                 <h2 className="mt-1 text-base font-black tracking-tight text-[#102A43]">
-                  People & access
+                  {t("app.shared.peopleAndAccess")}
                 </h2>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  See who can use this shared roster.
+                  {t("app.shared.peopleDescription")}
                 </p>
               </div>
               <div className="flex shrink-0 items-center gap-1">
@@ -5761,7 +6194,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                   className="h-8 w-8 rounded-xl text-emerald-700"
                   onClick={findGoogleSheetRosterInDrive}
                   disabled={googleSheetOpening}
-                  title="Open shared roster file"
+                  title={t("app.shared.openFile")}
                 >
                   <FolderOpen className="h-4 w-4" />
                 </Button>
@@ -5771,7 +6204,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                   size="icon"
                   className="h-8 w-8 rounded-xl"
                   onClick={() => setGoogleSheetShareOpen(false)}
-                  title="Close"
+                  title={t("common.close")}
                 >
                   <X className="h-4 w-4" />
                 </Button>
@@ -5781,7 +6214,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
               <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-3">
                 <div className="text-[10px] font-black uppercase tracking-wide text-emerald-700">
-                  Linked roster
+                  {t("app.shared.linkedRoster")}
                 </div>
                 <div className="mt-1 truncate text-[13px] font-bold text-[#102A43]">
                   {activeGoogleSheetSource?.spreadsheetName || activeRosterName}
@@ -5794,7 +6227,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
               <div className="mt-3 rounded-2xl border border-slate-100 bg-slate-50/80 p-3">
                 <div className="flex items-center justify-between gap-2">
                   <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-                    Organizers
+                    {t("app.access.organizers")}
                   </div>
                   <Button
                     type="button"
@@ -5802,22 +6235,22 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                     className="h-7 rounded-xl px-2 text-[10px] font-black text-slate-500 hover:bg-white"
                     onClick={() => void loadGoogleSheetAccessList()}
                     disabled={googleSheetAccessLoading}
-                    title="Refresh access list"
+                    title={t("app.access.refreshList")}
                   >
                     <RefreshCw className={`mr-1 h-3 w-3 ${googleSheetAccessLoading ? "animate-spin" : ""}`} />
-                    Refresh
+                    {t("app.actions.refresh")}
                   </Button>
                 </div>
 
                 {googleSheetAccessLoading && !googleSheetAccessList ? (
                   <div className="mt-3 rounded-2xl bg-white px-3 py-2 text-xs font-semibold text-slate-500">
-                    Loading sharing access‚Ä¶
+                    {t("app.access.loadingSharing")}
                   </div>
                 ) : googleSheetHasPeopleAccessInfo ? (
                   <div className="mt-3 grid gap-2">
                     <div>
                       <div className="px-1 text-[10px] font-black uppercase tracking-wide text-slate-400">
-                        Owner
+                        {t("app.access.owner")}
                       </div>
                       <div className="mt-1 grid gap-1.5">
                         {googleSheetOwnerPermissions.length > 0 ? googleSheetOwnerPermissions.map((permission) => {
@@ -5835,13 +6268,13 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                                 )}
                               </div>
                               <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-black text-emerald-700">
-                                Owner
+                                {t("app.access.owner")}
                               </span>
                             </div>
                           );
                         }) : (
                           <div className="rounded-2xl bg-white px-3 py-2 text-xs font-semibold text-slate-500">
-                            Owner not shown by Google Drive.
+                            {t("app.access.ownerNotShown")}
                           </div>
                         )}
                       </div>
@@ -5849,7 +6282,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
 
                     <div>
                       <div className="px-1 text-[10px] font-black uppercase tracking-wide text-slate-400">
-                        Editors
+                        {t("app.access.editors")}
                       </div>
                       <div className="mt-1 grid gap-1.5">
                         {googleSheetEditorPermissions.length > 0 || googleSheetSavedEditorEntries.length > 0 ? (
@@ -5871,7 +6304,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                                     )}
                                     {drivePermissionIsInherited(permission) && (
                                       <div className="mt-0.5 truncate text-[10px] font-semibold text-slate-400">
-                                        From shared folder access
+                                        {t("app.access.fromSharedFolder")}
                                       </div>
                                     )}
                                   </div>
@@ -5882,14 +6315,14 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                                       className="h-8 shrink-0 rounded-xl px-2 text-[10px] font-black text-red-600 hover:bg-red-50 hover:text-red-700"
                                       onClick={() => removeGoogleSheetEditorAccess(permission)}
                                       disabled={Boolean(googleSheetRemovingPermissionId)}
-                                      title="Remove editor access"
+                                      title={t("app.access.removeEditorTitle")}
                                     >
                                       <UserMinus className="mr-1 h-3 w-3" />
-                                      {removing ? "Removing..." : "Remove"}
+                                      {removing ? t("app.status.removingDots") : t("common.remove")}
                                     </Button>
                                   ) : (
                                     <span className="shrink-0 rounded-full bg-slate-50 px-2 py-0.5 text-[10px] font-black text-slate-500">
-                                      Editor
+                                      {t("app.access.editor")}
                                     </span>
                                   )}
                                 </div>
@@ -5906,14 +6339,14 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                                   </div>
                                 </div>
                                 <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-black text-emerald-700">
-                                  Editor
+                                  {t("app.access.editor")}
                                 </span>
                               </div>
                             ))}
                           </>
                         ) : (
                           <div className="rounded-2xl bg-white px-3 py-2 text-xs font-semibold text-slate-500">
-                            No editors added yet.
+                            {t("app.access.noEditors")}
                           </div>
                         )}
                       </div>
@@ -5922,7 +6355,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                     {googleSheetOtherPermissions.length > 0 && (
                       <div>
                         <div className="px-1 text-[10px] font-black uppercase tracking-wide text-slate-400">
-                          Other access
+                          {t("app.access.other")}
                         </div>
                         <div className="mt-1 grid gap-1.5">
                           {googleSheetOtherPermissions.map((permission) => {
@@ -5951,14 +6384,14 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                   </div>
                 ) : (
                   <div className="mt-3 rounded-2xl bg-white px-3 py-2 text-xs font-semibold text-slate-500">
-                    Sharing access could not be loaded.
+                    {t("app.access.loadFailed")}
                   </div>
                 )}
               </div>
 
               <div className="mt-3 rounded-2xl border border-emerald-100 bg-white p-3">
                 <label className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-                  Add editor
+                  {t("app.access.addEditor")}
                 </label>
                 <input
                   value={googleSheetShareName}
@@ -5966,7 +6399,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                   type="text"
                   autoCapitalize="words"
                   autoCorrect="off"
-                  placeholder="Name, optional"
+                  placeholder={t("app.access.nameOptional")}
                   className="mt-2 h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm font-bold text-[#102A43] outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
                 />
                 <input
@@ -5982,7 +6415,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                   inputMode="email"
                   autoCapitalize="none"
                   autoCorrect="off"
-                  placeholder="email@example.com"
+                  placeholder={t("app.access.emailPlaceholder")}
                   className="mt-2 h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm font-bold text-[#102A43] outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
                 />
                 <Button
@@ -5991,19 +6424,19 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                   onClick={confirmGoogleSheetShare}
                   disabled={googleSheetSharing}
                 >
-                  {googleSheetSharing ? "Sharing..." : "Add editor"}
+                  {googleSheetSharing ? t("app.status.sharingDots") : t("app.access.addEditor")}
                 </Button>
                 <p className="mt-2 text-[10px] font-semibold leading-snug text-slate-500">
-                  Name is only a friendly label. Email is the real Google access.
+                  {t("app.access.friendlyNameHelp")}
                 </p>
               </div>
 
               <div className="mt-3 rounded-2xl border border-slate-100 bg-white p-3">
                 <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-                  Other shared rosters
+                  {t("app.shared.otherRosters")}
                 </div>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  Open a roster someone shared with this Google account.
+                  {t("app.shared.openSharedDescription")}
                 </p>
                 <Button
                   type="button"
@@ -6014,17 +6447,17 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                 >
                   <FolderOpen className="h-3.5 w-3.5" />
                   <span className="truncate text-xs font-black">
-                    {googleSheetOpening ? "Opening..." : "Open shared roster file"}
+                    {googleSheetOpening ? t("app.status.openingDots") : t("app.shared.openFile")}
                   </span>
                 </Button>
               </div>
 
               <div className="mt-3 rounded-2xl border border-slate-100 bg-white p-3">
                 <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-                  Connection
+                  {t("app.shared.connection")}
                 </div>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  Stop syncing keeps this roster locally on this device. The shared roster is not deleted.
+                  {t("app.shared.stopSyncingDescription")}
                 </p>
                 <Button
                   type="button"
@@ -6036,7 +6469,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                   disabled={googleSheetSyncing || googleSheetOpening || googleSheetSharing}
                 >
                   <X className="h-3.5 w-3.5" />
-                  <span className="truncate text-xs font-black">Stop syncing this roster</span>
+                  <span className="truncate text-xs font-black">{t("app.shared.stopSyncing")}</span>
                 </Button>
               </div>
             </div>
@@ -6048,7 +6481,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                 className="h-10 w-full rounded-2xl text-slate-500"
                 onClick={() => setGoogleSheetShareOpen(false)}
               >
-                Done
+                {t("common.done")}
               </Button>
             </div>
           </div>
@@ -6065,10 +6498,10 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="text-[10px] font-black uppercase tracking-wide text-blue-500">
-                  Cloud Backup
+                  {t("app.cloudBackup.heading")}
                 </div>
                 <h2 className="mt-1 text-base font-black tracking-tight text-[#102A43]">
-                  How it works
+                  {t("app.help.howItWorks")}
                 </h2>
               </div>
               <Button
@@ -6077,7 +6510,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                 size="icon"
                 className="h-8 w-8 shrink-0 rounded-xl"
                 onClick={() => setDriveHelpOpen(false)}
-                title="Close"
+                title={t("common.close")}
               >
                 <X className="h-4 w-4" />
               </Button>
@@ -6086,19 +6519,19 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
             <div className="mt-4 space-y-3">
               <div className="rounded-2xl border border-slate-100 bg-slate-50/80 p-3">
                 <div className="text-xs font-black text-[#102A43]">
-                  Backup and device transfer
+                  {t("app.cloudBackup.help.deviceTransferHeading")}
                 </div>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  Cloud Backup saves a private text-only backup of your local/private rosters to Google Drive. Shared rosters stay online in Shared rosters and are not included.
+                  {t("app.cloudBackup.help.deviceTransferDescription")}
                 </p>
               </div>
 
               <div className="rounded-2xl border border-blue-100 bg-blue-50/80 p-3">
                 <div className="text-xs font-black text-blue-800">
-                  Use across devices
+                  {t("app.cloudBackup.help.acrossDevicesHeading")}
                 </div>
                 <p className="mt-1 text-xs font-semibold leading-snug text-blue-800/85">
-                  Save local rosters on one device, then restore them on another device signed in with the same Google account. It is private manual backup/restore, not collaboration or live sync.
+                  {t("app.cloudBackup.help.acrossDevicesDescription")}
                 </p>
               </div>
             </div>
@@ -6108,7 +6541,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
               className="mt-4 h-11 w-full rounded-2xl bg-[#102A43] text-white hover:bg-[#0b2036]"
               onClick={() => setDriveHelpOpen(false)}
             >
-              Got it
+              {t("app.actions.gotIt")}
             </Button>
           </div>
         </div>
@@ -6124,10 +6557,10 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="text-[10px] font-black uppercase tracking-wide text-emerald-600">
-                  Shared Roster
+                  {t("app.shared.heading")}
                 </div>
                 <h2 className="mt-1 text-base font-black tracking-tight text-[#102A43]">
-                  How it works
+                  {t("app.help.howItWorks")}
                 </h2>
               </div>
               <Button
@@ -6136,7 +6569,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                 size="icon"
                 className="h-8 w-8 shrink-0 rounded-xl"
                 onClick={() => setGoogleSheetHelpOpen(false)}
-                title="Close"
+                title={t("common.close")}
               >
                 <X className="h-4 w-4" />
               </Button>
@@ -6145,19 +6578,19 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
             <div className="mt-4 space-y-3">
               <div className="rounded-2xl border border-slate-100 bg-slate-50/80 p-3">
                 <div className="text-xs font-black text-[#102A43]">
-                  Share one roster
+                  {t("app.shared.help.oneRosterHeading")}
                 </div>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  Shared Roster lets trusted co-organizers open the same roster in Stripes. You can see the owner and editors in People & access.
+                  {t("app.shared.help.oneRosterDescription")}
                 </p>
               </div>
 
               <div className="rounded-2xl border border-emerald-100 bg-emerald-50/80 p-3">
                 <div className="text-xs font-black text-emerald-800">
-                  Save and get latest
+                  {t("app.shared.help.saveLatestHeading")}
                 </div>
                 <p className="mt-1 text-xs font-semibold leading-snug text-emerald-800/85">
-                  It does not update automatically. Get latest before editing, then save changes when you finish. Player photos stay on each device.
+                  {t("app.shared.help.saveLatestDescription")}
                 </p>
               </div>
             </div>
@@ -6167,7 +6600,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
               className="mt-4 h-11 w-full rounded-2xl bg-[#102A43] text-white hover:bg-[#0b2036]"
               onClick={() => setGoogleSheetHelpOpen(false)}
             >
-              Got it
+              {t("app.actions.gotIt")}
             </Button>
           </div>
         </div>
@@ -6183,13 +6616,13 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
             <div className="flex items-start justify-between gap-3 border-b border-slate-100 p-4 pb-3">
               <div className="min-w-0">
                 <div className="text-[10px] font-black uppercase tracking-wide text-blue-500">
-                  Cloud Backup
+                  {t("app.cloudBackup.heading")}
                 </div>
                 <h2 className="mt-1 truncate text-base font-black tracking-tight text-[#102A43]">
-                  Choose backup
+                  {t("app.cloudBackup.chooseHeading")}
                 </h2>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  Nothing changes yet. Pick a private backup to preview its rosters.
+                  {t("app.cloudBackup.chooseDescription")}
                 </p>
               </div>
               <Button
@@ -6198,7 +6631,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                 size="icon"
                 className="h-8 w-8 shrink-0 rounded-xl"
                 onClick={() => setDriveBackupChoices(null)}
-                title="Close"
+                title={t("common.close")}
               >
                 <X className="h-4 w-4" />
               </Button>
@@ -6222,11 +6655,13 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                             {file.name}
                           </span>
                           <span className="mt-0.5 block truncate text-[11px] font-bold text-blue-700/75">
-                            Backup file ¬∑ {formatDriveModifiedTime(file.modifiedTime)}
+                            {t("app.cloudBackup.backupFileWithDate", {
+                              date: formatDriveModifiedTime(file.modifiedTime),
+                            })}
                           </span>
                         </span>
                         <span className="shrink-0 text-[11px] font-black uppercase tracking-wide text-blue-500">
-                          Preview
+                          {t("app.actions.preview")}
                         </span>
                       </button>
 
@@ -6235,8 +6670,8 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                           type="button"
                           onClick={() => setDriveBackupDeleteConfirm({ file })}
                           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-red-100 bg-white text-red-500 shadow-sm transition active:scale-[0.96]"
-                          title="Delete backup"
-                          aria-label={`Delete ${file.name}`}
+                          title={t("app.cloudBackup.deleteTitle")}
+                          aria-label={t("app.cloudBackup.deleteAria", { name: file.name })}
                           disabled={googleDriveDeletingFileId === file.id}
                         >
                           <Trash2 className="h-4 w-4" />
@@ -6250,7 +6685,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                   <div className="flex gap-2">
                     <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
                     <p className="text-xs font-semibold leading-snug text-amber-800">
-                      No private Cloud Backup files found. Save a backup first.
+                      {t("app.cloudBackup.noneFound")}
                     </p>
                   </div>
                 </div>
@@ -6264,7 +6699,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                 className="h-10 rounded-2xl text-slate-500"
                 onClick={() => setDriveBackupChoices(null)}
               >
-                Close
+                {t("common.close")}
               </Button>
             </div>
           </div>
@@ -6284,17 +6719,17 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
               </div>
               <div className="min-w-0 flex-1">
                 <h2 className="text-base font-black tracking-tight text-[#102A43]">
-                  Delete this backup?
+                  {t("app.cloudBackup.deleteConfirmHeading")}
                 </h2>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  This moves the backup file to Google Drive trash. It does not change rosters already saved on this device.
+                  {t("app.cloudBackup.deleteConfirmDescription")}
                 </p>
               </div>
             </div>
 
             <div className="mt-3 rounded-2xl border border-red-100 bg-red-50/70 p-3">
               <div className="text-[10px] font-black uppercase tracking-wide text-red-600">
-                Backup file
+                {t("app.cloudBackup.backupFile")}
               </div>
               <div className="mt-1 truncate text-[13px] font-bold text-[#102A43]">
                 {driveBackupDeleteConfirm.file.name}
@@ -6312,7 +6747,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                 onClick={() => setDriveBackupDeleteConfirm(null)}
                 disabled={Boolean(googleDriveDeletingFileId)}
               >
-                Cancel
+                {t("common.cancel")}
               </Button>
               <Button
                 type="button"
@@ -6320,7 +6755,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                 onClick={confirmTrashGoogleDriveBackup}
                 disabled={Boolean(googleDriveDeletingFileId)}
               >
-                {googleDriveDeletingFileId ? "Deleting..." : "Move to trash"}
+                {googleDriveDeletingFileId ? t("app.status.deletingDots") : t("app.actions.moveToTrash")}
               </Button>
             </div>
           </div>
@@ -6340,17 +6775,17 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
               </div>
               <div className="min-w-0 flex-1">
                 <h2 className="text-base font-black tracking-tight text-[#102A43]">
-                  Update active Drive backup?
+                  {t("app.cloudBackup.updateConfirmHeading")}
                 </h2>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
-                  This will overwrite the selected all-rosters Drive backup file.
+                  {t("app.cloudBackup.updateConfirmDescription")}
                 </p>
               </div>
             </div>
 
             <div className="mt-3 rounded-2xl border border-slate-100 bg-slate-50/80 p-3">
               <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-                Safety backup file
+                {t("app.cloudBackup.safetyBackupFile")}
               </div>
               <div className="mt-1 truncate text-[13px] font-bold text-[#102A43]">
                 {driveUpdateConfirm.file.name}
@@ -6360,15 +6795,15 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
             <div className="mt-3 grid grid-cols-2 gap-2">
               <div className="rounded-2xl border border-amber-100 bg-amber-50/80 p-3 text-center">
                 <div className="text-[10px] font-black uppercase tracking-wide text-amber-700">
-                  Backup now
+                  {t("app.cloudBackup.backupNow")}
                 </div>
                 <div className="mt-1 text-xs font-black text-[#102A43]">
-                  {driveUpdateConfirm.readFailed ? "Could not check" : formatBackupSummary(driveUpdateConfirm.previous)}
+                  {driveUpdateConfirm.readFailed ? t("app.cloudBackup.couldNotCheck") : formatBackupSummary(driveUpdateConfirm.previous)}
                 </div>
               </div>
               <div className="rounded-2xl border border-emerald-100 bg-emerald-50/80 p-3 text-center">
                 <div className="text-[10px] font-black uppercase tracking-wide text-emerald-700">
-                  This device
+                  {t("app.cloudBackup.thisDevice")}
                 </div>
                 <div className="mt-1 text-xs font-black text-[#102A43]">
                   {formatBackupSummary(driveUpdateConfirm.next)}
@@ -6378,7 +6813,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
 
             <div className="mt-3 rounded-2xl border border-amber-100 bg-amber-50/80 p-3">
               <p className="text-xs font-semibold leading-snug text-amber-800">
-                Make sure this is the correct private all-rosters backup before updating. This will replace the backup file with the current roster list from this device.
+                {t("app.cloudBackup.updateWarning")}
               </p>
             </div>
 
@@ -6389,7 +6824,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                 onClick={confirmUpdateCurrentGoogleDriveBackup}
                 disabled={googleDriveUpdating}
               >
-                {googleDriveUpdating ? "Updating..." : "Update this backup"}
+                {googleDriveUpdating ? t("app.status.updatingDots") : t("app.cloudBackup.updateThis")}
               </Button>
               <Button
                 type="button"
@@ -6397,7 +6832,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                 className="h-10 rounded-2xl text-slate-500"
                 onClick={() => setDriveUpdateConfirm(null)}
               >
-                Cancel
+                {t("common.cancel")}
               </Button>
             </div>
           </div>
@@ -6414,10 +6849,10 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
             <div className="flex items-start justify-between gap-3 border-b border-slate-100 p-4 pb-3">
               <div className="min-w-0">
                 <div className="text-[10px] font-black uppercase tracking-wide text-blue-500">
-                  Google Drive backup
+                  {t("app.cloudBackup.googleDriveBackup")}
                 </div>
                 <h2 className="mt-1 truncate text-base font-black tracking-tight text-[#102A43]">
-                  Backup preview
+                  {t("app.backup.previewHeading")}
                 </h2>
                 <p className="mt-1 truncate text-xs font-semibold text-slate-500">
                   {driveImportPreview.file.name}
@@ -6429,7 +6864,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                 size="icon"
                 className="h-8 w-8 shrink-0 rounded-xl"
                 onClick={closeDriveImportPreview}
-                title="Close"
+                title={t("common.close")}
               >
                 <X className="h-4 w-4" />
               </Button>
@@ -6439,25 +6874,25 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
               <div className="grid grid-cols-2 gap-2">
                 <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-3 text-center">
                   <div className="text-xl font-black text-[#102A43]">
-                    {driveImportPreview.rosterCount}
+                    {formatNumber(locale, driveImportPreview.rosterCount)}
                   </div>
                   <div className="text-[10px] font-black uppercase tracking-wide text-blue-500">
-                    Rosters
+                    {t("app.backup.rostersLabel")}
                   </div>
                 </div>
                 <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-3 text-center">
                   <div className="text-xl font-black text-[#102A43]">
-                    {driveImportPreview.playerCount}
+                    {formatNumber(locale, driveImportPreview.playerCount)}
                   </div>
                   <div className="text-[10px] font-black uppercase tracking-wide text-emerald-600">
-                    Players
+                    {t("app.backup.playersLabel")}
                   </div>
                 </div>
               </div>
 
               <div className="mt-3 rounded-2xl border border-slate-100 bg-slate-50/80 p-3">
                 <div className="mb-2 text-[10px] font-black uppercase tracking-wide text-slate-400">
-                  Included rosters
+                  {t("app.backup.includedRosters")}
                 </div>
                 <div className="space-y-1.5">
                   {driveImportPreview.rosterNames.slice(0, 5).map((name, index) => (
@@ -6467,7 +6902,9 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                   ))}
                   {driveImportPreview.rosterNames.length > 5 ? (
                     <div className="text-xs font-bold text-slate-400">
-                      ‚Ä¶and {driveImportPreview.rosterNames.length - 5} more
+                      {t("app.backup.moreRosters", {
+                        count: driveImportPreview.rosterNames.length - 5,
+                      })}
                     </div>
                   ) : null}
                 </div>
@@ -6477,7 +6914,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                 <div className="flex gap-2">
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
                   <p className="text-xs font-semibold leading-snug text-amber-800">
-                    Drive backups are text-only. Player photos and logo images are not imported from Drive, but matching local photos/logos are preserved where possible.
+                    {t("app.cloudBackup.textOnlyWarning")}
                   </p>
                 </div>
               </div>
@@ -6489,7 +6926,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                 className="h-11 rounded-2xl bg-blue-600 text-white hover:bg-blue-700"
                 onClick={confirmAddDriveImport}
               >
-                Add as new rosters
+                {t("app.backup.addAsNewRosters")}
               </Button>
               <Button
                 type="button"
@@ -6497,7 +6934,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                 className="h-11 rounded-2xl border-red-100 bg-red-50/70 text-red-700 hover:bg-red-100 hover:text-red-800"
                 onClick={confirmReplaceDriveImport}
               >
-                Replace all local rosters
+                {t("app.backup.replaceAllLocal")}
               </Button>
               <Button
                 type="button"
@@ -6505,7 +6942,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                 className="h-10 rounded-2xl text-slate-500"
                 onClick={closeDriveImportPreview}
               >
-                Cancel
+                {t("common.cancel")}
               </Button>
             </div>
           </div>
@@ -6535,30 +6972,38 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
               </div>
               <div className="min-w-0 flex-1">
                 <h2 id="close-shared-workspace-title" className="text-base font-black text-[#102A43]">
-                  {closeSharedConfirm.cleanupPending ? "Finish workspace cleanup?" : "Close shared workspace?"}
+                  {closeSharedConfirm.cleanupPending
+                    ? t("app.workspaceClosure.finishHeading")
+                    : t("app.workspaceClosure.closeHeading")}
                 </h2>
                 <p className="mt-1 text-sm font-semibold leading-snug text-slate-600">
                   {closeSharedConfirm.cleanupPending
-                    ? `‚Äú${closeSharedConfirm.workspaceName}‚Äù is already closed. Retry the remaining cleanup of its Stripes-owned data.`
-                    : `This permanently deletes ‚Äú${closeSharedConfirm.workspaceName}‚Äù and all Stripes-owned shared workspace data for every device.`}
+                    ? t("app.workspaceClosure.finishDescription", {
+                      workspaceName: closeSharedConfirm.workspaceName,
+                    })
+                    : t("app.workspaceClosure.closeDescription", {
+                      workspaceName: closeSharedConfirm.workspaceName,
+                    })}
                 </p>
               </div>
             </div>
 
             <div className="mt-4 rounded-2xl border border-rose-100 bg-rose-50/70 p-3">
               <div className="text-[10px] font-black uppercase tracking-wide text-rose-700">
-                Permanent closure
+                {t("app.workspaceClosure.permanentClosure")}
               </div>
               <p className="mt-1 text-[11px] font-semibold leading-snug text-rose-800/80">
                 {closeSharedConfirm.cleanupPending
-                  ? "Already-deleted items stay deleted. Stripes will safely retry only the bounded cleanup recorded by the trusted closure checkpoint."
-                  : "Shared rosters, Action Board data, equipment, attendance, ratings, notes, resources, backups, governance history and pending invitations will be deleted. This cannot be undone."}
+                  ? t("app.workspaceClosure.retryDescription")
+                  : t("app.workspaceClosure.permanentDescription")}
               </p>
             </div>
 
             {!closeSharedConfirm.cleanupPending && (
               <label className="mt-4 grid gap-1.5 text-xs font-black text-[#102A43]">
-                Type {closeSharedConfirm.workspaceName} to confirm
+                {t("app.workspaceClosure.typeToConfirm", {
+                  workspaceName: closeSharedConfirm.workspaceName,
+                })}
                 <input
                   autoFocus
                   value={closeSharedConfirmationName}
@@ -6591,7 +7036,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                 }}
                 disabled={closeSharedBusy}
               >
-                Cancel
+                {t("common.cancel")}
               </Button>
               <Button
                 type="button"
@@ -6606,8 +7051,12 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                 )}
               >
                 {closeSharedBusy
-                  ? (closeSharedConfirm.cleanupPending ? "Finishing‚Ä¶" : "Closing‚Ä¶")
-                  : (closeSharedConfirm.cleanupPending ? "Finish cleanup" : "Close shared workspace")}
+                  ? (closeSharedConfirm.cleanupPending
+                    ? t("app.status.finishingDots")
+                    : t("app.status.closingDots"))
+                  : (closeSharedConfirm.cleanupPending
+                    ? t("app.workspaceClosure.finishAction")
+                    : t("app.workspaceClosure.closeAction"))}
               </Button>
             </div>
           </div>
@@ -6634,24 +7083,24 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                 <UserMinus className="h-5 w-5" />
               </div>
               <div className="min-w-0 flex-1">
-                <h2 className="text-base font-black text-[#102A43]">Leave shared roster?</h2>
+                <h2 className="text-base font-black text-[#102A43]">{t("app.leaveShared.heading")}</h2>
                 <p className="mt-1 text-sm font-semibold leading-snug text-slate-600">
-                  This removes only your organizer access to ‚Äú{activeRosterName}‚Äù and removes its opened copies from this device.
+                  {t("app.leaveShared.description", { rosterName: activeRosterName })}
                 </p>
               </div>
             </div>
 
             <div className="mt-4 rounded-2xl border border-violet-100 bg-violet-50/70 p-3">
               <div className="text-[10px] font-black uppercase tracking-wide text-violet-700">
-                Account access
+                {t("app.leaveShared.accountAccess")}
               </div>
               <p className="mt-1 text-[11px] font-semibold leading-snug text-violet-800/80">
-                It does not delete the shared roster or club data. Other organizers keep access and the shared workspace stays online.
+                {t("app.leaveShared.safetyDescription")}
               </p>
             </div>
 
             <p className="mt-3 text-[11px] font-bold leading-snug text-slate-500">
-              The last organizer cannot leave this way. Invite another organizer first.
+              {t("app.leaveShared.lastOrganizerWarning")}
             </p>
 
             {leaveSharedError && (
@@ -6671,7 +7120,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                 }}
                 disabled={leaveSharedBusy}
               >
-                Cancel
+                {t("common.cancel")}
               </Button>
               <Button
                 type="button"
@@ -6679,7 +7128,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                 onClick={leaveActiveSharedRoster}
                 disabled={leaveSharedBusy}
               >
-                {leaveSharedBusy ? "Leaving‚Ä¶" : "Leave shared roster"}
+                {leaveSharedBusy ? t("app.status.leavingDots") : t("app.leaveShared.action")}
               </Button>
             </div>
           </div>
@@ -6702,19 +7151,19 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                 <Copy className="h-5 w-5" />
               </div>
               <div className="min-w-0 flex-1">
-                <h2 className="text-base font-black text-[#102A43]">Make private copy?</h2>
+                <h2 className="text-base font-black text-[#102A43]">{t("app.privateCopy.heading")}</h2>
                 <p className="mt-1 text-sm font-semibold leading-snug text-slate-600">
-                  Create a clean local roster from ‚Äú{activeRosterName}‚Äù. The shared roster stays online and unchanged.
+                  {t("app.privateCopy.description", { rosterName: activeRosterName })}
                 </p>
               </div>
             </div>
 
             <div className="mt-4 rounded-2xl border border-violet-100 bg-violet-50/70 p-3">
               <div className="text-[10px] font-black uppercase tracking-wide text-violet-700">
-                Private copy
+                {t("app.privateCopy.label")}
               </div>
               <p className="mt-1 text-[11px] font-semibold leading-snug text-violet-800/80">
-                The copy uses shared names, Club stat averages, and GK flags as the starting local profile. Photos and advanced private traits are reset so the roster starts clean.
+                {t("app.privateCopy.details")}
               </p>
             </div>
 
@@ -6725,14 +7174,14 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                 className="h-11 rounded-2xl border-slate-200 bg-white text-xs font-black text-slate-600"
                 onClick={() => setPrivateCopyConfirmOpen(false)}
               >
-                Cancel
+                {t("common.cancel")}
               </Button>
               <Button
                 type="button"
                 className="h-11 rounded-2xl bg-violet-600 text-xs font-black text-white hover:bg-violet-700"
                 onClick={makePrivateCopyOfActiveSharedRoster}
               >
-                Make copy
+                {t("app.privateCopy.action")}
               </Button>
             </div>
           </div>
@@ -6750,10 +7199,12 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
             <div className="flex items-start justify-between gap-3 border-b border-slate-100 p-4 pb-3">
               <div className="min-w-0">
                 <div className="text-[10px] font-black uppercase tracking-wide text-[#102A43]/55">
-                  {localImportPreview.mode === "backup" ? "Local backup files" : "Local roster file"}
+                  {localImportPreview.mode === "backup"
+                    ? t("app.localImport.backupFiles")
+                    : t("app.localImport.rosterFile")}
                 </div>
                 <h2 className="mt-1 truncate text-base font-black tracking-tight text-[#102A43]">
-                  Import this file?
+                  {t("app.localImport.heading")}
                 </h2>
                 <p className="mt-1 truncate text-xs font-semibold text-slate-500">
                   {localImportPreview.sourceName}
@@ -6765,7 +7216,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                 size="icon"
                 className="h-8 w-8 shrink-0 rounded-xl"
                 onClick={closeLocalImportPreview}
-                title="Close"
+                title={t("common.close")}
               >
                 <X className="h-4 w-4" />
               </Button>
@@ -6775,25 +7226,25 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
               <div className="grid grid-cols-2 gap-2">
                 <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-3 text-center">
                   <div className="text-xl font-black text-[#102A43]">
-                    {localImportPreview.rosterCount}
+                    {formatNumber(locale, localImportPreview.rosterCount)}
                   </div>
                   <div className="text-[10px] font-black uppercase tracking-wide text-blue-500">
-                    Rosters
+                    {t("app.backup.rostersLabel")}
                   </div>
                 </div>
                 <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-3 text-center">
                   <div className="text-xl font-black text-[#102A43]">
-                    {localImportPreview.playerCount}
+                    {formatNumber(locale, localImportPreview.playerCount)}
                   </div>
                   <div className="text-[10px] font-black uppercase tracking-wide text-emerald-600">
-                    Players
+                    {t("app.backup.playersLabel")}
                   </div>
                 </div>
               </div>
 
               <div className="mt-3 rounded-2xl border border-slate-100 bg-slate-50/80 p-3">
                 <div className="mb-2 text-[10px] font-black uppercase tracking-wide text-slate-400">
-                  Included rosters
+                  {t("app.backup.includedRosters")}
                 </div>
                 <div className="space-y-1.5">
                   {localImportPreview.rosterNames.slice(0, 5).map((name, index) => (
@@ -6803,7 +7254,9 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                   ))}
                   {localImportPreview.rosterNames.length > 5 ? (
                     <div className="text-xs font-bold text-slate-400">
-                      ‚Ä¶and {localImportPreview.rosterNames.length - 5} more
+                      {t("app.backup.moreRosters", {
+                        count: localImportPreview.rosterNames.length - 5,
+                      })}
                     </div>
                   ) : null}
                 </div>
@@ -6814,8 +7267,10 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
                   <p className="text-xs font-semibold leading-snug text-amber-800">
                     {localImportPreview.mode === "backup"
-                      ? "This adds rosters from the backup file. Your current rosters stay in the app."
-                      : `This imports the file as a separate roster. Your current roster ‚Äú${activeRosterName}‚Äù stays unchanged.`}
+                      ? t("app.localImport.addDescription")
+                      : t("app.localImport.separateDescription", {
+                        rosterName: activeRosterName,
+                      })}
                   </p>
                 </div>
               </div>
@@ -6827,7 +7282,9 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                 className="h-11 rounded-2xl bg-[#102A43] text-white hover:bg-[#0b2036]"
                 onClick={confirmLocalImport}
               >
-                {localImportPreview.mode === "backup" ? "Add rosters from backup" : "Import as new roster"}
+                {localImportPreview.mode === "backup"
+                  ? t("app.localImport.addAction")
+                  : t("app.localImport.importAction")}
               </Button>
               <Button
                 type="button"
@@ -6835,7 +7292,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                 className="h-10 rounded-2xl text-slate-500"
                 onClick={closeLocalImportPreview}
               >
-                Cancel
+                {t("common.cancel")}
               </Button>
             </div>
           </div>
@@ -6869,7 +7326,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                 className="h-10 w-full rounded-2xl bg-[#102A43] text-xs font-black text-white hover:bg-[#0b2036]"
                 onClick={() => setRosterToolsNotice(null)}
               >
-                OK
+                {t("app.actions.ok")}
               </Button>
             </div>
           </div>
@@ -6890,17 +7347,17 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
               <div className="min-w-0 flex-1">
                 <h2 className="text-base font-black tracking-tight text-[#102A43]">
                   {activeRosterIsShared
-                    ? "This is a shared roster"
+                    ? t("app.rosterRemoval.sharedHeading")
                     : rosters.length > 1
-                      ? `Delete ‚Äú${activeRosterName}‚Äù?`
-                      : `Clear ‚Äú${activeRosterName}‚Äù?`}
+                      ? t("app.rosterRemoval.deleteHeading", { rosterName: activeRosterName })
+                      : t("app.rosterRemoval.clearHeading", { rosterName: activeRosterName })}
                 </h2>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500">
                   {activeRosterIsShared
-                    ? `‚Äú${activeRosterName}‚Äù is linked online. This action only removes the local copy on this device. To manage people or delete the online shared roster for everyone, go to Club ‚Üí Shared rosters.`
+                    ? t("app.rosterRemoval.sharedDescription", { rosterName: activeRosterName })
                     : rosters.length > 1
-                      ? "This deletes only the active roster. Your other rosters will stay."
-                      : `You need at least one roster, so this removes all ${players.length} player profiles from this roster only.`}
+                      ? t("app.rosterRemoval.deleteDescription")
+                      : t("app.rosterRemoval.clearDescription", { count: players.length })}
                 </p>
               </div>
             </div>
@@ -6910,7 +7367,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                 <div className="flex items-start gap-2">
                   <Info className="mt-0.5 h-4 w-4 shrink-0 text-violet-600" />
                   <p className="text-[11px] font-semibold leading-snug text-violet-900/80">
-                    Removing/disassociating the local copy is safe. It does not delete the online shared roster, remove collaborators, or change other organizers‚Äô copies.
+                    {t("app.rosterRemoval.sharedSafety")}
                   </p>
                 </div>
               </div>
@@ -6918,9 +7375,9 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
 
             <div className={`mt-4 rounded-2xl border p-3 ${activeRosterIsShared ? "border-violet-100 bg-violet-50/70" : "border-red-100 bg-red-50/70"}`}>
               <div className={`mb-2 flex items-center justify-between gap-2 text-[11px] font-black uppercase tracking-wide ${activeRosterIsShared ? "text-violet-700" : "text-red-700"}`}>
-                <span>Slide to confirm</span>
+                <span>{t("app.confirm.slide")}</span>
                 <span>
-                  {clearRosterSlide >= 95 ? "Ready" : `${clearRosterSlide}%`}
+                  {clearRosterSlide >= 95 ? t("app.confirm.ready") : formatPercent(locale, clearRosterSlide / 100)}
                 </span>
               </div>
               <input
@@ -6930,10 +7387,10 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                 value={clearRosterSlide}
                 onChange={(e) => setClearRosterSlide(Number(e.target.value))}
                 className={`w-full ${activeRosterIsShared ? "accent-violet-600" : "accent-red-600"}`}
-                aria-label="Slide to confirm roster action"
+                aria-label={t("app.rosterRemoval.slideAria")}
               />
               <p className={`mt-2 text-[11px] font-semibold ${activeRosterIsShared ? "text-violet-700/80" : "text-red-700/80"}`}>
-                Move the slider all the way right, then confirm.
+                {t("app.rosterRemoval.slideHelp")}
               </p>
             </div>
 
@@ -6946,7 +7403,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                   onClick={openSharedRostersFromLocalFlow}
                 >
                   <FolderOpen className="mr-1.5 h-4 w-4" />
-                  Open Shared rosters instead
+                  {t("app.rosterRemoval.openSharedInstead")}
                 </Button>
               )}
               <div className="flex items-center justify-end gap-2">
@@ -6956,7 +7413,7 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                   className="rounded-xl"
                   onClick={closeClearRoster}
                 >
-                  Cancel
+                  {t("common.cancel")}
                 </Button>
                 <Button
                   type="button"
@@ -6965,10 +7422,10 @@ This is a shared roster. Local Backup can only remove/disassociate this device‚Ä
                   disabled={clearRosterSlide < 95}
                 >
                   {activeRosterIsShared
-                    ? "Remove local copy only"
+                    ? t("app.rosterRemoval.removeLocalAction")
                     : rosters.length > 1
-                      ? "Delete roster"
-                      : "Clear roster"}
+                      ? t("app.rosterRemoval.deleteAction")
+                      : t("app.rosterRemoval.clearAction")}
                 </Button>
               </div>
             </div>

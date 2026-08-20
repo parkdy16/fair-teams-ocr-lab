@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Trans } from "react-i18next";
 import type { RoomPlayer } from "@/lib/localRoster";
 import { calculateOverall, normalizePlayer } from "@/lib/localRoster";
 import {
   BALANCED_PLAYER_STYLE,
   generateStyledPlayerAttributes,
-  getPlayerStyleDefinition,
   inferPlayerStyleFromAttributes,
   profileFromAveragedAttributes,
   type PlayerStyleValue,
@@ -27,6 +27,7 @@ import {
   type ClubRatingProfile,
   type ClubRatingSummary,
 } from "@/lib/clubCollaborationService";
+import { formatDateTime as formatLocalizedDateTime, formatList, formatNumber, getResolvedUiLocale, translate, type TranslationKey } from "@/i18n";
 
 
 
@@ -81,10 +82,10 @@ function clubRatingDotClass(state: ClubRatingCoverageState) {
 }
 
 function clubRatingStatusLabel(state: ClubRatingCoverageState) {
-  if (state === "complete") return "Fully rated";
-  if (state === "ready") return "Rating ready";
-  if (state === "needs") return "Needs ratings";
-  return "No ratings yet";
+  if (state === "complete") return translate("roster.ratingCoverage.complete");
+  if (state === "ready") return translate("roster.ratingCoverage.ready");
+  if (state === "needs") return translate("roster.ratingCoverage.needs");
+  return translate("roster.ratingCoverage.none");
 }
 
 function cleanVoiceAddName(value: string) {
@@ -196,7 +197,7 @@ function areLikelyDuplicateKeys(input: string, candidate: string) {
 function findSharedDuplicateCandidates(players: RoomPlayer[], name: string, aka?: string) {
   const rawInputs = [name, ...splitAliasValues(aka)].map(value => value.trim()).filter(Boolean);
   const inputKeys = rawInputs.flatMap(duplicateComparisonKeys).filter(Boolean);
-  if (!inputKeys.length) return [] as { player: RoomPlayer; reason: string }[];
+  if (!inputKeys.length) return [] as { player: RoomPlayer; reason: "exact" | "similar" }[];
 
   const matches = players
     .map(player => {
@@ -205,12 +206,12 @@ function findSharedDuplicateCandidates(players: RoomPlayer[], name: string, aka?
       if (!playerKeys.length) return null;
 
       const exact = inputKeys.some(input => playerKeys.includes(input));
-      if (exact) return { player, reason: "Name or AKA already matches" };
+      if (exact) return { player, reason: "exact" as const };
 
       const similar = inputKeys.some(input => playerKeys.some(candidate => areLikelyDuplicateKeys(input, candidate)));
-      return similar ? { player, reason: "Similar name or spelling" } : null;
+      return similar ? { player, reason: "similar" as const } : null;
     })
-    .filter(Boolean) as { player: RoomPlayer; reason: string }[];
+    .filter(Boolean) as { player: RoomPlayer; reason: "exact" | "similar" }[];
 
   const seen = new Set<string>();
   return matches.filter(match => {
@@ -221,12 +222,12 @@ function findSharedDuplicateCandidates(players: RoomPlayer[], name: string, aka?
 }
 
 const STAT_FIELDS = [
-  { key: "attack", label: "Attack", short: "ATK", icon: Target },
-  { key: "defense", label: "Defense", short: "DEF", icon: Shield },
-  { key: "speed", label: "Speed", short: "SPD", icon: Zap },
-  { key: "passing", label: "Passing", short: "PAS", icon: Share2 },
-  { key: "stamina", label: "Stamina", short: "STA", icon: Activity },
-  { key: "physical", label: "Strength", short: "STR", icon: Dumbbell },
+  { key: "attack", labelKey: "roster.stats.attack", icon: Target },
+  { key: "defense", labelKey: "roster.stats.defense", icon: Shield },
+  { key: "speed", labelKey: "roster.stats.speed", icon: Zap },
+  { key: "passing", labelKey: "roster.stats.passing", icon: Share2 },
+  { key: "stamina", labelKey: "roster.stats.stamina", icon: Activity },
+  { key: "physical", labelKey: "roster.stats.strength", icon: Dumbbell },
 ] as const;
 
 
@@ -378,83 +379,114 @@ function BulldogBadgeIcon({ className }: { className?: string }) {
 
 type AbilityKey = "isGoalkeeper" | "isPlaymaker" | "isFinisher" | "isDribbler" | "isSentinel" | "isEngine" | "isVersatile" | "isSpaceFinder" | "isLongPass" | "isTikiTaka" | "isCrossing" | "isAerial" | "isPowerShot" | "isBulldog";
 
-const SPECIAL_ABILITIES: { key: AbilityKey; label: string; badge: string; description: string; icon?: React.ComponentType<{ className?: string }> }[] = [
-  { key: "isGoalkeeper", label: "Goalkeeper", badge: "GK", description: "Comfortable in goal; useful when you want keeper options spread across teams." },
+type SpecialAbility = {
+  key: AbilityKey;
+  labelKey: TranslationKey;
+  badgeKey: TranslationKey;
+  descriptionKey: TranslationKey;
+  icon?: React.ComponentType<{ className?: string }>;
+};
+
+const SPECIAL_ABILITIES: SpecialAbility[] = [
+  { key: "isGoalkeeper", labelKey: "roster.abilities.goalkeeper.label", badgeKey: "roster.abilities.goalkeeper.badge", descriptionKey: "roster.abilities.goalkeeper.description" },
 
   // Attack-first traits
-  { key: "isFinisher", label: "Finisher", badge: "FIN", description: "Looks for goals, times runs well, and finishes chances.", icon: FinisherBadgeIcon },
-  { key: "isPowerShot", label: "Power Shot", badge: "PWR", description: "Shoots hard from distance or tight angles.", icon: PowerShotBadgeIcon },
-  { key: "isDribbler", label: "Dribbler", badge: "DRB", description: "Strong 1v1 player who can carry the ball under pressure.", icon: DribblerBadgeIcon },
-  { key: "isSpaceFinder", label: "Space Finder", badge: "SPC", description: "Finds useful spaces and helps create passing options.", icon: Search },
+  { key: "isFinisher", labelKey: "roster.abilities.finisher.label", badgeKey: "roster.abilities.finisher.badge", descriptionKey: "roster.abilities.finisher.description", icon: FinisherBadgeIcon },
+  { key: "isPowerShot", labelKey: "roster.abilities.powerShot.label", badgeKey: "roster.abilities.powerShot.badge", descriptionKey: "roster.abilities.powerShot.description", icon: PowerShotBadgeIcon },
+  { key: "isDribbler", labelKey: "roster.abilities.dribbler.label", badgeKey: "roster.abilities.dribbler.badge", descriptionKey: "roster.abilities.dribbler.description", icon: DribblerBadgeIcon },
+  { key: "isSpaceFinder", labelKey: "roster.abilities.spaceFinder.label", badgeKey: "roster.abilities.spaceFinder.badge", descriptionKey: "roster.abilities.spaceFinder.description", icon: Search },
 
   // Midfield / control traits
-  { key: "isPlaymaker", label: "Playmaker", badge: "PM", description: "Controls passing rhythm and creates chances for teammates.", icon: MagicWandBadgeIcon },
-  { key: "isCrossing", label: "Technician", badge: "TECH", description: "Good first touch, close control, and calm passing under pressure.", icon: TechnicianBadgeIcon },
-  { key: "isTikiTaka", label: "Tiki-Taka", badge: "TIKI", description: "Quick short passing, simple combinations, and good movement after the pass.", icon: TikiTakaBadgeIcon },
-  { key: "isVersatile", label: "Versatile", badge: "ALL", description: "All-rounder who can fill different roles when a team needs balance.", icon: VersatileBadgeIcon },
-  { key: "isLongPass", label: "Long Pass", badge: "L-PAS", description: "Good for switching play, longer passes, and through balls.", icon: LongPassBadgeIcon },
-  { key: "isEngine", label: "Engine", badge: "ENG", description: "High work rate; keeps running, pressing, and covering space.", icon: EngineBadgeIcon },
+  { key: "isPlaymaker", labelKey: "roster.abilities.playmaker.label", badgeKey: "roster.abilities.playmaker.badge", descriptionKey: "roster.abilities.playmaker.description", icon: MagicWandBadgeIcon },
+  { key: "isCrossing", labelKey: "roster.abilities.technician.label", badgeKey: "roster.abilities.technician.badge", descriptionKey: "roster.abilities.technician.description", icon: TechnicianBadgeIcon },
+  { key: "isTikiTaka", labelKey: "roster.abilities.tikiTaka.label", badgeKey: "roster.abilities.tikiTaka.badge", descriptionKey: "roster.abilities.tikiTaka.description", icon: TikiTakaBadgeIcon },
+  { key: "isVersatile", labelKey: "roster.abilities.versatile.label", badgeKey: "roster.abilities.versatile.badge", descriptionKey: "roster.abilities.versatile.description", icon: VersatileBadgeIcon },
+  { key: "isLongPass", labelKey: "roster.abilities.longPass.label", badgeKey: "roster.abilities.longPass.badge", descriptionKey: "roster.abilities.longPass.description", icon: LongPassBadgeIcon },
+  { key: "isEngine", labelKey: "roster.abilities.engine.label", badgeKey: "roster.abilities.engine.badge", descriptionKey: "roster.abilities.engine.description", icon: EngineBadgeIcon },
 
   // Defense-first traits
-  { key: "isAerial", label: "Header", badge: "HEAD", description: "Strong in the air for headers, clearances, and set pieces.", icon: HeaderBadgeIcon },
-  { key: "isSentinel", label: "Sentinel", badge: "SEN", description: "Defensive guardian who holds shape, marks, and protects space.", icon: Shield },
-  { key: "isBulldog", label: "Bulldog", badge: "DOG", description: "Relentless presser who hounds opponents and fights for loose balls.", icon: BulldogBadgeIcon },
+  { key: "isAerial", labelKey: "roster.abilities.header.label", badgeKey: "roster.abilities.header.badge", descriptionKey: "roster.abilities.header.description", icon: HeaderBadgeIcon },
+  { key: "isSentinel", labelKey: "roster.abilities.sentinel.label", badgeKey: "roster.abilities.sentinel.badge", descriptionKey: "roster.abilities.sentinel.description", icon: Shield },
+  { key: "isBulldog", labelKey: "roster.abilities.bulldog.label", badgeKey: "roster.abilities.bulldog.badge", descriptionKey: "roster.abilities.bulldog.description", icon: BulldogBadgeIcon },
 ];
 
+function abilityLabel(ability: SpecialAbility) {
+  return translate(ability.labelKey);
+}
 
-const FUN_BADGES: { value: FunBadge; label: string; emoji: string; description: string }[] = [
-  { value: "cool-head", label: "Cool Head", emoji: "🧊", description: "Stays composed when things get noisy." },
-  { value: "unbothered", label: "Unbothered", emoji: "😐", description: "Nothing seems to shake them." },
-  { value: "wildcard", label: "Wildcard", emoji: "🎲", description: "You never know which version shows up." },
-  { value: "silent-mode", label: "Silent Mode", emoji: "🔇", description: "Low volume, still fully present." },
-  { value: "smooth-talker", label: "Smooth Talker", emoji: "🗣️", description: "Can talk their way through anything." },
-  { value: "no-filter", label: "No Filter", emoji: "📣", description: "Says the thing everyone else was thinking." },
-  { value: "human-alarm", label: "Human Alarm", emoji: "🚨", description: "Maximum volume, usually for a good reason." },
-  { value: "influencer", label: "Influencer", emoji: "🤳", description: "The camera is probably already rolling." },
-  { value: "main-character", label: "Main Character", emoji: "🎬", description: "Somehow always becomes part of the story." },
-  { value: "old-school", label: "Old School", emoji: "📼", description: "Classic style, classic habits." },
-  { value: "always-late", label: "Always Late", emoji: "⏰", description: "Arrival time is more of a concept." },
-  { value: "early-exit", label: "Early Exit", emoji: "🚪", description: "Here now, gone suddenly." },
-  { value: "first-5", label: "First 5 Minutes", emoji: "🚀", description: "Starts like a storm, then negotiates with gravity." },
-  { value: "eighty-minute-warmup", label: "80-Minute Warmup", emoji: "🐢", description: "Gets going eventually, usually near the end." },
-  { value: "third-half", label: "Third Half", emoji: "🍺", description: "Shines brightest after the game." },
-  { value: "yellow-card", label: "Yellow Card", emoji: "🟨", description: "Lives one warning away from trouble." },
-  { value: "var-caller", label: "VAR Caller", emoji: "📺", description: "Would like that decision reviewed immediately." },
-  { value: "kit-collector", label: "Kit Collector", emoji: "👕", description: "Owns too many shirts and knows every kit." },
-  { value: "shoe-collector", label: "Shoe Collector", emoji: "👟", description: "Boot choice is part of the performance." },
-  { value: "fashion-icon", label: "Fashion Icon", emoji: "✨", description: "Turns the sideline into a runway." },
-  { value: "club-legend", label: "Club Legend", emoji: "🏆", description: "The history book has a chapter." },
-  { value: "snack-captain", label: "Snack Captain", emoji: "🍪", description: "Arrives with supplies, saves morale." },
-  { value: "cameo", label: "Cameo", emoji: "🎭", description: "Rare appearance, memorable impact." },
-  { value: "mastermind", label: "Mastermind", emoji: "♟️", description: "Quietly has a plan." },
-];
+function abilityBadgeLabel(ability: SpecialAbility) {
+  return translate(ability.badgeKey);
+}
 
-const FUN_BADGE_CATEGORIES: { label: string; values: FunBadge[] }[] = [
-  { label: "Personality", values: ["cool-head", "unbothered", "wildcard", "silent-mode", "smooth-talker", "no-filter", "human-alarm", "influencer", "main-character", "old-school"] },
-  { label: "Matchday", values: ["always-late", "early-exit", "first-5", "eighty-minute-warmup", "third-half", "yellow-card", "var-caller"] },
-  { label: "Club Culture", values: ["kit-collector", "shoe-collector", "fashion-icon", "club-legend", "snack-captain", "cameo", "mastermind"] },
+function abilityDescription(ability: SpecialAbility) {
+  return translate(ability.descriptionKey);
+}
+
+const FUN_BADGES: { value: FunBadge; labelKey: TranslationKey; emoji: string; descriptionKey: TranslationKey }[] = [
+  { value: "cool-head", labelKey: "roster.vibes.coolHead.label", emoji: "🧊", descriptionKey: "roster.vibes.coolHead.description" },
+  { value: "unbothered", labelKey: "roster.vibes.unbothered.label", emoji: "😐", descriptionKey: "roster.vibes.unbothered.description" },
+  { value: "wildcard", labelKey: "roster.vibes.wildcard.label", emoji: "🎲", descriptionKey: "roster.vibes.wildcard.description" },
+  { value: "silent-mode", labelKey: "roster.vibes.silentMode.label", emoji: "🔇", descriptionKey: "roster.vibes.silentMode.description" },
+  { value: "smooth-talker", labelKey: "roster.vibes.smoothTalker.label", emoji: "🗣️", descriptionKey: "roster.vibes.smoothTalker.description" },
+  { value: "no-filter", labelKey: "roster.vibes.noFilter.label", emoji: "📣", descriptionKey: "roster.vibes.noFilter.description" },
+  { value: "human-alarm", labelKey: "roster.vibes.humanAlarm.label", emoji: "🚨", descriptionKey: "roster.vibes.humanAlarm.description" },
+  { value: "influencer", labelKey: "roster.vibes.influencer.label", emoji: "🤳", descriptionKey: "roster.vibes.influencer.description" },
+  { value: "main-character", labelKey: "roster.vibes.mainCharacter.label", emoji: "🎬", descriptionKey: "roster.vibes.mainCharacter.description" },
+  { value: "old-school", labelKey: "roster.vibes.oldSchool.label", emoji: "📼", descriptionKey: "roster.vibes.oldSchool.description" },
+  { value: "always-late", labelKey: "roster.vibes.alwaysLate.label", emoji: "⏰", descriptionKey: "roster.vibes.alwaysLate.description" },
+  { value: "early-exit", labelKey: "roster.vibes.earlyExit.label", emoji: "🚪", descriptionKey: "roster.vibes.earlyExit.description" },
+  { value: "first-5", labelKey: "roster.vibes.firstFive.label", emoji: "🚀", descriptionKey: "roster.vibes.firstFive.description" },
+  { value: "eighty-minute-warmup", labelKey: "roster.vibes.eightyMinuteWarmup.label", emoji: "🐢", descriptionKey: "roster.vibes.eightyMinuteWarmup.description" },
+  { value: "third-half", labelKey: "roster.vibes.thirdHalf.label", emoji: "🍺", descriptionKey: "roster.vibes.thirdHalf.description" },
+  { value: "yellow-card", labelKey: "roster.vibes.yellowCard.label", emoji: "🟨", descriptionKey: "roster.vibes.yellowCard.description" },
+  { value: "var-caller", labelKey: "roster.vibes.varCaller.label", emoji: "📺", descriptionKey: "roster.vibes.varCaller.description" },
+  { value: "kit-collector", labelKey: "roster.vibes.kitCollector.label", emoji: "👕", descriptionKey: "roster.vibes.kitCollector.description" },
+  { value: "shoe-collector", labelKey: "roster.vibes.shoeCollector.label", emoji: "👟", descriptionKey: "roster.vibes.shoeCollector.description" },
+  { value: "fashion-icon", labelKey: "roster.vibes.fashionIcon.label", emoji: "✨", descriptionKey: "roster.vibes.fashionIcon.description" },
+  { value: "club-legend", labelKey: "roster.vibes.clubLegend.label", emoji: "🏆", descriptionKey: "roster.vibes.clubLegend.description" },
+  { value: "snack-captain", labelKey: "roster.vibes.snackCaptain.label", emoji: "🍪", descriptionKey: "roster.vibes.snackCaptain.description" },
+  { value: "cameo", labelKey: "roster.vibes.cameo.label", emoji: "🎭", descriptionKey: "roster.vibes.cameo.description" },
+  { value: "mastermind", labelKey: "roster.vibes.mastermind.label", emoji: "♟️", descriptionKey: "roster.vibes.mastermind.description" },
 ];
 
 function getFunBadge(value?: FunBadge) {
   return FUN_BADGES.find(badge => badge.value === value);
 }
 
-const SKILL_LEVEL_EXPLANATIONS: Record<number, string> = {
-  1: "Complete beginner. New to football or needs major help with positioning and ball control.",
-  2: "Beginner. Can join the game but often struggles with control, passing, and positioning.",
-  3: "Casual beginner. Understands the basics but is still inconsistent under pressure.",
-  4: "Lower casual level. Can play simple passes and defend sometimes, but impact is limited.",
-  5: "Average casual player. Reliable enough for normal games, with no major strengths or weaknesses.",
-  6: "Solid regular player. Understands the game well and contributes consistently.",
-  7: "Good player. Technically comfortable, makes good decisions, and affects the game positively.",
-  8: "Strong player. One of the better players in casual games; reliable in attack or defense.",
-  9: "Very strong player. Usually dominates casual games and strongly affects team balance.",
-  10: "Advanced / elite casual player. Clearly above the group level and must be balanced carefully.",
+const SKILL_LEVEL_EXPLANATIONS: Record<number, TranslationKey> = {
+  1: "roster.skillLevels.one",
+  2: "roster.skillLevels.two",
+  3: "roster.skillLevels.three",
+  4: "roster.skillLevels.four",
+  5: "roster.skillLevels.five",
+  6: "roster.skillLevels.six",
+  7: "roster.skillLevels.seven",
+  8: "roster.skillLevels.eight",
+  9: "roster.skillLevels.nine",
+  10: "roster.skillLevels.ten",
 };
 
 function skillLevelExplanation(skillLevel: number) {
   const bucket = Math.max(1, Math.min(10, Math.floor(skillLevel)));
-  return SKILL_LEVEL_EXPLANATIONS[bucket];
+  return translate(SKILL_LEVEL_EXPLANATIONS[bucket]);
+}
+
+const PLAYER_STYLE_PRESENTATION: Record<PlayerStyleValue, { labelKey: TranslationKey; descriptionKey: TranslationKey }> = {
+  0: { labelKey: "roster.playerStyles.centreBack.label", descriptionKey: "roster.playerStyles.centreBack.description" },
+  1: { labelKey: "roster.playerStyles.fullBack.label", descriptionKey: "roster.playerStyles.fullBack.description" },
+  2: { labelKey: "roster.playerStyles.defensiveMidfielder.label", descriptionKey: "roster.playerStyles.defensiveMidfielder.description" },
+  3: { labelKey: "roster.playerStyles.balancedMidfielder.label", descriptionKey: "roster.playerStyles.balancedMidfielder.description" },
+  4: { labelKey: "roster.playerStyles.attackingMidfielder.label", descriptionKey: "roster.playerStyles.attackingMidfielder.description" },
+  5: { labelKey: "roster.playerStyles.winger.label", descriptionKey: "roster.playerStyles.winger.description" },
+  6: { labelKey: "roster.playerStyles.striker.label", descriptionKey: "roster.playerStyles.striker.description" },
+};
+
+function playerStylePresentation(value: PlayerStyleValue) {
+  const presentation = PLAYER_STYLE_PRESENTATION[value];
+  return {
+    label: translate(presentation.labelKey),
+    description: translate(presentation.descriptionKey),
+  };
 }
 
 
@@ -546,7 +578,17 @@ function roundSkillStep(value: number) {
 
 function formatSkillStep(value: number) {
   const rounded = roundSkillStep(value);
-  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+  return formatNumber(getResolvedUiLocale(), rounded, {
+    minimumFractionDigits: Number.isInteger(rounded) ? 0 : 1,
+    maximumFractionDigits: 1,
+  });
+}
+
+function formatOneDecimal(value: number) {
+  return formatNumber(getResolvedUiLocale(), value, {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  });
 }
 
 function applyQuickSkillToPlayer(player: RoomPlayer, skillLevel: number): RoomPlayer {
@@ -569,14 +611,14 @@ async function fileToSmallDataUrl(file: File) {
   const dataUrl = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(new Error("Could not read the selected file."));
+    reader.onerror = () => reject(new Error(translate("roster.errors.photoReadFailed")));
     reader.readAsDataURL(file);
   });
 
   const image = await new Promise<HTMLImageElement>((resolve, reject) => {
     const img = new window.Image();
     img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error("This photo format is not supported by the browser. Try a JPG or PNG."));
+    img.onerror = () => reject(new Error(translate("roster.errors.photoFormatUnsupported")));
     img.src = dataUrl;
   });
 
@@ -609,19 +651,25 @@ function displayName(player: Pick<RoomPlayer, "name" | "aka">) {
 }
 
 function formatDateTime(value?: string) {
-  if (!value) return "Not saved yet";
+  if (!value) return translate("roster.messages.notSavedYet");
   try {
-    return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(value));
+    return formatLocalizedDateTime(getResolvedUiLocale(), new Date(value), {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
   } catch {
     return value;
   }
 }
 
 function NewBadge() {
-  return <span className="inline-flex items-center rounded-full bg-sky-100 px-1.5 py-0.5 text-[9px] font-bold text-sky-800 border border-sky-200 leading-none">NEW</span>;
+  return <span className="inline-flex items-center rounded-full bg-sky-100 px-1.5 py-0.5 text-[9px] font-bold text-sky-800 border border-sky-200 leading-none">{translate("roster.badges.new")}</span>;
 }
 function ORGBadge() {
-  return <span className="inline-flex items-center rounded-full bg-violet-100 px-1.5 py-0.5 text-[9px] font-bold text-violet-800 border border-violet-200 leading-none">ORG</span>;
+  return <span className="inline-flex items-center rounded-full bg-violet-100 px-1.5 py-0.5 text-[9px] font-bold text-violet-800 border border-violet-200 leading-none">{translate("roster.badges.organizer")}</span>;
 }
 function TogglePill({
   active,
@@ -650,30 +698,31 @@ function TogglePill({
 function FunBadgePill({ value }: { value?: FunBadge }) {
   const badge = getFunBadge(value);
   if (!badge) return null;
-  return <span title={badge.description} className="inline-flex items-center px-0.5 py-0 text-[10px] font-semibold text-muted-foreground leading-tight">{badge.emoji} {badge.label}</span>;
+  return <span title={translate(badge.descriptionKey)} className="inline-flex items-center px-0.5 py-0 text-[10px] font-semibold text-muted-foreground leading-tight">{badge.emoji} {translate(badge.labelKey)}</span>;
 }
 function AbilityBadge({
   ability,
   onClick,
   selected = false,
 }: {
-  ability: { badge: string; label: string; icon?: React.ComponentType<{ className?: string }> };
+  ability: SpecialAbility;
   onClick?: () => void;
   selected?: boolean;
 }) {
-  const baseTitle = `${ability.label} (${ability.badge})`;
+  const label = abilityLabel(ability);
+  const badge = abilityBadgeLabel(ability);
+  const baseTitle = translate("roster.accessibility.abilityBadge", { label, badge });
   const ringClass = selected ? "border-amber-500 ring-2 ring-amber-300" : "border-amber-300";
 
-  if (ability.badge === "GK") {
+  if (ability.key === "isGoalkeeper") {
     const className = `inline-flex items-center rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-black text-amber-800 border shadow-sm ${ringClass} ${onClick ? "cursor-pointer active:scale-95" : "cursor-default"}`;
     if (onClick) {
       return (
-        <button type="button" title={baseTitle} aria-label={ability.label} onClick={(e) => { e.stopPropagation(); onClick(); }} className={className}>
-          GK
-        </button>
+        <button type="button" title={baseTitle} aria-label={label} onClick={(e) => { e.stopPropagation(); onClick(); }} className={className}>
+          {badge}</button>
       );
     }
-    return <span title={baseTitle} aria-label={ability.label} className={className}>GK</span>;
+    return <span title={baseTitle} aria-label={label} className={className}>{badge}</span>;
   }
 
   const Icon = ability.icon ?? Star;
@@ -681,14 +730,14 @@ function AbilityBadge({
 
   if (onClick) {
     return (
-      <button type="button" title={baseTitle} aria-label={ability.label} onClick={(e) => { e.stopPropagation(); onClick(); }} className={className}>
+      <button type="button" title={baseTitle} aria-label={label} onClick={(e) => { e.stopPropagation(); onClick(); }} className={className}>
         <Icon className="w-3.5 h-3.5 stroke-[3]" />
       </button>
     );
   }
 
   return (
-    <span title={baseTitle} aria-label={ability.label} className={className}>
+    <span title={baseTitle} aria-label={label} className={className}>
       <Icon className="w-3.5 h-3.5 stroke-[3]" />
     </span>
   );
@@ -700,23 +749,23 @@ function SpecialAbilityIconRow({ player, max = 4 }: { player: RoomPlayer; max?: 
 
   const visible = abilities.slice(0, max);
   const hiddenCount = abilities.length - visible.length;
-  const title = abilities.map(ability => ability.label).join(", ");
+  const title = formatList(getResolvedUiLocale(), abilities.map(abilityLabel), { type: "unit" });
 
   return (
     <span title={title} className="stripes-type-ui inline-flex items-center gap-1 text-primary/80 leading-none">
       {visible.map(ability => {
-        if (ability.badge === "GK") {
+        const label = abilityLabel(ability);
+        if (ability.key === "isGoalkeeper") {
           return (
-            <span key={ability.key} aria-label={ability.label} className="text-[8px] font-black tracking-tight text-primary/80 leading-none">
-              GK
-            </span>
+            <span key={ability.key} aria-label={label} className="text-[8px] font-black tracking-tight text-primary/80 leading-none">
+              {abilityBadgeLabel(ability)}</span>
           );
         }
         const Icon = ability.icon ?? Star;
-        return <Icon key={ability.key} aria-label={ability.label} className="w-3 h-3 stroke-[2.8] shrink-0" />;
+        return <Icon key={ability.key} aria-label={label} className="w-3 h-3 stroke-[2.8] shrink-0" />;
       })}
       {hiddenCount > 0 ? (
-        <span className="text-[8px] font-black text-primary/70 leading-none">+{hiddenCount}</span>
+        <span className="text-[8px] font-black text-primary/70 leading-none">+{formatNumber(getResolvedUiLocale(), hiddenCount)}</span>
       ) : null}
     </span>
   );
@@ -756,14 +805,14 @@ function StatControl({ label, value, max = 10, onChange }: { label: string; valu
 }
 
 function PlayerRadar({ player, compact = false }: { player: RoomPlayer; compact?: boolean }) {
-  const data = useMemo(() => [
-    { stat: "Attack", value: player.attack },
-    { stat: "Passing", value: player.passing },
-    { stat: "Stamina", value: player.stamina },
-    { stat: "Defense", value: player.defense },
-    { stat: "Strength", value: player.physical },
-    { stat: "Speed", value: player.speed },
-  ], [player]);
+  const data = [
+    { stat: translate("roster.stats.attack"), value: player.attack },
+    { stat: translate("roster.stats.passing"), value: player.passing },
+    { stat: translate("roster.stats.stamina"), value: player.stamina },
+    { stat: translate("roster.stats.defense"), value: player.defense },
+    { stat: translate("roster.stats.strength"), value: player.physical },
+    { stat: translate("roster.stats.speed"), value: player.speed },
+  ];
 
   return (
     <div className={`${compact ? "h-36" : "h-52"} w-full bg-muted/40 rounded-xl border border-border p-2`}>
@@ -798,23 +847,27 @@ function VibePicker({ value, onChange }: { value?: FunBadge; onChange: (value?: 
         {selected ? (
           <span className="flex min-w-0 items-center gap-2">
             <span className="text-base leading-none">{selected.emoji}</span>
-            <span className="min-w-0 truncate text-sm font-semibold">{selected.label}</span>
+            <span className="min-w-0 truncate text-sm font-semibold">{translate(selected.labelKey)}</span>
           </span>
         ) : (
-          <span className="text-sm text-muted-foreground">None</span>
+          <span className="text-sm text-muted-foreground">{translate("roster.messages.none")}</span>
         )}
       </button>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="stripes-type-ui max-w-md max-h-[88dvh] overflow-hidden rounded-3xl p-0 gap-0">
           <DialogHeader className="px-5 pt-5 pb-3 text-left border-b border-border/70">
-            <DialogTitle>Choose player vibe</DialogTitle>
+            <DialogTitle>{translate("roster.headings.choosePlayerVibe")}</DialogTitle>
             {selected ? (
               <div className="pt-2 text-xs text-muted-foreground">
-                Current: <span className="font-bold text-foreground">{selected.emoji} {selected.label}</span>
+                <Trans
+                  i18nKey="roster.messages.currentVibe"
+                  values={{ vibe: `${selected.emoji} ${translate(selected.labelKey)}` }}
+                  components={{ current: <span className="font-bold text-foreground" /> }}
+                />
               </div>
             ) : (
-              <div className="pt-2 text-xs text-muted-foreground">Pick one compact vibe badge.</div>
+              <div className="pt-2 text-xs text-muted-foreground">{translate("roster.vibes.pickerHelp")}</div>
             )}
           </DialogHeader>
 
@@ -826,13 +879,13 @@ function VibePicker({ value, onChange }: { value?: FunBadge; onChange: (value?: 
                   <button
                     key={badge.value}
                     type="button"
-                    title={badge.description}
+                    title={translate(badge.descriptionKey)}
                     onClick={() => choose(badge.value)}
                     className={`min-h-[2.65rem] rounded-xl border px-1.5 py-1.5 text-center transition-all active:scale-[0.98] ${active ? "border-primary bg-primary/10 ring-1 ring-primary/30" : "border-border bg-card hover:border-primary/40 hover:bg-accent/60"}`}
                   >
                     <span className="flex min-w-0 flex-col items-center justify-center gap-0.5">
                       <span className="text-base leading-none">{badge.emoji}</span>
-                      <span className="max-w-full truncate text-[9px] font-extrabold leading-none text-foreground/90">{badge.label}</span>
+                      <span className="max-w-full truncate text-[9px] font-extrabold leading-none text-foreground/90">{translate(badge.labelKey)}</span>
                     </span>
                   </button>
                 );
@@ -841,8 +894,8 @@ function VibePicker({ value, onChange }: { value?: FunBadge; onChange: (value?: 
           </div>
 
           <div className="flex gap-2 border-t border-border/70 p-4">
-            <Button type="button" variant="outline" className="flex-1 rounded-xl" onClick={() => choose(undefined)}>Clear vibe</Button>
-            <Button type="button" className="flex-1 rounded-xl" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button type="button" variant="outline" className="flex-1 rounded-xl" onClick={() => choose(undefined)}>{translate("roster.actions.clearVibe")}</Button>
+            <Button type="button" className="flex-1 rounded-xl" onClick={() => setOpen(false)}>{translate("common.cancel")}</Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -1039,7 +1092,7 @@ function ProfileDialog({
     if (!isSharedRoster) return true;
     onUpdate(sharedIdentityUpdateFromDraft(draft));
     if (!sharedRosterId) {
-      setSharedProfileError("Shared roster is still connecting. Try again in a moment.");
+      setSharedProfileError(translate("roster.errors.sharedRosterConnecting"));
       return false;
     }
     try {
@@ -1048,7 +1101,7 @@ function ProfileDialog({
       await saveMyClubPlayerRating(sharedRosterId, player.id, sharedRatingProfileFromDraft(draft, sharedPlayerStyle));
       return true;
     } catch (error) {
-      setSharedProfileError(error instanceof Error ? error.message : "Could not save shared rating profile.");
+      setSharedProfileError(error instanceof Error ? error.message : translate("roster.errors.sharedProfileSaveFailed"));
       return false;
     } finally {
       setSharedProfileSaving(false);
@@ -1125,7 +1178,7 @@ function ProfileDialog({
       }}
     >
       <DialogTrigger asChild>
-        <Button variant="outline" size="icon" className={`w-8 h-8 rounded-full ${tutorialHighlightEdit ? "fairteams-tutorial-pulse relative z-[82]" : ""}`} title="Edit player" data-testid={`profile-${player.id}`} onClick={e => { e.stopPropagation(); onTutorialOpened?.(); }}>
+        <Button variant="outline" size="icon" className={`w-8 h-8 rounded-full ${tutorialHighlightEdit ? "fairteams-tutorial-pulse relative z-[82]" : ""}`} title={translate("roster.accessibility.editPlayer")} data-testid={`profile-${player.id}`} onClick={e => { e.stopPropagation(); onTutorialOpened?.(); }}>
           <Pencil className="w-4 h-4" />
         </Button>
       </DialogTrigger>
@@ -1134,24 +1187,24 @@ function ProfileDialog({
         className={`stripes-type-ui max-w-sm md:max-w-xl overflow-y-auto rounded-3xl ${tutorialHighlightSave ? "!top-[58%] !max-h-[76dvh]" : "max-h-[90dvh]"}`}
       >
         <DialogHeader>
-          <DialogTitle>{isSharedRoster ? "Shared Player Info" : "Player Setup"}</DialogTitle>
+          <DialogTitle>{isSharedRoster ? translate("roster.headings.sharedPlayerInfo") : translate("roster.headings.playerSetup")}</DialogTitle>
           <div className="text-xs font-semibold text-muted-foreground">
             {isSharedRoster
-              ? "This shared roster uses the same shared profile as Club ratings."
-              : "Quick edit first. Open Advanced only when you need detailed stats or photos."}
+              ? translate("roster.playerProfile.sharedSourceHelp")
+              : translate("roster.playerProfile.quickEditHelp")}
           </div>
         </DialogHeader>
 
         {reviewMode && (
           <div className="rounded-2xl border border-sky-100 bg-sky-50 px-3 py-2 text-xs font-bold text-sky-800">
-            Reviewing new players · {reviewIndex + 1} of {reviewTotal}
+            {translate("roster.messages.reviewProgress", { index: reviewIndex + 1, total: reviewTotal })}
           </div>
         )}
 
         <div className="flex flex-col gap-3.5 pt-1">
           <div className="grid grid-cols-1 gap-3">
             <div className="space-y-1.5">
-              <Label className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider">Player Name</Label>
+              <Label className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider">{translate("roster.labels.playerName")}</Label>
               <Input
                 value={draft.name}
                 onChange={e => updateDraft({ name: e.target.value })}
@@ -1165,60 +1218,57 @@ function ProfileDialog({
           <div className="grid grid-cols-[1.15fr_0.85fr] gap-2">
             <Select value={draft.gender} onValueChange={v => updateDraft({ gender: v as Gender })}>
               <SelectTrigger className="h-10 rounded-xl border-border bg-muted/30 text-xs font-bold px-2">
-                <SelectValue placeholder="Gender" />
+                <SelectValue placeholder={translate("roster.fields.gender")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="male">Male</SelectItem>
-                <SelectItem value="female">Female</SelectItem>
-                <SelectItem value="other">Other</SelectItem>
+                <SelectItem value="male">{translate("roster.messages.male")}</SelectItem>
+                <SelectItem value="female">{translate("roster.messages.female")}</SelectItem>
+                <SelectItem value="other">{translate("roster.messages.other")}</SelectItem>
               </SelectContent>
             </Select>
             <TogglePill active={!!draft.isNew} onClick={() => updateDraft({ isNew: !draft.isNew })} activeClassName="border-sky-300 bg-sky-100 text-sky-800 shadow-sm">
-              New
-            </TogglePill>
+              {translate("roster.labels.newPlayer")}</TogglePill>
           </div>
 
           {isSharedRoster && (
             <div className="rounded-2xl border border-violet-200 bg-violet-50/85 p-3 space-y-3">
               <div>
-                <Label className="text-[11px] uppercase font-black tracking-wide text-violet-700">Shared player info</Label>
+                <Label className="text-[11px] uppercase font-black tracking-wide text-violet-700">{translate("roster.labels.sharedPlayerInfo")}</Label>
                 <div className="mt-0.5 text-[10px] font-semibold leading-snug text-violet-700/75">
-                  These fields are shared with organizers. Club ratings override this profile when ratings exist.
-                </div>
+                  {translate("roster.playerProfile.sharedIdentityHelp")}</div>
               </div>
               <div className="space-y-1.5">
-                <Label className="text-[10px] uppercase font-bold text-violet-700/80 tracking-wider">AKA / Nickname</Label>
-                <Input value={draft.aka || ""} placeholder="Optional" onChange={e => updateDraft({ aka: e.target.value })} className="h-10 border-violet-100 bg-white text-sm font-semibold" />
+                <Label className="text-[10px] uppercase font-bold text-violet-700/80 tracking-wider">{translate("roster.labels.akaNickname")}</Label>
+                <Input value={draft.aka || ""} placeholder={translate("roster.fields.optional")} onChange={e => updateDraft({ aka: e.target.value })} className="h-10 border-violet-100 bg-white text-sm font-semibold" />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-[10px] uppercase font-bold text-violet-700/80 tracking-wider">Player Vibe</Label>
+                <Label className="text-[10px] uppercase font-bold text-violet-700/80 tracking-wider">{translate("roster.labels.playerVibe")}</Label>
                 <VibePicker value={draft.funBadge} onChange={funBadge => updateDraft({ funBadge })} />
               </div>
               {(() => {
                 const sharedOverall = sharedOverallFromDraft(draft);
-                const selectedStyle = getPlayerStyleDefinition(sharedPlayerStyle);
+                const selectedStyle = playerStylePresentation(sharedPlayerStyle);
                 return (
                   <div className="rounded-2xl border border-violet-100 bg-white/85 p-3 space-y-3">
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <Label className="text-[10px] uppercase font-black tracking-wide text-violet-700">Shared balance profile</Label>
+                        <Label className="text-[10px] uppercase font-black tracking-wide text-violet-700">{translate("roster.labels.sharedBalanceProfile")}</Label>
                         <div className="mt-0.5 text-[10px] font-semibold leading-snug text-violet-700/75">
-                          Same profile used by Club ratings. No local-only traits or Team Play here.
-                        </div>
+                          {translate("roster.playerProfile.sharedBalanceHelp")}</div>
                       </div>
                       <div className="rounded-xl bg-violet-700 px-3 py-1.5 text-center text-white shadow-sm">
-                        <div className="text-[8px] uppercase font-black opacity-75 leading-none">OVR</div>
-                        <div className="text-xl font-black leading-none">{sharedOverall.toFixed(1)}</div>
+                        <div className="text-[8px] uppercase font-black opacity-75 leading-none">{translate("roster.messages.ovr")}</div>
+                        <div className="text-xl font-black leading-none">{formatOneDecimal(sharedOverall)}</div>
                       </div>
                     </div>
 
                     <div className="rounded-2xl border border-violet-100 bg-violet-50/80 px-3 py-2">
                       <div className="flex items-center justify-between gap-2">
                         <div>
-                          <Label className="text-[10px] uppercase font-black tracking-wide text-violet-700">Overall skill</Label>
-                          <div className="mt-0.5 text-[10px] font-semibold text-violet-700/75">Moving this reshapes stats from the selected style.</div>
+                          <Label className="text-[10px] uppercase font-black tracking-wide text-violet-700">{translate("roster.labels.overallSkill")}</Label>
+                          <div className="mt-0.5 text-[10px] font-semibold text-violet-700/75">{translate("roster.playerProfile.styleAdjustmentHelp")}</div>
                         </div>
-                        <span className="text-sm font-black tabular-nums text-violet-900">{roundSkillStep(sharedOverall).toFixed(1)}</span>
+                        <span className="text-sm font-black tabular-nums text-violet-900">{formatOneDecimal(roundSkillStep(sharedOverall))}</span>
                       </div>
                       <input
                         type="range"
@@ -1240,7 +1290,7 @@ function ProfileDialog({
 
                     <div className="space-y-2 rounded-2xl border border-violet-100 bg-violet-50/80 px-3 py-2">
                       <div className="flex items-center justify-between gap-2">
-                        <Label className="text-[10px] uppercase font-black tracking-wide text-violet-700">Player Style</Label>
+                        <Label className="text-[10px] uppercase font-black tracking-wide text-violet-700">{translate("roster.labels.playerStyle")}</Label>
                         <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-black text-violet-800 shadow-sm">{selectedStyle.label}</span>
                       </div>
                       <input
@@ -1260,7 +1310,7 @@ function ProfileDialog({
                         className="w-full accent-violet-700"
                       />
                       <div className="grid grid-cols-3 text-[10px] font-black text-violet-500/80">
-                        <span>Defense</span><span className="text-center">Midfield</span><span className="text-right">Attack</span>
+                        <span>{translate("roster.stats.defense")}</span><span className="text-center">{translate("roster.stats.midfield")}</span><span className="text-right">{translate("roster.stats.attack")}</span>
                       </div>
                       <div className="rounded-xl border border-violet-100 bg-white/80 px-3 py-2 text-[11px] font-semibold leading-snug text-violet-900">
                         {selectedStyle.description}
@@ -1270,12 +1320,11 @@ function ProfileDialog({
                     <PlayerRadar player={{ ...draft, skill: sharedOverall, teamPlay: 2 }} />
 
                     <div className="grid grid-cols-2 gap-2">
-                      {STAT_FIELDS.map(({ key, label }) => (
-                        <StatControl key={key} label={label} value={draft[key]} onChange={value => updateDraft({ [key]: value, teamPlay: 2 } as Partial<RoomPlayer>)} />
+                      {STAT_FIELDS.map(({ key, labelKey }) => (
+                        <StatControl key={key} label={translate(labelKey)} value={draft[key]} onChange={value => updateDraft({ [key]: value, teamPlay: 2 } as Partial<RoomPlayer>)} />
                       ))}
                       <TogglePill active={!!draft.isGoalkeeper} onClick={() => updateDraft({ isGoalkeeper: !draft.isGoalkeeper, teamPlay: 2 })} activeClassName="border-amber-300 bg-amber-100 text-amber-900 shadow-sm">
-                        GK
-                      </TogglePill>
+                        {translate("roster.abilities.goalkeeper.badge")}</TogglePill>
                     </div>
 
                     {sharedProfileError && (
@@ -1294,11 +1343,11 @@ function ProfileDialog({
           <div className="rounded-2xl border border-primary/15 bg-primary/5 p-3 space-y-3">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <Label className="text-[11px] uppercase font-black tracking-wide text-primary">Skill Level</Label>
-                <div className="mt-0.5 text-[10px] font-semibold text-muted-foreground">Fast 1–10 setup for team balance</div>
+                <Label className="text-[11px] uppercase font-black tracking-wide text-primary">{translate("roster.labels.skillLevel")}</Label>
+                <div className="mt-0.5 text-[10px] font-semibold text-muted-foreground">{translate("roster.playerProfile.quickSkillHelp")}</div>
               </div>
               <div className="rounded-xl bg-primary text-primary-foreground px-3 py-1.5 text-center shadow-sm">
-                <div className="text-[8px] uppercase font-black opacity-75 leading-none">Skill</div>
+                <div className="text-[8px] uppercase font-black opacity-75 leading-none">{translate("roster.labels.skill")}</div>
                 <div className="text-xl font-black leading-none">{formatSkillStep(quickSkill)}</div>
               </div>
             </div>
@@ -1327,7 +1376,7 @@ function ProfileDialog({
             className={`flex h-10 items-center justify-between rounded-2xl border border-border bg-background px-3 text-left text-xs font-black tracking-wide text-foreground ${tutorialHighlightAdvanced ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
             data-testid={`button-toggle-edit-advanced-${player.id}`}
           >
-            <span>Advanced Edit</span>
+            <span>{translate("roster.messages.advancedEdit")}</span>
             <span className="text-muted-foreground">{advancedOpen ? "▲" : "▼"}</span>
           </button>
 
@@ -1339,7 +1388,7 @@ function ProfileDialog({
                     type="button"
                     onClick={() => setPhotoActionsOpen(prev => !prev)}
                     className="relative group rounded-full transition-transform active:scale-95"
-                    title="Change photo"
+                    title={translate("roster.accessibility.changePhoto")}
                   >
                     <PlayerAvatar player={draft} size="lg" />
                     <span className="absolute inset-0 bg-slate-900/35 rounded-full text-white hidden group-hover:flex items-center justify-center">
@@ -1349,30 +1398,26 @@ function ProfileDialog({
                   {photoActionsOpen && (
                     <div className="absolute left-0 top-full z-20 mt-2 w-36 rounded-xl border border-border bg-popover p-1.5 shadow-lg">
                       <button type="button" className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] font-bold hover:bg-accent" onClick={() => { setPhotoActionsOpen(false); photoCameraInput.current?.click(); }}>
-                        <Camera className="h-3.5 w-3.5" /> Take Photo
-                      </button>
+                        <Camera className="h-3.5 w-3.5" /> {translate("roster.actions.takePhoto")}</button>
                       <button type="button" className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] font-bold hover:bg-accent" onClick={() => { setPhotoActionsOpen(false); photoGalleryInput.current?.click(); }}>
-                        <ImageIcon className="h-3.5 w-3.5" /> Import Photo
-                      </button>
+                        <ImageIcon className="h-3.5 w-3.5" /> {translate("roster.actions.importPhoto")}</button>
                       {draft.profilePhoto && (
                         <button type="button" className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] font-bold text-muted-foreground hover:bg-accent" onClick={() => { setPhotoActionsOpen(false); updateDraft({ profilePhoto: undefined }); }}>
-                          <Trash2 className="h-3.5 w-3.5" /> Clear Photo
-                        </button>
+                          <Trash2 className="h-3.5 w-3.5" /> {translate("roster.actions.clearPhoto")}</button>
                       )}
                     </div>
                   )}
                 </div>
                 <div className="min-w-0 flex-[1_1_8rem] space-y-2">
-                  <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">AKA / Nickname</Label>
-                  <Input value={draft.aka || ""} placeholder="Optional" onChange={e => updateDraft({ aka: e.target.value })} className="h-10 text-sm font-semibold" />
+                  <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">{translate("roster.labels.akaNickname")}</Label>
+                  <Input value={draft.aka || ""} placeholder={translate("roster.fields.optional")} onChange={e => updateDraft({ aka: e.target.value })} className="h-10 text-sm font-semibold" />
                   <div className="grid grid-cols-[1fr_auto] items-end gap-2">
                     <div className="space-y-1.5 min-w-0">
-                      <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Player Vibe</Label>
+                      <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">{translate("roster.labels.playerVibe")}</Label>
                       <VibePicker value={draft.funBadge} onChange={funBadge => updateDraft({ funBadge })} />
                     </div>
                     <TogglePill active={!!draft.isOrganizer} onClick={() => updateDraft({ isOrganizer: !draft.isOrganizer })} activeClassName="border-violet-200 bg-violet-100 text-violet-800 shadow-sm">
-                      Org
-                    </TogglePill>
+                      {translate("roster.labels.organizerAbbreviation")}</TogglePill>
                   </div>
                 </div>
               </div>
@@ -1388,7 +1433,7 @@ function ProfileDialog({
                   e.target.value = "";
                   if (!file) return;
                   try { updateDraft({ profilePhoto: await fileToSmallDataUrl(file) }); }
-                  catch { alert("Could not load that photo."); }
+                  catch { alert(translate("roster.errors.photoLoadFailed")); }
                 }}
               />
               <input
@@ -1401,7 +1446,7 @@ function ProfileDialog({
                   e.target.value = "";
                   if (!file) return;
                   try { updateDraft({ profilePhoto: await fileToSmallDataUrl(file) }); }
-                  catch { alert("Could not load that photo."); }
+                  catch { alert(translate("roster.errors.photoLoadFailed")); }
                 }}
               />
 
@@ -1409,27 +1454,27 @@ function ProfileDialog({
 
               <div className="rounded-2xl border border-primary/15 bg-background/70 px-3 py-2 flex items-center justify-between">
                 <div>
-                  <Label className="text-[10px] uppercase font-black tracking-wide text-primary">Team-balance skill</Label>
-                  <div className="mt-0.5 text-[10px] font-semibold text-muted-foreground">Includes advanced stats and traits</div>
+                  <Label className="text-[10px] uppercase font-black tracking-wide text-primary">{translate("roster.labels.teamBalanceSkill")}</Label>
+                  <div className="mt-0.5 text-[10px] font-semibold text-muted-foreground">{translate("roster.playerProfile.balanceSkillHelp")}</div>
                 </div>
                 <div className="rounded-xl bg-primary text-primary-foreground px-3 py-1.5 text-center shadow-sm">
-                  <div className="text-[8px] uppercase font-black opacity-75 leading-none">Skill</div>
+                  <div className="text-[8px] uppercase font-black opacity-75 leading-none">{translate("roster.labels.skill")}</div>
                   <div className="text-xl font-black leading-none">{overall}</div>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-2">
-                {STAT_FIELDS.map(({ key, label }) => (
-                  <StatControl key={key} label={label} value={draft[key]} onChange={value => updateDraft({ [key]: value } as Partial<RoomPlayer>)} />
+                {STAT_FIELDS.map(({ key, labelKey }) => (
+                  <StatControl key={key} label={translate(labelKey)} value={draft[key]} onChange={value => updateDraft({ [key]: value } as Partial<RoomPlayer>)} />
                 ))}
-                <StatControl label="Team Play" value={draft.teamPlay} max={3} onChange={value => updateDraft({ teamPlay: value })} />
+                <StatControl label={translate("roster.accessibility.teamPlay")} value={draft.teamPlay} max={3} onChange={value => updateDraft({ teamPlay: value })} />
                 <div />
               </div>
 
               <div className="space-y-2 rounded-2xl border border-amber-100 bg-amber-50/75 p-3">
                 <div className="flex items-center justify-between">
-                  <Label className="text-[10px] uppercase font-bold text-amber-800 tracking-wider flex items-center gap-1"><Star className="w-3 h-3" /> Special traits</Label>
-                  <span className="text-[10px] font-bold text-amber-700">Optional</span>
+                  <Label className="text-[10px] uppercase font-bold text-amber-800 tracking-wider flex items-center gap-1"><Star className="w-3 h-3" /> {translate("roster.labels.specialTraits")}</Label>
+                  <span className="text-[10px] font-bold text-amber-700">{translate("roster.messages.optional")}</span>
                 </div>
                 <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,8rem),1fr))] gap-2 sm:grid-cols-2">
                   {SPECIAL_ABILITIES.map(ability => {
@@ -1445,19 +1490,19 @@ function ProfileDialog({
                           onClick={() => updateDraft({ [ability.key]: !selected } as Partial<RoomPlayer>)}
                           className="flex min-w-0 flex-1 items-center gap-1.5 px-2 text-left"
                         >
-                          {ability.badge === "GK" ? (
-                            <span className="w-5 text-center text-[10px] font-semibold text-amber-700">GK</span>
+                          {ability.key === "isGoalkeeper" ? (
+                            <span className="w-5 text-center text-[10px] font-semibold text-amber-700">{abilityBadgeLabel(ability)}</span>
                           ) : (
                             <Icon className="h-3.5 w-3.5 shrink-0 text-amber-700" />
                           )}
-                          <span className="truncate text-[11px] font-semibold leading-tight">{ability.label}</span>
+                          <span className="truncate text-[11px] font-semibold leading-tight">{abilityLabel(ability)}</span>
                         </button>
                         <button
                           type="button"
                           onClick={(event) => { event.stopPropagation(); setTraitHelp(current => current?.key === ability.key ? null : ability); }}
                           className="flex h-full w-7 shrink-0 items-center justify-center border-l border-amber-100/80 text-[11px] font-black text-amber-700/80 active:bg-amber-100"
-                          aria-label={`What does ${ability.label} mean?`}
-                          title={`What does ${ability.label} mean?`}
+                          aria-label={translate("roster.accessibility.whatDoesMean", { label: abilityLabel(ability) })}
+                          title={translate("roster.accessibility.whatDoesMean", { label: abilityLabel(ability) })}
                         >
                           ?
                         </button>
@@ -1469,8 +1514,8 @@ function ProfileDialog({
               </div>
 
               <div className="rounded-xl border border-border p-3 bg-background/70 text-[11px] text-muted-foreground font-semibold space-y-1">
-                <div className="flex justify-between gap-3"><span>Added</span><span className="text-right text-foreground">{formatDateTime(draft.createdAt)}</span></div>
-                <div className="flex justify-between gap-3"><span>Last edited</span><span className="text-right text-foreground">{formatDateTime(draft.updatedAt || draft.createdAt)}</span></div>
+                <div className="flex justify-between gap-3"><span>{translate("roster.messages.added")}</span><span className="text-right text-foreground">{formatDateTime(draft.createdAt)}</span></div>
+                <div className="flex justify-between gap-3"><span>{translate("roster.messages.lastEdited")}</span><span className="text-right text-foreground">{formatDateTime(draft.updatedAt || draft.createdAt)}</span></div>
               </div>
             </div>
           )}
@@ -1485,7 +1530,7 @@ function ProfileDialog({
                 onClick={skipReviewPlayer}
                 className="h-11 rounded-xl font-black"
               >
-                {reviewIsLast ? "Done" : "Skip"}
+                {reviewIsLast ? translate("common.done") : translate("roster.actions.skip")}
               </Button>
               <Button
                 type="button"
@@ -1493,11 +1538,11 @@ function ProfileDialog({
                 disabled={sharedProfileSaving}
                 className="h-11 rounded-xl font-black"
               >
-                {sharedProfileSaving ? "Saving…" : reviewIsLast ? "Save & Done" : "Save & Next"}
+                {sharedProfileSaving ? translate("roster.actions.saving") : reviewIsLast ? translate("roster.actions.saveDone") : translate("roster.actions.saveNext")}
               </Button>
             </div>
           ) : (
-            <Button onClick={save} disabled={sharedProfileSaving} className={`h-11 rounded-xl font-black uppercase tracking-wide ${tutorialHighlightSave ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}>{sharedProfileSaving ? "Saving…" : isSharedRoster ? "Save Shared Profile" : "Save Profile"}</Button>
+            <Button onClick={save} disabled={sharedProfileSaving} className={`h-11 rounded-xl font-black uppercase tracking-wide ${tutorialHighlightSave ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}>{sharedProfileSaving ? translate("roster.actions.saving") : isSharedRoster ? translate("roster.actions.saveSharedProfile") : translate("roster.actions.saveProfile")}</Button>
           )}
         </div>
       </DialogContent>
@@ -1517,21 +1562,21 @@ function TraitHelpHint({ ability, onClose }: { ability: (typeof SPECIAL_ABILITIE
     <div className="rounded-2xl border border-amber-200 bg-white/95 p-3 shadow-sm animate-in fade-in-50 slide-in-from-top-1">
       <div className="flex items-start gap-2.5">
         <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-700">
-          {ability.badge === "GK" ? <span className="text-[10px] font-black">GK</span> : <Icon className="h-4 w-4" />}
+          {ability.key === "isGoalkeeper" ? <span className="text-[10px] font-black">{abilityBadgeLabel(ability)}</span> : <Icon className="h-4 w-4" />}
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
-            <h3 className="text-xs font-black tracking-tight text-[#102A43]">{ability.label}</h3>
+            <h3 className="text-xs font-black tracking-tight text-[#102A43]">{abilityLabel(ability)}</h3>
             <button
               type="button"
               onClick={onClose}
               className="-mr-1 -mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-              aria-label="Close trait help"
+              aria-label={translate("roster.accessibility.closeTraitHelp")}
             >
               <X className="h-3.5 w-3.5" />
             </button>
           </div>
-          <p className="mt-0.5 text-[11px] font-semibold leading-snug text-slate-600">{ability.description}</p>
+          <p className="mt-0.5 text-[11px] font-semibold leading-snug text-slate-600">{abilityDescription(ability)}</p>
         </div>
       </div>
     </div>
@@ -1541,7 +1586,7 @@ function TraitHelpHint({ ability, onClose }: { ability: (typeof SPECIAL_ABILITIE
 function OverallBadge({ player }: { player: RoomPlayer }) {
   return (
     <div className="w-9 h-8 rounded-xl bg-primary/10 text-primary border border-primary/15 flex items-center justify-center shrink-0 shadow-sm">
-      <span className="text-[15px] font-extrabold leading-none">{player.skill}</span>
+      <span className="text-[15px] font-extrabold leading-none">{formatSkillStep(player.skill)}</span>
     </div>
   );
 }
@@ -1584,7 +1629,10 @@ function PlayerCardBack({ player, clubRatingSummary }: { player: RoomPlayer; clu
         <PlayerRadar player={graphPlayer} compact />
         {hasClubAverage ? (
           <div className="mt-1 text-center text-[10px] font-black uppercase tracking-wide text-primary">
-            Club avg {graphPlayer.skill} · {clubRatingSummary?.ratingCount} rating{clubRatingSummary?.ratingCount === 1 ? "" : "s"}
+            {translate("roster.messages.clubAverageRatings", {
+              average: graphPlayer.skill,
+              count: clubRatingSummary?.ratingCount ?? 0,
+            })}
           </div>
         ) : null}
       </div>
@@ -1603,11 +1651,11 @@ function PlayerCardBack({ player, clubRatingSummary }: { player: RoomPlayer; clu
           </div>
           {selectedAbility ? (
             <div className="mx-auto max-w-[260px] text-center">
-              <div className="text-[11px] font-semibold text-foreground leading-tight">{selectedAbility.label}</div>
-              <div className="mt-0.5 text-[10px] font-medium text-muted-foreground leading-snug">{selectedAbility.description}</div>
+              <div className="text-[11px] font-semibold text-foreground leading-tight">{abilityLabel(selectedAbility)}</div>
+              <div className="mt-0.5 text-[10px] font-medium text-muted-foreground leading-snug">{abilityDescription(selectedAbility)}</div>
             </div>
           ) : (
-            <div className="text-center text-[10px] font-semibold text-muted-foreground">Tap an ability icon to see what it means.</div>
+            <div className="text-center text-[10px] font-semibold text-muted-foreground">{translate("roster.abilities.selectionHelp")}</div>
           )}
         </div>
       )}
@@ -1673,7 +1721,7 @@ export function PlayersTab({
   const [addDetails, setAddDetails] = useState<AddPlayerDetails>(() => createStyledAddPlayerDetails(5, BALANCED_PLAYER_STYLE));
   const addOverall = calculateOverall(addDetails);
   const addSkillExplanation = skillLevelExplanation(skillLevel);
-  const addSelectedStyle = getPlayerStyleDefinition(addPlayerStyle);
+  const addSelectedStyle = playerStylePresentation(addPlayerStyle);
   const updateAddDetails = (data: Partial<AddPlayerDetails>) => setAddDetails(prev => ({ ...prev, ...data }));
   const [autoEditPlayerId, setAutoEditPlayerId] = useState<string | null>(null);
   const [flippedPlayerIds, setFlippedPlayerIds] = useState<Record<string, boolean>>({});
@@ -1850,12 +1898,12 @@ export function PlayersTab({
     };
     const Recognition = voiceWindow.SpeechRecognition || voiceWindow.webkitSpeechRecognition;
     if (!Recognition) {
-      setVoiceAddStatus("Voice is not supported here. Type a name below.");
+      setVoiceAddStatus(translate("roster.voice.unsupported"));
       return;
     }
     try {
       setVoiceAddHeard("");
-      setVoiceAddStatus("Say one player name.");
+      setVoiceAddStatus(translate("roster.voice.prompt"));
       navigator.vibrate?.(25);
       voiceAddRecognitionRef.current?.abort?.();
       const recognition = new Recognition();
@@ -1865,10 +1913,12 @@ export function PlayersTab({
       recognition.onresult = (event) => {
         const transcript = event.results?.[event.resultIndex]?.[0]?.transcript?.trim?.() ?? "";
         setVoiceAddHeard(transcript);
-        setVoiceAddStatus(transcript ? "Review and add the player." : "No name heard. Try again or type.");
+        setVoiceAddStatus(transcript ? translate("roster.voice.review") : translate("roster.voice.noNameHeard"));
       };
       recognition.onerror = (event) => {
-        setVoiceAddStatus(event.error ? `Voice stopped: ${event.error}` : "Try again or type a name.");
+        setVoiceAddStatus(event.error
+          ? translate("roster.voice.stopped", { error: event.error })
+          : translate("roster.voice.retry"));
         setVoiceAddListening(false);
       };
       recognition.onend = () => setVoiceAddListening(false);
@@ -1877,7 +1927,7 @@ export function PlayersTab({
       setVoiceAddListening(true);
     } catch (error) {
       console.error(error);
-      setVoiceAddStatus("Voice could not start. Type a name below.");
+      setVoiceAddStatus(translate("roster.voice.startFailed"));
       setVoiceAddListening(false);
     }
   };
@@ -1916,17 +1966,17 @@ export function PlayersTab({
     setSearch(displayName(player));
     setAddPlayerOpen(false);
     setSharedDuplicateOverride(false);
-    setSharedDuplicateNotice(`${displayName(player)} is selected in the roster search.`);
+    setSharedDuplicateNotice(translate("roster.duplicates.selectedInSearch", { player: displayName(player) }));
   };
 
   const addVoicePlayerToRoster = () => {
     const cleanedName = voiceAddCleanName;
     if (!cleanedName || !isProbablyVoiceAddName(cleanedName)) {
-      setVoiceAddStatus("Type a clean player name first.");
+      setVoiceAddStatus(translate("roster.voice.cleanNameRequired"));
       return;
     }
     if (voiceAddDuplicatePlayer) {
-      setVoiceAddStatus(`${displayName(voiceAddDuplicatePlayer)} already exists in the roster.`);
+      setVoiceAddStatus(translate("roster.duplicates.alreadyExists", { player: displayName(voiceAddDuplicatePlayer) }));
       return;
     }
 
@@ -1981,7 +2031,7 @@ export function PlayersTab({
     if (!name.trim()) return;
 
     if (isSharedRoster && sharedDuplicateCandidates.length > 0 && !sharedDuplicateOverride) {
-      setSharedDuplicateNotice("Check the possible match before adding this shared player.");
+      setSharedDuplicateNotice(translate("roster.duplicates.reviewBeforeAdding"));
       return;
     }
 
@@ -2086,7 +2136,7 @@ export function PlayersTab({
 
   const pairName = (playerId: string) => {
     const player = playerById.get(playerId);
-    return player ? displayName(player) : "Missing player";
+    return player ? displayName(player) : translate("roster.pairRules.missingPlayer");
   };
 
   const pairKey = (a: string, b: string) => [a, b].sort().join("|");
@@ -2105,11 +2155,11 @@ export function PlayersTab({
     const duplicateOther = cleanPairingRules.some((rule) => rule.kind !== pairAddKind && pairKey(rule.playerAId, rule.playerBId) === key);
 
     if (duplicateSame) {
-      setPairNotice("That pair is already saved here.");
+      setPairNotice(translate("roster.pairRules.duplicateSameSection"));
       return;
     }
     if (duplicateOther) {
-      setPairNotice("That pair already exists in the other section. Remove it first.");
+      setPairNotice(translate("roster.pairRules.duplicateOtherSection"));
       return;
     }
 
@@ -2125,7 +2175,7 @@ export function PlayersTab({
     ]);
     setPairFirstId("");
     setPairSecondId("");
-    setPairNotice("Pair added.");
+    setPairNotice(translate("roster.pairRules.added"));
   };
 
   const removePairRule = (ruleId: string) => {
@@ -2139,7 +2189,7 @@ export function PlayersTab({
       <div className="mb-2 flex items-center justify-between gap-2">
         <div>
           <div className="text-[11px] font-black uppercase tracking-wide text-foreground">{title}</div>
-          <div className="text-[10px] font-semibold text-muted-foreground">{rules.length} saved</div>
+          <div className="text-[10px] font-semibold text-muted-foreground">{translate("roster.pairRules.savedCount", { count: rules.length })}</div>
         </div>
         <Button
           type="button"
@@ -2150,8 +2200,7 @@ export function PlayersTab({
           className="h-8 rounded-xl px-2.5 text-[10px] font-black uppercase tracking-wide"
           data-testid={`button-add-${kind}-pair`}
         >
-          <Plus className="mr-1 h-3 w-3" /> Add
-        </Button>
+          <Plus className="mr-1 h-3 w-3" /> {translate("common.add")}</Button>
       </div>
       {rules.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border bg-background/70 px-3 py-2 text-[11px] font-semibold text-muted-foreground">{empty}</div>
@@ -2166,7 +2215,7 @@ export function PlayersTab({
                 type="button"
                 onClick={() => removePairRule(rule.id)}
                 className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                aria-label={`Remove ${pairName(rule.playerAId)} and ${pairName(rule.playerBId)}`}
+                aria-label={translate("roster.accessibility.removeAnd", { value1: pairName(rule.playerAId), value2: pairName(rule.playerBId) })}
                 data-testid={`button-remove-pair-${rule.id}`}
               >
                 <X className="h-3.5 w-3.5" />
@@ -2183,9 +2232,9 @@ export function PlayersTab({
       <div className="stripes-type-ui rounded-2xl border border-border/70 bg-card p-2.5 shadow-sm sm:p-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="min-w-0">
-            <div className="text-[9px] font-black uppercase tracking-wide text-muted-foreground sm:text-[10px]">Players</div>
+            <div className="text-[9px] font-black uppercase tracking-wide text-muted-foreground sm:text-[10px]">{translate("roster.messages.players")}</div>
             <div className="text-base font-black leading-tight text-foreground sm:text-lg">
-              {search ? `${filtered.length}/${players.length}` : players.length}
+              {search ? translate("roster.messages.searchResultCount", { count: filtered.length, total: players.length }) : players.length}
             </div>
           </div>
           <Button
@@ -2195,8 +2244,7 @@ export function PlayersTab({
             className={`h-8 rounded-xl border-primary/20 bg-primary/5 px-2.5 text-[10px] font-black uppercase tracking-wide text-primary shadow-none hover:bg-primary/10 hover:text-primary sm:h-9 sm:px-3 sm:text-[11px] ${players.length === 0 ? "fairteams-empty-add-pulse" : ""} ${tutorialStep === "open-add" ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
             data-testid="button-open-add-options"
           >
-            <Plus className="mr-1.5 h-3.5 w-3.5" /> Add Player
-          </Button>
+            <Plus className="mr-1.5 h-3.5 w-3.5" /> {translate("roster.actions.addPlayer")}</Button>
 
         <Dialog open={addOptionsOpen} onOpenChange={setAddOptionsOpen}>
           <DialogContent
@@ -2204,7 +2252,7 @@ export function PlayersTab({
             className="stripes-type-ui max-w-[340px] rounded-3xl p-0 overflow-hidden"
           >
             <div className="flex items-center justify-between border-b border-border px-5 py-4">
-              <DialogTitle className="text-xl font-black tracking-tight">Add players</DialogTitle>
+              <DialogTitle className="text-xl font-black tracking-tight">{translate("roster.headings.addPlayers")}</DialogTitle>
             </div>
             <div className="flex flex-col gap-2 p-4">
               {onScreenshotImport && (
@@ -2217,7 +2265,7 @@ export function PlayersTab({
                   <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-muted text-primary">
                     <ImageIcon className="h-5 w-5" />
                   </span>
-                  <span className="text-base font-black text-foreground">Import screenshot</span>
+                  <span className="text-base font-black text-foreground">{translate("roster.messages.importScreenshot")}</span>
                 </button>
               )}
               <button
@@ -2229,7 +2277,7 @@ export function PlayersTab({
                 <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-muted text-primary">
                   <Plus className="h-5 w-5" />
                 </span>
-                <span className="text-base font-black text-foreground">Add manually</span>
+                <span className="text-base font-black text-foreground">{translate("roster.messages.addManually")}</span>
               </button>
               <button
                 type="button"
@@ -2240,7 +2288,7 @@ export function PlayersTab({
                 <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-muted text-primary">
                   <Mic className="h-5 w-5" />
                 </span>
-                <span className="text-base font-black text-foreground">Add by voice</span>
+                <span className="text-base font-black text-foreground">{translate("roster.messages.addByVoice")}</span>
               </button>
             </div>
           </DialogContent>
@@ -2257,7 +2305,7 @@ export function PlayersTab({
             className="stripes-type-ui max-w-sm rounded-3xl p-0 overflow-hidden"
           >
             <div className="flex items-center justify-between border-b border-border px-5 py-4">
-              <DialogTitle className="text-xl font-black tracking-tight">Add by voice</DialogTitle>
+              <DialogTitle className="text-xl font-black tracking-tight">{translate("roster.headings.addByVoice")}</DialogTitle>
               <span className={`flex h-8 w-8 items-center justify-center rounded-full ${voiceAddListening ? "bg-red-100 text-red-700" : "bg-muted text-primary"}`}>
                 <Mic className={`h-4 w-4 ${voiceAddListening ? "animate-pulse" : ""}`} />
               </span>
@@ -2265,8 +2313,7 @@ export function PlayersTab({
             <div className="space-y-3 p-4">
               {voiceAddListening && (
                 <div className="rounded-2xl border border-red-100 bg-red-50 px-3 py-2 text-center text-[11px] font-black text-red-700">
-                  Listening… say one player name
-                </div>
+                  {translate("roster.voice.listening")}</div>
               )}
 
               {!voiceAddListening && voiceAddStatus && !voiceAddHeard.trim() && (
@@ -2277,34 +2324,36 @@ export function PlayersTab({
 
               <div className="rounded-2xl bg-muted/35 px-3 py-2">
                 <Label className="mb-1 block text-[10px] font-black uppercase tracking-wide text-muted-foreground">
-                  Heard / edit before adding
-                </Label>
+                  {translate("roster.labels.heardEditBeforeAdding")}</Label>
                 <Input
                   value={voiceAddCleanName}
                   onChange={(event) => setVoiceAddHeard(event.target.value)}
                   onKeyDown={blurOnDoneKey}
                   enterKeyHint="done"
                   className="h-9 rounded-xl bg-background text-sm font-black"
-                  placeholder="Type one player name"
+                  placeholder={translate("roster.fields.typeOnePlayerName")}
                 />
               </div>
 
               {isSharedRoster && (
                 <div className="rounded-2xl border border-violet-200 bg-violet-50/85 px-3 py-2 text-[11px] font-bold leading-snug text-violet-800">
-                  Voice add creates a shared player for every organizer. Club ratings can be submitted later.
-                </div>
+                  {translate("roster.voice.sharedRosterHelp")}</div>
               )}
 
               {voiceAddDuplicatePlayer && (
                 <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">
-                  Duplicate warning: {displayName(voiceAddDuplicatePlayer)} already exists in the {isSharedRoster ? "shared roster" : "roster"}.
+                  {translate(
+                    isSharedRoster
+                      ? "roster.duplicates.sharedVoiceWarning"
+                      : "roster.duplicates.localVoiceWarning",
+                    { player: displayName(voiceAddDuplicatePlayer) },
+                  )}
                 </div>
               )}
 
               {voiceAddCleanName && !isProbablyVoiceAddName(voiceAddCleanName) && (
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-500">
-                  Type a clean player name before adding.
-                </div>
+                  {translate("roster.voice.cleanNameRequired")}</div>
               )}
 
               <Button
@@ -2314,7 +2363,11 @@ export function PlayersTab({
                 className="h-10 w-full rounded-xl font-black uppercase tracking-wide"
                 data-testid="button-confirm-voice-add-player"
               >
-                {isSharedRoster ? "Add to Shared Roster" : `Add${voiceAddCleanName ? ` “${voiceAddCleanName}”` : " Player"}`}
+                {isSharedRoster
+                  ? translate("roster.actions.addToSharedRoster")
+                  : voiceAddCleanName
+                    ? translate("roster.actions.addNamedPlayer", { player: voiceAddCleanName })
+                    : translate("roster.actions.addPlayer")}
               </Button>
 
               <Button
@@ -2325,8 +2378,7 @@ export function PlayersTab({
                 className="h-9 w-full rounded-xl text-xs font-black"
               >
                 <Mic className="mr-1.5 h-3.5 w-3.5" />
-                Try Again
-              </Button>
+                {translate("roster.actions.tryAgain")}</Button>
             </div>
           </DialogContent>
         </Dialog>
@@ -2342,20 +2394,19 @@ export function PlayersTab({
             className={`stripes-type-ui max-w-sm md:max-w-xl rounded-3xl !translate-y-0 overflow-y-auto sm:!top-[50%] sm:!-translate-y-1/2 ${tutorialStep === "submit-player" ? "!top-[18dvh] max-h-[76dvh]" : "!top-[10dvh] max-h-[82dvh]"}`}
           >
             <DialogHeader>
-              <DialogTitle>{isSharedRoster ? "Add shared player" : "Add player"}</DialogTitle>
+              <DialogTitle>{isSharedRoster ? translate("roster.headings.addSharedPlayer") : translate("roster.headings.addPlayer")}</DialogTitle>
               {isSharedRoster && (
                 <div className="text-xs font-semibold leading-snug text-muted-foreground">
-                  Shared rosters add identity first. Organizers can submit Club ratings later.
-                </div>
+                  {translate("roster.sharedRoster.identityFirstHelp")}</div>
               )}
             </DialogHeader>
             <form onSubmit={handleAdd} onKeyDown={preventKeyboardSubmit} className="flex flex-col gap-3.5 pt-1">
               <div className="grid grid-cols-1 gap-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="name" className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider">Player Name</Label>
+                  <Label htmlFor="name" className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider">{translate("roster.labels.playerName")}</Label>
                   <Input
                     id="name"
-                    placeholder="e.g. Paul"
+                    placeholder={translate("roster.fields.playerNameExample")}
                     value={name}
                     onChange={e => setName(e.target.value)}
                     onKeyDown={blurOnDoneKey}
@@ -2369,12 +2420,12 @@ export function PlayersTab({
               <div className="grid grid-cols-[1.15fr_0.85fr] gap-2">
                 <Select value={gender} onValueChange={v => setGender(v as Gender)}>
                   <SelectTrigger className="h-10 rounded-xl border-border bg-muted/30 text-xs font-bold px-2" id="gender" data-testid="select-gender">
-                    <SelectValue placeholder="Gender" />
+                    <SelectValue placeholder={translate("roster.fields.gender")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="male">Male</SelectItem>
-                    <SelectItem value="female">Female</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
+                    <SelectItem value="male">{translate("roster.messages.male")}</SelectItem>
+                    <SelectItem value="female">{translate("roster.messages.female")}</SelectItem>
+                    <SelectItem value="other">{translate("roster.messages.other")}</SelectItem>
                   </SelectContent>
                 </Select>
                 <TogglePill
@@ -2393,23 +2444,21 @@ export function PlayersTab({
                   testId="checkbox-new-player"
                   activeClassName="border-sky-300 bg-sky-100 text-sky-800 shadow-sm"
                 >
-                  New
-                </TogglePill>
+                  {translate("roster.labels.newPlayer")}</TogglePill>
               </div>
 
               {isSharedRoster && (
                 <div className="rounded-2xl border border-violet-200 bg-violet-50/85 p-3 space-y-3">
                   <div>
-                    <Label className="text-[11px] uppercase font-black tracking-wide text-violet-700">Shared player info</Label>
+                    <Label className="text-[11px] uppercase font-black tracking-wide text-violet-700">{translate("roster.labels.sharedPlayerInfo")}</Label>
                     <div className="mt-0.5 text-[10px] font-semibold leading-snug text-violet-700/75">
-                      This player will appear for every organizer as soon as you add them. Ratings are collected separately in Club, and the player uses 5.0 only until the first Club rating exists.
-                    </div>
+                      {translate("roster.sharedRoster.addPlayerHelp")}</div>
                   </div>
                   <div className="space-y-1.5">
-                    <Label htmlFor="aka" className="text-[10px] uppercase font-bold text-violet-700/80 tracking-wider">AKA / Nickname</Label>
+                    <Label htmlFor="aka" className="text-[10px] uppercase font-bold text-violet-700/80 tracking-wider">{translate("roster.labels.akaNickname")}</Label>
                     <Input
                       id="aka"
-                      placeholder="Nickname or alternate spelling"
+                      placeholder={translate("roster.fields.nicknameOrAlternateSpelling")}
                       value={aka}
                       onChange={e => setAka(e.target.value)}
                       onKeyDown={blurOnDoneKey}
@@ -2419,17 +2468,17 @@ export function PlayersTab({
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-[10px] uppercase font-bold text-violet-700/80 tracking-wider">Player Vibe</Label>
+                    <Label className="text-[10px] uppercase font-bold text-violet-700/80 tracking-wider">{translate("roster.labels.playerVibe")}</Label>
                     <VibePicker value={addDetails.funBadge} onChange={funBadge => updateAddDetails({ funBadge })} />
                   </div>
                   <div className="rounded-2xl border border-violet-100 bg-white/85 p-3 space-y-3">
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <Label className="text-[11px] uppercase font-black tracking-wide text-violet-700">Initial Skill</Label>
-                        <div className="mt-0.5 text-[10px] font-semibold text-violet-700/75">Creates the first shared balance profile.</div>
+                        <Label className="text-[11px] uppercase font-black tracking-wide text-violet-700">{translate("roster.labels.initialSkill")}</Label>
+                        <div className="mt-0.5 text-[10px] font-semibold text-violet-700/75">{translate("roster.playerProfile.firstSharedProfileHelp")}</div>
                       </div>
                       <div className="rounded-xl bg-violet-700 px-3 py-1.5 text-center text-white shadow-sm">
-                        <div className="text-[8px] uppercase font-black opacity-75 leading-none">Skill</div>
+                        <div className="text-[8px] uppercase font-black opacity-75 leading-none">{translate("roster.labels.skill")}</div>
                         <div className="text-xl font-black leading-none">{addOverall}</div>
                       </div>
                     </div>
@@ -2451,7 +2500,7 @@ export function PlayersTab({
                     />
                     <div className="space-y-2">
                       <div className="flex items-center justify-between gap-2">
-                        <Label className="text-[10px] uppercase font-black tracking-wide text-violet-700">Player Style</Label>
+                        <Label className="text-[10px] uppercase font-black tracking-wide text-violet-700">{translate("roster.labels.playerStyle")}</Label>
                         <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-black text-violet-800">{addSelectedStyle.label}</span>
                       </div>
                       <input
@@ -2470,7 +2519,7 @@ export function PlayersTab({
                         className="w-full accent-violet-700"
                       />
                       <div className="grid grid-cols-3 text-[10px] font-black text-violet-500/80">
-                        <span>Defense</span><span className="text-center">Midfield</span><span className="text-right">Attack</span>
+                        <span>{translate("roster.stats.defense")}</span><span className="text-center">{translate("roster.stats.midfield")}</span><span className="text-right">{translate("roster.stats.attack")}</span>
                       </div>
                       <div className="rounded-xl border border-violet-100 bg-violet-50 px-3 py-2 text-[11px] font-semibold leading-snug text-violet-900">
                         {addSelectedStyle.description}
@@ -2482,17 +2531,18 @@ export function PlayersTab({
 
               {isSharedRoster && sharedDuplicateCandidates.length > 0 && !sharedDuplicateOverride && (
                 <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-left shadow-sm">
-                  <div className="text-[11px] font-black uppercase tracking-wide text-amber-800">Possible duplicate</div>
+                  <div className="text-[11px] font-black uppercase tracking-wide text-amber-800">{translate("roster.messages.possibleDuplicate")}</div>
                   <div className="mt-1 text-xs font-semibold leading-snug text-amber-900">
-                    This shared roster may already have this player. Use the existing player if this is the same person.
-                  </div>
+                    {translate("roster.duplicates.possibleMatchHelp")}</div>
                   <div className="mt-2 space-y-1.5">
                     {sharedDuplicateCandidates.map(match => (
                       <div key={match.player.id} className="rounded-xl border border-amber-200 bg-white/80 px-2.5 py-2">
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0">
                             <div className="truncate text-sm font-black text-slate-900">{displayName(match.player)}</div>
-                            <div className="text-[10px] font-bold uppercase tracking-wide text-amber-700">{match.reason}</div>
+                            <div className="text-[10px] font-bold uppercase tracking-wide text-amber-700">
+                              {translate(match.reason === "exact" ? "roster.duplicates.exactMatch" : "roster.duplicates.similarMatch")}
+                            </div>
                           </div>
                           <Button
                             type="button"
@@ -2501,8 +2551,7 @@ export function PlayersTab({
                             className="h-8 shrink-0 rounded-xl border-amber-200 bg-white text-[10px] font-black text-amber-900"
                             onClick={() => useExistingSharedDuplicate(match.player)}
                           >
-                            Use existing
-                          </Button>
+                            {translate("roster.actions.useExisting")}</Button>
                         </div>
                       </div>
                     ))}
@@ -2514,17 +2563,18 @@ export function PlayersTab({
                     className="mt-2 h-8 w-full rounded-xl text-[11px] font-black text-amber-900 hover:bg-amber-100"
                     onClick={() => {
                       setSharedDuplicateOverride(true);
-                      setSharedDuplicateNotice("Okay — press Add to Shared Roster again to add this as a separate player.");
+                      setSharedDuplicateNotice(translate("roster.duplicates.confirmSeparatePlayer"));
                     }}
                   >
-                    Add as separate player anyway
-                  </Button>
+                    {translate("roster.actions.addAsSeparatePlayerAnyway")}</Button>
                 </div>
               )}
 
               {isSharedRoster && sharedDuplicateOverride && primarySharedDuplicate && (
                 <div className="rounded-2xl border border-violet-200 bg-violet-50 px-3 py-2 text-[11px] font-bold leading-snug text-violet-800">
-                  Adding as a separate shared player for everyone despite a possible match with {displayName(primarySharedDuplicate.player)}.
+                  {translate("roster.messages.addingSeparateSharedPlayer", {
+                    player: displayName(primarySharedDuplicate.player),
+                  })}
                 </div>
               )}
 
@@ -2533,11 +2583,11 @@ export function PlayersTab({
               <div className="rounded-2xl border border-primary/15 bg-primary/5 p-3 space-y-3">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <Label className="text-[11px] uppercase font-black tracking-wide text-primary">Skill Level</Label>
-                    <div className="mt-0.5 text-[10px] font-semibold text-muted-foreground">1–10, adjustable by 0.5</div>
+                    <Label className="text-[11px] uppercase font-black tracking-wide text-primary">{translate("roster.labels.skillLevel")}</Label>
+                    <div className="mt-0.5 text-[10px] font-semibold text-muted-foreground">{translate("roster.playerSetup.skillRangeHelp")}</div>
                   </div>
                   <div className="rounded-xl bg-primary text-primary-foreground px-3 py-1.5 text-center shadow-sm">
-                    <div className="text-[8px] uppercase font-black opacity-75 leading-none">Skill</div>
+                    <div className="text-[8px] uppercase font-black opacity-75 leading-none">{translate("roster.labels.skill")}</div>
                     <div className="text-xl font-black leading-none">{formatSkillStep(skillLevel)}</div>
                   </div>
                 </div>
@@ -2563,7 +2613,7 @@ export function PlayersTab({
                 </div>
                 <div className="space-y-2 rounded-2xl border border-primary/10 bg-background/70 px-3 py-2">
                   <div className="flex items-center justify-between gap-2">
-                    <Label className="text-[10px] uppercase font-black tracking-wide text-primary">Player Style</Label>
+                    <Label className="text-[10px] uppercase font-black tracking-wide text-primary">{translate("roster.labels.playerStyle")}</Label>
                     <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-black text-primary">{addSelectedStyle.label}</span>
                   </div>
                   <input
@@ -2582,7 +2632,7 @@ export function PlayersTab({
                     className="w-full accent-primary"
                   />
                   <div className="grid grid-cols-3 text-[10px] font-black text-muted-foreground">
-                    <span>Defense</span><span className="text-center">Midfield</span><span className="text-right">Attack</span>
+                    <span>{translate("roster.stats.defense")}</span><span className="text-center">{translate("roster.stats.midfield")}</span><span className="text-right">{translate("roster.stats.attack")}</span>
                   </div>
                   <div className="rounded-xl border border-primary/10 bg-primary/5 px-3 py-2 text-[11px] font-semibold leading-snug text-muted-foreground">
                     {addSelectedStyle.description}
@@ -2592,9 +2642,9 @@ export function PlayersTab({
 
               <div className="rounded-2xl border border-border/70 bg-muted/25 p-2.5 text-[11px] font-semibold text-muted-foreground leading-snug">
                 {isNew ? (
-                  <span>NEW marks players who still need proper evaluation. Skill can be adjusted now and refined later.</span>
+                  <span>{translate("roster.playerSetup.newPlayerHelp")}</span>
                 ) : (
-                  <span>Known player: quick skill level is enough. Use Advanced only when you know details.</span>
+                  <span>{translate("roster.playerSetup.knownPlayerHelp")}</span>
                 )}
               </div>
 
@@ -2604,7 +2654,7 @@ export function PlayersTab({
                 className="flex h-10 items-center justify-between rounded-2xl border border-border bg-background px-3 text-left text-xs font-black tracking-wide text-foreground"
                 data-testid="button-toggle-add-advanced"
               >
-                <span>Advanced Edit</span>
+                <span>{translate("roster.messages.advancedEdit")}</span>
                 <span className="text-muted-foreground">{addAdvancedOpen ? "▲" : "▼"}</span>
               </button>
 
@@ -2616,32 +2666,29 @@ export function PlayersTab({
                         type="button"
                         onClick={(event) => { event.preventDefault(); event.stopPropagation(); setAddPhotoActionsOpen(prev => !prev); }}
                         className="h-16 w-16 overflow-hidden rounded-full border border-primary/20 bg-background text-base font-black text-primary shadow-sm ring-4 ring-primary/10 flex items-center justify-center transition-transform active:scale-95"
-                        title="Change photo"
+                        title={translate("roster.accessibility.changePhoto")}
                       >
                         {addProfilePhoto ? <img src={addProfilePhoto} alt="" className="h-full w-full object-cover" /> : (name.trim() ? initials(name.trim()) : <Camera className="h-5 w-5" />)}
                       </button>
                       {addPhotoActionsOpen && (
                         <div className="absolute left-0 top-full z-20 mt-2 w-36 rounded-xl border border-border bg-popover p-1.5 shadow-lg">
                           <button type="button" className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] font-bold hover:bg-accent" onClick={(event) => { event.preventDefault(); event.stopPropagation(); setAddPhotoActionsOpen(false); addPhotoCameraInput.current?.click(); }}>
-                            <Camera className="h-3.5 w-3.5" /> Take Photo
-                          </button>
+                            <Camera className="h-3.5 w-3.5" /> {translate("roster.actions.takePhoto")}</button>
                           <button type="button" className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] font-bold hover:bg-accent" onClick={(event) => { event.preventDefault(); event.stopPropagation(); setAddPhotoActionsOpen(false); addPhotoGalleryInput.current?.click(); }}>
-                            <ImageIcon className="h-3.5 w-3.5" /> Import Photo
-                          </button>
+                            <ImageIcon className="h-3.5 w-3.5" /> {translate("roster.actions.importPhoto")}</button>
                           {addProfilePhoto && (
                             <button type="button" className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] font-bold text-muted-foreground hover:bg-accent" onClick={(event) => { event.preventDefault(); event.stopPropagation(); setAddPhotoActionsOpen(false); setAddProfilePhoto(undefined); }}>
-                              <Trash2 className="h-3.5 w-3.5" /> Clear Photo
-                            </button>
+                              <Trash2 className="h-3.5 w-3.5" /> {translate("roster.actions.clearPhoto")}</button>
                           )}
                         </div>
                       )}
                     </div>
                     <div className="grid min-w-0 flex-[1_1_8rem] grid-cols-[repeat(auto-fit,minmax(min(100%,6rem),1fr))] gap-2">
                       <div className="space-y-1.5">
-                        <Label htmlFor="add-name-advanced" className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider">Name</Label>
+                        <Label htmlFor="add-name-advanced" className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider">{translate("roster.labels.name")}</Label>
                         <Input
                           id="add-name-advanced"
-                          placeholder="Player name"
+                          placeholder={translate("roster.fields.playerName")}
                           value={name}
                           onChange={e => setName(e.target.value)}
                           onKeyDown={blurOnDoneKey}
@@ -2650,10 +2697,10 @@ export function PlayersTab({
                         />
                       </div>
                       <div className="space-y-1.5">
-                        <Label htmlFor="aka" className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider">AKA</Label>
+                        <Label htmlFor="aka" className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider">{translate("roster.labels.aka")}</Label>
                         <Input
                           id="aka"
-                          placeholder="Nickname"
+                          placeholder={translate("roster.fields.nickname")}
                           value={aka}
                           onChange={e => setAka(e.target.value)}
                           onKeyDown={blurOnDoneKey}
@@ -2676,7 +2723,7 @@ export function PlayersTab({
                       e.target.value = "";
                       if (!file) return;
                       try { setAddProfilePhoto(await fileToSmallDataUrl(file)); }
-                      catch { alert("Could not load that photo."); }
+                      catch { alert(translate("roster.errors.photoLoadFailed")); }
                     }}
                   />
                   <input
@@ -2689,14 +2736,14 @@ export function PlayersTab({
                       e.target.value = "";
                       if (!file) return;
                       try { setAddProfilePhoto(await fileToSmallDataUrl(file)); }
-                      catch { alert("Could not load that photo."); }
+                      catch { alert(translate("roster.errors.photoLoadFailed")); }
                     }}
                   />
 
 
                   <div className="grid grid-cols-[1fr_auto] items-end gap-2">
                     <div className="space-y-1.5 min-w-0">
-                      <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Player Vibe</Label>
+                      <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">{translate("roster.labels.playerVibe")}</Label>
                       <VibePicker value={addDetails.funBadge} onChange={funBadge => updateAddDetails({ funBadge })} />
                     </div>
                     <TogglePill
@@ -2705,31 +2752,30 @@ export function PlayersTab({
                       testId="checkbox-organizer"
                       activeClassName="border-violet-200 bg-violet-100 text-violet-800 shadow-sm"
                     >
-                      Org
-                    </TogglePill>
+                      {translate("roster.labels.organizerAbbreviation")}</TogglePill>
                   </div>
 
                   <div className="rounded-2xl border border-primary/15 bg-primary/5 px-3 py-2 flex items-center justify-between">
                     <div>
-                      <Label className="text-[10px] uppercase font-black tracking-wide text-primary">Skill Level</Label>
-                      <div className="mt-0.5 text-[10px] font-semibold text-muted-foreground">Updates as advanced sliders change</div>
+                      <Label className="text-[10px] uppercase font-black tracking-wide text-primary">{translate("roster.labels.skillLevel")}</Label>
+                      <div className="mt-0.5 text-[10px] font-semibold text-muted-foreground">{translate("roster.playerSetup.advancedSkillHelp")}</div>
                     </div>
                     <div className="rounded-xl bg-primary text-primary-foreground px-3 py-1.5 text-center shadow-sm">
-                      <div className="text-[8px] uppercase font-black opacity-75 leading-none">Skill</div>
+                      <div className="text-[8px] uppercase font-black opacity-75 leading-none">{translate("roster.labels.skill")}</div>
                       <div className="text-xl font-black leading-none">{addOverall}</div>
                     </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-2">
-                    {STAT_FIELDS.map(({ key, label }) => (
-                      <StatControl key={key} label={label} value={addDetails[key]} onChange={value => updateAddDetails({ [key]: value } as Partial<AddPlayerDetails>)} />
+                    {STAT_FIELDS.map(({ key, labelKey }) => (
+                      <StatControl key={key} label={translate(labelKey)} value={addDetails[key]} onChange={value => updateAddDetails({ [key]: value } as Partial<AddPlayerDetails>)} />
                     ))}
-                    <StatControl label="Team Play" value={addDetails.teamPlay} max={3} onChange={value => updateAddDetails({ teamPlay: value })} />
+                    <StatControl label={translate("roster.accessibility.teamPlay")} value={addDetails.teamPlay} max={3} onChange={value => updateAddDetails({ teamPlay: value })} />
                     <div />
                   </div>
 
                   <div className="space-y-2">
-                    <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider flex items-center gap-1"><Star className="w-3 h-3" /> Special abilities</Label>
+                    <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider flex items-center gap-1"><Star className="w-3 h-3" /> {translate("roster.labels.specialAbilities")}</Label>
                     <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,8rem),1fr))] gap-2 sm:grid-cols-2">
                       {SPECIAL_ABILITIES.map(ability => {
                         const selected = Boolean(addDetails[ability.key]);
@@ -2744,19 +2790,19 @@ export function PlayersTab({
                               onClick={() => updateAddDetails({ [ability.key]: !selected } as Partial<AddPlayerDetails>)}
                               className="flex min-w-0 flex-1 items-center gap-1.5 px-2 text-left"
                             >
-                              {ability.badge === "GK" ? (
-                                <span className="w-5 text-center text-[10px] font-semibold text-amber-700">GK</span>
+                            {ability.key === "isGoalkeeper" ? (
+                                <span className="w-5 text-center text-[10px] font-semibold text-amber-700">{abilityBadgeLabel(ability)}</span>
                               ) : (
                                 <Icon className="h-3.5 w-3.5 shrink-0 text-amber-700" />
                               )}
-                              <span className="truncate text-[11px] font-semibold leading-tight">{ability.label}</span>
+                              <span className="truncate text-[11px] font-semibold leading-tight">{abilityLabel(ability)}</span>
                             </button>
                             <button
                               type="button"
                               onClick={(event) => { event.stopPropagation(); setAddTraitHelp(current => current?.key === ability.key ? null : ability); }}
                               className="flex h-full w-7 shrink-0 items-center justify-center border-l border-amber-100/80 text-[11px] font-black text-amber-700/80 active:bg-amber-100"
-                              aria-label={`What does ${ability.label} mean?`}
-                              title={`What does ${ability.label} mean?`}
+                              aria-label={translate("roster.accessibility.whatDoesMean", { label: abilityLabel(ability) })}
+                              title={translate("roster.accessibility.whatDoesMean", { label: abilityLabel(ability) })}
                             >
                               ?
                             </button>
@@ -2776,7 +2822,7 @@ export function PlayersTab({
                 className={`h-10 rounded-xl font-black uppercase tracking-wide ${tutorialStep === "submit-player" ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
                 data-testid="button-add-player"
               >
-                <Plus className="w-3.5 h-3.5 mr-1.5" /> {isSharedRoster ? "Add for everyone" : "Add Player"}
+                <Plus className="w-3.5 h-3.5 mr-1.5" /> {isSharedRoster ? translate("roster.actions.addForEveryone") : translate("roster.actions.addPlayer")}
               </Button>
             </form>
           </DialogContent>
@@ -2792,11 +2838,11 @@ export function PlayersTab({
             size="sm"
             onClick={() => setSortMode(prev => prev === "recent" ? "alpha" : prev === "alpha" ? "skill" : "recent")}
             className="h-8 rounded-xl px-2.5 text-[10px] font-black uppercase tracking-wide shadow-none border-primary/20 bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary"
-            title={effectiveSortMode === "recent" ? "Roster sorted by last edited. Tap for A-Z." : effectiveSortMode === "alpha" ? "Roster sorted A-Z. Tap for Skill high to low." : "Roster sorted by Skill high to low. Tap for Last Edited."}
+            title={effectiveSortMode === "recent" ? translate("roster.accessibility.sortRecent") : effectiveSortMode === "alpha" ? translate("roster.accessibility.sortAlpha") : translate("roster.accessibility.sortSkill")}
             data-testid="button-toggle-roster-sort"
           >
             {effectiveSortMode === "recent" ? <Clock3 className="mr-1 h-3 w-3" /> : effectiveSortMode === "alpha" ? <ArrowDownAZ className="mr-1 h-3 w-3" /> : <Star className="mr-1 h-3 w-3" />}
-            {effectiveSortMode === "recent" ? "Last Edited" : effectiveSortMode === "alpha" ? "A-Z" : "Skill ↓"}
+            {effectiveSortMode === "recent" ? translate("roster.actions.lastEdited") : effectiveSortMode === "alpha" ? translate("roster.actions.aZ") : translate("roster.actions.skill")}
           </Button>
           {isSharedRoster && (
             <Button
@@ -2805,8 +2851,8 @@ export function PlayersTab({
               size="icon"
               onClick={() => setClubRatingLegendOpen(true)}
               className="h-8 w-8 rounded-xl border-border bg-muted/20 text-muted-foreground shadow-none hover:bg-muted/40 hover:text-foreground"
-              title="Club rating status"
-              aria-label="Club rating status legend"
+              title={translate("roster.accessibility.clubRatingStatus")}
+              aria-label={translate("roster.accessibility.clubRatingStatusLegend")}
             >
               <Info className="h-3.5 w-3.5" />
             </Button>
@@ -2818,12 +2864,11 @@ export function PlayersTab({
               size="sm"
               onClick={() => setHideOverall(prev => !prev)}
               className={`h-8 rounded-xl px-2.5 text-[10px] font-black uppercase tracking-wide shadow-none ${hideOverall ? "border-border bg-muted/35 text-muted-foreground" : "border-primary/20 bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary"}`}
-              title={hideOverall ? "Show roster skill" : "Hide roster skill"}
+              title={hideOverall ? translate("roster.accessibility.showRosterSkill") : translate("roster.accessibility.hideRosterSkill")}
               data-testid="button-toggle-roster-ovr"
             >
               {hideOverall ? <EyeOff className="mr-1 h-3 w-3" /> : <Eye className="mr-1 h-3 w-3" />}
-              Skill
-            </Button>
+              {translate("roster.actions.toggleSkillVisibility")}</Button>
           )}
         </div>
           <Button
@@ -2833,12 +2878,11 @@ export function PlayersTab({
             onClick={() => setPairingRulesOpen(true)}
             disabled={!setPairingRules || players.length < 2}
             className="h-8 rounded-xl px-2.5 text-[10px] font-black uppercase tracking-wide shadow-none border-border bg-muted/25 text-muted-foreground hover:bg-muted/45 hover:text-foreground"
-            title="Manage optional keep-together and keep-separate rules"
+            title={translate("roster.accessibility.openPairingRules")}
             data-testid="button-open-pairing-rules"
           >
-            Pairing Rules
-            {cleanPairingRules.length > 0 && (
-              <span className="ml-1.5 rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] text-primary">{cleanPairingRules.length}</span>
+            {translate("roster.actions.pairingRules")}{cleanPairingRules.length > 0 && (
+              <span className="ml-1.5 rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] text-primary">{formatNumber(getResolvedUiLocale(), cleanPairingRules.length)}</span>
             )}
           </Button>
         </div>
@@ -2853,30 +2897,42 @@ export function PlayersTab({
           className="stripes-type-ui max-w-[380px] rounded-3xl p-0 overflow-hidden"
         >
           <DialogHeader className="border-b border-border px-5 py-4 text-left">
-            <DialogTitle className="text-xl font-black tracking-tight">Pairing Rules</DialogTitle>
+            <DialogTitle className="text-xl font-black tracking-tight">{translate("roster.headings.pairingRules")}</DialogTitle>
             <p className="text-[11px] font-semibold text-muted-foreground">
-              Optional rules for team generation. Keep them neutral and private.
-            </p>
+              {translate("roster.pairRules.intro")}</p>
           </DialogHeader>
 
           <div className="max-h-[72dvh] space-y-3 overflow-y-auto p-4">
-            {renderPairSection("together", "Keep Together", "No keep-together pairs yet.", togetherRules)}
-            {renderPairSection("separate", "Keep Separate", "No keep-separate pairs yet.", separateRules)}
+            {renderPairSection(
+              "together",
+              translate("roster.pairRules.keepTogether"),
+              translate("roster.pairRules.keepTogetherEmpty"),
+              togetherRules,
+            )}
+            {renderPairSection(
+              "separate",
+              translate("roster.pairRules.keepSeparate"),
+              translate("roster.pairRules.keepSeparateEmpty"),
+              separateRules,
+            )}
 
             {pairAddKind && (
               <div className="rounded-2xl border border-primary/20 bg-primary/5 p-3">
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <div>
                     <div className="text-[11px] font-black uppercase tracking-wide text-primary">
-                      Add {pairAddKind === "together" ? "Keep Together" : "Keep Separate"} Pair
-                    </div>
-                    <div className="text-[10px] font-semibold text-muted-foreground">Choose two players, then add the pair.</div>
+                      {translate("roster.pairRules.addKind", {
+                        kind: pairAddKind === "together"
+                          ? translate("roster.pairRules.keepTogether")
+                          : translate("roster.pairRules.keepSeparate"),
+                      })}</div>
+                    <div className="text-[10px] font-semibold text-muted-foreground">{translate("roster.pairRules.addHelp")}</div>
                   </div>
                   <button
                     type="button"
                     onClick={resetPairAdder}
                     className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-background"
-                    aria-label="Cancel adding pair"
+                    aria-label={translate("roster.accessibility.cancelAddingPair")}
                   >
                     <X className="h-3.5 w-3.5" />
                   </button>
@@ -2884,7 +2940,7 @@ export function PlayersTab({
 
                 <div className="grid gap-2">
                   <div className="space-y-1">
-                    <Label className="text-[10px] font-black uppercase tracking-wide text-muted-foreground">First player</Label>
+                    <Label className="text-[10px] font-black uppercase tracking-wide text-muted-foreground">{translate("roster.labels.firstPlayer")}</Label>
                     <Select
                       value={pairFirstId || undefined}
                       onValueChange={(value) => {
@@ -2894,7 +2950,7 @@ export function PlayersTab({
                       }}
                     >
                       <SelectTrigger className="h-10 rounded-xl bg-background text-sm font-bold" data-testid="select-pair-first-player">
-                        <SelectValue placeholder="Choose player" />
+                        <SelectValue placeholder={translate("roster.fields.choosePlayer")} />
                       </SelectTrigger>
                       <SelectContent className="max-h-64">
                         {pairSelectPlayers.map((player) => (
@@ -2907,7 +2963,7 @@ export function PlayersTab({
                   </div>
 
                   <div className="space-y-1">
-                    <Label className="text-[10px] font-black uppercase tracking-wide text-muted-foreground">Second player</Label>
+                    <Label className="text-[10px] font-black uppercase tracking-wide text-muted-foreground">{translate("roster.labels.secondPlayer")}</Label>
                     <Select
                       value={pairSecondId || undefined}
                       onValueChange={(value) => {
@@ -2916,7 +2972,7 @@ export function PlayersTab({
                       }}
                     >
                       <SelectTrigger className="h-10 rounded-xl bg-background text-sm font-bold" data-testid="select-pair-second-player">
-                        <SelectValue placeholder={pairFirstId ? "Choose player" : "Choose first player first"} />
+                        <SelectValue placeholder={pairFirstId ? translate("roster.fields.choosePlayer") : translate("roster.fields.chooseFirstPlayerFirst")} />
                       </SelectTrigger>
                       <SelectContent className="max-h-64">
                         {pairSelectPlayers.filter((player) => player.id !== pairFirstId).map((player) => (
@@ -2940,8 +2996,7 @@ export function PlayersTab({
                   disabled={!pairFirstId || !pairSecondId}
                   data-testid="button-confirm-add-pair"
                 >
-                  Add Pair
-                </Button>
+                  {translate("roster.actions.addPair")}</Button>
               </div>
             )}
           </div>
@@ -2951,21 +3006,15 @@ export function PlayersTab({
       <Dialog open={clubRatingLegendOpen} onOpenChange={setClubRatingLegendOpen}>
         <DialogContent className="stripes-type-ui max-w-xs rounded-3xl p-4">
           <DialogHeader className="text-left">
-            <DialogTitle className="text-base font-black text-[#102A43]">Club rating status</DialogTitle>
+            <DialogTitle className="text-base font-black text-[#102A43]">{translate("roster.headings.clubRatingStatus")}</DialogTitle>
             <p className="text-[11px] font-semibold leading-snug text-muted-foreground">
-              Dots show how complete the organizer ratings are. They do not show player skill.
-            </p>
+              {translate("roster.ratingCoverage.help")}</p>
           </DialogHeader>
           <div className="mt-2 grid gap-2">
-            {[
-              { state: "none" as ClubRatingCoverageState, label: "No ratings yet" },
-              { state: "needs" as ClubRatingCoverageState, label: "Needs ratings" },
-              { state: "ready" as ClubRatingCoverageState, label: "Rating ready" },
-              { state: "complete" as ClubRatingCoverageState, label: "Fully rated" },
-            ].map((item) => (
-              <div key={item.state} className="flex items-center gap-2 rounded-2xl bg-muted/30 px-3 py-2 text-xs font-bold text-[#102A43]">
-                <span className={`h-2.5 w-2.5 rounded-full ring-4 ${clubRatingDotClass(item.state)}`} />
-                <span>{item.label}</span>
+            {(["none", "needs", "ready", "complete"] as ClubRatingCoverageState[]).map((state) => (
+              <div key={state} className="flex items-center gap-2 rounded-2xl bg-muted/30 px-3 py-2 text-xs font-bold text-[#102A43]">
+                <span className={`h-2.5 w-2.5 rounded-full ring-4 ${clubRatingDotClass(state)}`} />
+                <span>{clubRatingStatusLabel(state)}</span>
               </div>
             ))}
           </div>
@@ -2978,7 +3027,7 @@ export function PlayersTab({
             <div className="relative min-w-0 flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
               <Input
-                placeholder="Search roster…"
+                placeholder={translate("roster.fields.searchRoster")}
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 className="h-9 pl-9 pr-9 text-xs sm:h-10 sm:text-sm lg:h-11 lg:pl-10 lg:text-[15px]"
@@ -2998,8 +3047,8 @@ export function PlayersTab({
               type="button"
               onClick={() => setAddOptionsOpen(true)}
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-[#102A43] shadow-sm transition hover:bg-slate-50 active:scale-[0.96] sm:h-10 sm:w-10 lg:h-11 lg:w-11"
-              title="Add player"
-              aria-label="Add player"
+              title={translate("roster.accessibility.addPlayer")}
+              aria-label={translate("roster.accessibility.addPlayer")}
               data-testid="button-sticky-add-player"
             >
               <Plus className="h-4 w-4" />
@@ -3009,14 +3058,17 @@ export function PlayersTab({
 
         {players.length === 0 ? (
           <div className="space-y-3 rounded-xl border border-dashed border-border bg-muted/50 p-5 text-center">
-            <p className="text-foreground font-black text-sm">Create your roster</p>
+            <p className="text-foreground font-black text-sm">{translate("roster.messages.createYourRoster")}</p>
             <p className="mx-auto max-w-sm text-muted-foreground font-medium text-xs leading-relaxed">
-              Fastest setup: press <span className="font-black text-primary">+ Player</span> above and import a Meetup, WhatsApp, Telegram, or attendee screenshot. You can also add players manually one by one.
+              <Trans
+                i18nKey="roster.messages.emptySetupHelp"
+                components={{ playerAction: <span className="font-black text-primary" /> }}
+              />
             </p>
           </div>
         ) : filtered.length === 0 ? (
           <div className="text-center py-8 bg-muted/50 rounded-xl border border-dashed border-border">
-            <p className="text-muted-foreground font-medium text-sm">No players match \"{search}\"</p>
+            <p className="text-muted-foreground font-medium text-sm">{translate("roster.messages.noPlayersMatch", { search })}</p>
           </div>
         ) : (
           <div className="flex flex-wrap items-start gap-2">
@@ -3053,8 +3105,8 @@ export function PlayersTab({
                           type="button"
                           onClick={() => setClubRatingLegendOpen(true)}
                           className="flex h-6 w-4 items-center justify-center"
-                          title={`${clubRatingStatusLabel(clubRatingStatus.state)} · ${clubRatingStatus.ratingCount}/${clubRatingStatus.total} organizers rated`}
-                          aria-label={`${clubRatingStatusLabel(clubRatingStatus.state)}: ${clubRatingStatus.ratingCount} of ${clubRatingStatus.total} organizers rated`}
+                          title={translate("roster.accessibility.organizersRated", { value1: clubRatingStatusLabel(clubRatingStatus.state), ratingCount: clubRatingStatus.ratingCount, total: clubRatingStatus.total })}
+                          aria-label={translate("roster.accessibility.ofOrganizersRated", { value1: clubRatingStatusLabel(clubRatingStatus.state), ratingCount: clubRatingStatus.ratingCount, total: clubRatingStatus.total })}
                         >
                           <span className={`h-2.5 w-2.5 rounded-full ring-4 ${clubRatingDotClass(clubRatingStatus.state)}`} />
                         </button>
@@ -3087,7 +3139,7 @@ export function PlayersTab({
                           <Button
                             variant="ghost"
                             size="icon"
-                            title={isSharedRoster ? "Remove from shared roster" : "Remove player"}
+                            title={isSharedRoster ? translate("roster.accessibility.removeFromSharedRoster") : translate("roster.accessibility.removePlayer")}
                             className="text-muted-foreground hover:text-destructive w-6 h-6 rounded-full"
                             data-testid={`button-remove-${player.id}`}
                           >
@@ -3096,17 +3148,17 @@ export function PlayersTab({
                         </AlertDialogTrigger>
                         <StripesConfirmContent>
                           <AlertDialogHeader>
-                            <AlertDialogTitle>{isSharedRoster ? "Remove from shared roster?" : "Remove Player?"}</AlertDialogTitle>
+                            <AlertDialogTitle>{isSharedRoster ? translate("roster.headings.removeFromSharedRoster") : translate("roster.headings.removePlayer")}</AlertDialogTitle>
                             <AlertDialogDescription>
                               {isSharedRoster
-                                ? `${displayName(player)} will be removed from this shared roster for every organizer. Pairing rules involving this player will also be removed. This does not delete anyone's private copy.`
-                                : `This will permanently delete ${displayName(player)} from this local roster.`}
+                                ? translate("roster.confirmations.removeSharedPlayer", { player: displayName(player) })
+                                : translate("roster.confirmations.removeLocalPlayer", { player: displayName(player) })}
                             </AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogCancel>{translate("common.cancel")}</AlertDialogCancel>
                             <AlertDialogAction onClick={() => removePlayer(player.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                              {isSharedRoster ? "Remove for everyone" : "Remove"}
+                              {isSharedRoster ? translate("roster.actions.removeForEveryone") : translate("common.remove")}
                             </AlertDialogAction>
                           </AlertDialogFooter>
                         </StripesConfirmContent>

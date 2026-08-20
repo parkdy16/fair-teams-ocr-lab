@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
+import { getEnglishCatalogMessage } from "../i18n/resources/en.ts";
 
 const service = fs.readFileSync(
   new URL("./fileCabinetResourceService.ts", import.meta.url),
@@ -77,9 +78,19 @@ test("remove transaction blocks feature relationships before deleting metadata",
 test("Cabinet UI preflights relationships and handles the atomic service result", () => {
   assert.match(cabinetUi, /checkFileCabinetResourceRemoval\(resource\)/);
   assert.match(cabinetUi, /result\.status === "blocked_by_relationships"/);
-  assert.match(cabinetUi, /setResourceNotice\(result\.message\)/);
-  assert.match(cabinetUi, /Cabinet-only shared index record/);
-  assert.match(cabinetUi, /Items tied to Action Board or Equipment cannot be removed here/);
+  assert.match(cabinetUi, /setResourceNotice\(relationshipBlockedRemovalText\(removal, t\)\)/);
+  assert.match(cabinetUi, /setResourceNotice\(relationshipBlockedRemovalText\(result, t\)\)/);
+  assert.match(cabinetUi, /relationshipKinds\.includes\("action_board"\)/);
+  assert.match(cabinetUi, /relationshipKinds\.includes\("equipment"\)/);
+  assert.match(cabinetUi, /t\("cabinet\.confirm\.removeEntryDescription"\)/);
+  assert.equal(
+    getEnglishCatalogMessage("cabinet.confirm.removeEntryDescription"),
+    "Stripes will remove this Cabinet-only shared index record. The original Google Drive item or external link target will not be changed or deleted. Items tied to Action Board or Equipment cannot be removed here.",
+  );
+  assert.equal(
+    getEnglishCatalogMessage("cabinet.notices.removeBlocked.both"),
+    "This item is still tied to Action Board and Equipment, so it cannot be removed from the File Cabinet. Remove its relationships from Action Board and Equipment first. No Stripes record or external item was deleted.",
+  );
   assert.doesNotMatch(cabinetUi, /saved Stripes context links/);
 });
 

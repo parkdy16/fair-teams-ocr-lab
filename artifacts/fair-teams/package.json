@@ -7,6 +7,7 @@
     "dev": "vite --config vite.config.ts --host 0.0.0.0",
     "build": "vite build --config vite.config.ts",
     "check:architecture": "node --test --test-concurrency=1 scripts/check-architecture-boundaries.test.mjs",
+    "check:i18n": "node --test --test-concurrency=1 scripts/check-i18n-ui-strings.test.mjs",
     "serve": "vite preview --config vite.config.ts --host 0.0.0.0",
     "test:core-regression": "node scripts/core-regression.mjs",
     "test:browser-smoke": "playwright test --config playwright.config.ts",
@@ -81,6 +82,8 @@
   },
   "dependencies": {
     "firebase": "^12.14.0",
+    "i18next": "26.3.6",
+    "react-i18next": "17.0.11",
     "tesseract.js": "^7.0.0"
   }
 }

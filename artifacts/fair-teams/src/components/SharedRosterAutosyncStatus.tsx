@@ -2,8 +2,10 @@ import { AlertTriangle, CheckCircle2, Loader2, RefreshCw, WifiOff } from "lucide
 import { Button } from "@/components/ui/button";
 import {
   sharedRosterAutosyncPresentation,
+  type SharedRosterAutosyncPresentation,
   type SharedRosterAutosyncSnapshot,
 } from "@/lib/sharedRosterAutosyncController";
+import { useStripesTranslation, type StripesTranslator } from "@/i18n";
 
 type Props = {
   snapshot: SharedRosterAutosyncSnapshot;
@@ -19,13 +21,130 @@ const toneClasses = {
   muted: "border-slate-100 bg-slate-50/90 text-slate-600",
 } as const;
 
+function autosyncFailureDetail(
+  snapshot: SharedRosterAutosyncSnapshot,
+  t: StripesTranslator,
+  fallback: string,
+) {
+  switch (snapshot.errorReason) {
+    case "online_changed":
+      return t("shared.autosync.failure.onlineChanged");
+    case "access_changed":
+      return t("shared.autosync.failure.accessChanged");
+    case "network_unavailable":
+      return t("shared.autosync.failure.networkUnavailable");
+    case "sync_failed":
+      return t("shared.autosync.failure.syncFailed");
+    case "online_state_unconfirmed":
+      return t("shared.autosync.failure.onlineStateUnconfirmed");
+    default:
+      return snapshot.errorMessage || fallback;
+  }
+}
+
+export function sharedRosterAutosyncCatalogPresentation(
+  snapshot: SharedRosterAutosyncSnapshot,
+  t: StripesTranslator,
+): SharedRosterAutosyncPresentation {
+  const visual = sharedRosterAutosyncPresentation(snapshot);
+  if (snapshot.status === "synced") {
+    return {
+      ...visual,
+      label: t("shared.autosync.synced.label"),
+      detail: t("shared.autosync.synced.detail"),
+    };
+  }
+  if (snapshot.status === "scheduled") {
+    return {
+      ...visual,
+      label: t("shared.autosync.scheduled.label"),
+      detail: t("shared.autosync.scheduled.detail"),
+    };
+  }
+  if (snapshot.status === "saving") {
+    return {
+      ...visual,
+      label: t("shared.autosync.saving.label"),
+      detail: t("shared.autosync.saving.detail"),
+    };
+  }
+  if (snapshot.status === "conflict") {
+    return {
+      ...visual,
+      label: t("shared.autosync.conflict.label"),
+      detail: t("shared.autosync.conflict.detail"),
+    };
+  }
+  if (snapshot.status === "failed") {
+    return {
+      ...visual,
+      label: snapshot.hasUnsyncedChanges
+        ? t("shared.autosync.failed.unsyncedLabel")
+        : t("shared.autosync.failed.cleanLabel"),
+      detail: autosyncFailureDetail(
+        snapshot,
+        t,
+        t("shared.autosync.failed.detail"),
+      ),
+    };
+  }
+  if (snapshot.status === "offline") {
+    return {
+      ...visual,
+      label: snapshot.hasUnsyncedChanges
+        ? t("shared.autosync.offline.unsyncedLabel")
+        : t("shared.autosync.offline.cleanLabel"),
+      detail: snapshot.hasUnsyncedChanges
+        ? t("shared.autosync.offline.unsyncedDetail")
+        : t("shared.autosync.offline.cleanDetail"),
+    };
+  }
+  if (snapshot.status === "blocked") {
+    if (snapshot.blockReason === "read_only") {
+      return {
+        ...visual,
+        label: snapshot.hasUnsyncedChanges
+          ? t("shared.autosync.readOnly.unsyncedLabel")
+          : t("shared.autosync.readOnly.cleanLabel"),
+        detail: snapshot.hasUnsyncedChanges
+          ? t("shared.autosync.readOnly.unsyncedDetail")
+          : t("shared.autosync.readOnly.cleanDetail"),
+      };
+    }
+    const reason = snapshot.blockReason === "signed_out"
+      ? t("shared.autosync.blocked.signedOut")
+      : snapshot.blockReason === "loading"
+        ? t("shared.autosync.blocked.loading")
+        : snapshot.blockReason === "access_lost"
+          ? t("shared.autosync.blocked.accessLost")
+          : t("shared.autosync.blocked.unavailable");
+    return {
+      ...visual,
+      label: snapshot.hasUnsyncedChanges
+        ? t("shared.autosync.blocked.savedLabel", { reason })
+        : reason,
+      detail: autosyncFailureDetail(
+        snapshot,
+        t,
+        t("shared.autosync.blocked.detail"),
+      ),
+    };
+  }
+  return {
+    ...visual,
+    label: t("shared.autosync.local.label"),
+    detail: t("shared.autosync.local.detail"),
+  };
+}
+
 export function SharedRosterAutosyncStatus({
   snapshot,
   onRetry,
   variant = "panel",
 }: Props) {
+  const { t } = useStripesTranslation();
   if (snapshot.status === "local_only") return null;
-  const presentation = sharedRosterAutosyncPresentation(snapshot);
+  const presentation = sharedRosterAutosyncCatalogPresentation(snapshot, t);
   const Icon = presentation.busy
     ? Loader2
     : snapshot.status === "synced"
@@ -51,7 +170,7 @@ export function SharedRosterAutosyncStatus({
             onClick={onRetry}
           >
             <RefreshCw className="mr-1 h-3 w-3" />
-            Retry
+            {t("shared.autosync.retry")}
           </Button>
         )}
       </div>
@@ -77,7 +196,7 @@ export function SharedRosterAutosyncStatus({
           onClick={onRetry}
         >
           <RefreshCw className="mr-1 h-3.5 w-3.5" />
-          Retry
+          {t("shared.autosync.retry")}
         </Button>
       )}
     </div>

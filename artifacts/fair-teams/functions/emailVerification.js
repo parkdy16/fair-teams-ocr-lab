@@ -1,5 +1,7 @@
 "use strict";
 
+const { backendT } = require("./i18n");
+
 const VERIFICATION_COOLDOWN_MS = 60 * 1000;
 const VERIFICATION_WINDOW_MS = 24 * 60 * 60 * 1000;
 const VERIFICATION_MAX_SENDS = 10;
@@ -105,29 +107,29 @@ function escapeHtml(value) {
     .replace(/'/g, "&#039;");
 }
 
-function verificationEmail(verificationUrl) {
+function verificationEmail(verificationUrl, locale) {
   const link = String(verificationUrl || "").trim();
   if (!/^https:\/\//i.test(link)) {
     throw new TypeError("A Firebase email verification URL is required.");
   }
   return {
-    subject: "Verify your Stripes email",
+    subject: backendT("emails.verification.subject", {}, locale),
     text: [
-      "Stripes",
+      backendT("common.brand", {}, locale),
       "",
-      "Verify your email to finish setting up your Stripes account or organizer invitation.",
+      backendT("emails.verification.intro", {}, locale),
       "",
-      `Verify email: ${link}`,
+      backendT("emails.verification.linkLabel", { link }, locale),
       "",
-      "This link was requested for your Stripes account. If you did not request it, you can ignore this email.",
+      backendT("emails.verification.requestedNotice", {}, locale),
     ].join("\n"),
     html: `
       <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#102A43;line-height:1.5">
-        <div style="font-size:14px;font-weight:800;color:#7c3aed;margin-bottom:14px">Stripes</div>
-        <h1 style="font-size:24px;line-height:1.2;margin:0 0 12px">Verify your email</h1>
-        <p style="color:#475569">Verify your email to finish setting up your Stripes account or organizer invitation.</p>
-        <p style="margin:24px 0"><a href="${escapeHtml(link)}" style="display:inline-block;background:#102A43;color:#fff;text-decoration:none;padding:12px 18px;border-radius:12px;font-weight:700">Verify email</a></p>
-        <p style="font-size:13px;color:#64748b">This link was requested for your Stripes account. If you did not request it, you can ignore this email.</p>
+        <div style="font-size:14px;font-weight:800;color:#7c3aed;margin-bottom:14px">${backendT("common.brand", {}, locale)}</div>
+        <h1 style="font-size:24px;line-height:1.2;margin:0 0 12px">${backendT("emails.verification.heading", {}, locale)}</h1>
+        <p style="color:#475569">${backendT("emails.verification.intro", {}, locale)}</p>
+        <p style="margin:24px 0"><a href="${escapeHtml(link)}" style="display:inline-block;background:#102A43;color:#fff;text-decoration:none;padding:12px 18px;border-radius:12px;font-weight:700">${backendT("emails.verification.button", {}, locale)}</a></p>
+        <p style="font-size:13px;color:#64748b">${backendT("emails.verification.requestedNotice", {}, locale)}</p>
       </div>
     `,
   };

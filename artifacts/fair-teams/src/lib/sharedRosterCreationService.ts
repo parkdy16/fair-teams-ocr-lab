@@ -3,6 +3,11 @@ import {
   getFairTeamsAuth,
   getFairTeamsFirebaseApp,
 } from "@/lib/firebaseClient";
+import {
+  DEFAULT_FIREBASE_SHARED_GROUP_NAME,
+  DEFAULT_FIREBASE_SHARED_ROSTER_NAME,
+  type SharedSummaryNameSource,
+} from "@/lib/sharedRosterNames";
 
 export type CreateLinkedSharedRosterInput = {
   creationRequestId: string;
@@ -15,7 +20,9 @@ export type CreatedLinkedSharedRoster = {
   id: string;
   groupId: string;
   groupName: string;
+  groupNameSource?: SharedSummaryNameSource;
   name: string;
+  nameSource?: SharedSummaryNameSource;
   ownerUid: string;
   ownerEmail: string;
   version: number;
@@ -66,16 +73,18 @@ function parseCreatedRoster(value: unknown): CreatedLinkedSharedRoster {
   const data = value as Record<string, unknown>;
   const id = cleanDocumentId(String(data.id || ""), "shared roster");
   const groupId = cleanDocumentId(String(data.groupId || ""), "shared workspace");
-  const name = typeof data.name === "string" && data.name.trim()
-    ? data.name.trim()
-    : "Shared roster";
+  const hasStoredName = typeof data.name === "string" && Boolean(data.name.trim());
+  const hasStoredGroupName = typeof data.groupName === "string" && Boolean(data.groupName.trim());
+  const name = hasStoredName ? String(data.name).trim() : DEFAULT_FIREBASE_SHARED_ROSTER_NAME;
   return {
     id,
     groupId,
-    groupName: typeof data.groupName === "string" && data.groupName.trim()
-      ? data.groupName.trim()
-      : "My Stripes group",
+    groupName: hasStoredGroupName
+      ? String(data.groupName).trim()
+      : DEFAULT_FIREBASE_SHARED_GROUP_NAME,
+    groupNameSource: hasStoredGroupName ? "stored" : "fallback",
     name,
+    nameSource: hasStoredName ? "stored" : "fallback",
     ownerUid: typeof data.ownerUid === "string" ? data.ownerUid : "",
     ownerEmail: typeof data.ownerEmail === "string" ? data.ownerEmail : "",
     version: typeof data.version === "number" ? data.version : 1,

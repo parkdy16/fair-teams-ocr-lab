@@ -6,13 +6,15 @@ import {
   Shuffle,
   Users,
 } from "lucide-react";
+import { useStripesTranslation } from "@/i18n";
 
 export function MarketingHome() {
+  const { t } = useStripesTranslation();
   return (
     <main className="min-h-[100dvh] bg-[#f7faf9] text-[#102A43]">
       <div className="mx-auto w-full max-w-6xl px-5 sm:px-8 lg:px-10">
         <header className="flex items-center justify-between gap-4 py-5">
-          <a href="/" className="flex items-center gap-2.5" aria-label="Stripes home">
+          <a href="/" className="flex items-center gap-2.5" aria-label={t("public.homeAria")}>
             <img
               src="/stripes-logo-mark.png"
               alt=""
@@ -20,10 +22,10 @@ export function MarketingHome() {
             />
             <div>
               <div className="font-['Fredoka'] text-[22px] font-semibold leading-none tracking-tight">
-                Stripes
+                {t("common.brand.stripes")}
               </div>
               <div className="mt-0.5 text-[10px] font-semibold text-slate-500">
-                Team generator and club organizer
+                {t("public.brand.tagline")}
               </div>
             </div>
           </a>
@@ -32,7 +34,7 @@ export function MarketingHome() {
             href="/app"
             className="stripes-type-ui inline-flex h-10 items-center gap-2 rounded-2xl bg-[#102A43] px-4 text-sm font-bold text-white shadow-sm transition hover:bg-[#173c5e]"
           >
-            Open Stripes
+            {t("public.openStripes")}
             <ArrowRight className="h-4 w-4" />
           </a>
         </header>
@@ -40,19 +42,17 @@ export function MarketingHome() {
         <section className="grid items-center gap-12 pb-20 pt-14 lg:grid-cols-[1.05fr_0.95fr] lg:gap-16 lg:pb-20 lg:pt-16">
           <div className="max-w-2xl">
             <div className="mb-5 inline-flex rounded-full border border-emerald-100 bg-white px-3 py-1.5 text-[11px] font-bold text-[#2f6f65] shadow-sm">
-              Built for recreational sports organizers
+              {t("public.marketing.hero.badge")}
             </div>
 
             <h1 className="font-['Fredoka'] text-[44px] font-semibold leading-[0.98] tracking-[-0.035em] sm:text-[58px] lg:text-[70px]">
-              Fair teams.
+              {t("public.marketing.hero.titleLine1")}
               <br />
-              A better organized club.
+              {t("public.marketing.hero.titleLine2")}
             </h1>
 
             <p className="mt-6 max-w-xl text-[17px] font-medium leading-relaxed text-slate-600 sm:text-[19px]">
-              Generate balanced teams in under a minute, then keep the useful
-              organizer work — attendance, decisions, equipment and follow-through —
-              together in one place.
+              {t("public.marketing.hero.body")}
             </p>
 
             <div className="mt-8 flex flex-wrap items-center gap-3">
@@ -60,11 +60,11 @@ export function MarketingHome() {
                 href="/app"
                 className="stripes-type-ui inline-flex h-12 items-center gap-2 rounded-2xl bg-[#102A43] px-5 text-sm font-bold text-white shadow-sm transition hover:bg-[#173c5e]"
               >
-                Open Stripes
+                {t("public.openStripes")}
                 <ArrowRight className="h-4 w-4" />
               </a>
               <span className="text-xs font-semibold text-slate-400">
-                Works in your browser
+                {t("public.marketing.hero.browser")}
               </span>
             </div>
           </div>
@@ -74,29 +74,29 @@ export function MarketingHome() {
 
         <section className="border-t border-slate-200/80 py-20 lg:py-24">
           <SectionIntro
-            eyebrow="From roster to game"
-            title="Fair teams without the pre-game spreadsheet."
-            body="Keep one roster, choose who is playing today, and let Stripes build balanced teams."
+            eyebrow={t("public.marketing.roster.eyebrow")}
+            title={t("public.marketing.roster.title")}
+            body={t("public.marketing.roster.body")}
           />
 
           <div className="mt-10 grid gap-3 lg:grid-cols-3">
             <Step
               number="1"
               icon={<Users className="h-5 w-5" />}
-              title="Keep your roster"
-              body="Players, ratings and the information you actually need each week."
+              title={t("public.marketing.roster.step1.title")}
+              body={t("public.marketing.roster.step1.body")}
             />
             <Step
               number="2"
               icon={<CalendarCheck2 className="h-5 w-5" />}
-              title="Choose today's players"
-              body="Mark who is here and make the final adjustments before you start."
+              title={t("public.marketing.roster.step2.title")}
+              body={t("public.marketing.roster.step2.body")}
             />
             <Step
               number="3"
               icon={<Shuffle className="h-5 w-5" />}
-              title="Generate teams"
-              body="Create balanced teams quickly, then swap or adjust when real life gets in the way."
+              title={t("public.marketing.roster.step3.title")}
+              body={t("public.marketing.roster.step3.body")}
             />
           </div>
         </section>
@@ -104,63 +104,62 @@ export function MarketingHome() {
         <section className="grid gap-12 border-t border-slate-200/80 py-20 lg:grid-cols-[0.88fr_1.12fr] lg:items-center lg:gap-16 lg:py-24">
           <div>
             <div className="text-xs font-extrabold uppercase tracking-[0.15em] text-violet-600">
-              Club organizer
+              {t("public.marketing.club.eyebrow")}
             </div>
             <h2 className="mt-3 font-['Fredoka'] text-[34px] font-semibold leading-tight tracking-[-0.025em] sm:text-[42px]">
-              The things organizers usually have to remember themselves.
+              {t("public.marketing.club.title")}
             </h2>
             <p className="mt-4 max-w-xl text-base font-medium leading-relaxed text-slate-600">
-              Stripes gives organizers a shared place for the information that gets
-              lost between games, messages and different people.
+              {t("public.marketing.club.body")}
             </p>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
             <ClubFeature
               icon={<CalendarCheck2 className="h-5 w-5" />}
-              title="Attendance memory"
-              body="Keep simple records of tardies, last-minute cancellations, no-shows and conduct issues."
+              title={t("public.marketing.club.attendance.title")}
+              body={t("public.marketing.club.attendance.body")}
             />
             <ClubFeature
               icon={<ClipboardList className="h-5 w-5" />}
-              title="Action Board"
-              body="Make decisions, assign follow-up and keep the outcome visible after the chat has moved on."
+              title={t("public.marketing.club.actionBoard.title")}
+              body={t("public.marketing.club.actionBoard.body")}
             />
             <ClubFeature
               icon={<PackageOpen className="h-5 w-5" />}
-              title="Equipment"
-              body="Know which bags, balls and other club gear you have — and who currently has them."
+              title={t("public.marketing.club.equipment.title")}
+              body={t("public.marketing.club.equipment.body")}
             />
             <ClubFeature
               icon={<Users className="h-5 w-5" />}
-              title="Shared organizers"
-              body="Give the people running the club access to the same working information."
+              title={t("public.marketing.club.organizers.title")}
+              body={t("public.marketing.club.organizers.body")}
             />
           </div>
         </section>
 
         <section className="border-t border-slate-200/80 py-20 lg:py-24">
           <SectionIntro
-            eyebrow="Inside Stripes"
-            title="One workflow from game day to club work."
-            body="The team generator stays fast and focused, while the Club workspace gives organizers room for the things that need to last beyond one session."
+            eyebrow={t("public.marketing.inside.eyebrow")}
+            title={t("public.marketing.inside.title")}
+            body={t("public.marketing.inside.body")}
           />
 
           <div className="mt-10 grid gap-8">
             <ProductScreenshot
-              eyebrow="Club workspace"
-              title="The organizer view."
-              body="Player management, club access, decisions, notes, equipment and Help live together without turning Stripes into another chat app."
+              eyebrow={t("public.marketing.inside.club.eyebrow")}
+              title={t("public.marketing.inside.club.title")}
+              body={t("public.marketing.inside.club.body")}
               src="/site/club-desktop.png"
-              alt="Stripes Club organizer workspace on desktop"
+              alt={t("public.marketing.inside.club.alt")}
             />
 
             <ProductScreenshot
-              eyebrow="Action Board"
-              title="Decisions that don't disappear in chat."
-              body="Keep a topic visible from idea to decision to follow-through, with voting, ownership, due dates, links, comments and history when they are useful."
+              eyebrow={t("public.marketing.inside.actionBoard.eyebrow")}
+              title={t("public.marketing.inside.actionBoard.title")}
+              body={t("public.marketing.inside.actionBoard.body")}
               src="/site/action-board-desktop.png"
-              alt="Stripes Action Board with card details open on desktop"
+              alt={t("public.marketing.inside.actionBoard.alt")}
             />
           </div>
         </section>
@@ -169,15 +168,13 @@ export function MarketingHome() {
           <div className="rounded-[2rem] bg-[#102A43] px-6 py-8 text-white sm:px-9 sm:py-10 lg:grid lg:grid-cols-[1fr_auto] lg:items-center lg:gap-12 lg:px-12">
             <div>
               <div className="text-xs font-extrabold uppercase tracking-[0.15em] text-emerald-200">
-                Keep your group chat
+                {t("public.marketing.chat.eyebrow")}
               </div>
               <h2 className="mt-3 max-w-2xl font-['Fredoka'] text-[30px] font-semibold leading-tight sm:text-[38px]">
-                Stripes is not another place your club has to talk.
+                {t("public.marketing.chat.title")}
               </h2>
               <p className="mt-4 max-w-2xl text-sm font-medium leading-relaxed text-slate-300 sm:text-base">
-                Signal, WhatsApp and other group chats are good at conversation.
-                Stripes is for what chat handles poorly: durable decisions, ownership,
-                attendance memory and club information you need to find again.
+                {t("public.marketing.chat.body")}
               </p>
             </div>
 
@@ -185,7 +182,7 @@ export function MarketingHome() {
               href="/app"
               className="mt-7 inline-flex h-12 items-center gap-2 rounded-2xl bg-white px-5 text-sm font-bold text-[#102A43] lg:mt-0"
             >
-              Try Stripes
+              {t("public.marketing.chat.cta")}
               <ArrowRight className="h-4 w-4" />
             </a>
           </div>
@@ -193,36 +190,35 @@ export function MarketingHome() {
 
         <section className="border-t border-slate-200/80 py-16 text-center">
           <h2 className="font-['Fredoka'] text-[32px] font-semibold tracking-tight sm:text-[40px]">
-            Spend less time organizing the game.
+            {t("public.marketing.cta.title")}
           </h2>
           <p className="mx-auto mt-3 max-w-xl text-sm font-medium leading-relaxed text-slate-500 sm:text-base">
-            Keep the roster ready, build the teams, and give the organizers one place
-            for the work that needs to survive beyond today.
+            {t("public.marketing.cta.body")}
           </p>
           <a
             href="/app"
             className="mt-7 inline-flex h-12 items-center gap-2 rounded-2xl bg-[#102A43] px-6 text-sm font-bold text-white"
           >
-            Open Stripes
+            {t("public.openStripes")}
             <ArrowRight className="h-4 w-4" />
           </a>
         </section>
 
         <footer className="flex flex-wrap items-center justify-between gap-4 border-t border-slate-200/80 py-6 text-[11px] font-medium text-slate-400">
-          <span>Stripes · Team generator and club organizer</span>
+          <span>{t("public.brand.footer")}</span>
           <div className="flex flex-wrap items-center gap-4">
-            <span>Meetup import planned</span>
+            <span>{t("public.marketing.footer.meetup")}</span>
             <a href="/privacy" className="font-bold text-slate-500 hover:text-[#102A43]">
-              Privacy
+              {t("public.marketing.footer.privacy")}
             </a>
             <a href="/terms" className="font-bold text-slate-500 hover:text-[#102A43]">
-              Terms
+              {t("public.marketing.footer.terms")}
             </a>
             <a href="/support" className="font-bold text-slate-500 hover:text-[#102A43]">
-              Support
+              {t("public.marketing.footer.support")}
             </a>
             <a href="/app" className="font-bold text-slate-600 hover:text-[#102A43]">
-              Open app →
+              {t("public.marketing.footer.openApp")}
             </a>
           </div>
         </footer>
@@ -232,6 +228,7 @@ export function MarketingHome() {
 }
 
 function HeroPreview() {
+  const { t } = useStripesTranslation();
   return (
     <div className="relative">
       <div className="absolute -left-8 -top-10 h-44 w-44 rounded-full bg-violet-100/65 blur-3xl" />
@@ -241,14 +238,14 @@ function HeroPreview() {
         <div className="overflow-hidden rounded-[1.8rem] border border-slate-200 bg-white">
           <img
             src="/site/teams-mobile.png"
-            alt="Stripes generated teams on mobile"
+            alt={t("public.marketing.preview.alt")}
             className="block h-auto w-full max-w-[17rem]"
           />
         </div>
       </div>
 
       <div className="relative mx-auto mt-4 max-w-sm text-center text-[11px] font-semibold leading-relaxed text-slate-400">
-        Choose who is playing, generate balanced teams, then adjust when you need to.
+        {t("public.marketing.preview.caption")}
       </div>
     </div>
   );

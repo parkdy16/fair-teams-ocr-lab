@@ -72,6 +72,12 @@ const {
   SharedRosterCreationError,
 } = require("./sharedRosterCreation");
 const { logPrivacySafeFailure } = require("./privacySafeDiagnostics");
+const { backendT } = require("./i18n");
+const {
+  actionBoardEmailBodies,
+  actionBoardEmailSubject,
+  actionBoardPushNotification,
+} = require("./actionBoardNotificationText");
 
 initializeApp();
 
@@ -115,7 +121,8 @@ function scopeRefs(db, scopeId) {
 }
 
 function actorName(auth) {
-  return cleanText(auth?.token?.name || auth?.token?.email?.split("@")[0] || "Organizer", 60) || "Organizer";
+  const fallback = backendT("common.fallbackOrganizer");
+  return cleanText(auth?.token?.name || auth?.token?.email?.split("@")[0] || fallback, 60) || fallback;
 }
 
 function notificationForTarget(card, stepKind, stepId) {
@@ -155,32 +162,60 @@ function applyNotification(card, stepKind, stepId, notification) {
 }
 
 function stepInfo(card, stepKind, stepId) {
-  const topicTitle = cleanText(card.title || "Action Board topic", 160);
+  const topicTitle = cleanText(
+    card.title || backendT("notifications.actionBoard.fallbackTopic"),
+    160,
+  );
   if (stepKind === "topic") {
-    return { topicTitle, label: "Idea", text: topicTitle, createdAt: Number(card.createdAt || 0) };
+    return {
+      topicTitle,
+      label: backendT("notifications.actionBoard.step.idea"),
+      text: topicTitle,
+      createdAt: Number(card.createdAt || 0),
+    };
   }
   if (stepKind === "decision") {
     const decisions = Array.isArray(card.decisions) ? card.decisions : [];
     const decision = decisions.find((item) => String(item?.id || "") === stepId);
     if (!decision) throw new HttpsError("not-found", "This decision no longer exists.");
-    const question = cleanText(decision.title || decision.question || decision.questions?.[0]?.text || "Decision", 220);
+    const question = cleanText(
+      decision.title
+        || decision.question
+        || decision.questions?.[0]?.text
+        || backendT("notifications.actionBoard.fallbackDecision"),
+      220,
+    );
     const label = decision.decisionType === "schedule" || decision.kind === "schedule"
-      ? "Scheduling"
+      ? backendT("notifications.actionBoard.step.scheduling")
       : decision.decisionType === "players"
-        ? "Player decision"
+        ? backendT("notifications.actionBoard.step.playerDecision")
         : decision.decisionType === "equipment"
-          ? "Equipment decision"
-          : "Decision";
+          ? backendT("notifications.actionBoard.step.equipmentDecision")
+          : backendT("notifications.actionBoard.step.decision");
     return { topicTitle, label, text: question, createdAt: Number(decision.createdAt || card.createdAt || 0) };
   }
   const actions = Array.isArray(card.actions) ? card.actions : [];
   const action = actions.find((item) => String(item?.id || "") === stepId);
   if (!action) throw new HttpsError("not-found", "This action no longer exists.");
-  return { topicTitle, label: "Action", text: cleanText(action.text || "Action", 220), createdAt: Number(action.createdAt || card.createdAt || 0) };
+  return {
+    topicTitle,
+    label: backendT("notifications.actionBoard.step.action"),
+    text: cleanText(
+      action.text || backendT("notifications.actionBoard.fallbackAction"),
+      220,
+    ),
+    createdAt: Number(action.createdAt || card.createdAt || 0),
+  };
 }
 
 function decisionHeading(decision) {
-  return cleanText(decision?.title || decision?.question || decision?.questions?.[0]?.text || "Decision", 160);
+  return cleanText(
+    decision?.title
+      || decision?.question
+      || decision?.questions?.[0]?.text
+      || backendT("notifications.actionBoard.fallbackDecision"),
+    160,
+  );
 }
 
 function priorContext(card, targetCreatedAt) {
@@ -196,19 +231,16 @@ function priorContext(card, targetCreatedAt) {
     const createdAt = Number(action?.createdAt || 0);
     if (createdAt && createdAt < targetCreatedAt) {
       const prefix = action?.status === "done" ? "✓" : "•";
-      entries.push({ createdAt, text: `${prefix} ${cleanText(action?.text || "Action", 160)}` });
+      entries.push({
+        createdAt,
+        text: `${prefix} ${cleanText(
+          action?.text || backendT("notifications.actionBoard.fallbackAction"),
+          160,
+        )}`,
+      });
     }
   }
   return entries.sort((a, b) => a.createdAt - b.createdAt).slice(-4).map((item) => item.text);
-}
-
-function escapeHtml(value) {
-  return String(value || "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
 }
 
 function messageIdPart(value) {
@@ -398,40 +430,7 @@ exports.sendStripesEmailVerification = onCall({
 });
 
 function emailBodies({ senderName, step, topicContext, customMessage, appUrl }) {
-  const contextLines = [`Topic: ${step.topicTitle}`, ...topicContext];
-  const text = [
-    `Stripes · ${step.topicTitle}`,
-    "",
-    `${step.label}: ${step.text}`,
-    customMessage ? `Message from ${senderName}: ${customMessage}` : `Sent by ${senderName}`,
-    "",
-    "Topic so far",
-    ...contextLines.map((line) => `- ${line}`),
-    "",
-    appUrl ? `Open Stripes: ${appUrl}` : "Open Stripes to respond or continue the topic.",
-  ].join("\n");
-
-  const contextHtml = contextLines.map((line) => `<li style="margin:4px 0">${escapeHtml(line)}</li>`).join("");
-  const messageHtml = customMessage
-    ? `<div style="margin:16px 0;padding:12px 14px;background:#f8fafc;border-radius:12px"><strong>${escapeHtml(senderName)}:</strong> ${escapeHtml(customMessage)}</div>`
-    : `<p style="color:#64748b">Sent by ${escapeHtml(senderName)}</p>`;
-  const button = appUrl
-    ? `<p style="margin-top:22px"><a href="${escapeHtml(appUrl)}" style="display:inline-block;background:#102A43;color:white;text-decoration:none;padding:10px 16px;border-radius:12px;font-weight:700">Open in Stripes</a></p>`
-    : "";
-  const html = `
-    <div style="font-family:Arial,sans-serif;max-width:620px;margin:0 auto;color:#102A43;line-height:1.5">
-      <div style="font-size:13px;font-weight:700;color:#64748b;margin-bottom:8px">Stripes · ${escapeHtml(step.topicTitle)}</div>
-      <div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:#7c3aed">${escapeHtml(step.label)}</div>
-      <h2 style="font-size:20px;line-height:1.25;margin:6px 0 10px">${escapeHtml(step.text)}</h2>
-      ${messageHtml}
-      <div style="margin-top:20px;border-top:1px solid #e2e8f0;padding-top:14px">
-        <div style="font-size:12px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.04em">Topic so far</div>
-        <ul style="padding-left:20px;margin:8px 0 0">${contextHtml}</ul>
-      </div>
-      ${button}
-      <p style="margin-top:24px;font-size:11px;color:#94a3b8">This notification was sent manually by an organizer. Stripes does not automatically email board activity.</p>
-    </div>`;
-  return { text, html };
+  return actionBoardEmailBodies({ senderName, step, topicContext, customMessage, appUrl });
 }
 
 async function emailThreadFor(db, scope, cardId, recipientEmail) {
@@ -2024,9 +2023,7 @@ exports.notifyActionBoardStep = onCall({ region: REGION, timeoutSeconds: 60, sec
           const bodies = emailBodies({ senderName, step, topicContext, customMessage, appUrl });
           await sendResendEmail({
             to: recipientEmail,
-            subject: isFirst
-              ? `Stripes · ${step.topicTitle}`
-              : `Re: Stripes · ${step.topicTitle}`,
+            subject: actionBoardEmailSubject(step.topicTitle, isFirst),
             text: bodies.text,
             html: bodies.html,
             messageId: currentMessageId,
@@ -2074,10 +2071,14 @@ exports.notifyActionBoardStep = onCall({ region: REGION, timeoutSeconds: 60, sec
         throw new HttpsError("failed-precondition", "None of the selected organizers has phone notifications enabled yet.");
       }
       if (fids.length) {
-        const pushBody = customMessage || `${senderName} needs your attention: ${step.text}`;
+        const pushNotification = actionBoardPushNotification({
+          senderName,
+          step,
+          customMessage,
+        });
         const result = await getMessaging().sendEachForMulticast({
           fids,
-          notification: { title: `Stripes · ${step.topicTitle}`, body: pushBody.slice(0, 180) },
+          notification: pushNotification,
           data: { topicId: String(cardId), stepKind, stepId: String(stepId || "") },
           webpush: appUrl ? { fcmOptions: { link: appUrl } } : undefined,
         });

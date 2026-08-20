@@ -1,5 +1,6 @@
 import { GOOGLE_DRIVE_FOLDER_MIME_TYPE } from "./googleDriveCabinet.ts";
 import { getGoogleDriveConfig, FAIR_TEAMS_DRIVE_MIME_TYPE } from "./googleDriveConfig.ts";
+import { translate } from "../i18n/i18n.ts";
 
 const GOOGLE_API_SCRIPT_URL = "https://apis.google.com/js/api.js";
 
@@ -226,7 +227,7 @@ export async function pickGoogleDriveBackupFile(accessToken: string): Promise<Go
       builder.setDeveloperKey(config.apiKey);
       applyPickerAppId(builder, config.appId);
       builder.setOAuthToken(accessToken);
-      builder.setTitle("Open Stripes Drive backup");
+      builder.setTitle(translate("app.googlePicker.openBackupTitle"));
       builder.setOrigin(window.location.origin);
       builder.setCallback((response: PickerResponse) => {
         if (response.action === picker.Action.CANCEL) {
@@ -316,7 +317,7 @@ export async function pickGoogleSheetRosterFile(accessToken: string): Promise<Go
       builder.setDeveloperKey(config.apiKey);
       applyPickerAppId(builder, config.appId);
       builder.setOAuthToken(accessToken);
-      builder.setTitle("Open shared Stripes roster");
+      builder.setTitle(translate("app.googlePicker.openSharedRosterTitle"));
       builder.setOrigin(window.location.origin);
       if (typeof builder.setSelectableMimeTypes === "function") {
         builder.setSelectableMimeTypes(FAIR_TEAMS_GOOGLE_SHEET_MIME_TYPE);
@@ -408,7 +409,7 @@ export async function pickGoogleMyDriveCabinetFolder(
       builder.setDeveloperKey(config.apiKey);
       applyPickerAppId(builder, config.appId);
       builder.setOAuthToken(accessToken);
-      builder.setTitle("Authorize the saved File Cabinet folder");
+      builder.setTitle(translate("cabinet.googlePicker.authorizeSavedFolderTitle"));
       builder.setOrigin(window.location.origin);
       if (typeof builder.setSelectableMimeTypes === "function") {
         builder.setSelectableMimeTypes(GOOGLE_DRIVE_FOLDER_MIME_TYPE);
@@ -490,7 +491,7 @@ export async function pickGoogleSharedDriveCabinetFolder(
       builder.setDeveloperKey(config.apiKey);
       applyPickerAppId(builder, config.appId);
       builder.setOAuthToken(accessToken);
-      builder.setTitle("Choose File Cabinet folder in Shared Drive");
+      builder.setTitle(translate("cabinet.googlePicker.chooseSharedDriveFolderTitle"));
       builder.setOrigin(window.location.origin);
       if (typeof builder.setSelectableMimeTypes === "function") {
         builder.setSelectableMimeTypes(GOOGLE_DRIVE_FOLDER_MIME_TYPE);
@@ -604,7 +605,7 @@ export async function pickGoogleDriveFileCabinetResource(
       builder.setDeveloperKey(config.apiKey);
       applyPickerAppId(builder, config.appId);
       builder.setOAuthToken(accessToken);
-      builder.setTitle("Add a Google Drive item to File Cabinet");
+      builder.setTitle(translate("cabinet.googlePicker.addDriveItemTitle"));
       builder.setOrigin(window.location.origin);
       if (typeof builder.setMaxItems === "function") builder.setMaxItems(1);
       builder.setCallback((response: PickerResponse) => {
@@ -621,7 +622,7 @@ export async function pickGoogleDriveFileCabinetResource(
         }
         settle({
           id: picked.id,
-          name: picked.name || "Google Drive item",
+          name: picked.name || translate("cabinet.googlePicker.unnamedDriveItem"),
           mimeType: picked.mimeType || "",
         });
       });

@@ -1,24 +1,24 @@
+import { useStripesTranslation } from "@/i18n";
+
 type PublicPage = "privacy" | "terms" | "support";
 
 export function PublicInfoPage({ page }: { page: PublicPage }) {
+  const { t } = useStripesTranslation();
   const content = {
     privacy: {
-      eyebrow: "Privacy",
-      title: "Privacy Policy",
-      intro:
-        "Stripes is designed to help recreational sports organizers build teams and manage shared club work without collecting more information than the service needs.",
+      eyebrow: t("public.info.privacy.eyebrow"),
+      title: t("public.info.privacy.title"),
+      intro: t("public.info.privacy.intro"),
     },
     terms: {
-      eyebrow: "Terms",
-      title: "Terms of Use",
-      intro:
-        "These terms describe the basic rules for using Stripes. They are written for a practical organizer tool rather than as a substitute for rights you may have under applicable law.",
+      eyebrow: t("public.info.terms.eyebrow"),
+      title: t("public.info.terms.title"),
+      intro: t("public.info.terms.intro"),
     },
     support: {
-      eyebrow: "Support",
-      title: "How can we help?",
-      intro:
-        "Questions, problems, privacy requests, or feedback about Stripes can be sent directly to support.",
+      eyebrow: t("public.info.support.eyebrow"),
+      title: t("public.info.support.title"),
+      intro: t("public.info.support.intro"),
     },
   }[page];
 
@@ -28,10 +28,10 @@ export function PublicInfoPage({ page }: { page: PublicPage }) {
         <header className="flex items-center justify-between border-b border-slate-200/80 py-5">
           <a href="/" className="flex items-center gap-3">
             <div className="font-['Fredoka'] text-2xl font-semibold tracking-[-0.03em]">
-              Stripes
+              {t("common.brand.stripes")}
             </div>
             <span className="hidden text-[11px] font-semibold text-slate-400 sm:inline">
-              Team generator and club organizer
+              {t("public.brand.tagline")}
             </span>
           </a>
 
@@ -39,7 +39,7 @@ export function PublicInfoPage({ page }: { page: PublicPage }) {
             href="/app"
             className="inline-flex h-9 items-center rounded-xl bg-[#102A43] px-4 text-xs font-bold text-white"
           >
-            Open Stripes
+            {t("public.openStripes")}
           </a>
         </header>
 
@@ -64,22 +64,22 @@ export function PublicInfoPage({ page }: { page: PublicPage }) {
 
           <div className="mt-8 flex flex-wrap gap-4 text-xs font-bold text-slate-500">
             <a href="/" className="hover:text-[#102A43]">
-              ← Stripes home
+              {t("public.info.home")}
             </a>
             <a href="/privacy" className="hover:text-[#102A43]">
-              Privacy
+              {t("public.info.privacy.eyebrow")}
             </a>
             <a href="/terms" className="hover:text-[#102A43]">
-              Terms
+              {t("public.info.terms.eyebrow")}
             </a>
             <a href="/support" className="hover:text-[#102A43]">
-              Support
+              {t("public.info.support.eyebrow")}
             </a>
           </div>
         </article>
 
         <footer className="border-t border-slate-200/80 py-6 text-[11px] font-medium text-slate-400">
-          Stripes · Team generator and club organizer
+          {t("public.brand.footer")}
         </footer>
       </div>
     </main>
@@ -106,123 +106,89 @@ function Section({
 }
 
 function PrivacyContent() {
+  const { t } = useStripesTranslation();
   return (
     <>
       <p className="mb-7 text-xs font-semibold text-slate-400">
-        Last updated: August 12, 2026
+        {t("public.info.lastUpdated")}
       </p>
 
-      <Section title="What Stripes stores">
+      <Section title={t("public.info.privacy.storage.title")}>
         <p>
-          A local roster can be stored directly in your browser on your device.
-          Shared club features can store roster, attendance, equipment, notes,
-          ratings, decisions, actions, organizer access, and related account
-          information using Firebase services.
+          {t("public.info.privacy.storage.local")}
         </p>
         <p>
-          Organizers decide what member information they enter into Stripes and
-          are responsible for using that information appropriately within their club.
+          {t("public.info.privacy.storage.organizers")}
         </p>
       </Section>
 
-      <Section title="Accounts and shared club data">
+      <Section title={t("public.info.privacy.accounts.title")}>
         <p>
-          Shared features use Firebase Authentication and Firebase/Firestore
-          services so authorized organizers can access and update the same club
-          information.
+          {t("public.info.privacy.accounts.shared")}
         </p>
         <p>
-          We use this information to provide the features you request, maintain
-          account access, synchronize shared data, protect the service, and respond
-          to support requests.
+          {t("public.info.privacy.accounts.use")}
         </p>
       </Section>
 
-      <Section title="Google Drive and Google Sheets">
+      <Section title={t("public.info.privacy.google.title")}>
         <p>
-          Connecting Google is optional. When you choose to connect Google Drive
-          or Google Sheets, Stripes requests access only so it can perform
-          user-initiated features such as creating, reading, backing up, sharing,
-          importing, or updating Stripes roster files.
+          {t("public.info.privacy.google.optional")}
         </p>
         <p>
-          Google user data is not sold or used for advertising. Stripes uses data
-          received from Google APIs only to provide or improve the user-facing
-          features you request, maintain security, comply with law, or when you
-          explicitly authorize another use.
+          {t("public.info.privacy.google.use")}
         </p>
         <p>
-          Stripes&apos; use and transfer of information received from Google APIs
-          adheres to the Google API Services User Data Policy, including the
-          Limited Use requirements.
+          {t("public.info.privacy.google.policy")}
         </p>
       </Section>
 
-      <Section title="Stripes Help and AI">
+      <Section title={t("public.info.privacy.ai.title")}>
         <p>
-          When you intentionally use an AI-powered Stripes Help feature, the
-          information needed to answer that request may be sent to an AI service
-          provider such as OpenAI. Do not put information into an AI request that
-          you do not want processed for that request.
+          {t("public.info.privacy.ai.body")}
         </p>
       </Section>
 
-      <Section title="Notifications">
+      <Section title={t("public.info.privacy.notifications.title")}>
         <p>
-          When an organizer chooses to send a Stripes notification, information
-          required to deliver that message, such as the recipient address and
-          notification content, may be processed by email delivery providers such
-          as Resend.
+          {t("public.info.privacy.notifications.body")}
         </p>
       </Section>
 
-      <Section title="Why information is processed">
+      <Section title={t("public.info.privacy.processing.title")}>
         <p>
-          Depending on the feature and circumstances, Stripes processes information
-          because it is necessary to provide a service you requested, because you
-          consented to an optional connection such as Google, because there is a
-          legitimate interest in operating and securing the service, or because
-          processing is required by law.
+          {t("public.info.privacy.processing.body")}
         </p>
       </Section>
 
-      <Section title="Retention and deletion">
+      <Section title={t("public.info.privacy.retention.title")}>
         <p>
-          Local roster information remains on the device until it is removed by the
-          user, the browser storage is cleared, or the application removes it.
-          Shared information is retained while it is needed to provide the relevant
-          Stripes feature or until it is deleted, subject to necessary security,
-          backup, and legal retention.
+          {t("public.info.privacy.retention.body")}
         </p>
         <p>
-          Third-party service providers may also retain limited operational or
-          security records according to their own applicable policies.
+          {t("public.info.privacy.retention.providers")}
         </p>
       </Section>
 
-      <Section title="Your rights">
+      <Section title={t("public.info.privacy.rights.title")}>
         <p>
-          Depending on applicable law, you may have rights to request access,
-          correction, deletion, restriction, objection, or portability of personal
-          information. You may also have the right to complain to your competent
-          data protection supervisory authority.
+          {t("public.info.privacy.rights.body")}
         </p>
         <p>
-          For a privacy request, email{" "}
+          {t("public.info.privacy.rights.contact")}{" "}
           <a
             href="mailto:support@stripes.work"
             className="font-bold text-[#2f6f65] hover:underline"
           >
-            support@stripes.work
+            {t("public.supportEmail")}
           </a>
           .
         </p>
       </Section>
 
-      <Section title="Changes">
+      <Section title={t("public.info.privacy.changes.title")}>
         <p>
-          This policy may be updated as Stripes changes. The current version will
-          remain available at this page with its latest update date.
+          {t("public.info.privacy.changes.body")}
         </p>
       </Section>
     </>
@@ -230,84 +196,69 @@ function PrivacyContent() {
 }
 
 function TermsContent() {
+  const { t } = useStripesTranslation();
   return (
     <>
       <p className="mb-7 text-xs font-semibold text-slate-400">
-        Last updated: August 12, 2026
+        {t("public.info.lastUpdated")}
       </p>
 
-      <Section title="Using Stripes">
+      <Section title={t("public.info.terms.using.title")}>
         <p>
-          Stripes is a team-generation and club-organization tool for recreational
-          sports. You may use it only in compliance with applicable law and these
-          terms.
+          {t("public.info.terms.using.body")}
         </p>
       </Section>
 
-      <Section title="Your club data">
+      <Section title={t("public.info.terms.data.title")}>
         <p>
-          You are responsible for information you add to Stripes and for having an
-          appropriate reason or permission to use information about players,
-          members, organizers, or other people.
+          {t("public.info.terms.data.responsibility")}
         </p>
         <p>
-          Do not use Stripes to store information that is unnecessary for organizing
-          your recreational sports activities.
+          {t("public.info.terms.data.minimum")}
         </p>
       </Section>
 
-      <Section title="Accounts and access">
+      <Section title={t("public.info.terms.accounts.title")}>
         <p>
-          You are responsible for keeping access to your account and connected
-          services secure. Shared-organizer features are intended only for people
-          who have been authorized to access the relevant club information.
+          {t("public.info.terms.accounts.body")}
         </p>
       </Section>
 
-      <Section title="Third-party services">
+      <Section title={t("public.info.terms.providers.title")}>
         <p>
-          Some optional Stripes features depend on services provided by third
-          parties, including Google, Firebase, OpenAI, and email delivery providers.
-          Their availability and their own terms may affect those features.
+          {t("public.info.terms.providers.body")}
         </p>
       </Section>
 
-      <Section title="Availability">
+      <Section title={t("public.info.terms.availability.title")}>
         <p>
-          Stripes is under active development. Features may change, be interrupted,
-          or occasionally contain errors. Important club decisions or records should
-          not depend on Stripes being continuously available without an appropriate
-          backup.
+          {t("public.info.terms.availability.body")}
         </p>
       </Section>
 
-      <Section title="Responsibility">
+      <Section title={t("public.info.terms.responsibility.title")}>
         <p>
-          Stripes helps organizers make and record organizational decisions, but it
-          does not make safety, disciplinary, medical, legal, or eligibility
-          decisions for a club. Organizers remain responsible for those decisions.
+          {t("public.info.terms.responsibility.body")}
         </p>
       </Section>
 
-      <Section title="Applicable rights">
+      <Section title={t("public.info.terms.rights.title")}>
         <p>
-          Nothing in these terms removes consumer, privacy, or other legal rights
-          that cannot lawfully be excluded or limited.
+          {t("public.info.terms.rights.body")}
         </p>
       </Section>
 
-      <Section title="Changes and contact">
+      <Section title={t("public.info.terms.changes.title")}>
         <p>
-          These terms may change as Stripes develops. Material changes will be
-          reflected on this page.
+          {t("public.info.terms.changes.body")}
         </p>
         <p>
-          Questions can be sent to{" "}
+          {t("public.info.terms.changes.contact")}{" "}
           <a
             href="mailto:support@stripes.work"
             className="font-bold text-[#2f6f65] hover:underline"
           >
-            support@stripes.work
+            {t("public.supportEmail")}
           </a>
           .
         </p>
@@ -317,45 +268,40 @@ function TermsContent() {
 }
 
 function SupportContent() {
+  const { t } = useStripesTranslation();
   return (
     <>
-      <Section title="Email support">
+      <Section title={t("public.info.support.email.title")}>
         <p>
-          Send questions or bug reports to{" "}
+          {t("public.info.support.email.contact")}{" "}
           <a
             href="mailto:support@stripes.work"
             className="font-bold text-[#2f6f65] hover:underline"
           >
-            support@stripes.work
+            {t("public.supportEmail")}
           </a>
           .
         </p>
         <p>
-          For a technical problem, it helps to include what you were trying to do,
-          what happened instead, and the device or browser you were using.
+          {t("public.info.support.email.details")}
         </p>
       </Section>
 
-      <Section title="Privacy requests">
+      <Section title={t("public.info.support.privacy.title")}>
         <p>
-          You can use the same address for questions about your information or a
-          request to access, correct, or delete personal information associated with
-          Stripes. Putting “Privacy request” in the subject line will help identify it.
+          {t("public.info.support.privacy.body")}
         </p>
       </Section>
 
-      <Section title="Please don't send sensitive information">
+      <Section title={t("public.info.support.sensitive.title")}>
         <p>
-          Never send passwords, authentication codes, or unnecessary sensitive
-          information about club members in a support email.
+          {t("public.info.support.sensitive.body")}
         </p>
       </Section>
 
-      <Section title="Meetup">
+      <Section title={t("public.info.support.meetup.title")}>
         <p>
-          Meetup import is planned but is not currently an available Stripes
-          integration. Any future connection will be optional and will require the
-          organizer to authorize access.
+          {t("public.info.support.meetup.body")}
         </p>
       </Section>
     </>

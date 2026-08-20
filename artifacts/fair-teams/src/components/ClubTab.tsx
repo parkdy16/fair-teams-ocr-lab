@@ -52,7 +52,6 @@ import {
 import type { PairingRule } from "@/lib/types";
 import { bestPlayerNameMatch } from "@/lib/playerNameMatching";
 import {
-  DEFAULT_ATTENDANCE_WARNING_TEMPLATES,
   deleteAttendanceIssue,
   listenToAttendanceIssues,
   listenToAttendanceWarningTemplates,
@@ -79,12 +78,21 @@ import {
 import {
   BALANCED_PLAYER_STYLE,
   generateStyledPlayerAttributes,
-  getPlayerStyleDefinition,
   inferPlayerStyleFromAttributes,
   type PlayerStyleAttributes,
   type PlayerStyleValue,
 } from "@/lib/playerStyleProfile";
+import { playerStyleTranslationKeys } from "@/i18n/playerStyle";
 import { fileCabinetGoogleLoginHint } from "@/lib/fileCabinetDriveAccess";
+import {
+  formatDateTime,
+  formatList,
+  formatNumber,
+  formatPercent,
+  getResolvedUiLocale,
+  translate,
+  type TranslationKey,
+} from "@/i18n";
 
 type ClubTabProps = {
   isActive?: boolean;
@@ -131,16 +139,29 @@ type EquipmentHolder = {
   label: string;
 };
 
+type SharedPersonPresentation =
+  | { stableKey: string; kind: "me" }
+  | { stableKey: string; kind: "organizer" }
+  | { stableKey: string; kind: "person"; number: number }
+  | { stableKey: string; kind: "named"; label: string };
+
+type AttendanceWarningCopyNotice =
+  | { tone: "success" }
+  | { tone: "error"; message: string };
+
 type ClubEquipmentKit = FirebaseEquipmentBag;
 
 const EQUIPMENT_PREVIEW_STORAGE_KEY = "fairteams.clubEquipment.preview.v1";
 const CLUB_DESK_COLLAPSED_STORAGE_KEY = "fairteams.clubDesk.collapsed.v2";
 
-const ATTENDANCE_ISSUE_OPTIONS: Array<{ value: AttendanceIssueType; label: string }> = [
-  { value: "tardy", label: "Tardy" },
-  { value: "late-cancellation", label: "Last-minute cancellation" },
-  { value: "no-show", label: "No-show" },
-  { value: "conduct", label: "Conduct issue" },
+const ATTENDANCE_ISSUE_OPTIONS: Array<{
+  value: AttendanceIssueType;
+  labelKey: TranslationKey;
+}> = [
+  { value: "tardy", labelKey: "club.attendance.issue.tardy" },
+  { value: "late-cancellation", labelKey: "club.attendance.issue.lateCancellation" },
+  { value: "no-show", labelKey: "club.attendance.issue.noShow" },
+  { value: "conduct", labelKey: "club.attendance.issue.conduct" },
 ];
 
 type AttendanceRange = "3m" | "6m" | "12m" | "all";
@@ -153,40 +174,68 @@ function todayIsoDate() {
 }
 
 function attendanceIssueLabel(issueType: AttendanceIssueType) {
-  return ATTENDANCE_ISSUE_OPTIONS.find((option) => option.value === issueType)?.label || "Attendance issue";
+  const option = ATTENDANCE_ISSUE_OPTIONS.find((candidate) => candidate.value === issueType);
+  return option ? translate(option.labelKey) : translate("club.attendance.issue.fallback");
 }
 
 function formatAttendanceDate(value: string) {
   const parsed = new Date(`${value}T12:00:00`);
   if (Number.isNaN(parsed.getTime())) return value;
-  return new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short", year: "numeric" }).format(parsed);
+  return formatDateTime(getResolvedUiLocale(), parsed, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
 }
 
-const ATTENDANCE_WARNING_TEMPLATE_OPTIONS: Array<{ value: AttendanceWarningTemplateKind; label: string }> = [
-  { value: "late-cancellation", label: "Last-minute cancellation" },
-  { value: "no-show", label: "No-show" },
-  { value: "tardy", label: "Tardy / repeated lateness" },
-  { value: "dismissal", label: "Dismissal from group" },
+const ATTENDANCE_WARNING_TEMPLATE_OPTIONS: Array<{
+  value: AttendanceWarningTemplateKind;
+  labelKey: TranslationKey;
+}> = [
+  { value: "late-cancellation", labelKey: "club.attendance.template.lateCancellation" },
+  { value: "no-show", labelKey: "club.attendance.template.noShow" },
+  { value: "tardy", labelKey: "club.attendance.template.tardy" },
+  { value: "dismissal", labelKey: "club.attendance.template.dismissal" },
 ];
 
-function attendanceRangeText(range: AttendanceRange) {
-  if (range === "3m") return "last 3 months";
-  if (range === "6m") return "last 6 months";
-  if (range === "12m") return "last 12 months";
-  return "full recorded history";
+function localizedAttendanceWarningTemplates(): AttendanceWarningTemplates {
+  return {
+    "late-cancellation": translate(
+      "club.attendance.defaultTemplate.lateCancellation",
+    ),
+    "no-show": translate("club.attendance.defaultTemplate.noShow"),
+    tardy: translate("club.attendance.defaultTemplate.tardy"),
+    dismissal: translate("club.attendance.defaultTemplate.dismissal"),
+  };
 }
 
-function countPhrase(count: number, singular: string, plural: string) {
-  return `${count} ${count === 1 ? singular : plural}`;
+function attendanceRangeText(range: AttendanceRange) {
+  if (range === "3m") return translate("club.attendance.range.last3Months");
+  if (range === "6m") return translate("club.attendance.range.last6Months");
+  if (range === "12m") return translate("club.attendance.range.last12Months");
+  return translate("club.attendance.range.fullHistory");
+}
+
+function countPhrase(count: number, key: TranslationKey) {
+  return translate(key, { count });
+}
+
+function attendanceSummaryText(count: number, key: TranslationKey) {
+  return translate(key, {
+    count,
+    formattedCount: formatNumber(getResolvedUiLocale(), count),
+  });
 }
 
 function formatAttendanceDateList(dates: string[]) {
   const unique = Array.from(new Set(dates)).sort();
-  if (!unique.length) return "the recorded dates";
+  if (!unique.length) return translate("club.attendance.recordedDates");
   const formatted = unique.map(formatAttendanceDate);
   if (formatted.length === 1) return formatted[0];
-  if (formatted.length === 2) return `${formatted[0]} and ${formatted[1]}`;
-  return `${formatted.slice(0, -1).join(", ")}, and ${formatted[formatted.length - 1]}`;
+  return formatList(getResolvedUiLocale(), formatted, {
+    style: "long",
+    type: "conjunction",
+  });
 }
 
 function fillAttendanceWarningTemplate(
@@ -207,10 +256,10 @@ function fillAttendanceWarningTemplate(
     "{player}": context.player,
     "{group}": context.group,
     "{period}": context.period,
-    "{last_minute}": countPhrase(context.lateCancellationCount, "last-minute cancellation", "last-minute cancellations"),
-    "{no_shows}": countPhrase(context.noShowCount, "no-show", "no-shows"),
-    "{tardies}": countPhrase(context.tardyCount, "tardy", "tardies"),
-    "{attendance_issues}": countPhrase(attendanceIssueCount, "attendance issue", "attendance issues"),
+    "{last_minute}": countPhrase(context.lateCancellationCount, "club.attendance.count.lastMinuteCancellation"),
+    "{no_shows}": countPhrase(context.noShowCount, "club.attendance.count.noShow"),
+    "{tardies}": countPhrase(context.tardyCount, "club.attendance.count.tardy"),
+    "{attendance_issues}": countPhrase(attendanceIssueCount, "club.attendance.count.issue"),
     "{last_minute_count}": String(context.lateCancellationCount),
     "{no_show_count}": String(context.noShowCount),
     "{tardy_count}": String(context.tardyCount),
@@ -230,7 +279,9 @@ async function copyText(text: string) {
       // Fall back to the legacy copy path below.
     }
   }
-  if (typeof document === "undefined") throw new Error("Copy is not available on this device.");
+  if (typeof document === "undefined") {
+    throw new Error(translate("club.errors.copyUnavailable"));
+  }
   const textarea = document.createElement("textarea");
   textarea.value = text;
   textarea.setAttribute("readonly", "");
@@ -240,7 +291,7 @@ async function copyText(text: string) {
   textarea.select();
   const copied = document.execCommand("copy");
   document.body.removeChild(textarea);
-  if (!copied) throw new Error("Could not copy warning text.");
+  if (!copied) throw new Error(translate("club.errors.copyWarningFailed"));
 }
 
 const EQUIPMENT_COLORS = [
@@ -263,35 +314,35 @@ const EQUIPMENT_COLORS = [
 
 const DEFAULT_EQUIPMENT_COLOR = EQUIPMENT_COLORS[0];
 
-const EQUIPMENT_COLOR_NAMES: Record<string, string> = {
-  "#111827": "Black",
-  "#475569": "Slate",
-  "#1e3a8a": "Navy",
-  "#2563eb": "Blue",
-  "#0891b2": "Cyan",
-  "#0f766e": "Teal",
-  "#16a34a": "Green",
-  "#ca8a04": "Yellow",
-  "#ea580c": "Orange",
-  "#dc2626": "Red",
-  "#9f1239": "Burgundy",
-  "#db2777": "Pink",
-  "#7c3aed": "Purple",
-  "#8b5e34": "Brown",
-  "#f8fafc": "White",
+const EQUIPMENT_COLOR_LABEL_KEYS: Record<string, TranslationKey> = {
+  "#111827": "club.colors.black",
+  "#475569": "club.colors.slate",
+  "#1e3a8a": "club.colors.navy",
+  "#2563eb": "club.colors.blue",
+  "#0891b2": "club.colors.cyan",
+  "#0f766e": "club.colors.teal",
+  "#16a34a": "club.colors.green",
+  "#ca8a04": "club.colors.yellow",
+  "#ea580c": "club.colors.orange",
+  "#dc2626": "club.colors.red",
+  "#9f1239": "club.colors.burgundy",
+  "#db2777": "club.colors.pink",
+  "#7c3aed": "club.colors.purple",
+  "#8b5e34": "club.colors.brown",
+  "#f8fafc": "club.colors.white",
 };
 
 const EQUIPMENT_PRESETS = [
-  { key: "balls", label: "Balls" },
-  { key: "flat-cones", label: "Flat cones" },
-  { key: "tower-cones", label: "Tower cones" },
-  { key: "bibs", label: "Bibs / vests" },
-  { key: "team-bands", label: "Team bands" },
-  { key: "ball-pumps", label: "Ball pumps" },
-  { key: "goals", label: "Goals" },
-  { key: "first-aid", label: "First-aid kits" },
-  { key: "first-aid-spray", label: "First-aid spray" },
-  { key: "whistles", label: "Whistles" },
+  { key: "balls", label: "Balls", labelKey: "club.equipment.preset.balls" },
+  { key: "flat-cones", label: "Flat cones", labelKey: "club.equipment.preset.flatCones" },
+  { key: "tower-cones", label: "Tower cones", labelKey: "club.equipment.preset.towerCones" },
+  { key: "bibs", label: "Bibs / vests", labelKey: "club.equipment.preset.bibs" },
+  { key: "team-bands", label: "Team bands", labelKey: "club.equipment.preset.teamBands" },
+  { key: "ball-pumps", label: "Ball pumps", labelKey: "club.equipment.preset.ballPumps" },
+  { key: "goals", label: "Goals", labelKey: "club.equipment.preset.goals" },
+  { key: "first-aid", label: "First-aid kits", labelKey: "club.equipment.preset.firstAidKits" },
+  { key: "first-aid-spray", label: "First-aid spray", labelKey: "club.equipment.preset.firstAidSpray" },
+  { key: "whistles", label: "Whistles", labelKey: "club.equipment.preset.whistles" },
 ] as const;
 
 const EQUIPMENT_PRESET_ORDER = new Map<string, number>(
@@ -330,7 +381,9 @@ function legacyEquipmentItems(contents: string[]): EquipmentInventoryItem[] {
     });
     // Old generic cones and color-specific bibs are deliberately kept custom;
     // we cannot safely guess flat vs tower or erase useful color information.
-    const legacyLabel = /^cones?$/.test(normalized) ? "Cones (legacy)" : rawLabel.replace(/^\w/, (letter) => letter.toUpperCase());
+    const legacyLabel = /^cones?$/.test(normalized)
+      ? translate("club.equipment.legacyCones")
+      : rawLabel.replace(/^\w/, (letter) => letter.toUpperCase());
     const label = preset?.label || legacyLabel;
     const key = preset?.key || `custom:${equipmentItemKey(label)}`;
     const existing = items.find((item) => item.key === key && item.label.toLowerCase() === label.toLowerCase());
@@ -347,7 +400,9 @@ function equipmentItemsForKit(kit: ClubEquipmentKit): EquipmentInventoryItem[] {
   return structured.length ? structured.map((item) => ({ ...item })) : legacyEquipmentItems(kit.contents || []);
 }
 
-function equipmentItemDisplayLabel(item: EquipmentInventoryItem) {
+function equipmentItemCanonicalLabel(item: EquipmentInventoryItem) {
+  // `contents` is persisted legacy compatibility text. Keep its established
+  // canonical value stable; live presentation uses the catalog-backed helper below.
   if (item.key !== "balls") return item.label;
   const brand = item.brand?.trim();
   const size = item.size?.trim();
@@ -357,77 +412,121 @@ function equipmentItemDisplayLabel(item: EquipmentInventoryItem) {
   return `Balls · Size ${size}`;
 }
 
+function equipmentItemDisplayLabel(item: EquipmentInventoryItem) {
+  if (item.custom) return item.label;
+  if (item.key !== "balls") {
+    const preset = EQUIPMENT_PRESETS.find((candidate) => candidate.key === item.key);
+    return preset ? translate(preset.labelKey) : item.label;
+  }
+  const brand = item.brand?.trim();
+  const size = item.size?.trim();
+  if (!brand && !size) return translate("club.equipment.preset.balls");
+  if (brand && size) {
+    return translate("club.equipment.ballDetailsWithSize", { brand, size });
+  }
+  if (brand) return brand;
+  return translate("club.equipment.ballsWithSize", { size });
+}
+
 function equipmentContentsFromItems(items: EquipmentInventoryItem[]) {
   return items
     .filter((item) => item.label.trim() && item.quantity > 0)
     .map((item) => {
       const quantity = Math.max(1, Math.round(item.quantity));
-      const label = equipmentItemDisplayLabel(item);
+      const label = equipmentItemCanonicalLabel(item);
       return quantity === 1 ? label : `${quantity} ${label}`;
     })
     .slice(0, 30);
 }
 
-const LOCAL_EQUIPMENT_HOLDERS: EquipmentHolder[] = [
-  { id: "storage", label: "Club storage" },
-  { id: "you", label: "You" },
-  { id: "other", label: "Other organizer" },
+const LOCAL_EQUIPMENT_HOLDERS: Array<{
+  id: string;
+  labelKey: TranslationKey;
+}> = [
+  { id: "storage", labelKey: "club.equipment.clubStorage" },
+  { id: "you", labelKey: "club.people.you" },
+  { id: "other", labelKey: "club.people.otherOrganizer" },
 ];
 
-const DEFAULT_EQUIPMENT_KITS: ClubEquipmentKit[] = [
-  {
-    id: "kit-ball-bag",
-    name: "Ball bag",
-    holderId: "you",
-    color: "#2563eb",
-    contents: ["2 Balls", "Ball pumps"],
-    items: [
-      { key: "balls", label: "Balls", quantity: 2 },
-      { key: "ball-pumps", label: "Ball pumps", quantity: 1 },
-    ],
-    createdAt: Date.now(),
-    createdByName: "Preview",
-    updatedAt: Date.now(),
-    updatedByName: "Preview",
-  },
-  {
-    id: "kit-bibs",
-    name: "Bibs",
-    holderId: "storage",
-    color: "#db2777",
-    contents: ["10 Dark bibs", "10 Light bibs"],
-    items: [
-      { key: "custom:dark-bibs", label: "Dark bibs", quantity: 10, custom: true },
-      { key: "custom:light-bibs", label: "Light bibs", quantity: 10, custom: true },
-    ],
-    createdAt: Date.now(),
-    createdByName: "Preview",
-    updatedAt: Date.now(),
-    updatedByName: "Preview",
-  },
-  {
-    id: "kit-cones",
-    name: "Cone stack",
-    holderId: "storage",
-    color: "#ea580c",
-    contents: ["12 Flat cones"],
-    items: [{ key: "flat-cones", label: "Flat cones", quantity: 12 }],
-    createdAt: Date.now(),
-    createdByName: "Preview",
-    updatedAt: Date.now(),
-    updatedByName: "Preview",
-  },
-];
+function defaultEquipmentContent(count: number, item: string) {
+  return translate("club.equipment.defaultKit.itemCount", {
+    count,
+    formattedCount: formatNumber(getResolvedUiLocale(), count),
+    item,
+  });
+}
+
+function createDefaultEquipmentKits(): ClubEquipmentKit[] {
+  const now = Date.now();
+  const previewActor = translate("club.equipment.defaultKit.previewActor");
+  const balls = translate("club.equipment.preset.balls");
+  const ballPumps = translate("club.equipment.preset.ballPumps");
+  const darkBibs = translate("club.equipment.defaultKit.darkBibs");
+  const lightBibs = translate("club.equipment.defaultKit.lightBibs");
+  const flatCones = translate("club.equipment.preset.flatCones");
+
+  return [
+    {
+      id: "kit-ball-bag",
+      name: translate("club.equipment.defaultKit.ballBagName"),
+      holderId: "you",
+      color: "#2563eb",
+      contents: [defaultEquipmentContent(2, balls), ballPumps],
+      items: [
+        { key: "balls", label: balls, quantity: 2 },
+        { key: "ball-pumps", label: ballPumps, quantity: 1 },
+      ],
+      createdAt: now,
+      createdByName: previewActor,
+      updatedAt: now,
+      updatedByName: previewActor,
+    },
+    {
+      id: "kit-bibs",
+      name: translate("club.equipment.defaultKit.bibsName"),
+      holderId: "storage",
+      color: "#db2777",
+      contents: [
+        defaultEquipmentContent(10, darkBibs),
+        defaultEquipmentContent(10, lightBibs),
+      ],
+      items: [
+        { key: "custom:dark-bibs", label: darkBibs, quantity: 10, custom: true },
+        { key: "custom:light-bibs", label: lightBibs, quantity: 10, custom: true },
+      ],
+      createdAt: now,
+      createdByName: previewActor,
+      updatedAt: now,
+      updatedByName: previewActor,
+    },
+    {
+      id: "kit-cones",
+      name: translate("club.equipment.defaultKit.coneStackName"),
+      holderId: "storage",
+      color: "#ea580c",
+      contents: [defaultEquipmentContent(12, flatCones)],
+      items: [{ key: "flat-cones", label: flatCones, quantity: 12 }],
+      createdAt: now,
+      createdByName: previewActor,
+      updatedAt: now,
+      updatedByName: previewActor,
+    },
+  ];
+}
 
 type RatingProfileDraft = PlayerStyleAttributes;
 
-const RATING_STAT_FIELDS: Array<{ key: keyof Omit<PlayerStyleAttributes, "teamPlay">; label: string; short: string }> = [
-  { key: "attack", label: "Attack", short: "ATK" },
-  { key: "defense", label: "Defense", short: "DEF" },
-  { key: "passing", label: "Passing", short: "PASS" },
-  { key: "speed", label: "Speed", short: "SPD" },
-  { key: "stamina", label: "Stamina", short: "STA" },
-  { key: "physical", label: "Physical", short: "PHY" },
+const RATING_STAT_FIELDS: Array<{
+  key: keyof Omit<PlayerStyleAttributes, "teamPlay">;
+  labelKey: TranslationKey;
+  shortKey: TranslationKey;
+}> = [
+  { key: "attack", labelKey: "club.ratings.stat.attack", shortKey: "club.ratings.statShort.attack" },
+  { key: "defense", labelKey: "club.ratings.stat.defense", shortKey: "club.ratings.statShort.defense" },
+  { key: "passing", labelKey: "club.ratings.stat.passing", shortKey: "club.ratings.statShort.passing" },
+  { key: "speed", labelKey: "club.ratings.stat.speed", shortKey: "club.ratings.statShort.speed" },
+  { key: "stamina", labelKey: "club.ratings.stat.stamina", shortKey: "club.ratings.statShort.stamina" },
+  { key: "physical", labelKey: "club.ratings.stat.physical", shortKey: "club.ratings.statShort.physical" },
 ];
 
 function roundRatingStep(value: number) {
@@ -456,7 +555,7 @@ function ClubRatingStatControl({
           <div className="text-[9px] font-black uppercase tracking-wide text-slate-400">{short}</div>
           <div className="text-[11px] font-black text-[#102A43]">{label}</div>
         </div>
-        <div className="text-sm font-black tabular-nums text-[#102A43]">{Number(value).toFixed(1)}</div>
+        <div className="text-sm font-black tabular-nums text-[#102A43]">{formatNumber(getResolvedUiLocale(), Number(value), { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</div>
       </div>
       <input
         type="range"
@@ -512,23 +611,77 @@ function looksLikeReadableName(value: string) {
   return words.every((word) => /^[a-zA-ZÀ-ž]{2,}$/.test(word));
 }
 
-function cleanEquipmentHolderLabel(
+type EquipmentHolderPresentation =
+  | { kind: "current-user"; stableKey: "current-user" }
+  | { kind: "organizer-fallback"; stableKey: "organizer-fallback" }
+  | { kind: "named"; stableKey: string; label: string };
+
+function equipmentHolderPresentation(
   value: string,
   namesByEmail: Record<string, string> = {},
-) {
+): EquipmentHolderPresentation {
   const trimmed = value.trim();
-  if (!trimmed) return "Organizer";
-  if (isLikelyCurrentUserLabel(trimmed)) return "You";
+  if (!trimmed) {
+    return { kind: "organizer-fallback", stableKey: "organizer-fallback" };
+  }
+  if (isLikelyCurrentUserLabel(trimmed)) {
+    return { kind: "current-user", stableKey: "current-user" };
+  }
 
   const normalizedEmail = trimmed.toLowerCase();
   const savedName = normalizedEmail.includes("@")
     ? namesByEmail[normalizedEmail]
     : undefined;
-  if (savedName?.trim()) return titleCaseWords(savedName.trim());
+  if (savedName?.trim()) {
+    const label = titleCaseWords(savedName.trim());
+    return { kind: "named", stableKey: `name:${label.toLocaleLowerCase()}`, label };
+  }
 
   const emailName = trimmed.includes("@") ? trimmed.split("@")[0] : trimmed;
+  if (
+    normalizedEmail.includes("@") &&
+    emailName.trim().toLowerCase() === "organizer"
+  ) {
+    return { kind: "organizer-fallback", stableKey: "organizer-fallback" };
+  }
   const readableName = titleCaseWords(emailName.replace(/[._-]+/g, " "));
-  return looksLikeReadableName(readableName) ? readableName : "Organizer";
+  if (looksLikeReadableName(readableName)) {
+    return {
+      kind: "named",
+      stableKey: `name:${readableName.toLocaleLowerCase()}`,
+      label: readableName,
+    };
+  }
+
+  return { kind: "organizer-fallback", stableKey: "organizer-fallback" };
+}
+
+function equipmentHolderPresentationLabel(
+  presentation: EquipmentHolderPresentation,
+) {
+  if (presentation.kind === "current-user") return translate("club.people.you");
+  if (presentation.kind === "organizer-fallback") {
+    return translate("club.people.organizer");
+  }
+  return presentation.label;
+}
+
+function sharedPersonPresentationLabel(person: SharedPersonPresentation) {
+  if (person.kind === "me") return translate("club.people.me");
+  if (person.kind === "organizer") return translate("club.people.organizer");
+  if (person.kind === "person") {
+    return translate("club.people.personNumber", { number: person.number });
+  }
+  return person.label;
+}
+
+function cleanEquipmentHolderLabel(
+  value: string,
+  namesByEmail: Record<string, string> = {},
+) {
+  return equipmentHolderPresentationLabel(
+    equipmentHolderPresentation(value, namesByEmail),
+  );
 }
 
 function equipmentActorLabel(
@@ -539,16 +692,18 @@ function equipmentActorLabel(
   const cleanName = name?.trim();
   if (cleanName && !cleanName.includes("@")) return titleCaseWords(cleanName);
   const cleanEmail = email?.trim() || cleanName || "";
-  if (!cleanEmail) return "Unknown";
-  const label = cleanEquipmentHolderLabel(cleanEmail, namesByEmail);
-  return label === "Organizer" ? "Unknown" : label;
+  if (!cleanEmail) return translate("club.people.unknown");
+  const presentation = equipmentHolderPresentation(cleanEmail, namesByEmail);
+  return presentation.kind === "organizer-fallback"
+    ? translate("club.people.unknown")
+    : equipmentHolderPresentationLabel(presentation);
 }
 
 function formatEquipmentTimestamp(value?: number) {
-  if (!value) return "time not recorded";
+  if (!value) return translate("club.time.notRecorded");
   const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) return "time not recorded";
-  return date.toLocaleString([], {
+  if (!Number.isFinite(date.getTime())) return translate("club.time.notRecorded");
+  return formatDateTime(getResolvedUiLocale(), date, {
     month: "short",
     day: "numeric",
     hour: "2-digit",
@@ -557,10 +712,10 @@ function formatEquipmentTimestamp(value?: number) {
 }
 
 function formatClubNoteDate(value?: number) {
-  if (!value) return "date not recorded";
+  if (!value) return translate("club.time.dateNotRecorded");
   const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) return "date not recorded";
-  return date.toLocaleDateString([], {
+  if (!Number.isFinite(date.getTime())) return translate("club.time.dateNotRecorded");
+  return formatDateTime(getResolvedUiLocale(), date, {
     month: "short",
     day: "numeric",
   });
@@ -591,13 +746,15 @@ function buildSharedEquipmentHolders(
   };
 
   currentUserLabels.forEach((label) =>
-    addHolder(makeEquipmentHolderId(label), "You"),
+    addHolder(makeEquipmentHolderId(label), translate("club.people.you")),
   );
   otherLabels.slice(0, 8).forEach((label, index) => {
-    const cleaned = cleanEquipmentHolderLabel(label, namesByEmail);
+    const presentation = equipmentHolderPresentation(label, namesByEmail);
     addHolder(
       makeEquipmentHolderId(label),
-      cleaned === "Organizer" ? `Organizer ${index + 1}` : cleaned,
+      presentation.kind === "organizer-fallback"
+        ? translate("club.people.organizerNumber", { number: index + 1 })
+        : equipmentHolderPresentationLabel(presentation),
     );
   });
 
@@ -608,9 +765,11 @@ function buildSharedEquipmentHolders(
       addHolder(holderId, cleanEquipmentHolderLabel(holderId, namesByEmail)),
     );
 
-  if (!holders.length) holders.push({ id: "organizer", label: "Organizer" });
+  if (!holders.length) {
+    holders.push({ id: "organizer", label: translate("club.people.organizer") });
+  }
 
-  return [{ id: "storage", label: "Club storage" }, ...holders];
+  return [{ id: "storage", label: translate("club.equipment.clubStorage") }, ...holders];
 }
 
 function makeEquipmentHolderId(value: string) {
@@ -627,7 +786,7 @@ function makeId(prefix: string) {
 
 function parseEquipmentKits(
   raw: string | null,
-  fallback: ClubEquipmentKit[] = DEFAULT_EQUIPMENT_KITS,
+  fallback: ClubEquipmentKit[] = createDefaultEquipmentKits(),
 ): ClubEquipmentKit[] {
   if (!raw) return fallback;
   try {
@@ -817,13 +976,13 @@ function clubNoteTextClass(text: string) {
 function getClubGreetingName(user: SharedRosterUser | null) {
   const displayName = user?.displayName?.trim();
   if (displayName) return displayName.split(/\s+/)[0] || displayName;
-  const emailName = user?.email?.split("@")[0] || "Organizer";
+  const emailName = user?.email?.split("@")[0] || translate("club.people.organizer");
   return emailName
     .replace(/[._-]+/g, " ")
     .split(" ")
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ") || "Organizer";
+    .join(" ") || translate("club.people.organizer");
 }
 
 export function ClubTab({
@@ -861,6 +1020,7 @@ export function ClubTab({
   tutorialStep,
   onTutorialAction,
 }: ClubTabProps) {
+  const uiLocale = getResolvedUiLocale();
   const [clubRatingSummaries, setClubRatingSummaries] = useState<
     ClubRatingSummary[]
   >([]);
@@ -903,12 +1063,16 @@ export function ClubTab({
   const [attendanceDate, setAttendanceDate] = useState(todayIsoDate);
   const [attendanceNote, setAttendanceNote] = useState("");
   const [attendanceDuplicate, setAttendanceDuplicate] = useState<AttendanceIssueRecord | null>(null);
-  const [attendanceWarningTemplates, setAttendanceWarningTemplates] = useState<AttendanceWarningTemplates>(() => ({ ...DEFAULT_ATTENDANCE_WARNING_TEMPLATES }));
+  const [attendanceWarningTemplates, setAttendanceWarningTemplates] =
+    useState<AttendanceWarningTemplates>(localizedAttendanceWarningTemplates);
   const [attendanceWarningTemplatesLoading, setAttendanceWarningTemplatesLoading] = useState(false);
   const [attendanceWarningTemplatesError, setAttendanceWarningTemplatesError] = useState("");
   const [attendanceWarningTemplatesOpen, setAttendanceWarningTemplatesOpen] = useState(false);
   const [attendanceWarningTemplateKind, setAttendanceWarningTemplateKind] = useState<AttendanceWarningTemplateKind>("late-cancellation");
-  const [attendanceWarningTemplateDraft, setAttendanceWarningTemplateDraft] = useState(DEFAULT_ATTENDANCE_WARNING_TEMPLATES["late-cancellation"]);
+  const [attendanceWarningTemplateDraft, setAttendanceWarningTemplateDraft] =
+    useState(
+      () => localizedAttendanceWarningTemplates()["late-cancellation"],
+    );
   const [attendanceWarningTemplateSaving, setAttendanceWarningTemplateSaving] = useState(false);
   const [attendanceWarningTemplateNotice, setAttendanceWarningTemplateNotice] = useState("");
   const [attendanceWarningBoardOpen, setAttendanceWarningBoardOpen] = useState(false);
@@ -916,9 +1080,10 @@ export function ClubTab({
   const [attendanceWarningComposerOpen, setAttendanceWarningComposerOpen] = useState(false);
   const [attendanceWarningComposerKind, setAttendanceWarningComposerKind] = useState<AttendanceWarningTemplateKind>("late-cancellation");
   const [attendanceWarningComposerDraft, setAttendanceWarningComposerDraft] = useState("");
-  const [attendanceWarningCopyNotice, setAttendanceWarningCopyNotice] = useState("");
+  const [attendanceWarningCopyNotice, setAttendanceWarningCopyNotice] =
+    useState<AttendanceWarningCopyNotice | null>(null);
   const [equipmentKits, setEquipmentKits] = useState<ClubEquipmentKit[]>(() => {
-    if (typeof window === "undefined") return DEFAULT_EQUIPMENT_KITS;
+    if (typeof window === "undefined") return createDefaultEquipmentKits();
     return parseEquipmentKits(
       window.localStorage.getItem(EQUIPMENT_PREVIEW_STORAGE_KEY),
     );
@@ -1005,43 +1170,52 @@ export function ClubTab({
   const equipmentSharedConnecting = isSharedRoster && !equipmentRealtimeEnabled;
   const equipmentStatusText = equipmentCanSyncOnline
     ? equipmentError
-      ? "Reconnecting equipment…"
+      ? translate("club.equipment.status.reconnecting")
       : equipmentSaving
-        ? "Saving equipment…"
+        ? translate("club.equipment.status.saving")
         : equipmentLoading
           ? equipmentKits.length > 0
-            ? "Online · live board"
-            : "Online · loading bags"
-          : "Online · shared equipment"
+            ? translate("club.equipment.status.onlineLiveBoard")
+            : translate("club.equipment.status.onlineLoadingBags")
+          : translate("club.equipment.status.onlineShared")
     : equipmentWaitingForAccount
-      ? "Connecting account…"
+      ? translate("club.account.connecting")
       : equipmentNeedsSignIn
-        ? "Sign in for online equipment"
+        ? translate("club.equipment.status.signIn")
         : equipmentSharedConnecting
-          ? sharedAuthorityMessage || "Connecting shared equipment…"
-          : "Local preview";
+          ? sharedAuthorityMessage || translate("club.equipment.status.connectingShared")
+          : translate("club.equipment.status.localPreview");
   const equipmentBoardStatusText = equipmentMoveNotice
-    ? `${equipmentMoveNotice}${equipmentCanSyncOnline ? " · saved online" : ""}`
+    ? equipmentCanSyncOnline
+      ? translate("club.equipment.status.moveSavedOnline", { notice: equipmentMoveNotice })
+      : equipmentMoveNotice
     : equipmentCanSyncOnline
       ? equipmentError
-        ? "Reconnecting equipment board…"
+        ? translate("club.equipment.status.reconnectingBoard")
         : equipmentSaving
-          ? "Saving equipment…"
+          ? translate("club.equipment.status.saving")
           : equipmentLoading
             ? equipmentKits.length > 0
-              ? "Online · loading latest bags…"
-              : "Online · loading bags…"
-            : `Online · shared equipment${equipmentLastSyncedAt ? ` · updated ${formatEquipmentTimestamp(equipmentLastSyncedAt)}` : ""}`
+              ? translate("club.equipment.status.onlineLoadingLatest")
+              : translate("club.equipment.status.onlineLoadingBagsProgress")
+            : equipmentLastSyncedAt
+              ? translate("club.equipment.status.onlineSharedUpdated", {
+                  time: formatEquipmentTimestamp(equipmentLastSyncedAt),
+                })
+              : translate("club.equipment.status.onlineShared")
       : equipmentWaitingForAccount
-        ? "Connecting account…"
+        ? translate("club.account.connecting")
         : equipmentNeedsSignIn
-          ? "Sign in to use the shared equipment board online."
+          ? translate("club.equipment.status.signInBoard")
           : equipmentSharedConnecting
-            ? sharedAuthorityMessage || "Connecting shared equipment…"
-            : "Local preview · drag bags to move";
+            ? sharedAuthorityMessage || translate("club.equipment.status.connectingShared")
+            : translate("club.equipment.status.localPreviewMove");
   const equipmentHolders = useMemo<EquipmentHolder[]>(() => {
     if (!isSharedRoster && !equipmentRealtimeEnabled)
-      return LOCAL_EQUIPMENT_HOLDERS;
+      return LOCAL_EQUIPMENT_HOLDERS.map(({ id, labelKey }) => ({
+        id,
+        label: translate(labelKey),
+      }));
     return buildSharedEquipmentHolders(
       equipmentHolderLabels,
       equipmentKits,
@@ -1053,6 +1227,7 @@ export function ClubTab({
     equipmentKits,
     equipmentRealtimeEnabled,
     isSharedRoster,
+    uiLocale,
   ]);
   const actionBoardOrganizerPeople = useMemo(
     () =>
@@ -1066,7 +1241,7 @@ export function ClubTab({
         email,
         name: cleanEquipmentHolderLabel(email, equipmentHolderNamesByEmail),
       })),
-    [equipmentHolderNamesByEmail, notificationRecipientEmails],
+    [equipmentHolderNamesByEmail, notificationRecipientEmails, uiLocale],
   );
   const actionBoardEquipmentItems = useMemo(
     () =>
@@ -1078,7 +1253,7 @@ export function ClubTab({
             .filter(Boolean),
         ),
       ).slice(0, 24),
-    [equipmentKits],
+    [equipmentKits, uiLocale],
   );
   const cleanPairingRuleCount = pairingRules.filter(
     (rule) => rule.playerAId && rule.playerBId,
@@ -1140,7 +1315,7 @@ export function ClubTab({
         (error) => {
           setEquipmentLoading(false);
           setEquipmentError(
-            error.message || "Could not load shared equipment board.",
+            error.message || translate("club.errors.loadEquipmentFailed"),
           );
         },
       );
@@ -1151,7 +1326,7 @@ export function ClubTab({
       setEquipmentError(
         error instanceof Error
           ? error.message
-          : "Could not connect equipment board.",
+          : translate("club.errors.connectEquipmentFailed"),
       );
       return undefined;
     }
@@ -1183,19 +1358,19 @@ export function ClubTab({
         },
         (error) => {
           setAttendanceLoading(false);
-          setAttendanceError(error.message || "Could not load attendance records.");
+          setAttendanceError(error.message || translate("club.errors.loadAttendanceFailed"));
         },
       );
     } catch (error) {
       setAttendanceLoading(false);
-      setAttendanceError(error instanceof Error ? error.message : "Could not connect Club attendance.");
+      setAttendanceError(error instanceof Error ? error.message : translate("club.errors.connectAttendanceFailed"));
       return undefined;
     }
   }, [attendanceReadEnabled, sharedRosterId]);
 
   useEffect(() => {
     if (!attendanceReadEnabled || !sharedRosterId) {
-      setAttendanceWarningTemplates({ ...DEFAULT_ATTENDANCE_WARNING_TEMPLATES });
+      setAttendanceWarningTemplates(localizedAttendanceWarningTemplates());
       setAttendanceWarningTemplatesLoading(false);
       setAttendanceWarningTemplatesError("");
       return;
@@ -1212,15 +1387,16 @@ export function ClubTab({
         },
         (error) => {
           setAttendanceWarningTemplatesLoading(false);
-          setAttendanceWarningTemplatesError(error.message || "Could not load warning templates.");
+          setAttendanceWarningTemplatesError(error.message || translate("club.errors.loadWarningTemplatesFailed"));
         },
+        localizedAttendanceWarningTemplates(),
       );
     } catch (error) {
       setAttendanceWarningTemplatesLoading(false);
-      setAttendanceWarningTemplatesError(error instanceof Error ? error.message : "Could not connect warning templates.");
+      setAttendanceWarningTemplatesError(error instanceof Error ? error.message : translate("club.errors.connectWarningTemplatesFailed"));
       return undefined;
     }
-  }, [attendanceReadEnabled, sharedRosterId]);
+  }, [attendanceReadEnabled, sharedRosterId, uiLocale]);
 
   const clubRatingsEnabled = Boolean(
     isSharedRoster
@@ -1250,7 +1426,7 @@ export function ClubTab({
           setClubRatingLoading(false);
         },
         (error) => {
-          setClubRatingError(error.message || "Could not load Club ratings.");
+          setClubRatingError(error.message || translate("club.errors.loadRatingsFailed"));
           setClubRatingLoading(false);
         },
       );
@@ -1261,7 +1437,7 @@ export function ClubTab({
           setClubRatingLoading(false);
         },
         (error) => {
-          setClubRatingError(error.message || "Could not load your ratings.");
+          setClubRatingError(error.message || translate("club.errors.loadOwnRatingsFailed"));
           setClubRatingLoading(false);
         },
       );
@@ -1273,7 +1449,7 @@ export function ClubTab({
       setClubRatingError(
         error instanceof Error
           ? error.message
-          : "Could not connect Club ratings.",
+          : translate("club.errors.connectRatingsFailed"),
       );
       setClubRatingLoading(false);
       return;
@@ -1294,13 +1470,13 @@ export function ClubTab({
     setClubNotesError("");
     try {
       return listenToClubNotes(sharedRosterId, setClubNotes, (error) =>
-        setClubNotesError(error.message || "Could not load Club notes."),
+        setClubNotesError(error.message || translate("club.errors.loadNotesFailed")),
       );
     } catch (error) {
       setClubNotesError(
         error instanceof Error
           ? error.message
-          : "Could not connect Club notes.",
+          : translate("club.errors.connectNotesFailed"),
       );
       return;
     }
@@ -1367,24 +1543,33 @@ export function ClubTab({
   const clubSkippedCount = skippedPlayers.length;
   const clubNeedRatingCount = needRatingPlayers.length;
   const clubRatingProgressText = clubRatingsEnabled
-    ? `${clubRatedCount} of ${players.length} rated${clubSkippedCount ? ` · ${clubSkippedCount} skipped` : ""}`
+    ? clubSkippedCount
+      ? translate("club.ratings.progressWithSkipped", {
+          rated: clubRatedCount,
+          total: players.length,
+          skipped: clubSkippedCount,
+        })
+      : translate("club.ratings.progress", {
+          rated: clubRatedCount,
+          total: players.length,
+        })
     : isSharedRoster
-      ? sharedAuthorityMessage || "Sign in to rate this shared roster."
-      : "Available when this roster is shared.";
+      ? sharedAuthorityMessage || translate("club.ratings.signInToRate")
+      : translate("club.ratings.sharedOnly");
   const previewClubNotes = clubNotes.slice(0, 3);
   const currentUserUid = clubUser?.uid || "";
   const clubNotesEnabled = Boolean(
     isSharedRoster && sharedRosterId && sharedCapabilities.canUseClubNotes,
   );
   const clubNotesUnavailableReason = !isSharedRoster
-    ? "Club Notes belong to shared rosters. Open or create a shared roster first."
+    ? translate("club.notes.sharedOnly")
     : sharedAuthorityMessage || (!sharedRosterId
-      ? "This shared roster is still connecting. Try again in a moment."
+      ? translate("club.notes.rosterConnecting")
       : !authReady
-        ? "Connecting your Stripes account. Try again in a moment."
+        ? translate("club.notes.accountConnecting")
         : !clubUser?.email
-          ? "Sign in to add Club Notes."
-          : "Club Notes are unavailable for this account.");
+          ? translate("club.notes.signIn")
+          : translate("club.notes.unavailable"));
   const canAddClubNote =
     clubNotesEnabled && clubNoteDraft.trim().length > 0 && !clubNoteSaving;
   const canRemoveClubNote = (note: ClubNote) =>
@@ -1460,13 +1645,13 @@ export function ClubTab({
         savedCount += 1;
       }
       setRatingSeedMessage(
-        `Imported ${savedCount} current roster rating${savedCount === 1 ? "" : "s"} as your Club ratings.`,
+        translate("club.ratings.imported", { count: savedCount }),
       );
     } catch (error) {
       const message =
         error instanceof Error
           ? error.message
-          : "Could not import current roster ratings.";
+          : translate("club.errors.importRatingsFailed");
       setRatingSeedMessage("");
       setClubRatingError(message);
     } finally {
@@ -1492,18 +1677,21 @@ export function ClubTab({
       if (nextPlayer) {
         openRatingForPlayer(nextPlayer);
         setRatingFlowNotice(
-          `${savedPlayerName} saved. Next up: ${nextPlayer.name}.`,
+          translate("club.ratings.savedNext", {
+            player: savedPlayerName,
+            nextPlayer: nextPlayer.name,
+          }),
         );
       } else {
         setRatingPlayerId(null);
         setRatingBoardOpen(true);
         setRatingFlowNotice(
-          `${savedPlayerName} saved. You are caught up for now.`,
+          translate("club.ratings.savedCaughtUp", { player: savedPlayerName }),
         );
       }
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Could not save your rating.";
+        error instanceof Error ? error.message : translate("club.errors.saveRatingFailed");
       setRatingDialogError(message);
       setClubRatingError(message);
     } finally {
@@ -1523,18 +1711,21 @@ export function ClubTab({
       if (nextPlayer) {
         openRatingForPlayer(nextPlayer);
         setRatingFlowNotice(
-          `${skippedPlayerName} skipped for later. Next up: ${nextPlayer.name}.`,
+          translate("club.ratings.skippedNext", {
+            player: skippedPlayerName,
+            nextPlayer: nextPlayer.name,
+          }),
         );
       } else {
         setRatingPlayerId(null);
         setRatingBoardOpen(true);
         setRatingFlowNotice(
-          `${skippedPlayerName} skipped for later. You are caught up for now.`,
+          translate("club.ratings.skippedCaughtUp", { player: skippedPlayerName }),
         );
       }
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Could not skip this player.";
+        error instanceof Error ? error.message : translate("club.errors.skipRatingFailed");
       setRatingDialogError(message);
       setClubRatingError(message);
     } finally {
@@ -1551,7 +1742,7 @@ export function ClubTab({
       setClubNoteDraft("");
     } catch (error) {
       setClubNotesError(
-        error instanceof Error ? error.message : "Could not add Club note.",
+        error instanceof Error ? error.message : translate("club.errors.addNoteFailed"),
       );
     } finally {
       setClubNoteSaving(false);
@@ -1563,16 +1754,16 @@ export function ClubTab({
       if (onApplyAiSmartCommandAction) {
         return await onApplyAiSmartCommandAction(action);
       }
-      throw new Error("Stripes understands this, but it is not wired to apply yet.");
+      throw new Error(translate("club.ai.actionNotWired"));
     }
 
     const noteText = action.noteText?.trim();
     if (!noteText) {
-      throw new Error("I understood a Club note request, but no note text was found.");
+      throw new Error(translate("club.ai.noteTextMissing"));
     }
 
     if (!sharedRosterId || !clubNotesEnabled) {
-      throw new Error(clubNotesUnavailableReason || "Club Notes are not ready yet.");
+      throw new Error(clubNotesUnavailableReason || translate("club.notes.notReady"));
     }
 
     setClubNoteSaving(true);
@@ -1580,10 +1771,10 @@ export function ClubTab({
     try {
       await addClubNote(sharedRosterId, noteText);
       setClubNoteDraft("");
-      return "Added to Club Notes.";
+      return translate("club.ai.noteAdded");
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Could not add Club note.";
+        error instanceof Error ? error.message : translate("club.errors.addNoteFailed");
       setClubNotesError(message);
       throw new Error(message);
     } finally {
@@ -1595,7 +1786,7 @@ export function ClubTab({
     if (!sharedRosterId || !canRemoveClubNote(note) || clubNoteDeletingId)
       return;
     const confirmed = window.confirm(
-      "Remove this Club note? This only deletes your own note.",
+      translate("club.notes.removeConfirm"),
     );
     if (!confirmed) return;
     setClubNoteDeletingId(note.id);
@@ -1604,7 +1795,7 @@ export function ClubTab({
       await deleteOwnClubNote(sharedRosterId, note.id);
     } catch (error) {
       setClubNotesError(
-        error instanceof Error ? error.message : "Could not remove Club note.",
+        error instanceof Error ? error.message : translate("club.errors.removeNoteFailed"),
       );
     } finally {
       setClubNoteDeletingId(null);
@@ -1622,23 +1813,42 @@ export function ClubTab({
         : null,
     [editingKitId, equipmentKits],
   );
-  const sharedPersonNames = useMemo(() => {
-    const cleaned = equipmentHolderLabels
-      .map((label) =>
-        cleanEquipmentHolderLabel(label, equipmentHolderNamesByEmail),
-      )
-      .map((label) => (label === "You" ? "Me" : label))
-      .filter(Boolean);
-    const unique = cleaned.filter(
-      (label, index, all) => all.indexOf(label) === index,
+  const sharedPeople = useMemo<SharedPersonPresentation[]>(() => {
+    const people = equipmentHolderLabels.map((label) => {
+      const presentation = equipmentHolderPresentation(
+        label,
+        equipmentHolderNamesByEmail,
+      );
+      if (presentation.kind === "current-user") {
+        return { stableKey: presentation.stableKey, kind: "me" } as const;
+      }
+      if (presentation.kind === "organizer-fallback") {
+        return {
+          stableKey: presentation.stableKey,
+          kind: "organizer",
+        } as const;
+      }
+      return {
+        stableKey: presentation.stableKey,
+        kind: "named",
+        label: presentation.label,
+      } as const;
+    });
+    const unique = people.filter(
+      (person, index, all) =>
+        all.findIndex((candidate) => candidate.stableKey === person.stableKey) === index,
     );
     if (unique.length) return unique;
     if (!isSharedRoster) return [];
     return [
-      "Me",
+      { stableKey: "current-user", kind: "me" },
       ...Array.from(
         { length: Math.max(0, sharedPeopleCount - 1) },
-        (_, index) => `Person ${index + 2}`,
+        (_, index) => ({
+          stableKey: `person-${index + 2}`,
+          kind: "person" as const,
+          number: index + 2,
+        }),
       ),
     ];
   }, [
@@ -1681,7 +1891,10 @@ export function ClubTab({
           : item.custom
             ? `custom:${equipmentItemKey(normalizedLabel)}`
             : item.key || equipmentItemKey(normalizedLabel);
-        const displayLabel = item.key === "balls" ? equipmentItemDisplayLabel(item) : normalizedLabel;
+        const displayLabel = equipmentItemDisplayLabel({
+          ...item,
+          label: normalizedLabel,
+        });
         const existing = totals.get(key);
         if (existing) existing.quantity += item.quantity;
         else totals.set(key, { ...item, key, label: displayLabel });
@@ -1694,12 +1907,12 @@ export function ClubTab({
       const bOrder = EQUIPMENT_PRESET_ORDER.get(bBaseKey) ?? 999;
       return aOrder - bOrder || a.label.localeCompare(b.label);
     });
-  }, [equipmentKits]);
+  }, [equipmentKits, uiLocale]);
   const actionBoardEquipmentSnapshot = useMemo(() => ({
     bags: equipmentKits.map((kit) => ({
       id: kit.id,
-      name: kit.name || "Equipment bag",
-      holder: equipmentHolderLabelById[normalizeEquipmentHolderId(kit.holderId)] || "Club storage",
+      name: kit.name || translate("club.equipment.defaultBagName"),
+      holder: equipmentHolderLabelById[normalizeEquipmentHolderId(kit.holderId)] || translate("club.equipment.clubStorage"),
       color: kit.color,
       items: equipmentItemsForKit(kit).map((item) => ({
         label: equipmentItemDisplayLabel(item),
@@ -1710,7 +1923,7 @@ export function ClubTab({
       label: equipmentItemDisplayLabel(item),
       quantity: item.quantity,
     })),
-  }), [equipmentHolderLabelById, equipmentInventoryTotals, equipmentKits]);
+  }), [equipmentHolderLabelById, equipmentInventoryTotals, equipmentKits, uiLocale]);
   const addEquipmentPreset = (preset: (typeof EQUIPMENT_PRESETS)[number]) => {
     setKitItems((current) => {
       const existing = current.find((item) =>
@@ -1931,7 +2144,7 @@ export function ClubTab({
     const now = Date.now();
     const existingKit = equipmentKits.find((kit) => kit.id === bagId) || null;
     const actorEmail = clubUser?.email || undefined;
-    const actorName = clubUser?.displayName || actorEmail || "Organizer";
+    const actorName = clubUser?.displayName || actorEmail || translate("club.people.organizer");
     const cleanedItems = kitItems
       .filter((item) => item.label.trim() && item.quantity > 0)
       .map((item) => ({
@@ -1944,7 +2157,7 @@ export function ClubTab({
       .slice(0, 30);
     const nextKit: ClubEquipmentKit = {
       id: bagId,
-      name: trimmedName || existingKit?.name || "Equipment bag",
+      name: trimmedName || existingKit?.name || translate("club.equipment.defaultBagName"),
       holderId: normalizedHolderId,
       color: kitColor,
       contents: equipmentContentsFromItems(cleanedItems),
@@ -1980,7 +2193,7 @@ export function ClubTab({
         setEquipmentKits(previousKits);
         if (equipmentGroupId) writeCachedEquipmentKits(equipmentGroupId, previousKits);
         setEquipmentError(
-          error instanceof Error ? error.message : "Could not save equipment bag.",
+          error instanceof Error ? error.message : translate("club.errors.saveEquipmentFailed"),
         );
       }
     } finally {
@@ -2025,7 +2238,7 @@ export function ClubTab({
     if (!currentKit) return;
     const now = Date.now();
     const actorEmail = clubUser?.email || undefined;
-    const actorName = clubUser?.displayName || actorEmail || "Organizer";
+    const actorName = clubUser?.displayName || actorEmail || translate("club.people.organizer");
     const nextKit = {
       ...currentKit,
       holderId,
@@ -2039,9 +2252,14 @@ export function ClubTab({
     );
     const nextHolderLabel =
       equipmentHolderLabelById[normalizeEquipmentHolderId(holderId)] ||
-      "new holder";
+      translate("club.equipment.newHolder");
     setEquipmentKits(nextKits);
-    setEquipmentMoveNotice(`${currentKit.name} moved → ${nextHolderLabel}`);
+    setEquipmentMoveNotice(
+      translate("club.equipment.moved", {
+        bag: currentKit.name,
+        holder: nextHolderLabel,
+      }),
+    );
     if (equipmentGroupId) writeCachedEquipmentKits(equipmentGroupId, nextKits);
     try {
       setEquipmentError("");
@@ -2055,7 +2273,7 @@ export function ClubTab({
       setEquipmentError(
         error instanceof Error
           ? error.message
-          : "Could not move equipment bag.",
+          : translate("club.errors.moveEquipmentFailed"),
       );
     }
   };
@@ -2162,7 +2380,7 @@ export function ClubTab({
       setEquipmentError(
         error instanceof Error
           ? error.message
-          : "Could not delete equipment bag.",
+          : translate("club.errors.deleteEquipmentFailed"),
       );
     } finally {
       setEquipmentSaving(false);
@@ -2197,7 +2415,7 @@ export function ClubTab({
     filteredAttendanceRecords.forEach((record) => {
       const matched = resolveAttendancePlayer(record);
       const playerId = matched?.id || record.playerId || `name:${record.playerName.toLowerCase()}`;
-      const name = matched?.name || record.playerName || "Unknown player";
+      const name = matched?.name || record.playerName || translate("club.people.unknownPlayer");
       const current = map.get(playerId) || { playerId, name, records: [] };
       current.records.push(record);
       map.set(playerId, current);
@@ -2211,7 +2429,7 @@ export function ClubTab({
       });
     }
     return rows.sort((a, b) => b.records.length - a.records.length || a.name.localeCompare(b.name));
-  }, [filteredAttendanceRecords, players, attendanceSort]);
+  }, [filteredAttendanceRecords, players, attendanceSort, uiLocale]);
 
   const attendancePlayerMatches = useMemo(() => {
     const needle = attendancePlayerSearch.trim().toLocaleLowerCase();
@@ -2253,7 +2471,7 @@ export function ClubTab({
     });
     return fillAttendanceWarningTemplate(attendanceWarningTemplates[kind], {
       player: row.name,
-      group: activeRosterName.trim() || "the group",
+      group: activeRosterName.trim() || translate("club.people.theGroup"),
       period: attendanceRangeText(attendanceRange),
       lateCancellationCount,
       noShowCount,
@@ -2289,9 +2507,9 @@ export function ClubTab({
     try {
       await saveAttendanceWarningTemplate(sharedRosterId, attendanceWarningTemplateKind, attendanceWarningTemplateDraft);
       setAttendanceWarningTemplates((current) => ({ ...current, [attendanceWarningTemplateKind]: attendanceWarningTemplateDraft.trim() }));
-      setAttendanceWarningTemplateNotice("Saved for this Club");
+      setAttendanceWarningTemplateNotice(translate("club.attendance.templateSaved"));
     } catch (error) {
-      setAttendanceWarningTemplatesError(error instanceof Error ? error.message : "Could not save warning template.");
+      setAttendanceWarningTemplatesError(error instanceof Error ? error.message : translate("club.errors.saveWarningTemplateFailed"));
     } finally {
       setAttendanceWarningTemplateSaving(false);
     }
@@ -2308,7 +2526,7 @@ export function ClubTab({
     setAttendanceHistoryPlayerId(row.playerId);
     setAttendanceWarningComposerKind(initialKind);
     setAttendanceWarningComposerDraft(buildAttendanceWarningForRow(row, initialKind));
-    setAttendanceWarningCopyNotice("");
+    setAttendanceWarningCopyNotice(null);
     setAttendanceWarningComposerOpen(true);
   };
 
@@ -2320,17 +2538,23 @@ export function ClubTab({
   const selectAttendanceWarningComposerKind = (kind: AttendanceWarningTemplateKind) => {
     setAttendanceWarningComposerKind(kind);
     setAttendanceWarningComposerDraft(buildAttendanceWarning(kind));
-    setAttendanceWarningCopyNotice("");
+    setAttendanceWarningCopyNotice(null);
   };
 
   const copyAttendanceWarning = async () => {
     if (!attendanceWarningComposerDraft.trim()) return;
-    setAttendanceWarningCopyNotice("");
+    setAttendanceWarningCopyNotice(null);
     try {
       await copyText(attendanceWarningComposerDraft.trim());
-      setAttendanceWarningCopyNotice("Copied");
+      setAttendanceWarningCopyNotice({ tone: "success" });
     } catch (error) {
-      setAttendanceWarningCopyNotice(error instanceof Error ? error.message : "Could not copy warning.");
+      setAttendanceWarningCopyNotice({
+        tone: "error",
+        message:
+          error instanceof Error
+            ? error.message
+            : translate("club.errors.copyWarningFailed"),
+      });
     }
   };
 
@@ -2367,7 +2591,7 @@ export function ClubTab({
     if (!sharedRosterId || !attendanceEnabled || !attendancePlayerId || attendanceSaving) return;
     const player = players.find((candidate) => candidate.id === attendancePlayerId);
     if (!player) {
-      setAttendanceError("Choose a player from the roster.");
+      setAttendanceError(translate("club.attendance.choosePlayer"));
       return;
     }
     const duplicate = attendanceRecords.find((record) =>
@@ -2395,7 +2619,7 @@ export function ClubTab({
       setAttendanceDuplicate(null);
       resetAttendanceEditor();
     } catch (error) {
-      setAttendanceError(error instanceof Error ? error.message : "Could not save attendance record.");
+      setAttendanceError(error instanceof Error ? error.message : translate("club.errors.saveAttendanceFailed"));
     } finally {
       setAttendanceSaving(false);
     }
@@ -2410,7 +2634,7 @@ export function ClubTab({
       setAttendanceEditorOpen(false);
       resetAttendanceEditor();
     } catch (error) {
-      setAttendanceError(error instanceof Error ? error.message : "Could not delete attendance record.");
+      setAttendanceError(error instanceof Error ? error.message : translate("club.errors.deleteAttendanceFailed"));
     } finally {
       setAttendanceSaving(false);
     }
@@ -2524,7 +2748,7 @@ export function ClubTab({
         event.preventDefault();
         blurActiveField();
         setAttendanceWarningComposerOpen(false);
-        setAttendanceWarningCopyNotice("");
+        setAttendanceWarningCopyNotice(null);
         return;
       }
       if (state.attendanceWarningTemplatesOpen) {
@@ -2590,17 +2814,17 @@ export function ClubTab({
     }
   }, [clubDeskCollapsed]);
 
-  const clubDeskSummary = useMemo(() => {
-    if (!clubUser) return "Sign in to share and manage collaborators";
+  const clubDeskSummary = (() => {
+    if (!clubUser) return translate("club.account.signInToManage");
     const parts: string[] = [];
     if (isSharedRoster) {
-      parts.push(`${sharedPeopleCount} organizer${sharedPeopleCount === 1 ? "" : "s"}`);
-      parts.push("Shared roster");
+      parts.push(translate("common.organizerCount", { count: sharedPeopleCount }));
+      parts.push(translate("club.account.sharedRoster"));
     } else {
-      parts.push("Private setup");
+      parts.push(translate("club.account.privateSetup"));
     }
     return parts.join(" · ");
-  }, [clubUser, isSharedRoster, sharedPeopleCount]);
+  })();
 
   return (
     <div className="mx-auto flex w-full max-w-xl flex-col gap-3 px-1 pb-2 lg:mx-0 lg:max-w-none lg:gap-5 lg:px-0">
@@ -2611,8 +2835,7 @@ export function ClubTab({
         <DialogContent className="stripes-type-ui max-w-sm rounded-3xl p-3">
           <DialogHeader className="px-1 pb-1 text-left">
             <DialogTitle className="text-base font-black text-[#102A43]">
-              Stripes account
-            </DialogTitle>
+              {translate("club.headings.stripesAccount")}</DialogTitle>
           </DialogHeader>
           <FirebaseSharedRosterAuthCard />
         </DialogContent>
@@ -2628,10 +2851,9 @@ export function ClubTab({
           aria-controls="fairteams-help-content"
         >
           <span className="min-w-0">
-            <span className="block text-[15px] font-black leading-tight text-[#102A43]">Stripes Help</span>
+            <span className="block text-[15px] font-black leading-tight text-[#102A43]">{translate("club.messages.stripesHelp")}</span>
             <span className="mt-0.5 block text-[10px] font-semibold text-slate-500">
-              Ask how Stripes works
-            </span>
+              {translate("club.messages.askHowStripesWorks")}</span>
           </span>
           <span className="ml-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-50 text-slate-500">
             {helpCollapsed && tutorialStep !== "help-question"
@@ -2657,7 +2879,7 @@ export function ClubTab({
             onOpenToday={onOpenTodayFromAi}
             onQuestionSubmitted={() => onTutorialAction?.("help-question-submitted")}
             tutorialActive={tutorialStep === "help-question"}
-            tutorialQuestion="How do shared rosters work?"
+            tutorialQuestion={translate("club.ai.sharedRostersQuestion")}
           />
         </div>
       </div>
@@ -2674,15 +2896,15 @@ export function ClubTab({
               <UsersRound className="fairteams-desktop-balanced-icon h-5 w-5 lg:h-6 lg:w-6" />
             </div>
             <span className="min-w-0">
-              <span className="block text-[17px] font-black leading-tight text-[#102A43] lg:text-[22px]">Player Management</span>
-              <span className="mt-0.5 block text-[10px] font-bold text-[#52746d] lg:text-[13px]">Ratings · Attendance · Rules · Warnings</span>
+              <span className="block text-[17px] font-black leading-tight text-[#102A43] lg:text-[22px]">{translate("club.messages.playerManagement")}</span>
+              <span className="mt-0.5 block text-[10px] font-bold text-[#52746d] lg:text-[13px]">{translate("club.messages.ratingsAttendanceRulesWarnings")}</span>
             </span>
           </button>
           <button
             type="button"
             className="ml-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/85 text-[#52746d] ring-1 ring-[#d6e8e2] active:scale-[0.98]"
             onClick={() => setPlayerManagementCollapsed((current) => !current)}
-            aria-label={playerManagementCollapsed ? "Expand Player Management" : "Collapse Player Management"}
+            aria-label={playerManagementCollapsed ? translate("club.accessibility.expandPlayerManagement") : translate("club.accessibility.collapsePlayerManagement")}
           >
             {playerManagementCollapsed ? <ChevronDown className="h-4 w-4 lg:h-5 lg:w-5" /> : <ChevronUp className="h-4 w-4 lg:h-5 lg:w-5" />}
           </button>
@@ -2699,9 +2921,9 @@ export function ClubTab({
               >
                 <Star className="h-4 w-4 shrink-0 text-[#3f756b] lg:h-5 lg:w-5" />
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[12px] font-black text-[#102A43] lg:text-[15px]">Club ratings</span>
+                  <span className="block text-[12px] font-black text-[#102A43] lg:text-[15px]">{translate("club.messages.clubRatings")}</span>
                   <span className="block truncate text-[10px] font-bold text-slate-500 lg:text-[13px]">
-                    {clubRatingsEnabled ? `${clubRatedCount}/${players.length} rated` : isSharedRoster ? "Sign in to rate" : "Shared rosters only"}
+                    {clubRatingsEnabled ? translate("club.messages.rated", { clubRatedCount, length: players.length }) : isSharedRoster ? translate("club.messages.signInToRate") : translate("club.messages.sharedRostersOnly")}
                   </span>
                 </span>
                 <ChevronRight className="h-4 w-4 shrink-0 text-slate-300" />
@@ -2715,9 +2937,9 @@ export function ClubTab({
               >
                 <Clock3 className="h-4 w-4 shrink-0 text-[#3f756b] lg:h-5 lg:w-5" />
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[12px] font-black text-[#102A43] lg:text-[15px]">Attendance</span>
+                  <span className="block text-[12px] font-black text-[#102A43] lg:text-[15px]">{translate("club.messages.attendance")}</span>
                   <span className="block truncate text-[10px] font-bold text-slate-500 lg:text-[13px]">
-                    {attendanceReadEnabled ? (attendanceEnabled ? "Shared organizer log" : "Shared attendance · view only") : isSharedRoster ? (sharedAuthorityMessage || "Sign in to view") : "Shared rosters only"}
+                    {attendanceReadEnabled ? (attendanceEnabled ? translate("club.messages.sharedOrganizerLog") : translate("club.messages.sharedAttendanceViewOnly")) : isSharedRoster ? (sharedAuthorityMessage || translate("club.messages.signInToView")) : translate("club.messages.sharedRostersOnly")}
                   </span>
                 </span>
                 <ChevronRight className="h-4 w-4 shrink-0 text-slate-300" />
@@ -2731,9 +2953,11 @@ export function ClubTab({
               >
                 <ClipboardList className="h-4 w-4 shrink-0 text-[#3f756b] lg:h-5 lg:w-5" />
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[12px] font-black text-[#102A43] lg:text-[15px]">Rules</span>
+                  <span className="block text-[12px] font-black text-[#102A43] lg:text-[15px]">{translate("club.messages.rules")}</span>
                   <span className="block truncate text-[10px] font-bold text-slate-500 lg:text-[13px]">
-                    {cleanPairingRuleCount > 0 ? `${cleanPairingRuleCount} pairing rule${cleanPairingRuleCount === 1 ? "" : "s"}` : "No pairing rules"}
+                    {cleanPairingRuleCount > 0
+                      ? translate("club.rules.pairingRuleCount", { count: cleanPairingRuleCount })
+                      : translate("club.messages.noPairingRules")}
                   </span>
                 </span>
                 <ChevronRight className="h-4 w-4 shrink-0 text-slate-300" />
@@ -2747,9 +2971,13 @@ export function ClubTab({
               >
                 <AlertTriangle className="h-4 w-4 shrink-0 text-[#3f756b] lg:h-5 lg:w-5" />
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[12px] font-black text-[#102A43] lg:text-[15px]">Warnings</span>
+                  <span className="block text-[12px] font-black text-[#102A43] lg:text-[15px]">{translate("club.messages.warnings")}</span>
                   <span className="block truncate text-[10px] font-bold text-slate-500 lg:text-[13px]">
-                    {attendanceReadEnabled ? `${attendanceOverview.length} player${attendanceOverview.length === 1 ? "" : "s"} with recorded issues` : isSharedRoster ? (sharedAuthorityMessage || "Sign in to view warnings") : "Shared rosters only"}
+                    {attendanceReadEnabled
+                      ? translate("club.attendance.playersWithIssues", { count: attendanceOverview.length })
+                      : isSharedRoster
+                        ? sharedAuthorityMessage || translate("club.messages.signInToViewWarnings")
+                        : translate("club.messages.sharedRostersOnly")}
                   </span>
                 </span>
                 <ChevronRight className="h-4 w-4 shrink-0 text-slate-300" />
@@ -2759,8 +2987,7 @@ export function ClubTab({
             {(isSharedRoster && legacySkillSeedPlayers.length > 0) && (
               <div className="mt-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
                 <div className="text-[11px] font-bold leading-snug text-slate-700">
-                  Use current roster ratings as your first Club ratings.
-                </div>
+                  {translate("club.ratings.seedHelp")}</div>
                 <Button
                   type="button"
                   variant="outline"
@@ -2768,7 +2995,9 @@ export function ClubTab({
                   disabled={!clubRatingsEnabled || ratingSeedSaving}
                   onClick={seedClubRatingsFromRosterSkills}
                 >
-                  {ratingSeedSaving ? "Importing…" : `Use ratings for ${legacySkillSeedPlayers.length} player${legacySkillSeedPlayers.length === 1 ? "" : "s"}`}
+                  {ratingSeedSaving
+                    ? translate("club.actions.importing")
+                    : translate("club.ratings.useRosterRatings", { count: legacySkillSeedPlayers.length })}
                 </Button>
               </div>
             )}
@@ -2795,12 +3024,16 @@ export function ClubTab({
                     onClick={() => setRatingBoardOpen(true)}
                   >
                     <span className="min-w-0">
-                      <span className="block text-xs font-black text-[#102A43]">Needs your rating</span>
+                      <span className="block text-xs font-black text-[#102A43]">{translate("club.messages.needsYourRating")}</span>
                       <span className="block truncate text-[11px] font-semibold text-slate-600">
-                        {orderedNeedRatingPlayers.slice(0, 3).map((player) => player.name).join(", ")}
+                        {formatList(
+                          uiLocale,
+                          orderedNeedRatingPlayers.slice(0, 3).map((player) => player.name),
+                          { style: "long", type: "unit" },
+                        )}
                       </span>
                     </span>
-                    <span className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-slate-700 ring-1 ring-slate-200">{clubNeedRatingCount}</span>
+                    <span className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-slate-700 ring-1 ring-slate-200">{formatNumber(uiLocale, clubNeedRatingCount)}</span>
                   </button>
                 )}
                 {clubSkippedCount > 0 && (
@@ -2811,12 +3044,16 @@ export function ClubTab({
                     onClick={() => setRatingBoardOpen(true)}
                   >
                     <span className="min-w-0">
-                      <span className="block text-xs font-black text-[#102A43]">Skipped for later</span>
+                      <span className="block text-xs font-black text-[#102A43]">{translate("club.messages.skippedForLater")}</span>
                       <span className="block truncate text-[11px] font-semibold text-amber-700">
-                        {skippedPlayers.slice(0, 3).map((player) => player.name).join(", ")}
+                        {formatList(
+                          uiLocale,
+                          skippedPlayers.slice(0, 3).map((player) => player.name),
+                          { style: "long", type: "unit" },
+                        )}
                       </span>
                     </span>
-                    <span className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-amber-700">{clubSkippedCount}</span>
+                    <span className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-amber-700">{formatNumber(uiLocale, clubSkippedCount)}</span>
                   </button>
                 )}
               </div>
@@ -2836,14 +3073,14 @@ export function ClubTab({
               <KeyRound className="fairteams-desktop-balanced-icon h-[18px] w-[18px] lg:h-5 lg:w-5" />
             </div>
             <span className="min-w-0">
-              <span className="block truncate text-[17px] font-black leading-tight text-[#102A43] lg:text-[22px]">Club Access</span>
+              <span className="block truncate text-[17px] font-black leading-tight text-[#102A43] lg:text-[22px]">{translate("club.messages.clubAccess")}</span>
               <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[10px] font-bold text-violet-700/75 lg:text-[13px]">
-                {clubUser && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" aria-label="Online" />}
+                {clubUser && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" aria-label={translate("club.accessibility.online")} />}
                 <span className="truncate">
                   {clubUser && !isSharedRoster
-                    ? `${clubGreetingName} · Local roster open`
+                    ? translate("club.messages.localRosterOpen", { clubGreetingName })
                     : clubUser
-                      ? `${clubGreetingName} · ${clubDeskSummary}`
+                      ? translate("club.account.greetingSummary", { greeting: clubGreetingName, summary: clubDeskSummary })
                       : clubDeskSummary}
                 </span>
               </span>
@@ -2856,8 +3093,7 @@ export function ClubTab({
                 className="h-9 shrink-0 rounded-full bg-[#102A43] px-3 text-[11px] font-black text-white hover:bg-[#0b2036] lg:text-xs"
                 onClick={() => setAccountDialogOpen(true)}
               >
-                Sign in
-              </Button>
+                {translate("club.actions.signIn")}</Button>
             )}
             {clubUser && (
               <Button
@@ -2868,14 +3104,13 @@ export function ClubTab({
                   void signOutOfSharedRosters();
                 }}
               >
-                Sign out
-              </Button>
+                {translate("club.actions.signOut")}</Button>
             )}
             <button
               type="button"
               className="flex h-9 w-9 items-center justify-center rounded-full bg-white/80 text-violet-600 ring-1 ring-violet-100 active:scale-[0.98]"
               onClick={() => setClubDeskCollapsed((current) => !current)}
-              aria-label={clubDeskCollapsed ? "Expand Club Access" : "Collapse Club Access"}
+              aria-label={clubDeskCollapsed ? translate("club.accessibility.expandClubAccess") : translate("club.accessibility.collapseClubAccess")}
             >
               {clubDeskCollapsed ? <ChevronDown className="h-4 w-4 lg:h-5 lg:w-5" /> : <ChevronUp className="h-4 w-4 lg:h-5 lg:w-5" />}
             </button>
@@ -2885,8 +3120,7 @@ export function ClubTab({
         {clubUser && !isSharedRoster && onOpenSharedRosters && (
           <div className="mt-2 flex flex-col gap-2 rounded-2xl border border-violet-100 bg-white/75 px-3 py-2.5 min-[360px]:flex-row min-[360px]:items-center min-[360px]:justify-between">
             <div className="min-w-0 text-[11px] font-semibold leading-snug text-violet-800/75 lg:text-[14px]">
-              You’re signed in. Open a shared roster to use the shared Club workspace.
-            </div>
+              {translate("club.account.openSharedRosterHelp")}</div>
             <Button
               type="button"
               className="h-9 shrink-0 rounded-xl bg-violet-600 px-3 text-[11px] font-black text-white hover:bg-violet-700 lg:h-10 lg:px-4 lg:text-[13px]"
@@ -2896,8 +3130,7 @@ export function ClubTab({
                 window.setTimeout(() => onOpenSharedRosters(), 0);
               }}
             >
-              Open shared rosters
-            </Button>
+              {translate("club.actions.openSharedRosters")}</Button>
           </div>
         )}
 
@@ -2941,9 +3174,9 @@ export function ClubTab({
               <StickyNote className="fairteams-desktop-balanced-icon h-[18px] w-[18px] lg:h-6 lg:w-6" />
             </div>
             <span className="min-w-0">
-              <span className="block text-[17px] font-black leading-tight text-[#102A43] md:text-[18px] lg:text-[22px]">Club Notes</span>
+              <span className="block text-[17px] font-black leading-tight text-[#102A43] md:text-[18px] lg:text-[22px]">{translate("club.messages.clubNotes")}</span>
               <span className="mt-0.5 block truncate text-[10px] font-bold text-[#9a641f] lg:text-[13px]">
-                {previewClubNotes[0] ? `Latest: ${previewClubNotes[0].text}` : "Shared notes for organizers"}
+                {previewClubNotes[0] ? translate("club.messages.latest", { text: previewClubNotes[0].text }) : translate("club.messages.sharedNotesForOrganizers")}
               </span>
             </span>
           </button>
@@ -2951,7 +3184,7 @@ export function ClubTab({
             type="button"
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/85 text-[#b76518] ring-1 ring-amber-100 active:scale-[0.98] lg:hidden"
             onClick={() => setClubNotesOpen(true)}
-            aria-label="Open Club Notes"
+            aria-label={translate("club.accessibility.openClubNotes")}
           >
             <ChevronRight className="h-4 w-4" />
           </button>
@@ -2962,8 +3195,7 @@ export function ClubTab({
                 className="rounded-full bg-transparent px-2.5 py-1 text-[11px] font-black text-[#a94f0a] active:scale-95 lg:px-3 lg:py-1.5 lg:text-[13px]"
                 onClick={() => setClubNotesOpen(true)}
               >
-                View all
-              </button>
+                {translate("club.actions.viewAll")}</button>
             )}
             <Button
               type="button"
@@ -2971,8 +3203,7 @@ export function ClubTab({
               onClick={() => setClubNotesOpen(true)}
               disabled={!clubNotesEnabled}
             >
-              Post-it
-            </Button>
+              {translate("club.actions.postIt")}</Button>
           </div>
         </div>
 
@@ -2992,7 +3223,7 @@ export function ClubTab({
                     {note.text}
                   </div>
                   <div className="mt-1.5 pr-4 text-[9px] font-bold leading-tight text-slate-600/80 lg:mt-2 lg:text-[11px]">
-                    <div className="truncate">— {note.createdByName || "Organizer"}</div>
+                    <div className="truncate">— {note.createdByName || translate("club.messages.organizer")}</div>
                   </div>
                 </div>
                 {canRemoveClubNote(note) && (
@@ -3001,7 +3232,7 @@ export function ClubTab({
                     className="absolute bottom-2 right-2 rounded-full bg-white/60 p-1 text-slate-600 shadow-sm active:scale-95 disabled:opacity-50"
                     onClick={() => removeOwnClubNote(note)}
                     disabled={clubNoteDeletingId === note.id}
-                    aria-label="Remove your Club note"
+                    aria-label={translate("club.accessibility.removeYourClubNote")}
                   >
                     <Trash2 className="h-3 w-3" />
                   </button>
@@ -3010,8 +3241,7 @@ export function ClubTab({
             ))
           ) : (
             <div className="col-span-3 min-h-[5rem] w-full rounded-2xl border border-dashed border-amber-200 bg-white/60 px-3 py-3 text-sm font-black text-[#102A43] lg:min-h-[3.75rem] lg:py-2.5">
-              Leave the first note for the organizers.
-            </div>
+              {translate("club.messages.leaveTheFirstNoteForTheOrganizers")}</div>
           )}
         </div>
 
@@ -3030,17 +3260,14 @@ export function ClubTab({
             </div>
             <div className="min-w-0 flex-1">
             <div className="text-[17px] font-black leading-tight text-[#102A43] md:text-[18px] lg:text-[22px]">
-              Equipment
-            </div>
+              {translate("club.messages.equipment")}</div>
             <div className="mt-1 hidden text-xs font-semibold leading-snug text-slate-500 md:block md:text-[12px] lg:text-[15px] lg:leading-relaxed">
-              Drag bags between people and club storage, or select a bag for details.
-            </div>
+              {translate("club.equipment.boardHelp")}</div>
             <div className="mt-1 text-[10px] font-black text-slate-400 md:hidden">
-              Bags · balls · cones · gear
-            </div>
+              {translate("club.messages.bagsBallsConesGear")}</div>
             </div>
           </button>
-          <button type="button" className="ml-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/85 text-blue-600 ring-1 ring-sky-100 active:scale-[0.98] lg:hidden" onClick={() => setEquipmentBoardOpen(true)} aria-label="Open Equipment">
+          <button type="button" className="ml-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/85 text-blue-600 ring-1 ring-sky-100 active:scale-[0.98] lg:hidden" onClick={() => setEquipmentBoardOpen(true)} aria-label={translate("club.accessibility.openEquipment")}>
             <ChevronRight className="h-4 w-4" />
           </button>
           <Button
@@ -3048,8 +3275,7 @@ export function ClubTab({
             className="hidden h-9 shrink-0 rounded-2xl border border-slate-100 bg-white px-3 text-xs font-black text-[#102A43] shadow-sm hover:bg-slate-50 lg:inline-flex lg:h-10 lg:px-4 lg:text-[14px]"
             onClick={() => setEquipmentBoardOpen(true)}
           >
-            Open
-          </Button>
+            {translate("common.open")}</Button>
         </div>
 
         <div className="hidden md:block">
@@ -3087,7 +3313,7 @@ export function ClubTab({
                             onPointerUp={finishEquipmentPointerDrag}
                             onPointerCancel={finishEquipmentPointerDrag}
                             onClick={() => openEquipmentKitFromBoard(kit)}
-                            aria-label={equipmentCanEdit ? `Edit ${kit.name}` : kit.name}
+                            aria-label={equipmentCanEdit ? translate("club.accessibility.edit", { name: kit.name }) : kit.name}
                           >
                             <span className="flex max-w-[7.4rem] items-center gap-1.5">
                               <DuffleBagIcon
@@ -3103,8 +3329,7 @@ export function ClubTab({
                       })
                     ) : (
                       <span className="rounded-full border border-dashed border-slate-200 bg-white/70 px-2 py-1 text-[10px] font-bold text-slate-400 lg:px-2.5 lg:py-1.5 lg:text-[12px]">
-                        No bag
-                      </span>
+                        {translate("club.messages.noBag")}</span>
                     )}
                   </div>
                 </div>
@@ -3112,14 +3337,12 @@ export function ClubTab({
             })}
             {equipmentKits.length > equipmentPreviewKits.length && (
               <div className="border-t border-slate-100 px-2.5 py-1.5 text-[10px] font-bold text-slate-400">
-                Open board to see all {equipmentKits.length} bags.
-              </div>
+                {translate("club.equipment.openBoardCount", { count: equipmentKits.length })}</div>
             )}
           </div>
         ) : (
           <div className="mt-3 rounded-2xl bg-white/70 px-3 py-5 text-center text-sm font-black text-[#102A43] lg:py-3.5">
-            No bags yet
-          </div>
+            {translate("club.messages.noBagsYet")}</div>
         )}
         </div>
       </section>
@@ -3130,7 +3353,7 @@ export function ClubTab({
       })}
       {isSharedRoster && !fileCabinetNode && sharedAuthorityMessage && (
         <section className="rounded-[1.75rem] border border-violet-100 bg-violet-50/60 p-3 shadow-sm" role="status">
-          <div className="text-sm font-black text-[#102A43]">File Cabinet</div>
+          <div className="text-sm font-black text-[#102A43]">{translate("club.messages.fileCabinet")}</div>
           <div className="mt-1 text-[11px] font-semibold leading-snug text-violet-800">
             {sharedAuthorityMessage}
           </div>
@@ -3143,8 +3366,7 @@ export function ClubTab({
           <DialogHeader className="border-b border-amber-100 bg-amber-50/70 px-4 py-3 text-left">
             <DialogTitle className="flex items-center gap-2 text-base font-black text-[#102A43] lg:text-xl">
               <StickyNote className="h-4 w-4 text-amber-600" />
-              Club notes
-            </DialogTitle>
+              {translate("club.headings.clubNotes")}</DialogTitle>
           </DialogHeader>
           <div className="border-b border-amber-100 bg-white/80 p-4">
             <div className="flex items-end gap-2 rounded-2xl border border-amber-100 bg-white p-2 shadow-sm">
@@ -3154,8 +3376,8 @@ export function ClubTab({
                 disabled={!clubNotesEnabled}
                 placeholder={
                   clubNotesEnabled
-                    ? "Puma ball died today — Joon"
-                    : clubNotesUnavailableReason || "Shared notes appear after sign-in."
+                    ? translate("club.fields.noteExample")
+                    : clubNotesUnavailableReason || translate("club.fields.sharedNotesAppearAfterSignIn")
                 }
                 className="min-h-[4.25rem] min-w-0 flex-1 resize-none border-0 bg-transparent p-1 text-sm font-semibold shadow-none focus-visible:ring-0 min-[310px]:min-h-[3.2rem]"
                 maxLength={160}
@@ -3166,7 +3388,7 @@ export function ClubTab({
                 disabled={!canAddClubNote}
                 onClick={addSharedClubNote}
               >
-                {clubNoteSaving ? "Posting…" : "Post"}
+                {clubNoteSaving ? translate("club.actions.posting") : translate("club.actions.post")}
               </Button>
             </div>
             {clubNotesError && (
@@ -3195,7 +3417,7 @@ export function ClubTab({
                           {note.text}
                         </div>
                         <div className="mt-1 text-[10px] font-bold leading-tight text-amber-700/70">
-                          <div>— {note.createdByName || "Organizer"}</div>
+                          <div>— {note.createdByName || translate("club.messages.organizer")}</div>
                           <div>{formatClubNoteDate(note.createdAt)}</div>
                         </div>
                       </div>
@@ -3205,7 +3427,7 @@ export function ClubTab({
                           className="rounded-full bg-white/80 p-1.5 text-amber-600 ring-1 ring-amber-100 active:scale-95 disabled:opacity-50"
                           onClick={() => removeOwnClubNote(note)}
                           disabled={clubNoteDeletingId === note.id}
-                          aria-label="Remove your Club note"
+                          aria-label={translate("club.accessibility.removeYourClubNote")}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
@@ -3215,8 +3437,7 @@ export function ClubTab({
                 ))
               ) : (
                 <div className="rounded-2xl bg-slate-50 px-3 py-2 text-sm font-black text-[#102A43]">
-                  No notes yet.
-                </div>
+                  {translate("club.messages.noNotesYet")}</div>
               )}
             </div>
           </div>
@@ -3227,23 +3448,21 @@ export function ClubTab({
         <DialogContent className="max-w-xs rounded-3xl border border-slate-100 p-0 shadow-[0_14px_40px_rgba(15,23,42,0.16)]">
           <DialogHeader className="border-b border-slate-100 px-4 py-3 text-left">
             <DialogTitle className="text-base font-black text-[#102A43]">
-              Organizers
-            </DialogTitle>
+              {translate("club.headings.organizers")}</DialogTitle>
           </DialogHeader>
           <div className="grid gap-1.5 p-4">
-            {sharedPersonNames.length ? (
-              sharedPersonNames.map((name) => (
+            {sharedPeople.length ? (
+              sharedPeople.map((person) => (
                 <div
-                  key={name}
+                  key={person.stableKey}
                   className="rounded-2xl bg-slate-50 px-3 py-2 text-sm font-black text-[#102A43]"
                 >
-                  {name}
+                  {sharedPersonPresentationLabel(person)}
                 </div>
               ))
             ) : (
               <div className="rounded-2xl bg-slate-50 px-3 py-2 text-sm font-bold text-slate-500">
-                Only you
-              </div>
+                {translate("club.messages.onlyYou")}</div>
             )}
           </div>
         </DialogContent>
@@ -3253,49 +3472,72 @@ export function ClubTab({
         <DialogContent className="max-h-[88dvh] max-w-md overflow-hidden rounded-3xl p-0" onOpenAutoFocus={(event) => event.preventDefault()}>
           <DialogHeader className="border-b border-slate-100 px-4 py-3 text-left">
             <DialogTitle className="flex items-center gap-2 text-base font-black text-[#102A43]">
-              {attendanceHistoryPlayerId && <button type="button" className="-ml-1 rounded-full p-1 text-slate-500 hover:bg-slate-100" onClick={() => setAttendanceHistoryPlayerId(null)} aria-label="Back to attendance overview"><ChevronLeft className="h-5 w-5" /></button>}
+              {attendanceHistoryPlayerId && <button type="button" className="-ml-1 rounded-full p-1 text-slate-500 hover:bg-slate-100" onClick={() => setAttendanceHistoryPlayerId(null)} aria-label={translate("club.accessibility.backToAttendanceOverview")}><ChevronLeft className="h-5 w-5" /></button>}
               <Clock3 className="h-5 w-5 text-violet-600" />
-              {attendanceHistoryPlayerId ? (attendanceOverview.find((row) => row.playerId === attendanceHistoryPlayerId)?.name || "Attendance history") : "Club attendance"}
+              {attendanceHistoryPlayerId ? (attendanceOverview.find((row) => row.playerId === attendanceHistoryPlayerId)?.name || translate("club.headings.attendanceHistory")) : translate("club.headings.clubAttendance")}
             </DialogTitle>
           </DialogHeader>
           {!attendanceHistoryPlayerId ? (
             <div className="flex min-h-0 flex-col gap-3 p-4">
               <div className="grid grid-cols-2 gap-2">
                 <label className="grid gap-1 text-[10px] font-black uppercase tracking-wide text-slate-400">
-                  Period
-                  <select value={attendanceRange} onChange={(event) => setAttendanceRange(event.target.value as AttendanceRange)} className="h-9 rounded-xl border border-slate-200 bg-white px-2 text-xs font-bold normal-case tracking-normal text-[#102A43]">
-                    <option value="3m">3 months</option>
-                    <option value="6m">6 months</option>
-                    <option value="12m">12 months</option>
-                    <option value="all">All</option>
+                  {translate("club.labels.period")}<select value={attendanceRange} onChange={(event) => setAttendanceRange(event.target.value as AttendanceRange)} className="h-9 rounded-xl border border-slate-200 bg-white px-2 text-xs font-bold normal-case tracking-normal text-[#102A43]">
+                    <option value="3m">{translate("club.attendance.period.threeMonths")}</option>
+                    <option value="6m">{translate("club.attendance.period.sixMonths")}</option>
+                    <option value="12m">{translate("club.attendance.period.twelveMonths")}</option>
+                    <option value="all">{translate("club.messages.all")}</option>
                   </select>
                 </label>
                 <label className="grid gap-1 text-[10px] font-black uppercase tracking-wide text-slate-400">
-                  Sort
-                  <select value={attendanceSort} onChange={(event) => setAttendanceSort(event.target.value as AttendanceSort)} className="h-9 rounded-xl border border-slate-200 bg-white px-2 text-xs font-bold normal-case tracking-normal text-[#102A43]">
-                    <option value="issues">Most issues</option>
-                    <option value="recent">Most recent</option>
+                  {translate("club.labels.sort")}<select value={attendanceSort} onChange={(event) => setAttendanceSort(event.target.value as AttendanceSort)} className="h-9 rounded-xl border border-slate-200 bg-white px-2 text-xs font-bold normal-case tracking-normal text-[#102A43]">
+                    <option value="issues">{translate("club.messages.mostIssues")}</option>
+                    <option value="recent">{translate("club.messages.mostRecent")}</option>
                   </select>
                 </label>
               </div>
               <div className="grid grid-cols-[1fr_auto] gap-2">
-                <Button type="button" className="h-10 min-w-0 rounded-2xl bg-[#102A43] text-sm font-black text-white hover:bg-[#0b2036]" disabled={!attendanceEnabled} onClick={openNewAttendanceIssue}><Plus className="mr-1.5 h-4 w-4" />Record attendance issue</Button>
-                <Button type="button" variant="outline" className="h-10 rounded-2xl border-slate-200 px-3 text-xs font-black text-[#102A43]" disabled={!attendanceEnabled} onClick={() => openAttendanceWarningTemplates()}><ClipboardList className="mr-1.5 h-4 w-4" />Templates</Button>
+                <Button type="button" className="h-10 min-w-0 rounded-2xl bg-[#102A43] text-sm font-black text-white hover:bg-[#0b2036]" disabled={!attendanceEnabled} onClick={openNewAttendanceIssue}><Plus className="mr-1.5 h-4 w-4" />{translate("club.actions.recordAttendanceIssue")}</Button>
+                <Button type="button" variant="outline" className="h-10 rounded-2xl border-slate-200 px-3 text-xs font-black text-[#102A43]" disabled={!attendanceEnabled} onClick={() => openAttendanceWarningTemplates()}><ClipboardList className="mr-1.5 h-4 w-4" />{translate("club.actions.templates")}</Button>
               </div>
               {attendanceError && <div className="shrink-0 rounded-2xl border border-amber-100 bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-800">{attendanceError}</div>}
               <div className="min-h-0 max-h-[52dvh] overflow-y-auto pr-1" style={{ WebkitOverflowScrolling: "touch" }}>
-                {attendanceLoading ? <div className="rounded-2xl bg-slate-50 px-3 py-3 text-sm font-bold text-slate-500">Loading attendance…</div> : attendanceOverview.length === 0 ? <div className="rounded-2xl bg-slate-50 px-3 py-4 text-center text-sm font-bold text-slate-500">No attendance issues recorded.</div> : <div className="grid gap-2">{attendanceOverview.map((row) => {
+                {attendanceLoading ? <div className="rounded-2xl bg-slate-50 px-3 py-3 text-sm font-bold text-slate-500">{translate("club.messages.loadingAttendance")}</div> : attendanceOverview.length === 0 ? <div className="rounded-2xl bg-slate-50 px-3 py-4 text-center text-sm font-bold text-slate-500">{translate("club.messages.noAttendanceIssuesRecorded")}</div> : <div className="grid gap-2">{attendanceOverview.map((row) => {
                   const counts = { tardy: 0, lateCancellation: 0, noShow: 0, conduct: 0 };
                   row.records.forEach((record) => { if (record.issueType === "tardy") counts.tardy += 1; if (record.issueType === "late-cancellation") counts.lateCancellation += 1; if (record.issueType === "no-show") counts.noShow += 1; if (record.issueType === "conduct") counts.conduct += 1; });
-                  const parts = [counts.noShow ? `${counts.noShow} No-show` : "", counts.lateCancellation ? `${counts.lateCancellation} Last-minute` : "", counts.tardy ? `${counts.tardy} Tardy` : "", counts.conduct ? `${counts.conduct} Conduct` : ""].filter(Boolean);
-                  return <button key={row.playerId} type="button" className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white px-3 py-3 text-left shadow-sm active:scale-[0.99]" onClick={() => setAttendanceHistoryPlayerId(row.playerId)}><span className="min-w-0"><span className="block truncate text-sm font-black text-[#102A43]">{row.name}</span><span className="block truncate text-[11px] font-semibold text-slate-500">{parts.join(" · ")}</span></span><span className="shrink-0 rounded-full bg-violet-50 px-2.5 py-1 text-[11px] font-black text-violet-700">{row.records.length} {row.records.length === 1 ? "issue" : "issues"}</span></button>;
+                  const parts = [
+                    counts.noShow
+                      ? attendanceSummaryText(
+                          counts.noShow,
+                          "club.attendance.overviewSummary.noShow",
+                        )
+                      : "",
+                    counts.lateCancellation
+                      ? attendanceSummaryText(
+                          counts.lateCancellation,
+                          "club.attendance.overviewSummary.lastMinute",
+                        )
+                      : "",
+                    counts.tardy
+                      ? attendanceSummaryText(
+                          counts.tardy,
+                          "club.attendance.overviewSummary.tardy",
+                        )
+                      : "",
+                    counts.conduct
+                      ? attendanceSummaryText(
+                          counts.conduct,
+                          "club.attendance.overviewSummary.conduct",
+                        )
+                      : "",
+                  ].filter(Boolean);
+                  return <button key={row.playerId} type="button" className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white px-3 py-3 text-left shadow-sm active:scale-[0.99]" onClick={() => setAttendanceHistoryPlayerId(row.playerId)}><span className="min-w-0"><span className="block truncate text-sm font-black text-[#102A43]">{row.name}</span><span className="block truncate text-[11px] font-semibold text-slate-500">{parts.join(" · ")}</span></span><span className="shrink-0 rounded-full bg-violet-50 px-2.5 py-1 text-[11px] font-black text-violet-700">{translate("club.attendance.issueCount", { count: row.records.length })}</span></button>;
                 })}</div>}
               </div>
             </div>
           ) : (
             <div className="max-h-[68dvh] overflow-y-auto p-4" style={{ WebkitOverflowScrolling: "touch" }}>
-              <Button type="button" className="mb-3 h-10 w-full rounded-2xl bg-[#102A43] text-sm font-black text-white hover:bg-[#0b2036]" onClick={() => openAttendanceWarningComposer()}><Copy className="mr-1.5 h-4 w-4" />Copy warning</Button>
-              <div className="grid gap-2">{(attendanceHistoryRow?.records || []).map((record) => <button key={record.id} type="button" className="rounded-2xl border border-slate-100 bg-white px-3 py-3 text-left shadow-sm active:scale-[0.99] disabled:cursor-default disabled:active:scale-100" disabled={!attendanceEnabled} onClick={() => openAttendanceRecord(record)}><div className="flex items-start justify-between gap-2"><span className="text-sm font-black text-[#102A43]">{attendanceIssueLabel(record.issueType)}</span><span className="text-[10px] font-black text-slate-400">{formatAttendanceDate(record.incidentDate)}</span></div>{record.note && <div className="mt-1 text-[11px] font-semibold leading-snug text-slate-600">{record.note}</div>}{(record.createdByName || record.createdByEmail) && <div className="mt-1.5 text-[10px] font-semibold text-slate-400">Recorded by {record.createdByName || record.createdByEmail}</div>}</button>)}</div>
+              <Button type="button" className="mb-3 h-10 w-full rounded-2xl bg-[#102A43] text-sm font-black text-white hover:bg-[#0b2036]" onClick={() => openAttendanceWarningComposer()}><Copy className="mr-1.5 h-4 w-4" />{translate("club.actions.copyWarning")}</Button>
+              <div className="grid gap-2">{(attendanceHistoryRow?.records || []).map((record) => <button key={record.id} type="button" className="rounded-2xl border border-slate-100 bg-white px-3 py-3 text-left shadow-sm active:scale-[0.99] disabled:cursor-default disabled:active:scale-100" disabled={!attendanceEnabled} onClick={() => openAttendanceRecord(record)}><div className="flex items-start justify-between gap-2"><span className="text-sm font-black text-[#102A43]">{attendanceIssueLabel(record.issueType)}</span><span className="text-[10px] font-black text-slate-400">{formatAttendanceDate(record.incidentDate)}</span></div>{record.note && <div className="mt-1 text-[11px] font-semibold leading-snug text-slate-600">{record.note}</div>}{(record.createdByName || record.createdByEmail) && <div className="mt-1.5 text-[10px] font-semibold text-slate-400">{translate("club.attendance.recordedBy", { name: record.createdByName || record.createdByEmail })}</div>}</button>)}</div>
             </div>
           )}
         </DialogContent>
@@ -3304,31 +3546,31 @@ export function ClubTab({
       <Dialog open={attendanceWarningBoardOpen} onOpenChange={(open) => { setAttendanceWarningBoardOpen(open); if (!open) { blurActiveField(); setAttendanceWarningPlayerSearch(""); } }}>
         <DialogContent className="max-h-[90dvh] max-w-md overflow-hidden rounded-3xl p-0" onOpenAutoFocus={(event) => event.preventDefault()}>
           <DialogHeader className="border-b border-slate-100 px-4 py-3 text-left">
-            <DialogTitle className="flex items-center gap-2 text-base font-black text-[#102A43]"><AlertTriangle className="h-5 w-5 text-[#3f756b]" />Warnings</DialogTitle>
+            <DialogTitle className="flex items-center gap-2 text-base font-black text-[#102A43]"><AlertTriangle className="h-5 w-5 text-[#3f756b]" />{translate("club.headings.warnings")}</DialogTitle>
           </DialogHeader>
           <div className="grid gap-3 border-b border-slate-100 p-4 pb-3">
             <div className="flex items-center gap-2">
               <div className="relative min-w-0 flex-1">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-300" />
-                <Input value={attendanceWarningPlayerSearch} onChange={(event) => setAttendanceWarningPlayerSearch(event.target.value)} placeholder="Find a player" className="h-10 rounded-2xl border-slate-200 pl-9 text-sm font-semibold" />
+                <Input value={attendanceWarningPlayerSearch} onChange={(event) => setAttendanceWarningPlayerSearch(event.target.value)} placeholder={translate("club.fields.findAPlayer")} className="h-10 rounded-2xl border-slate-200 pl-9 text-sm font-semibold" />
               </div>
-              <Button type="button" variant="outline" className="h-10 shrink-0 rounded-2xl border-slate-200 px-3 text-xs font-black text-[#102A43]" onClick={() => openAttendanceWarningTemplates()}><ClipboardList className="mr-1.5 h-4 w-4" />Templates</Button>
+              <Button type="button" variant="outline" className="h-10 shrink-0 rounded-2xl border-slate-200 px-3 text-xs font-black text-[#102A43]" onClick={() => openAttendanceWarningTemplates()}><ClipboardList className="mr-1.5 h-4 w-4" />{translate("club.actions.templates")}</Button>
             </div>
             <div className="flex items-center justify-between gap-2">
-              <span className="text-[11px] font-semibold text-slate-500">Attendance overview</span>
+              <span className="text-[11px] font-semibold text-slate-500">{translate("club.messages.attendanceOverview")}</span>
               <select value={attendanceRange} onChange={(event) => setAttendanceRange(event.target.value as AttendanceRange)} className="h-9 rounded-xl border border-slate-200 bg-white px-2 text-xs font-bold text-[#102A43]">
-                <option value="3m">Last 3 months</option>
-                <option value="6m">Last 6 months</option>
-                <option value="12m">Last 12 months</option>
-                <option value="all">All</option>
+                <option value="3m">{translate("club.messages.last3Months")}</option>
+                <option value="6m">{translate("club.messages.last6Months")}</option>
+                <option value="12m">{translate("club.messages.last12Months")}</option>
+                <option value="all">{translate("club.messages.all")}</option>
               </select>
             </div>
           </div>
           <div className="max-h-[64dvh] overflow-y-auto p-4" style={{ WebkitOverflowScrolling: "touch" }}>
             {attendanceLoading ? (
-              <div className="py-8 text-center text-sm font-semibold text-slate-400">Loading attendance…</div>
+              <div className="py-8 text-center text-sm font-semibold text-slate-400">{translate("club.messages.loadingAttendance")}</div>
             ) : attendanceWarningOverview.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-8 text-center text-sm font-semibold text-slate-400">No recorded attendance issues in this period.</div>
+              <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-8 text-center text-sm font-semibold text-slate-400">{translate("club.attendance.emptyPeriod")}</div>
             ) : (
               <div className="grid gap-2">
                 {attendanceWarningOverview.map((row) => {
@@ -3340,17 +3582,33 @@ export function ClubTab({
                     if (record.issueType === "conduct") counts.conduct += 1;
                   });
                   const latest = [...row.records].sort((a, b) => b.incidentDate.localeCompare(a.incidentDate))[0];
-                  const parts = [counts.noShow ? `${counts.noShow} no-show` : "", counts.lateCancellation ? `${counts.lateCancellation} last-minute` : "", counts.tardy ? `${counts.tardy} tardy` : "", counts.conduct ? `${counts.conduct} conduct` : ""].filter(Boolean);
+                  const parts = [
+                    counts.noShow
+                      ? attendanceSummaryText(counts.noShow, "club.attendance.summary.noShow")
+                      : "",
+                    counts.lateCancellation
+                      ? attendanceSummaryText(
+                          counts.lateCancellation,
+                          "club.attendance.summary.lastMinute",
+                        )
+                      : "",
+                    counts.tardy
+                      ? attendanceSummaryText(counts.tardy, "club.attendance.summary.tardy")
+                      : "",
+                    counts.conduct
+                      ? attendanceSummaryText(counts.conduct, "club.attendance.summary.conduct")
+                      : "",
+                  ].filter(Boolean);
                   return (
                     <button key={row.playerId} type="button" className="flex w-full items-center gap-3 rounded-2xl border border-slate-100 bg-white px-3 py-3 text-left shadow-sm transition active:scale-[0.99]" onClick={() => { setAttendanceWarningBoardOpen(false); openAttendanceWarningComposerForRow(row); }}>
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-sm font-black text-[#102A43]">{row.name}</span>
                         <span className="mt-0.5 block truncate text-[11px] font-semibold text-slate-500">{parts.join(" · ")}</span>
-                        {latest && <span className="mt-1 block text-[10px] font-semibold text-slate-400">Latest · {formatAttendanceDate(latest.incidentDate)} · {attendanceIssueLabel(latest.issueType)}</span>}
+                        {latest && <span className="mt-1 block text-[10px] font-semibold text-slate-400">{translate("club.attendance.latest", { date: formatAttendanceDate(latest.incidentDate), issue: attendanceIssueLabel(latest.issueType) })}</span>}
                       </span>
                       <span className="shrink-0 text-right">
-                        <span className="block text-[11px] font-black text-[#102A43]">{row.records.length}</span>
-                        <span className="block text-[9px] font-bold uppercase tracking-wide text-slate-400">issues</span>
+                        <span className="block text-[11px] font-black text-[#102A43]">{formatNumber(uiLocale, row.records.length)}</span>
+                        <span className="block text-[9px] font-bold uppercase tracking-wide text-slate-400">{translate("club.messages.issues")}</span>
                       </span>
                       <ChevronRight className="h-4 w-4 shrink-0 text-slate-300" />
                     </button>
@@ -3365,53 +3623,51 @@ export function ClubTab({
       <Dialog open={attendanceWarningTemplatesOpen} onOpenChange={(open) => { setAttendanceWarningTemplatesOpen(open); if (!open) { blurActiveField(); setAttendanceWarningTemplateNotice(""); } }}>
         <DialogContent className="max-h-[88dvh] max-w-md overflow-y-auto rounded-3xl p-0" onOpenAutoFocus={(event) => event.preventDefault()}>
           <DialogHeader className="border-b border-slate-100 px-4 py-3 text-left">
-            <DialogTitle className="flex items-center gap-2 text-base font-black text-[#102A43]"><ClipboardList className="h-5 w-5 text-violet-600" />Warning templates</DialogTitle>
+            <DialogTitle className="flex items-center gap-2 text-base font-black text-[#102A43]"><ClipboardList className="h-5 w-5 text-violet-600" />{translate("club.headings.warningTemplates")}</DialogTitle>
           </DialogHeader>
           <div className="grid gap-3 p-4">
-            <div className="rounded-2xl bg-violet-50 px-3 py-2.5 text-[11px] font-semibold leading-relaxed text-violet-800">These templates belong to this Club and are shared with collaborators. Stripes never sends them automatically.</div>
+            <div className="rounded-2xl bg-violet-50 px-3 py-2.5 text-[11px] font-semibold leading-relaxed text-violet-800">{translate("club.attendance.templateSharingHelp")}</div>
             <label className="grid gap-1.5 text-[10px] font-black uppercase tracking-wide text-slate-400">
-              Template
-              <select value={attendanceWarningTemplateKind} onChange={(event) => selectAttendanceWarningTemplateKind(event.target.value as AttendanceWarningTemplateKind)} className="h-10 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-bold normal-case tracking-normal text-[#102A43]">
-                {ATTENDANCE_WARNING_TEMPLATE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              {translate("club.labels.template")}<select value={attendanceWarningTemplateKind} onChange={(event) => selectAttendanceWarningTemplateKind(event.target.value as AttendanceWarningTemplateKind)} className="h-10 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-bold normal-case tracking-normal text-[#102A43]">
+                {ATTENDANCE_WARNING_TEMPLATE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{translate(option.labelKey)}</option>)}
               </select>
             </label>
             <div className="grid gap-1.5">
-              <Label className="text-[10px] font-black uppercase tracking-wide text-slate-400">Saved wording</Label>
+              <Label className="text-[10px] font-black uppercase tracking-wide text-slate-400">{translate("club.labels.savedWording")}</Label>
               <Textarea value={attendanceWarningTemplateDraft} onChange={(event) => { setAttendanceWarningTemplateDraft(event.target.value.slice(0, 2400)); setAttendanceWarningTemplateNotice(""); }} className="min-h-48 resize-none rounded-2xl border-slate-200 text-sm font-semibold leading-relaxed" />
-              <div className="text-[10px] font-semibold leading-relaxed text-slate-400">Placeholders: {'{player}'} · {'{group}'} · {'{period}'} · {'{last_minute}'} · {'{last_minute_dates}'} · {'{no_shows}'} · {'{no_show_dates}'} · {'{tardies}'} · {'{attendance_issues}'}</div>
+              <div className="text-[10px] font-semibold leading-relaxed text-slate-400">{translate("club.attendance.placeholders")}</div>
             </div>
-            {attendanceWarningTemplatesLoading && <div className="text-[11px] font-semibold text-slate-400">Syncing Club templates…</div>}
+            {attendanceWarningTemplatesLoading && <div className="text-[11px] font-semibold text-slate-400">{translate("club.messages.syncingClubTemplates")}</div>}
             {attendanceWarningTemplatesError && <div className="rounded-2xl border border-amber-100 bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-800">{attendanceWarningTemplatesError}</div>}
             {attendanceWarningTemplateNotice && <div className="rounded-2xl bg-emerald-50 px-3 py-2 text-[11px] font-bold text-emerald-700">{attendanceWarningTemplateNotice}</div>}
             <div className="grid grid-cols-[auto_1fr] gap-2">
-              <Button type="button" variant="outline" className="h-10 rounded-2xl border-slate-200 px-3 text-xs font-black text-slate-600" disabled={attendanceWarningTemplateSaving} onClick={() => { setAttendanceWarningTemplateDraft(DEFAULT_ATTENDANCE_WARNING_TEMPLATES[attendanceWarningTemplateKind]); setAttendanceWarningTemplateNotice("Default loaded — save to share it"); }}>Default</Button>
-              <Button type="button" className="h-10 rounded-2xl bg-[#102A43] text-sm font-black text-white hover:bg-[#0b2036]" disabled={!attendanceWarningTemplateDraft.trim() || attendanceWarningTemplateSaving || !attendanceEnabled} onClick={saveCurrentAttendanceWarningTemplate}>{attendanceWarningTemplateSaving ? "Saving…" : "Save template"}</Button>
+              <Button type="button" variant="outline" className="h-10 rounded-2xl border-slate-200 px-3 text-xs font-black text-slate-600" disabled={attendanceWarningTemplateSaving} onClick={() => { setAttendanceWarningTemplateDraft(localizedAttendanceWarningTemplates()[attendanceWarningTemplateKind]); setAttendanceWarningTemplateNotice(translate("club.attendance.defaultLoaded")); }}>{translate("club.actions.default")}</Button>
+              <Button type="button" className="h-10 rounded-2xl bg-[#102A43] text-sm font-black text-white hover:bg-[#0b2036]" disabled={!attendanceWarningTemplateDraft.trim() || attendanceWarningTemplateSaving || !attendanceEnabled} onClick={saveCurrentAttendanceWarningTemplate}>{attendanceWarningTemplateSaving ? translate("club.actions.saving") : translate("club.actions.saveTemplate")}</Button>
             </div>
           </div>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={attendanceWarningComposerOpen} onOpenChange={(open) => { setAttendanceWarningComposerOpen(open); if (!open) { blurActiveField(); setAttendanceWarningCopyNotice(""); } }}>
+      <Dialog open={attendanceWarningComposerOpen} onOpenChange={(open) => { setAttendanceWarningComposerOpen(open); if (!open) { blurActiveField(); setAttendanceWarningCopyNotice(null); } }}>
         <DialogContent className="max-h-[88dvh] max-w-md overflow-y-auto rounded-3xl p-0" onOpenAutoFocus={(event) => event.preventDefault()}>
           <DialogHeader className="border-b border-slate-100 px-4 py-3 text-left">
-            <DialogTitle className="flex items-center gap-2 text-base font-black text-[#102A43]"><Copy className="h-5 w-5 text-violet-600" />Copy warning{attendanceHistoryRow ? ` · ${attendanceHistoryRow.name}` : ""}</DialogTitle>
+            <DialogTitle className="flex items-center gap-2 text-base font-black text-[#102A43]"><Copy className="h-5 w-5 text-violet-600" />{attendanceHistoryRow ? translate("club.headings.copyWarningFor", { name: attendanceHistoryRow.name }) : translate("club.headings.copyWarning")}</DialogTitle>
           </DialogHeader>
           <div className="grid gap-3 p-4">
             <label className="grid gap-1.5 text-[10px] font-black uppercase tracking-wide text-slate-400">
-              Template
-              <select value={attendanceWarningComposerKind} onChange={(event) => selectAttendanceWarningComposerKind(event.target.value as AttendanceWarningTemplateKind)} className="h-10 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-bold normal-case tracking-normal text-[#102A43]">
-                {ATTENDANCE_WARNING_TEMPLATE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              {translate("club.labels.template")}<select value={attendanceWarningComposerKind} onChange={(event) => selectAttendanceWarningComposerKind(event.target.value as AttendanceWarningTemplateKind)} className="h-10 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-bold normal-case tracking-normal text-[#102A43]">
+                {ATTENDANCE_WARNING_TEMPLATE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{translate(option.labelKey)}</option>)}
               </select>
             </label>
             <div className="grid gap-1.5">
-              <Label className="text-[10px] font-black uppercase tracking-wide text-slate-400">Preview</Label>
-              <Textarea value={attendanceWarningComposerDraft} onChange={(event) => { setAttendanceWarningComposerDraft(event.target.value); setAttendanceWarningCopyNotice(""); }} className="min-h-52 resize-none rounded-2xl border-slate-200 text-sm font-semibold leading-relaxed" />
-              <div className="text-[10px] font-semibold leading-relaxed text-slate-400">No-show and last-minute templates can cite the recorded dates. Tardy templates use the selected period and count. Conduct notes are never inserted automatically. You can edit this copy before copying it.</div>
+              <Label className="text-[10px] font-black uppercase tracking-wide text-slate-400">{translate("club.labels.preview")}</Label>
+              <Textarea value={attendanceWarningComposerDraft} onChange={(event) => { setAttendanceWarningComposerDraft(event.target.value); setAttendanceWarningCopyNotice(null); }} className="min-h-52 resize-none rounded-2xl border-slate-200 text-sm font-semibold leading-relaxed" />
+              <div className="text-[10px] font-semibold leading-relaxed text-slate-400">{translate("club.attendance.warningComposerHelp")}</div>
             </div>
-            {attendanceWarningCopyNotice && <div className={`rounded-2xl px-3 py-2 text-[11px] font-bold ${attendanceWarningCopyNotice === "Copied" ? "bg-emerald-50 text-emerald-700" : "border border-amber-100 bg-amber-50 text-amber-800"}`}>{attendanceWarningCopyNotice}</div>}
+            {attendanceWarningCopyNotice && <div className={`rounded-2xl px-3 py-2 text-[11px] font-bold ${attendanceWarningCopyNotice.tone === "success" ? "bg-emerald-50 text-emerald-700" : "border border-amber-100 bg-amber-50 text-amber-800"}`}>{attendanceWarningCopyNotice.tone === "success" ? translate("club.attendance.copied") : attendanceWarningCopyNotice.message}</div>}
             <div className="grid grid-cols-[auto_1fr] gap-2">
-              <Button type="button" variant="outline" className="h-10 rounded-2xl border-slate-200 px-3 text-xs font-black text-slate-600" onClick={() => { setAttendanceWarningComposerOpen(false); openAttendanceWarningTemplates(attendanceWarningComposerKind); }}>Edit template</Button>
-              <Button type="button" className="h-10 rounded-2xl bg-[#102A43] text-sm font-black text-white hover:bg-[#0b2036]" disabled={!attendanceWarningComposerDraft.trim()} onClick={copyAttendanceWarning}><Copy className="mr-1.5 h-4 w-4" />{attendanceWarningCopyNotice === "Copied" ? "Copied" : "Copy warning"}</Button>
+              <Button type="button" variant="outline" className="h-10 rounded-2xl border-slate-200 px-3 text-xs font-black text-slate-600" onClick={() => { setAttendanceWarningComposerOpen(false); openAttendanceWarningTemplates(attendanceWarningComposerKind); }}>{translate("club.actions.editTemplate")}</Button>
+              <Button type="button" className="h-10 rounded-2xl bg-[#102A43] text-sm font-black text-white hover:bg-[#0b2036]" disabled={!attendanceWarningComposerDraft.trim()} onClick={copyAttendanceWarning}><Copy className="mr-1.5 h-4 w-4" />{attendanceWarningCopyNotice?.tone === "success" ? translate("club.actions.copied") : translate("club.actions.copyWarning")}</Button>
             </div>
           </div>
         </DialogContent>
@@ -3419,10 +3675,10 @@ export function ClubTab({
 
       <Dialog open={attendanceEditorOpen} onOpenChange={(open) => { setAttendanceEditorOpen(open); if (!open) { blurActiveField(); setAttendanceDuplicate(null); } }}>
         <DialogContent className="max-h-[88dvh] max-w-md overflow-y-auto rounded-3xl p-0" onOpenAutoFocus={(event) => event.preventDefault()}>
-          <DialogHeader className="border-b border-slate-100 px-4 py-3 text-left"><DialogTitle className="flex items-center gap-2 text-base font-black text-[#102A43]"><Clock3 className="h-5 w-5 text-violet-600" />{attendanceEditingId ? "Edit attendance record" : "Record attendance issue"}</DialogTitle></DialogHeader>
+          <DialogHeader className="border-b border-slate-100 px-4 py-3 text-left"><DialogTitle className="flex items-center gap-2 text-base font-black text-[#102A43]"><Clock3 className="h-5 w-5 text-violet-600" />{attendanceEditingId ? translate("club.headings.editAttendanceRecord") : translate("club.headings.recordAttendanceIssue")}</DialogTitle></DialogHeader>
           <div className="grid gap-3 p-4" onPointerDown={(event) => { const target = event.target as HTMLElement; if (!target.closest("input,button,select,textarea")) blurActiveField(); }}>
             <div className="grid gap-1.5">
-              <Label className="text-xs font-black uppercase tracking-wide text-slate-500">Player</Label>
+              <Label className="text-xs font-black uppercase tracking-wide text-slate-500">{translate("club.labels.player")}</Label>
               <div className="rounded-2xl border border-slate-200 bg-white p-2">
                 <div className="relative">
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -3433,7 +3689,7 @@ export function ClubTab({
                       if (attendancePlayerId) setAttendancePlayerId("");
                       setAttendanceDuplicate(null);
                     }}
-                    placeholder="Search roster…"
+                    placeholder={translate("club.fields.searchRoster")}
                     className="h-10 rounded-xl border-slate-200 pl-9 text-sm font-semibold"
                     enterKeyHint="search"
                     disabled={attendanceSaving}
@@ -3442,8 +3698,8 @@ export function ClubTab({
                 <div className="mt-1.5 max-h-40 overflow-y-auto" style={{ WebkitOverflowScrolling: "touch" }}>
                   {attendancePlayerMatches.length > 0 ? attendancePlayerMatches.map((player) => {
                     const selected = attendancePlayerId === player.id;
-                    return <button key={player.id} type="button" disabled={attendanceSaving} onClick={() => { setAttendancePlayerId(player.id); setAttendancePlayerSearch(player.name); setAttendanceDuplicate(null); }} className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left ${selected ? "bg-violet-50 text-violet-800" : "text-[#102A43] hover:bg-slate-50"}`}><span className="min-w-0"><span className="block truncate text-sm font-black">{player.name}</span>{player.aka && <span className="block truncate text-[10px] font-semibold text-slate-400">{player.aka}</span>}</span>{selected && <span className="text-[10px] font-black uppercase tracking-wide">Selected</span>}</button>;
-                  }) : <div className="px-3 py-3 text-center text-xs font-semibold text-slate-400">No roster match</div>}
+                    return <button key={player.id} type="button" disabled={attendanceSaving} onClick={() => { setAttendancePlayerId(player.id); setAttendancePlayerSearch(player.name); setAttendanceDuplicate(null); }} className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left ${selected ? "bg-violet-50 text-violet-800" : "text-[#102A43] hover:bg-slate-50"}`}><span className="min-w-0"><span className="block truncate text-sm font-black">{player.name}</span>{player.aka && <span className="block truncate text-[10px] font-semibold text-slate-400">{player.aka}</span>}</span>{selected && <span className="text-[10px] font-black uppercase tracking-wide">{translate("club.messages.selected")}</span>}</button>;
+                  }) : <div className="px-3 py-3 text-center text-xs font-semibold text-slate-400">{translate("club.messages.noRosterMatch")}</div>}
                 </div>
                 <button
                   type="button"
@@ -3457,17 +3713,17 @@ export function ClubTab({
                   className="mt-1.5 flex w-full items-center gap-2 rounded-xl border border-dashed border-slate-200 px-3 py-2 text-left text-xs font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <Plus className="h-4 w-4" />
-                  {attendancePlayerSearch.trim() ? `Add “${attendancePlayerSearch.trim()}” to roster` : "Add player to roster"}
+                  {attendancePlayerSearch.trim() ? translate("club.actions.addToRoster", { value1: attendancePlayerSearch.trim() }) : translate("club.actions.addPlayerToRoster")}
                 </button>
               </div>
             </div>
-            <div className="grid gap-1.5"><Label className="text-xs font-black uppercase tracking-wide text-slate-500">Issue</Label><div className="grid grid-cols-2 gap-2">{ATTENDANCE_ISSUE_OPTIONS.map((option) => <button key={option.value} type="button" className={`min-h-10 rounded-2xl border px-2 py-2 text-[11px] font-black ${attendanceIssueType === option.value ? "border-violet-300 bg-violet-50 text-violet-800" : "border-slate-200 bg-white text-slate-600"}`} onClick={() => { setAttendanceIssueType(option.value); setAttendanceDuplicate(null); }}>{option.label}</button>)}</div></div>
-            <div className="grid gap-1.5"><Label className="text-xs font-black uppercase tracking-wide text-slate-500">Date</Label><Input type="date" value={attendanceDate} onChange={(event) => { setAttendanceDate(event.target.value); setAttendanceDuplicate(null); }} max={todayIsoDate()} className="h-10 rounded-2xl border-slate-200 text-sm font-semibold" /></div>
-            {attendanceIssueType === "conduct" && <div className="grid gap-1.5"><Label className="text-xs font-black uppercase tracking-wide text-slate-500">What happened? <span className="normal-case text-slate-400">optional</span></Label><Input value={attendanceNote} onChange={(event) => setAttendanceNote(event.target.value.slice(0,240))} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } }} enterKeyHint="done" maxLength={240} placeholder="Short organizer note" className="h-10 rounded-2xl border-slate-200 text-sm font-semibold" /></div>}
-            <div className="rounded-2xl bg-slate-50 px-3 py-2 text-[10px] font-semibold leading-snug text-slate-500">Session “Late” only keeps someone out of team generation. It does not create an attendance record.</div>
-            {attendanceDuplicate && <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3"><div className="flex items-start gap-2 text-[11px] font-bold leading-snug text-amber-900"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /><span>{attendanceIssueLabel(attendanceDuplicate.issueType)} is already recorded for this player on {formatAttendanceDate(attendanceDuplicate.incidentDate)}.</span></div><div className="mt-2 grid grid-cols-2 gap-2"><Button type="button" variant="outline" className="h-9 rounded-xl border-amber-200 bg-white text-[11px] font-black text-amber-800" onClick={() => setAttendanceDuplicate(null)}>Cancel</Button><Button type="button" className="h-9 rounded-xl bg-amber-700 text-[11px] font-black text-white hover:bg-amber-800" onClick={() => saveAttendanceRecord(true)}>Record another</Button></div></div>}
+            <div className="grid gap-1.5"><Label className="text-xs font-black uppercase tracking-wide text-slate-500">{translate("club.labels.issue")}</Label><div className="grid grid-cols-2 gap-2">{ATTENDANCE_ISSUE_OPTIONS.map((option) => <button key={option.value} type="button" className={`min-h-10 rounded-2xl border px-2 py-2 text-[11px] font-black ${attendanceIssueType === option.value ? "border-violet-300 bg-violet-50 text-violet-800" : "border-slate-200 bg-white text-slate-600"}`} onClick={() => { setAttendanceIssueType(option.value); setAttendanceDuplicate(null); }}>{translate(option.labelKey)}</button>)}</div></div>
+            <div className="grid gap-1.5"><Label className="text-xs font-black uppercase tracking-wide text-slate-500">{translate("club.labels.date")}</Label><Input type="date" value={attendanceDate} onChange={(event) => { setAttendanceDate(event.target.value); setAttendanceDuplicate(null); }} max={todayIsoDate()} className="h-10 rounded-2xl border-slate-200 text-sm font-semibold" /></div>
+            {attendanceIssueType === "conduct" && <div className="grid gap-1.5"><Label className="text-xs font-black uppercase tracking-wide text-slate-500">{translate("club.labels.whatHappened")}{" "}<span className="normal-case text-slate-400">{translate("club.messages.optional")}</span></Label><Input value={attendanceNote} onChange={(event) => setAttendanceNote(event.target.value.slice(0,240))} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } }} enterKeyHint="done" maxLength={240} placeholder={translate("club.fields.shortOrganizerNote")} className="h-10 rounded-2xl border-slate-200 text-sm font-semibold" /></div>}
+            <div className="rounded-2xl bg-slate-50 px-3 py-2 text-[10px] font-semibold leading-snug text-slate-500">{translate("club.attendance.lateDifferenceHelp")}</div>
+            {attendanceDuplicate && <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3"><div className="flex items-start gap-2 text-[11px] font-bold leading-snug text-amber-900"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /><span>{translate("club.attendance.duplicate", { issue: attendanceIssueLabel(attendanceDuplicate.issueType), date: formatAttendanceDate(attendanceDuplicate.incidentDate) })}</span></div><div className="mt-2 grid grid-cols-2 gap-2"><Button type="button" variant="outline" className="h-9 rounded-xl border-amber-200 bg-white text-[11px] font-black text-amber-800" onClick={() => setAttendanceDuplicate(null)}>{translate("common.cancel")}</Button><Button type="button" className="h-9 rounded-xl bg-amber-700 text-[11px] font-black text-white hover:bg-amber-800" onClick={() => saveAttendanceRecord(true)}>{translate("club.actions.recordAnother")}</Button></div></div>}
             {attendanceError && <div className="rounded-2xl border border-amber-100 bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-800">{attendanceError}</div>}
-            <div className={`grid gap-2 ${attendanceEditingId ? "grid-cols-[0.8fr_1.2fr]" : "grid-cols-1"}`}>{attendanceEditingId && <Button type="button" variant="outline" className="h-10 rounded-2xl border-red-200 text-sm font-black text-red-500 hover:bg-red-50" disabled={!attendanceEnabled || attendanceSaving} onClick={removeAttendanceRecord}><Trash2 className="mr-1.5 h-4 w-4" />Delete</Button>}<Button type="button" className="h-10 rounded-2xl bg-[#102A43] text-sm font-black text-white hover:bg-[#0b2036]" disabled={!attendanceEnabled || !attendancePlayerId || !attendanceDate || attendanceSaving} onClick={() => { blurActiveField(); saveAttendanceRecord(false); }}>{attendanceSaving ? "Saving…" : attendanceEditingId ? "Save changes" : "Save record"}</Button></div>
+            <div className={`grid gap-2 ${attendanceEditingId ? "grid-cols-[0.8fr_1.2fr]" : "grid-cols-1"}`}>{attendanceEditingId && <Button type="button" variant="outline" className="h-10 rounded-2xl border-red-200 text-sm font-black text-red-500 hover:bg-red-50" disabled={!attendanceEnabled || attendanceSaving} onClick={removeAttendanceRecord}><Trash2 className="mr-1.5 h-4 w-4" />{translate("common.delete")}</Button>}<Button type="button" className="h-10 rounded-2xl bg-[#102A43] text-sm font-black text-white hover:bg-[#0b2036]" disabled={!attendanceEnabled || !attendancePlayerId || !attendanceDate || attendanceSaving} onClick={() => { blurActiveField(); saveAttendanceRecord(false); }}>{attendanceSaving ? translate("club.actions.saving") : attendanceEditingId ? translate("club.actions.saveChanges") : translate("club.actions.saveRecord")}</Button></div>
           </div>
         </DialogContent>
       </Dialog>
@@ -3477,17 +3733,14 @@ export function ClubTab({
           <DialogHeader className="border-b border-violet-100 bg-violet-50/70 px-4 py-3 text-left">
             <DialogTitle className="flex items-center gap-2 text-base font-black text-[#102A43]">
               <Star className="h-4 w-4 text-violet-600" />
-              Organizer ratings
-            </DialogTitle>
+              {translate("club.headings.organizerRatings")}</DialogTitle>
           </DialogHeader>
           <div
             className="max-h-[66svh] overflow-y-auto p-4"
             style={{ WebkitOverflowScrolling: "touch" }}
           >
             <div className="mb-3 rounded-2xl bg-violet-50 px-3 py-2 text-[11px] font-bold leading-snug text-violet-800">
-              Rate players you know, skip the ones you do not know yet, and
-              adjust your own ratings anytime. Individual ratings stay private.
-            </div>
+              {translate("club.ratings.privacyHelp")}</div>
 
             {ratingFlowNotice && (
               <div className="mb-3 rounded-2xl border border-violet-100 bg-white px-3 py-2 text-[11px] font-black leading-snug text-violet-800 shadow-sm">
@@ -3499,8 +3752,8 @@ export function ClubTab({
               {newNeedRatingPlayers.length > 0 && (
                 <div className="grid gap-2">
                   <div className="flex items-center justify-between px-1 text-[10px] font-black uppercase tracking-wide text-violet-600">
-                    <span>New players to rate</span>
-                    <span>{newNeedRatingPlayers.length}</span>
+                    <span>{translate("club.messages.newPlayersToRate")}</span>
+                    <span>{formatNumber(uiLocale, newNeedRatingPlayers.length)}</span>
                   </div>
                   {newNeedRatingPlayers.map((player) => (
                     <button
@@ -3515,18 +3768,16 @@ export function ClubTab({
                             {player.name}
                           </span>
                           <span className="rounded-full bg-white px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-violet-700">
-                            New
-                          </span>
+                            {translate("club.messages.new")}</span>
                         </span>
                         {player.aka && (
                           <span className="block truncate text-[11px] font-semibold text-violet-700">
-                            AKA {player.aka}
+                            {translate("club.people.aka", { name: player.aka })}
                           </span>
                         )}
                       </span>
                       <span className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-violet-700">
-                        Rate
-                      </span>
+                        {translate("club.messages.rate")}</span>
                     </button>
                   ))}
                 </div>
@@ -3535,8 +3786,8 @@ export function ClubTab({
               {regularNeedRatingPlayers.length > 0 && (
                 <div className="grid gap-2">
                   <div className="flex items-center justify-between px-1 text-[10px] font-black uppercase tracking-wide text-violet-600">
-                    <span>Needs your rating</span>
-                    <span>{regularNeedRatingPlayers.length}</span>
+                    <span>{translate("club.messages.needsYourRating")}</span>
+                    <span>{formatNumber(uiLocale, regularNeedRatingPlayers.length)}</span>
                   </div>
                   {regularNeedRatingPlayers.map((player) => (
                     <button
@@ -3551,13 +3802,12 @@ export function ClubTab({
                         </span>
                         {player.aka && (
                           <span className="block truncate text-[11px] font-semibold text-slate-500">
-                            AKA {player.aka}
+                            {translate("club.people.aka", { name: player.aka })}
                           </span>
                         )}
                       </span>
                       <span className="rounded-full bg-violet-50 px-2 py-1 text-[10px] font-black text-violet-700">
-                        Rate
-                      </span>
+                        {translate("club.messages.rate")}</span>
                     </button>
                   ))}
                 </div>
@@ -3566,8 +3816,8 @@ export function ClubTab({
               {skippedPlayers.length > 0 && (
                 <div className="grid gap-2">
                   <div className="flex items-center justify-between px-1 text-[10px] font-black uppercase tracking-wide text-amber-600">
-                    <span>Skipped for later</span>
-                    <span>{skippedPlayers.length}</span>
+                    <span>{translate("club.messages.skippedForLater")}</span>
+                    <span>{formatNumber(uiLocale, skippedPlayers.length)}</span>
                   </div>
                   {skippedPlayers.map((player) => (
                     <button
@@ -3582,13 +3832,12 @@ export function ClubTab({
                         </span>
                         {player.aka && (
                           <span className="block truncate text-[11px] font-semibold text-slate-500">
-                            AKA {player.aka}
+                            {translate("club.people.aka", { name: player.aka })}
                           </span>
                         )}
                       </span>
                       <span className="rounded-full bg-amber-50 px-2 py-1 text-[10px] font-black text-amber-700">
-                        Rate now
-                      </span>
+                        {translate("club.messages.rateNow")}</span>
                     </button>
                   ))}
                 </div>
@@ -3597,8 +3846,8 @@ export function ClubTab({
               {ratedPlayers.length > 0 && (
                 <div className="grid gap-2">
                   <div className="flex items-center justify-between px-1 text-[10px] font-black uppercase tracking-wide text-slate-400">
-                    <span>Your rated players</span>
-                    <span>{ratedPlayers.length}</span>
+                    <span>{translate("club.messages.yourRatedPlayers")}</span>
+                    <span>{formatNumber(uiLocale, ratedPlayers.length)}</span>
                   </div>
                   {ratedPlayers.map((player) => {
                     const myRating = myRatingByPlayerId.get(player.id);
@@ -3615,18 +3864,18 @@ export function ClubTab({
                             {player.name}
                           </span>
                           <span className="block truncate text-[11px] font-semibold text-slate-500">
-                            Your{" "}
-                            {typeof myRating?.skill === "number"
-                              ? myRating.skill.toFixed(1)
-                              : "—"}
                             {summary?.averageSkill
-                              ? ` · Club ${summary.averageSkill.toFixed(1)}`
-                              : ""}
+                              ? translate("club.ratings.yourAndClub", {
+                                  your: typeof myRating?.skill === "number" ? formatNumber(uiLocale, myRating.skill, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : "—",
+                                  club: formatNumber(uiLocale, summary.averageSkill, { minimumFractionDigits: 1, maximumFractionDigits: 1 }),
+                                })
+                              : translate("club.ratings.yourOnly", {
+                                  your: typeof myRating?.skill === "number" ? formatNumber(uiLocale, myRating.skill, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : "—",
+                                })}
                           </span>
                         </span>
                         <span className="rounded-full bg-slate-50 px-2 py-1 text-[10px] font-black text-slate-600">
-                          Adjust
-                        </span>
+                          {translate("club.messages.adjust")}</span>
                       </button>
                     );
                   })}
@@ -3635,8 +3884,7 @@ export function ClubTab({
 
               {players.length === 0 && (
                 <div className="rounded-2xl bg-slate-50 px-3 py-2 text-sm font-bold text-slate-500">
-                  No players yet.
-                </div>
+                  {translate("club.messages.noPlayersYet")}</div>
               )}
             </div>
           </div>
@@ -3657,8 +3905,8 @@ export function ClubTab({
             <DialogTitle className="flex items-center gap-2 text-base font-black text-[#102A43]">
               <Star className="h-5 w-5 text-violet-600" />
               {ratingDialogPlayer
-                ? `Rate ${ratingDialogPlayer.name}`
-                : "Rate player"}
+                ? translate("club.headings.rate", { name: ratingDialogPlayer.name })
+                : translate("club.headings.ratePlayer")}
             </DialogTitle>
           </DialogHeader>
           {ratingDialogPlayer &&
@@ -3683,12 +3931,12 @@ export function ClubTab({
                   (player) => player.id !== ratingDialogPlayer.id,
                 ).length;
               const ratingModeLabel = myRating?.skipped
-                ? "Skipped before"
+                ? translate("club.ratings.mode.skipped")
                 : typeof myRating?.skill === "number"
-                  ? "Adjusting your rating"
+                  ? translate("club.ratings.mode.adjusting")
                   : ratingDialogPlayer.isNew
-                    ? "New player"
-                    : "Needs your rating";
+                    ? translate("club.ratings.mode.newPlayer")
+                    : translate("club.ratings.mode.needsRating");
               return (
                 <div className="grid gap-4 p-4">
                   {ratingFlowNotice && (
@@ -3700,8 +3948,7 @@ export function ClubTab({
                   <div className="rounded-2xl bg-slate-50 px-3 py-2">
                     <div className="flex items-center justify-between gap-2">
                       <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-                        Player
-                      </div>
+                        {translate("club.ratings.playerColumn")}</div>
                       <div className="rounded-full bg-white px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-violet-700">
                         {ratingModeLabel}
                       </div>
@@ -3716,14 +3963,12 @@ export function ClubTab({
                     )}
                     {remainingAfterThis > 0 && (
                       <div className="mt-2 text-[11px] font-bold text-slate-400">
-                        {remainingAfterThis} more player
-                        {remainingAfterThis === 1 ? "" : "s"} after this.
-                      </div>
+                        {translate("club.ratings.remainingAfterThis", { count: remainingAfterThis })}</div>
                     )}
                   </div>
 
                   {(() => {
-                    const selectedStyle = getPlayerStyleDefinition(ratingPlayerStyle);
+                    const selectedStyle = playerStyleTranslationKeys(ratingPlayerStyle);
                     const computedOverall = calculateOverall(ratingProfile);
                     return (
                       <>
@@ -3731,14 +3976,12 @@ export function ClubTab({
                           <div className="flex items-end justify-between gap-3">
                             <div>
                               <Label className="text-xs font-black uppercase tracking-wide text-primary">
-                                Overall skill
-                              </Label>
+                                {translate("club.labels.overallSkill")}</Label>
                               <div className="mt-0.5 text-[10px] font-semibold text-slate-500">
-                                Moving this reshapes the profile from the selected style.
-                              </div>
+                                {translate("club.ratings.styleSliderHelp")}</div>
                             </div>
                             <div className="text-3xl font-black tabular-nums text-[#102A43]">
-                              {computedOverall.toFixed(1)}
+                              {formatNumber(uiLocale, computedOverall, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
                             </div>
                           </div>
                           <input
@@ -3755,9 +3998,9 @@ export function ClubTab({
                             className="w-full accent-[#102A43]"
                           />
                           <div className="grid grid-cols-3 text-[10px] font-black text-slate-400">
-                            <span>2 weak regular</span>
-                            <span className="text-center">5 average</span>
-                            <span className="text-right">9 strongest</span>
+                            <span>{translate("club.ratings.scale.weakRegular")}</span>
+                            <span className="text-center">{translate("club.ratings.scale.average")}</span>
+                            <span className="text-right">{translate("club.ratings.scale.strongest")}</span>
                           </div>
                         </div>
 
@@ -3765,14 +4008,12 @@ export function ClubTab({
                           <div className="flex items-center justify-between gap-2">
                             <div>
                               <Label className="text-xs font-black uppercase tracking-wide text-violet-700">
-                                Player style
-                              </Label>
+                                {translate("club.labels.playerStyle")}</Label>
                               <div className="mt-0.5 text-[10px] font-semibold text-violet-700/75">
-                                Defense → midfield → attack. Used only to create the stat shape.
-                              </div>
+                                {translate("club.ratings.styleScaleHelp")}</div>
                             </div>
                             <div className="rounded-xl bg-white px-2.5 py-1 text-xs font-black text-violet-800 shadow-sm">
-                              {selectedStyle.label}
+                              {translate(selectedStyle.labelKey)}
                             </div>
                           </div>
                           <input
@@ -3789,12 +4030,12 @@ export function ClubTab({
                             className="w-full accent-violet-700"
                           />
                           <div className="grid grid-cols-3 text-[10px] font-black text-violet-500/80">
-                            <span>Defense</span>
-                            <span className="text-center">Midfield</span>
-                            <span className="text-right">Attack</span>
+                            <span>{translate("club.messages.defense")}</span>
+                            <span className="text-center">{translate("club.messages.midfield")}</span>
+                            <span className="text-right">{translate("club.messages.attack")}</span>
                           </div>
                           <div className="rounded-xl border border-violet-100 bg-white/80 px-3 py-2 text-[11px] font-semibold leading-snug text-violet-900">
-                            {selectedStyle.description}
+                            {translate(selectedStyle.descriptionKey)}
                           </div>
                         </div>
 
@@ -3803,16 +4044,16 @@ export function ClubTab({
                           onClick={() => setRatingGoalkeeper((current) => !current)}
                           className={`flex h-10 items-center justify-between rounded-2xl border px-3 text-left text-xs font-black transition-colors ${ratingGoalkeeper ? "border-amber-300 bg-amber-50 text-amber-900" : "border-slate-200 bg-white text-slate-600"}`}
                         >
-                          <span>GK</span>
-                          <span className="text-[10px] font-bold">{ratingGoalkeeper ? "Can play goalkeeper" : "Optional role flag"}</span>
+                          <span>{translate("club.messages.gk")}</span>
+                          <span className="text-[10px] font-bold">{ratingGoalkeeper ? translate("club.messages.canPlayGoalkeeper") : translate("club.messages.optionalRoleFlag")}</span>
                         </button>
 
                         <div className="grid grid-cols-2 gap-2">
-                          {RATING_STAT_FIELDS.map(({ key, label, short }) => (
+                          {RATING_STAT_FIELDS.map(({ key, labelKey, shortKey }) => (
                             <ClubRatingStatControl
                               key={key}
-                              label={label}
-                              short={short}
+                              label={translate(labelKey)}
+                              short={translate(shortKey)}
                               value={ratingProfile[key]}
                               onChange={(value) => {
                                 const next = { ...ratingProfile, [key]: value };
@@ -3824,17 +4065,24 @@ export function ClubTab({
                         </div>
 
                         <div className="rounded-2xl border border-violet-100 bg-violet-50 px-3 py-2 text-[11px] font-semibold leading-snug text-violet-800">
-                          The style slider creates realistic ATK/DEF/PASS/SPEED values, then Stripes keeps using the existing weighted OVR formula. Manual stat tweaks here become your real shared rating.
-                        </div>
+                          {translate("club.ratings.styleAndOverallHelp")}</div>
 
                         <div className="rounded-2xl bg-slate-50 px-3 py-2">
                           <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-                            Club average
-                          </div>
+                            {translate("club.messages.clubAverage")}</div>
                           <div className="mt-1 text-sm font-black text-[#102A43]">
                             {canRevealAverage && summary?.averageSkill
-                              ? `${summary.averageSkill.toFixed(1)} · ${summary.ratingCount} organizer${summary.ratingCount === 1 ? "" : "s"}${summary.gkYesCount ? ` · GK ${summary.gkYesCount}` : ""}`
-                              : "Hidden until you rate this player"}
+                              ? summary.gkYesCount
+                                ? translate("club.ratings.averageSummaryWithGoalkeepers", {
+                                    average: formatNumber(uiLocale, summary.averageSkill, { minimumFractionDigits: 1, maximumFractionDigits: 1 }),
+                                    count: summary.ratingCount,
+                                    goalkeepers: summary.gkYesCount,
+                                  })
+                                : translate("club.ratings.averageSummary", {
+                                    average: formatNumber(uiLocale, summary.averageSkill, { minimumFractionDigits: 1, maximumFractionDigits: 1 }),
+                                    count: summary.ratingCount,
+                                  })
+                              : translate("club.messages.hiddenUntilYouRateThisPlayer")}
                           </div>
                         </div>
                       </>
@@ -3855,7 +4103,7 @@ export function ClubTab({
                       disabled={ratingSaving}
                       onClick={skipClubRating}
                     >
-                      {nextPlayerAfterThis ? "Skip & next" : "Skip for later"}
+                      {nextPlayerAfterThis ? translate("club.actions.skipNext") : translate("club.actions.skipForLater")}
                     </Button>
                     <Button
                       type="button"
@@ -3864,10 +4112,10 @@ export function ClubTab({
                       onClick={saveClubRating}
                     >
                       {ratingSaving
-                        ? "Saving…"
+                        ? translate("club.actions.saving")
                         : nextPlayerAfterThis
-                          ? "Save & next"
-                          : "Save & finish"}
+                          ? translate("club.actions.saveNext")
+                          : translate("club.actions.saveFinish")}
                     </Button>
                   </div>
                 </div>
@@ -3891,12 +4139,11 @@ export function ClubTab({
               <div className="min-w-0">
                 <DialogTitle className="flex items-center gap-2 text-base font-black text-[#102A43] lg:text-xl">
                   <AntiqueBallIcon className="h-5 w-5 text-emerald-600 lg:h-6 lg:w-6" />
-                  Equipment board
-                </DialogTitle>
+                  {translate("club.headings.equipmentBoard")}</DialogTitle>
                 <p className="mt-1 text-xs font-semibold leading-snug text-slate-500 lg:text-sm">
                   {equipmentCanEdit
-                    ? "Drag bags between holders. Tap a bag to edit its name and contents."
-                    : "Shared equipment is view-only for this account."}
+                    ? translate("club.equipment.dragHelp")
+                    : translate("club.equipment.viewOnly")}
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -3906,8 +4153,7 @@ export function ClubTab({
                   className="h-9 rounded-2xl border-slate-200 bg-white px-3 text-xs font-black text-[#102A43]"
                   onClick={() => setEquipmentInventoryOpen(true)}
                 >
-                  View club inventory
-                </Button>
+                  {translate("club.actions.viewClubInventory")}</Button>
                 {equipmentCanEdit && (
                   <Button
                     type="button"
@@ -3915,8 +4161,7 @@ export function ClubTab({
                     onClick={openNewEquipmentKit}
                   >
                     <Plus className="mr-1.5 h-4 w-4" />
-                    Add bag
-                  </Button>
+                    {translate("club.actions.addBag")}</Button>
                 )}
               </div>
             </div>
@@ -3933,10 +4178,9 @@ export function ClubTab({
 
             <div className="overflow-hidden rounded-[1.65rem] border border-slate-200 bg-white shadow-[0_14px_34px_rgba(15,23,42,0.08)]">
               <div className="grid grid-cols-[4.75rem_minmax(0,1fr)] border-b border-slate-200 bg-white text-[10px] font-black uppercase tracking-wide text-slate-400 min-[340px]:grid-cols-[5.75rem_minmax(0,1fr)] lg:grid-cols-[11rem_minmax(0,1fr)] lg:text-xs">
-                <div className="px-3 py-2.5">Holder</div>
+                <div className="px-3 py-2.5">{translate("club.messages.holder")}</div>
                 <div className="border-l border-slate-200 px-3 py-2.5">
-                  Bags
-                </div>
+                  {translate("club.equipment.bagsHeading")}</div>
               </div>
 
               {equipmentHolders.map((holder, index) => {
@@ -3966,7 +4210,7 @@ export function ClubTab({
                         <div
                           className={`min-h-8 rounded-2xl border border-dashed ${highlighted ? "border-emerald-300 bg-white/80 px-3 py-1 text-[11px] font-bold text-emerald-600" : "border-transparent"}`}
                         >
-                          {highlighted ? "Drop here" : ""}
+                          {highlighted ? translate("club.messages.dropHere") : ""}
                         </div>
                       ) : (
                         holderKits.map((kit) => {
@@ -4022,7 +4266,7 @@ export function ClubTab({
                               <button
                                 type="button"
                                 className="ml-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
-                                aria-label={`Show contents of ${kit.name}`}
+                                aria-label={translate("club.accessibility.showContentsOf", { name: kit.name })}
                                 onPointerDown={(event) =>
                                   event.stopPropagation()
                                 }
@@ -4055,8 +4299,7 @@ export function ClubTab({
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-                      Inside bag
-                    </div>
+                      {translate("club.messages.insideBag")}</div>
                     <h3 className="mt-1 truncate text-base font-black text-[#102A43]">
                       {contentPeekKit.name}
                     </h3>
@@ -4067,8 +4310,7 @@ export function ClubTab({
                     className="h-9 shrink-0 rounded-2xl px-3 text-xs font-black"
                     onClick={() => setContentPeekKitId(null)}
                   >
-                    Close
-                  </Button>
+                    {translate("common.close")}</Button>
                 </div>
 
                 {equipmentItemsForKit(contentPeekKit).length > 0 ? (
@@ -4078,14 +4320,13 @@ export function ClubTab({
                         key={`${contentPeekKit.id}-content-${item.key}-${index}`}
                         className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700"
                       >
-                        {equipmentItemDisplayLabel(item)} × {item.quantity}
+                        {equipmentItemDisplayLabel(item)} × {formatNumber(uiLocale, item.quantity)}
                       </span>
                     ))}
                   </div>
                 ) : (
                   <div className="mt-3 rounded-2xl bg-slate-50 px-3 py-3 text-sm font-semibold text-slate-500">
-                    Nothing listed yet.
-                  </div>
+                    {translate("club.messages.nothingListedYet")}</div>
                 )}
 
               </div>
@@ -4105,10 +4346,9 @@ export function ClubTab({
           <DialogHeader className="border-b border-slate-100 px-4 py-3 text-left">
             <DialogTitle className="flex items-center gap-2 text-base font-black text-[#102A43]">
               <AntiqueBallIcon className="h-5 w-5 text-blue-600" />
-              Club inventory
-            </DialogTitle>
+              {translate("club.headings.clubInventory")}</DialogTitle>
             <p className="text-[11px] font-semibold text-slate-500">
-              Everything across {equipmentKits.length} bag{equipmentKits.length === 1 ? "" : "s"}.
+              {translate("club.equipment.inventoryBagCount", { count: equipmentKits.length })}
             </p>
           </DialogHeader>
 
@@ -4116,8 +4356,7 @@ export function ClubTab({
             {equipmentKits.length > 0 && (
               <section>
                 <div className="mb-1.5 px-1 text-[10px] font-black uppercase tracking-wide text-slate-400">
-                  Bags
-                </div>
+                  {translate("club.equipment.bagsHeading")}</div>
                 <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
                   {equipmentKits.map((kit, index) => (
                     <div
@@ -4132,8 +4371,9 @@ export function ClubTab({
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-sm font-black text-[#102A43]">{kit.name}</div>
                         <div className="text-[10px] font-bold text-slate-400">
-                          {EQUIPMENT_COLOR_NAMES[kit.color || DEFAULT_EQUIPMENT_COLOR] || "Custom color"} bag
-                        </div>
+                          {EQUIPMENT_COLOR_LABEL_KEYS[kit.color || DEFAULT_EQUIPMENT_COLOR]
+                            ? translate(EQUIPMENT_COLOR_LABEL_KEYS[kit.color || DEFAULT_EQUIPMENT_COLOR])
+                            : translate("club.messages.customColor")} {translate("club.messages.bag")}</div>
                       </div>
                     </div>
                   ))}
@@ -4143,13 +4383,12 @@ export function ClubTab({
 
             <section>
               <div className="mb-1.5 px-1 text-[10px] font-black uppercase tracking-wide text-slate-400">
-                Equipment
-              </div>
+                {translate("club.messages.equipment")}</div>
               {equipmentInventoryTotals.length > 0 ? (
                 <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
                   <div className="grid grid-cols-[minmax(0,1fr)_4.5rem] border-b border-slate-200 bg-slate-50 px-3 py-2 text-[10px] font-black uppercase tracking-wide text-slate-400">
-                    <span>Item</span>
-                    <span className="text-right">Total</span>
+                    <span>{translate("club.messages.item")}</span>
+                    <span className="text-right">{translate("club.messages.total")}</span>
                   </div>
                   {equipmentInventoryTotals.map((item, index) => (
                     <div
@@ -4157,13 +4396,13 @@ export function ClubTab({
                       className={`grid grid-cols-[minmax(0,1fr)_4.5rem] items-center px-3 py-2.5 ${index === 0 ? "" : "border-t border-slate-100"} ${index % 2 === 1 ? "bg-slate-50/55" : "bg-white"}`}
                     >
                       <span className="truncate text-sm font-bold text-[#102A43]">{item.label}</span>
-                      <span className="text-right text-base font-black tabular-nums text-[#102A43]">{item.quantity}</span>
+                      <span className="text-right text-base font-black tabular-nums text-[#102A43]">{formatNumber(uiLocale, item.quantity)}</span>
                     </div>
                   ))}
                 </div>
               ) : (
                 <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-3 py-5 text-center text-sm font-semibold text-slate-400">
-                  {equipmentKits.length === 0 ? "No equipment has been added yet." : "No equipment contents added yet."}
+                  {equipmentKits.length === 0 ? translate("club.messages.noEquipmentHasBeenAddedYet") : translate("club.messages.noEquipmentContentsAddedYet")}
                 </div>
               )}
             </section>
@@ -4186,10 +4425,9 @@ export function ClubTab({
           onOpenAutoFocus={(event) => event.preventDefault()}
         >
           <DialogHeader className="border-b border-slate-100 px-4 py-3 text-left">
-            <DialogTitle className="text-base font-black text-[#102A43]">Add item</DialogTitle>
+            <DialogTitle className="text-base font-black text-[#102A43]">{translate("club.headings.addItem")}</DialogTitle>
             <p className="text-[11px] font-semibold text-slate-500">
-              Choose one common item or add a custom category.
-            </p>
+              {translate("club.equipment.choosePresetHelp")}</p>
           </DialogHeader>
 
           <div className="max-h-[68dvh] overflow-y-auto p-3">
@@ -4211,7 +4449,7 @@ export function ClubTab({
                       setEquipmentItemPickerOpen(false);
                     }}
                   >
-                    <span className={`text-sm font-bold ${selected ? "text-blue-700" : "text-[#102A43]"}`}>{preset.label}</span>
+                    <span className={`text-sm font-bold ${selected ? "text-blue-700" : "text-[#102A43]"}`}>{translate(preset.labelKey)}</span>
                     <Plus className={`h-4 w-4 shrink-0 ${selected ? "text-blue-600" : "text-slate-300"}`} />
                   </button>
                 );
@@ -4219,7 +4457,7 @@ export function ClubTab({
             </div>
 
             <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50/70 p-2.5">
-              <div className="mb-1.5 text-[10px] font-black uppercase tracking-wide text-slate-400">Custom item</div>
+              <div className="mb-1.5 text-[10px] font-black uppercase tracking-wide text-slate-400">{translate("club.messages.customItem")}</div>
               <div className="flex items-center gap-2">
                 <Input
                   value={customEquipmentName}
@@ -4236,7 +4474,7 @@ export function ClubTab({
                     }
                   }}
                   enterKeyHint="done"
-                  placeholder="Example: Corner flags"
+                  placeholder={translate("club.fields.customItemExample")}
                   maxLength={40}
                   className="h-10 min-w-0 flex-1 rounded-2xl border-slate-200 bg-white text-sm font-semibold"
                 />
@@ -4249,8 +4487,7 @@ export function ClubTab({
                     setEquipmentItemPickerOpen(false);
                   }}
                 >
-                  Add
-                </Button>
+                  {translate("common.add")}</Button>
               </div>
             </div>
           </div>
@@ -4277,7 +4514,7 @@ export function ClubTab({
                 color={kitColor || DEFAULT_EQUIPMENT_COLOR}
                 className="h-5 w-7 shrink-0"
               />
-              {editingKitId ? "Edit Bag" : "New Bag"}
+              {editingKitId ? translate("club.headings.editBag") : translate("club.headings.newBag")}
             </DialogTitle>
           </DialogHeader>
 
@@ -4285,8 +4522,7 @@ export function ClubTab({
             <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
               <div className="grid min-w-0 gap-1.5">
                 <Label className="text-xs font-black uppercase tracking-wide text-slate-500">
-                  Bag name
-                </Label>
+                  {translate("club.labels.bagName")}</Label>
                 <Input
                   value={kitName}
                   onChange={(event) => setKitName(event.target.value)}
@@ -4297,48 +4533,47 @@ export function ClubTab({
                     }
                   }}
                   enterKeyHint="done"
-                  placeholder="Example: Saturday match bag"
+                  placeholder={translate("club.fields.bagNameExample")}
                   className="h-10 min-w-0 rounded-2xl border-slate-200 text-sm font-semibold"
                 />
               </div>
               <div className="grid gap-1.5">
                 <Label className="text-xs font-black uppercase tracking-wide text-slate-500">
-                  Bag color
-                </Label>
+                  {translate("club.labels.bagColor")}</Label>
                 <div className="relative">
                   <Button
                     type="button"
                     variant="outline"
                     className="h-10 min-w-[5.3rem] rounded-2xl border-slate-200 px-2.5 text-[11px] font-black text-slate-600"
                     onClick={() => setColorPickerOpen((open) => !open)}
-                    aria-label="Choose bag color"
+                    aria-label={translate("club.accessibility.chooseBagColor")}
                   >
                     <span
                       className="mr-2 h-5 w-5 rounded-full border border-slate-300 shadow-inner"
                       style={{ backgroundColor: kitColor }}
                     />
-                    {EQUIPMENT_COLOR_NAMES[kitColor] || "Choose"}
+                    {EQUIPMENT_COLOR_LABEL_KEYS[kitColor]
+                      ? translate(EQUIPMENT_COLOR_LABEL_KEYS[kitColor])
+                      : translate("club.actions.choose")}
                   </Button>
                   {colorPickerOpen && (
                     <div className="absolute right-0 z-50 mt-2 w-52 rounded-3xl border border-slate-200 bg-white p-3 shadow-[0_18px_45px_rgba(15,23,42,0.18)]">
                       <div className="mb-2 flex items-center justify-between gap-3">
                         <div className="text-[11px] font-black uppercase tracking-wide text-slate-400">
-                          Bag color
-                        </div>
+                          {translate("club.messages.bagColor")}</div>
                         <button
                           type="button"
                           className="rounded-full px-2 py-1 text-[10px] font-black text-slate-400 hover:bg-slate-50"
                           onClick={() => setColorPickerOpen(false)}
                         >
-                          Done
-                        </button>
+                          {translate("common.done")}</button>
                       </div>
                       <div className="grid grid-cols-5 gap-2">
                         {EQUIPMENT_COLORS.map((color) => (
                           <button
                             key={color}
                             type="button"
-                            aria-label="Choose bag color"
+                            aria-label={translate("club.accessibility.chooseBagColor")}
                             className={`h-8 w-8 rounded-full border transition ${kitColor === color ? "border-[#102A43] ring-2 ring-slate-200 ring-offset-1" : "border-slate-200"}`}
                             style={{ backgroundColor: color }}
                             onClick={() => {
@@ -4358,16 +4593,13 @@ export function ClubTab({
               <div className="flex items-end justify-between gap-2">
                 <div>
                   <Label className="text-xs font-black uppercase tracking-wide text-slate-500">
-                    Bag contents
-                  </Label>
+                    {translate("club.labels.bagContents")}</Label>
                   <div className="mt-0.5 text-[10px] font-semibold text-slate-400">
-                    Only items already in this bag are shown here.
-                  </div>
+                    {translate("club.equipment.currentBagItemsHelp")}</div>
                 </div>
                 {kitItems.length > 0 && (
                   <div className="text-[10px] font-black text-slate-400">
-                    {kitItems.reduce((sum, item) => sum + item.quantity, 0)} total
-                  </div>
+                    {translate("club.equipment.itemTotal", { count: kitItems.reduce((sum, item) => sum + item.quantity, 0) })}</div>
                 )}
               </div>
 
@@ -4386,7 +4618,7 @@ export function ClubTab({
                           <div className="min-w-0 flex-1">
                             <div className="truncate text-xs font-black text-[#102A43]">{item.label}</div>
                             {item.custom && (
-                              <div className="text-[9px] font-black uppercase tracking-wide text-slate-400">Custom</div>
+                              <div className="text-[9px] font-black uppercase tracking-wide text-slate-400">{translate("club.messages.custom")}</div>
                             )}
                             {isBall && (
                               <button
@@ -4395,8 +4627,13 @@ export function ClubTab({
                                 onClick={() => setBallDetailsIndex(ballDetailsOpen ? null : index)}
                               >
                                 {hasBallDetails
-                                  ? `${item.brand?.trim() || "Ball"}${item.size?.trim() ? ` · Size ${item.size.trim()}` : ""}`
-                                  : "Add brand / size"}
+                                  ? item.size?.trim()
+                                    ? translate("club.equipment.ballDetailsWithSize", {
+                                        brand: item.brand?.trim() || translate("club.equipment.ball"),
+                                        size: item.size.trim(),
+                                      })
+                                    : item.brand?.trim() || translate("club.equipment.ball")
+                                  : translate("club.actions.addBrandSize")}
                               </button>
                             )}
                           </div>
@@ -4405,7 +4642,7 @@ export function ClubTab({
                               type="button"
                               className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-sm font-black text-slate-500"
                               onClick={() => updateEquipmentItemQuantity(index, -1)}
-                              aria-label={`Decrease ${item.label}`}
+                              aria-label={translate("club.accessibility.decrease", { label: item.label })}
                             >
                               −
                             </button>
@@ -4435,13 +4672,13 @@ export function ClubTab({
                                 }
                               }}
                               className="h-8 w-14 rounded-xl border-slate-200 px-1 text-center text-xs font-black tabular-nums"
-                              aria-label={`${item.label} quantity`}
+                              aria-label={translate("club.accessibility.quantity", { label: item.label })}
                             />
                             <button
                               type="button"
                               className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-sm font-black text-slate-500"
                               onClick={() => updateEquipmentItemQuantity(index, 1)}
-                              aria-label={`Increase ${item.label}`}
+                              aria-label={translate("club.accessibility.increase", { label: item.label })}
                             >
                               +
                             </button>
@@ -4453,7 +4690,7 @@ export function ClubTab({
                                 setEquipmentQuantityDrafts({});
                                 setBallDetailsIndex(null);
                               }}
-                              aria-label={`Remove ${item.label}`}
+                              aria-label={translate("club.accessibility.remove", { label: item.label })}
                             >
                               <Trash2 className="h-3.5 w-3.5" />
                             </button>
@@ -4463,7 +4700,7 @@ export function ClubTab({
                         {ballDetailsOpen && (
                           <div className="mt-2 grid grid-cols-2 gap-2 rounded-xl bg-slate-50 p-2">
                             <div className="grid gap-1">
-                              <Label className="text-[9px] font-black uppercase tracking-wide text-slate-400">Brand</Label>
+                              <Label className="text-[9px] font-black uppercase tracking-wide text-slate-400">{translate("club.labels.brand")}</Label>
                               <Input
                                 value={item.brand || ""}
                                 onChange={(event) => {
@@ -4477,12 +4714,12 @@ export function ClubTab({
                                   }
                                 }}
                                 enterKeyHint="done"
-                                placeholder="e.g. Adidas Tiro"
+                                placeholder={translate("club.fields.brandExample")}
                                 className="h-8 rounded-xl border-slate-200 bg-white px-2 text-xs font-semibold"
                               />
                             </div>
                             <div className="grid gap-1">
-                              <Label className="text-[9px] font-black uppercase tracking-wide text-slate-400">Size</Label>
+                              <Label className="text-[9px] font-black uppercase tracking-wide text-slate-400">{translate("club.labels.size")}</Label>
                               <Input
                                 value={item.size || ""}
                                 onChange={(event) => {
@@ -4496,7 +4733,7 @@ export function ClubTab({
                                   }
                                 }}
                                 enterKeyHint="done"
-                                placeholder="e.g. 5"
+                                placeholder={translate("club.fields.quantityExample")}
                                 className="h-8 rounded-xl border-slate-200 bg-white px-2 text-xs font-semibold"
                               />
                             </div>
@@ -4508,8 +4745,7 @@ export function ClubTab({
                 </div>
               ) : (
                 <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-3 py-3 text-[11px] font-semibold text-slate-400">
-                  No contents yet. Add the first item when you need it.
-                </div>
+                  {translate("club.equipment.emptyBag")}</div>
               )}
 
               <Button
@@ -4524,15 +4760,14 @@ export function ClubTab({
                 }}
               >
                 <Plus className="mr-1.5 h-4 w-4" />
-                Add item
-              </Button>
+                {translate("club.actions.addItem")}</Button>
             </div>
 
 
             {editingKitMeta && (
               <div className="rounded-2xl border border-slate-100 bg-slate-50/70 px-3 py-2 text-[11px] font-semibold leading-snug text-slate-500">
                 <div>
-                  Created by{" "}
+                  {translate("club.messages.createdBy")}{" "}
                   {equipmentActorLabel(
                     editingKitMeta.createdByName,
                     editingKitMeta.createdByEmail,
@@ -4541,7 +4776,7 @@ export function ClubTab({
                   · {formatEquipmentTimestamp(editingKitMeta.createdAt)}
                 </div>
                 <div>
-                  Last updated by{" "}
+                  {translate("club.messages.lastUpdatedBy")}{" "}
                   {equipmentActorLabel(
                     editingKitMeta.updatedByName,
                     editingKitMeta.updatedByEmail,
@@ -4555,13 +4790,13 @@ export function ClubTab({
             {editingKitId && deleteConfirmOpen && (
               <div className="rounded-2xl border border-red-100 bg-red-50/70 p-2.5">
                 <div className="mb-1.5 text-[11px] font-bold leading-snug text-red-700">
-                  Deleting removes this bag from everyone’s shared equipment
-                  board.
-                </div>
+                  {translate("club.equipment.deleteSharedWarning")}</div>
                 <div className="mb-1.5 flex items-center justify-between gap-2 text-[10px] font-black uppercase tracking-wide text-red-700">
-                  <span>Slide to unlock delete</span>
+                  <span>{translate("club.messages.slideToUnlockDelete")}</span>
                   <span>
-                    {deleteBagSlide >= 95 ? "Ready" : `${deleteBagSlide}%`}
+                    {deleteBagSlide >= 95
+                      ? translate("club.messages.ready")
+                      : formatPercent(uiLocale, deleteBagSlide / 100, { maximumFractionDigits: 0 })}
                   </span>
                 </div>
                 <input
@@ -4573,14 +4808,14 @@ export function ClubTab({
                     setDeleteBagSlide(Number(event.target.value))
                   }
                   className="w-full accent-red-600"
-                  aria-label="Slide to unlock delete bag"
+                  aria-label={translate("club.accessibility.slideToUnlockDeleteBag")}
                 />
               </div>
             )}
 
             {(equipmentSaving || equipmentError) && (
               <div className={`px-1 text-center text-[10px] font-bold ${equipmentError ? "text-red-500" : "text-slate-400"}`}>
-                {equipmentError ? "Couldn’t save changes. Check connection and try again." : "Saving…"}
+                {equipmentError ? translate("club.equipment.saveFailed") : translate("club.messages.saving")}
               </div>
             )}
 
@@ -4603,7 +4838,7 @@ export function ClubTab({
                 }}
               >
                 <Trash2 className="mr-1.5 h-4 w-4" />
-                {deleteConfirmOpen && deleteBagSlide >= 95 ? "Delete now" : "Delete bag"}
+                {deleteConfirmOpen && deleteBagSlide >= 95 ? translate("club.actions.deleteNow") : translate("club.actions.deleteBag")}
               </Button>
             )}
           </div>

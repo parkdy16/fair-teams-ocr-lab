@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { Trans } from "react-i18next";
 import type { RoomPlayer } from "@/lib/localRoster";
 import { FieldSize, PairingRule, Player, Team, TeamColor } from "@/lib/types";
 import { getSpecialSkillStatBoosts } from "@/lib/playerAbilityEffects";
@@ -12,18 +13,39 @@ import { StripesSheetContent } from "@/components/ui/stripes-modal";
 import stripesLogo from "@/assets/stripes-logo-mark.png";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Shuffle, ArrowLeftRight, Download, HelpCircle, Clock, Check, BarChart3, List, Maximize2, X, Square, Undo2, Redo2, ChevronLeft } from "lucide-react";
+import {
+  formatDateTime,
+  formatNumber,
+  getResolvedUiLocale,
+  translate,
+  useStripesTranslation,
+  type TranslationKey,
+} from "@/i18n";
 
 const PRESENT_TEAMS_SCROLL_FIX_VERSION = "present-fullscreen-portal-v1";
 
-const COLOR_OPTIONS: { value: TeamColor; label: string; hex: string; textHex: string }[] = [
-  { value: "blue",   label: "Blue",   hex: "#3b82f6", textHex: "#fff"    },
-  { value: "red",    label: "Red",    hex: "#ef4444", textHex: "#fff"    },
-  { value: "lime",   label: "Lime",   hex: "#84cc16", textHex: "#1a1a1a" },
-  { value: "yellow", label: "Yellow", hex: "#facc15", textHex: "#1a1a1a" },
-  { value: "orange", label: "Orange", hex: "#f97316", textHex: "#fff"    },
-  { value: "purple", label: "Purple", hex: "#8b5cf6", textHex: "#fff"    },
-  { value: "black",  label: "Black",  hex: "#102A43", textHex: "#fff"    },
-  { value: "white",  label: "White",  hex: "#FFFFFF", textHex: "#102A43" },
+type CardScreen = "yellow" | "red";
+
+const CARD_SCREEN_LABEL_KEYS: Record<CardScreen, TranslationKey> = {
+  yellow: "teams.gameTools.cardColor.yellow",
+  red: "teams.gameTools.cardColor.red",
+};
+
+const FIELD_SIZE_HISTORY_LABEL_KEYS: Record<FieldSize, TranslationKey> = {
+  small: "teams.history.fieldSize.small",
+  medium: "teams.history.fieldSize.medium",
+  large: "teams.history.fieldSize.large",
+};
+
+const COLOR_OPTIONS: { value: TeamColor; labelKey: TranslationKey; hex: string; textHex: string }[] = [
+  { value: "blue",   labelKey: "teams.colors.blue",   hex: "#3b82f6", textHex: "#fff"    },
+  { value: "red",    labelKey: "teams.colors.red",    hex: "#ef4444", textHex: "#fff"    },
+  { value: "lime",   labelKey: "teams.colors.lime",   hex: "#84cc16", textHex: "#1a1a1a" },
+  { value: "yellow", labelKey: "teams.colors.yellow", hex: "#facc15", textHex: "#1a1a1a" },
+  { value: "orange", labelKey: "teams.colors.orange", hex: "#f97316", textHex: "#fff"    },
+  { value: "purple", labelKey: "teams.colors.purple", hex: "#8b5cf6", textHex: "#fff"    },
+  { value: "black",  labelKey: "teams.colors.black",  hex: "#102A43", textHex: "#fff"    },
+  { value: "white",  labelKey: "teams.colors.white",  hex: "#FFFFFF", textHex: "#102A43" },
 ];
 
 function colorFor(color: TeamColor) {
@@ -52,20 +74,20 @@ function TeamColorStripesIcon({
 }
 
 function GKBadge() {
-  return <span className="inline-flex items-center rounded-full border border-emerald-200/60 bg-emerald-50/50 px-1 py-0 text-[8px] font-semibold lowercase text-emerald-700/70">gk</span>;
+  return <span className="inline-flex items-center rounded-full border border-emerald-200/60 bg-emerald-50/50 px-1 py-0 text-[8px] font-semibold lowercase text-emerald-700/70">{translate("teams.badges.goalkeeperShort")}</span>;
 }
 
 function ORGBadge() {
-  return <span className="inline-flex items-center rounded-full border border-violet-200/60 bg-violet-50/50 px-1 py-0 text-[8px] font-semibold lowercase text-violet-700/70">org</span>;
+  return <span className="inline-flex items-center rounded-full border border-violet-200/60 bg-violet-50/50 px-1 py-0 text-[8px] font-semibold lowercase text-violet-700/70">{translate("teams.badges.organizerShort")}</span>;
 }
 
 function NewBadge() {
-  return <span className="inline-flex items-center rounded-full border border-sky-200/60 bg-sky-50/50 px-1 py-0 text-[8px] font-semibold lowercase text-sky-700/70">new</span>;
+  return <span className="inline-flex items-center rounded-full border border-sky-200/60 bg-sky-50/50 px-1 py-0 text-[8px] font-semibold lowercase text-sky-700/70">{translate("teams.badges.new")}</span>;
 }
 
 function NotHereBadge() {
   return (
-    <span className="inline-flex items-center text-amber-700" title="Not here yet" aria-label="Not here yet">
+    <span className="inline-flex items-center text-amber-700" title={translate("teams.status.notHereYet")} aria-label={translate("teams.status.notHereYet")}>
       <Clock className="h-3.5 w-3.5" />
     </span>
   );
@@ -83,12 +105,12 @@ function displayName(player: Pick<Player, "name" | "aka">) {
 function GenderBadge({ gender }: { gender?: string }) {
   const normalized = (gender ?? "other").toLowerCase();
   if (normalized === "female") {
-    return <span className="text-[8px] font-medium lowercase text-pink-500/50">f</span>;
+    return <span className="text-[8px] font-medium lowercase text-pink-500/50">{translate("teams.gender.femaleShort")}</span>;
   }
   if (normalized === "male") {
-    return <span className="text-[8px] font-medium lowercase text-blue-500/50">m</span>;
+    return <span className="text-[8px] font-medium lowercase text-blue-500/50">{translate("teams.gender.maleShort")}</span>;
   }
-  return <span className="text-[8px] font-medium lowercase text-purple-500/45">o</span>;
+  return <span className="text-[8px] font-medium lowercase text-purple-500/45">{translate("teams.gender.otherShort")}</span>;
 }
 
 function playerEffectiveStat(player: Player, key: keyof Pick<Player, "attack" | "passing" | "defense" | "speed" | "stamina">) {
@@ -103,22 +125,22 @@ function averageStat(players: Player[], key: keyof Pick<Player, "attack" | "pass
 
 function teamStatRows(players: Player[]) {
   return [
-    { key: "attack", label: "Atk", value: averageStat(players, "attack"), max: 10 },
-    { key: "passing", label: "Pass", value: averageStat(players, "passing"), max: 10 },
-    { key: "defense", label: "Def", value: averageStat(players, "defense"), max: 10 },
-    { key: "speed", label: "Speed", value: averageStat(players, "speed"), max: 10 },
-    { key: "stamina", label: "Stam", value: averageStat(players, "stamina"), max: 10 },
+    { key: "attack", label: translate("teams.stats.attackShort"), value: averageStat(players, "attack"), max: 10 },
+    { key: "passing", label: translate("teams.stats.passingShort"), value: averageStat(players, "passing"), max: 10 },
+    { key: "defense", label: translate("teams.stats.defenseShort"), value: averageStat(players, "defense"), max: 10 },
+    { key: "speed", label: translate("teams.stats.speed"), value: averageStat(players, "speed"), max: 10 },
+    { key: "stamina", label: translate("teams.stats.staminaShort"), value: averageStat(players, "stamina"), max: 10 },
   ];
 }
 
 const FIELD_SIZE_STORAGE_KEY = "fair-teams-field-size-v1";
 const TEAM_HISTORY_STORAGE_KEY = "fair-teams-team-history-v1";
 
-const TEAM_DRAW_STEPS = [
-  "Sorting the group…",
-  "Balancing strengths…",
-  "Checking pairings…",
-  "Forming teams…",
+const TEAM_DRAW_STEP_KEYS: TranslationKey[] = [
+  "teams.generation.sorting",
+  "teams.generation.balancingStrengths",
+  "teams.generation.checkingPairings",
+  "teams.generation.formingTeams",
 ];
 
 interface TeamHistoryEntry {
@@ -147,11 +169,12 @@ function saveTeamHistory(history: TeamHistoryEntry[]) {
 function shortDateTime(value: string) {
   try {
     const date = new Date(value);
-    const month = new Intl.DateTimeFormat(undefined, { month: "short" }).format(date);
-    const day = new Intl.DateTimeFormat(undefined, { day: "numeric" }).format(date);
-    const weekday = new Intl.DateTimeFormat(undefined, { weekday: "short" }).format(date);
-    const time = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" }).format(date);
-    return `${month} ${day} ${weekday}, ${time}`;
+    const locale = getResolvedUiLocale();
+    const month = formatDateTime(locale, date, { month: "short" });
+    const day = formatDateTime(locale, date, { day: "numeric" });
+    const weekday = formatDateTime(locale, date, { weekday: "short" });
+    const time = formatDateTime(locale, date, { hour: "2-digit", minute: "2-digit" });
+    return translate("teams.history.dateTime", { month, day, weekday, time });
   } catch {
     return value;
   }
@@ -159,7 +182,7 @@ function shortDateTime(value: string) {
 
 function teamsDateLabel(date = new Date()) {
   try {
-    return new Intl.DateTimeFormat(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" }).format(date);
+    return formatDateTime(getResolvedUiLocale(), date, { weekday: "long", year: "numeric", month: "long", day: "numeric" });
   } catch {
     return date.toLocaleDateString();
   }
@@ -318,7 +341,7 @@ async function exportTeamsAsJpg(teams: Team[], fieldSize: FieldSize) {
   const logoSize = 52;
   const brandGap = 9;
   ctx.font = `600 32px "Fredoka", "Outfit", sans-serif`;
-  const brandText = "Stripes";
+  const brandText = translate("common.brand.stripes");
   const brandTextWidth = ctx.measureText(brandText).width;
   const brandWidth = logoSize + brandGap + brandTextWidth;
   const brandStartX = (CANVAS_W - brandWidth) / 2;
@@ -331,7 +354,7 @@ async function exportTeamsAsJpg(teams: Team[], fieldSize: FieldSize) {
   ctx.textAlign = "center";
   ctx.fillStyle = "#64748B";
   ctx.font = `700 11px "Outfit", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
-  ctx.fillText(`Teams · ${teamsDateLabel()}`, CANVAS_W / 2, 70);
+  ctx.fillText(translate("teams.export.heading", { date: teamsDateLabel() }), CANVAS_W / 2, 70);
   ctx.textAlign = "left";
 
   const rowY = teamRowHeights.reduce<number[]>((positions, height, row) => {
@@ -374,7 +397,7 @@ async function exportTeamsAsJpg(teams: Team[], fieldSize: FieldSize) {
 
     ctx.fillStyle = "#64748B";
     ctx.font = `700 10px "Outfit", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
-    ctx.fillText(`${team.players.length} ${team.players.length === 1 ? "player" : "players"}`, x + CARD_PAD_X, y + 38);
+    ctx.fillText(translate("common.playerCount", { count: team.players.length }), x + CARD_PAD_X, y + 38);
 
     ctx.strokeStyle = "#E2E8F0";
     ctx.lineWidth = 1;
@@ -390,17 +413,24 @@ async function exportTeamsAsJpg(teams: Team[], fieldSize: FieldSize) {
     if (team.players.length === 0) {
       ctx.fillStyle = "#94A3B8";
       ctx.font = `italic 12px "Outfit", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
-      ctx.fillText("No players", playerX, playerY);
+      ctx.fillText(translate("teams.export.noPlayers"), playerX, playerY);
     } else {
       team.players.forEach(player => {
         ctx.fillStyle = "#102A43";
         ctx.font = `800 16px "Outfit", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
-        const badges = [
-          ...(player.isOrganizer ? ["ORG"] : []),
-          ...(player.isGoalkeeper ? ["GK"] : []),
+        const badges: Array<{ kind: "organizer" | "goalkeeper"; text: string }> = [
+          ...(player.isOrganizer
+            ? [{ kind: "organizer" as const, text: translate("teams.badges.organizerCanvas") }]
+            : []),
+          ...(player.isGoalkeeper
+            ? [{ kind: "goalkeeper" as const, text: translate("teams.badges.goalkeeperCanvas") }]
+            : []),
         ];
         const badgeGap = 6;
-        const badgeWidths = badges.reduce((sum, badge) => sum + (badge === "ORG" ? 30 : 25), 0) + Math.max(0, badges.length - 1) * 4;
+        const badgeWidths = badges.reduce(
+          (sum, badge) => sum + (badge.kind === "organizer" ? 30 : 25),
+          0,
+        ) + Math.max(0, badges.length - 1) * 4;
         const maxNameWidth = CARD_W - CARD_PAD_X * 2 - (badges.length ? badgeGap + badgeWidths : 0);
         const nameText = truncateCanvasText(ctx, displayName(player), maxNameWidth);
         ctx.fillText(nameText, playerX, playerY);
@@ -408,11 +438,11 @@ async function exportTeamsAsJpg(teams: Team[], fieldSize: FieldSize) {
         let badgeX = playerX + ctx.measureText(nameText).width + badgeGap;
         const badgeY = playerY - 13;
         badges.forEach((badge) => {
-          if (badge === "ORG") {
-            drawTextBadge(ctx, "ORG", badgeX, badgeY, "#EA580C", "#FFEDD5", "#FDBA74");
+          if (badge.kind === "organizer") {
+            drawTextBadge(ctx, badge.text, 30, badgeX, badgeY, "#EA580C", "#FFEDD5", "#FDBA74");
             badgeX += 34;
           } else {
-            drawTextBadge(ctx, "GK", badgeX, badgeY, "#15803D", "#DCFCE7", "#86EFAC");
+            drawTextBadge(ctx, badge.text, 25, badgeX, badgeY, "#15803D", "#DCFCE7", "#86EFAC");
             badgeX += 29;
           }
         });
@@ -443,13 +473,14 @@ function truncateCanvasText(ctx: CanvasRenderingContext2D, text: string, maxWidt
 function drawTextBadge(
   ctx: CanvasRenderingContext2D,
   text: string,
+  width: number,
   x: number,
   y: number,
   textColor: string,
   bgColor: string,
   borderColor: string,
 ) {
-  const w = text === "ORG" ? 30 : 25;
+  const w = width;
   const h = 15;
   ctx.fillStyle = bgColor;
   roundRect(ctx, x, y, w, h, 4);
@@ -467,6 +498,7 @@ function drawTextBadge(
 
 
 export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, sharedRosterId, canReadClubRatings = false, onOpenClubRatings, onEditPlayers, aiTeamSetupToken = 0, aiTeamCount = null, aiAutoGenerate = false, aiShuffleEquals = false, onAiTeamStateChange, tutorialStep, onTutorialAction }: TeamsTabProps) {
+  const { t, locale } = useStripesTranslation();
   const [numTeams, setNumTeams] = useState<number>(2);
   const [fieldSize, setFieldSize] = useState<FieldSize>(() => loadFieldSize());
   const [showFieldHelp, setShowFieldHelp] = useState(false);
@@ -489,7 +521,7 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
   const [clubRatingSummaries, setClubRatingSummaries] = useState<ClubRatingSummary[]>([]);
   const [presentTeamsOpen, setPresentTeamsOpen] = useState(false);
   const [gameToolsOpen, setGameToolsOpen] = useState(false);
-  const [cardScreen, setCardScreen] = useState<"yellow" | "red" | null>(null);
+  const [cardScreen, setCardScreen] = useState<CardScreen | null>(null);
   const generateTimerRef = useRef<number | null>(null);
   const lastAiTeamSetupTokenRef = useRef<number>(0);
 
@@ -526,7 +558,7 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
   useEffect(() => {
     if (!isGenerating) return;
     const interval = window.setInterval(() => {
-      setDrawStep(prev => (prev + 1) % TEAM_DRAW_STEPS.length);
+      setDrawStep(prev => (prev + 1) % TEAM_DRAW_STEP_KEYS.length);
     }, 260);
     return () => window.clearInterval(interval);
   }, [isGenerating]);
@@ -603,7 +635,7 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
       <div className="flex items-center justify-between gap-2 mb-2">
         <div className="flex items-center gap-2">
           <Clock className="w-4 h-4 text-muted-foreground" />
-          <h3 className="text-xs font-black uppercase tracking-wider text-muted-foreground">Team History</h3>
+          <h3 className="text-xs font-black uppercase tracking-wider text-muted-foreground">{t("teams.history.heading")}</h3>
         </div>
         <button
           type="button"
@@ -611,7 +643,7 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
           onClick={() => setHistory([])}
           data-testid="button-clear-history"
         >
-          Clear
+          {t("teams.history.clear")}
         </button>
       </div>
       <div className="flex gap-2 overflow-x-auto pb-1">
@@ -624,8 +656,11 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
             data-testid={`button-history-${entry.id}`}
           >
             <p className="text-[11px] font-black text-foreground truncate">{shortDateTime(entry.createdAt)}</p>
-            <p className="text-[10px] font-bold text-muted-foreground capitalize">{entry.fieldSize} · {entry.numTeams} teams</p>
-            <p className="text-[10px] text-muted-foreground">{entry.totalPlayers} players</p>
+            <p className="text-[10px] font-bold text-muted-foreground capitalize">{t("teams.history.summary", {
+              fieldSize: t(FIELD_SIZE_HISTORY_LABEL_KEYS[entry.fieldSize]),
+              count: entry.numTeams,
+            })}</p>
+            <p className="text-[10px] text-muted-foreground">{t("common.playerCount", { count: entry.totalPlayers })}</p>
           </button>
         ))}
       </div>
@@ -698,7 +733,16 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
     setIsGenerating(true);
     setDrawStep(0);
 
-    const nextTeams = generateTeams(attendingPlayers, safeTeamCount, shuffleEquals, fieldSize, pairingRules);
+    const nextTeams = generateTeams(
+      attendingPlayers,
+      safeTeamCount,
+      shuffleEquals,
+      fieldSize,
+      pairingRules,
+    ).map((team, index) => ({
+      ...team,
+      name: t("teams.defaults.teamName", { number: index + 1 }),
+    }));
 
     if (generateTimerRef.current !== null) window.clearTimeout(generateTimerRef.current);
     generateTimerRef.current = window.setTimeout(() => {
@@ -738,8 +782,8 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
   }, [aiTeamSetupToken, aiTeamCount, aiAutoGenerate, aiShuffleEquals, attendingPlayers, fieldSize, pairingRules, isGenerating]);
 
   const handleColorChange = (teamId: string, color: TeamColor) => {
-    const label = colorFor(color).label;
-    setTeams(prev => prev.map(t => t.id === teamId ? { ...t, color, name: label } : t));
+    const defaultTeamName = t(colorFor(color).labelKey);
+    setTeams(prev => prev.map(t => t.id === teamId ? { ...t, color, name: defaultTeamName } : t));
   };
 
   const colorPickerTeam = colorPickerTeamId
@@ -866,15 +910,15 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
       <div className="flex min-h-[calc(100vh-220px)] flex-col gap-3">
         <div className="flex flex-1 flex-col items-center justify-center px-8 text-center">
           <p className="max-w-xs text-sm font-semibold leading-relaxed text-muted-foreground">
-            Choose at least 2 players to make teams.
+            {t("teams.empty.choosePlayers")}
           </p>
           {onEditPlayers && (
             <button
               type="button"
               onClick={onEditPlayers}
               className="mt-4 flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-[#102A43] shadow-sm transition hover:bg-slate-50 active:scale-[0.96]"
-              aria-label="Back to team setup"
-              title="Back to team setup"
+              aria-label={t("teams.actions.backToSetup")}
+              title={t("teams.actions.backToSetup")}
             >
               <ChevronLeft className="h-5 w-5" />
             </button>
@@ -896,35 +940,35 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
               onClick={onEditPlayers}
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-[#102A43] shadow-sm transition hover:bg-slate-50 active:scale-[0.96]"
               data-testid="button-edit-team-players"
-              aria-label="Back to team setup"
-              title="Back to team setup"
+              aria-label={t("teams.actions.backToSetup")}
+              title={t("teams.actions.backToSetup")}
             >
               <ChevronLeft className="h-5 w-5" />
             </button>
           )}
           <div className="min-w-0">
-            <div className="text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">Current teams</div>
+            <div className="text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">{t("teams.current.heading")}</div>
             <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-black text-[#102A43]">
-              <span>{numTeams} teams</span>
+              <span>{t("teams.count", { count: numTeams })}</span>
               <span className="text-slate-300">·</span>
-              <span>{attendingPlayers.length} players</span>
+              <span>{t("common.playerCount", { count: attendingPlayers.length })}</span>
             </div>
           </div>
         </div>
 
         <div className="flex items-center gap-2 rounded-xl bg-slate-50/80 p-2">
-          <span className="shrink-0 text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">Field</span>
+          <span className="shrink-0 text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">{t("teams.field.label")}</span>
           <Select value={fieldSize} onValueChange={v => setFieldSize(v as FieldSize)}>
             <SelectTrigger className="h-8 min-w-[112px] flex-1 rounded-lg border-slate-200 bg-white px-2 text-[12px] font-black capitalize shadow-none" data-testid="select-field-size">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="small">Small field</SelectItem>
-              <SelectItem value="medium">Medium field</SelectItem>
-              <SelectItem value="large">Large field</SelectItem>
+              <SelectItem value="small">{t("teams.field.small")}</SelectItem>
+              <SelectItem value="medium">{t("teams.field.medium")}</SelectItem>
+              <SelectItem value="large">{t("teams.field.large")}</SelectItem>
             </SelectContent>
           </Select>
-          <button type="button" onClick={() => setShowFieldHelp(v => !v)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-white hover:text-[#102A43]" title="What does Field Size mean?" data-testid="button-field-help">
+          <button type="button" onClick={() => setShowFieldHelp(v => !v)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-white hover:text-[#102A43]" title={t("teams.field.helpTitle")} data-testid="button-field-help">
             <HelpCircle className="h-3.5 w-3.5" />
           </button>
         </div>
@@ -935,8 +979,8 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
             onClick={handleUndo}
             disabled={!undoStack.length || isGenerating}
             className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-[#102A43] shadow-sm transition hover:bg-slate-50 active:scale-[0.96] disabled:cursor-default disabled:bg-slate-50 disabled:text-slate-300 disabled:shadow-none"
-            title="Undo last team change"
-            aria-label="Undo last team change"
+            title={t("teams.actions.undo")}
+            aria-label={t("teams.actions.undo")}
             data-testid="button-team-undo"
           >
             <Undo2 className="h-4 w-4" />
@@ -946,12 +990,12 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
             className={`stripes-shuffle-button h-11 min-w-0 rounded-xl px-4 text-[13px] font-black text-white transition-all lg:h-12 lg:text-sm ${isGenerating ? "ring-4 ring-slate-300/35" : ""}`}
             onClick={() => handleGenerate(true)}
             disabled={isGenerating}
-            title="Shuffle teams"
+            title={t("teams.actions.shuffle")}
             data-testid="button-shuffle"
           >
             <span className="inline-flex items-center justify-center gap-2">
               <Shuffle className={`h-4 w-4 ${isGenerating ? "animate-spin" : ""}`} />
-              {isGenerating ? "Balancing" : "Shuffle teams"}
+              {isGenerating ? t("teams.generation.balancing") : t("teams.actions.shuffle")}
             </span>
           </Button>
 
@@ -960,8 +1004,8 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
             onClick={handleRedo}
             disabled={!redoStack.length || isGenerating}
             className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-[#102A43] shadow-sm transition hover:bg-slate-50 active:scale-[0.96] disabled:cursor-default disabled:bg-slate-50 disabled:text-slate-300 disabled:shadow-none"
-            title="Redo team change"
-            aria-label="Redo team change"
+            title={t("teams.actions.redo")}
+            aria-label={t("teams.actions.redo")}
             data-testid="button-team-redo"
           >
             <Redo2 className="h-4 w-4" />
@@ -972,7 +1016,7 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
           <div className="rounded-lg border border-emerald-300/35 bg-emerald-50/80 px-3 py-2 text-[11px] font-black text-emerald-700 shadow-inner">
             <div className="flex items-center gap-2">
               <Shuffle className="w-3.5 h-3.5 animate-spin" />
-              <span>{TEAM_DRAW_STEPS[drawStep]}</span>
+              <span>{t(TEAM_DRAW_STEP_KEYS[drawStep]!)}</span>
             </div>
             <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-emerald-100">
               <div className="h-full w-2/3 rounded-full bg-emerald-500 animate-pulse" />
@@ -982,9 +1026,9 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
 
         {showFieldHelp && (
           <div className="rounded-lg bg-muted/50 border border-border p-2 text-[10px] leading-snug text-muted-foreground">
-            <p><span className="font-black text-foreground">Small:</span> 4v4–5v5. Passing and quick play matter more; stamina/speed matter a little less.</p>
-            <p><span className="font-black text-foreground">Medium:</span> 6v6–8v8. Balanced weighting.</p>
-            <p><span className="font-black text-foreground">Large:</span> bigger pitch. Stamina and speed matter more.</p>
+            <p><span className="font-black text-foreground">{t("teams.field.smallLabel")}</span> {t("teams.field.smallHelp")}</p>
+            <p><span className="font-black text-foreground">{t("teams.field.mediumLabel")}</span> {t("teams.field.mediumHelp")}</p>
+            <p><span className="font-black text-foreground">{t("teams.field.largeLabel")}</span> {t("teams.field.largeHelp")}</p>
           </div>
         )}
 
@@ -996,9 +1040,18 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
         <div className="stripes-type-ui bg-primary/10 border border-primary/30 rounded-xl px-3 py-2 flex items-center gap-2">
           <ArrowLeftRight className="w-3.5 h-3.5 text-primary shrink-0" />
           <p className="text-xs font-semibold text-primary flex-1">
-            Selected <span className="font-black">{displayName(teams.flatMap(t => t.players).find(p => p.id === swap.playerId) || { name: "player" })}</span> — tap another player to swap, or tap Move here on a team
+            <Trans
+              i18nKey="teams.swap.selectedInstructions"
+              values={{
+                player: displayName(
+                  teams.flatMap((team) => team.players).find((player) => player.id === swap.playerId)
+                    || { name: t("teams.swap.playerFallback") },
+                ),
+              }}
+              components={{ player: <span className="font-black" /> }}
+            />
           </p>
-          <button className="text-[10px] text-muted-foreground underline shrink-0" onClick={() => setSwap(null)} data-testid="button-cancel-swap">Cancel</button>
+          <button className="text-[10px] text-muted-foreground underline shrink-0" onClick={() => setSwap(null)} data-testid="button-cancel-swap">{t("common.cancel")}</button>
         </div>
       )}
 
@@ -1010,8 +1063,14 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
             const accentColor = team.color === "white" ? "hsl(var(--border))" : col.hex;
             const isSwapDest = swap && swap.fromTeamId !== team.id;
             const notHereCount = team.players.filter(isNotHereYet).length;
-            const avgSkill = team.averageSkill.toFixed(1);
-            const totalSkill = team.totalSkill.toFixed(1);
+            const avgSkill = formatNumber(locale, team.averageSkill, {
+              minimumFractionDigits: 1,
+              maximumFractionDigits: 1,
+            });
+            const totalSkill = formatNumber(locale, team.totalSkill, {
+              minimumFractionDigits: 1,
+              maximumFractionDigits: 1,
+            });
             const showingStats = Boolean(teamStatsOpen[team.id]);
             const statsRows = teamStatRows(team.players);
 
@@ -1060,7 +1119,7 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
                           type="button"
                           onClick={() => startEditingTeamName(team.id, team.name)}
                           className="min-w-0 truncate text-left text-sm font-black lg:text-[17px] leading-tight text-foreground hover:text-primary"
-                          title="Tap to rename team"
+                          title={t("teams.actions.rename")}
                           data-testid={`button-team-name-${team.id}`}
                         >
                           {team.name}
@@ -1074,11 +1133,11 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
                           type="button"
                           onClick={() => toggleTeamStats(team.id)}
                           className="inline-flex h-7 items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-1.5 text-[9px] font-black text-slate-600 active:scale-[0.97]"
-                          title={showingStats ? "Show players" : "Show team stats"}
+                          title={showingStats ? t("teams.actions.showPlayers") : t("teams.actions.showStats")}
                           data-testid={`button-team-stats-${team.id}`}
                         >
                           {showingStats ? <List className="h-3.5 w-3.5" /> : <BarChart3 className="h-3.5 w-3.5" />}
-                          <span className="hidden sm:inline">{showingStats ? "List" : "Stats"}</span>
+                          <span className="hidden sm:inline">{showingStats ? t("teams.view.list") : t("teams.view.stats")}</span>
                         </button>
                       )}
 
@@ -1087,8 +1146,8 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
                         type="button"
                         onClick={() => setColorPickerTeamId(team.id)}
                         className="flex h-7 w-7 items-center justify-center rounded-lg transition hover:bg-slate-50 active:scale-[0.96]"
-                        title={`Change team color (${col.label})`}
-                        aria-label={`Change team color. Current color: ${col.label}`}
+                        title={t("teams.colors.changeTitle", { color: t(col.labelKey) })}
+                        aria-label={t("teams.colors.changeAria", { color: t(col.labelKey) })}
                         data-testid={`select-team-color-${team.id}`}
                       >
                         <TeamColorStripesIcon
@@ -1102,16 +1161,16 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
                   <div className="flex items-center gap-1.5 text-[10px] font-semibold lg:text-[13px] leading-tight text-muted-foreground">
                     <span>
                       {showingStats
-                        ? `Avg ${avgSkill} · ${team.players.length} player${team.players.length === 1 ? "" : "s"}`
-                        : `Avg ${avgSkill} · Total ${totalSkill}`}
+                        ? t("teams.stats.averageAndPlayers", { average: avgSkill, count: team.players.length })
+                        : t("teams.stats.averageAndTotal", { average: avgSkill, total: totalSkill })}
                     </span>
                     {notHereCount > 0 && (
                       <span
                         className="inline-flex items-center gap-0.5 rounded-full border border-amber-200 bg-amber-100 px-1 py-0.5 text-[8px] font-black text-amber-800"
-                        title={`${notHereCount} not here yet`}
+                        title={t("teams.status.notHereYetCount", { count: notHereCount })}
                       >
                         <Clock className="h-2.5 w-2.5" />
-                        {notHereCount}
+                        {formatNumber(locale, notHereCount)}
                       </span>
                     )}
                   </div>
@@ -1122,7 +1181,7 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
                       style={{ backgroundColor: accentColor }}
                       data-testid={`button-moveto-${team.id}`}
                     >
-                      Move here
+                      {t("teams.actions.moveHere")}
                     </button>
                   )}
                 </div>
@@ -1141,20 +1200,25 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
                                 style={{ width: `${pct}%`, backgroundColor: accentColor }}
                               />
                             </div>
-                            <span className="text-right text-[9px] font-black tabular-nums text-slate-600">{stat.value.toFixed(1)}</span>
+                            <span className="text-right text-[9px] font-black tabular-nums text-slate-600">
+                              {formatNumber(locale, stat.value, {
+                                minimumFractionDigits: 1,
+                                maximumFractionDigits: 1,
+                              })}
+                            </span>
                           </div>
                         );
                       })}
                     </div>
 
                     <p className="mt-2 text-[9px] font-semibold leading-snug text-slate-400">
-                      Style averages for attack, passing, defense, speed, and stamina.
+                      {t("teams.stats.help")}
                     </p>
                   </div>
                 ) : (
                   <div className="bg-card divide-y divide-border">
                     {team.players.length === 0 ? (
-                      <p className="py-3 text-center text-[10px] text-muted-foreground italic">Empty</p>
+                      <p className="py-3 text-center text-[10px] text-muted-foreground italic">{t("teams.empty.team")}</p>
                     ) : (
                       team.players.map(player => {
                         const isSelected = swap?.playerId === player.id && swap?.fromTeamId === team.id;
@@ -1201,7 +1265,7 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
                               <GenderBadge gender={player.gender} />
                               {!isSharedRoster && showPlayerSkillNumbers && (
                                 <span className="min-w-7 h-5 px-1 flex items-center justify-center rounded bg-gradient-to-br from-slate-100 to-slate-200 text-[#102A43] text-[10px] font-black border border-slate-200">
-                                  {player.skill === 0 ? "N" : player.skill}
+                                  {player.skill === 0 ? t("teams.stats.notRatedShort") : player.skill}
                                 </span>
                               )}
                             </div>
@@ -1225,11 +1289,11 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
             className={`stripes-type-ui h-9 rounded-xl border-slate-200 bg-white px-3 text-[12px] font-black tracking-tight text-[#102A43] shadow-sm hover:bg-slate-50 ${tutorialStep === "present" ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
             onClick={() => { setPresentTeamsOpen(true); onTutorialAction?.("presented"); }}
             disabled={isGenerating}
-            title="Show teams full screen"
+            title={t("teams.actions.presentTitle")}
             data-testid="button-present-teams"
           >
             <Maximize2 className="w-3.5 h-3.5 mr-1.5" />
-            Present Teams
+            {t("teams.actions.present")}
           </Button>
         </div>
       )}
@@ -1246,7 +1310,7 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
         >
           <DialogHeader>
             <DialogTitle className="text-left text-base font-semibold text-[#102A43]">
-              Team color
+              {t("teams.colors.dialogTitle")}
             </DialogTitle>
           </DialogHeader>
 
@@ -1277,7 +1341,7 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
                     className="h-8 w-8"
                   />
                   <span className="truncate text-[10px] font-semibold text-slate-600">
-                    {option.label}
+                    {t(option.labelKey)}
                   </span>
                   {selected && (
                     <span className="absolute right-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#102A43] text-white">
@@ -1296,7 +1360,7 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
           className="fixed inset-0 z-[90] flex overflow-hidden bg-slate-950 text-white"
           role="dialog"
           aria-modal="true"
-          aria-label="Present teams"
+          aria-label={t("teams.presentation.ariaLabel")}
           data-present-teams-version={PRESENT_TEAMS_SCROLL_FIX_VERSION}
           style={{ height: "100dvh", minHeight: "100svh", maxHeight: "100dvh" }}
         >
@@ -1304,15 +1368,15 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
             {tutorialStep === "close-presentation" && <div className="pointer-events-none fixed inset-0 z-[91] bg-slate-950/50" aria-hidden="true" />}
             <div className="relative z-[92] flex shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-slate-950/95 px-3 py-2 pt-[max(0.5rem,env(safe-area-inset-top))]">
               <div className="min-w-0">
-                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-300">Stripes</p>
-                <h2 className="truncate text-lg font-black tracking-tight">Teams</h2>
+                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-300">{t("common.brand.stripes")}</p>
+                <h2 className="truncate text-lg font-black tracking-tight">{t("teams.heading")}</h2>
                 <p className="truncate text-[10px] font-semibold text-slate-400">{teamsDateLabel()}</p>
               </div>
               <button
                 type="button"
                 onClick={() => { setPresentTeamsOpen(false); onTutorialAction?.("presentation-closed"); }}
                 className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-white/15 bg-white/10 text-white active:scale-[0.98] ${tutorialStep === "close-presentation" ? "fairteams-tutorial-pulse fairteams-presentation-close-target" : ""}`}
-                aria-label="Close full screen teams"
+                aria-label={t("teams.actions.closePresentation")}
                 data-testid="button-close-present-teams"
               >
                 <X className="h-5 w-5" />
@@ -1336,12 +1400,12 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
                       <div className="flex items-center justify-between gap-1.5 px-2 py-1.5" style={{ borderBottom: `2px solid ${borderColor}` }}>
                         <div className="min-w-0 truncate text-[15px] font-black leading-tight sm:text-[17px]">{team.name}</div>
                         <div className="shrink-0 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-black text-slate-500">
-                          {team.players.length}
+                          {formatNumber(locale, team.players.length)}
                         </div>
                       </div>
                       <div className="divide-y divide-slate-100">
                         {team.players.length === 0 ? (
-                          <p className="px-2 py-1.5 text-[12px] font-bold text-slate-400">Empty</p>
+                          <p className="px-2 py-1.5 text-[12px] font-bold text-slate-400">{t("teams.empty.team")}</p>
                         ) : team.players.map((player) => (
                           <div key={player.id} className="flex min-h-[1.65rem] items-center justify-between gap-1 px-2 py-1">
                             <div className="min-w-0 truncate text-[13px] font-black leading-tight sm:text-[15px]">{displayName(player)}</div>
@@ -1369,7 +1433,7 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
                     data-testid="button-game-tool-yellow-card"
                   >
                     <Square className="mr-1.5 h-4 w-4 fill-current" />
-                    Yellow
+                    {t("teams.gameTools.yellow")}
                   </button>
                   <button
                     type="button"
@@ -1378,7 +1442,7 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
                     data-testid="button-game-tool-red-card"
                   >
                     <Square className="mr-1.5 h-4 w-4 fill-current" />
-                    Red
+                    {t("teams.gameTools.red")}
                   </button>
                 </div>
               </div>
@@ -1386,7 +1450,7 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
 
             <div className="flex shrink-0 items-center justify-between gap-2 border-t border-white/10 bg-slate-950/95 px-2 py-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
               <p className="min-w-0 text-[11px] font-semibold leading-snug text-slate-400">
-                Show this screen to players. Save only when you need an image.
+                {t("teams.presentation.help")}
               </p>
               <div className="flex shrink-0 items-center gap-1.5">
                 <button
@@ -1396,7 +1460,7 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
                   aria-expanded={gameToolsOpen}
                   data-testid="button-present-game-tools"
                 >
-                  Game Tools
+                  {t("teams.gameTools.heading")}
                 </button>
                 <button
                   type="button"
@@ -1405,7 +1469,7 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
                   data-testid="button-present-save-image"
                 >
                   <Download className="mr-1.5 h-3.5 w-3.5" />
-                  Save Image
+                  {t("teams.actions.saveImage")}
                 </button>
               </div>
             </div>
@@ -1416,7 +1480,9 @@ export function TeamsTab({ players, pairingRules = [], isSharedRoster = false, s
                 onClick={() => setCardScreen(null)}
                 className="fixed inset-0 z-[110] block h-full w-full border-0 p-0 active:scale-100"
                 style={{ backgroundColor: cardScreen === "yellow" ? "#facc15" : "#dc2626" }}
-                aria-label={`Close ${cardScreen} card screen`}
+                aria-label={t("teams.gameTools.closeCard", {
+                  color: t(CARD_SCREEN_LABEL_KEYS[cardScreen]),
+                })}
                 data-testid={`screen-${cardScreen}-card`}
               />
             )}

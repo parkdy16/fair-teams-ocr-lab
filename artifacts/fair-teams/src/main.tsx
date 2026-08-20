@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import App from "./App";
 import { MarketingHome } from "./components/MarketingHome";
 import { PublicInfoPage } from "./components/PublicInfoPage";
+import { StripesI18nProvider, useStripesTranslation } from "./i18n";
 import "./index.css";
 
 const queryClient = new QueryClient({
@@ -40,10 +41,13 @@ function getPublicPage() {
   return null;
 }
 
-const publicPage = getPublicPage();
+function StripesApplication() {
+  // Subscribe the application root so framework-neutral presentation helpers
+  // are recalculated when a future locale selector changes the active locale.
+  useStripesTranslation();
+  const publicPage = getPublicPage();
 
-createRoot(document.getElementById("root")!).render(
-  shouldRenderApp() ? (
+  return shouldRenderApp() ? (
     <QueryClientProvider client={queryClient}>
       <App />
     </QueryClientProvider>
@@ -51,5 +55,11 @@ createRoot(document.getElementById("root")!).render(
     <PublicInfoPage page={publicPage} />
   ) : (
     <MarketingHome />
-  ),
+  );
+}
+
+createRoot(document.getElementById("root")!).render(
+  <StripesI18nProvider>
+    <StripesApplication />
+  </StripesI18nProvider>,
 );

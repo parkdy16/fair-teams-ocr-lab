@@ -41,9 +41,19 @@ import {
   preserveCreatedRosterWhenRatingSeedFails,
   recordSharedRosterCreationResult,
 } from "@/lib/sharedRosterCreationAttempt";
+import {
+  DEFAULT_FIREBASE_SHARED_GROUP_NAME,
+  DEFAULT_FIREBASE_SHARED_ROSTER_NAME,
+  type SharedSummaryNameSource,
+} from "@/lib/sharedRosterNames";
 
 export { toSharedRosterUser };
 export type { SharedRosterUser };
+export {
+  DEFAULT_FIREBASE_SHARED_GROUP_NAME,
+  DEFAULT_FIREBASE_SHARED_ROSTER_NAME,
+} from "@/lib/sharedRosterNames";
+export type { SharedSummaryNameSource } from "@/lib/sharedRosterNames";
 
 export type SharedRosterRole = "owner" | "editor" | "organizer" | "viewer" | "member";
 
@@ -76,6 +86,7 @@ export type FirebaseSharedRosterBackup = {
 export type FirebaseSharedGroupSummary = {
   id: string;
   name: string;
+  nameSource?: SharedSummaryNameSource;
   ownerUid: string;
   ownerEmail: string;
   rosterCount: number;
@@ -99,7 +110,9 @@ export type FirebaseSharedRosterSummary = {
   id: string;
   groupId?: string;
   groupName?: string;
+  groupNameSource?: SharedSummaryNameSource;
   name: string;
+  nameSource?: SharedSummaryNameSource;
   ownerUid: string;
   ownerEmail: string;
   version: number;
@@ -185,7 +198,7 @@ function removeEmailKey<T>(record: Record<string, T>, email?: string) {
 
 function cleanGroupName(value?: string) {
   const name = (value || "").trim();
-  return name || "My Stripes group";
+  return name || DEFAULT_FIREBASE_SHARED_GROUP_NAME;
 }
 
 function getCurrentSharedRosterUser() {
@@ -219,7 +232,7 @@ function makeSharedRosterUpdateSnapshot(
     ...existing,
     // Shared roster identity changes must travel with the same live save as players.
     // Logos stay device-local because image data is intentionally excluded from Firestore.
-    name: savePayload.name || existing.name || "Shared roster",
+    name: savePayload.name || existing.name || DEFAULT_FIREBASE_SHARED_ROSTER_NAME,
     themeColor: savePayload.themeColor || existing.themeColor,
     players: savePayload.players,
     pairingRules: savePayload.pairingRules,
@@ -443,6 +456,7 @@ function toGroupSummary(
   data: DocumentData,
   expectedUserUid?: string,
 ): FirebaseSharedGroupSummary {
+  const hasStoredName = typeof data.name === "string" && Boolean(data.name.trim());
   const rosterIds = Array.isArray(data.rosterIds) ? data.rosterIds.filter((value) => typeof value === "string") : [];
   const memberUids = Array.isArray(data.memberUids) ? data.memberUids : [];
   const memberEmails = Array.isArray(data.memberEmails) ? data.memberEmails.filter((value): value is string => typeof value === "string") : [];
@@ -451,7 +465,8 @@ function toGroupSummary(
   const memberNamesByUid = cleanNameMap(data.memberNamesByUid);
   return {
     id,
-    name: typeof data.name === "string" && data.name.trim() ? data.name : "My Stripes group",
+    name: hasStoredName ? data.name : DEFAULT_FIREBASE_SHARED_GROUP_NAME,
+    nameSource: hasStoredName ? "stored" : "fallback",
     ownerUid: typeof data.ownerUid === "string" ? data.ownerUid : "",
     ownerEmail: typeof data.ownerEmail === "string" ? data.ownerEmail : "",
     rosterCount: rosterIds.length,
@@ -478,6 +493,8 @@ function toRosterSummary(
   data: DocumentData,
   expectedUserUid?: string,
 ): FirebaseSharedRosterSummary {
+  const hasStoredName = typeof data.name === "string" && Boolean(data.name.trim());
+  const hasStoredGroupName = typeof data.groupName === "string" && Boolean(data.groupName.trim());
   const rosterData = data.rosterData && typeof data.rosterData === "object" ? data.rosterData as { players?: unknown[] } : undefined;
   const playerCount = typeof data.playerCount === "number"
     ? data.playerCount
@@ -488,8 +505,10 @@ function toRosterSummary(
   return {
     id,
     groupId: typeof data.groupId === "string" ? data.groupId : undefined,
-    groupName: typeof data.groupName === "string" && data.groupName.trim() ? data.groupName : undefined,
-    name: typeof data.name === "string" && data.name.trim() ? data.name : "Shared roster",
+    groupName: hasStoredGroupName ? data.groupName : undefined,
+    groupNameSource: hasStoredGroupName ? "stored" : undefined,
+    name: hasStoredName ? data.name : DEFAULT_FIREBASE_SHARED_ROSTER_NAME,
+    nameSource: hasStoredName ? "stored" : "fallback",
     ownerUid: typeof data.ownerUid === "string" ? data.ownerUid : "",
     ownerEmail: typeof data.ownerEmail === "string" ? data.ownerEmail : "",
     version: typeof data.version === "number" ? data.version : 1,
@@ -689,7 +708,7 @@ export async function listFirebaseSharedGroups(): Promise<FirebaseSharedGroupSum
 
 async function requireGroupForRoster(groupId?: string, fallbackName?: string) {
   const user = getCurrentSharedRosterUser();
-  if (!groupId) return createFirebaseSharedGroup(fallbackName || "My Stripes group");
+  if (!groupId) return createFirebaseSharedGroup(fallbackName || DEFAULT_FIREBASE_SHARED_GROUP_NAME);
   const groupRef = doc(getFairTeamsFirestore(), "sharedGroups", groupId);
   const groupSnap = await getDoc(groupRef);
   if (!groupSnap.exists()) throw new Error("Shared group was not found.");
@@ -723,7 +742,7 @@ async function createFirebaseSharedRosterAttempt(
   const created = await createLinkedSharedRoster({
     creationRequestId: attempt.creationRequestId,
     groupId: group.id,
-    name: roster.name || "Shared roster",
+    name: roster.name || DEFAULT_FIREBASE_SHARED_ROSTER_NAME,
     rosterData,
   });
   recordSharedRosterCreationResult(attempt, created.id);
@@ -1043,7 +1062,7 @@ export async function saveFirebaseSharedRoster(roster: RoomRoster): Promise<Fire
     const playerCount = Array.isArray(rosterData.players) ? rosterData.players.length : 0;
     const remoteName = typeof data.name === "string" && data.name.trim() ? data.name.trim() : "";
     const localName = typeof roster.name === "string" && roster.name.trim() ? roster.name.trim() : "";
-    const syncedName = localName || remoteName || "Shared roster";
+    const syncedName = localName || remoteName || DEFAULT_FIREBASE_SHARED_ROSTER_NAME;
     const organizerName = nameFromUser(user);
     const memberNamesByUid = { ...cleanNameMap(data.memberNamesByUid), [user.uid]: organizerName };
     const memberNamesByEmail = { ...cleanNameMap(data.memberNamesByEmail), [normalizeEmail(user.email)]: organizerName };
@@ -1093,7 +1112,9 @@ export async function saveFirebaseSharedRoster(roster: RoomRoster): Promise<Fire
       id: snapshot.id,
       groupId,
       groupName,
+      groupNameSource: groupName ? "stored" : undefined,
       name: payload.name,
+      nameSource: "stored",
       ownerUid: typeof data.ownerUid === "string" ? data.ownerUid : "",
       ownerEmail: typeof data.ownerEmail === "string" ? data.ownerEmail : "",
       version: nextVersion,
@@ -1170,11 +1191,15 @@ export async function restoreFirebaseSharedRosterBackup(rosterId: string, backup
       lastSavedAtIso: now,
     });
 
+    const hasStoredName = typeof data.name === "string" && Boolean(data.name.trim());
+    const hasStoredGroupName = typeof data.groupName === "string" && Boolean(data.groupName.trim());
     const summary: FirebaseSharedRosterSummary = {
       id: snapshot.id,
       groupId: typeof data.groupId === "string" ? data.groupId : undefined,
-      groupName: typeof data.groupName === "string" ? data.groupName : undefined,
-      name: typeof data.name === "string" && data.name.trim() ? data.name : "Shared roster",
+      groupName: hasStoredGroupName ? data.groupName : undefined,
+      groupNameSource: hasStoredGroupName ? "stored" : undefined,
+      name: hasStoredName ? data.name : DEFAULT_FIREBASE_SHARED_ROSTER_NAME,
+      nameSource: hasStoredName ? "stored" : "fallback",
       ownerUid: typeof data.ownerUid === "string" ? data.ownerUid : "",
       ownerEmail: typeof data.ownerEmail === "string" ? data.ownerEmail : "",
       version: nextVersion,

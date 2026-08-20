@@ -16,23 +16,27 @@ before and after execution.
 1. fail-closed runner self-test;
 2. live architecture/import boundary checks, including their synthetic
    fail-closed self-tests;
-3. every outer `src/lib/**/*.test.ts` production-logic and integration suite;
-4. syntax checks for Functions JavaScript and test support;
-5. existing Functions/backend, governance and privacy-safe-diagnostic tests;
-6. Firestore emulator behavior, including P0-S2, Cabinet and the representative
+3. the zero-baseline i18n hard-coded UI-string policy and its synthetic
+   fail-closed tests;
+4. every outer `src/lib/**/*.test.ts` and `src/i18n/**/*.test.ts`
+   production-logic and integration suite;
+5. syntax checks for Functions JavaScript and test support;
+6. existing Functions/backend, governance and privacy-safe-diagnostic tests;
+7. Firestore emulator behavior, including P0-S2, Cabinet and the representative
    Stripes Regression Club fixture;
-7. a fresh-process, demo-project Firestore emulator export/import recovery
+8. a fresh-process, demo-project Firestore emulator export/import recovery
    rehearsal with restored-data and authority checks;
-8. production frontend build;
-9. `git diff --check HEAD`.
+9. production frontend build;
+10. `git diff --check HEAD`.
 
 The emulator uses deterministic test-only identities and a Firebase demo project.
 It neither reads nor writes production Firebase data.
 
-H2 added two discoverable focused commands which Core now owns:
+H2 and I1 added three discoverable focused commands which Core now owns:
 
 ```text
 npm run check:architecture
+npm run check:i18n
 npm --prefix functions run test:recovery:emulator
 ```
 
@@ -43,13 +47,20 @@ Firebase/fetch shortcuts, and freezes the small set of currently reviewed
 low-level Google UI adapter imports. Failures identify the file, line, column
 and rule.
 
+The i18n checker uses the same parser dependency but remains a separate,
+focused zero-baseline policy. It scans only live outer production JSX/TSX,
+rejects high-confidence literal render text and presentation attributes, and
+allows only a narrowly scoped, reasoned `i18n-exempt` annotation for genuinely
+technical or provider-controlled text. It does not use a violation count or a
+large allowlist that could hide newly introduced product language.
+
 The recovery command invokes the Functions-local pinned Firebase CLI, removes
 inherited cloud target/credential variables, and explicitly uses only
 `demo-stripes-recovery-rehearsal`. It exports a fixed synthetic workspace from
 one Firestore emulator lifecycle and imports it into a fresh lifecycle before
-  checking linkage, membership/roles, representative Club data, Cabinet
-   location and strict G3 resource metadata, private/server-only records and
-   current Firestore authority.
+checking linkage, membership/roles, representative Club data, Cabinet location
+and strict G3 resource metadata, private/server-only records and current
+Firestore authority.
 
 ## H1 companion gates
 
@@ -64,7 +75,7 @@ npm run test:browser-smoke
 
 `typecheck:live` checks the shipping outer `src/` tree without the tracked stale
 `src/src/` tree. The Core Regression Gate remains the integration command and
-already includes the production build. The browser command adds five semantic
+already includes the production build. The browser command adds six semantic
 Chromium smoke scenarios without production credentials or data.
 
 These gates preserve the constraints in
@@ -159,19 +170,23 @@ local-storage fixtures and covers:
 - entry into the Roster, Teams and Club shell surfaces;
 - switching between two local rosters through the real picker;
 - fail-closed Club authority for a cached shared roster while signed out;
-- generation of two complete teams with every selected player exactly once.
+- generation of two complete teams with every selected player exactly once;
+- safe English fallback for an unsupported persisted UI locale, including
+  representative shell, modal and Club text without raw keys.
 
 The harness injects explicit demo-only Firebase values, blocks service workers
 and aborts every non-loopback request. It does not claim positive signed-in
 organizer authority, Google-provider behavior, mobile interaction fidelity or
 visual correctness. Those would require a larger safe auth/emulator fixture or
-real-provider/manual verification.
+real-provider/manual verification; focused source tests retain File Cabinet
+catalog and authority coverage without adding an unsafe browser auth bypass.
 
 ### 8. Build/type/static verification
 
 - production Vite build: mandatory;
 - Functions `node --check`: mandatory;
 - live architecture/import boundary check: mandatory;
+- live zero-baseline hard-coded UI-string check: mandatory;
 - demo-only synthetic recovery export/import: mandatory;
 - patch whitespace check: mandatory;
 - live outer-source TypeScript check: mandatory in CI and zero-error;

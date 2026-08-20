@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Trans } from "react-i18next";
 import Tesseract from "tesseract.js";
 import type { RoomPlayer, RoomRoster } from "@/lib/localRoster";
 import {
@@ -32,6 +33,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { formatList, formatNumber, formatPercent, getResolvedUiLocale, translate } from "@/i18n";
+
+function displayNumber(value: number) {
+  return formatNumber(getResolvedUiLocale(), value);
+}
+
+function displayPercentage(value: number | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return `${value}%`;
+  return formatPercent(getResolvedUiLocale(), value / 100, {
+    maximumFractionDigits: 2,
+  });
+}
 
 function displayName(player: Pick<RoomPlayer, "name" | "aka">) {
   const aka = player.aka?.trim();
@@ -54,27 +67,29 @@ function TodayStatusDots({
   player: Pick<RoomPlayer, "isNew" | "isGoalkeeper" | "isOrganizer">;
 }) {
   const labels = [
-    player.isNew ? "New player" : null,
-    player.isGoalkeeper ? "Goalkeeper" : null,
-    player.isOrganizer ? "Organizer" : null,
-  ].filter(Boolean);
+    player.isNew ? translate("today.accessibility.newPlayer") : null,
+    player.isGoalkeeper ? translate("today.accessibility.goalkeeper") : null,
+    player.isOrganizer ? translate("today.accessibility.organizer") : null,
+  ].filter((label): label is string => Boolean(label));
 
   if (labels.length === 0) return null;
+
+  const labelText = formatList(getResolvedUiLocale(), labels, { type: "unit" });
 
   return (
     <span
       className="ml-1 inline-flex shrink-0 items-center gap-1"
-      title={labels.join(", ")}
-      aria-label={labels.join(", ")}
+      title={labelText}
+      aria-label={labelText}
     >
       {player.isNew && (
-        <StatusDot label="New player" className="border-sky-200 bg-sky-100" />
+        <StatusDot label={translate("today.accessibility.newPlayer")} className="border-sky-200 bg-sky-100" />
       )}
       {player.isGoalkeeper && (
-        <StatusDot label="Goalkeeper" className="border-emerald-200 bg-emerald-100" />
+        <StatusDot label={translate("today.accessibility.goalkeeper")} className="border-emerald-200 bg-emerald-100" />
       )}
       {player.isOrganizer && (
-        <StatusDot label="Organizer" className="border-orange-200 bg-orange-100" />
+        <StatusDot label={translate("today.accessibility.organizer")} className="border-orange-200 bg-orange-100" />
       )}
     </span>
   );
@@ -86,12 +101,12 @@ function isFirebaseSharedRoster(roster: RoomRoster) {
 
 
 function fallbackOrganizerName(email: string) {
-  const prefix = email.split("@")[0] || "Organizer";
+  const prefix = email.split("@")[0] || translate("today.fallback.organizerName");
   return prefix
     .replace(/[._-]+/g, " ")
     .replace(/\s+/g, " ")
     .trim()
-    .replace(/\b\w/g, (char) => char.toUpperCase()) || "Organizer";
+    .replace(/\b\w/g, (char) => char.toUpperCase()) || translate("today.fallback.organizerName");
 }
 
 function organizerGreetingName(user: SharedRosterUser | null) {
@@ -104,9 +119,9 @@ function RosterKindBadge({ roster }: { roster: RoomRoster }) {
   return (
     <span
       className={`inline-flex shrink-0 items-center rounded-full px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide ${shared ? "bg-violet-50 text-violet-700 ring-1 ring-violet-100" : "bg-slate-100 text-slate-500"}`}
-      title={shared ? "Shared roster" : "Local roster"}
+      title={shared ? translate("today.accessibility.sharedRoster") : translate("today.accessibility.localRoster")}
     >
-      {shared ? "Shared" : "Local"}
+      {shared ? translate("today.messages.shared") : translate("today.messages.local")}
     </span>
   );
 }
@@ -2509,12 +2524,12 @@ export function TodayTab({
     const Recognition =
       window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!Recognition) {
-      setQuickVoiceStatus("Voice is not supported here. Type a name below.");
+      setQuickVoiceStatus(translate("today.status.quickVoiceUnsupported"));
       return;
     }
     try {
       setQuickVoiceHeard("");
-      setQuickVoiceStatus("Say one player name.");
+      setQuickVoiceStatus(translate("today.status.quickVoicePrompt"));
       navigator.vibrate?.(25);
       quickRecognitionRef.current?.abort?.();
       const recognition = new Recognition();
@@ -2527,15 +2542,15 @@ export function TodayTab({
         setQuickVoiceHeard(transcript);
         setQuickVoiceStatus(
           transcript
-            ? "Choose the player to select."
-            : "No name heard. Try again or type.",
+            ? translate("today.status.quickVoiceChoosePlayer")
+            : translate("today.status.quickVoiceNoNameHeard"),
         );
       };
       recognition.onerror = (event) => {
         setQuickVoiceStatus(
           event.error
-            ? `Voice stopped: ${event.error}`
-            : "Try again or type a name.",
+            ? translate("today.status.voiceStoppedWithError", { error: event.error })
+            : translate("today.status.quickVoiceTryAgainOrType"),
         );
         setQuickVoiceListening(false);
       };
@@ -2545,7 +2560,7 @@ export function TodayTab({
       setQuickVoiceListening(true);
     } catch (error) {
       console.error(error);
-      setQuickVoiceStatus("Voice could not start. Type a name below.");
+      setQuickVoiceStatus(translate("today.status.quickVoiceCouldNotStart"));
       setQuickVoiceListening(false);
     }
   };
@@ -2572,7 +2587,7 @@ export function TodayTab({
       !normalizedName ||
       !isProbablyVoicePlayerName(cleanedName)
     ) {
-      setQuickVoiceStatus("Type a clean player name first.");
+      setQuickVoiceStatus(translate("today.status.quickVoiceCleanNameRequired"));
       return;
     }
 
@@ -2622,7 +2637,7 @@ export function TodayTab({
       window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!Recognition) {
       setVoiceStatus(
-        "Voice is not supported in this browser. You can still paste or type names here.",
+        translate("today.status.voiceUnsupported"),
       );
       return;
     }
@@ -2671,8 +2686,8 @@ export function TodayTab({
         }
         setVoiceStatus(
           event.error
-            ? `Voice stopped: ${event.error}`
-            : "Voice stopped. You can try again or type names manually.",
+            ? translate("today.status.voiceStoppedWithError", { error: event.error })
+            : translate("today.status.voiceStoppedManualFallback"),
         );
         voiceShouldListenRef.current = false;
         setVoiceListening(false);
@@ -2703,7 +2718,7 @@ export function TodayTab({
       console.error(error);
       voiceShouldListenRef.current = false;
       setVoiceStatus(
-        "Voice could not start. You can still paste or type names here.",
+        translate("today.status.voiceCouldNotStart"),
       );
       setVoiceListening(false);
     }
@@ -2716,7 +2731,7 @@ export function TodayTab({
     setOcrProgress(reviewInput.trim() ? 100 : 0);
     setOcrStatus(
       reviewInput.trim()
-        ? "Voice/Text list ready. Import from this screen."
+        ? translate("today.status.voiceReviewReady")
         : "",
     );
     return reviewInput;
@@ -2725,24 +2740,24 @@ export function TodayTab({
   const reviewVoiceText = () => {
     const reviewInput = syncVoiceReviewText();
     if (!reviewInput.trim()) {
-      setVoiceStatus("Type or say at least one clean player name first.");
+      setVoiceStatus(translate("today.status.voiceCleanNameRequired"));
       return;
     }
     stopVoiceListening();
     setVoiceStatus(
-      "Review the matches below, edit the text box if needed, then import selected names.",
+      translate("today.status.voiceReviewInstructions"),
     );
   };
 
   const importSelectedVoiceNames = () => {
     const reviewInput = syncVoiceReviewText();
     if (!reviewInput.trim()) {
-      setVoiceStatus("Type or say at least one clean player name first.");
+      setVoiceStatus(translate("today.status.voiceCleanNameRequired"));
       return;
     }
     stopVoiceListening();
     if (selectedOcrTotal === 0) {
-      setVoiceStatus("Select at least one matched or new name below first.");
+      setVoiceStatus(translate("today.status.voiceSelectionRequired"));
       return;
     }
     addSelectedOcrMatches();
@@ -3248,7 +3263,7 @@ export function TodayTab({
     setOcrRunning(true);
     setOcrText("");
     setOcrProgress(0);
-    setOcrStatus("Starting scan…");
+    setOcrStatus(translate("today.status.ocrStarting"));
     setOcrScreenshotReport([]);
     setScannedThumbnailsExpanded(false);
     setManualRawOcrName("");
@@ -3266,7 +3281,11 @@ export function TodayTab({
       for (let index = 0; index < selectedScreenshots.length; index += 1) {
         const file = selectedScreenshots[index];
         setOcrStatus(
-          `Reading ${index + 1} of ${selectedScreenshots.length}: ${file.name}`,
+          translate("today.status.ocrReadingScreenshot", {
+            current: index + 1,
+            total: selectedScreenshots.length,
+            fileName: file.name,
+          }),
         );
 
         const activeCropAreas =
@@ -3334,7 +3353,11 @@ export function TodayTab({
                   logger: (message: Tesseract.LoggerMessage) => {
                     if (message.status)
                       setOcrStatus(
-                        `${message.status} (${index + 1}/${selectedScreenshots.length})`,
+                        translate("today.status.ocrProviderProgress", {
+                          status: message.status,
+                          current: index + 1,
+                          total: selectedScreenshots.length,
+                        }),
                       );
                     if (typeof message.progress === "number") {
                       const totalPasses =
@@ -3355,8 +3378,17 @@ export function TodayTab({
                     if (message.status) {
                       setOcrStatus(
                         label
-                          ? `${label}: ${message.status} (${index + 1}/${selectedScreenshots.length})`
-                          : `${message.status} (${index + 1}/${selectedScreenshots.length})`,
+                          ? translate("today.status.ocrProviderProgressWithLabel", {
+                              label,
+                              status: message.status,
+                              current: index + 1,
+                              total: selectedScreenshots.length,
+                            })
+                          : translate("today.status.ocrProviderProgress", {
+                              status: message.status,
+                              current: index + 1,
+                              total: selectedScreenshots.length,
+                            }),
                       );
                     }
                     if (typeof message.progress === "number") {
@@ -3405,7 +3437,10 @@ export function TodayTab({
           // debug/report output so we can fix the parser with evidence instead of
           // making every import slower.
           setOcrStatus(
-            `No names found in the fast OCR pass (${index + 1}/${selectedScreenshots.length}). Open/copy the OCR report for debugging.`,
+            translate("today.status.ocrNoNamesFastPass", {
+              current: index + 1,
+              total: selectedScreenshots.length,
+            }),
           );
         }
 
@@ -3420,13 +3455,13 @@ export function TodayTab({
       setOcrStatus(
         screenshotImportMode === "other"
           ? useTwoOtherCropAreas
-            ? "Two-area crop scan complete. Review names below."
-            : "Crop scan complete. Review names below."
-          : "Scan complete. Review names below.",
+            ? translate("today.status.ocrTwoAreaComplete")
+            : translate("today.status.ocrCropComplete")
+          : translate("today.status.ocrScanComplete"),
       );
     } catch (error) {
       console.error(error);
-      setOcrStatus("Scan failed. Try a clearer screenshot or fewer images.");
+      setOcrStatus(translate("today.status.ocrScanFailed"));
     } finally {
       setOcrRunning(false);
     }
@@ -3468,7 +3503,7 @@ export function TodayTab({
       !normalizedName ||
       !isManuallyTypedOcrName(cleanedName)
     ) {
-      setOcrStatus("Type a clean player name from the raw OCR text first.");
+      setOcrStatus(translate("today.status.ocrCleanNameRequired"));
       return;
     }
 
@@ -3494,7 +3529,9 @@ export function TodayTab({
           : [...current, normalizedName],
       );
       setManualRawOcrName("");
-      setOcrStatus(`${cleanedName} is now selected in Review Names.`);
+      setOcrStatus(
+        translate("today.status.ocrNameSelected", { playerName: cleanedName }),
+      );
       return;
     }
 
@@ -3522,7 +3559,7 @@ export function TodayTab({
     );
     setManualRawOcrName("");
     setOcrStatus(
-      `${cleanedName} added to Review Names. Press Add Selected to confirm.`,
+      translate("today.status.ocrNameAdded", { playerName: cleanedName }),
     );
   };
 
@@ -3633,7 +3670,14 @@ export function TodayTab({
     setPrioritizeScannedPlayers(true);
     setPlayers(nextPlayers);
     setOcrStatus(
-      `Added ${playerIds.size} existing player${playerIds.size === 1 ? "" : "s"} and created ${newPlayers.length} new player${newPlayers.length === 1 ? "" : "s"}.`,
+      translate("today.status.ocrPlayersAddedSummary", {
+        existingPlayers: translate("today.status.ocrExistingPlayerCount", {
+          count: playerIds.size,
+        }),
+        newPlayers: translate("today.status.ocrNewPlayerCount", {
+          count: newPlayers.length,
+        }),
+      }),
     );
     setConfirmNewPlayersOpen(false);
     setOcrOpen(false);
@@ -3735,7 +3779,7 @@ export function TodayTab({
     const report = {
       reportVersion: 1,
       createdAt: new Date().toISOString(),
-      appArea: "Stripes OCR import",
+      appArea: translate("today.export.ocrReportAppArea"),
       importContext: ocrImportContext,
       inputSource: ocrInputSource,
       screenshotImportMode:
@@ -3783,7 +3827,7 @@ export function TodayTab({
         selectedCandidateKeys: selectedOcrCandidateKeys,
       },
       notes:
-        "No screenshot image is included. Screen and image dimensions are included because screenshot size/device size can affect OCR behavior.",
+        translate("today.export.ocrReportPrivacyNote"),
     };
 
     const mode =
@@ -3794,7 +3838,7 @@ export function TodayTab({
       selectedScreenshotNames[0] || "names",
     )}-${new Date().toISOString().slice(0, 10)}.json`;
     downloadJsonFile(filename, report);
-    setOcrStatus("OCR report exported.");
+    setOcrStatus(translate("today.status.ocrReportExported"));
   };
 
   const selectAllOcrMatches = () => {
@@ -3804,13 +3848,13 @@ export function TodayTab({
       setSelectedOcrCandidateKeys((current) =>
         current.filter((key) => !allSelectableOcrCandidateKeys.includes(key)),
       );
-      setOcrStatus("Review Names selection cleared.");
+      setOcrStatus(translate("today.status.ocrSelectionCleared"));
       return;
     }
 
     setSelectedOcrCandidateKeys(allSelectableOcrCandidateKeys);
     setOcrStatus(
-      "All usable Review Names are selected. Press Add Selected to confirm.",
+      translate("today.status.ocrAllUsableSelected"),
     );
   };
 
@@ -3869,17 +3913,25 @@ export function TodayTab({
       {rosterChoices.length > 0 && !todayRosterReady ? (
         <div className="space-y-3 lg:grid lg:grid-cols-[minmax(0,1.05fr)_minmax(360px,0.95fr)] lg:items-center lg:gap-12 lg:space-y-0 lg:rounded-[2rem] lg:border lg:border-slate-200 lg:bg-white lg:p-10 lg:shadow-[0_24px_70px_rgba(15,23,42,0.08)]">
           <div className="px-1 pb-1 pt-2 lg:px-2 lg:py-6">
-            <div className="hidden lg:inline-flex rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-emerald-700">Stripes workspace</div>
+            <div className="hidden lg:inline-flex rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-emerald-700">{translate("today.messages.stripesWorkspace")}</div>
             <h2 className="text-2xl font-black tracking-tight text-[#102A43] lg:mt-5 lg:text-5xl lg:leading-[1.02]">
-              {startGreetingName ? `Hey, ${startGreetingName}` : "Hey,"}
+              {startGreetingName
+                ? translate("today.headings.greetingNamed", { startGreetingName })
+                : translate("today.headings.greetingGeneric")}
             </h2>
             <p className="mt-1 text-sm font-semibold text-slate-500 lg:mt-4 lg:max-w-md lg:text-lg lg:leading-relaxed">
-              {startGreetingName ? "Choose where to start." : "Choose your roster."}
+              {startGreetingName ? translate("today.messages.chooseWhereToStart") : translate("today.messages.chooseYourRoster")}
             </p>
             <div className="mt-7 hidden grid-cols-2 gap-3 lg:grid">
-              {["Create and rate rosters", "Select today's players", "Generate balanced teams", "Run tasks and votes"].map((item, index) => (
-                <div key={item} className="rounded-2xl bg-slate-50 px-4 py-3 text-sm font-black text-[#102A43]">
-                  <span className="mr-2 text-emerald-600">{index + 1}.</span>{item}
+              {([
+                "today.onboarding.createAndRateRosters",
+                "today.onboarding.selectTodaysPlayers",
+                "today.onboarding.generateBalancedTeams",
+                "today.onboarding.runTasksAndVotes",
+              ] as const).map((key, index) => (
+                <div key={key} className="rounded-2xl bg-slate-50 px-4 py-3 text-sm font-black text-[#102A43]">
+                  <span className="mr-2 text-emerald-600">{index + 1}.</span>
+                  {translate(key)}
                 </div>
               ))}
             </div>
@@ -3893,13 +3945,15 @@ export function TodayTab({
               className={`flex w-full items-center justify-between rounded-3xl border px-4 py-4 text-left shadow-sm transition-transform active:scale-[0.99] ${isFirebaseSharedRoster(activeRosterChoice) ? "border-violet-100 bg-violet-50/70 hover:bg-violet-50" : "border-slate-200 bg-white hover:bg-slate-50"}`}
             >
               <span className="min-w-0">
-                <span className="block text-[10px] font-black uppercase tracking-wide text-slate-400">Last used</span>
+                <span className="block text-[10px] font-black uppercase tracking-wide text-slate-400">{translate("today.messages.lastUsed")}</span>
                 <span className="mt-1 flex min-w-0 items-center gap-1.5">
                   <span className="truncate text-base font-black text-[#102A43]">{activeRosterChoice.name}</span>
                   <RosterKindBadge roster={activeRosterChoice} />
                 </span>
                 <span className="mt-1 block text-xs font-bold text-slate-500">
-                  {activeRosterChoice.players.length === 0 ? "Empty roster" : `${activeRosterChoice.players.length} player${activeRosterChoice.players.length === 1 ? "" : "s"}`}
+                  {activeRosterChoice.players.length === 0
+                    ? translate("today.messages.emptyRoster")
+                    : translate("common.playerCount", { count: activeRosterChoice.players.length })}
                 </span>
               </span>
               <span className="ml-3 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-slate-400 shadow-sm">
@@ -3915,10 +3969,9 @@ export function TodayTab({
               className="flex w-full items-center justify-between rounded-3xl border border-slate-200 bg-white px-4 py-3 text-left shadow-sm transition-transform hover:bg-slate-50 active:scale-[0.99]"
             >
               <span className="min-w-0">
-                <span className="block text-sm font-black text-[#102A43]">Change roster</span>
+                <span className="block text-sm font-black text-[#102A43]">{translate("today.messages.changeRoster")}</span>
                 <span className="mt-0.5 block text-xs font-semibold text-slate-500">
-                  Local and shared rosters
-                </span>
+                  {translate("today.messages.localAndSharedRosters")}</span>
               </span>
               <span className="ml-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-50 text-slate-400">
                 <ChevronRight className="h-4 w-4" />
@@ -3933,12 +3986,9 @@ export function TodayTab({
             <ImageIcon className="h-6 w-6 text-primary" />
           </div>
           <h2 className="text-lg font-black tracking-tight text-[#102A43]">
-            Create your first player list
-          </h2>
+            {translate("today.headings.createYourFirstPlayerList")}</h2>
           <p className="mx-auto mt-2 max-w-xs text-xs font-semibold leading-relaxed text-muted-foreground">
-            Fastest setup: import a Meetup, WhatsApp, Telegram, or attendee
-            screenshot and create multiple players at once.
-          </p>
+            {translate("today.emptyState.importScreenshotHelp")}</p>
           <div className="stripes-type-ui mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
             <Button
               type="button"
@@ -3947,8 +3997,7 @@ export function TodayTab({
               data-testid="empty-today-import-button"
             >
               <ClipboardList className="h-3.5 w-3.5" />
-              Screenshot Import
-            </Button>
+              {translate("today.actions.screenshotImport")}</Button>
             <Button
               type="button"
               variant="outline"
@@ -3956,8 +4005,7 @@ export function TodayTab({
               className="h-10 rounded-xl text-xs font-black uppercase tracking-wide"
               data-testid="empty-today-add-player-button"
             >
-              Add Player Manually
-            </Button>
+              {translate("today.actions.addPlayerManually")}</Button>
             <Button
               type="button"
               variant="outline"
@@ -3968,8 +4016,7 @@ export function TodayTab({
               <Mic
                 className={`mr-1.5 h-3.5 w-3.5 ${quickVoiceOpen || quickVoiceListening ? "animate-pulse" : ""}`}
               />
-              Voice Add
-            </Button>
+              {translate("today.actions.voiceAdd")}</Button>
           </div>
         </div>
       ) : (
@@ -3980,20 +4027,18 @@ export function TodayTab({
           >
             <div className="flex flex-col">
               <span className="text-[10px] uppercase font-black tracking-wider text-slate-500">
-                Session
-              </span>
+                {translate("today.messages.session")}</span>
               <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1 leading-tight">
                 <span className="text-base font-black text-slate-900">
-                  {selectedCount} attending
-                </span>
+                  {displayNumber(selectedCount)} {translate("today.messages.attending")}</span>
                 {notHereYetCount > 0 && (
                   <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-100 px-1.5 py-0.5 leading-none text-amber-800">
-                    <span className="text-[9px] font-extrabold uppercase tracking-wide text-amber-700/80">Late</span>
-                    <span className="text-[11px] font-black text-amber-900">{notHereYetCount}</span>
+                    <span className="text-[9px] font-extrabold uppercase tracking-wide text-amber-700/80">{translate("today.messages.late")}</span>
+                    <span className="text-[11px] font-black text-amber-900">{displayNumber(notHereYetCount)}</span>
                   </span>
                 )}
                 <span className="text-xs font-semibold text-slate-500">
-                  / {players.length}
+                  / {displayNumber(players.length)}
                 </span>
               </span>
             </div>
@@ -4013,8 +4058,7 @@ export function TodayTab({
                 }}
                 className="h-7 bg-white/75 px-2 text-[10px] font-black uppercase text-slate-700 hover:bg-white"
               >
-                All
-              </Button>
+                {translate("today.actions.all")}</Button>
               <Button
                 variant="outline"
                 size="sm"
@@ -4030,8 +4074,7 @@ export function TodayTab({
                 }}
                 className="h-7 bg-white/60 px-2 text-[10px] font-black uppercase text-slate-500 hover:bg-white hover:text-slate-700"
               >
-                Clear
-              </Button>
+                {translate("today.actions.clear")}</Button>
             </div>
           </div>
 
@@ -4045,8 +4088,7 @@ export function TodayTab({
               data-testid="today-import-button"
             >
               <ClipboardList className="mr-1.5 h-3.5 w-3.5" />
-              Screenshot Import
-            </Button>
+              {translate("today.actions.screenshotImport")}</Button>
             <Button
               type="button"
               variant="outline"
@@ -4062,8 +4104,7 @@ export function TodayTab({
               <Mic
                 className={`mr-1.5 h-3.5 w-3.5 ${quickVoiceOpen || quickVoiceListening ? "animate-pulse" : ""}`}
               />
-              Voice Select
-            </Button>
+              {translate("today.actions.voiceSelect")}</Button>
           </div>
         </>
       )}
@@ -4081,14 +4122,14 @@ export function TodayTab({
               </span>
               <span>
                 {quickVoiceListening
-                  ? "Say one name"
+                  ? translate("today.messages.sayOneName")
                   : quickVoiceHeard.trim()
                     ? players.length === 0
-                      ? "Add player"
-                      : "Choose player"
+                      ? translate("today.messages.addPlayer")
+                      : translate("today.messages.choosePlayer")
                     : players.length === 0
-                      ? "Voice Add"
-                      : "Voice Select"}
+                      ? translate("today.messages.voiceAdd")
+                      : translate("today.messages.voiceSelect")}
               </span>
             </div>
             <button
@@ -4099,14 +4140,12 @@ export function TodayTab({
               }}
               className="rounded-full px-2 py-1 text-[10px] font-black uppercase text-slate-500 hover:bg-slate-100"
             >
-              Close
-            </button>
+              {translate("common.close")}</button>
           </div>
 
           {quickVoiceListening && (
             <div className="mb-2 rounded-2xl border border-red-100 bg-red-50 px-3 py-2 text-center text-[11px] font-black text-red-700">
-              Listening…
-            </div>
+              {translate("today.messages.listening")}</div>
           )}
 
           {!quickVoiceListening &&
@@ -4121,21 +4160,19 @@ export function TodayTab({
             <div className="flex min-h-0 flex-1 flex-col gap-2">
               <div className="rounded-2xl bg-slate-50 px-3 py-2">
                 <label className="mb-1 block text-[10px] font-black uppercase tracking-wide text-slate-400">
-                  Heard / edit before adding
-                </label>
+                  {translate("today.labels.heardEditBeforeAdding")}</label>
                 <Input
                   value={quickVoiceCleanName}
                   onChange={(event) => setQuickVoiceHeard(event.target.value)}
                   className="h-8 rounded-xl border-slate-200 bg-white text-xs font-black text-slate-900"
-                  placeholder="Type one player name"
+                  placeholder={translate("today.fields.typeOnePlayerName")}
                 />
               </div>
 
               {quickVoiceCandidates.length > 0 ? (
                 <div className="space-y-1.5">
                   <div className="px-1 text-[10px] font-black uppercase tracking-wide text-slate-400">
-                    Roster suggestions
-                  </div>
+                    {translate("today.messages.rosterSuggestions")}</div>
                   {quickVoiceCandidates.map(
                     ({ player, matchedName, isAlternate }, index) => (
                       <button
@@ -4152,14 +4189,14 @@ export function TodayTab({
                             className={`mt-0.5 block truncate text-[10px] font-bold ${index === 0 ? "text-emerald-700/80" : "text-slate-400"}`}
                           >
                             {isAlternate
-                              ? `Heard as “${quickVoiceCleanName}”`
+                              ? translate("today.messages.heardAs", { quickVoiceCleanName })
                               : matchedName !== quickVoiceCleanName
-                                ? `Matched “${matchedName}”`
-                                : "Close match"}
+                                ? translate("today.messages.matched", { matchedName })
+                                : translate("today.messages.closeMatch")}
                           </span>
                         </span>
                         <span className="shrink-0 text-[10px] font-black">
-                          {player.attending ? "Already selected" : "Select"}
+                          {player.attending ? translate("today.messages.alreadySelected") : translate("today.messages.select")}
                         </span>
                       </button>
                     ),
@@ -4168,8 +4205,8 @@ export function TodayTab({
               ) : (
                 <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-3 text-center text-xs font-bold text-slate-500">
                   {players.length === 0
-                    ? "No roster yet. Add the heard name below."
-                    : "No roster match found."}
+                    ? translate("today.quickVoice.emptyRosterHelp")
+                    : translate("today.messages.noRosterMatchFound")}
                 </div>
               )}
 
@@ -4177,10 +4214,10 @@ export function TodayTab({
                 <div className="rounded-2xl border border-sky-100 bg-sky-50 p-2.5">
                   <div className="mb-2 text-[10px] font-bold leading-snug text-sky-700">
                     {quickVoiceCandidates.length > 0
-                      ? "Not one of these? Add the heard name as a new player for today."
+                      ? translate("today.quickVoice.alternativeAddHelp")
                       : players.length === 0
-                        ? "Add the heard name as a new player for today."
-                        : "No roster match? Add the heard name as a new player for today."}
+                        ? translate("today.quickVoice.addHeardNameHelp")
+                        : translate("today.quickVoice.noMatchAddHelp")}
                   </div>
                   <Button
                     type="button"
@@ -4188,8 +4225,7 @@ export function TodayTab({
                     onClick={addQuickVoicePlayer}
                     className="h-8 w-full rounded-xl border-sky-200 bg-white text-xs font-black text-sky-800 hover:bg-sky-100"
                   >
-                    Add “{quickVoiceCleanName}” as new player
-                  </Button>
+                    {translate("today.actions.addNamedAsNewPlayer", { player: quickVoiceCleanName })}</Button>
                 </div>
               )}
             </div>
@@ -4203,8 +4239,7 @@ export function TodayTab({
               className="mt-2 h-9 w-full rounded-2xl text-xs font-black"
             >
               <Mic className="mr-1.5 h-3.5 w-3.5" />
-              Try Again
-            </Button>
+              {translate("today.actions.tryAgain")}</Button>
           )}
         </div>
       )}
@@ -4221,17 +4256,17 @@ export function TodayTab({
           <DialogHeader>
             <DialogTitle className="text-base font-black">
               {ocrInputSource === "voiceText"
-                ? "Review Voice/Text Names"
+                ? translate("today.headings.reviewVoiceTextNames")
                 : ocrImportContext === "roster"
-                  ? "Add Players from Screenshot"
-                  : "Screenshot Import"}
+                  ? translate("today.headings.addPlayersFromScreenshot")
+                  : translate("today.headings.screenshotImport")}
             </DialogTitle>
             <DialogDescription className="text-xs">
               {ocrInputSource === "voiceText"
-                ? "Check matches and new players before anything is added to Session."
+                ? translate("today.import.voiceReviewHelp")
                 : ocrImportContext === "roster"
-                  ? "Add multiple players to your roster from a Meetup, WhatsApp, Telegram, or attendee screenshot."
-                  : "Import today's attendees from a Meetup, WhatsApp, Telegram, or list screenshot."}
+                  ? translate("today.import.rosterScreenshotHelp")
+                  : translate("today.import.attendanceScreenshotHelp")}
             </DialogDescription>
           </DialogHeader>
 
@@ -4247,10 +4282,9 @@ export function TodayTab({
                       : "border-border bg-background text-muted-foreground"
                   }`}
                 >
-                  <div className="text-xs font-black">Meetup screenshot</div>
+                  <div className="text-xs font-black">{translate("today.messages.meetupScreenshot")}</div>
                   <div className="mt-1 text-[10px] font-medium">
-                    Fast scan for Meetup attendee screenshots.
-                  </div>
+                    {translate("today.import.meetupModeHelp")}</div>
                 </button>
                 <button
                   type="button"
@@ -4261,10 +4295,9 @@ export function TodayTab({
                       : "border-border bg-background text-muted-foreground"
                   }`}
                 >
-                  <div className="text-xs font-black">Other screenshot</div>
+                  <div className="text-xs font-black">{translate("today.messages.otherScreenshot")}</div>
                   <div className="mt-1 text-[10px] font-medium">
-                    Crop the name area before scanning.
-                  </div>
+                    {translate("today.import.otherModeHelp")}</div>
                 </button>
               </div>
             )}
@@ -4274,13 +4307,13 @@ export function TodayTab({
                 <Upload className="h-6 w-6 text-muted-foreground" />
                 <div className="text-xs font-black text-foreground">
                   {selectedScreenshotNames.length > 0
-                    ? `${selectedScreenshotNames.length} screenshot${selectedScreenshotNames.length === 1 ? "" : "s"} selected`
-                    : "Upload Screenshot(s)"}
+                    ? translate("today.messages.screenshotSelected", { count: selectedScreenshotNames.length })
+                    : translate("today.messages.uploadScreenshotS")}
                 </div>
                 <div className="text-[10px] font-medium text-muted-foreground">
                   {screenshotImportMode === "other"
-                    ? "Select one or more screenshots. You will crop each image before scanning."
-                    : "Select all screenshots for one attendee list. You can select multiple screenshots from one attendee list."}
+                    ? translate("today.import.cropSelectionHelp")
+                    : translate("today.import.multiScreenshotSelectionHelp")}
                 </div>
                 <input
                   type="file"
@@ -4320,13 +4353,9 @@ export function TodayTab({
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
                       <div className="text-base font-black text-foreground">
-                        {selectedScreenshotNames.length} screenshot
-                        {selectedScreenshotNames.length === 1 ? "" : "s"}{" "}
-                        selected
-                      </div>
+                        {translate("today.messages.screenshotSelected", { count: selectedScreenshotNames.length })}</div>
                       <div className="truncate text-xs font-semibold text-muted-foreground">
-                        Check the full previews, then scan.
-                      </div>
+                        {translate("today.messages.checkTheFullPreviewsThenScan")}</div>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
                       <Button
@@ -4336,8 +4365,7 @@ export function TodayTab({
                         onClick={clearOcrSelection}
                         className="h-11 rounded-2xl px-5 text-xs font-black shadow-sm"
                       >
-                        Clear
-                      </Button>
+                        {translate("today.actions.clear")}</Button>
                       <Button
                         type="button"
                         size="sm"
@@ -4345,8 +4373,7 @@ export function TodayTab({
                         disabled={ocrRunning || selectedScreenshots.length === 0}
                         className="h-11 rounded-2xl px-6 text-xs font-black shadow-sm"
                       >
-                        Scan
-                      </Button>
+                        {translate("today.actions.scan")}</Button>
                     </div>
                   </div>
                 </div>
@@ -4358,7 +4385,7 @@ export function TodayTab({
                         className="overflow-hidden rounded-2xl border bg-muted/30 shadow-sm"
                       >
                         <div className="border-b bg-background/90 px-3 py-2 text-[11px] font-black text-muted-foreground">
-                          Screenshot {index + 1} of {selectedScreenshotPreviews.length}
+                          {translate("today.messages.screenshotProgress", { index: index + 1, total: selectedScreenshotPreviews.length })}
                         </div>
                         <img
                           src={preview.url}
@@ -4386,8 +4413,7 @@ export function TodayTab({
                       <div className="flex items-center justify-between gap-2 landscape:flex-col landscape:items-stretch">
                         <div className="flex min-w-0 items-center gap-1.5 landscape:justify-center">
                           <div className="truncate text-[12px] font-black leading-tight text-foreground landscape:text-center landscape:text-[11px]">
-                            Crop names
-                          </div>
+                            {translate("today.messages.cropNames")}</div>
                           <button
                             type="button"
                             onClick={() => setCropHelpOpen((value) => !value)}
@@ -4396,7 +4422,7 @@ export function TodayTab({
                                 ? "border-primary/30 bg-primary/10 text-primary"
                                 : "border-border bg-background"
                             }`}
-                            aria-label="Crop instructions"
+                            aria-label={translate("today.accessibility.cropInstructions")}
                           >
                             <Info className="h-3.5 w-3.5" />
                           </button>
@@ -4412,8 +4438,7 @@ export function TodayTab({
                             onClick={clearOcrSelection}
                             className="h-8 rounded-xl px-2 text-[11px] font-black landscape:w-full landscape:px-1.5"
                           >
-                            Cancel
-                          </Button>
+                            {translate("common.cancel")}</Button>
                           <Button
                             type="button"
                             size="sm"
@@ -4428,16 +4453,14 @@ export function TodayTab({
                             }
                             className="h-8 rounded-xl px-3 text-[11px] font-black shadow-sm landscape:w-full landscape:px-1.5"
                           >
-                            Scan
-                          </Button>
+                            {translate("today.actions.scan")}</Button>
                         </div>
                       </div>
 
                       <div className="mt-1.5 flex items-center gap-1.5 overflow-x-auto pb-0.5 landscape:mt-0 landscape:flex-1 landscape:flex-col landscape:items-stretch landscape:overflow-x-hidden landscape:overflow-y-auto landscape:pb-0">
                         <div className="flex shrink-0 items-center gap-1 landscape:flex-col landscape:items-stretch">
                           <span className="px-0.5 text-[8px] font-black uppercase tracking-wide text-muted-foreground landscape:text-center">
-                            Image
-                          </span>
+                            {translate("today.messages.image")}</span>
                           <div className="flex gap-1 landscape:flex-col">
                             {selectedScreenshotPreviews.map((preview, index) => {
                               const hasAnyCrop =
@@ -4455,9 +4478,9 @@ export function TodayTab({
                                         ? "border-emerald-200 bg-emerald-50 text-emerald-800"
                                         : "border-border bg-background text-muted-foreground"
                                   }`}
-                                  aria-label={`Screenshot ${index + 1}`}
+                                  aria-label={translate("today.accessibility.screenshot", { number: index + 1 })}
                                 >
-                                  {hasAnyCrop ? "✓" : index + 1}
+                                  {hasAnyCrop ? "✓" : displayNumber(index + 1)}
                                 </button>
                               );
                             })}
@@ -4466,8 +4489,7 @@ export function TodayTab({
 
                         <div className="flex shrink-0 items-center gap-1 landscape:flex-col landscape:items-stretch">
                           <span className="px-0.5 text-[8px] font-black uppercase tracking-wide text-muted-foreground landscape:text-center">
-                            Read
-                          </span>
+                            {translate("today.messages.read")}</span>
                           <div className="flex gap-1 rounded-xl bg-muted p-0.5 landscape:w-full landscape:flex-col">
                             <button
                               type="button"
@@ -4480,8 +4502,8 @@ export function TodayTab({
                                   ? "bg-background text-primary shadow-sm"
                                   : "text-muted-foreground"
                               }`}
-                              aria-label="Read one list"
-                              title="Read one list"
+                              aria-label={translate("today.accessibility.readOneList")}
+                              title={translate("today.accessibility.readOneList")}
                             >
                               <span className="flex h-4 w-5 items-center justify-center rounded border border-current/40 text-[9px] leading-none">1</span>
                             </button>
@@ -4499,8 +4521,8 @@ export function TodayTab({
                                   ? "bg-background text-primary shadow-sm"
                                   : "text-muted-foreground"
                               }`}
-                              aria-label="Read two lists"
-                              title="Read two lists"
+                              aria-label={translate("today.accessibility.readTwoLists")}
+                              title={translate("today.accessibility.readTwoLists")}
                             >
                               <span className="flex h-4 w-5 items-center justify-center rounded border border-current/40 text-[9px] leading-none">2</span>
                             </button>
@@ -4510,8 +4532,7 @@ export function TodayTab({
                         {useTwoOtherCropAreas && (
                           <div className="flex shrink-0 items-center gap-1 landscape:flex-col landscape:items-stretch">
                             <span className="px-0.5 text-[8px] font-black uppercase tracking-wide text-muted-foreground landscape:text-center">
-                              Box
-                            </span>
+                              {translate("today.messages.box")}</span>
                             <div className="flex gap-1 rounded-xl bg-muted p-0.5 landscape:w-full landscape:flex-col">
                               {[0, 1].map((area) => {
                                 const saved = area === 1
@@ -4531,10 +4552,10 @@ export function TodayTab({
                                           ? "bg-background text-emerald-700"
                                           : "text-muted-foreground"
                                     }`}
-                                    aria-label={`Box ${area + 1}`}
-                                    title={`Box ${area + 1}`}
+                                    aria-label={translate("today.accessibility.box", { number: area + 1 })}
+                                    title={translate("today.accessibility.box", { number: area + 1 })}
                                   >
-                                    {saved ? "✓" : area + 1}
+                                    {saved ? "✓" : displayNumber(area + 1)}
                                   </button>
                                 );
                               })}
@@ -4554,14 +4575,21 @@ export function TodayTab({
                           }
                           className="ml-auto h-7 shrink-0 rounded-xl px-2 text-[10px] font-black shadow-sm landscape:ml-0 landscape:mt-auto landscape:w-full landscape:px-1.5"
                         >
-                          Clear
-                        </Button>
+                          {translate("today.actions.clear")}</Button>
                       </div>
                     </div>
 
                     {cropHelpOpen && (
                       <div className="pointer-events-none absolute left-2 right-2 top-[calc(env(safe-area-inset-top)+48px)] z-30 rounded-2xl border border-sky-100 bg-sky-50/95 px-3 py-2 text-[10px] font-bold leading-snug text-sky-900 shadow-lg backdrop-blur landscape:left-[calc(env(safe-area-inset-left)+6.3rem)] landscape:right-2 landscape:top-2 landscape:max-w-sm">
-                        Drag to select where names are. Use <b>Image 1/2</b> to switch screenshots. If names are in separate areas, like two columns, choose <b>Read: 2</b>, then draw <b>Box 1</b> and <b>Box 2</b> separately.
+                        <Trans
+                          i18nKey="today.crop.help"
+                          components={{
+                            imageSwitch: <b />,
+                            twoAreaMode: <b />,
+                            firstBox: <b />,
+                            secondBox: <b />,
+                          }}
+                        />
                       </div>
                     )}
 
@@ -4631,7 +4659,7 @@ export function TodayTab({
                                 const areas = [
                                   {
                                     area: 0 as const,
-                                    label: "List 1",
+                                    label: translate("today.crop.listLabel", { number: 1 }),
                                     box:
                                       cropDragStart?.index === activeCropIndex &&
                                       cropDragStart.area === 0 &&
@@ -4641,7 +4669,7 @@ export function TodayTab({
                                   },
                                   {
                                     area: 1 as const,
-                                    label: "List 2",
+                                    label: translate("today.crop.listLabel", { number: 2 }),
                                     box:
                                       useTwoOtherCropAreas &&
                                       cropDragStart?.index === activeCropIndex &&
@@ -4659,8 +4687,8 @@ export function TodayTab({
                                     {areas.length === 0 && (
                                       <div className="pointer-events-none absolute inset-x-3 bottom-3 rounded-2xl bg-slate-950/70 px-3 py-2 text-center text-[11px] font-bold text-white shadow-lg">
                                         {useTwoOtherCropAreas
-                                          ? `Drag around List ${activeCropArea + 1}.`
-                                          : "Drag around the names you want Stripes to read."}
+                                          ? translate("today.messages.dragAroundList", { number: activeCropArea + 1 })
+                                          : translate("today.crop.drawNamesPrompt")}
                                       </div>
                                     )}
                                     {areas.map(({ area, label, box }) => {
@@ -4709,14 +4737,14 @@ export function TodayTab({
                                           <span
                                             className={`pointer-events-none absolute left-1 top-1 rounded-full px-1.5 py-0.5 text-[10px] font-black shadow-sm ${boxTone.badge}`}
                                           >
-                                            {useTwoOtherCropAreas ? label : "List"}
+                                            {useTwoOtherCropAreas ? label : translate("today.messages.list")}
                                           </span>
                                           {isActive &&
                                             handles.map(({ handle, className }) => (
                                               <button
                                                 key={`crop-handle-${area}-${handle}`}
                                                 type="button"
-                                                aria-label={`Resize ${label}`}
+                                                aria-label={translate("today.accessibility.resize", { label })}
                                                 className={`absolute h-3.5 w-3.5 rounded-full ${boxTone.handle} shadow-sm ring-1 ${className}`}
                                                 onPointerDown={(event) =>
                                                   startCropResize(
@@ -4749,9 +4777,10 @@ export function TodayTab({
                 <div className="rounded-xl border bg-muted/30 px-3 py-2">
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0 text-xs font-black text-foreground">
-                      ✓ {selectedScreenshotNames.length} screenshot
-                      {selectedScreenshotNames.length === 1 ? "" : "s"}{" "}
-                      {ocrText ? "scanned" : "loaded"}
+                      {translate("today.messages.screenshotLoadStatus", {
+                        count: selectedScreenshotNames.length,
+                        status: ocrText ? translate("today.messages.scanned") : translate("today.messages.loaded"),
+                      })}
                     </div>
                     <div className="flex shrink-0 items-center gap-1">
                       {selectedScreenshotPreviews.length > 0 && (
@@ -4765,13 +4794,13 @@ export function TodayTab({
                           className="h-7 w-7 rounded-lg text-muted-foreground"
                           aria-label={
                             scannedThumbnailsExpanded
-                              ? "Hide uploaded screenshots"
-                              : "Show uploaded screenshots"
+                              ? translate("today.accessibility.hideUploadedScreenshots")
+                              : translate("today.accessibility.showUploadedScreenshots")
                           }
                           title={
                             scannedThumbnailsExpanded
-                              ? "Hide screenshots"
-                              : "Show screenshots"
+                              ? translate("today.accessibility.hideScreenshots")
+                              : translate("today.accessibility.showScreenshots")
                           }
                         >
                           <Eye className="h-3.5 w-3.5" />
@@ -4785,8 +4814,7 @@ export function TodayTab({
                           onClick={clearOcrSelection}
                           className="h-7 shrink-0 px-2 text-[10px] font-black"
                         >
-                          Clear
-                        </Button>
+                          {translate("today.actions.clear")}</Button>
                       )}
                     </div>
                   </div>
@@ -4822,10 +4850,9 @@ export function TodayTab({
               <div className="rounded-xl border bg-card p-3">
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <div className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
-                    Scan Status
-                  </div>
+                    {translate("today.messages.scanStatus")}</div>
                   <div className="text-[10px] font-black text-muted-foreground">
-                    {ocrProgress}%
+                    {displayPercentage(ocrProgress)}
                   </div>
                 </div>
                 <div className="h-2 overflow-hidden rounded-full bg-muted">
@@ -4845,15 +4872,15 @@ export function TodayTab({
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <div className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
                     {ocrInputSource === "voiceText"
-                      ? "List Summary"
-                      : "Scan Summary"}
+                      ? translate("today.messages.listSummary")
+                      : translate("today.messages.scanSummary")}
                   </div>
                   <div className="flex shrink-0 items-center gap-1.5">
                     {hasExpectedAttendeeNumber && (
                       <div
                         className={`rounded-full px-2 py-0.5 text-[10px] font-black ${missingFromScan > 0 ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}
                       >
-                        {scannedNameCount} / {Math.round(expectedAttendeeNumber)}
+                        {displayNumber(scannedNameCount)} / {displayNumber(Math.round(expectedAttendeeNumber))}
                       </div>
                     )}
                     {ocrInputSource === "screenshot" && (
@@ -4864,29 +4891,27 @@ export function TodayTab({
                         onClick={exportOcrReport}
                         className="h-7 rounded-xl px-2 text-[10px] font-black"
                       >
-                        Export report
-                      </Button>
+                        {translate("today.actions.exportReport")}</Button>
                     )}
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2 text-[11px] font-black">
                   <span className="rounded-full bg-muted/60 px-2 py-1 text-foreground">
-                    {ocrInputSource === "voiceText" ? "Parsed" : "Found"}:{" "}
-                    {scannedNameCount}
+                    {ocrInputSource === "voiceText" ? translate("today.messages.parsed") : translate("today.messages.found")}:{" "}
+                    {displayNumber(scannedNameCount)}
                   </span>
                   <span className="rounded-full bg-emerald-50 px-2 py-1 text-emerald-800">
-                    ✓ {rosterMatchCount}
+                    ✓ {displayNumber(rosterMatchCount)}
                   </span>
                   <span className="rounded-full bg-amber-50 px-2 py-1 text-amber-800">
-                    ? {suggestions}
+                    ? {displayNumber(suggestions)}
                   </span>
                   <span className="rounded-full bg-sky-50 px-2 py-1 text-sky-800">
-                    + {newNames}
+                    + {displayNumber(newNames)}
                   </span>
                   {hasExpectedAttendeeNumber && missingFromScan > 0 && (
                     <span className="rounded-full bg-amber-100 px-2 py-1 text-amber-900">
-                      {missingFromScan} missing
-                    </span>
+                      {displayNumber(missingFromScan)} {translate("today.messages.missing")}</span>
                   )}
                 </div>
                 {unmatchedScannedNames.length > 0 && (
@@ -4901,8 +4926,7 @@ export function TodayTab({
                     ))}
                     {unmatchedScannedNames.length > 8 && (
                       <span className="rounded-full bg-muted px-2 py-1 text-[10px] font-black text-muted-foreground">
-                        +{unmatchedScannedNames.length - 8} more
-                      </span>
+                        {translate("today.messages.moreCount", { count: unmatchedScannedNames.length - 8 })}</span>
                     )}
                   </div>
                 )}
@@ -4913,19 +4937,15 @@ export function TodayTab({
               <div className="rounded-xl border bg-card p-3">
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <div className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
-                    Review Names
-                  </div>
+                    {translate("today.messages.reviewNames")}</div>
                   {reviewNames.length > 0 && (
                     <div className="text-[10px] font-black text-muted-foreground">
-                      {safeMatches} match · {suggestions} check · {newNames} new
-                    </div>
+                      {translate("today.messages.scanMatchSummary", { matches: safeMatches, suggestions, newNames })}</div>
                   )}
                 </div>
                 {ocrInputSource === "screenshot" && (
                   <div className="mb-2 rounded-lg border bg-muted/30 px-2 py-1.5 text-[10px] font-bold text-muted-foreground">
-                    OCR debug: {ocrRawWordCount} raw words · {ocrRawLineCount}{" "}
-                    raw lines · {reviewNames.length} review names
-                  </div>
+                    {/* i18n-exempt -- developer OCR diagnostic counters, not product language */ `OCR debug: ${ocrRawWordCount} raw words · ${ocrRawLineCount} raw lines · ${reviewNames.length} review names`}</div>
                 )}
                 {reviewNames.length > 0 ? (
                   <div className="space-y-2 pr-1">
@@ -4974,22 +4994,22 @@ export function TodayTab({
                                 </div>
                                 {reviewStatus === "match" && resolvedMatch && (
                                   <div className="mt-0.5 font-medium text-emerald-700">
-                                    MATCH: {displayName(resolvedMatch)} ·{" "}
-                                    {candidate.score}%
+                                    {translate("today.messages.matchNamed", { player: displayName(resolvedMatch) })} ·{" "}
+                                    {displayPercentage(candidate.score)}
                                   </div>
                                 )}
                                 {reviewStatus === "suggest" &&
                                   resolvedMatch && (
                                     <div className="mt-0.5 font-medium text-amber-700">
-                                      SELECTED: {displayName(resolvedMatch)} ·{" "}
-                                      {candidate.score}%
+                                      {translate("today.messages.selectedNamed", { player: displayName(resolvedMatch) })} ·{" "}
+                                      {displayPercentage(candidate.score)}
                                     </div>
                                   )}
                                 {reviewStatus === "new" && (
                                   <div className="mt-0.5 font-medium text-sky-700">
                                     {resolvedMatch
-                                      ? `NEW: ${displayName(resolvedMatch)} added from import`
-                                      : "NEW: Will create roster player if selected"}
+                                      ? translate("today.messages.newAddedFromImport", { playerName: displayName(resolvedMatch) })
+                                      : translate("today.import.newCandidateHelp")}
                                   </div>
                                 )}
                               </div>
@@ -5004,10 +5024,10 @@ export function TodayTab({
                               }`}
                             >
                               {reviewStatus === "match"
-                                ? "MATCH"
+                                ? translate("today.importBadge.match")
                                 : reviewStatus === "suggest"
-                                  ? "CHECK"
-                                  : "NEW"}
+                                  ? translate("today.importBadge.needsReview")
+                                  : translate("today.importBadge.new")}
                             </div>
                           </div>
                           {canEditNewName && (
@@ -5015,8 +5035,7 @@ export function TodayTab({
                               {canUseTokenEditor && (
                                 <>
                                   <div className="mb-1 text-[9px] font-black uppercase tracking-wide text-sky-700">
-                                    Tap wrong words off
-                                  </div>
+                                    {translate("today.messages.tapWrongWordsOff")}</div>
                                   <div className="mb-2 flex flex-wrap gap-1">
                                     {nameTokens.map((token, tokenIndex) => {
                                       const isKept = tokenSelection[tokenIndex];
@@ -5045,8 +5064,7 @@ export function TodayTab({
                                 </>
                               )}
                               <label className="mb-1 block text-[9px] font-black uppercase tracking-wide text-sky-700">
-                                Will add
-                              </label>
+                                {translate("today.labels.willAdd")}</label>
                               <Input
                                 value={editedName}
                                 onChange={(event) =>
@@ -5062,11 +5080,11 @@ export function TodayTab({
                                   )
                                 }
                                 className="h-8 rounded-xl border-sky-100 bg-white text-xs font-black text-slate-900"
-                                placeholder="Clean player name"
+                                placeholder={translate("today.fields.cleanPlayerName")}
                               />
                               {cleanedEditedName !== candidate.name && (
                                 <div className="mt-1 text-[10px] font-medium text-sky-700">
-                                  Scan text: {candidate.name}
+                                  {translate("today.messages.scanTextNamed", { name: candidate.name })}
                                 </div>
                               )}
                             </div>
@@ -5092,8 +5110,15 @@ export function TodayTab({
                                             : "bg-card text-muted-foreground"
                                         }`}
                                       >
-                                        {isChosen ? "✓ " : "Use "}
-                                        {displayName(player)} {score}%
+                                        {isChosen
+                                          ? translate("today.actions.selectedSuggestion", {
+                                              playerName: displayName(player),
+                                              scoreText: displayPercentage(score),
+                                            })
+                                          : translate("today.actions.useSuggestion", {
+                                              playerName: displayName(player),
+                                              scoreText: displayPercentage(score),
+                                            })}
                                       </button>
                                     );
                                   })}
@@ -5113,7 +5138,7 @@ export function TodayTab({
                                     {chosenOcrMatchIds[candidateKey] ===
                                     "__new__"
                                       ? "✓ "
-                                      : "Add as new: "}
+                                      : translate("today.actions.addAsNewNamed", { name: displayCandidateName })}
                                     {displayCandidateName}
                                   </button>
                                 )}
@@ -5125,8 +5150,7 @@ export function TodayTab({
                   </div>
                 ) : (
                   <div className="rounded-lg bg-muted/50 p-3 text-center text-xs font-medium text-muted-foreground">
-                    Screenshot Import will show filtered possible names here.
-                  </div>
+                    {translate("today.import.emptyReviewHelp")}</div>
                 )}
               </div>
             )}
@@ -5136,11 +5160,9 @@ export function TodayTab({
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <div className="text-sm font-black text-foreground">
-                      Check missed names
-                    </div>
+                      {translate("today.messages.checkMissedNames")}</div>
                     <div className="text-[11px] font-medium text-muted-foreground">
-                      Use Add to rescue names the scanner missed.
-                    </div>
+                      {translate("today.import.rawTextAddHelp")}</div>
                   </div>
                   <Button
                     type="button"
@@ -5149,21 +5171,20 @@ export function TodayTab({
                     onClick={() => setShowRawOcrText((value) => !value)}
                     className="h-8 shrink-0 px-3 text-[10px] font-black"
                   >
-                    {showRawOcrText ? "Hide words" : "Show words"}
+                    {showRawOcrText ? translate("today.actions.hideWords") : translate("today.actions.showWords")}
                   </Button>
                 </div>
                 {showRawOcrText && (
                   <div className="mt-2 space-y-2">
                     <div className="text-[11px] font-semibold text-muted-foreground">
-                      Possible missed names appear first. Already reviewed names are marked as In Review.
-                    </div>
+                      {translate("today.import.rawTextReviewHelp")}</div>
                     <div className="grid grid-cols-[1fr_auto] gap-2">
                       <Input
                         value={manualRawOcrName}
                         onChange={(event) =>
                           setManualRawOcrName(event.target.value)
                         }
-                        placeholder="Type missing name from raw text"
+                        placeholder={translate("today.fields.typeMissingNameFromRawText")}
                         autoCapitalize="words"
                         autoCorrect="off"
                         spellCheck={false}
@@ -5176,8 +5197,7 @@ export function TodayTab({
                         disabled={!manualRawOcrName.trim()}
                         className="h-9 rounded-xl px-3 text-[10px] font-black"
                       >
-                        Add
-                      </Button>
+                        {translate("common.add")}</Button>
                     </div>
                     <div className="max-h-56 space-y-1 overflow-y-auto rounded-lg bg-muted/50 p-2 text-[11px] leading-relaxed text-foreground">
                       {rawOcrLineEntries.map((entry) => {
@@ -5210,7 +5230,7 @@ export function TodayTab({
                                   disabled={alreadyAdded}
                                   className="h-6 shrink-0 px-2 text-[9px] font-black"
                                 >
-                                  {alreadyAdded ? "Added" : "Add"}
+                                  {alreadyAdded ? translate("today.actions.added") : translate("common.add")}
                                 </Button>
                               )}
                             </div>
@@ -5229,7 +5249,9 @@ export function TodayTab({
                                             : "border-sky-200 bg-sky-50 text-sky-800"
                                       }`}
                                     >
-                                      In Review: {candidate.name}
+                                      {translate("today.messages.inReviewNamed", {
+                                        playerName: candidate.name,
+                                      })}
                                     </span>
                                   );
                                 })}
@@ -5255,11 +5277,9 @@ export function TodayTab({
                         htmlFor="expected-player-count"
                         className="mb-1 block text-[10px] font-black uppercase tracking-wider text-muted-foreground"
                       >
-                        Expected players
-                        <span className="font-bold normal-case tracking-normal text-muted-foreground/80">
+                        {translate("today.labels.expectedPlayers")}<span className="font-bold normal-case tracking-normal text-muted-foreground/80">
                           {" "}
-                          (optional)
-                        </span>
+                          {translate("today.messages.optional")}</span>
                       </label>
                       <Input
                         id="expected-player-count"
@@ -5270,7 +5290,7 @@ export function TodayTab({
                         onChange={(event) =>
                           setExpectedAttendeeCount(event.target.value)
                         }
-                        placeholder="Example: 20"
+                        placeholder={translate("today.fields.expectedPlayersExample")}
                         className="h-10 rounded-xl text-sm font-bold"
                       />
                     </div>
@@ -5281,10 +5301,10 @@ export function TodayTab({
                       className="h-10 rounded-xl px-4 text-xs font-black"
                     >
                       {ocrRunning
-                        ? "Scanning…"
+                        ? translate("today.actions.scanning")
                         : screenshotImportMode === "other"
-                          ? "Scan Crops"
-                          : "Scan Screenshot"}
+                          ? translate("today.actions.scanCrops")
+                          : translate("today.actions.scanScreenshot")}
                     </Button>
                   </div>
                 </div>
@@ -5296,11 +5316,9 @@ export function TodayTab({
                         htmlFor="expected-attendee-count"
                         className="mb-1 block text-[10px] font-black uppercase tracking-wider text-muted-foreground"
                       >
-                        Expected attendees today
-                        <span className="font-bold normal-case tracking-normal text-muted-foreground/80">
+                        {translate("today.labels.expectedAttendeesToday")}<span className="font-bold normal-case tracking-normal text-muted-foreground/80">
                           {" "}
-                          (optional)
-                        </span>
+                          {translate("today.messages.optional")}</span>
                       </label>
                       <Input
                         id="expected-attendee-count"
@@ -5311,7 +5329,7 @@ export function TodayTab({
                         onChange={(event) =>
                           setExpectedAttendeeCount(event.target.value)
                         }
-                        placeholder="Example: 18"
+                        placeholder={translate("today.fields.expectedAttendeesExample")}
                         className="h-10 rounded-xl text-sm font-bold"
                       />
                     </div>
@@ -5322,16 +5340,14 @@ export function TodayTab({
                       className="h-10 rounded-xl px-4 text-xs font-black"
                     >
                       {ocrRunning
-                        ? "Scanning…"
+                        ? translate("today.actions.scanning")
                         : screenshotImportMode === "other"
-                          ? "Scan Crops"
-                          : "Screenshot Import"}
+                          ? translate("today.actions.scanCrops")
+                          : translate("today.actions.screenshotImport")}
                     </Button>
                   </div>
                   <div className="text-[10px] font-medium text-muted-foreground">
-                    This footer stays fixed while you review uploaded
-                    screenshots.
-                  </div>
+                    {translate("today.import.stickyFooterHelp")}</div>
                 </div>
               )
             ) : (
@@ -5344,8 +5360,8 @@ export function TodayTab({
                   className="h-9 shrink-0 rounded-xl px-3 text-xs font-black whitespace-nowrap"
                 >
                   {allSelectableOcrSelected
-                    ? `Clear All (${allOcrTotal})`
-                    : `Select All (${allOcrTotal})`}
+                    ? translate("today.actions.clearAll", { allOcrTotal })
+                    : translate("today.actions.selectAll", { allOcrTotal })}
                 </Button>
                 <Button
                   type="button"
@@ -5353,7 +5369,7 @@ export function TodayTab({
                   disabled={selectedOcrTotal === 0}
                   className="h-9 min-w-0 flex-1 rounded-xl px-3 text-xs font-black whitespace-nowrap"
                 >
-                  Add Selected ({selectedOcrTotal})
+                  {translate("today.actions.addSelected", { count: selectedOcrTotal })}
                 </Button>
               </div>
             )}
@@ -5370,19 +5386,12 @@ export function TodayTab({
         <DialogContent className="stripes-type-ui max-w-xs rounded-2xl">
           <DialogHeader>
             <DialogTitle className="text-base font-black">
-              Review new players?
-            </DialogTitle>
+              {translate("today.headings.reviewNewPlayers")}</DialogTitle>
             <DialogDescription className="text-xs">
-              {newPlayerReviewPrompt?.count ?? 0} new player
-              {newPlayerReviewPrompt?.count === 1 ? "" : "s"} were created with
-              default Skill Level 5. You can quickly adjust skill and traits
-              now.
-            </DialogDescription>
+              {translate("today.messages.newPlayersCreated", { count: newPlayerReviewPrompt?.count ?? 0 })}</DialogDescription>
           </DialogHeader>
           <div className="rounded-xl border border-sky-100 bg-sky-50 p-3 text-[11px] font-semibold leading-snug text-sky-800">
-            This opens the Roster tab and starts with the first new player
-            profile.
-          </div>
+            {translate("today.newPlayers.reviewProfileHelp")}</div>
           <DialogFooter className="gap-2 sm:gap-2">
             <Button
               type="button"
@@ -5390,8 +5399,7 @@ export function TodayTab({
               onClick={() => setNewPlayerReviewPrompt(null)}
               className="h-9 text-xs font-bold"
             >
-              Later
-            </Button>
+              {translate("today.actions.later")}</Button>
             <Button
               type="button"
               onClick={() => {
@@ -5401,8 +5409,7 @@ export function TodayTab({
               }}
               className="h-9 text-xs font-black"
             >
-              Review now
-            </Button>
+              {translate("today.actions.reviewNow")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -5414,12 +5421,9 @@ export function TodayTab({
         <DialogContent className="stripes-type-ui w-[92vw] max-w-md rounded-2xl p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle className="text-base font-black">
-              Create New Players?
-            </DialogTitle>
+              {translate("today.headings.createNewPlayers")}</DialogTitle>
             <DialogDescription className="text-xs">
-              These scan names are not in your roster yet. Create them with
-              default Skill Level 5 and add them to Session?
-            </DialogDescription>
+              {translate("today.newPlayers.confirmCreateHelp")}</DialogDescription>
           </DialogHeader>
           <div className="max-h-56 space-y-2 overflow-y-auto rounded-xl border bg-muted/40 p-3">
             {selectedNewCandidates.map((candidate) => {
@@ -5433,16 +5437,13 @@ export function TodayTab({
                 >
                   <span className="min-w-0 flex-1 truncate">{finalName}</span>
                   <span className="shrink-0 rounded-full bg-sky-50 px-2 py-1 text-[10px] font-black text-sky-700">
-                    Skill 5
-                  </span>
+                    {translate("today.newPlayers.defaultSkillBadge")}</span>
                 </div>
               );
             })}
           </div>
           <div className="rounded-xl bg-sky-50 p-3 text-[11px] font-medium text-sky-800 border border-sky-100">
-            New players will start with Skill Level 5 and the NEW badge. You can
-            review skill and player type next in the Roster tab.
-          </div>
+            {translate("today.newPlayers.skillDefaultsHelp")}</div>
           <DialogFooter className="gap-2 sm:gap-2">
             <Button
               type="button"
@@ -5450,15 +5451,13 @@ export function TodayTab({
               onClick={() => setConfirmNewPlayersOpen(false)}
               className="h-9 text-xs font-bold"
             >
-              No, go back
-            </Button>
+              {translate("today.actions.noGoBack")}</Button>
             <Button
               type="button"
               onClick={finalizeAddSelectedOcrMatches}
               className="h-9 text-xs font-black"
             >
-              Yes, create and add
-            </Button>
+              {translate("today.actions.yesCreateAndAdd")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -5476,11 +5475,9 @@ export function TodayTab({
         >
           <DialogHeader>
             <DialogTitle className="text-base font-black">
-              Say or Paste Names
-            </DialogTitle>
+              {translate("today.headings.sayOrPasteNames")}</DialogTitle>
             <DialogDescription className="text-xs">
-              Say, paste, or type names. The text box is the control center.
-            </DialogDescription>
+              {translate("today.voice.inputHelp")}</DialogDescription>
           </DialogHeader>
 
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1 pb-2">
@@ -5490,11 +5487,9 @@ export function TodayTab({
                   htmlFor="voice-expected-attendee-count"
                   className="mb-1 block text-[10px] font-black uppercase tracking-wider text-muted-foreground"
                 >
-                  Expected
-                  <span className="font-bold normal-case tracking-normal text-muted-foreground/80">
+                  {translate("today.labels.expected")}<span className="font-bold normal-case tracking-normal text-muted-foreground/80">
                     {" "}
-                    (optional)
-                  </span>
+                    {translate("today.messages.optional")}</span>
                 </label>
                 <Input
                   id="voice-expected-attendee-count"
@@ -5505,7 +5500,7 @@ export function TodayTab({
                   onChange={(event) =>
                     setVoiceExpectedAttendeeCount(event.target.value)
                   }
-                  placeholder="Example: 18"
+                  placeholder={translate("today.fields.expectedAttendeesExample")}
                   className="h-10 rounded-xl text-sm font-bold"
                 />
               </div>
@@ -5513,14 +5508,15 @@ export function TodayTab({
                 className={`rounded-xl px-3 py-2 text-center text-[11px] font-black ${hasVoiceExpectedAttendeeNumber && voiceMissingCount > 0 ? "bg-amber-50 text-amber-800 ring-1 ring-amber-200" : "bg-muted text-foreground"}`}
               >
                 <div>
-                  {voiceCapturedCount}
                   {hasVoiceExpectedAttendeeNumber
-                    ? ` / ${Math.round(voiceExpectedAttendeeNumber)}`
-                    : ""}
+                    ? translate("today.messages.capturedOfExpected", {
+                        captured: voiceCapturedCount,
+                        expected: Math.round(voiceExpectedAttendeeNumber),
+                      })
+                    : voiceCapturedCount}
                 </div>
                 <div className="text-[9px] uppercase tracking-wide text-muted-foreground">
-                  names
-                </div>
+                  {translate("today.messages.names")}</div>
               </div>
             </div>
 
@@ -5534,14 +5530,14 @@ export function TodayTab({
                   ),
                 )
               }
-              placeholder="Joon, Jan, Andrea, Phillip R, Jorge"
+              placeholder={translate("today.fields.joonJanAndreaPhillipRJorge")}
               className={`min-h-36 resize-none rounded-xl text-sm font-semibold leading-relaxed ${voiceListening ? "border-red-300 ring-2 ring-red-100" : ""}`}
               data-testid="voice-text-import-notepad"
             />
 
             {voiceListening && voiceInterimText && (
               <div className="rounded-xl border border-red-200 bg-red-50 p-2 text-[11px] font-bold text-red-800">
-                Hearing: “{voiceInterimText}”
+                {translate("today.messages.hearingNamed", { transcript: voiceInterimText })}
               </div>
             )}
             {!voiceListening && voiceStatus && (
@@ -5554,13 +5550,11 @@ export function TodayTab({
               <div className="mb-2 flex items-center justify-between gap-2">
                 <div>
                   <div className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
-                    Smart match review
-                  </div>
+                    {translate("today.messages.smartMatchReview")}</div>
                 </div>
                 {reviewNames.length > 0 && (
                   <div className="shrink-0 text-[10px] font-black text-muted-foreground">
-                    {safeMatches} match · {suggestions} check · {newNames} new
-                  </div>
+                    {translate("today.messages.scanMatchSummary", { matches: safeMatches, suggestions, newNames })}</div>
                 )}
               </div>
 
@@ -5592,20 +5586,19 @@ export function TodayTab({
                               </div>
                               {reviewStatus === "match" && resolvedMatch && (
                                 <div className="mt-0.5 font-medium text-emerald-700">
-                                  MATCH: {displayName(resolvedMatch)} ·{" "}
-                                  {candidate.score}%
+                                  {translate("today.messages.matchNamed", { player: displayName(resolvedMatch) })} ·{" "}
+                                  {displayPercentage(candidate.score)}
                                 </div>
                               )}
                               {reviewStatus === "suggest" && resolvedMatch && (
                                 <div className="mt-0.5 font-medium text-amber-700">
-                                  SELECTED: {displayName(resolvedMatch)} ·{" "}
-                                  {candidate.score}%
+                                  {translate("today.messages.selectedNamed", { player: displayName(resolvedMatch) })} ·{" "}
+                                  {displayPercentage(candidate.score)}
                                 </div>
                               )}
                               {reviewStatus === "new" && (
                                 <div className="mt-0.5 font-medium text-sky-700">
-                                  NEW: Will create roster player if selected
-                                </div>
+                                  {translate("today.import.newCandidateHelp")}</div>
                               )}
                             </div>
                           </div>
@@ -5613,10 +5606,10 @@ export function TodayTab({
                             className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-black ${reviewStatus === "match" ? "bg-emerald-100 text-emerald-800" : reviewStatus === "suggest" ? "bg-amber-100 text-amber-800" : "bg-sky-100 text-sky-800"}`}
                           >
                             {reviewStatus === "match"
-                              ? "MATCH"
+                              ? translate("today.importBadge.match")
                               : reviewStatus === "suggest"
-                                ? "CHECK"
-                                : "NEW"}
+                                ? translate("today.importBadge.needsReview")
+                                : translate("today.importBadge.new")}
                           </span>
                         </div>
                         {reviewStatus !== "match" &&
@@ -5637,7 +5630,7 @@ export function TodayTab({
                                       className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${isChosen ? "border-amber-300 bg-amber-100 text-amber-900" : "bg-card text-muted-foreground"}`}
                                     >
                                       {isChosen ? "✓ " : "+ "}
-                                      {displayName(player)} {score}%
+                                      {displayName(player)} {displayPercentage(score)}
                                     </button>
                                   );
                                 })}
@@ -5651,7 +5644,7 @@ export function TodayTab({
                                 >
                                   {chosenOcrMatchIds[candidateKey] === "__new__"
                                     ? "✓ "
-                                    : "+ New: "}
+                                    : translate("today.actions.newNamed", { name: candidate.name })}
                                   {candidate.name}
                                 </button>
                               )}
@@ -5663,8 +5656,7 @@ export function TodayTab({
                 </div>
               ) : (
                 <div className="rounded-lg bg-muted/50 p-3 text-center text-xs font-medium text-muted-foreground">
-                  Names typed above will appear here.
-                </div>
+                  {translate("today.voice.emptyReviewHelp")}</div>
               )}
             </div>
           </div>
@@ -5687,7 +5679,7 @@ export function TodayTab({
                 <Mic
                   className={`mr-1.5 h-3.5 w-3.5 ${voiceListening ? "animate-pulse" : ""}`}
                 />
-                {voiceListening ? "RECORDING — TAP TO STOP" : "Record"}
+                {voiceListening ? translate("today.actions.recordingTapToStop") : translate("today.actions.record")}
               </Button>
               <Button
                 type="button"
@@ -5701,15 +5693,14 @@ export function TodayTab({
                 disabled={!voiceText.trim() && !voiceListening}
                 className="h-10 rounded-xl px-3 text-xs font-bold"
               >
-                Clear
-              </Button>
+                {translate("today.actions.clear")}</Button>
               <Button
                 type="button"
                 onClick={importSelectedVoiceNames}
                 disabled={!voiceText.trim() || selectedOcrTotal === 0}
                 className="h-10 min-w-0 flex-1 rounded-xl px-3 text-xs font-black"
               >
-                Import Names ({selectedOcrTotal})
+                {translate("today.actions.importNames", { count: selectedOcrTotal })}
               </Button>
             </div>
           </DialogFooter>
@@ -5722,7 +5713,7 @@ export function TodayTab({
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
           <Input
-            placeholder="Search players…"
+            placeholder={translate("today.fields.searchPlayers")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="h-9 pl-8 pr-8 text-xs lg:h-11 lg:pl-10 lg:pr-10 lg:text-[15px]"
@@ -5742,7 +5733,7 @@ export function TodayTab({
         {filtered.length === 0 ? (
           <div className="text-center py-8 bg-muted/50 rounded-xl border border-dashed border-border">
             <p className="text-muted-foreground font-medium text-xs">
-              No players match "{search}"
+              {translate("today.messages.noPlayersMatch", { search })}
             </p>
           </div>
         ) : (
@@ -5775,10 +5766,10 @@ export function TodayTab({
                     type="button"
                     aria-label={
                       isNotHereYet(player)
-                        ? "Mark player as arrived"
-                        : "Mark player as not here yet"
+                        ? translate("today.accessibility.markPlayerAsArrived")
+                        : translate("today.accessibility.markPlayerAsNotHereYet")
                     }
-                    title={isNotHereYet(player) ? "Mark arrived" : "Not here yet"}
+                    title={isNotHereYet(player) ? translate("today.accessibility.markArrived") : translate("today.accessibility.notHereYet")}
                     onClick={(event) => {
                       event.preventDefault();
                       event.stopPropagation();

@@ -6,7 +6,7 @@
   },
   "main": "index.js",
   "scripts": {
-    "test": "node --test organizerRemoval.test.js organizerRemovalTransaction.test.js workspaceInvitation.test.js workspaceInvitationRules.test.js emailVerification.test.js workspaceClosure.test.js workspaceClosureRules.test.js cabinetRules.test.js workspaceRosterLinkage.test.js sharedRosterCreation.test.js privacySafeDiagnostics.test.js",
+    "test": "node --test organizerRemoval.test.js organizerRemovalTransaction.test.js workspaceInvitation.test.js workspaceInvitationRules.test.js emailVerification.test.js workspaceClosure.test.js workspaceClosureRules.test.js cabinetRules.test.js workspaceRosterLinkage.test.js sharedRosterCreation.test.js privacySafeDiagnostics.test.js i18n.test.js",
     "test:rules:cabinet": "firebase emulators:exec --config ../firebase.json --only firestore --project demo-stripes-cabinet-rules \"node --test cabinetRules.emulator.test.js\"",
     "test:rules:core": "firebase emulators:exec --config ../firebase.json --only firestore --project demo-stripes-core-regression \"node --test --test-concurrency=1 cabinetRules.emulator.test.js coreRegressionRules.emulator.test.js sharedRosterCreation.emulator.test.js sharedRosterLinkageRules.emulator.test.js\"",
     "test:rules:p0s2": "firebase emulators:exec --config ../firebase.json --only firestore --project demo-stripes-p0s2-rules \"node --test --test-concurrency=1 cabinetRules.emulator.test.js sharedRosterCreation.emulator.test.js sharedRosterLinkageRules.emulator.test.js\"",
@@ -14,7 +14,8 @@
   },
   "dependencies": {
     "firebase-admin": "^14.2.0",
-    "firebase-functions": "^7.3.0"
+    "firebase-functions": "^7.3.0",
+    "i18next": "26.3.6"
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^5.0.0",

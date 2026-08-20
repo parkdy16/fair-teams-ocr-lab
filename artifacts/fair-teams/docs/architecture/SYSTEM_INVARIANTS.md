@@ -175,3 +175,21 @@ Each hardening task must:
 The live import/layer checks in `npm run check:architecture` are part of the
 permanent Core Regression Gate. New exceptions require deliberate architecture
 review; the check must not be weakened as an implementation shortcut.
+
+## 14. Language versus durable data
+
+- Stripes-authored user-facing language belongs in the approved i18n catalog
+  and presentation layer, not in authority/security decisions.
+- The i18n layer must not translate or reinterpret user- or provider-authored
+  content; existing validation, sanitization and interchange behavior remains
+  authoritative. Stable roles, statuses, schema fields, provider codes and
+  interchange values must not be replaced by localized display strings in
+  persistence.
+- Locale preference is presentation-only and must not affect authentication,
+  workspace membership, capability calculation or Firestore Rules.
+- Backend recipient language requires an explicit allowlisted authority. It
+  must not be inferred from an email address, domain, name or another user's
+  device-local preference.
+- The durable contribution and boundary rules are defined in
+  `docs/architecture/INTERNATIONALIZATION.md`; the zero-baseline frontend policy
+  in `npm run check:i18n` is part of the permanent Core Regression Gate.

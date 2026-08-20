@@ -9,6 +9,7 @@ export {
   StripesEmailVerificationError,
   verificationEmailError,
   verificationResendLabel,
+  verificationResendSeconds,
 } from "@/lib/stripesEmailVerificationState";
 
 export type StripesEmailVerificationResult = {

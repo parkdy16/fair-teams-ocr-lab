@@ -241,6 +241,7 @@ test("save failure preserves the latest local payload and never reports synced",
   assert.equal(await controller.saveLatest(), false);
   assert.equal(controller.getSnapshot().status, "failed");
   assert.equal(controller.getSnapshot().hasUnsyncedChanges, true);
+  assert.equal(controller.getSnapshot().errorReason, "network_unavailable");
   assert.equal(sharedRosterAutosyncPresentation(controller.getSnapshot()).label, "Saved on this device · Not synced");
 });
 
@@ -489,6 +490,7 @@ test("permission failure never auto-retries and Retry follows current P0-A1 auth
   await controller.saveLatest();
   assert.equal(controller.getSnapshot().status, "blocked");
   assert.equal(controller.getSnapshot().errorKind, "authority");
+  assert.equal(controller.getSnapshot().errorReason, "access_changed");
   assert.equal(controller.getSnapshot().retryable, true);
   assert.equal(calls, 1);
   controller.configure(context(dirty, { authorityStatus: "access_lost", canEdit: false }));
@@ -636,8 +638,17 @@ test("known newer remote version wins over a simultaneous transient save failure
 });
 
 test("structured error classification keeps diagnostics safe and distinct", () => {
-  assert.equal(classifySharedRosterAutosyncError(Object.assign(new Error("denied"), { code: "permission-denied" })).kind, "authority");
-  assert.equal(classifySharedRosterAutosyncError(Object.assign(new Error("offline"), { code: "unavailable" })).kind, "network");
-  assert.equal(classifySharedRosterAutosyncError(Object.assign(new Error("changed"), { code: "shared-roster-version-conflict" })).kind, "conflict");
-  assert.equal(classifySharedRosterAutosyncError(new Error("unexpected internal path /secret/player-data")).message, "Stripes could not sync this roster. Your edits are saved on this device.");
+  const authority = classifySharedRosterAutosyncError(Object.assign(new Error("denied"), { code: "permission-denied" }));
+  const network = classifySharedRosterAutosyncError(Object.assign(new Error("offline"), { code: "unavailable" }));
+  const conflict = classifySharedRosterAutosyncError(Object.assign(new Error("changed"), { code: "shared-roster-version-conflict" }));
+  const unknown = classifySharedRosterAutosyncError(new Error("unexpected internal path /secret/player-data"));
+
+  assert.equal(authority.kind, "authority");
+  assert.equal(authority.reason, "access_changed");
+  assert.equal(network.kind, "network");
+  assert.equal(network.reason, "network_unavailable");
+  assert.equal(conflict.kind, "conflict");
+  assert.equal(conflict.reason, "online_changed");
+  assert.equal(unknown.reason, "sync_failed");
+  assert.equal(unknown.message, "Stripes could not sync this roster. Your edits are saved on this device.");
 });

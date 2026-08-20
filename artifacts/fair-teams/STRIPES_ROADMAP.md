@@ -3955,10 +3955,21 @@ separate phases.
 #### I1 — Internationalization foundation
 
 **Mandatory before the next large wave of user-facing feature/UI expansion —
-IMPLEMENTED AND LOCALLY VERIFIED ON 2026-08-20.**
+RELEASED ON 2026-08-20.**
 
-This worktree checkpoint is not yet a committed, hosted-CI or released
-checkpoint.
+Release evidence:
+
+- implementation commit `d9bb4be` (`Establish English-only internationalization foundation`);
+- exact commit passed hosted GitHub `Stripes preventive gates`;
+- the five I1-affected Firebase Functions were successfully deployed to
+  `fair-teams-dev`: `sendStripesEmailVerification`,
+  `createWorkspaceOrganizerInvitation`,
+  `resendWorkspaceOrganizerInvitation`,
+  `acceptWorkspaceOrganizerInvitation`, and `notifyActionBoardStep`;
+- production English smoke passed across normal navigation/UI, core Session and
+  team-generation behavior, File Cabinet persistence, dialogs/status text and
+  deterministic local Assistant behavior;
+- no raw translation keys or obvious I1 presentation regressions were observed.
 
 Build the language architecture while keeping the released product English-only.
 
@@ -4012,10 +4023,11 @@ Local implementation checkpoint:
   ten-stage Core Regression Gate, with focused locale/catalog/formatting tests
   and a sixth unsupported-locale browser smoke scenario.
 
-The requested local architecture, i18n, type, Functions, Core, browser and
-whitespace gates pass, and the live-source behavioral diff review found no I1
-product/runtime regression. No hosted CI result is claimed for this uncommitted
-and unreleased worktree.
+The local architecture, i18n, type, Functions, Core, browser and whitespace
+gates passed, the live-source behavioral diff review found no I1
+product/runtime regression, hosted CI passed for `d9bb4be`, the affected
+Functions were deployed successfully, and the production English smoke passed.
+I1 is therefore released.
 
 #### I2 — Localization
 
@@ -4043,9 +4055,8 @@ another application-wide architecture migration.
 
 ### Authoritative next implementation sequence
 
-The I1 foundation is implemented and locally verified but remains uncommitted
-and unreleased. New major user-facing feature surfaces must use this foundation
-rather than adding another large body of hard-coded English UI.
+The I1 foundation is released. New major user-facing feature surfaces must use
+this foundation rather than adding another large body of hard-coded English UI.
 Actual German/Korean catalogs and recipient-locale authority remain deferred to
 I2; I2 is not automatically the next implementation phase.
 

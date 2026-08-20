@@ -3730,6 +3730,11 @@ Golden scenarios should primarily assert product properties/invariants rather
 than freeze incidental implementation details. Intentional evaluator changes
 must update expected behavior explicitly rather than weakening the harness.
 
+**H3-B progress — 2026-08-20 (local, uncommitted):** Added a bounded, invariant-only
+golden safety test expansion in `src/lib/teamGenerator.test.ts`, including a
+deterministic 9-player 4v5 characterization fixture and a first production-facing
+documentation artifact: `docs/architecture/H3_TEAM_ENGINE.md`.
+
 #### Incremental hardening after H1-H3
 
 Privacy-safe observability, provider contract coverage and architecture-boundary

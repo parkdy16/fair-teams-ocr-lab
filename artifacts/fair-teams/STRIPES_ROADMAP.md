@@ -3804,6 +3804,43 @@ authorization flow for already-indexed Drive resources, and authenticated
 real-provider visual verification. The eligible-Workspace Shared Drive
 real-account matrix remains open as its existing conditional release gate.
 
+#### G3 production smoke and File Cabinet UX direction
+
+**Production smoke — 2026-08-20.**
+
+- G3 commit `af81cdd` passed the hosted GitHub `Stripes preventive gates`;
+- the G3 Firestore rules compiled and were deployed successfully to
+  `fair-teams-dev`;
+- a normal Google Drive file/folder could be registered in the production File
+  Cabinet and remained indexed after refresh;
+- an HTTP(S) web link could be registered and remained indexed after refresh;
+- the current URL editor requires an explicit `http://` or `https://` scheme.
+  Friendly normalization such as `amazon.de` -> `https://amazon.de` is a future
+  UX-polish item rather than a resource-model change;
+- this was a bounded production smoke, not exhaustive File Cabinet UX/provider
+  verification.
+
+**Approved future File Cabinet UX direction:**
+
+- the current flat Cabinet-items list is the provider-neutral architecture
+  foundation, not the intended final File Cabinet experience;
+- File Cabinet should evolve toward a simple Finder/Explorer-style organization
+  model;
+- Stripes folders/collections should be lightweight provider-neutral virtual
+  organization metadata rather than a mirror of Google Drive's physical folder
+  hierarchy;
+- Google Drive files/folders, web links and future providers may appear together
+  in Stripes organization without moving or copying their external originals;
+- desktop may use a folder/sidebar plus contents presentation where useful;
+- mobile should use a simpler folder -> contents drill-down rather than forcing
+  a desktop two-pane layout;
+- origin/context relationships remain independent from visual folder
+  organization so reorganizing Cabinet presentation cannot silently destroy
+  Action Board or Equipment relationships;
+- external provider resources remain untouched unless a future explicit
+  destructive product decision says otherwise.
+
+
 Initial goals:
 
 - individual Google resource references;
@@ -3908,7 +3945,65 @@ value, including:
 Do not choose Spark merely because it is cheaper if a task has hidden
 architecture/security consequences.
 
+### I — Internationalization and localization
+
+**Approved direction — 2026-08-20.**
+
+Internationalization architecture and actual translation are intentionally
+separate phases.
+
+#### I1 — Internationalization foundation
+
+**Mandatory before the next large wave of user-facing feature/UI expansion.**
+
+Build the language architecture while keeping the released product English-only.
+
+Goals:
+
+- establish one maintained i18n framework/catalog architecture;
+- make English the canonical source catalog;
+- establish locale detection, selection and persistence;
+- establish pluralization plus date/number formatting conventions;
+- establish patterns for validation errors, accessibility labels,
+  notifications, emails and other system-generated language;
+- migrate existing user-facing application chrome into the translation system
+  in a bounded, testable way;
+- prevent future user-facing features from introducing uncontrolled hard-coded
+  English strings where practical;
+- preserve user-generated content exactly as entered;
+- preserve current product behavior and visual structure.
+
+I1 does **not** require German or Korean translations. The purpose is to make
+future feature work i18n-ready without forcing active development to maintain
+multiple changing translations.
+
+#### I2 — Localization
+
+Perform later, once major product wording and flows are sufficiently stable and
+before multilingual release.
+
+Initial target languages:
+
+- English;
+- German;
+- Korean.
+
+I2 includes reviewed catalogs, terminology consistency, long-string/responsive
+testing, Korean typography/layout checks, plural/date/number verification,
+missing-key/fallback coverage and approved localization of system-generated
+emails/notifications.
+
+Future languages should then be primarily catalog/localization work rather than
+another application-wide architecture migration.
+
 ### Authoritative next implementation sequence
+
+I1 is the next mandatory architecture checkpoint before substantial new user-facing UI
+expansion. Existing bounded verification, bug fixes and documentation may
+continue, but new major user-facing feature surfaces should be built on the I1
+internationalization foundation rather than adding another large body of
+hard-coded English UI.
+
 
 The stabilization detour and CRG-1 are complete. G2.1a through G2.4 are
 accepted foundations, and both G2.5 implementation commits are on `main`.

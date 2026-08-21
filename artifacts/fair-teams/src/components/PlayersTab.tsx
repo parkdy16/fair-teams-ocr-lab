@@ -6,10 +6,13 @@ import {
   BALANCED_PLAYER_STYLE,
   generateStyledPlayerAttributes,
   inferPlayerStyleFromAttributes,
+  inferPlayerStyleMatch,
   profileFromAveragedAttributes,
   type PlayerStyleValue,
 } from "@/lib/playerStyleProfile";
 import { FunBadge, Gender, PairingRule, PairingRuleKind } from "@/lib/types";
+import { PlayerBatchRatingFlow } from "@/components/PlayerBatchRatingFlow";
+import { PlayerPresetPicker } from "@/components/PlayerPresetPicker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,6 +31,7 @@ import {
   type ClubRatingSummary,
 } from "@/lib/clubCollaborationService";
 import { formatDateTime as formatLocalizedDateTime, formatList, formatNumber, getResolvedUiLocale, translate, type TranslationKey } from "@/i18n";
+import { playerStyleTranslationKeys } from "@/i18n/playerStyle";
 
 
 
@@ -470,25 +474,6 @@ function skillLevelExplanation(skillLevel: number) {
   const bucket = Math.max(1, Math.min(10, Math.floor(skillLevel)));
   return translate(SKILL_LEVEL_EXPLANATIONS[bucket]);
 }
-
-const PLAYER_STYLE_PRESENTATION: Record<PlayerStyleValue, { labelKey: TranslationKey; descriptionKey: TranslationKey }> = {
-  0: { labelKey: "roster.playerStyles.centreBack.label", descriptionKey: "roster.playerStyles.centreBack.description" },
-  1: { labelKey: "roster.playerStyles.fullBack.label", descriptionKey: "roster.playerStyles.fullBack.description" },
-  2: { labelKey: "roster.playerStyles.defensiveMidfielder.label", descriptionKey: "roster.playerStyles.defensiveMidfielder.description" },
-  3: { labelKey: "roster.playerStyles.balancedMidfielder.label", descriptionKey: "roster.playerStyles.balancedMidfielder.description" },
-  4: { labelKey: "roster.playerStyles.attackingMidfielder.label", descriptionKey: "roster.playerStyles.attackingMidfielder.description" },
-  5: { labelKey: "roster.playerStyles.winger.label", descriptionKey: "roster.playerStyles.winger.description" },
-  6: { labelKey: "roster.playerStyles.striker.label", descriptionKey: "roster.playerStyles.striker.description" },
-};
-
-function playerStylePresentation(value: PlayerStyleValue) {
-  const presentation = PLAYER_STYLE_PRESENTATION[value];
-  return {
-    label: translate(presentation.labelKey),
-    description: translate(presentation.descriptionKey),
-  };
-}
-
 
 function initials(name: string) {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]?.toUpperCase()).join("") || "?";
@@ -1046,6 +1031,7 @@ function ProfileDialog({
   );
   const [sharedProfileSaving, setSharedProfileSaving] = useState(false);
   const [sharedProfileError, setSharedProfileError] = useState("");
+  const [pendingProfilePreset, setPendingProfilePreset] = useState<{ value: PlayerStyleValue; teamPlay: number } | null>(null);
   const overall = calculateOverall(draft);
   const quickSkill = quickSkillFromPlayer(draft);
   const quickSkillExplanation = skillLevelExplanation(quickSkill);
@@ -1067,7 +1053,29 @@ function ProfileDialog({
   };
 
   const applyQuickSkill = (skillLevel: number) => {
-    setDraft(prev => applyQuickSkillToPlayer(prev, skillLevel));
+    const nextSkill = roundSkillStep(skillLevel);
+    setDraft(prev => normalizePlayer({
+      ...prev,
+      ...generateStyledPlayerAttributes(nextSkill, sharedPlayerStyle),
+      teamPlay: prev.teamPlay || 2,
+    }));
+  };
+
+  const commitProfilePreset = (nextStyle: PlayerStyleValue, teamPlay: number) => {
+    setSharedPlayerStyle(nextStyle);
+    updateDraft({
+      ...generateStyledPlayerAttributes(roundSkillStep(calculateOverall(draft)), nextStyle),
+      teamPlay,
+    });
+  };
+
+  const applyProfilePreset = (nextStyle: PlayerStyleValue, teamPlay: number) => {
+    const match = inferPlayerStyleMatch({ ...draft, skill: calculateOverall(draft) });
+    if (!match.isPresetLike) {
+      setPendingProfilePreset({ value: nextStyle, teamPlay });
+      return;
+    }
+    commitProfilePreset(nextStyle, teamPlay);
   };
 
   useEffect(() => {
@@ -1075,6 +1083,7 @@ function ProfileDialog({
     resetSharedDraft();
     setAdvancedOpen(false);
     setPhotoActionsOpen(false);
+    setPendingProfilePreset(null);
     setOpen(true);
     onAutoOpenHandled?.();
   }, [autoOpen, player, onAutoOpenHandled]);
@@ -1082,6 +1091,7 @@ function ProfileDialog({
   const closeProfileDialog = () => {
     setPhotoActionsOpen(false);
     setTraitHelp(null);
+    setPendingProfilePreset(null);
     setOpen(false);
     if (reviewMode) {
       onReviewDone?.();
@@ -1164,6 +1174,7 @@ function ProfileDialog({
   }, [open, traitHelp, photoActionsOpen, reviewMode, onReviewDone]);
 
   return (
+    <>
     <Dialog
       open={open}
       onOpenChange={(next) => {
@@ -1247,7 +1258,6 @@ function ProfileDialog({
               </div>
               {(() => {
                 const sharedOverall = sharedOverallFromDraft(draft);
-                const selectedStyle = playerStylePresentation(sharedPlayerStyle);
                 return (
                   <div className="rounded-2xl border border-violet-100 bg-white/85 p-3 space-y-3">
                     <div className="flex items-center justify-between gap-3">
@@ -1289,32 +1299,17 @@ function ProfileDialog({
                     </div>
 
                     <div className="space-y-2 rounded-2xl border border-violet-100 bg-violet-50/80 px-3 py-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <Label className="text-[10px] uppercase font-black tracking-wide text-violet-700">{translate("roster.labels.playerStyle")}</Label>
-                        <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-black text-violet-800 shadow-sm">{selectedStyle.label}</span>
+                      <div>
+                        <Label className="text-[10px] uppercase font-black tracking-wide text-violet-700">{translate("roster.labels.whatStandsOut")}</Label>
+                        <div className="mt-0.5 text-[10px] font-semibold leading-snug text-violet-700/75">{translate("roster.playerPresets.help")}</div>
                       </div>
-                      <input
-                        type="range"
-                        min={0}
-                        max={6}
-                        step={1}
+                      <PlayerPresetPicker
                         value={sharedPlayerStyle}
-                        onPointerDown={dismissActiveInput}
-                        onTouchStart={dismissActiveInput}
-                        onChange={e => {
-                          const nextStyle = Number(e.target.value) as PlayerStyleValue;
-                          setSharedPlayerStyle(nextStyle);
-                          const generated = generateStyledPlayerAttributes(roundSkillStep(sharedOverall), nextStyle);
-                          updateDraft({ ...generated, teamPlay: 2 });
-                        }}
-                        className="w-full accent-violet-700"
+                        onChange={(nextStyle) => applyProfilePreset(nextStyle, 2)}
+                        tone="violet"
+                        compact
+                        testIdPrefix={`shared-player-preset-${player.id}`}
                       />
-                      <div className="grid grid-cols-3 text-[10px] font-black text-violet-500/80">
-                        <span>{translate("roster.stats.defense")}</span><span className="text-center">{translate("roster.stats.midfield")}</span><span className="text-right">{translate("roster.stats.attack")}</span>
-                      </div>
-                      <div className="rounded-xl border border-violet-100 bg-white/80 px-3 py-2 text-[11px] font-semibold leading-snug text-violet-900">
-                        {selectedStyle.description}
-                      </div>
                     </div>
 
                     <PlayerRadar player={{ ...draft, skill: sharedOverall, teamPlay: 2 }} />
@@ -1365,6 +1360,19 @@ function ProfileDialog({
             <div className="rounded-xl border border-primary/10 bg-background/70 px-3 py-2 text-[11px] font-semibold leading-snug text-muted-foreground">
               {quickSkillExplanation}
             </div>
+          </div>
+
+          <div className="space-y-2 rounded-2xl border border-primary/15 bg-primary/5 p-3">
+            <div>
+              <Label className="text-[10px] uppercase font-black tracking-wide text-primary">{translate("roster.labels.whatStandsOut")}</Label>
+              <div className="mt-0.5 text-[10px] font-semibold leading-snug text-muted-foreground">{translate("roster.playerPresets.help")}</div>
+            </div>
+            <PlayerPresetPicker
+              value={sharedPlayerStyle}
+              onChange={(nextStyle) => applyProfilePreset(nextStyle, draft.teamPlay || 2)}
+              compact
+              testIdPrefix={`edit-player-preset-${player.id}`}
+            />
           </div>
 
           <button
@@ -1547,6 +1555,35 @@ function ProfileDialog({
         </div>
       </DialogContent>
     </Dialog>
+
+    <AlertDialog open={pendingProfilePreset !== null} onOpenChange={(next) => { if (!next) setPendingProfilePreset(null); }}>
+      <StripesConfirmContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{translate("roster.headings.replaceDetailedProfile")}</AlertDialogTitle>
+          <AlertDialogDescription>
+            {pendingProfilePreset
+              ? translate("roster.messages.presetReplaceConfirm", {
+                  preset: translate(playerStyleTranslationKeys(pendingProfilePreset.value).labelKey),
+                })
+              : ""}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>{translate("roster.actions.keepCustomProfile")}</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => {
+              if (!pendingProfilePreset) return;
+              const next = pendingProfilePreset;
+              setPendingProfilePreset(null);
+              commitProfilePreset(next.value, next.teamPlay);
+            }}
+          >
+            {translate("roster.actions.replaceProfile")}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </StripesConfirmContent>
+    </AlertDialog>
+    </>
   );
 }
 
@@ -1674,6 +1711,8 @@ export function PlayersTab({
   reviewPlayerIndex = 0,
   reviewPlayerTotal = 0,
   onReviewPlayerHandled,
+  onStartReviewPlayers,
+  onReviewPrevious,
   onReviewNext,
   onReviewDone,
   openPairingRulesToken = 0,
@@ -1695,6 +1734,8 @@ export function PlayersTab({
   reviewPlayerIndex?: number;
   reviewPlayerTotal?: number;
   onReviewPlayerHandled?: () => void;
+  onStartReviewPlayers?: (playerIds: string[]) => void;
+  onReviewPrevious?: () => void;
   onReviewNext?: () => void;
   onReviewDone?: () => void;
   openPairingRulesToken?: number;
@@ -1721,7 +1762,6 @@ export function PlayersTab({
   const [addDetails, setAddDetails] = useState<AddPlayerDetails>(() => createStyledAddPlayerDetails(5, BALANCED_PLAYER_STYLE));
   const addOverall = calculateOverall(addDetails);
   const addSkillExplanation = skillLevelExplanation(skillLevel);
-  const addSelectedStyle = playerStylePresentation(addPlayerStyle);
   const updateAddDetails = (data: Partial<AddPlayerDetails>) => setAddDetails(prev => ({ ...prev, ...data }));
   const [autoEditPlayerId, setAutoEditPlayerId] = useState<string | null>(null);
   const [flippedPlayerIds, setFlippedPlayerIds] = useState<Record<string, boolean>>({});
@@ -2082,6 +2122,27 @@ export function PlayersTab({
 
   const clubRatingSummaryByPlayerId = useMemo(() => new Map(clubRatingSummaries.map((summary) => [summary.playerId, summary])), [clubRatingSummaries]);
   const myClubRatingByPlayerId = useMemo(() => new Map(myClubRatings.map((rating) => [rating.playerId, rating])), [myClubRatings]);
+  const reviewFlowPlayer = reviewActivePlayerId
+    ? players.find((player) => player.id === reviewActivePlayerId) ?? null
+    : null;
+  const ratingQueueIds = useMemo(() => {
+    const ordered = [...players].sort((a, b) => {
+      const aNeedsRating = isSharedRoster
+        ? !hasCompleteClubMyRating(myClubRatingByPlayerId.get(a.id))
+        : Boolean(a.isNew);
+      const bNeedsRating = isSharedRoster
+        ? !hasCompleteClubMyRating(myClubRatingByPlayerId.get(b.id))
+        : Boolean(b.isNew);
+      if (aNeedsRating !== bNeedsRating) return aNeedsRating ? -1 : 1;
+      return displayName(a).localeCompare(displayName(b));
+    });
+    return ordered.map((player) => player.id);
+  }, [isSharedRoster, myClubRatingByPlayerId, players]);
+
+  useEffect(() => {
+    if (!reviewPlayerId || reviewPlayerId !== reviewActivePlayerId) return;
+    onReviewPlayerHandled?.();
+  }, [onReviewPlayerHandled, reviewActivePlayerId, reviewPlayerId]);
 
   const sortedPlayers = [...players].sort((a, b) => {
     if (effectiveSortMode === "alpha") {
@@ -2228,7 +2289,21 @@ export function PlayersTab({
   );
 
   return (
-    <div className="flex flex-col gap-3 sm:gap-4">
+    <>
+      <PlayerBatchRatingFlow
+        player={reviewFlowPlayer}
+        sharedRating={reviewFlowPlayer ? myClubRatingByPlayerId.get(reviewFlowPlayer.id) : undefined}
+        index={reviewPlayerIndex}
+        total={reviewPlayerTotal}
+        isSharedRoster={isSharedRoster}
+        sharedRosterId={sharedRosterId}
+        onUpdatePlayer={updatePlayer}
+        onPrevious={() => onReviewPrevious?.()}
+        onNext={() => onReviewNext?.()}
+        onDone={() => onReviewDone?.()}
+      />
+
+      <div className="flex flex-col gap-3 sm:gap-4">
       <div className="stripes-type-ui rounded-2xl border border-border/70 bg-card p-2.5 shadow-sm sm:p-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="min-w-0">
@@ -2237,14 +2312,28 @@ export function PlayersTab({
               {search ? translate("roster.messages.searchResultCount", { count: filtered.length, total: players.length }) : players.length}
             </div>
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => { setAddOptionsOpen(true); onTutorialAction?.("add-options-opened"); }}
-            className={`h-8 rounded-xl border-primary/20 bg-primary/5 px-2.5 text-[10px] font-black uppercase tracking-wide text-primary shadow-none hover:bg-primary/10 hover:text-primary sm:h-9 sm:px-3 sm:text-[11px] ${players.length === 0 ? "fairteams-empty-add-pulse" : ""} ${tutorialStep === "open-add" ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
-            data-testid="button-open-add-options"
-          >
-            <Plus className="mr-1.5 h-3.5 w-3.5" /> {translate("roster.actions.addPlayer")}</Button>
+          <div className="flex items-center gap-1.5">
+            {onStartReviewPlayers && players.length > 0 ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onStartReviewPlayers(ratingQueueIds)}
+                className="h-8 rounded-xl border-violet-200 bg-violet-50 px-2.5 text-[10px] font-black uppercase tracking-wide text-violet-700 shadow-none hover:bg-violet-100 hover:text-violet-800 sm:h-9 sm:px-3 sm:text-[11px]"
+                data-testid="button-rate-players"
+              >
+                <Star className="mr-1.5 h-3.5 w-3.5" /> {translate("roster.actions.ratePlayers")}
+              </Button>
+            ) : null}
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => { setAddOptionsOpen(true); onTutorialAction?.("add-options-opened"); }}
+              className={`h-8 rounded-xl border-primary/20 bg-primary/5 px-2.5 text-[10px] font-black uppercase tracking-wide text-primary shadow-none hover:bg-primary/10 hover:text-primary sm:h-9 sm:px-3 sm:text-[11px] ${players.length === 0 ? "fairteams-empty-add-pulse" : ""} ${tutorialStep === "open-add" ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
+              data-testid="button-open-add-options"
+            >
+              <Plus className="mr-1.5 h-3.5 w-3.5" /> {translate("roster.actions.addPlayer")}
+            </Button>
+          </div>
 
         <Dialog open={addOptionsOpen} onOpenChange={setAddOptionsOpen}>
           <DialogContent
@@ -2499,31 +2588,20 @@ export function PlayersTab({
                       style={{ "--slider-fill": `${((skillLevel - 1) / 9) * 100}%` } as React.CSSProperties}
                     />
                     <div className="space-y-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <Label className="text-[10px] uppercase font-black tracking-wide text-violet-700">{translate("roster.labels.playerStyle")}</Label>
-                        <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-black text-violet-800">{addSelectedStyle.label}</span>
+                      <div>
+                        <Label className="text-[10px] uppercase font-black tracking-wide text-violet-700">{translate("roster.labels.whatStandsOut")}</Label>
+                        <div className="mt-0.5 text-[10px] font-semibold leading-snug text-violet-700/75">{translate("roster.playerPresets.help")}</div>
                       </div>
-                      <input
-                        type="range"
-                        min={0}
-                        max={6}
-                        step={1}
+                      <PlayerPresetPicker
                         value={addPlayerStyle}
-                        onPointerDown={dismissActiveInput}
-                        onTouchStart={dismissActiveInput}
-                        onChange={e => {
-                          const nextStyle = Number(e.target.value) as PlayerStyleValue;
+                        onChange={(nextStyle) => {
                           setAddPlayerStyle(nextStyle);
-                          setAddDetails(prev => applyStyledSkillToDetails(prev, skillLevel, nextStyle));
+                          setAddDetails((previous) => applyStyledSkillToDetails(previous, skillLevel, nextStyle));
                         }}
-                        className="w-full accent-violet-700"
+                        tone="violet"
+                        compact
+                        testIdPrefix="add-shared-player-preset"
                       />
-                      <div className="grid grid-cols-3 text-[10px] font-black text-violet-500/80">
-                        <span>{translate("roster.stats.defense")}</span><span className="text-center">{translate("roster.stats.midfield")}</span><span className="text-right">{translate("roster.stats.attack")}</span>
-                      </div>
-                      <div className="rounded-xl border border-violet-100 bg-violet-50 px-3 py-2 text-[11px] font-semibold leading-snug text-violet-900">
-                        {addSelectedStyle.description}
-                      </div>
                     </div>
                   </div>
                 </div>
@@ -2612,31 +2690,19 @@ export function PlayersTab({
                   {addSkillExplanation}
                 </div>
                 <div className="space-y-2 rounded-2xl border border-primary/10 bg-background/70 px-3 py-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <Label className="text-[10px] uppercase font-black tracking-wide text-primary">{translate("roster.labels.playerStyle")}</Label>
-                    <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-black text-primary">{addSelectedStyle.label}</span>
+                  <div>
+                    <Label className="text-[10px] uppercase font-black tracking-wide text-primary">{translate("roster.labels.whatStandsOut")}</Label>
+                    <div className="mt-0.5 text-[10px] font-semibold leading-snug text-muted-foreground">{translate("roster.playerPresets.help")}</div>
                   </div>
-                  <input
-                    type="range"
-                    min={0}
-                    max={6}
-                    step={1}
+                  <PlayerPresetPicker
                     value={addPlayerStyle}
-                    onPointerDown={dismissActiveInput}
-                    onTouchStart={dismissActiveInput}
-                    onChange={e => {
-                      const nextStyle = Number(e.target.value) as PlayerStyleValue;
+                    onChange={(nextStyle) => {
                       setAddPlayerStyle(nextStyle);
-                      setAddDetails(prev => applyStyledSkillToDetails(prev, skillLevel, nextStyle));
+                      setAddDetails((previous) => applyStyledSkillToDetails(previous, skillLevel, nextStyle));
                     }}
-                    className="w-full accent-primary"
+                    compact
+                    testIdPrefix="add-local-player-preset"
                   />
-                  <div className="grid grid-cols-3 text-[10px] font-black text-muted-foreground">
-                    <span>{translate("roster.stats.defense")}</span><span className="text-center">{translate("roster.stats.midfield")}</span><span className="text-right">{translate("roster.stats.attack")}</span>
-                  </div>
-                  <div className="rounded-xl border border-primary/10 bg-primary/5 px-3 py-2 text-[11px] font-semibold leading-snug text-muted-foreground">
-                    {addSelectedStyle.description}
-                  </div>
                 </div>
               </div>
 
@@ -3114,16 +3180,10 @@ export function PlayersTab({
                       <ProfileDialog
                         player={player}
                         onUpdate={(data) => updatePlayer(player.id, data)}
-                        autoOpen={autoEditPlayerId === player.id || reviewPlayerId === player.id}
+                        autoOpen={autoEditPlayerId === player.id}
                         onAutoOpenHandled={() => {
                           if (autoEditPlayerId === player.id) setAutoEditPlayerId(null);
-                          if (reviewPlayerId === player.id) onReviewPlayerHandled?.();
                         }}
-                        reviewMode={reviewActivePlayerId === player.id && reviewPlayerTotal > 0}
-                        reviewIndex={reviewPlayerIndex}
-                        reviewTotal={reviewPlayerTotal}
-                        onReviewNext={onReviewNext}
-                        onReviewDone={onReviewDone}
                         isSharedRoster={isSharedRoster}
                         sharedRosterId={sharedRosterId}
                         clubMyRating={myClubRatingByPlayerId.get(player.id)}
@@ -3174,5 +3234,6 @@ export function PlayersTab({
         )}
       </div>
     </div>
+    </>
   );
 }

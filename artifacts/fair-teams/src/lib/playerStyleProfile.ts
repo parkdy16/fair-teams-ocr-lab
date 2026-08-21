@@ -1,6 +1,15 @@
-import { calculateOverall, type RoomPlayer } from "@/lib/localRoster";
+import { calculateOverall, type RoomPlayer } from "./localRoster.ts";
 
 export type PlayerStyleValue = 0 | 1 | 2 | 3 | 4 | 5 | 6;
+
+export type PlayerPresetId =
+  | "defender"
+  | "strong"
+  | "high-energy"
+  | "all-rounder"
+  | "playmaker"
+  | "fast"
+  | "goal-threat";
 
 export type PlayerStyleAttributes = Pick<
   RoomPlayer,
@@ -9,6 +18,7 @@ export type PlayerStyleAttributes = Pick<
 
 export type PlayerStyleDefinition = {
   value: PlayerStyleValue;
+  id: PlayerPresetId;
   shortLabel: string;
   label: string;
   sliderLabel: string;
@@ -18,68 +28,87 @@ export type PlayerStyleDefinition = {
 
 export const BALANCED_PLAYER_STYLE: PlayerStyleValue = 3;
 
+/**
+ * Experimental JoonGPT rating presets.
+ *
+ * Presets are fast profile-shaping shortcuts, not another permanent statistics
+ * layer. The generated detailed attributes remain the source of truth and can
+ * be refined through Advanced Edit. Numeric values stay stable so the
+ * experiment can reuse the existing local/shared persistence contract.
+ */
 export const PLAYER_STYLE_DEFINITIONS: PlayerStyleDefinition[] = [
   {
-    value: 0,
-    shortLabel: "CB",
-    label: "Centre-back type",
-    sliderLabel: "Defense",
-    description: "Stays back, wins duels, protects space, and gives the team defensive stability. Stripes creates high DEF/physical, lower ATK.",
-    deltas: { attack: -2.6, defense: 1.9, passing: -0.3, speed: -1.0, stamina: 0.3, physical: 1.2 },
-  },
-  {
-    value: 1,
-    shortLabel: "FB",
-    label: "Full-back / wing-back type",
-    sliderLabel: "Wide support",
-    description: "Covers wide areas and supports both defense and attack. Stripes creates good DEF, speed, stamina, and some ATK.",
-    deltas: { attack: -0.7, defense: 0.9, passing: -0.1, speed: 1.2, stamina: 1.0, physical: -0.2 },
-  },
-  {
-    value: 2,
-    shortLabel: "DM",
-    label: "Defensive midfielder type",
-    sliderLabel: "Deep support",
-    description: "Protects the team and connects play. Stripes creates strong DEF and PASS, with less direct attacking weight.",
-    deltas: { attack: -1.2, defense: 1.3, passing: 1.1, speed: -0.2, stamina: 0.5, physical: 0.5 },
-  },
-  {
-    value: 3,
-    shortLabel: "CM",
-    label: "Balanced midfielder type",
-    sliderLabel: "Balanced",
-    description: "All-round player. Stripes keeps the profile close to the overall skill, with a small boost to passing and stamina.",
-    deltas: { attack: 0, defense: 0, passing: 0.6, speed: 0, stamina: 0.4, physical: 0 },
+    value: 6,
+    id: "goal-threat",
+    shortLabel: "GOAL",
+    label: "Goal Threat",
+    sliderLabel: "Goal Threat",
+    description: "Attacks space, looks to score, and creates direct danger around goal.",
+    deltas: { attack: 2.4, defense: -2.0, passing: -0.5, speed: 0.7, stamina: -0.2, physical: 0.1 },
   },
   {
     value: 4,
-    shortLabel: "AM",
-    label: "Attacking midfielder type",
-    sliderLabel: "Creative support",
-    description: "Creates chances and supports attacks. Stripes creates stronger PASS and ATK, with slightly lower defensive weight.",
-    deltas: { attack: 1.0, defense: -0.9, passing: 1.2, speed: 0.1, stamina: 0, physical: -0.3 },
+    id: "playmaker",
+    shortLabel: "PLAY",
+    label: "Playmaker",
+    sliderLabel: "Playmaker",
+    description: "Connects play, spots openings, and creates chances for teammates.",
+    deltas: { attack: 0.2, defense: -0.6, passing: 2.2, speed: -0.3, stamina: 0.1, physical: -0.7 },
+  },
+  {
+    value: 0,
+    id: "defender",
+    shortLabel: "DEF",
+    label: "Defender",
+    sliderLabel: "Defender",
+    description: "Protects space, wins the ball, and gives the team defensive stability.",
+    deltas: { attack: -2.0, defense: 2.2, passing: -0.4, speed: -0.4, stamina: 0.4, physical: 0.7 },
   },
   {
     value: 5,
-    shortLabel: "W",
-    label: "Winger type",
-    sliderLabel: "Wide attack",
-    description: "Wide attacking player. Stripes creates high SPEED and ATK, with less defensive weight.",
-    deltas: { attack: 1.4, defense: -1.7, passing: 0.2, speed: 1.7, stamina: 0.4, physical: -0.8 },
+    id: "fast",
+    shortLabel: "FAST",
+    label: "Fast",
+    sliderLabel: "Fast",
+    description: "Changes the game with speed, acceleration, and quick recovery runs.",
+    deltas: { attack: 0.6, defense: -0.4, passing: -0.3, speed: 2.3, stamina: 0.4, physical: -0.8 },
   },
   {
-    value: 6,
-    shortLabel: "ST",
-    label: "Striker type",
-    sliderLabel: "Attack",
-    description: "Main attacking threat. Stripes creates very high ATK, lower DEF, and a more direct finishing profile.",
-    deltas: { attack: 2.0, defense: -2.2, passing: -0.4, speed: 0.5, stamina: -0.2, physical: 0.4 },
+    value: 2,
+    id: "high-energy",
+    shortLabel: "ENG",
+    label: "High Energy",
+    sliderLabel: "High Energy",
+    description: "Runs, presses, and keeps covering space throughout the game.",
+    deltas: { attack: 0.0, defense: 0.5, passing: 0.0, speed: 0.6, stamina: 2.2, physical: -0.2 },
+  },
+  {
+    value: 1,
+    id: "strong",
+    shortLabel: "STR",
+    label: "Strong",
+    sliderLabel: "Strong",
+    description: "Wins physical battles, shields the ball, and gives the team presence.",
+    deltas: { attack: 0.1, defense: 0.5, passing: -0.5, speed: -1.0, stamina: 0.1, physical: 2.2 },
+  },
+  {
+    value: 3,
+    id: "all-rounder",
+    shortLabel: "ALL",
+    label: "All-rounder",
+    sliderLabel: "All-rounder",
+    description: "Contributes across the game without one quality dominating the profile.",
+    deltas: { attack: 0.0, defense: 0.0, passing: 0.2, speed: 0.1, stamina: 0.2, physical: 0.0 },
   },
 ];
 
+export const PLAYER_PROFILE_PRESET_ORDER = PLAYER_STYLE_DEFINITIONS.map(
+  (definition) => definition.value,
+) as PlayerStyleValue[];
+
 const STAT_KEYS = ["attack", "defense", "passing", "speed", "stamina", "physical"] as const;
 
-type StyleStatKey = (typeof STAT_KEYS)[number];
+export type PlayerStyleStatKey = (typeof STAT_KEYS)[number];
 
 function clamp(value: unknown, min: number, max: number, fallback: number) {
   const n = Number(value);
@@ -98,7 +127,9 @@ export function normalizePlayerStyle(value: unknown): PlayerStyleValue {
 
 export function getPlayerStyleDefinition(value: unknown): PlayerStyleDefinition {
   const style = normalizePlayerStyle(value);
-  return PLAYER_STYLE_DEFINITIONS.find((definition) => definition.value === style) || PLAYER_STYLE_DEFINITIONS[BALANCED_PLAYER_STYLE];
+  return PLAYER_STYLE_DEFINITIONS.find((definition) => definition.value === style)
+    ?? PLAYER_STYLE_DEFINITIONS.find((definition) => definition.value === BALANCED_PLAYER_STYLE)
+    ?? PLAYER_STYLE_DEFINITIONS[0];
 }
 
 export function generateStyledPlayerAttributes(
@@ -117,15 +148,15 @@ export function generateStyledPlayerAttributes(
     teamPlay: 2,
   };
 
-  // Keep the existing Stripes weighted OVR formula as the source of truth.
-  // The role creates the shape, then we gently move the shaped stats so the
-  // computed OVR lands close to the organizer's chosen overall skill.
-  for (let i = 0; i < 8; i += 1) {
+  // Keep the current Stripes OVR formula authoritative. The preset creates the
+  // profile shape, then the shaped values move together until the computed OVR
+  // lands close to the organizer's chosen overall skill.
+  for (let index = 0; index < 8; index += 1) {
     for (const key of STAT_KEYS) attrs[key] = clamp(attrs[key], 1, 10, target);
     const currentOverall = calculateOverall(attrs);
-    const diff = target - currentOverall;
-    if (Math.abs(diff) < 0.05) break;
-    for (const key of STAT_KEYS) attrs[key] = clamp(attrs[key] + diff * 0.9, 1, 10, target);
+    const difference = target - currentOverall;
+    if (Math.abs(difference) < 0.05) break;
+    for (const key of STAT_KEYS) attrs[key] = clamp(attrs[key] + difference * 0.9, 1, 10, target);
   }
 
   return {
@@ -139,23 +170,44 @@ export function generateStyledPlayerAttributes(
   };
 }
 
-export function inferPlayerStyleFromAttributes(player: Partial<PlayerStyleAttributes & { skill?: number }>): PlayerStyleValue {
+export function playerStyleProfileDistance(
+  player: Partial<PlayerStyleAttributes & { skill?: number }>,
+  styleValue: unknown,
+) {
   const target = roundHalf(clamp(player.skill, 1, 10, calculateOverall(player)));
+  const generated = generateStyledPlayerAttributes(target, styleValue);
+  return STAT_KEYS.reduce((sum, key) => {
+    const actual = clamp(player[key], 1, 10, generated[key]);
+    return sum + Math.abs(actual - generated[key]);
+  }, 0);
+}
+
+export function inferPlayerStyleMatch(player: Partial<PlayerStyleAttributes & { skill?: number }>) {
   let bestStyle: PlayerStyleValue = BALANCED_PLAYER_STYLE;
-  let bestScore = Number.POSITIVE_INFINITY;
+  let bestDistance = Number.POSITIVE_INFINITY;
 
   for (const definition of PLAYER_STYLE_DEFINITIONS) {
-    const generated = generateStyledPlayerAttributes(target, definition.value);
-    const score = STAT_KEYS.reduce((sum, key: StyleStatKey) => {
-      const actual = clamp(player[key], 1, 10, generated[key]);
-      return sum + Math.abs(actual - generated[key]);
-    }, 0);
-    if (score < bestScore) {
-      bestScore = score;
+    const distance = playerStyleProfileDistance(player, definition.value);
+    if (distance < bestDistance) {
+      bestDistance = distance;
       bestStyle = definition.value;
     }
   }
-  return bestStyle;
+
+  return {
+    style: bestStyle,
+    distance: bestDistance,
+    // Generated profiles are exact. This small allowance covers half-step
+    // rounding and tiny manual corrections without labelling a substantially
+    // custom profile as a preset.
+    isPresetLike: bestDistance <= 1.5,
+  };
+}
+
+export function inferPlayerStyleFromAttributes(
+  player: Partial<PlayerStyleAttributes & { skill?: number }>,
+): PlayerStyleValue {
+  return inferPlayerStyleMatch(player).style;
 }
 
 export function profileFromAveragedAttributes(

@@ -6,46 +6,39 @@ export type PlayerStyleTranslationKeys = {
   descriptionKey: TranslationKey;
 };
 
-const PLAYER_STYLE_TRANSLATION_KEYS: Record<
-  PlayerStyleValue,
-  PlayerStyleTranslationKeys
-> = {
+const PLAYER_STYLE_TRANSLATION_KEYS: Record<PlayerStyleValue, PlayerStyleTranslationKeys> = {
   0: {
-    labelKey: "roster.playerStyles.centreBack.label",
-    descriptionKey: "roster.playerStyles.centreBack.description",
+    labelKey: "roster.playerPresets.defender.label",
+    descriptionKey: "roster.playerPresets.defender.description",
   },
   1: {
-    labelKey: "roster.playerStyles.fullBack.label",
-    descriptionKey: "roster.playerStyles.fullBack.description",
+    labelKey: "roster.playerPresets.strong.label",
+    descriptionKey: "roster.playerPresets.strong.description",
   },
   2: {
-    labelKey: "roster.playerStyles.defensiveMidfielder.label",
-    descriptionKey: "roster.playerStyles.defensiveMidfielder.description",
+    labelKey: "roster.playerPresets.highEnergy.label",
+    descriptionKey: "roster.playerPresets.highEnergy.description",
   },
   3: {
-    labelKey: "roster.playerStyles.balancedMidfielder.label",
-    descriptionKey: "roster.playerStyles.balancedMidfielder.description",
+    labelKey: "roster.playerPresets.allRounder.label",
+    descriptionKey: "roster.playerPresets.allRounder.description",
   },
   4: {
-    labelKey: "roster.playerStyles.attackingMidfielder.label",
-    descriptionKey: "roster.playerStyles.attackingMidfielder.description",
+    labelKey: "roster.playerPresets.playmaker.label",
+    descriptionKey: "roster.playerPresets.playmaker.description",
   },
   5: {
-    labelKey: "roster.playerStyles.winger.label",
-    descriptionKey: "roster.playerStyles.winger.description",
+    labelKey: "roster.playerPresets.fast.label",
+    descriptionKey: "roster.playerPresets.fast.description",
   },
   6: {
-    labelKey: "roster.playerStyles.striker.label",
-    descriptionKey: "roster.playerStyles.striker.description",
+    labelKey: "roster.playerPresets.goalThreat.label",
+    descriptionKey: "roster.playerPresets.goalThreat.description",
   },
 };
 
-export function playerStyleTranslationKeys(
-  style: unknown,
-): PlayerStyleTranslationKeys {
+export function playerStyleTranslationKeys(style: unknown): PlayerStyleTranslationKeys {
   const numericStyle = Math.round(Number(style));
-  const normalizedStyle = (
-    numericStyle >= 0 && numericStyle <= 6 ? numericStyle : 3
-  ) as PlayerStyleValue;
+  const normalizedStyle = (numericStyle >= 0 && numericStyle <= 6 ? numericStyle : 3) as PlayerStyleValue;
   return PLAYER_STYLE_TRANSLATION_KEYS[normalizedStyle];
 }

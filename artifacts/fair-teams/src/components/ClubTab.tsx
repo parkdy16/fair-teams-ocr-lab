@@ -21,6 +21,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { FirebaseSharedRosterAuthCard } from "@/components/FirebaseSharedRosterAuthCard";
 import { AiSmartCommandPanel } from "@/components/AiSmartCommandPanel";
+import { getPlayerProfilePresetOption, PlayerPresetPicker } from "@/components/PlayerPresetPicker";
 import { TaskBoard } from "@/components/TaskBoard";
 import type { AiSmartCommandAction } from "@/lib/aiSmartCommandTypes";
 import { getFairTeamsAuth } from "@/lib/firebaseClient";
@@ -39,6 +40,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { StripesConfirmContent } from "@/components/ui/stripes-modal";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -79,10 +90,10 @@ import {
   BALANCED_PLAYER_STYLE,
   generateStyledPlayerAttributes,
   inferPlayerStyleFromAttributes,
+  inferPlayerStyleMatch,
   type PlayerStyleAttributes,
   type PlayerStyleValue,
 } from "@/lib/playerStyleProfile";
-import { playerStyleTranslationKeys } from "@/i18n/playerStyle";
 import { fileCabinetGoogleLoginHint } from "@/lib/fileCabinetDriveAccess";
 import {
   formatDateTime,
@@ -1030,6 +1041,7 @@ export function ClubTab({
   const [ratingPlayerId, setRatingPlayerId] = useState<string | null>(null);
   const [ratingDraft, setRatingDraft] = useState(5);
   const [ratingPlayerStyle, setRatingPlayerStyle] = useState<PlayerStyleValue>(BALANCED_PLAYER_STYLE);
+  const [pendingRatingPreset, setPendingRatingPreset] = useState<PlayerStyleValue | null>(null);
   const [ratingProfile, setRatingProfile] = useState<RatingProfileDraft>(() => generateStyledPlayerAttributes(5, BALANCED_PLAYER_STYLE));
   const [ratingGoalkeeper, setRatingGoalkeeper] = useState(false);
   const [ratingSaving, setRatingSaving] = useState(false);
@@ -1575,6 +1587,11 @@ export function ClubTab({
   const canRemoveClubNote = (note: ClubNote) =>
     Boolean(currentUserUid && note.createdByUid === currentUserUid);
 
+  const commitRatingPreset = (nextStyle: PlayerStyleValue) => {
+    setRatingPlayerStyle(nextStyle);
+    setRatingProfile(generateStyledPlayerAttributes(ratingDraft, nextStyle));
+  };
+
   const openRatingForPlayer = (player: RoomPlayer | null) => {
     if (!player) return;
     const existing = myRatingByPlayerId.get(player.id);
@@ -1595,6 +1612,7 @@ export function ClubTab({
       : generateStyledPlayerAttributes(baseSkill, style);
     setRatingDialogError("");
     setRatingFlowNotice("");
+    setPendingRatingPreset(null);
     setRatingBoardOpen(false);
     setRatingDraft(baseSkill);
     setRatingPlayerStyle(style);
@@ -3896,6 +3914,7 @@ export function ClubTab({
         onOpenChange={(open) => {
           if (!open) {
             setRatingDialogError("");
+            setPendingRatingPreset(null);
             setRatingPlayerId(null);
           }
         }}
@@ -3968,7 +3987,6 @@ export function ClubTab({
                   </div>
 
                   {(() => {
-                    const selectedStyle = playerStyleTranslationKeys(ratingPlayerStyle);
                     const computedOverall = calculateOverall(ratingProfile);
                     return (
                       <>
@@ -4005,38 +4023,31 @@ export function ClubTab({
                         </div>
 
                         <div className="grid gap-2 rounded-2xl border border-violet-100 bg-violet-50 p-3">
-                          <div className="flex items-center justify-between gap-2">
-                            <div>
-                              <Label className="text-xs font-black uppercase tracking-wide text-violet-700">
-                                {translate("club.labels.playerStyle")}</Label>
-                              <div className="mt-0.5 text-[10px] font-semibold text-violet-700/75">
-                                {translate("club.ratings.styleScaleHelp")}</div>
-                            </div>
-                            <div className="rounded-xl bg-white px-2.5 py-1 text-xs font-black text-violet-800 shadow-sm">
-                              {translate(selectedStyle.labelKey)}
+                          <div>
+                            <Label className="text-xs font-black uppercase tracking-wide text-violet-700">
+                              {translate("roster.labels.whatStandsOut")}
+                            </Label>
+                            <div className="mt-0.5 text-[10px] font-semibold leading-snug text-violet-700/75">
+                              {translate("roster.playerPresets.help")}
                             </div>
                           </div>
-                          <input
-                            type="range"
-                            min="0"
-                            max="6"
-                            step="1"
+                          <PlayerPresetPicker
                             value={ratingPlayerStyle}
-                            onChange={(event) => {
-                              const nextStyle = Number(event.target.value) as PlayerStyleValue;
-                              setRatingPlayerStyle(nextStyle);
-                              setRatingProfile(generateStyledPlayerAttributes(ratingDraft, nextStyle));
+                            onChange={(nextStyle) => {
+                              const match = inferPlayerStyleMatch({
+                                ...ratingProfile,
+                                skill: calculateOverall(ratingProfile),
+                              });
+                              if (!match.isPresetLike) {
+                                setPendingRatingPreset(nextStyle);
+                                return;
+                              }
+                              commitRatingPreset(nextStyle);
                             }}
-                            className="w-full accent-violet-700"
+                            tone="violet"
+                            compact
+                            testIdPrefix={`club-rating-preset-${ratingDialogPlayer.id}`}
                           />
-                          <div className="grid grid-cols-3 text-[10px] font-black text-violet-500/80">
-                            <span>{translate("club.messages.defense")}</span>
-                            <span className="text-center">{translate("club.messages.midfield")}</span>
-                            <span className="text-right">{translate("club.messages.attack")}</span>
-                          </div>
-                          <div className="rounded-xl border border-violet-100 bg-white/80 px-3 py-2 text-[11px] font-semibold leading-snug text-violet-900">
-                            {translate(selectedStyle.descriptionKey)}
-                          </div>
                         </div>
 
                         <button
@@ -4123,6 +4134,43 @@ export function ClubTab({
             })()}
         </DialogContent>
       </Dialog>
+
+      <AlertDialog
+        open={pendingRatingPreset !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingRatingPreset(null);
+        }}
+      >
+        <StripesConfirmContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {translate("roster.headings.replaceDetailedProfile")}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingRatingPreset !== null
+                ? translate("roster.messages.presetReplaceConfirm", {
+                    preset: getPlayerProfilePresetOption(pendingRatingPreset).label,
+                  })
+                : ""}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>
+              {translate("roster.actions.keepCustomProfile")}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (pendingRatingPreset === null) return;
+                const nextPreset = pendingRatingPreset;
+                setPendingRatingPreset(null);
+                commitRatingPreset(nextPreset);
+              }}
+            >
+              {translate("roster.actions.replaceProfile")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </StripesConfirmContent>
+      </AlertDialog>
 
       <Dialog
         open={equipmentBoardOpen}

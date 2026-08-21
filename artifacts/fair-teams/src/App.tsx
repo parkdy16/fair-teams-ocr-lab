@@ -574,6 +574,13 @@ function App() {
     setReviewPlayerIndex(nextIndex);
     setReviewAutoOpenPlayerId(nextPlayerId);
   };
+  const openPreviousReviewPlayer = () => {
+    const previousIndex = reviewPlayerIndex - 1;
+    const previousPlayerId = reviewPlayerQueue[previousIndex];
+    if (!previousPlayerId) return;
+    setReviewPlayerIndex(previousIndex);
+    setReviewAutoOpenPlayerId(previousPlayerId);
+  };
   const [todayOcrOpenToken, setTodayOcrOpenToken] = useState(0);
   const [ocrImportContext, setOcrImportContext] = useState<"today" | "roster">(
     "today",
@@ -4497,6 +4504,8 @@ function App() {
                 reviewPlayerIndex={reviewPlayerIndex}
                 reviewPlayerTotal={reviewPlayerQueue.length}
                 onReviewPlayerHandled={() => setReviewAutoOpenPlayerId(null)}
+                onStartReviewPlayers={startReviewPlayerQueue}
+                onReviewPrevious={openPreviousReviewPlayer}
                 onReviewNext={openNextReviewPlayer}
                 onReviewDone={finishReviewPlayerQueue}
                 openPairingRulesToken={openPairingRulesToken}

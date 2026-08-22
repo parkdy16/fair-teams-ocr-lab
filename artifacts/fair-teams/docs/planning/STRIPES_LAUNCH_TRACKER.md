@@ -219,3 +219,82 @@ Priority order:
 6. SEO/ASO/discovery.
 
 Full multisport breadth remains post-launch unless explicitly reprioritized.
+
+---
+
+## LATEST visual UX audit execution checkpoint - 2026-08-22
+
+The production visual UX audit infrastructure is now established on `main`.
+
+Adoption checkpoint:
+
+- PR #1 merged as `840228f` — `Adopt Stripes visual UX audit`;
+- deterministic production baseline: 12 scenarios x 4 viewports;
+- 48 of 48 baseline captures passed;
+- evidence includes screenshots, ARIA/accessibility snapshots, Playwright
+  traces, visual metrics, interactive-element inventory and browser diagnostics;
+- generated audit evidence remains outside Git;
+- the audit runner no longer requires the deprecated Windows `shell: true`
+  execution path.
+
+The audit system is now reusable production infrastructure, not part of the
+remaining final-design implementation budget.
+
+### Continuous audit loop
+
+The earlier `Design early, audit late` guidance is refined as follows:
+
+For major UX/UI packages, use the visual audit before and after implementation
+when useful:
+
+1. capture the production before-state;
+2. approve product behavior and interaction direction;
+3. implement the bounded package;
+4. capture the production after-state;
+5. review accessibility, responsive behavior and visual hierarchy;
+6. run regression and real-device verification.
+
+This does **not** remove the final post-feature-freeze app-wide reconsideration.
+
+The final controlled UX/UI budget remains reserved for systematic cross-app
+review, cohesion work and real-device corrections after the major launch
+features are complete. Permanent audit infrastructure simply means that late
+review begins with better evidence and fewer accumulated surprises.
+
+### Product-experiment boundary
+
+The JoonGPT experimental branch remains a source of candidate interaction ideas,
+not production code to merge wholesale.
+
+Candidate ideas should be classified through evidence and product review before
+adoption. Production implementation should remain bounded, maintainable and
+consistent with the canonical roadmap.
+
+### Near-term T1 execution
+
+The next production UX/model packages remain:
+
+1. rating data-model and persistence foundation;
+2. guided roster creation;
+3. Rating setup under Roster Settings;
+4. unified Player Setup / unrated-player review flow;
+5. continued Generate/evaluator and Live Split work.
+
+The production audit should surround these packages where the UI surface changes
+materially.
+
+### First-user evidence gap
+
+The current 48-capture baseline does not yet fully cover the genuine first-use
+journey.
+
+Promote durable audit scenarios as those flows stabilize for:
+
+- onboarding beginning;
+- onboarding completed;
+- empty starter roster;
+- first roster creation / Settings from empty state;
+- newly connected user with no useful local roster.
+
+This is an evidence-coverage gap, not a blocker on beginning the next bounded T1
+package.

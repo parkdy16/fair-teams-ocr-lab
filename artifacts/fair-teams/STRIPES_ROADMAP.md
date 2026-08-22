@@ -6401,3 +6401,259 @@ Do not install tools merely because they exist.
 
 Pilot each one against a concrete Stripes workflow and retain it only if the
 value is meaningful.
+
+---
+
+## LATEST T1 UX / visual-audit execution authority - 2026-08-22
+
+This section supersedes older T1 UX execution guidance where it conflicts.
+
+### Production visual-audit infrastructure
+
+The Stripes visual UX audit is now adopted as permanent production
+infrastructure rather than an experiment-only tool.
+
+Current validated production baseline:
+
+- 12 deterministic product states;
+- 4 viewports: 390x844, 430x932, 768x1024 and 1440x900;
+- 48 total captures;
+- all 48 production captures passed on 2026-08-22;
+- each scenario records screenshot, ARIA/accessibility evidence, Playwright
+  trace, visual metrics, interactive-element inventory and browser diagnostics;
+- generated evidence remains outside Git;
+- the audit runner no longer depends on the Windows `shell: true` execution
+  path.
+
+Canonical audit documentation:
+
+`docs/planning/STRIPES_UX_AUDIT.md`
+
+The audit is evidence, not an automatic redesign.
+
+Major UX/UI changes should normally use:
+
+1. production before-state capture;
+2. approved product/interaction direction;
+3. implementation;
+4. production after-state capture;
+5. regression and real-device verification.
+
+Experimental UI code must not be merged wholesale merely because a prototype
+looks promising.
+
+### T1 product simplicity authority
+
+Stripes' core recreational/social job remains:
+
+> There are people here. We need to divide them into good teams.
+
+The product should optimize for a good session, not merely mathematical equality.
+
+Progressive depth remains the target:
+
+- names only / Quick Teams -> works;
+- Overall Skill / OVR -> better;
+- OVR + quick description -> smarter;
+- Advanced Edit -> precise.
+
+The product should remain usable one-handed beside the pitch and should expose
+complexity progressively rather than presenting configuration as the default
+experience.
+
+### Overall Skill and detailed profile
+
+Overall Skill / OVR remains an independent holistic strength rating and the
+primary competitive-strength guardrail.
+
+Detailed qualities describe **how** a player is good.
+
+They do not silently determine, average into or recompute OVR.
+
+Overall-only players remain valid.
+
+For Football, the current six-dimensional target vocabulary remains:
+
+1. Goal Threat / Attack
+2. Creation / Passing
+3. Stamina
+4. Defense
+5. Technique
+6. Pace
+
+Detailed profiles may be asymmetric even for high-OVR players.
+
+### Rating setup terminology and placement
+
+The user-facing configuration concept should be **Rating setup**, not
+`Player Model`.
+
+Normal product language should prefer:
+
+- Rating setup;
+- What matters / qualities;
+- Quick descriptions;
+- Level of detail;
+- Stronger / Typical / Weaker;
+- Share rating setup.
+
+Rating setup belongs under **Roster Settings**, not as a prominent everyday
+Roster-page action.
+
+Advanced preset/import/export/Drive management should remain secondary to the
+normal rating workflow.
+
+### Guided new-roster creation
+
+The current dense/nested custom-roster setup should be replaced by a guided
+creation flow with one meaningful decision per step.
+
+Approved direction:
+
+1. choose activity:
+   - Football;
+   - Another sport;
+   - Game or activity;
+   - Import setup;
+2. choose rating detail:
+   - Overall only;
+   - Overall + 3 qualities, recommended;
+   - Overall + 6 qualities;
+3. define what matters using simple quality names;
+4. optionally choose/create/import quick descriptions or do it later.
+
+Do not use a joystick icon as the generic activity metaphor.
+
+Custom activities may begin Overall-only.
+
+The architecture should initially support deliberate 3- or 6-quality models
+rather than arbitrary attribute counts.
+
+### Unified player rating experience
+
+Do not maintain a separate batch-rating product experience beside Player Setup.
+
+Individual editing and multi-player review should use the same mature Player
+Setup surface.
+
+When ratings are incomplete, the Roster may expose a contextual action such as:
+
+`Rate 7 unrated players`
+
+When complete, the equivalent action should become review-oriented rather than
+remaining a permanent primary CTA.
+
+Batch progression should preserve the same editor and add safe progression to
+the next unrated player.
+
+Exact gesture mechanics remain implementation/test details rather than canonical
+product requirements until real-device validation.
+
+### Quick descriptions / presets
+
+Quick descriptions are shortcuts that seed profile shape relative to OVR peers.
+They are not an additional source of player strength.
+
+Approved behavior:
+
+- no quick description is valid;
+- selecting one must not auto-advance;
+- re-selecting an active item can deselect it;
+- selection should immediately reveal useful profile feedback;
+- applying a preset over manually fine-tuned profile data must not silently
+  destroy that work;
+- custom quick descriptions may be created and managed in Rating setup;
+- support up to three selected descriptions, while keeping primary/secondary
+  hierarchy visually clear and avoiding contradictory or effectively flat
+  combinations.
+
+Preset selection should normalize profile shape rather than grant additional
+strength.
+
+### Radar feedback
+
+For players with detailed rating data, radar/profile feedback should appear
+immediately after the first quick description is applied.
+
+Approved direction:
+
+- hide the radar for a genuinely Overall-only profile;
+- reveal it after profile detail exists;
+- update it live as quick descriptions or Advanced Edit changes;
+- allow it to collapse again when all detailed profile information is removed;
+- place it before Advanced Edit in the normal editing hierarchy.
+
+Radar values remain absolute stored ratings on the stable profile scale.
+
+### Visual interaction direction
+
+The useful edge-selection idea may survive, but the experimental multicolor
+vertical rail is not approved as-is.
+
+Avoid the postal/USPS-like appearance.
+
+Preferred visual hierarchy:
+
+- navy/core Stripes identity for primary structure and actions;
+- amber only for selected quick descriptions where useful;
+- team colors only for team identity;
+- purple for shared/collaboration contexts;
+- restrained warm-paper personality in Club where already established;
+- idle quick-description controls should remain visually quieter.
+
+Any edge selector should be integrated with the Skill/OVR editing shell rather
+than behaving like an unrelated decorative stripe.
+
+### Fairness authority refinement
+
+Equal OVR does not imply equivalent team composition.
+
+Future evaluator order remains:
+
+1. valid assignment and hard constraints;
+2. OVR/effective competitive-strength fairness;
+3. functional completeness/playability;
+4. composition/complementarity;
+5. optional session intent.
+
+Detailed profiles are secondary to OVR but may identify meaningful
+same-strength composition improvements, such as restoring direct attacking
+threat through a minimal equal-OVR swap.
+
+Do not pretend there is one universal preferred match character. Some groups
+prefer open/high-scoring games and others prefer tight/low-scoring games.
+
+A future tiny sport-specific intent such as Balanced/Open/Tight may be explored,
+but generic weighting sliders are not the target UX.
+
+### First-user audit gap
+
+The current 48-capture production baseline is valid but does not yet fully cover
+the genuine first-use journey.
+
+Add durable scenarios when implementation reaches the relevant surfaces for:
+
+- onboarding beginning;
+- onboarding completed;
+- empty starter roster;
+- first roster creation / Settings from an empty state;
+- newly connected user with no useful local roster.
+
+The empty-roster experience should lead with a clear primary action such as
+`Add your first player` rather than configuration-first hierarchy.
+
+### Production adoption sequence
+
+Use this production sequence unless later evidence justifies a change:
+
+1. visual-audit infrastructure;
+2. rating data-model and persistence foundation;
+3. guided roster creation;
+4. Rating setup under Roster Settings;
+5. unified Player Setup / unrated review queue;
+6. accessibility and visual-regression strengthening;
+7. continue Generate/evaluator/Live Split work using the same evidence loop.
+
+The JoonGPT experimental branch remains useful for interaction experiments and
+before/after comparison, but production adoption should occur in bounded,
+production-quality packages rather than by merging the experiment wholesale.

@@ -198,6 +198,7 @@ interface SwapSelection { playerId: string; fromTeamId: string; }
 function toLocalPlayer(p: RoomPlayer): Player {
   return {
     id: p.id, name: p.name, aka: p.aka, gender: p.gender as Player["gender"], skill: p.skill,
+    overallIndependent: p.overallIndependent, profilePresetIds: p.profilePresetIds, profileFineTuned: p.profileFineTuned,
     attack: p.attack, defense: p.defense, speed: p.speed, passing: p.passing, stamina: p.stamina, physical: p.physical,
     teamPlay: p.teamPlay, profilePhoto: p.profilePhoto, isGoalkeeper: p.isGoalkeeper,
     isPlaymaker: p.isPlaymaker, isFinisher: p.isFinisher, isDribbler: p.isDribbler, isSentinel: p.isSentinel, isEngine: p.isEngine, isVersatile: p.isVersatile,
@@ -223,6 +224,7 @@ function toClubBalancePlayer(p: RoomPlayer, summary?: ClubRatingSummary): Player
     aka: p.aka,
     gender: p.gender as Player["gender"],
     skill: safeSkill,
+    overallIndependent: true,
     attack: profile.attack,
     defense: profile.defense,
     speed: profile.speed,

@@ -11,6 +11,7 @@ export type FirebaseSharedRosterMaterialPayload = {
   themeColor?: string;
   players: FirebaseSharedRosterMaterialPlayer[];
   pairingRules: PairingRule[];
+  playerModel: RoomRoster["playerModel"];
 };
 
 export function clampFirebaseSharedRosterSkill(value: unknown) {
@@ -31,6 +32,10 @@ function makeFirebaseSharedRosterMaterialPlayer(
     aka: player.aka,
     gender: player.gender,
     skill,
+    // Detailed organizer observations remain in private Club rating
+    // submissions. The shared roster material keeps the established neutral
+    // profile so one organizer cannot publish their private shape as canonical
+    // club truth merely by saving the roster.
     attack: skill,
     defense: skill,
     speed: skill,
@@ -69,6 +74,7 @@ export function makeFirebaseSharedRosterMaterialPayload(
     themeColor: roster.themeColor,
     players: roster.players.map(makeFirebaseSharedRosterMaterialPlayer),
     pairingRules: roster.pairingRules || [],
+    playerModel: roster.playerModel,
   };
 }
 

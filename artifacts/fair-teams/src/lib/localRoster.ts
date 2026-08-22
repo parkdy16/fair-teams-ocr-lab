@@ -1,5 +1,10 @@
 import type { FunBadge, Gender, PairingRule, PairingRuleKind, TodayStatus } from "./types.ts";
 import { getSpecialSkillStatBoosts } from "./playerAbilityEffects.ts";
+import {
+  createDefaultRosterPlayerModel,
+  normalizeRosterPlayerModel,
+  type RosterPlayerModel,
+} from "./rosterPlayerModel.ts";
 
 export interface RoomPlayer {
   id: string;
@@ -7,7 +12,10 @@ export interface RoomPlayer {
   name: string;
   aka?: string;
   gender: Gender;
-  skill: number;       // computed overall 0-10
+  skill: number;       // organizer-authored overall 0-10 for new profiles
+  overallIndependent?: boolean;
+  profilePresetIds?: string[];
+  profileFineTuned?: boolean;
   attack: number;      // 1-10
   defense: number;     // 1-10
   speed: number;       // 1-10
@@ -67,6 +75,9 @@ function specialAbilityBonus(_player: Partial<RoomPlayer>) {
 }
 
 export function calculateOverall(player: Partial<RoomPlayer>) {
+  if (player.overallIndependent) {
+    return clamp(player.skill, 1, 10, 5, 0.5);
+  }
   const attack = clamp(player.attack, 1, 10, clamp(player.skill, 0, 10, 5, 0.5), 0.5);
   const defense = clamp(player.defense, 1, 10, clamp(player.skill, 0, 10, 5, 0.5), 0.5);
   const speed = clamp(player.speed, 1, 10, 5, 0.5);
@@ -186,6 +197,11 @@ export function normalizePlayer(player: RoomPlayerNormalizationInput, index = 0)
     aka: typeof player.aka === "string" && player.aka.trim() ? player.aka.trim() : undefined,
     gender: player.gender === "female" || player.gender === "other" ? player.gender : "male",
     skill: baseSkill,
+    overallIndependent: Boolean(player.overallIndependent),
+    profilePresetIds: Array.isArray(player.profilePresetIds)
+      ? Array.from(new Set(player.profilePresetIds.map((value) => String(value || "").trim()).filter(Boolean))).slice(0, 2)
+      : undefined,
+    profileFineTuned: Boolean(player.profileFineTuned),
     attack: clamp(player.attack, 1, 10, baseSkill || 5, 0.5),
     defense: clamp(player.defense, 1, 10, baseSkill || 5, 0.5),
     speed: clamp(player.speed, 1, 10, 5, 0.5),
@@ -216,7 +232,9 @@ export function normalizePlayer(player: RoomPlayerNormalizationInput, index = 0)
     createdAt: player.createdAt || new Date().toISOString(),
     updatedAt: player.updatedAt || player.createdAt || new Date().toISOString(),
   };
-  normalized.skill = calculateOverall(normalized);
+  normalized.skill = normalized.overallIndependent
+    ? clamp(player.skill, 1, 10, baseSkill || 5, 0.5)
+    : calculateOverall(normalized);
   return normalized;
 }
 
@@ -273,6 +291,7 @@ export interface RoomRoster {
   name: string;
   players: RoomPlayer[];
   pairingRules?: PairingRule[];
+  playerModel: RosterPlayerModel;
   themeColor?: string;
   logo?: string;
   cloudSource?: RosterCloudSource;
@@ -511,7 +530,7 @@ function cleanPairingRules(value: unknown, players: RoomPlayer[]): PairingRule[]
 export function createRoster(
   name: string,
   players: Partial<RoomPlayer>[] = [],
-  identity: { themeColor?: string; logo?: string } = {},
+  identity: { themeColor?: string; logo?: string; playerModel?: RosterPlayerModel } = {},
 ): RoomRoster {
   const now = new Date().toISOString();
   const normalizedPlayers = players.map((player, index) => normalizePlayer(player, index)).filter((player) => player.name);
@@ -520,6 +539,7 @@ export function createRoster(
     name: cleanRosterName(name),
     players: normalizedPlayers,
     pairingRules: [],
+    playerModel: normalizeRosterPlayerModel(identity.playerModel || createDefaultRosterPlayerModel()),
     themeColor: pickRosterColor(identity),
     logo: pickRosterLogo(identity),
     createdAt: now,
@@ -538,6 +558,7 @@ export function normalizeRoster(roster: Partial<RoomRoster> & { rosterName?: str
     name,
     players,
     pairingRules: cleanPairingRules((roster as { pairingRules?: unknown }).pairingRules, players),
+    playerModel: normalizeRosterPlayerModel((roster as { playerModel?: unknown }).playerModel),
     themeColor: pickRosterColor(roster),
     logo: pickRosterLogo(roster),
     cloudSource: cleanRosterCloudSource((roster as { cloudSource?: unknown }).cloudSource),
@@ -683,7 +704,7 @@ export function escapeCsv(value: unknown) {
 }
 
 export function playersToCsv(players: RoomPlayer[]) {
-  const headers = ["name", "aka", "gender", "overall", "attack", "defense", "speed", "passing", "stamina", "strength", "teamPlay", "isGoalkeeper", "isPlaymaker", "isFinisher", "isDribbler", "isSentinel", "isEngine", "isVersatile", "isSpaceFinder", "isLongPass", "isTikiTaka", "isTechnician", "isHeader", "isPowerShot", "isBulldog", "isOrganizer", "isNew", "funBadge", "attending", "createdAt", "updatedAt"];
+  const headers = ["name", "aka", "gender", "overall", "attack", "defense", "speed", "passing", "stamina", "technique", "teamPlay", "isGoalkeeper", "isPlaymaker", "isFinisher", "isDribbler", "isSentinel", "isEngine", "isVersatile", "isSpaceFinder", "isLongPass", "isTikiTaka", "isTechnician", "isHeader", "isPowerShot", "isBulldog", "isOrganizer", "isNew", "funBadge", "attending", "createdAt", "updatedAt"];
   const rows = players.map(p => [p.name, p.aka || "", p.gender, p.skill, p.attack, p.defense, p.speed, p.passing, p.stamina, p.physical, p.teamPlay, p.isGoalkeeper ? "yes" : "no", p.isPlaymaker ? "yes" : "no", p.isFinisher ? "yes" : "no", p.isDribbler ? "yes" : "no", p.isSentinel ? "yes" : "no", p.isEngine ? "yes" : "no", p.isVersatile ? "yes" : "no", p.isSpaceFinder ? "yes" : "no", p.isLongPass ? "yes" : "no", p.isTikiTaka ? "yes" : "no", p.isCrossing ? "yes" : "no", p.isAerial ? "yes" : "no", p.isPowerShot ? "yes" : "no", p.isBulldog ? "yes" : "no", p.isOrganizer ? "yes" : "no", p.isNew ? "yes" : "no", p.funBadge || "", p.attending ? "yes" : "no", p.createdAt, p.updatedAt || ""]);
   return [headers, ...rows].map(row => row.map(escapeCsv).join(",")).join("\n");
 }
@@ -739,7 +760,7 @@ export function csvToPlayers(csvText: string): RoomPlayer[] {
       speed: Number(get("speed") || 5),
       passing: Number(get("passing") || skill),
       stamina: Number(get("stamina") || 5),
-      physical: Number(get("strength") || get("physical") || 5),
+      physical: Number(get("technique") || get("physical") || get("strength") || 5),
       teamPlay: Number(get("teamplay") || get("teamPlay") || get("weakfoot") || get("weakFoot") || 2),
       isGoalkeeper: parseBoolean(get("isgoalkeeper") || get("goalkeeper") || get("gk")),
       isPlaymaker: parseBoolean(get("isplaymaker") || get("playmaker")),

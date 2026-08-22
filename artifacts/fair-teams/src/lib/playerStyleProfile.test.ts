@@ -11,7 +11,7 @@ import { calculateOverall } from "./localRoster.ts";
 test("quick presets are presented in the approved easy-to-recognize order", () => {
   assert.deepEqual(
     PLAYER_STYLE_DEFINITIONS.map((preset) => preset.id),
-    ["goal-threat", "playmaker", "defender", "fast", "high-energy", "strong", "all-rounder"],
+    ["goal-threat", "playmaker", "defender", "fast", "high-energy", "technician", "all-rounder"],
   );
 });
 
@@ -30,7 +30,7 @@ test("every quick preset keeps the generated profile close to the chosen OVR", (
 
 test("quick presets create recognizably different football profiles", () => {
   const defender = generateStyledPlayerAttributes(6, 0);
-  const strong = generateStyledPlayerAttributes(6, 1);
+  const technician = generateStyledPlayerAttributes(6, 1);
   const highEnergy = generateStyledPlayerAttributes(6, 2);
   const allRounder = generateStyledPlayerAttributes(6, 3);
   const playmaker = generateStyledPlayerAttributes(6, 4);
@@ -38,8 +38,8 @@ test("quick presets create recognizably different football profiles", () => {
   const goalThreat = generateStyledPlayerAttributes(6, 6);
 
   assert.ok(defender.defense > defender.attack);
-  assert.ok(strong.physical > strong.speed);
-  assert.ok(strong.physical > strong.passing);
+  assert.ok(technician.physical > technician.speed);
+  assert.ok(technician.physical > technician.defense);
   assert.ok(highEnergy.stamina > allRounder.stamina);
   assert.ok(playmaker.passing > playmaker.defense);
   assert.ok(fast.speed > fast.defense);

@@ -585,4 +585,6 @@ export const appEnglish = {
   "app.rosterRemoval.removeLocalAction": "Remove local copy only",
   "app.rosterRemoval.deleteAction": "Delete roster",
   "app.rosterRemoval.clearAction": "Clear roster",
+  "app.rosterTools.playerModel": "Player model",
+  "app.rosterTools.playerModelSummary": "{{attributes}} attributes · {{presets}} presets",
 } as const;

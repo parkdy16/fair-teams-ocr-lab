@@ -9,7 +9,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 
-import { PlayerPresetEdgePicker } from "@/components/PlayerPresetPicker";
+import { PlayerPresetChip, PlayerPresetEdgePicker } from "@/components/PlayerPresetPicker";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -23,39 +23,33 @@ import {
 import { Dialog, DialogTitle } from "@/components/ui/dialog";
 import { StripesConfirmContent, StripesWorkspaceContent } from "@/components/ui/stripes-modal";
 import { formatNumber, getResolvedUiLocale, translate } from "@/i18n";
-import { playerStyleTranslationKeys } from "@/i18n/playerStyle";
 import {
   saveMyClubPlayerRating,
   type ClubMyRating,
   type ClubRatingProfile,
 } from "@/lib/clubCollaborationService";
-import { calculateOverall, normalizePlayer, type RoomPlayer } from "@/lib/localRoster";
+import { normalizePlayer, type RoomPlayer } from "@/lib/localRoster";
 import {
-  BALANCED_PLAYER_STYLE,
-  generateStyledPlayerAttributes,
-  inferPlayerStyleMatch,
-  type PlayerStyleStatKey,
-  type PlayerStyleValue,
-} from "@/lib/playerStyleProfile";
+  applyProfileToPlayer,
+  neutralProfileForOverall,
+  normalizePresetSelection,
+  normalizeRosterPlayerModel,
+  profileForPresetSelection,
+  type PlayerProfileSlot,
+  type RosterPlayerModel,
+  type RosterPlayerPreset,
+} from "@/lib/rosterPlayerModel";
 
-const STAT_FIELDS: { key: PlayerStyleStatKey; labelKey: Parameters<typeof translate>[0] }[] = [
-  { key: "attack", labelKey: "roster.stats.attack" },
-  { key: "defense", labelKey: "roster.stats.defense" },
-  { key: "speed", labelKey: "roster.stats.speed" },
-  { key: "passing", labelKey: "roster.stats.passing" },
-  { key: "stamina", labelKey: "roster.stats.stamina" },
-  { key: "physical", labelKey: "roster.stats.strength" },
-];
+const LEGACY_BALANCED_STYLE = 3;
 
 type RatingSnapshot = {
   draft: RoomPlayer;
-  preset: PlayerStyleValue | null;
+  selectedPresetIds: string[];
   fineTuned: boolean;
 };
 
-type PendingPreset = {
-  value: PlayerStyleValue;
-  autoAdvance: boolean;
+type PendingPresetSelection = {
+  selectedPresetIds: string[];
 };
 
 function clamp(value: number, min: number, max: number) {
@@ -102,6 +96,7 @@ function draftFromPlayer(player: RoomPlayer, sharedRating?: ClubMyRating | null)
   return normalizePlayer({
     ...base,
     skill: Number(sharedRating?.skill),
+    overallIndependent: true,
     attack: Number(sharedRating?.attack),
     defense: Number(sharedRating?.defense),
     speed: Number(sharedRating?.speed),
@@ -110,92 +105,53 @@ function draftFromPlayer(player: RoomPlayer, sharedRating?: ClubMyRating | null)
     physical: Number(sharedRating?.physical),
     teamPlay: 2,
     isGoalkeeper: Boolean(sharedRating?.isGoalkeeper),
+    profilePresetIds: sharedRating?.profilePresetIds ?? base.profilePresetIds,
+    profileFineTuned: Boolean(sharedRating?.profileFineTuned),
   });
 }
 
-function looksFlat(player: RoomPlayer) {
-  const values = [player.attack, player.defense, player.speed, player.passing, player.stamina, player.physical];
-  return Math.max(...values) - Math.min(...values) <= 0.5;
-}
-
-function initialSnapshot(player: RoomPlayer, sharedRating?: ClubMyRating | null): RatingSnapshot {
+function initialSnapshot(
+  player: RoomPlayer,
+  model: RosterPlayerModel,
+  sharedRating?: ClubMyRating | null,
+): RatingSnapshot {
   const draft = draftFromPlayer(player, sharedRating);
-  const flat = looksFlat(draft);
-  const match = inferPlayerStyleMatch({ ...draft, skill: calculateOverall(draft) });
-  const explicitPreset = typeof sharedRating?.playerStyle === "number"
-    ? sharedRating.playerStyle
-    : null;
   return {
     draft,
-    preset: flat ? null : explicitPreset ?? (match.isPresetLike ? match.style : null),
-    fineTuned: !flat && !match.isPresetLike,
+    selectedPresetIds: normalizePresetSelection(model, draft.profilePresetIds),
+    fineTuned: Boolean(draft.profileFineTuned),
   };
 }
 
-function attributesAtOverall(player: RoomPlayer, targetOverall: number, preset: PlayerStyleValue | null) {
-  const target = roundSkill(targetOverall);
-  const seed = preset === null
-    ? { attack: target, defense: target, speed: target, passing: target, stamina: target, physical: target, teamPlay: player.teamPlay || 2 }
-    : generateStyledPlayerAttributes(target, preset);
-  const next = normalizePlayer({ ...player, ...seed });
-  return { next, target };
-}
-
-function sharedOverall(player: RoomPlayer) {
-  return calculateOverall({
-    attack: player.attack,
-    defense: player.defense,
-    speed: player.speed,
-    passing: player.passing,
-    stamina: player.stamina,
-    physical: player.physical,
-    teamPlay: 2,
-    isGoalkeeper: false,
-    isPlaymaker: false,
-    isFinisher: false,
-    isDribbler: false,
-    isSentinel: false,
-    isEngine: false,
-    isVersatile: false,
-    isSpaceFinder: false,
-    isLongPass: false,
-    isTikiTaka: false,
-    isCrossing: false,
-    isAerial: false,
-    isPowerShot: false,
-    isBulldog: false,
+function profileDraft(
+  player: RoomPlayer,
+  model: RosterPlayerModel,
+  overall: number,
+  selectedPresetIds: string[],
+  fineTuned: boolean,
+) {
+  if (fineTuned) {
+    return normalizePlayer({
+      ...player,
+      skill: roundSkill(overall),
+      overallIndependent: true,
+      profilePresetIds: selectedPresetIds,
+      profileFineTuned: true,
+    });
+  }
+  const profile = selectedPresetIds.length
+    ? profileForPresetSelection(model, overall, selectedPresetIds)
+    : neutralProfileForOverall(overall);
+  return normalizePlayer({
+    ...applyProfileToPlayer(player, overall, profile, selectedPresetIds),
+    profileFineTuned: false,
   });
 }
 
-function shiftDetailedProfileToOverall(
-  player: RoomPlayer,
-  targetOverall: number,
-  isSharedRoster: boolean,
-) {
-  const target = roundSkill(targetOverall);
-  const next = normalizePlayer(player);
-  const overallFor = (candidate: RoomPlayer) => isSharedRoster
-    ? sharedOverall(candidate)
-    : calculateOverall(candidate);
-
-  // Preserve the organizer's manually shaped profile while moving the whole
-  // profile toward the newly selected OVR. This keeps relative differences
-  // intact until a 1/10 boundary makes that impossible.
-  for (let index = 0; index < 12; index += 1) {
-    const difference = target - overallFor(next);
-    if (Math.abs(difference) < 0.05) break;
-    for (const { key } of STAT_FIELDS) {
-      next[key] = roundSkill(clamp(next[key] + difference, 1, 10));
-    }
-  }
-
-  return normalizePlayer(next);
-}
-
-function RadarPreview({ player }: { player: RoomPlayer }) {
-  const data = STAT_FIELDS.map(({ key, labelKey }) => ({
-    stat: translate(labelKey),
-    value: player[key],
+function RadarPreview({ player, model }: { player: RoomPlayer; model: RosterPlayerModel }) {
+  const data = model.attributes.map((attribute) => ({
+    stat: attribute.label,
+    value: player[attribute.slot],
   }));
   return (
     <div className="h-48 w-full rounded-3xl border border-slate-100 bg-white/90 p-1 shadow-sm">
@@ -241,6 +197,7 @@ function StatControl({
 
 export function PlayerBatchRatingFlow({
   player,
+  playerModel,
   sharedRating,
   index,
   total,
@@ -252,6 +209,7 @@ export function PlayerBatchRatingFlow({
   onDone,
 }: {
   player: RoomPlayer | null;
+  playerModel: RosterPlayerModel;
   sharedRating?: ClubMyRating;
   index: number;
   total: number;
@@ -262,12 +220,13 @@ export function PlayerBatchRatingFlow({
   onNext: () => void;
   onDone: () => void;
 }) {
+  const model = useMemo(() => normalizeRosterPlayerModel(playerModel), [playerModel]);
   const [draft, setDraft] = useState<RoomPlayer | null>(null);
-  const [preset, setPreset] = useState<PlayerStyleValue | null>(null);
+  const [selectedPresetIds, setSelectedPresetIds] = useState<string[]>([]);
   const [fineTuned, setFineTuned] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [presetOpenToken, setPresetOpenToken] = useState(0);
-  const [pendingPreset, setPendingPreset] = useState<PendingPreset | null>(null);
+  const [pendingPresetSelection, setPendingPresetSelection] = useState<PendingPresetSelection | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [leaving, setLeaving] = useState<"next" | "previous" | null>(null);
@@ -279,20 +238,10 @@ export function PlayerBatchRatingFlow({
   const isOpen = Boolean(player && total > 0);
   const isLast = total > 0 && index >= total - 1;
   const canGoBack = index > 0;
-  const currentOverall = draft
-    ? roundSkill(isSharedRoster ? sharedOverall(draft) : calculateOverall(draft))
-    : 5;
-  const presetCopy = useMemo(() => {
-    if (fineTuned) {
-      return {
-        label: translate("roster.labels.customProfile"),
-        description: translate("roster.messages.customProfileDescription"),
-      };
-    }
-    if (preset === null) return null;
-    const keys = playerStyleTranslationKeys(preset);
-    return { label: translate(keys.labelKey), description: translate(keys.descriptionKey) };
-  }, [fineTuned, preset]);
+  const currentOverall = draft ? roundSkill(draft.skill || 5) : 5;
+  const selectedPresets = selectedPresetIds
+    .map((presetId) => model.presets.find((preset) => preset.id === presetId))
+    .filter((preset): preset is RosterPlayerPreset => Boolean(preset));
 
   useEffect(() => {
     const media = window.matchMedia?.("(prefers-reduced-motion: reduce)");
@@ -313,22 +262,22 @@ export function PlayerBatchRatingFlow({
       return;
     }
     const cached = cacheRef.current.get(player.id);
-    const snapshot = cached ?? initialSnapshot(player, sharedRating);
+    const snapshot = cached ?? initialSnapshot(player, model, sharedRating);
     setDraft(normalizePlayer(snapshot.draft));
-    setPreset(snapshot.preset);
+    setSelectedPresetIds(snapshot.selectedPresetIds);
     setFineTuned(snapshot.fineTuned);
     setAdvancedOpen(false);
-    setPendingPreset(null);
+    setPendingPresetSelection(null);
     setSaving(false);
     setError("");
     setLeaving(null);
     setEdgePullProgress(0);
-  }, [player?.id, sharedRating?.updatedAt]);
+  }, [model, player?.id, sharedRating?.updatedAt]);
 
   useEffect(() => {
     if (!player || !draft) return;
-    cacheRef.current.set(player.id, { draft, preset, fineTuned });
-  }, [draft, fineTuned, player, preset]);
+    cacheRef.current.set(player.id, { draft, selectedPresetIds, fineTuned });
+  }, [draft, fineTuned, player, selectedPresetIds]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -367,17 +316,21 @@ export function PlayerBatchRatingFlow({
     callback();
   };
 
-  const persist = async (
-    sourceDraft: RoomPlayer,
-    sourcePreset: PlayerStyleValue | null,
-    sourceFineTuned: boolean,
-  ) => {
+  const persist = async (sourceDraft: RoomPlayer) => {
     if (!player) return false;
     setSaving(true);
     setError("");
     try {
       const savedAt = new Date().toISOString();
-      let savedDraft = normalizePlayer({ ...sourceDraft, isNew: false, updatedAt: savedAt });
+      const savedDraft = normalizePlayer({
+        ...sourceDraft,
+        skill: roundSkill(sourceDraft.skill),
+        overallIndependent: true,
+        profilePresetIds: selectedPresetIds,
+        profileFineTuned: fineTuned,
+        isNew: false,
+        updatedAt: savedAt,
+      });
 
       if (isSharedRoster) {
         if (!sharedRosterId) {
@@ -385,30 +338,30 @@ export function PlayerBatchRatingFlow({
           return false;
         }
         const profile: ClubRatingProfile = {
-          skill: roundSkill(sharedOverall(sourceDraft)),
-          attack: sourceDraft.attack,
-          defense: sourceDraft.defense,
-          speed: sourceDraft.speed,
-          passing: sourceDraft.passing,
-          stamina: sourceDraft.stamina,
-          physical: sourceDraft.physical,
+          skill: savedDraft.skill,
+          attack: savedDraft.attack,
+          defense: savedDraft.defense,
+          speed: savedDraft.speed,
+          passing: savedDraft.passing,
+          stamina: savedDraft.stamina,
+          physical: savedDraft.physical,
           teamPlay: 2,
-          playerStyle: sourcePreset ?? BALANCED_PLAYER_STYLE,
-          isGoalkeeper: Boolean(sourceDraft.isGoalkeeper),
+          playerStyle: LEGACY_BALANCED_STYLE,
+          isGoalkeeper: Boolean(savedDraft.isGoalkeeper),
+          overallIndependent: true,
+          profilePresetIds: selectedPresetIds,
+          profileFineTuned: fineTuned,
         };
         await saveMyClubPlayerRating(sharedRosterId, player.id, profile);
         onUpdatePlayer(player.id, { isNew: false, updatedAt: savedAt });
       } else {
-        const skill = roundSkill(calculateOverall(sourceDraft));
-        savedDraft = normalizePlayer({ ...savedDraft, skill });
         onUpdatePlayer(player.id, savedDraft);
       }
-
       setDraft(savedDraft);
       cacheRef.current.set(player.id, {
         draft: savedDraft,
-        preset: sourcePreset,
-        fineTuned: sourceFineTuned,
+        selectedPresetIds,
+        fineTuned,
       });
       return true;
     } catch (saveError) {
@@ -419,54 +372,49 @@ export function PlayerBatchRatingFlow({
     }
   };
 
-  const saveAndAdvance = async (
-    sourceDraft = draft,
-    sourcePreset = preset,
-    sourceFineTuned = fineTuned,
-  ) => {
-    if (!sourceDraft || saving) return;
-    const saved = await persist(sourceDraft, sourcePreset, sourceFineTuned);
+  const saveAndAdvance = async () => {
+    if (!draft || saving) return;
+    const prepared = profileDraft(draft, model, currentOverall, selectedPresetIds, fineTuned);
+    const saved = await persist(prepared);
     if (!saved) return;
     vibrate(10);
     await moveCard("next", isLast ? onDone : onNext);
   };
 
-  const applyPreset = async (nextPreset: PlayerStyleValue, autoAdvance: boolean) => {
-    if (!draft || saving) return;
-    const { next } = attributesAtOverall(draft, currentOverall, nextPreset);
-    setDraft(next);
-    setPreset(nextPreset);
+  const applyPresetSelection = (nextIds: string[]) => {
+    if (!draft) return;
+    const next = profileDraft(draft, model, currentOverall, nextIds, false);
+    setSelectedPresetIds(nextIds);
     setFineTuned(false);
+    setDraft(next);
     setError("");
     vibrate(8);
-    if (autoAdvance && !advancedOpen) await saveAndAdvance(next, nextPreset, false);
   };
 
-  const requestPreset = (nextPreset: PlayerStyleValue, autoAdvance: boolean) => {
-    if (fineTuned) {
-      setPendingPreset({ value: nextPreset, autoAdvance });
+  const requestPresetToggle = (presetId: string) => {
+    if (!draft || saving) return;
+    const selected = selectedPresetIds.includes(presetId);
+    let nextIds = selected
+      ? selectedPresetIds.filter((id) => id !== presetId)
+      : [...selectedPresetIds, presetId];
+    if (nextIds.length > 2) {
+      setError(translate("roster.playerModel.chooseUpToTwo"));
       return;
     }
-    void applyPreset(nextPreset, autoAdvance);
+    nextIds = nextIds.slice(0, 2);
+    if (fineTuned) {
+      setPendingPresetSelection({ selectedPresetIds: nextIds });
+      return;
+    }
+    applyPresetSelection(nextIds);
   };
 
   const setOverall = (nextOverall: number) => {
     if (!draft || saving) return;
-    const next = fineTuned
-      ? shiftDetailedProfileToOverall(draft, nextOverall, isSharedRoster)
-      : attributesAtOverall(draft, nextOverall, preset).next;
+    const next = profileDraft(draft, model, nextOverall, selectedPresetIds, fineTuned);
     setDraft(next);
     setError("");
     vibrate(4);
-  };
-
-  const saveOvrOnly = async () => {
-    if (!draft) return;
-    const { next } = attributesAtOverall(draft, currentOverall, null);
-    setDraft(next);
-    setPreset(null);
-    setFineTuned(false);
-    await saveAndAdvance(next, null, false);
   };
 
   if (!player || !draft) return null;
@@ -544,16 +492,16 @@ export function PlayerBatchRatingFlow({
                           <div className="truncate text-xl font-black tracking-tight sm:text-2xl">{displayName(player)}</div>
                           <div className="mt-1 text-[11px] font-bold text-white/65">{translate("roster.messages.ratePlayersHelp")}</div>
                         </div>
-                        {presetCopy ? (
-                          <div className="hidden max-w-[9rem] items-center gap-1.5 rounded-2xl border border-white/15 bg-white/10 px-2.5 py-2 text-[10px] font-black sm:flex">
-                            <Check className="h-3.5 w-3.5 shrink-0" />
-                            <span className="truncate">{presetCopy.label}</span>
+                        {fineTuned ? (
+                          <div className="hidden rounded-2xl border border-white/15 bg-white/10 px-2.5 py-2 text-[10px] font-black sm:flex">
+                            <Check className="mr-1.5 h-3.5 w-3.5" />
+                            {translate("roster.labels.customProfile")}
                           </div>
                         ) : null}
                       </div>
                     </div>
 
-                    <div className="grid gap-4 p-4 sm:p-6">
+                    <div className="grid gap-4 p-4 pr-12 sm:p-6 sm:pr-14">
                       <div className="rounded-[1.75rem] border border-indigo-100 bg-indigo-50/65 px-3 py-4 sm:px-5">
                         <div className="flex items-center justify-center gap-3">
                           <button
@@ -593,22 +541,30 @@ export function PlayerBatchRatingFlow({
                         />
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={() => setPresetOpenToken((token) => token + 1)}
-                        disabled={saving}
-                        className="flex min-h-16 items-center justify-between gap-3 rounded-[1.5rem] border border-slate-200 bg-slate-50/80 px-4 text-left shadow-sm transition hover:border-primary/30 hover:bg-primary/5 active:scale-[0.99] disabled:opacity-50"
-                        data-testid="open-player-presets"
-                      >
-                        <span className="min-w-0">
-                          <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">{translate("roster.labels.whatStandsOut")}</span>
-                          <span className="mt-1 block truncate text-sm font-black text-[#102A43]">{presetCopy?.label ?? translate("roster.actions.ovrOnly")}</span>
-                          <span className="mt-0.5 block text-[10px] font-semibold leading-snug text-slate-500">{presetCopy?.description ?? translate("roster.messages.noPresetNeeded")}</span>
-                        </span>
-                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                          <ArrowLeft className="h-4 w-4" />
-                        </span>
-                      </button>
+                      <div className="flex min-h-11 flex-wrap items-center gap-2 rounded-2xl border border-dashed border-amber-200 bg-amber-50/45 px-3 py-2">
+                        {selectedPresets.length ? selectedPresets.map((preset) => (
+                          <PlayerPresetChip
+                            key={preset.id}
+                            preset={preset}
+                            selected
+                            compact
+                            onClick={() => requestPresetToggle(preset.id)}
+                            disabled={saving}
+                          />
+                        )) : (
+                          <span className="text-[11px] font-semibold text-slate-500">{translate("roster.messages.noPresetNeeded")}</span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setPresetOpenToken((token) => token + 1)}
+                          disabled={saving}
+                          className="ml-auto rounded-full px-2.5 py-1.5 text-[10px] font-black text-amber-800 hover:bg-amber-100"
+                          data-testid="open-player-presets"
+                        >
+                          <Plus className="mr-1 inline h-3.5 w-3.5" />
+                          {translate("roster.playerModel.addStandout")}
+                        </button>
+                      </div>
 
                       <button
                         type="button"
@@ -622,16 +578,22 @@ export function PlayerBatchRatingFlow({
 
                       {advancedOpen ? (
                         <div className="grid gap-3 rounded-[1.75rem] border border-indigo-100 bg-indigo-50/45 p-3 sm:p-4">
-                          <div className="text-[10px] font-semibold leading-snug text-slate-500">{translate("roster.playerPresets.help")}</div>
-                          <RadarPreview player={draft} />
+                          <div className="text-[10px] font-semibold leading-snug text-slate-500">{translate("roster.playerModel.advancedIndependentHelp")}</div>
+                          <RadarPreview player={draft} model={model} />
                           <div className="grid gap-2 sm:grid-cols-2">
-                            {STAT_FIELDS.map(({ key, labelKey }) => (
+                            {model.attributes.map((attribute) => (
                               <StatControl
-                                key={key}
-                                label={translate(labelKey)}
-                                value={draft[key]}
+                                key={attribute.id}
+                                label={attribute.label}
+                                value={draft[attribute.slot]}
                                 onChange={(value) => {
-                                  setDraft(normalizePlayer({ ...draft, [key]: value }));
+                                  setDraft(normalizePlayer({
+                                    ...draft,
+                                    [attribute.slot]: value,
+                                    skill: currentOverall,
+                                    overallIndependent: true,
+                                    profileFineTuned: true,
+                                  }));
                                   setFineTuned(true);
                                   setError("");
                                 }}
@@ -660,8 +622,9 @@ export function PlayerBatchRatingFlow({
 
                     <PlayerPresetEdgePicker
                       key={player.id}
-                      value={preset}
-                      onSelect={(nextPreset) => requestPreset(nextPreset, !advancedOpen)}
+                      model={model}
+                      selectedIds={selectedPresetIds}
+                      onToggle={requestPresetToggle}
                       onPullProgress={setEdgePullProgress}
                       disabled={saving}
                       openRequestToken={presetOpenToken}
@@ -678,17 +641,15 @@ export function PlayerBatchRatingFlow({
                 </Button>
                 <Button
                   type="button"
-                  onClick={() => { if (preset === null && !fineTuned) void saveOvrOnly(); else void saveAndAdvance(); }}
+                  onClick={() => void saveAndAdvance()}
                   disabled={saving}
                   className="h-12 rounded-2xl font-black"
                 >
                   {saving
                     ? translate("roster.actions.saving")
-                    : preset === null && !fineTuned
-                      ? translate("roster.actions.ovrOnlyNext")
-                      : isLast
-                        ? translate("roster.actions.saveDone")
-                        : translate("roster.actions.saveNext")}
+                    : isLast
+                      ? translate("roster.actions.saveDone")
+                      : translate("roster.actions.saveNext")}
                 </Button>
               </div>
             </footer>
@@ -696,26 +657,22 @@ export function PlayerBatchRatingFlow({
         </StripesWorkspaceContent>
       </Dialog>
 
-      <AlertDialog open={pendingPreset !== null} onOpenChange={(next) => { if (!next) setPendingPreset(null); }}>
+      <AlertDialog open={pendingPresetSelection !== null} onOpenChange={(next) => { if (!next) setPendingPresetSelection(null); }}>
         <StripesConfirmContent>
           <AlertDialogHeader>
             <AlertDialogTitle>{translate("roster.headings.replaceDetailedProfile")}</AlertDialogTitle>
             <AlertDialogDescription>
-              {pendingPreset
-                ? translate("roster.messages.presetReplaceConfirm", {
-                    preset: translate(playerStyleTranslationKeys(pendingPreset.value).labelKey),
-                  })
-                : ""}
+              {translate("roster.playerModel.presetReplaceCustomConfirm")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>{translate("roster.actions.keepCustomProfile")}</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
-                if (!pendingPreset) return;
-                const next = pendingPreset;
-                setPendingPreset(null);
-                void applyPreset(next.value, next.autoAdvance);
+                if (!pendingPresetSelection) return;
+                const next = pendingPresetSelection.selectedPresetIds;
+                setPendingPresetSelection(null);
+                applyPresetSelection(next);
               }}
             >
               {translate("roster.actions.replaceProfile")}

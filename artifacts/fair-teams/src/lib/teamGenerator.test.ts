@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { normalizePlayer } from "./localRoster.ts";
-import { generateTeams, recomputeStats } from "./teamGenerator.ts";
+import { generateTeams, getWeightedSkill, recomputeStats } from "./teamGenerator.ts";
 import type { PairingRule, Player, Team } from "./types.ts";
 
 function representativePlayers(): Player[] {
@@ -90,6 +90,23 @@ function assertStructurallyValid(teams: Team[], players: Player[], requestedTeam
   const sizes = teams.map((team) => team.players.length);
   assert.ok(Math.max(...sizes) - Math.min(...sizes) <= 1);
 }
+
+test("independent OVR remains the strength guardrail for an asymmetric detailed profile", () => {
+  const goalThreat = player("ovr-nine-goal-threat", {
+    skill: 9,
+    overallIndependent: true,
+    attack: 10,
+    defense: 4,
+    speed: 8.5,
+    passing: 7.5,
+    stamina: 7,
+    physical: 8,
+  });
+
+  assert.equal(getWeightedSkill(goalThreat, "small"), 9);
+  assert.equal(getWeightedSkill(goalThreat, "medium"), 9);
+  assert.equal(getWeightedSkill(goalThreat, "large"), 9);
+});
 
 test("representative roster generates the requested balanced team count without loss or duplication", () => {
   const players = representativePlayers();

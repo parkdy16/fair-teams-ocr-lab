@@ -1,77 +1,231 @@
-# JoonGPT Rating Experience Experiment
+# JoonGPT Player Model + Rating Experiment
 
 Status: **EXPERIMENTAL BRANCH ONLY**
 
 Branch: `experiment/joongpt-prototype`
 
 This document records a disposable product experiment. It does not supersede
-`STRIPES_ROADMAP.md`, authorize production migration, or change the canonical
-launch plan. Accepted findings will be reconciled into the canonical roadmap
-only after real-device testing and an explicit product decision.
+`STRIPES_ROADMAP.md`, authorize a production migration, or change the canonical
+launch plan. Accepted findings are reconciled into the canonical roadmap only
+after real-device testing and an explicit product decision.
 
-## Hypothesis
+## Product hypothesis
 
-A recreational organizer should be able to rate a player in a few seconds:
+Stripes should make player rating feel complete after one judgment and smarter
+after one optional gesture:
 
-**OVR -> pull the Stripes edge -> choose one quick preset -> next player**
+**OVR -> optional standout preset -> explicit Next**
 
-The interaction should be faster and more memorable than the current
-Defense-to-Attack slider without adding another player-statistics system.
+The normal flow should remain usable with one hand and should be easier to
+understand than the previous Defense-to-Attack slider. The detailed player
+model should be powerful enough to improve future team composition without
+turning routine roster setup into scouting homework.
 
-## Product contract under test
+## Findings from Prototype A phone testing
 
-- OVR remains the organizer's primary overall-strength judgment.
-- A preset is a quick profile-shaping shortcut, not a separate permanent trait.
-- Applying a preset seeds the existing six detailed values around the selected
-  OVR.
-- The generated detailed values remain the editable source of truth.
-- OVR-only is a complete and valid rating.
-- Advanced Edit remains available when the organizer wants precision.
-- A preset must not silently increase OVR.
-- Applying a preset to a manually refined profile requires explicit
-  replacement confirmation.
-- The experiment does not change the team generator, Firestore rules,
-  authentication, governance, Google integrations, or shared-workspace
-  authority.
+The first deployed rating prototype established the following product findings:
 
-## Prototype preset vocabulary
+- The OVR-first card flow feels better than the previous style slider.
+- Presets must be visibly optional. The first large central `What stands out?`
+  control incorrectly made them feel mandatory.
+- `All-rounder` is unnecessary. No selected preset already means that nothing
+  particular has been recorded as standing out at that OVR.
+- A selected preset must be removable by selecting it again.
+- Selecting a preset must not immediately advance to the next player. The user
+  needs a chance to review, switch, clear, or fine-tune it.
+- A literal operating-system screen-edge gesture risks browser/back-gesture
+  conflict. The preferred interaction is a visible Stripes rail inset into the
+  player card edge.
+- High OVR must not produce an almost full radar. OVR answers **how good**;
+  detailed attributes answer **how that ability is expressed**.
+- Physical/Strength is not the intended future Football dimension. The current
+  storage slot may remain as a compatibility seam, but the user-facing semantic
+  replacement is Technique.
 
-The first experiment deliberately uses plain-language football concepts that a
-recreational organizer should understand immediately:
+## A.2 player model under test
 
-1. **Goal threat** - attacks space, looks to score, and creates direct danger.
-2. **Playmaker** - connects play and creates chances for teammates.
-3. **Defender** - protects space and gives the team defensive stability.
-4. **Fast** - changes the game through speed and recovery runs.
-5. **High energy** - runs, presses, and keeps covering space.
-6. **Strong** - wins physical battles and protects the ball.
-7. **All-rounder** - contributes across the game without one dominant quality.
+### Independent OVR
 
-These names and their numerical templates are prototype material. Testing must
-judge both immediate comprehension and whether the seeded profiles feel
-credible.
+OVR is an organizer-authored holistic strength judgment and the current
+competitive-strength guardrail.
 
-## Interaction under test
+- Editing detailed profile values does not silently recalculate OVR.
+- Changing OVR does not flatten a manually refined detailed profile.
+- A high-OVR player may still have an obvious weak detailed dimension.
+- The current mature generator uses independent OVR as the strength input for
+  these new profiles. Detailed composition remains prepared data for the later
+  structured evaluator; this experiment is not Generate v2.
+
+### Roster-owned attributes
+
+Each roster owns one player-model definition. The experimental supported
+profile shapes are deliberately limited to:
+
+- 3 attributes — triangle;
+- 6 attributes — hexagon.
+
+The default Football six are:
+
+1. Goal Threat
+2. Creation
+3. Stamina
+4. Defense
+5. Technique
+6. Pace
+
+The legacy `physical` storage field temporarily carries the Technique value so
+this experiment can remain compatible with the mature persistence and
+shared-rating seams without a broad backend migration.
+
+Attributes may be customized while creating a roster. Changing an attribute's
+meaning removes the existing preset library so no saved shape can silently
+describe the wrong dimensions; the organizer then creates or imports presets for
+the new model. Switching to the three-attribute Football shape keeps only Goal Threat,
+Playmaker, and Defender as representable starter presets. Once the roster
+contains players, semantic attribute editing is locked. Applying a genuinely
+different model to an existing local roster requires an explicit rating reset
+while retaining player identity. A shared-roster destructive reset is
+intentionally not implemented in this experiment because it needs an
+organizer-safe trusted backend decision and private-rating cleanup contract.
+
+### Presets
+
+A preset is a reusable profile shape over the roster's exact attribute model.
+It is not a cosmetic label, a collectible badge, or another independent set of
+player statistics.
+
+- A roster may contain many available presets.
+- A player may select zero, one primary, or one primary plus one secondary
+  preset in this experiment.
+- Selecting a selected preset again clears it.
+- A third selection is rejected rather than silently flattening the profile.
+- The first preset has 65% and the second 35% influence when blended.
+- Preset offsets are centered over the active attributes so a preset changes
+  shape rather than adding hidden strength.
+- Applying a preset copies the resulting detailed values to the player.
+- Later edits to the library preset do not retroactively change already-rated
+  players.
+- Replacing a manually fine-tuned profile requires confirmation.
+
+The default Football preset library deliberately contains several immediately
+recognizable choices and no `All-rounder`:
+
+- Goal Threat
+- Finisher
+- Playmaker
+- Technician
+- Dribbler
+- Space Finder
+- Defender
+- Ball Winner
+- Fast
+- High Energy
+
+These names and shapes remain experimental. Real-player testing should judge
+whether every option is immediately understood and whether any choices overlap
+too heavily.
+
+## Locked rating interaction being tested
 
 ### Mobile and tablet
 
 - Rating opens a full-screen stack of player cards.
-- New or unrated players appear first.
-- The current card presents the player identity and a large OVR control.
-- A Stripes-branded edge handle is available within thumb reach.
-- Pulling the edge inward reveals the preset strips.
-- Sliding to a preset and releasing selects it.
-- Selecting a preset in the fast flow saves the rating and deals the current
-  card away to reveal the next player.
-- The organizer can use OVR only, skip, return to the previous card, or open
-  Advanced Edit.
-- A visible `What stands out?` control opens the same selector conventionally.
-- Reduced-motion behavior and tappable alternatives remain available.
+- The current card emphasizes player identity and a large OVR control.
+- OVR-only is a complete rating and the normal explicit `Next` action remains
+  available without interacting with presets.
+- A visible Stripes rail sits inside the right edge of the player card.
+- Pulling the rail inward reveals the roster's preset library.
+- Sliding vertically highlights a preset; releasing toggles it.
+- A small conventional `Add standout` action opens the same library for users
+  who do not use the gesture.
+- Selected presets use the visual language of the existing Special Traits
+  chips, but their new meaning is algorithmic profile seeding.
+- Selecting a preset does not auto-save or auto-advance.
+- The organizer can clear, switch, add a secondary preset, open Advanced Edit,
+  or press Next.
+- The card then deals away and reveals the next player.
+- Previous restores the prior card and its values.
+- Reduced-motion and tap-only alternatives remain available.
 
 ### Desktop
 
-Desktop uses the same player and preset concepts with pointer/keyboard-friendly
-controls. It must not require a simulated phone swipe.
+Desktop uses the same OVR, preset, and Advanced Edit concepts with
+pointer/keyboard-friendly controls. It must not require simulated phone
+swiping.
+
+## Dedicated Player Model settings
+
+The experiment adds a separate Player Model modal rather than requiring a fake
+player to create reusable presets.
+
+### Attributes
+
+- Choose 3 or 6 during roster creation.
+- Edit each attribute name and explanation.
+- Attribute slots and stable IDs bind presets and detailed player values.
+- Existing rosters with players cannot casually reinterpret those meanings.
+
+### Preset Library
+
+- Create a preset.
+- Edit name and short description.
+- Choose a stable icon from the curated Stripes/Lucide library.
+- Shape the preset using one relative bar per current roster attribute.
+- See a live radar preview.
+- Save, duplicate, reorder, select, or delete presets.
+- Deleting a preset does not rewrite already-copied player detailed values.
+
+The editor normalizes saved offsets around the current model so moving every
+bar upward cannot secretly create a stronger player. OVR remains the strength
+judgment.
+
+## Portable preset packs
+
+A self-contained `.stripes-presets.json` pack contains:
+
+- pack/schema version;
+- the complete 3- or 6-attribute model;
+- stable attribute IDs, meanings, slots, and order;
+- only the selected presets;
+- preset names, descriptions, stable icon keys, and relative shapes;
+- no player names, ratings, attendance, identities, or club data.
+
+The Settings library supports:
+
+- select a few presets;
+- select all presets;
+- export the selected collection as one file;
+- save the same file to the connected user's Google Drive using the existing
+  memory-only `drive.file` connection;
+- import a pack.
+
+For a matching attribute model, imported presets receive new IDs and name
+conflicts become `(1)`, `(2)`, and so on. Nothing is silently overwritten.
+
+For an incompatible model:
+
+- roster creation may adopt the imported model;
+- an existing local roster may explicitly replace the model and reset rating
+  data while keeping players;
+- an existing shared roster is refused in this experiment pending an approved
+  trusted shared reset flow.
+
+This pack is the intended future community-sharing boundary. A community pack
+would be copied into a roster; it would never remain live-linked to its author.
+No stripes.work publishing, discovery, likes, moderation, or marketplace
+backend is included here.
+
+## Shared-roster and privacy boundary
+
+The roster's player-model definition and preset library are shared workspace
+configuration and participate in shared autosync material identity.
+
+Individual detailed profile observations remain private organizer ratings.
+The shared canonical player payload continues to publish the mature neutral
+profile shape rather than one organizer's private detailed assessment.
+
+No Firestore rules, callable Functions, authentication, governance, or Google
+scope changes are part of this patch.
 
 ## Intentionally untouched systems
 
@@ -79,14 +233,13 @@ controls. It must not require a simulated phone swipe.
 - Firestore and Storage security rules
 - shared-workspace authority and governance
 - invitation and workspace-closure flows
-- Google Drive / File Cabinet architecture
-- the production team evaluator and generator
-- Live Split
+- File Cabinet architecture and Google OAuth scopes
+- final structured evaluator / Generate v2
+- Live Split optimizer
+- community website backend
 - canonical roadmap sequencing
 
-## Required verification
-
-Repository checks:
+## Required repository verification
 
 ```text
 npm run typecheck:live
@@ -97,19 +250,37 @@ npm run test:browser-smoke
 git diff --check HEAD
 ```
 
-Real-device rating test:
+The experiment also adds focused tests for:
+
+- deterministic default player-model normalization;
+- 3- and 6-attribute models;
+- high-OVR asymmetric preset profiles;
+- preset centering and two-preset blending;
+- independent OVR generator behavior;
+- pack selection/import compatibility and conflict-safe naming;
+- local player reset preserving identity;
+- shared autosync including the model while excluding private detailed
+  observations.
+
+## Real-device verification
 
 - Rate at least 20 players in one session.
-- Test OVR-only players.
-- Test each preset at low, medium, and high OVR.
-- Test Advanced Edit after applying a preset.
-- Test applying a preset after manual refinement and verify confirmation.
-- Test previous-player recovery.
-- Test closing and reopening the flow.
-- Test right-thumb reach and accidental edge activation.
-- Test in bright outdoor conditions.
-- Test reduced-motion and conventional tap-only use.
-- Note whether the deal-away transition remains satisfying after repetition.
+- Confirm OVR-only feels complete and does not invite unnecessary preset work.
+- Test every default preset at OVR 3, 6, and 9.
+- Confirm high-OVR preset radars retain meaningful weaknesses.
+- Select, switch, and re-tap to clear presets.
+- Try primary plus secondary presets and confirm a third is refused clearly.
+- Fine-tune a preset profile, then attempt replacement and verify confirmation.
+- Test Previous, Skip, close/reopen, and explicit Next.
+- Test the inset rail with right thumb, tap-only controls, Android back gesture,
+  scrolling, bright outdoor conditions, and reduced motion.
+- Create, edit, duplicate, reorder, and delete custom presets.
+- Export a selected subset and all presets.
+- Import into a matching model and verify conflict-safe duplicate names.
+- Save a pack to Google Drive and verify it creates a separate JSON file without
+  changing Cabinet or roster backup behavior.
+- Test a new custom three-attribute roster.
+- Test an incompatible pack against a local roster using disposable data only.
 
 ## Decision record
 
@@ -117,19 +288,23 @@ After testing, classify each item as **Keep**, **Change**, or **Reject**:
 
 | Item | Decision | Evidence / notes |
 |---|---|---|
-| Full-screen card stack | Pending | |
-| OVR-first flow | Pending | |
-| Edge-strip gesture | Pending | |
-| Conventional preset picker | Pending | |
-| Auto-save and advance after preset | Pending | |
-| Card deal transition | Pending | |
-| Seven-preset vocabulary | Pending | |
-| Preset-generated detailed profile | Pending | |
-| Advanced Edit handoff | Pending | |
+| Full-screen card stack | Keep provisionally | First phone test felt better than the old slider. |
+| OVR-first, OVR-only complete | Pending A.2 | |
+| Inset Stripes rail | Pending A.2 | |
+| Explicit Next / no preset auto-advance | Pending A.2 | |
+| Optional primary + secondary preset | Pending A.2 | |
+| High-OVR asymmetric profile | Pending A.2 | |
+| Independent OVR | Pending A.2 | |
+| Default Football six | Pending A.2 | |
+| Default preset vocabulary | Pending A.2 | |
+| Dedicated preset editor | Pending A.2 | |
+| 3/6 custom attribute creation | Pending A.2 | |
+| Pack export/import | Pending A.2 | |
+| Google Drive pack save | Pending A.2 | |
 
 ## Production boundary
 
-A successful prototype proves a product interaction, not production readiness.
-Any accepted behavior must later be reconciled against the canonical roadmap
-and implemented/reviewed with the normal Stripes engineering, regression,
-security, and release gates.
+A successful experiment proves product behavior, not production readiness. Any
+accepted behavior must later be reconciled against the canonical roadmap and
+implemented/reviewed with the normal Stripes architecture, migration, privacy,
+security, regression, and manual release gates.

@@ -141,6 +141,7 @@ type ClubTabProps = {
   onApplyAiSmartCommandAction?: (action: AiSmartCommandAction) => Promise<string | void> | string | void;
   onOpenTodayFromAi?: () => void;
   onRequestAddPlayer?: (suggestedName?: string) => void;
+  onRequestRatePlayers?: (playerIds: string[]) => void;
   tutorialStep?: string | null;
   onTutorialAction?: (action: string, playerId?: string) => void;
 };
@@ -1028,6 +1029,7 @@ export function ClubTab({
   onApplyAiSmartCommandAction,
   onOpenTodayFromAi,
   onRequestAddPlayer,
+  onRequestRatePlayers,
   tutorialStep,
   onTutorialAction,
 }: ClubTabProps) {
@@ -1594,6 +1596,17 @@ export function ClubTab({
 
   const openRatingForPlayer = (player: RoomPlayer | null) => {
     if (!player) return;
+    if (onRequestRatePlayers) {
+      const queue = [
+        player.id,
+        ...orderedNeedRatingPlayers
+          .map((candidate) => candidate.id)
+          .filter((playerId) => playerId !== player.id),
+      ];
+      setRatingBoardOpen(false);
+      onRequestRatePlayers(queue);
+      return;
+    }
     const existing = myRatingByPlayerId.get(player.id);
     const baseSkill = roundRatingStep(typeof existing?.skill === "number" ? existing.skill : Number(player.skill) || 5);
     const style = typeof existing?.playerStyle === "number"

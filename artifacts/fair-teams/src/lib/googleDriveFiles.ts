@@ -86,19 +86,21 @@ export async function getGoogleDriveUserSummary(accessToken: string): Promise<Go
   return (result?.user || {}) as GoogleDriveUserSummary;
 }
 
-export async function createGoogleDriveJsonFile(
+export async function createGoogleDriveTextFile(
   accessToken: string,
   fileName: string,
-  jsonText: string,
+  text: string,
+  options: {
+    mimeType?: string;
+    appProperties?: Record<string, string>;
+  } = {},
 ): Promise<GoogleDriveFileResult> {
   const boundary = `fair_teams_drive_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  const mimeType = options.mimeType || FAIR_TEAMS_DRIVE_MIME_TYPE;
   const metadata = {
     name: fileName,
-    mimeType: FAIR_TEAMS_DRIVE_MIME_TYPE,
-    appProperties: {
-      fairTeamsBackup: "true",
-      fairTeamsBackupType: "google-drive-text-backup",
-    },
+    mimeType,
+    ...(options.appProperties ? { appProperties: options.appProperties } : {}),
   };
 
   const body = [
@@ -107,9 +109,9 @@ export async function createGoogleDriveJsonFile(
     "",
     JSON.stringify(metadata),
     `--${boundary}`,
-    `Content-Type: ${FAIR_TEAMS_DRIVE_MIME_TYPE}; charset=UTF-8`,
+    `Content-Type: ${mimeType}; charset=UTF-8`,
     "",
-    jsonText,
+    text,
     `--${boundary}--`,
   ].join("\r\n");
 
@@ -139,6 +141,20 @@ export async function createGoogleDriveJsonFile(
   }
 
   return result as GoogleDriveFileResult;
+}
+
+export async function createGoogleDriveJsonFile(
+  accessToken: string,
+  fileName: string,
+  jsonText: string,
+): Promise<GoogleDriveFileResult> {
+  return createGoogleDriveTextFile(accessToken, fileName, jsonText, {
+    mimeType: FAIR_TEAMS_DRIVE_MIME_TYPE,
+    appProperties: {
+      fairTeamsBackup: "true",
+      fairTeamsBackupType: "google-drive-text-backup",
+    },
+  });
 }
 
 export async function readGoogleDriveJsonFile(accessToken: string, fileId: string): Promise<{ file: GoogleDriveFileResult; text: string }> {

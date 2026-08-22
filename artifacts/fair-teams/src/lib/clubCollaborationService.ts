@@ -32,6 +32,9 @@ export type ClubRatingProfile = {
   teamPlay: number;
   playerStyle?: PlayerStyleValue;
   isGoalkeeper?: boolean;
+  overallIndependent?: boolean;
+  profilePresetIds?: string[];
+  profileFineTuned?: boolean;
 };
 
 export type ClubRatingSummary = {
@@ -62,6 +65,9 @@ export type ClubMyRating = {
   teamPlay?: number | null;
   playerStyle?: PlayerStyleValue | null;
   isGoalkeeper?: boolean;
+  overallIndependent?: boolean;
+  profilePresetIds?: string[];
+  profileFineTuned?: boolean;
   skipped: boolean;
   updatedAt?: number;
 };
@@ -137,6 +143,15 @@ function clampTeamPlay(value: unknown) {
   return n === 1 || n === 3 ? n : 2;
 }
 
+function cleanProfilePresetIds(value: unknown) {
+  if (!Array.isArray(value)) return [] as string[];
+  return Array.from(new Set(
+    value
+      .map((item) => String(item || "").trim())
+      .filter(Boolean),
+  )).slice(0, 2);
+}
+
 function roundOne(value: number | null | undefined) {
   if (value === null || value === undefined || !Number.isFinite(Number(value))) return null;
   return Math.round(Number(value) * 10) / 10;
@@ -185,6 +200,9 @@ function coerceRatingProfile(input: number | Partial<ClubRatingProfile>): ClubRa
     teamPlay: clampTeamPlay(input.teamPlay ?? generated.teamPlay),
     playerStyle,
     isGoalkeeper: Boolean(input.isGoalkeeper),
+    overallIndependent: Boolean(input.overallIndependent),
+    profilePresetIds: cleanProfilePresetIds(input.profilePresetIds),
+    profileFineTuned: Boolean(input.profileFineTuned),
   };
 }
 
@@ -205,6 +223,9 @@ function profileFromSubmission(data: DocumentData | null): ClubRatingProfile | n
     teamPlay: clampTeamPlay(data.teamPlay ?? generated.teamPlay),
     playerStyle,
     isGoalkeeper: Boolean(data.isGoalkeeper),
+    overallIndependent: Boolean(data.overallIndependent),
+    profilePresetIds: cleanProfilePresetIds(data.profilePresetIds),
+    profileFineTuned: Boolean(data.profileFineTuned),
   };
 }
 
@@ -310,6 +331,9 @@ function toMyRating(_id: string, data: DocumentData): ClubMyRating | null {
     teamPlay: skipped ? null : profile?.teamPlay ?? null,
     playerStyle: skipped ? null : profile?.playerStyle ?? null,
     isGoalkeeper: skipped ? false : Boolean(profile?.isGoalkeeper),
+    overallIndependent: skipped ? false : Boolean(profile?.overallIndependent),
+    profilePresetIds: skipped ? [] : profile?.profilePresetIds ?? [],
+    profileFineTuned: skipped ? false : Boolean(profile?.profileFineTuned),
     skipped,
     updatedAt: timestampToMillis(data.updatedAt) || timestampToMillis(data.updatedAtIso),
   };
@@ -408,6 +432,9 @@ export async function saveMyClubPlayerRating(rosterId: string, playerId: string,
       teamPlay: profile.teamPlay,
       playerStyle: profile.playerStyle ?? BALANCED_PLAYER_STYLE,
       isGoalkeeper: Boolean(profile.isGoalkeeper),
+      overallIndependent: Boolean(profile.overallIndependent),
+      profilePresetIds: cleanProfilePresetIds(profile.profilePresetIds),
+      profileFineTuned: Boolean(profile.profileFineTuned),
       skipped: false,
       updatedAt: serverTimestamp(),
       updatedAtIso: now.toISOString(),
@@ -474,6 +501,9 @@ export async function skipMyClubPlayerRating(rosterId: string, playerId: string)
       teamPlay: null,
       playerStyle: null,
       isGoalkeeper: false,
+      overallIndependent: false,
+      profilePresetIds: [],
+      profileFineTuned: false,
       skipped: true,
       updatedAt: serverTimestamp(),
       updatedAtIso: now.toISOString(),

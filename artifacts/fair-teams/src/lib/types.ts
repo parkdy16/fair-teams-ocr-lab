@@ -9,7 +9,10 @@ export interface Player {
   name: string;
   aka?: string;
   gender: Gender;
-  skill: number;    // computed overall 0-10
+  skill: number;    // organizer-authored OVR for independent profiles; legacy computed overall otherwise
+  overallIndependent?: boolean;
+  profilePresetIds?: string[];
+  profileFineTuned?: boolean;
   attack: number;   // 1-10
   defense: number;  // 1-10
   speed: number;    // 1-10

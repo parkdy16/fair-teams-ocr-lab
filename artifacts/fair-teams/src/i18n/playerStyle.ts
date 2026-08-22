@@ -12,8 +12,8 @@ const PLAYER_STYLE_TRANSLATION_KEYS: Record<PlayerStyleValue, PlayerStyleTransla
     descriptionKey: "roster.playerPresets.defender.description",
   },
   1: {
-    labelKey: "roster.playerPresets.strong.label",
-    descriptionKey: "roster.playerPresets.strong.description",
+    labelKey: "roster.playerPresets.technician.label",
+    descriptionKey: "roster.playerPresets.technician.description",
   },
   2: {
     labelKey: "roster.playerPresets.highEnergy.label",

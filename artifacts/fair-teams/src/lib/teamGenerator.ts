@@ -4,6 +4,16 @@ import type { FieldSize, PairingRule, Player, Team, TeamColor } from "./types.ts
 const DEFAULT_COLORS: TeamColor[] = ["red", "blue", "lime", "yellow", "orange", "black"];
 
 export function getWeightedSkill(player: Player, fieldSize: FieldSize = "medium") {
+  // New JoonGPT profiles deliberately separate OVR (how good) from detailed
+  // profile shape (how that ability is expressed). Until the structured T1
+  // evaluator is ready, the mature generator must keep organizer-authored OVR
+  // as its competitive-strength guardrail rather than averaging an intentionally
+  // asymmetric radar back into a lower or higher hidden skill value.
+  if (player.overallIndependent) {
+    const overall = Number(player.skill);
+    if (!Number.isFinite(overall)) return 5;
+    return Number(Math.min(10, Math.max(1, overall)).toFixed(1));
+  }
   const weights = fieldSize === "small"
     ? { attack: 0.22, passing: 0.26, defense: 0.22, speed: 0.15, stamina: 0.15 }
     : fieldSize === "large"

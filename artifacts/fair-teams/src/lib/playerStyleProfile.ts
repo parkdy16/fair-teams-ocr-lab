@@ -4,7 +4,7 @@ export type PlayerStyleValue = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
 export type PlayerPresetId =
   | "defender"
-  | "strong"
+  | "technician"
   | "high-energy"
   | "all-rounder"
   | "playmaker"
@@ -84,12 +84,12 @@ export const PLAYER_STYLE_DEFINITIONS: PlayerStyleDefinition[] = [
   },
   {
     value: 1,
-    id: "strong",
-    shortLabel: "STR",
-    label: "Strong",
-    sliderLabel: "Strong",
-    description: "Wins physical battles, shields the ball, and gives the team presence.",
-    deltas: { attack: 0.1, defense: 0.5, passing: -0.5, speed: -1.0, stamina: 0.1, physical: 2.2 },
+    id: "technician",
+    shortLabel: "TECH",
+    label: "Technician",
+    sliderLabel: "Technician",
+    description: "Controls the ball cleanly and solves pressure with skill.",
+    deltas: { attack: 0.4, defense: -0.6, passing: 0.8, speed: -0.4, stamina: -0.2, physical: 2.4 },
   },
   {
     value: 3,

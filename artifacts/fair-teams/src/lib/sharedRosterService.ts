@@ -216,6 +216,11 @@ function makeSharedRosterSnapshot(roster: RoomRoster) {
   };
   delete snapshot.logo;
   delete snapshot.cloudSource;
+  // The trusted linked-roster creation callable has a deliberately frozen
+  // allow-list. Keep initial creation backward-compatible; once the organizer
+  // adopts the created roster, the normal authoritative autosync writes the
+  // roster-owned player model through the existing organizer update path.
+  delete snapshot.playerModel;
   return snapshot;
 }
 
@@ -236,6 +241,7 @@ function makeSharedRosterUpdateSnapshot(
     themeColor: savePayload.themeColor || existing.themeColor,
     players: savePayload.players,
     pairingRules: savePayload.pairingRules,
+    playerModel: savePayload.playerModel,
   });
 }
 

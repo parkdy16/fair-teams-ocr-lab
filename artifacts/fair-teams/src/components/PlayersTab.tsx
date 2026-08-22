@@ -4,21 +4,29 @@ import type { RoomPlayer } from "@/lib/localRoster";
 import { calculateOverall, normalizePlayer } from "@/lib/localRoster";
 import {
   BALANCED_PLAYER_STYLE,
-  generateStyledPlayerAttributes,
-  inferPlayerStyleFromAttributes,
-  inferPlayerStyleMatch,
   profileFromAveragedAttributes,
   type PlayerStyleValue,
 } from "@/lib/playerStyleProfile";
 import { FunBadge, Gender, PairingRule, PairingRuleKind } from "@/lib/types";
 import { PlayerBatchRatingFlow } from "@/components/PlayerBatchRatingFlow";
-import { PlayerPresetPicker } from "@/components/PlayerPresetPicker";
+import { PlayerModelSettings } from "@/components/PlayerModelSettings";
+import { RosterPlayerPresetPicker } from "@/components/PlayerPresetPicker";
+import { PlayerPresetIcon } from "@/components/playerPresetIcons";
+import {
+  applyProfileToPlayer,
+  neutralProfileForOverall,
+  normalizePresetSelection,
+  normalizeRosterPlayerModel,
+  profileForPresetSelection,
+  type RosterPlayerModel,
+  type RosterPlayerPreset,
+} from "@/lib/rosterPlayerModel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { UserMinus, Plus, Star, Zap, Search, X, Camera, Image as ImageIcon, Trash2, Pencil, Shield, Activity, Dumbbell, Target, Share2, ArrowDownAZ, Clock3, Mic, Info, Eye, EyeOff } from "lucide-react";
+import { UserMinus, Plus, Star, Zap, Search, X, Camera, Image as ImageIcon, Trash2, Pencil, Shield, Activity, Dumbbell, Target, Share2, ArrowDownAZ, Clock3, Mic, Info, Eye, EyeOff, Settings2 } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { StripesConfirmContent } from "@/components/ui/stripes-modal";
 import { PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart, ResponsiveContainer } from "recharts";
@@ -31,7 +39,6 @@ import {
   type ClubRatingSummary,
 } from "@/lib/clubCollaborationService";
 import { formatDateTime as formatLocalizedDateTime, formatList, formatNumber, getResolvedUiLocale, translate, type TranslationKey } from "@/i18n";
-import { playerStyleTranslationKeys } from "@/i18n/playerStyle";
 
 
 
@@ -224,16 +231,6 @@ function findSharedDuplicateCandidates(players: RoomPlayer[], name: string, aka?
     return true;
   }).slice(0, 3);
 }
-
-const STAT_FIELDS = [
-  { key: "attack", labelKey: "roster.stats.attack", icon: Target },
-  { key: "defense", labelKey: "roster.stats.defense", icon: Shield },
-  { key: "speed", labelKey: "roster.stats.speed", icon: Zap },
-  { key: "passing", labelKey: "roster.stats.passing", icon: Share2 },
-  { key: "stamina", labelKey: "roster.stats.stamina", icon: Activity },
-  { key: "physical", labelKey: "roster.stats.strength", icon: Dumbbell },
-] as const;
-
 
 function EngineBadgeIcon({ className }: { className?: string }) {
   return (
@@ -520,43 +517,6 @@ function createDefaultAddPlayerDetails(skillLevel = 5): AddPlayerDetails {
   };
 }
 
-function createStyledAddPlayerDetails(skillLevel = 5, playerStyle: PlayerStyleValue = BALANCED_PLAYER_STYLE): AddPlayerDetails {
-  const generated = generateStyledPlayerAttributes(skillLevel, playerStyle);
-  return {
-    ...createDefaultAddPlayerDetails(skillLevel),
-    ...generated,
-  };
-}
-
-function applySkillLevelToDetails(details: AddPlayerDetails, skillLevel: number): AddPlayerDetails {
-  return {
-    ...details,
-    attack: skillLevel,
-    defense: skillLevel,
-    speed: skillLevel,
-    passing: skillLevel,
-    stamina: skillLevel,
-    physical: skillLevel,
-  };
-}
-
-function applyStyledSkillToDetails(details: AddPlayerDetails, skillLevel: number, playerStyle: PlayerStyleValue): AddPlayerDetails {
-  const generated = generateStyledPlayerAttributes(skillLevel, playerStyle);
-  return {
-    ...details,
-    ...generated,
-  };
-}
-
-function quickSkillFromPlayer(player: Partial<RoomPlayer>) {
-  const values = [player.attack, player.defense, player.speed, player.passing, player.stamina, player.physical]
-    .map((value) => Number(value))
-    .filter((value) => Number.isFinite(value));
-  if (!values.length) return Math.max(1, Math.min(10, Number(player.skill) || 5));
-  const average = values.reduce((sum, value) => sum + value, 0) / values.length;
-  return Math.round(Math.max(1, Math.min(10, average)) * 2) / 2;
-}
-
 function roundSkillStep(value: number) {
   return Math.max(1, Math.min(10, Math.round(value * 2) / 2));
 }
@@ -756,11 +716,53 @@ function SpecialAbilityIconRow({ player, max = 4 }: { player: RoomPlayer; max?: 
   );
 }
 
-function PlayerTags({ player, includeVibe = false, includeAbilityCount = false }: { player: RoomPlayer; includeVibe?: boolean; includeAbilityCount?: boolean }) {
+function PlayerPresetIconRow({
+  player,
+  playerModel,
+  max = 3,
+}: {
+  player: RoomPlayer;
+  playerModel: RosterPlayerModel;
+  max?: number;
+}) {
+  const model = normalizeRosterPlayerModel(playerModel);
+  const presets = (player.profilePresetIds ?? [])
+    .map((presetId) => model.presets.find((preset) => preset.id === presetId))
+    .filter((preset): preset is RosterPlayerPreset => Boolean(preset));
+  if (!presets.length) return null;
+  const visible = presets.slice(0, max);
+  const hiddenCount = presets.length - visible.length;
+  const title = formatList(getResolvedUiLocale(), presets.map((preset) => preset.name), { type: "unit" });
+  return (
+    <span title={title} className="stripes-type-ui inline-flex items-center gap-1 text-amber-700 leading-none">
+      {visible.map((preset) => (
+        <span key={preset.id} aria-label={preset.name} className="flex h-4 w-4 items-center justify-center rounded-full bg-amber-100">
+          <PlayerPresetIcon iconKey={preset.iconKey} className="h-2.5 w-2.5" />
+        </span>
+      ))}
+      {hiddenCount > 0 ? <span className="text-[8px] font-black">+{hiddenCount}</span> : null}
+    </span>
+  );
+}
+
+function PlayerTags({
+  player,
+  playerModel,
+  includeVibe = false,
+  includeAbilityCount = false,
+}: {
+  player: RoomPlayer;
+  playerModel: RosterPlayerModel;
+  includeVibe?: boolean;
+  includeAbilityCount?: boolean;
+}) {
+  const hasNewPresets = Boolean(player.profilePresetIds?.length);
   return (
     <div className="mt-0.5 flex flex-wrap gap-x-1.5 gap-y-0.5 min-h-3 items-center">
       {includeVibe && player.funBadge ? <FunBadgePill value={player.funBadge} /> : null}
-      {includeAbilityCount ? <SpecialAbilityIconRow player={player} /> : null}
+      {hasNewPresets
+        ? <PlayerPresetIconRow player={player} playerModel={playerModel} />
+        : includeAbilityCount ? <SpecialAbilityIconRow player={player} /> : null}
       {player.isNew && <NewBadge />}
       {player.isOrganizer && <ORGBadge />}
     </div>
@@ -789,15 +791,20 @@ function StatControl({ label, value, max = 10, onChange }: { label: string; valu
   );
 }
 
-function PlayerRadar({ player, compact = false }: { player: RoomPlayer; compact?: boolean }) {
-  const data = [
-    { stat: translate("roster.stats.attack"), value: player.attack },
-    { stat: translate("roster.stats.passing"), value: player.passing },
-    { stat: translate("roster.stats.stamina"), value: player.stamina },
-    { stat: translate("roster.stats.defense"), value: player.defense },
-    { stat: translate("roster.stats.strength"), value: player.physical },
-    { stat: translate("roster.stats.speed"), value: player.speed },
-  ];
+function PlayerRadar({
+  player,
+  playerModel,
+  compact = false,
+}: {
+  player: RoomPlayer;
+  playerModel: RosterPlayerModel;
+  compact?: boolean;
+}) {
+  const model = normalizeRosterPlayerModel(playerModel);
+  const data = model.attributes.map((attribute) => ({
+    stat: attribute.label,
+    value: player[attribute.slot],
+  }));
 
   return (
     <div className={`${compact ? "h-36" : "h-52"} w-full bg-muted/40 rounded-xl border border-border p-2`}>
@@ -923,6 +930,9 @@ function sharedDraftFromPlayerAndRating(player: RoomPlayer, rating?: ClubMyRatin
     physical: Number(rating?.physical),
     teamPlay: 2,
     isGoalkeeper: Boolean(rating?.isGoalkeeper),
+    overallIndependent: Boolean(rating?.overallIndependent ?? true),
+    profilePresetIds: rating?.profilePresetIds ?? base.profilePresetIds,
+    profileFineTuned: Boolean(rating?.profileFineTuned),
   });
 }
 
@@ -953,7 +963,7 @@ function sharedOverallFromDraft(player: Partial<RoomPlayer>) {
 }
 
 function sharedRatingProfileFromDraft(draft: RoomPlayer, playerStyle: PlayerStyleValue): ClubRatingProfile {
-  const skill = roundSkillStep(sharedOverallFromDraft(draft));
+  const skill = roundSkillStep(draft.overallIndependent ? draft.skill : sharedOverallFromDraft(draft));
   return {
     skill,
     attack: draft.attack,
@@ -965,6 +975,9 @@ function sharedRatingProfileFromDraft(draft: RoomPlayer, playerStyle: PlayerStyl
     teamPlay: 2,
     playerStyle,
     isGoalkeeper: Boolean(draft.isGoalkeeper),
+    overallIndependent: true,
+    profilePresetIds: draft.profilePresetIds ?? [],
+    profileFineTuned: Boolean(draft.profileFineTuned),
   };
 }
 
@@ -982,6 +995,7 @@ function sharedIdentityUpdateFromDraft(draft: RoomPlayer): Partial<RoomPlayer> {
 
 function ProfileDialog({
   player,
+  playerModel,
   onUpdate,
   autoOpen = false,
   onAutoOpenHandled,
@@ -1001,6 +1015,7 @@ function ProfileDialog({
   onTutorialSaved,
 }: {
   player: RoomPlayer;
+  playerModel: RosterPlayerModel;
   onUpdate: (data: Partial<RoomPlayer>) => void;
   autoOpen?: boolean;
   onAutoOpenHandled?: () => void;
@@ -1019,63 +1034,84 @@ function ProfileDialog({
   onTutorialAdvancedOpened?: () => void;
   onTutorialSaved?: () => void;
 }) {
-  const [draft, setDraft] = useState<RoomPlayer>(() => isSharedRoster ? sharedDraftFromPlayerAndRating(player, clubMyRating) : normalizePlayer(player));
+  const safePlayerModel = useMemo(() => normalizeRosterPlayerModel(playerModel), [playerModel]);
+  const initialDraft = () => isSharedRoster ? sharedDraftFromPlayerAndRating(player, clubMyRating) : normalizePlayer(player);
+  const [draft, setDraft] = useState<RoomPlayer>(initialDraft);
   const [open, setOpen] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const photoCameraInput = useRef<HTMLInputElement | null>(null);
   const photoGalleryInput = useRef<HTMLInputElement | null>(null);
   const [photoActionsOpen, setPhotoActionsOpen] = useState(false);
-  const [traitHelp, setTraitHelp] = useState<(typeof SPECIAL_ABILITIES)[number] | null>(null);
-  const [sharedPlayerStyle, setSharedPlayerStyle] = useState<PlayerStyleValue>(
-    typeof clubMyRating?.playerStyle === "number" ? clubMyRating.playerStyle : inferPlayerStyleFromAttributes(player),
+  const [selectedProfilePresetIds, setSelectedProfilePresetIds] = useState<string[]>(() =>
+    normalizePresetSelection(safePlayerModel, clubMyRating?.profilePresetIds ?? player.profilePresetIds),
   );
   const [sharedProfileSaving, setSharedProfileSaving] = useState(false);
   const [sharedProfileError, setSharedProfileError] = useState("");
-  const [pendingProfilePreset, setPendingProfilePreset] = useState<{ value: PlayerStyleValue; teamPlay: number } | null>(null);
-  const overall = calculateOverall(draft);
-  const quickSkill = quickSkillFromPlayer(draft);
+  const [pendingProfilePresetIds, setPendingProfilePresetIds] = useState<string[] | null>(null);
+  const overall = roundSkillStep(calculateOverall(draft));
+  const quickSkill = overall;
   const quickSkillExplanation = skillLevelExplanation(quickSkill);
   const reviewIsLast = reviewMode && reviewIndex >= reviewTotal - 1;
 
   const updateDraft = (data: Partial<RoomPlayer>) => {
-    setDraft(prev => normalizePlayer({ ...prev, ...data }));
+    setDraft((previous) => normalizePlayer({ ...previous, ...data }));
+  };
+
+  const shapeDraft = (source: RoomPlayer, nextOverall: number, presetIds: string[], keepFineTuned = false) => {
+    if (keepFineTuned) {
+      return normalizePlayer({
+        ...source,
+        skill: roundSkillStep(nextOverall),
+        overallIndependent: true,
+        profilePresetIds: presetIds,
+        profileFineTuned: true,
+      });
+    }
+    const profile = presetIds.length
+      ? profileForPresetSelection(safePlayerModel, nextOverall, presetIds)
+      : neutralProfileForOverall(nextOverall);
+    return normalizePlayer({
+      ...applyProfileToPlayer(source, nextOverall, profile, presetIds),
+      profileFineTuned: false,
+    });
   };
 
   const resetSharedDraft = () => {
-    const nextDraft = isSharedRoster ? sharedDraftFromPlayerAndRating(player, clubMyRating) : normalizePlayer(player);
-    setDraft(nextDraft);
-    setSharedPlayerStyle(
-      typeof clubMyRating?.playerStyle === "number"
-        ? clubMyRating.playerStyle
-        : inferPlayerStyleFromAttributes(nextDraft),
+    const nextDraft = initialDraft();
+    const nextPresetIds = normalizePresetSelection(
+      safePlayerModel,
+      clubMyRating?.profilePresetIds ?? nextDraft.profilePresetIds,
     );
+    setDraft(nextDraft);
+    setSelectedProfilePresetIds(nextPresetIds);
     setSharedProfileError("");
   };
 
   const applyQuickSkill = (skillLevel: number) => {
     const nextSkill = roundSkillStep(skillLevel);
-    setDraft(prev => normalizePlayer({
-      ...prev,
-      ...generateStyledPlayerAttributes(nextSkill, sharedPlayerStyle),
-      teamPlay: prev.teamPlay || 2,
-    }));
+    setDraft((previous) => shapeDraft(previous, nextSkill, selectedProfilePresetIds, Boolean(previous.profileFineTuned)));
   };
 
-  const commitProfilePreset = (nextStyle: PlayerStyleValue, teamPlay: number) => {
-    setSharedPlayerStyle(nextStyle);
-    updateDraft({
-      ...generateStyledPlayerAttributes(roundSkillStep(calculateOverall(draft)), nextStyle),
-      teamPlay,
-    });
+  const commitProfilePresetSelection = (nextPresetIds: string[]) => {
+    setSelectedProfilePresetIds(nextPresetIds);
+    setDraft((previous) => shapeDraft(previous, calculateOverall(previous), nextPresetIds, false));
+    setSharedProfileError("");
   };
 
-  const applyProfilePreset = (nextStyle: PlayerStyleValue, teamPlay: number) => {
-    const match = inferPlayerStyleMatch({ ...draft, skill: calculateOverall(draft) });
-    if (!match.isPresetLike) {
-      setPendingProfilePreset({ value: nextStyle, teamPlay });
+  const toggleProfilePreset = (presetId: string) => {
+    const selected = selectedProfilePresetIds.includes(presetId);
+    const nextPresetIds = selected
+      ? selectedProfilePresetIds.filter((id) => id !== presetId)
+      : [...selectedProfilePresetIds, presetId];
+    if (nextPresetIds.length > 2) {
+      setSharedProfileError(translate("roster.playerModel.chooseUpToTwo"));
       return;
     }
-    commitProfilePreset(nextStyle, teamPlay);
+    if (draft.profileFineTuned) {
+      setPendingProfilePresetIds(nextPresetIds);
+      return;
+    }
+    commitProfilePresetSelection(nextPresetIds);
   };
 
   useEffect(() => {
@@ -1083,15 +1119,14 @@ function ProfileDialog({
     resetSharedDraft();
     setAdvancedOpen(false);
     setPhotoActionsOpen(false);
-    setPendingProfilePreset(null);
+    setPendingProfilePresetIds(null);
     setOpen(true);
     onAutoOpenHandled?.();
   }, [autoOpen, player, onAutoOpenHandled]);
 
   const closeProfileDialog = () => {
     setPhotoActionsOpen(false);
-    setTraitHelp(null);
-    setPendingProfilePreset(null);
+    setPendingProfilePresetIds(null);
     setOpen(false);
     if (reviewMode) {
       onReviewDone?.();
@@ -1108,7 +1143,10 @@ function ProfileDialog({
     try {
       setSharedProfileSaving(true);
       setSharedProfileError("");
-      await saveMyClubPlayerRating(sharedRosterId, player.id, sharedRatingProfileFromDraft(draft, sharedPlayerStyle));
+      await saveMyClubPlayerRating(sharedRosterId, player.id, sharedRatingProfileFromDraft({
+        ...draft,
+        profilePresetIds: selectedProfilePresetIds,
+      }, BALANCED_PLAYER_STYLE));
       return true;
     } catch (error) {
       setSharedProfileError(error instanceof Error ? error.message : translate("roster.errors.sharedProfileSaveFailed"));
@@ -1158,10 +1196,6 @@ function ProfileDialog({
 
     const handleNativeBack = (event: Event) => {
       event.preventDefault();
-      if (traitHelp) {
-        setTraitHelp(null);
-        return;
-      }
       if (photoActionsOpen) {
         setPhotoActionsOpen(false);
         return;
@@ -1171,7 +1205,7 @@ function ProfileDialog({
 
     window.addEventListener("fairteams:native-back", handleNativeBack);
     return () => window.removeEventListener("fairteams:native-back", handleNativeBack);
-  }, [open, traitHelp, photoActionsOpen, reviewMode, onReviewDone]);
+  }, [open, photoActionsOpen, reviewMode, onReviewDone]);
 
   return (
     <>
@@ -1257,7 +1291,7 @@ function ProfileDialog({
                 <VibePicker value={draft.funBadge} onChange={funBadge => updateDraft({ funBadge })} />
               </div>
               {(() => {
-                const sharedOverall = sharedOverallFromDraft(draft);
+                const sharedOverall = overall;
                 return (
                   <div className="rounded-2xl border border-violet-100 bg-white/85 p-3 space-y-3">
                     <div className="flex items-center justify-between gap-3">
@@ -1288,11 +1322,7 @@ function ProfileDialog({
                         value={roundSkillStep(sharedOverall)}
                         onPointerDown={dismissActiveInput}
                         onTouchStart={dismissActiveInput}
-                        onChange={e => {
-                          const nextSkill = roundSkillStep(Number(e.target.value));
-                          const generated = generateStyledPlayerAttributes(nextSkill, sharedPlayerStyle);
-                          updateDraft({ ...generated, teamPlay: 2 });
-                        }}
+                        onChange={e => applyQuickSkill(roundSkillStep(Number(e.target.value)))}
                         className="fairteams-slider w-full"
                         style={{ "--slider-fill": `${((roundSkillStep(sharedOverall) - 1) / 9) * 100}%` } as React.CSSProperties}
                       />
@@ -1303,20 +1333,19 @@ function ProfileDialog({
                         <Label className="text-[10px] uppercase font-black tracking-wide text-violet-700">{translate("roster.labels.whatStandsOut")}</Label>
                         <div className="mt-0.5 text-[10px] font-semibold leading-snug text-violet-700/75">{translate("roster.playerPresets.help")}</div>
                       </div>
-                      <PlayerPresetPicker
-                        value={sharedPlayerStyle}
-                        onChange={(nextStyle) => applyProfilePreset(nextStyle, 2)}
-                        tone="violet"
-                        compact
-                        testIdPrefix={`shared-player-preset-${player.id}`}
+                      <RosterPlayerPresetPicker
+                        model={safePlayerModel}
+                        selectedIds={selectedProfilePresetIds}
+                        onToggle={toggleProfilePreset}
+                        disabled={sharedProfileSaving}
                       />
                     </div>
 
-                    <PlayerRadar player={{ ...draft, skill: sharedOverall, teamPlay: 2 }} />
+                    <PlayerRadar player={{ ...draft, skill: sharedOverall, teamPlay: 2 }} playerModel={playerModel} />
 
                     <div className="grid grid-cols-2 gap-2">
-                      {STAT_FIELDS.map(({ key, labelKey }) => (
-                        <StatControl key={key} label={translate(labelKey)} value={draft[key]} onChange={value => updateDraft({ [key]: value, teamPlay: 2 } as Partial<RoomPlayer>)} />
+                      {normalizeRosterPlayerModel(playerModel).attributes.map((attribute) => (
+                        <StatControl key={attribute.id} label={attribute.label} value={draft[attribute.slot]} onChange={value => updateDraft({ [attribute.slot]: value, teamPlay: 2, overallIndependent: true, profileFineTuned: true } as Partial<RoomPlayer>)} />
                       ))}
                       <TogglePill active={!!draft.isGoalkeeper} onClick={() => updateDraft({ isGoalkeeper: !draft.isGoalkeeper, teamPlay: 2 })} activeClassName="border-amber-300 bg-amber-100 text-amber-900 shadow-sm">
                         {translate("roster.abilities.goalkeeper.badge")}</TogglePill>
@@ -1367,11 +1396,11 @@ function ProfileDialog({
               <Label className="text-[10px] uppercase font-black tracking-wide text-primary">{translate("roster.labels.whatStandsOut")}</Label>
               <div className="mt-0.5 text-[10px] font-semibold leading-snug text-muted-foreground">{translate("roster.playerPresets.help")}</div>
             </div>
-            <PlayerPresetPicker
-              value={sharedPlayerStyle}
-              onChange={(nextStyle) => applyProfilePreset(nextStyle, draft.teamPlay || 2)}
-              compact
-              testIdPrefix={`edit-player-preset-${player.id}`}
+            <RosterPlayerPresetPicker
+              model={safePlayerModel}
+              selectedIds={selectedProfilePresetIds}
+              onToggle={toggleProfilePreset}
+              disabled={sharedProfileSaving}
             />
           </div>
 
@@ -1458,7 +1487,7 @@ function ProfileDialog({
                 }}
               />
 
-              <PlayerRadar player={{ ...draft, skill: overall }} />
+              <PlayerRadar player={{ ...draft, skill: overall }} playerModel={playerModel} />
 
               <div className="rounded-2xl border border-primary/15 bg-background/70 px-3 py-2 flex items-center justify-between">
                 <div>
@@ -1472,53 +1501,16 @@ function ProfileDialog({
               </div>
 
               <div className="grid grid-cols-2 gap-2">
-                {STAT_FIELDS.map(({ key, labelKey }) => (
-                  <StatControl key={key} label={translate(labelKey)} value={draft[key]} onChange={value => updateDraft({ [key]: value } as Partial<RoomPlayer>)} />
+                {safePlayerModel.attributes.map((attribute) => (
+                  <StatControl key={attribute.id} label={attribute.label} value={draft[attribute.slot]} onChange={value => updateDraft({ [attribute.slot]: value, overallIndependent: true, profileFineTuned: true } as Partial<RoomPlayer>)} />
                 ))}
-                <StatControl label={translate("roster.accessibility.teamPlay")} value={draft.teamPlay} max={3} onChange={value => updateDraft({ teamPlay: value })} />
-                <div />
-              </div>
-
-              <div className="space-y-2 rounded-2xl border border-amber-100 bg-amber-50/75 p-3">
-                <div className="flex items-center justify-between">
-                  <Label className="text-[10px] uppercase font-bold text-amber-800 tracking-wider flex items-center gap-1"><Star className="w-3 h-3" /> {translate("roster.labels.specialTraits")}</Label>
-                  <span className="text-[10px] font-bold text-amber-700">{translate("roster.messages.optional")}</span>
-                </div>
-                <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,8rem),1fr))] gap-2 sm:grid-cols-2">
-                  {SPECIAL_ABILITIES.map(ability => {
-                    const selected = Boolean(draft[ability.key]);
-                    const Icon = ability.icon ?? Star;
-                    return (
-                      <div
-                        key={ability.key}
-                        className={`flex h-8 items-center overflow-hidden rounded-xl border transition-colors ${selected ? "border-amber-400 bg-amber-50 text-amber-900 shadow-sm" : "border-border bg-background/70 text-foreground"}`}
-                      >
-                        <button
-                          type="button"
-                          onClick={() => updateDraft({ [ability.key]: !selected } as Partial<RoomPlayer>)}
-                          className="flex min-w-0 flex-1 items-center gap-1.5 px-2 text-left"
-                        >
-                          {ability.key === "isGoalkeeper" ? (
-                            <span className="w-5 text-center text-[10px] font-semibold text-amber-700">{abilityBadgeLabel(ability)}</span>
-                          ) : (
-                            <Icon className="h-3.5 w-3.5 shrink-0 text-amber-700" />
-                          )}
-                          <span className="truncate text-[11px] font-semibold leading-tight">{abilityLabel(ability)}</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(event) => { event.stopPropagation(); setTraitHelp(current => current?.key === ability.key ? null : ability); }}
-                          className="flex h-full w-7 shrink-0 items-center justify-center border-l border-amber-100/80 text-[11px] font-black text-amber-700/80 active:bg-amber-100"
-                          aria-label={translate("roster.accessibility.whatDoesMean", { label: abilityLabel(ability) })}
-                          title={translate("roster.accessibility.whatDoesMean", { label: abilityLabel(ability) })}
-                        >
-                          ?
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-                {traitHelp ? <TraitHelpHint ability={traitHelp} onClose={() => setTraitHelp(null)} /> : null}
+                <TogglePill
+                  active={Boolean(draft.isGoalkeeper)}
+                  onClick={() => updateDraft({ isGoalkeeper: !draft.isGoalkeeper })}
+                  activeClassName="border-amber-300 bg-amber-100 text-amber-900 shadow-sm"
+                >
+                  {translate("roster.abilities.goalkeeper.label")}
+                </TogglePill>
               </div>
 
               <div className="rounded-xl border border-border p-3 bg-background/70 text-[11px] text-muted-foreground font-semibold space-y-1">
@@ -1556,26 +1548,20 @@ function ProfileDialog({
       </DialogContent>
     </Dialog>
 
-    <AlertDialog open={pendingProfilePreset !== null} onOpenChange={(next) => { if (!next) setPendingProfilePreset(null); }}>
+    <AlertDialog open={pendingProfilePresetIds !== null} onOpenChange={(next) => { if (!next) setPendingProfilePresetIds(null); }}>
       <StripesConfirmContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{translate("roster.headings.replaceDetailedProfile")}</AlertDialogTitle>
-          <AlertDialogDescription>
-            {pendingProfilePreset
-              ? translate("roster.messages.presetReplaceConfirm", {
-                  preset: translate(playerStyleTranslationKeys(pendingProfilePreset.value).labelKey),
-                })
-              : ""}
-          </AlertDialogDescription>
+          <AlertDialogDescription>{translate("roster.playerModel.presetReplaceCustomConfirm")}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>{translate("roster.actions.keepCustomProfile")}</AlertDialogCancel>
           <AlertDialogAction
             onClick={() => {
-              if (!pendingProfilePreset) return;
-              const next = pendingProfilePreset;
-              setPendingProfilePreset(null);
-              commitProfilePreset(next.value, next.teamPlay);
+              if (!pendingProfilePresetIds) return;
+              const next = pendingProfilePresetIds;
+              setPendingProfilePresetIds(null);
+              commitProfilePresetSelection(next);
             }}
           >
             {translate("roster.actions.replaceProfile")}
@@ -1584,39 +1570,6 @@ function ProfileDialog({
       </StripesConfirmContent>
     </AlertDialog>
     </>
-  );
-}
-
-function TraitHelpHint({ ability, onClose }: { ability: (typeof SPECIAL_ABILITIES)[number]; onClose: () => void }) {
-  const Icon = ability.icon ?? Star;
-
-  useEffect(() => {
-    const timer = window.setTimeout(onClose, 6500);
-    return () => window.clearTimeout(timer);
-  }, [ability.key, onClose]);
-
-  return (
-    <div className="rounded-2xl border border-amber-200 bg-white/95 p-3 shadow-sm animate-in fade-in-50 slide-in-from-top-1">
-      <div className="flex items-start gap-2.5">
-        <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-700">
-          {ability.key === "isGoalkeeper" ? <span className="text-[10px] font-black">{abilityBadgeLabel(ability)}</span> : <Icon className="h-4 w-4" />}
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-2">
-            <h3 className="text-xs font-black tracking-tight text-[#102A43]">{abilityLabel(ability)}</h3>
-            <button
-              type="button"
-              onClick={onClose}
-              className="-mr-1 -mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-              aria-label={translate("roster.accessibility.closeTraitHelp")}
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          </div>
-          <p className="mt-0.5 text-[11px] font-semibold leading-snug text-slate-600">{abilityDescription(ability)}</p>
-        </div>
-      </div>
-    </div>
   );
 }
 
@@ -1650,20 +1603,35 @@ function playerWithClubAverage(player: RoomPlayer, summary?: ClubRatingSummary):
     stamina: profile.stamina,
     physical: profile.physical,
     teamPlay: 2,
+    overallIndependent: true,
     isGoalkeeper: Boolean((summary?.gkYesCount || 0) > 0 || player.isGoalkeeper),
   };
 }
 
-function PlayerCardBack({ player, clubRatingSummary }: { player: RoomPlayer; clubRatingSummary?: ClubRatingSummary }) {
+function PlayerCardBack({
+  player,
+  playerModel,
+  clubRatingSummary,
+}: {
+  player: RoomPlayer;
+  playerModel: RosterPlayerModel;
+  clubRatingSummary?: ClubRatingSummary;
+}) {
   const graphPlayer = playerWithClubAverage(player, clubRatingSummary);
   const hasClubAverage = Number(clubRatingSummary?.ratingCount || 0) > 0 && Number.isFinite(Number(clubRatingSummary?.averageSkill));
+  const safeModel = normalizeRosterPlayerModel(playerModel);
+  const profilePresets = (player.profilePresetIds ?? [])
+    .map((presetId) => safeModel.presets.find((preset) => preset.id === presetId))
+    .filter((preset): preset is RosterPlayerPreset => Boolean(preset));
   const abilities = SPECIAL_ABILITIES.filter(a => Boolean(player[a.key]));
+  const [selectedPresetId, setSelectedPresetId] = useState<string | null>(profilePresets[0]?.id ?? null);
   const [selectedAbilityKey, setSelectedAbilityKey] = useState<AbilityKey | null>(abilities[0]?.key ?? null);
+  const selectedPreset = profilePresets.find((preset) => preset.id === selectedPresetId) ?? profilePresets[0];
   const selectedAbility = abilities.find(a => a.key === selectedAbilityKey) ?? abilities[0];
   return (
     <div className="mt-3 border-t border-border/70 pt-3 space-y-3">
       <div className="rounded-2xl bg-muted/25 border border-border/70 p-2 shadow-inner">
-        <PlayerRadar player={graphPlayer} compact />
+        <PlayerRadar player={graphPlayer} playerModel={playerModel} compact />
         {hasClubAverage ? (
           <div className="mt-1 text-center text-[10px] font-black uppercase tracking-wide text-primary">
             {translate("roster.messages.clubAverageRatings", {
@@ -1674,7 +1642,29 @@ function PlayerCardBack({ player, clubRatingSummary }: { player: RoomPlayer; clu
         ) : null}
       </div>
 
-      {abilities.length > 0 && (
+      {profilePresets.length > 0 ? (
+        <div className="space-y-2" onClick={(event) => event.stopPropagation()}>
+          <div className="flex flex-wrap items-center justify-center gap-1.5">
+            {profilePresets.map((preset) => (
+              <button
+                key={preset.id}
+                type="button"
+                onClick={() => setSelectedPresetId((current) => current === preset.id ? null : preset.id)}
+                className={`flex min-h-8 items-center gap-1.5 rounded-full border px-2.5 text-[10px] font-black ${selectedPreset?.id === preset.id ? "border-amber-400 bg-amber-100 text-amber-950" : "border-amber-100 bg-white text-amber-800"}`}
+              >
+                <PlayerPresetIcon iconKey={preset.iconKey} className="h-3.5 w-3.5" />
+                {preset.name}
+              </button>
+            ))}
+          </div>
+          {selectedPreset ? (
+            <div className="mx-auto max-w-[280px] text-center">
+              <div className="text-[11px] font-semibold leading-tight text-foreground">{selectedPreset.name}</div>
+              <div className="mt-0.5 text-[10px] font-medium leading-snug text-muted-foreground">{selectedPreset.description}</div>
+            </div>
+          ) : null}
+        </div>
+      ) : abilities.length > 0 ? (
         <div className="space-y-2" onClick={e => e.stopPropagation()}>
           <div className="flex flex-wrap gap-1.5 items-center justify-center">
             {abilities.map(a => (
@@ -1695,7 +1685,7 @@ function PlayerCardBack({ player, clubRatingSummary }: { player: RoomPlayer; clu
             <div className="text-center text-[10px] font-semibold text-muted-foreground">{translate("roster.abilities.selectionHelp")}</div>
           )}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -1703,6 +1693,10 @@ function PlayerCardBack({ player, clubRatingSummary }: { player: RoomPlayer; clu
 export function PlayersTab({
   players,
   setPlayers,
+  playerModel,
+  onPlayerModelChange,
+  onSavePresetPackToGoogleDrive,
+  rosterName,
   pairingRules = [],
   setPairingRules,
   onScreenshotImport,
@@ -1726,6 +1720,10 @@ export function PlayersTab({
 }: {
   players: RoomPlayer[];
   setPlayers: (players: RoomPlayer[]) => void;
+  playerModel: RosterPlayerModel;
+  onPlayerModelChange: (model: RosterPlayerModel) => void;
+  onSavePresetPackToGoogleDrive?: (fileName: string, jsonText: string) => Promise<void>;
+  rosterName: string;
   pairingRules?: PairingRule[];
   setPairingRules?: (rules: PairingRule[]) => void;
   onScreenshotImport?: () => void;
@@ -1752,17 +1750,45 @@ export function PlayersTab({
   const [gender, setGender] = useState<Gender>("male");
   const [isNew, setIsNew] = useState(true);
   const [skillLevel, setSkillLevel] = useState(5);
-  const [addPlayerStyle, setAddPlayerStyle] = useState<PlayerStyleValue>(BALANCED_PLAYER_STYLE);
+  const [addPresetIds, setAddPresetIds] = useState<string[]>([]);
+  const [addProfileFineTuned, setAddProfileFineTuned] = useState(false);
+  const [addPresetError, setAddPresetError] = useState("");
   const [addAdvancedOpen, setAddAdvancedOpen] = useState(false);
   const [isOrganizer, setIsOrganizer] = useState(false);
   const [addProfilePhoto, setAddProfilePhoto] = useState<string | undefined>(undefined);
   const [addPhotoActionsOpen, setAddPhotoActionsOpen] = useState(false);
   const addPhotoCameraInput = useRef<HTMLInputElement | null>(null);
   const addPhotoGalleryInput = useRef<HTMLInputElement | null>(null);
-  const [addDetails, setAddDetails] = useState<AddPlayerDetails>(() => createStyledAddPlayerDetails(5, BALANCED_PLAYER_STYLE));
-  const addOverall = calculateOverall(addDetails);
+  const [addDetails, setAddDetails] = useState<AddPlayerDetails>(() => createDefaultAddPlayerDetails(5));
+  const safeRosterPlayerModel = useMemo(() => normalizeRosterPlayerModel(playerModel), [playerModel]);
+  const addOverall = roundSkillStep(skillLevel);
   const addSkillExplanation = skillLevelExplanation(skillLevel);
   const updateAddDetails = (data: Partial<AddPlayerDetails>) => setAddDetails(prev => ({ ...prev, ...data }));
+  const shapeAddDetails = (nextOverall: number, presetIds: string[]) => {
+    const profile = presetIds.length
+      ? profileForPresetSelection(safeRosterPlayerModel, nextOverall, presetIds)
+      : neutralProfileForOverall(nextOverall);
+    setAddDetails((current) => ({ ...current, ...profile, teamPlay: 2 }));
+    setAddProfileFineTuned(false);
+  };
+  const changeAddOverall = (nextOverall: number) => {
+    const safeOverall = roundSkillStep(nextOverall);
+    setSkillLevel(safeOverall);
+    if (!addProfileFineTuned) shapeAddDetails(safeOverall, addPresetIds);
+  };
+  const toggleAddPreset = (presetId: string) => {
+    const selected = addPresetIds.includes(presetId);
+    const nextIds = selected
+      ? addPresetIds.filter((id) => id !== presetId)
+      : [...addPresetIds, presetId];
+    if (nextIds.length > 2) {
+      setAddPresetError(translate("roster.playerModel.chooseUpToTwo"));
+      return;
+    }
+    setAddPresetIds(nextIds);
+    setAddPresetError("");
+    shapeAddDetails(skillLevel, nextIds);
+  };
   const [autoEditPlayerId, setAutoEditPlayerId] = useState<string | null>(null);
   const [flippedPlayerIds, setFlippedPlayerIds] = useState<Record<string, boolean>>({});
   const [search, setSearch] = useState("");
@@ -1773,13 +1799,13 @@ export function PlayersTab({
   const [pairSecondId, setPairSecondId] = useState("");
   const [pairNotice, setPairNotice] = useState("");
   const [addPlayerOpen, setAddPlayerOpen] = useState(false);
+  const [playerModelSettingsOpen, setPlayerModelSettingsOpen] = useState(false);
   const [sharedDuplicateOverride, setSharedDuplicateOverride] = useState(false);
   const [sharedDuplicateNotice, setSharedDuplicateNotice] = useState("");
   const [voiceAddOpen, setVoiceAddOpen] = useState(false);
   const [voiceAddHeard, setVoiceAddHeard] = useState("");
   const [voiceAddListening, setVoiceAddListening] = useState(false);
   const [voiceAddStatus, setVoiceAddStatus] = useState("");
-  const [addTraitHelp, setAddTraitHelp] = useState<(typeof SPECIAL_ABILITIES)[number] | null>(null);
   const voiceAddRecognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const [hideOverall, setHideOverall] = useState(() => rosterSkillHiddenSession);
   const [sortMode, setSortMode] = useState<"recent" | "alpha" | "skill">(() => rosterSortModeSession);
@@ -1832,8 +1858,7 @@ export function PlayersTab({
       voiceAddOpen ||
       addPlayerOpen ||
       pairingRulesOpen ||
-      addPhotoActionsOpen ||
-      Boolean(addTraitHelp);
+      addPhotoActionsOpen;
 
     if (!hasRosterDialogOpen) return;
 
@@ -1841,10 +1866,6 @@ export function PlayersTab({
       if (event.defaultPrevented) return;
       event.preventDefault();
 
-      if (addTraitHelp) {
-        setAddTraitHelp(null);
-        return;
-      }
       if (addPhotoActionsOpen) {
         setAddPhotoActionsOpen(false);
         return;
@@ -1875,7 +1896,6 @@ export function PlayersTab({
     addPlayerOpen,
     pairingRulesOpen,
     addPhotoActionsOpen,
-    addTraitHelp,
   ]);
 
   useEffect(() => {
@@ -1888,8 +1908,10 @@ export function PlayersTab({
     setGender("male");
     setIsNew(true);
     setSkillLevel(5);
-    setAddPlayerStyle(BALANCED_PLAYER_STYLE);
-    setAddDetails(createStyledAddPlayerDetails(5, BALANCED_PLAYER_STYLE));
+    setAddPresetIds([]);
+    setAddProfileFineTuned(false);
+    setAddPresetError("");
+    setAddDetails(createDefaultAddPlayerDetails(5));
     setAddProfilePhoto(undefined);
     setAddPhotoActionsOpen(false);
     setAddAdvancedOpen(false);
@@ -1912,7 +1934,7 @@ export function PlayersTab({
     if (tutorialStep === "add-manual") {
       setName("Heung-min");
       setSkillLevel(7);
-      setAddDetails(createStyledAddPlayerDetails(7, BALANCED_PLAYER_STYLE));
+      setAddDetails(createDefaultAddPlayerDetails(7));
     }
     onTutorialAction?.("manual-opened");
     setAddOptionsOpen(false);
@@ -2021,14 +2043,20 @@ export function PlayersTab({
     }
 
     const now = new Date().toISOString();
-    const profileDetails = createDefaultAddPlayerDetails(5);
+    const profileDetails = {
+      ...createDefaultAddPlayerDetails(5),
+      ...neutralProfileForOverall(5),
+    };
     const newPlayer = normalizePlayer({
       id: createPlayerId(),
       roomId: 1,
       name: cleanedName,
       gender: "male",
-      skill: calculateOverall(profileDetails),
+      skill: 5,
       ...profileDetails,
+      overallIndependent: true,
+      profilePresetIds: [],
+      profileFineTuned: false,
       isOrganizer: false,
       isNew: true,
       attending: false,
@@ -2083,8 +2111,11 @@ export function PlayersTab({
       name: name.trim(),
       aka: aka.trim() || undefined,
       gender,
-      skill: calculateOverall(profileDetails),
+      skill: roundSkillStep(skillLevel),
       ...profileDetails,
+      overallIndependent: true,
+      profilePresetIds: addPresetIds,
+      profileFineTuned: addProfileFineTuned,
       profilePhoto: !isSharedRoster && addAdvancedOpen ? addProfilePhoto : undefined,
       isOrganizer: isSharedRoster ? false : isOrganizer,
       isNew,
@@ -2097,8 +2128,10 @@ export function PlayersTab({
     setAka("");
     setIsNew(true);
     setSkillLevel(5);
-    setAddPlayerStyle(BALANCED_PLAYER_STYLE);
-    setAddDetails(createStyledAddPlayerDetails(5, BALANCED_PLAYER_STYLE));
+    setAddPresetIds([]);
+    setAddProfileFineTuned(false);
+    setAddPresetError("");
+    setAddDetails(createDefaultAddPlayerDetails(5));
     setAddProfilePhoto(undefined);
     setAddPhotoActionsOpen(false);
     setAddAdvancedOpen(false);
@@ -2290,8 +2323,21 @@ export function PlayersTab({
 
   return (
     <>
+      <PlayerModelSettings
+        open={playerModelSettingsOpen}
+        onOpenChange={setPlayerModelSettingsOpen}
+        model={playerModel}
+        players={players}
+        rosterName={rosterName}
+        onSave={onPlayerModelChange}
+        onResetPlayers={setPlayers}
+        onSavePackToGoogleDrive={onSavePresetPackToGoogleDrive}
+        sharedRoster={isSharedRoster}
+      />
+
       <PlayerBatchRatingFlow
         player={reviewFlowPlayer}
+        playerModel={playerModel}
         sharedRating={reviewFlowPlayer ? myClubRatingByPlayerId.get(reviewFlowPlayer.id) : undefined}
         index={reviewPlayerIndex}
         total={reviewPlayerTotal}
@@ -2313,6 +2359,15 @@ export function PlayersTab({
             </div>
           </div>
           <div className="flex items-center gap-1.5">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setPlayerModelSettingsOpen(true)}
+              className="h-8 rounded-xl border-slate-200 bg-white px-2.5 text-[10px] font-black uppercase tracking-wide text-slate-600 shadow-none hover:bg-slate-50 sm:h-9 sm:px-3 sm:text-[11px]"
+              data-testid="button-player-model-settings"
+            >
+              <Settings2 className="mr-1.5 h-3.5 w-3.5" /> {translate("roster.playerModel.shortHeading")}
+            </Button>
             {onStartReviewPlayers && players.length > 0 ? (
               <Button
                 type="button"
@@ -2524,8 +2579,10 @@ export function PlayersTab({
                       const next = !prev;
                       if (next) {
                         setSkillLevel(5);
-                        setAddPlayerStyle(BALANCED_PLAYER_STYLE);
-                        setAddDetails(current => applyStyledSkillToDetails(current, 5, BALANCED_PLAYER_STYLE));
+                        setAddPresetIds([]);
+                        setAddProfileFineTuned(false);
+                        setAddPresetError("");
+                        setAddDetails(createDefaultAddPlayerDetails(5));
                       }
                       return next;
                     });
@@ -2579,11 +2636,7 @@ export function PlayersTab({
                       value={skillLevel}
                       onPointerDown={dismissActiveInput}
                       onTouchStart={dismissActiveInput}
-                      onChange={e => {
-                        const next = roundSkillStep(Number(e.target.value));
-                        setSkillLevel(next);
-                        setAddDetails(prev => applyStyledSkillToDetails(prev, next, addPlayerStyle));
-                      }}
+                      onChange={e => changeAddOverall(Number(e.target.value))}
                       className="fairteams-slider w-full"
                       style={{ "--slider-fill": `${((skillLevel - 1) / 9) * 100}%` } as React.CSSProperties}
                     />
@@ -2592,16 +2645,12 @@ export function PlayersTab({
                         <Label className="text-[10px] uppercase font-black tracking-wide text-violet-700">{translate("roster.labels.whatStandsOut")}</Label>
                         <div className="mt-0.5 text-[10px] font-semibold leading-snug text-violet-700/75">{translate("roster.playerPresets.help")}</div>
                       </div>
-                      <PlayerPresetPicker
-                        value={addPlayerStyle}
-                        onChange={(nextStyle) => {
-                          setAddPlayerStyle(nextStyle);
-                          setAddDetails((previous) => applyStyledSkillToDetails(previous, skillLevel, nextStyle));
-                        }}
-                        tone="violet"
-                        compact
-                        testIdPrefix="add-shared-player-preset"
+                      <RosterPlayerPresetPicker
+                        model={safeRosterPlayerModel}
+                        selectedIds={addPresetIds}
+                        onToggle={toggleAddPreset}
                       />
+                      {addPresetError ? <div className="text-[10px] font-bold text-rose-600">{addPresetError}</div> : null}
                     </div>
                   </div>
                 </div>
@@ -2677,11 +2726,7 @@ export function PlayersTab({
                   value={skillLevel}
                   onPointerDown={dismissActiveInput}
                   onTouchStart={dismissActiveInput}
-                  onChange={e => {
-                    const next = roundSkillStep(Number(e.target.value));
-                    setSkillLevel(next);
-                    setAddDetails(prev => applyStyledSkillToDetails(prev, next, addPlayerStyle));
-                  }}
+                  onChange={e => changeAddOverall(Number(e.target.value))}
                   className="fairteams-slider w-full"
                   style={{ "--slider-fill": `${((skillLevel - 1) / 9) * 100}%` } as React.CSSProperties}
                   data-testid="input-player-skill-level"
@@ -2694,15 +2739,12 @@ export function PlayersTab({
                     <Label className="text-[10px] uppercase font-black tracking-wide text-primary">{translate("roster.labels.whatStandsOut")}</Label>
                     <div className="mt-0.5 text-[10px] font-semibold leading-snug text-muted-foreground">{translate("roster.playerPresets.help")}</div>
                   </div>
-                  <PlayerPresetPicker
-                    value={addPlayerStyle}
-                    onChange={(nextStyle) => {
-                      setAddPlayerStyle(nextStyle);
-                      setAddDetails((previous) => applyStyledSkillToDetails(previous, skillLevel, nextStyle));
-                    }}
-                    compact
-                    testIdPrefix="add-local-player-preset"
+                  <RosterPlayerPresetPicker
+                    model={safeRosterPlayerModel}
+                    selectedIds={addPresetIds}
+                    onToggle={toggleAddPreset}
                   />
+                  {addPresetError ? <div className="text-[10px] font-bold text-rose-600">{addPresetError}</div> : null}
                 </div>
               </div>
 
@@ -2833,51 +2875,19 @@ export function PlayersTab({
                   </div>
 
                   <div className="grid grid-cols-2 gap-2">
-                    {STAT_FIELDS.map(({ key, labelKey }) => (
-                      <StatControl key={key} label={translate(labelKey)} value={addDetails[key]} onChange={value => updateAddDetails({ [key]: value } as Partial<AddPlayerDetails>)} />
+                    {normalizeRosterPlayerModel(playerModel).attributes.map((attribute) => (
+                      <StatControl key={attribute.id} label={attribute.label} value={addDetails[attribute.slot]} onChange={value => { updateAddDetails({ [attribute.slot]: value } as Partial<AddPlayerDetails>); setAddProfileFineTuned(true); }} />
                     ))}
-                    <StatControl label={translate("roster.accessibility.teamPlay")} value={addDetails.teamPlay} max={3} onChange={value => updateAddDetails({ teamPlay: value })} />
-                    <div />
                   </div>
 
-                  <div className="space-y-2">
-                    <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider flex items-center gap-1"><Star className="w-3 h-3" /> {translate("roster.labels.specialAbilities")}</Label>
-                    <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,8rem),1fr))] gap-2 sm:grid-cols-2">
-                      {SPECIAL_ABILITIES.map(ability => {
-                        const selected = Boolean(addDetails[ability.key]);
-                        const Icon = ability.icon ?? Star;
-                        return (
-                          <div
-                            key={ability.key}
-                            className={`flex h-8 items-center overflow-hidden rounded-xl border transition-colors ${selected ? "border-amber-400 bg-amber-50 text-amber-900" : "border-border bg-background/70 text-foreground"}`}
-                          >
-                            <button
-                              type="button"
-                              onClick={() => updateAddDetails({ [ability.key]: !selected } as Partial<AddPlayerDetails>)}
-                              className="flex min-w-0 flex-1 items-center gap-1.5 px-2 text-left"
-                            >
-                            {ability.key === "isGoalkeeper" ? (
-                                <span className="w-5 text-center text-[10px] font-semibold text-amber-700">{abilityBadgeLabel(ability)}</span>
-                              ) : (
-                                <Icon className="h-3.5 w-3.5 shrink-0 text-amber-700" />
-                              )}
-                              <span className="truncate text-[11px] font-semibold leading-tight">{abilityLabel(ability)}</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={(event) => { event.stopPropagation(); setAddTraitHelp(current => current?.key === ability.key ? null : ability); }}
-                              className="flex h-full w-7 shrink-0 items-center justify-center border-l border-amber-100/80 text-[11px] font-black text-amber-700/80 active:bg-amber-100"
-                              aria-label={translate("roster.accessibility.whatDoesMean", { label: abilityLabel(ability) })}
-                              title={translate("roster.accessibility.whatDoesMean", { label: abilityLabel(ability) })}
-                            >
-                              ?
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    {addTraitHelp ? <TraitHelpHint ability={addTraitHelp} onClose={() => setAddTraitHelp(null)} /> : null}
-                  </div>
+                  <TogglePill
+                    active={Boolean(addDetails.isGoalkeeper)}
+                    onClick={() => updateAddDetails({ isGoalkeeper: !addDetails.isGoalkeeper })}
+                    activeClassName="border-amber-300 bg-amber-100 text-amber-900 shadow-sm"
+                  >
+                    <Shield className="mr-1.5 h-3.5 w-3.5" />
+                    {translate("roster.abilities.goalkeeper.label")}
+                  </TogglePill>
                 </div>
               )}
                 </>
@@ -3162,7 +3172,7 @@ export function PlayersTab({
                     <PlayerAvatar player={player} size="sm" />
                     <div className="min-w-0 flex-1">
                       <div className="break-words text-[13px] font-semibold leading-tight text-[#102A43] sm:text-[14px] lg:text-[15px]">{displayName(player)}</div>
-                      <PlayerTags player={player} includeVibe includeAbilityCount={!isFlipped} />
+                      <PlayerTags player={player} playerModel={playerModel} includeVibe includeAbilityCount={!isFlipped} />
                     </div>
                     <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
                       {!isSharedRoster && !hideOverall ? <OverallBadge player={player} /> : null}
@@ -3179,6 +3189,7 @@ export function PlayersTab({
                       ) : null}
                       <ProfileDialog
                         player={player}
+                        playerModel={playerModel}
                         onUpdate={(data) => updatePlayer(player.id, data)}
                         autoOpen={autoEditPlayerId === player.id}
                         onAutoOpenHandled={() => {
@@ -3226,7 +3237,7 @@ export function PlayersTab({
                     </div>
                   </div>
 
-                  {isFlipped ? <PlayerCardBack player={player} clubRatingSummary={clubRatingSummaryByPlayerId.get(player.id)} /> : null}
+                  {isFlipped ? <PlayerCardBack player={player} playerModel={playerModel} clubRatingSummary={clubRatingSummaryByPlayerId.get(player.id)} /> : null}
                 </div>
               );
             })}

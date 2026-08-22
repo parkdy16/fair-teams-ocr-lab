@@ -26,6 +26,7 @@ import {
   Building2,
 } from "lucide-react";
 import { PlayersTab } from "@/components/PlayersTab";
+import { PlayerModelSettings } from "@/components/PlayerModelSettings";
 import { TodayTab } from "@/components/TodayTab";
 import { TeamsTab } from "@/components/TeamsTab";
 import { ClubTab } from "@/components/ClubTab";
@@ -57,6 +58,11 @@ import {
   saveRosterState,
   type RoomPlayerNormalizationInput,
 } from "@/lib/localRoster";
+import {
+  createDefaultRosterPlayerModel,
+  normalizeRosterPlayerModel,
+  type RosterPlayerModel,
+} from "@/lib/rosterPlayerModel";
 import { getGoogleDriveConfig } from "@/lib/googleDriveConfig";
 import { allRostersToDriveBackupJson, parseDriveBackupJson } from "@/lib/googleDriveBackup";
 import { requestGoogleDriveAccessToken, revokeGoogleDriveAccessToken } from "@/lib/googleDriveAuth";
@@ -69,6 +75,7 @@ import {
 } from "@/lib/googleDriveConnection";
 import {
   createGoogleDriveJsonFile,
+  createGoogleDriveTextFile,
   deleteGoogleDriveFilePermission,
   getGoogleDriveUserSummary,
   listGoogleDriveBackupFileGroups,
@@ -915,6 +922,8 @@ function App() {
     if (!activeSharedCapabilities.canLeaveWorkspace) setLeaveSharedConfirmOpen(false);
   }, [activeSharedCapabilities.canLeaveWorkspace, activeSharedCapabilities.canUseClubAccess]);
   const [newRosterName, setNewRosterName] = useState("");
+  const [newRosterPlayerModel, setNewRosterPlayerModel] = useState<RosterPlayerModel>(() => createDefaultRosterPlayerModel());
+  const [newRosterPlayerModelOpen, setNewRosterPlayerModelOpen] = useState(false);
   const [fileImportMode, setFileImportMode] = useState<"shared" | "backup">(
     "shared",
   );
@@ -1431,6 +1440,18 @@ function App() {
     }));
   };
 
+  const replaceActiveRosterPlayerModel = (nextModel: RosterPlayerModel) => {
+    const normalizedModel = normalizeRosterPlayerModel(nextModel);
+    setRosterState((current) => ({
+      ...current,
+      rosters: current.rosters.map((roster) =>
+        roster.id === current.activeRosterId
+          ? { ...roster, playerModel: normalizedModel, updatedAt: new Date().toISOString() }
+          : roster,
+      ),
+    }));
+  };
+
   const replacePairingRules = (nextPairingRules: PairingRule[]) => {
     const safePlayerIds = new Set(players.map((player) => player.id));
     setRosterState((current) => ({
@@ -1793,7 +1814,7 @@ function App() {
               current.rosters,
             ),
         sharedRoster.players,
-        { themeColor: sharedRoster.themeColor },
+        { themeColor: sharedRoster.themeColor, playerModel: sharedRoster.playerModel },
       );
       const linkedRoster = normalizeRoster({
         ...imported,
@@ -2065,6 +2086,7 @@ function App() {
         ...createRoster(copyName, copiedPlayers, {
           themeColor: activeRoster.themeColor,
           logo: activeRoster.logo,
+          playerModel: activeRoster.playerModel,
         }),
         pairingRules: activeRoster.pairingRules || [],
         cloudSource: undefined,
@@ -2300,7 +2322,7 @@ function App() {
       }),
       isReplacingStarter ? [] : rosters,
     );
-    const roster = createRoster(name, []);
+    const roster = createRoster(name, [], { playerModel: newRosterPlayerModel });
     setRosterState((current) => {
       const currentIsStarter =
         current.rosters.length === 1 &&
@@ -2311,6 +2333,7 @@ function App() {
         : { rosters: [...current.rosters, roster], activeRosterId: roster.id };
     });
     setNewRosterName("");
+    setNewRosterPlayerModel(createDefaultRosterPlayerModel());
     setRosterFilesOpen(false);
   };
 
@@ -2348,6 +2371,23 @@ function App() {
       result.status === "expired" ? "warning" : "error",
     );
     return "";
+  };
+
+  const savePresetPackToGoogleDrive = async (fileName: string, jsonText: string) => {
+    if (!googleDriveConfig.isConfigured) {
+      throw new Error(t("app.notices.googleDriveNotConfigured.backupMessage"));
+    }
+    const accessToken = googleDriveAccessToken || await connectGoogleDrive();
+    if (!accessToken) {
+      throw new Error(t("app.notices.signInWithGoogleFirst.backupMessage"));
+    }
+    await createGoogleDriveTextFile(accessToken, fileName, jsonText, {
+      mimeType: "application/json",
+      appProperties: {
+        stripesPresetPack: "true",
+        stripesPresetPackType: "player-model-presets",
+      },
+    });
   };
 
   const disconnectGoogleDrive = async () => {
@@ -2411,7 +2451,7 @@ function App() {
         const copied = createRoster(
           uniqueRosterName(roster.name, nextRosters),
           roster.players,
-          { themeColor: roster.themeColor, logo: roster.logo },
+          { themeColor: roster.themeColor, logo: roster.logo, playerModel: roster.playerModel },
         );
         nextRosters.push(copied);
         return copied;
@@ -3755,7 +3795,7 @@ function App() {
         const copied = createRoster(
           uniqueRosterName(roster.name, nextRosters),
           roster.players,
-          { themeColor: roster.themeColor, logo: roster.logo },
+          { themeColor: roster.themeColor, logo: roster.logo, playerModel: roster.playerModel },
         );
         nextRosters.push(copied);
         return copied;
@@ -4185,6 +4225,16 @@ function App() {
       className="fairteams-visual-refresh stripes-type-ui flex h-[100dvh] min-h-[100dvh] w-full max-w-md flex-col overflow-hidden bg-background md:max-w-3xl lg:w-[96vw] lg:max-w-[1760px] lg:rounded-none xl:my-3 xl:h-[calc(100dvh-1.5rem)] xl:min-h-[calc(100dvh-1.5rem)] xl:rounded-[2rem] xl:border xl:border-slate-200 xl:shadow-xl mx-auto relative"
       style={{ "--roster-accent": identityAccentColor } as React.CSSProperties}
     >
+      <PlayerModelSettings
+        open={newRosterPlayerModelOpen}
+        onOpenChange={setNewRosterPlayerModelOpen}
+        model={newRosterPlayerModel}
+        rosterName={newRosterName || t("app.rosterTools.newRosterPlaceholder")}
+        onSave={setNewRosterPlayerModel}
+        onSavePackToGoogleDrive={savePresetPackToGoogleDrive}
+        creationMode
+      />
+
       <Tabs
         value={activeTab}
         onValueChange={(value) => {
@@ -4491,6 +4541,10 @@ function App() {
               <PlayersTab
                 players={players}
                 setPlayers={replacePlayers}
+                playerModel={activeRoster.playerModel}
+                onPlayerModelChange={replaceActiveRosterPlayerModel}
+                onSavePresetPackToGoogleDrive={savePresetPackToGoogleDrive}
+                rosterName={activeRosterName}
                 pairingRules={pairingRules}
                 setPairingRules={replacePairingRules}
                 onScreenshotImport={() => {
@@ -4602,6 +4656,10 @@ function App() {
                 onOpenTeams={() => setActiveTab("teams")}
                 onRequestAddPlayer={(suggestedName) => {
                   setExternalAddPlayerRequest({ token: Date.now(), name: suggestedName });
+                  setActiveTab("players");
+                }}
+                onRequestRatePlayers={(playerIds) => {
+                  startReviewPlayerQueue(playerIds);
                   setActiveTab("players");
                 }}
                 currentTeamCount={aiTeamsState.teamCount}
@@ -5184,6 +5242,19 @@ function App() {
                     {t("app.rosterTools.new")}
                   </Button>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setNewRosterPlayerModelOpen(true)}
+                  className="mt-2 flex w-full items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-left transition hover:border-indigo-200 hover:bg-indigo-50/60"
+                >
+                  <span className="min-w-0">
+                    <span className="block text-[10px] font-black uppercase tracking-wide text-slate-500">{t("app.rosterTools.playerModel")}</span>
+                    <span className="mt-0.5 block truncate text-xs font-semibold text-slate-600">
+                      {t("app.rosterTools.playerModelSummary", { attributes: newRosterPlayerModel.profileSize, presets: newRosterPlayerModel.presets.length })}
+                    </span>
+                  </span>
+                  <Settings className="h-4 w-4 shrink-0 text-indigo-600" />
+                </button>
               </div>
 
               <div className={`overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm ${rosterToolsActivePanel && rosterToolsActivePanel !== "local" ? "hidden" : ""}`}>

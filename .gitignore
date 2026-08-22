@@ -51,3 +51,7 @@ Thumbs.db
 # Local environment files
 .env.local
 .env.*.local
+
+# Generated Stripes visual UX audit evidence
+artifacts/fair-teams/ux-audit-results/
+artifacts/fair-teams/Stripes-UX-Audit*.zip

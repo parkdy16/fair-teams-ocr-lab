@@ -26,7 +26,7 @@ import {
   Building2,
 } from "lucide-react";
 import { PlayersTab } from "@/components/PlayersTab";
-import { PlayerModelSettings } from "@/components/PlayerModelSettings";
+import { NewRosterSetupDialog } from "@/components/NewRosterSetupDialog";
 import { TodayTab } from "@/components/TodayTab";
 import { TeamsTab } from "@/components/TeamsTab";
 import { ClubTab } from "@/components/ClubTab";
@@ -921,9 +921,7 @@ function App() {
     if (!activeSharedCapabilities.canUseClubAccess) setHeaderSharedPeopleOpen(false);
     if (!activeSharedCapabilities.canLeaveWorkspace) setLeaveSharedConfirmOpen(false);
   }, [activeSharedCapabilities.canLeaveWorkspace, activeSharedCapabilities.canUseClubAccess]);
-  const [newRosterName, setNewRosterName] = useState("");
-  const [newRosterPlayerModel, setNewRosterPlayerModel] = useState<RosterPlayerModel>(() => createDefaultRosterPlayerModel());
-  const [newRosterPlayerModelOpen, setNewRosterPlayerModelOpen] = useState(false);
+  const [newRosterSetupOpen, setNewRosterSetupOpen] = useState(false);
   const [fileImportMode, setFileImportMode] = useState<"shared" | "backup">(
     "shared",
   );
@@ -1274,6 +1272,7 @@ function App() {
 
   const appScrollLockActive =
     groupSettingsOpen ||
+    newRosterSetupOpen ||
     rosterFilesOpen ||
     rosterPickerOpen ||
     clearRosterOpen ||
@@ -2311,30 +2310,40 @@ function App() {
     );
   };
 
-  const createNewRoster = () => {
+  const suggestedNewRosterName = () => {
     const isReplacingStarter =
-      rosters.length === 1 &&
-      players.length === 0 &&
-      isDefaultEmptyRosterName(activeRosterName);
+      rosters.length === 1
+      && players.length === 0
+      && isDefaultEmptyRosterName(activeRosterName);
+    return t("app.defaults.numberedRosterName", {
+      number: isReplacingStarter ? 1 : rosters.length + 1,
+    });
+  };
+
+  const createNewRoster = (setup?: { name?: string; playerModel?: RosterPlayerModel }) => {
+    const isReplacingStarter =
+      rosters.length === 1
+      && players.length === 0
+      && isDefaultEmptyRosterName(activeRosterName);
     const name = uniqueRosterName(
-      newRosterName || t("app.defaults.numberedRosterName", {
-        number: isReplacingStarter ? 1 : rosters.length + 1,
-      }),
+      setup?.name || suggestedNewRosterName(),
       isReplacingStarter ? [] : rosters,
     );
-    const roster = createRoster(name, [], { playerModel: newRosterPlayerModel });
+    const roster = createRoster(name, [], {
+      playerModel: setup?.playerModel || createDefaultRosterPlayerModel(),
+    });
     setRosterState((current) => {
       const currentIsStarter =
-        current.rosters.length === 1 &&
-        current.rosters[0]?.players.length === 0 &&
-        isDefaultEmptyRosterName(current.rosters[0]?.name || "");
+        current.rosters.length === 1
+        && current.rosters[0]?.players.length === 0
+        && isDefaultEmptyRosterName(current.rosters[0]?.name || "");
       return currentIsStarter
         ? { rosters: [roster], activeRosterId: roster.id }
         : { rosters: [...current.rosters, roster], activeRosterId: roster.id };
     });
-    setNewRosterName("");
-    setNewRosterPlayerModel(createDefaultRosterPlayerModel());
+    setNewRosterSetupOpen(false);
     setRosterFilesOpen(false);
+    if (tutorialStep === "create-roster") setTutorialStep("recap");
   };
 
   const connectGoogleDrive = async (options?: {
@@ -3890,6 +3899,10 @@ function App() {
     : 0;
 
   const closeTopLevelOverlayForBack = () => {
+    if (newRosterSetupOpen) {
+      setNewRosterSetupOpen(false);
+      return true;
+    }
     if (clearRosterOpen) {
       closeClearRoster();
       return true;
@@ -3978,6 +3991,7 @@ function App() {
   };
 
   const hasTopLevelBackTarget =
+    newRosterSetupOpen ||
     clearRosterOpen ||
     groupSettingsOpen ||
     rosterPickerOpen ||
@@ -4048,6 +4062,7 @@ function App() {
     googleSheetShareOpen,
     groupSettingsOpen,
     headerSharedPeopleOpen,
+    newRosterSetupOpen,
     rosterFilesOpen,
     rosterPickerOpen,
     rosterToolsActivePanel,
@@ -4225,14 +4240,12 @@ function App() {
       className="fairteams-visual-refresh stripes-type-ui flex h-[100dvh] min-h-[100dvh] w-full max-w-md flex-col overflow-hidden bg-background md:max-w-3xl lg:w-[96vw] lg:max-w-[1760px] lg:rounded-none xl:my-3 xl:h-[calc(100dvh-1.5rem)] xl:min-h-[calc(100dvh-1.5rem)] xl:rounded-[2rem] xl:border xl:border-slate-200 xl:shadow-xl mx-auto relative"
       style={{ "--roster-accent": identityAccentColor } as React.CSSProperties}
     >
-      <PlayerModelSettings
-        open={newRosterPlayerModelOpen}
-        onOpenChange={setNewRosterPlayerModelOpen}
-        model={newRosterPlayerModel}
-        rosterName={newRosterName || t("app.rosterTools.newRosterPlaceholder")}
-        onSave={setNewRosterPlayerModel}
+      <NewRosterSetupDialog
+        open={newRosterSetupOpen}
+        onOpenChange={setNewRosterSetupOpen}
+        defaultName={suggestedNewRosterName()}
+        onCreate={createNewRoster}
         onSavePackToGoogleDrive={savePresetPackToGoogleDrive}
-        creationMode
       />
 
       <Tabs
@@ -5215,45 +5228,24 @@ function App() {
                 <div className="mb-2 text-[10px] font-black uppercase tracking-wide text-slate-400">
                   {t("app.rosterTools.createRoster")}
                 </div>
-                <div className="flex gap-2">
-                  <input
-                    value={newRosterName}
-                    onChange={(e) => setNewRosterName(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        createNewRoster();
-                        if (tutorialStep === "create-roster") {
-                          setRosterFilesOpen(false);
-                          setTutorialStep("recap");
-                        }
-                      }
-                    }}
-                    className={`h-10 min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-bold text-[#102A43] outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100 ${tutorialStep === "create-roster" ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
-                    placeholder={t("app.rosterTools.newRosterPlaceholder")}
-                    maxLength={36}
-                  />
-                  <Button
-                    type="button"
-                    className={`h-10 rounded-2xl bg-[#102A43] px-3 text-xs font-black text-white ${tutorialStep === "create-roster" ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
-                    onClick={() => { createNewRoster(); if (tutorialStep === "create-roster") { setRosterFilesOpen(false); setTutorialStep("recap"); } }}
-                  >
-                    <Plus className="mr-1.5 h-3.5 w-3.5" />
-                    {t("app.rosterTools.new")}
-                  </Button>
-                </div>
                 <button
                   type="button"
-                  onClick={() => setNewRosterPlayerModelOpen(true)}
-                  className="mt-2 flex w-full items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-left transition hover:border-indigo-200 hover:bg-indigo-50/60"
+                  onClick={() => setNewRosterSetupOpen(true)}
+                  className={`flex w-full items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-left transition hover:border-indigo-200 hover:bg-indigo-50/60 active:scale-[0.99] ${tutorialStep === "create-roster" ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
+                  data-testid="open-new-roster-setup"
                 >
-                  <span className="min-w-0">
-                    <span className="block text-[10px] font-black uppercase tracking-wide text-slate-500">{t("app.rosterTools.playerModel")}</span>
-                    <span className="mt-0.5 block truncate text-xs font-semibold text-slate-600">
-                      {t("app.rosterTools.playerModelSummary", { attributes: newRosterPlayerModel.profileSize, presets: newRosterPlayerModel.presets.length })}
+                  <span className="flex min-w-0 items-center gap-2.5">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-[#102A43] text-white shadow-sm">
+                      <Plus className="h-4 w-4" />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-sm font-black text-[#102A43]">{t("app.newRoster.openAction")}</span>
+                      <span className="mt-0.5 block text-[11px] font-semibold leading-snug text-slate-500">
+                        {t("app.newRoster.openDescription")}
+                      </span>
                     </span>
                   </span>
-                  <Settings className="h-4 w-4 shrink-0 text-indigo-600" />
+                  <ChevronRight className="h-4 w-4 shrink-0 text-indigo-600" />
                 </button>
               </div>
 

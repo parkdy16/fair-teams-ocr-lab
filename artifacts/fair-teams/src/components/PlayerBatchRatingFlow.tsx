@@ -29,6 +29,7 @@ import {
   type ClubRatingProfile,
 } from "@/lib/clubCollaborationService";
 import { normalizePlayer, type RoomPlayer } from "@/lib/localRoster";
+import { customPlayerModelNeedsDefinition } from "@/lib/newRosterSetup";
 import {
   applyProfileToPlayer,
   neutralProfileForOverall,
@@ -239,6 +240,8 @@ export function PlayerBatchRatingFlow({
   const isLast = total > 0 && index >= total - 1;
   const canGoBack = index > 0;
   const currentOverall = draft ? roundSkill(draft.skill || 5) : 5;
+  const detailedModelReady = !customPlayerModelNeedsDefinition(model);
+  const hasPresetLibrary = detailedModelReady && model.presets.length > 0;
   const selectedPresets = selectedPresetIds
     .map((presetId) => model.presets.find((preset) => preset.id === presetId))
     .filter((preset): preset is RosterPlayerPreset => Boolean(preset));
@@ -541,42 +544,50 @@ export function PlayerBatchRatingFlow({
                         />
                       </div>
 
-                      <div className="flex min-h-11 flex-wrap items-center gap-2 rounded-2xl border border-dashed border-amber-200 bg-amber-50/45 px-3 py-2">
-                        {selectedPresets.length ? selectedPresets.map((preset) => (
-                          <PlayerPresetChip
-                            key={preset.id}
-                            preset={preset}
-                            selected
-                            compact
-                            onClick={() => requestPresetToggle(preset.id)}
+                      {hasPresetLibrary ? (
+                        <div className="flex min-h-11 flex-wrap items-center gap-2 rounded-2xl border border-dashed border-amber-200 bg-amber-50/45 px-3 py-2">
+                          {selectedPresets.length ? selectedPresets.map((preset) => (
+                            <PlayerPresetChip
+                              key={preset.id}
+                              preset={preset}
+                              selected
+                              compact
+                              onClick={() => requestPresetToggle(preset.id)}
+                              disabled={saving}
+                            />
+                          )) : (
+                            <span className="text-[11px] font-semibold text-slate-500">{translate("roster.messages.noPresetNeeded")}</span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setPresetOpenToken((token) => token + 1)}
                             disabled={saving}
-                          />
-                        )) : (
-                          <span className="text-[11px] font-semibold text-slate-500">{translate("roster.messages.noPresetNeeded")}</span>
-                        )}
+                            className="ml-auto rounded-full px-2.5 py-1.5 text-[10px] font-black text-amber-800 hover:bg-amber-100"
+                            data-testid="open-player-presets"
+                          >
+                            <Plus className="mr-1 inline h-3.5 w-3.5" />
+                            {translate("roster.playerModel.addStandout")}
+                          </button>
+                        </div>
+                      ) : null}
+
+                      {detailedModelReady ? (
                         <button
                           type="button"
-                          onClick={() => setPresetOpenToken((token) => token + 1)}
-                          disabled={saving}
-                          className="ml-auto rounded-full px-2.5 py-1.5 text-[10px] font-black text-amber-800 hover:bg-amber-100"
-                          data-testid="open-player-presets"
+                          onClick={() => setAdvancedOpen((current) => !current)}
+                          className="flex h-11 items-center justify-between rounded-2xl border border-slate-200 bg-white px-3 text-left text-xs font-black text-[#102A43] shadow-sm transition active:scale-[0.99]"
+                          aria-expanded={advancedOpen}
                         >
-                          <Plus className="mr-1 inline h-3.5 w-3.5" />
-                          {translate("roster.playerModel.addStandout")}
+                          <span className="flex items-center gap-2"><SlidersHorizontal className="h-4 w-4 text-indigo-600" /> {translate("roster.messages.advancedEdit")}</span>
+                          {advancedOpen ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
                         </button>
-                      </div>
+                      ) : (
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-[10px] font-semibold leading-snug text-slate-500">
+                          {translate("roster.playerModel.ovrOnlyCustomRating")}
+                        </div>
+                      )}
 
-                      <button
-                        type="button"
-                        onClick={() => setAdvancedOpen((current) => !current)}
-                        className="flex h-11 items-center justify-between rounded-2xl border border-slate-200 bg-white px-3 text-left text-xs font-black text-[#102A43] shadow-sm transition active:scale-[0.99]"
-                        aria-expanded={advancedOpen}
-                      >
-                        <span className="flex items-center gap-2"><SlidersHorizontal className="h-4 w-4 text-indigo-600" /> {translate("roster.messages.advancedEdit")}</span>
-                        {advancedOpen ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
-                      </button>
-
-                      {advancedOpen ? (
+                      {detailedModelReady && advancedOpen ? (
                         <div className="grid gap-3 rounded-[1.75rem] border border-indigo-100 bg-indigo-50/45 p-3 sm:p-4">
                           <div className="text-[10px] font-semibold leading-snug text-slate-500">{translate("roster.playerModel.advancedIndependentHelp")}</div>
                           <RadarPreview player={draft} model={model} />
@@ -620,15 +631,17 @@ export function PlayerBatchRatingFlow({
                       ) : null}
                     </div>
 
-                    <PlayerPresetEdgePicker
-                      key={player.id}
-                      model={model}
-                      selectedIds={selectedPresetIds}
-                      onToggle={requestPresetToggle}
-                      onPullProgress={setEdgePullProgress}
-                      disabled={saving}
-                      openRequestToken={presetOpenToken}
-                    />
+                    {hasPresetLibrary ? (
+                      <PlayerPresetEdgePicker
+                        key={player.id}
+                        model={model}
+                        selectedIds={selectedPresetIds}
+                        onToggle={requestPresetToggle}
+                        onPullProgress={setEdgePullProgress}
+                        disabled={saving}
+                        openRequestToken={presetOpenToken}
+                      />
+                    ) : null}
                   </section>
                 </div>
               </div>

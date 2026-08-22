@@ -225,3 +225,82 @@ test("a representative local attendance can generate two complete teams", async 
     await expect(page.locator(`[data-testid^="player-row-smoke-player-${index + 1}-team-"]`)).toHaveCount(1);
   }
 });
+
+test("a custom OVR-first roster can be created from the dedicated setup", async ({ page }) => {
+  await seedLocalApp(page);
+  await enterActiveRoster(page);
+
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByTestId("open-new-roster-setup").click();
+
+  const setup = page.getByTestId("new-roster-setup");
+  await expect(setup.getByRole("heading", { name: "Create a roster" })).toBeVisible();
+  await setup.getByTestId("new-roster-name").fill("Friday Games");
+  await setup.getByTestId("new-roster-mode-custom").click();
+  await expect(setup.getByTestId("new-roster-model-summary")).toContainText("3 attributes");
+  await expect(setup.getByTestId("new-roster-model-summary")).toContainText("0 presets");
+  await setup.getByTestId("create-roster-submit").click();
+
+  await expect(page.getByText("Friday Games", { exact: true }).first()).toBeVisible();
+  await expect.poll(async () => page.evaluate(({ rosterKey }) => {
+    const value = window.localStorage.getItem(rosterKey);
+    if (!value) return "";
+    const stored = JSON.parse(value);
+    return stored.rosters.find((roster: { id: string }) => roster.id === stored.activeRosterId)?.name ?? "";
+  }, { rosterKey: rosterStorageKey })).toBe("Friday Games");
+  const stored = await page.evaluate(({ rosterKey }) => JSON.parse(window.localStorage.getItem(rosterKey) || "null"), { rosterKey: rosterStorageKey });
+  const activeRoster = stored.rosters.find((roster: { id: string }) => roster.id === stored.activeRosterId);
+  expect(activeRoster.name).toBe("Friday Games");
+  expect(activeRoster.players).toHaveLength(0);
+  expect(activeRoster.playerModel.profileSize).toBe(3);
+  expect(activeRoster.playerModel.presets).toHaveLength(0);
+});
+
+
+test("a custom roster can define attributes and a reusable preset before creation", async ({ page }) => {
+  await seedLocalApp(page);
+  await enterActiveRoster(page);
+
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByTestId("open-new-roster-setup").click();
+  const setup = page.getByTestId("new-roster-setup");
+  await setup.getByTestId("new-roster-name").fill("Workshop Teams");
+  await setup.getByTestId("new-roster-mode-custom").click();
+  await setup.getByTestId("customize-new-roster-model").click();
+
+  const modelSettings = page.getByTestId("player-model-settings");
+  await expect(modelSettings).toBeVisible();
+  await modelSettings.getByTestId("player-model-attribute-1").fill("Strategy");
+  await modelSettings.getByTestId("player-model-attribute-2").fill("Knowledge");
+  await modelSettings.getByTestId("player-model-attribute-3").fill("Communication");
+  await modelSettings.getByRole("button", { name: "Presets", exact: true }).click();
+  await modelSettings.getByRole("button", { name: "Create preset", exact: true }).click();
+
+  const presetEditor = page.getByTestId("preset-editor");
+  await expect(presetEditor).toBeVisible();
+  await presetEditor.getByTestId("preset-name").fill("Strategist");
+  const strategySlider = presetEditor.getByLabel("Set Strategy for this preset");
+  await strategySlider.press("ArrowRight");
+  await strategySlider.press("ArrowRight");
+  await strategySlider.press("ArrowRight");
+  await strategySlider.press("ArrowRight");
+  await presetEditor.getByTestId("save-preset").click();
+
+  await expect(modelSettings.getByText("Strategist", { exact: true })).toBeVisible();
+  await modelSettings.getByTestId("save-player-model").click();
+  await expect(setup).toBeVisible();
+  await expect(setup.getByTestId("new-roster-model-summary")).toContainText("3 attributes");
+  await expect(setup.getByTestId("new-roster-model-summary")).toContainText("1 preset");
+  await expect(setup.getByTestId("new-roster-model-summary")).toContainText("Strategy");
+  await setup.getByTestId("create-roster-submit").click();
+
+  await expect(page.getByText("Workshop Teams", { exact: true }).first()).toBeVisible();
+  const stored = await page.evaluate(({ rosterKey }) => JSON.parse(window.localStorage.getItem(rosterKey) || "null"), { rosterKey: rosterStorageKey });
+  const activeRoster = stored.rosters.find((roster: { id: string }) => roster.id === stored.activeRosterId);
+  expect(activeRoster.playerModel.attributes.map((attribute: { label: string }) => attribute.label)).toEqual([
+    "Strategy",
+    "Knowledge",
+    "Communication",
+  ]);
+  expect(activeRoster.playerModel.presets.map((preset: { name: string }) => preset.name)).toContain("Strategist");
+});

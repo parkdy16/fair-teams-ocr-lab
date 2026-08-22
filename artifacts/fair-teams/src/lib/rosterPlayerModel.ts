@@ -584,8 +584,8 @@ export function createPresetDraft(model: RosterPlayerModel, source?: RosterPlaye
   }
   return {
     id: createId("preset"),
-    name: "New preset",
-    description: "Reusable player profile.",
+    name: "",
+    description: "",
     iconKey: "star",
     offsets: offsets(),
     builtIn: false,

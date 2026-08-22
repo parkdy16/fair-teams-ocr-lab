@@ -20,8 +20,15 @@ import {
   ResponsiveContainer,
 } from "recharts";
 
-import { translate } from "@/i18n";
+import { translate, type TranslationKey } from "@/i18n";
 import { downloadText, type RoomPlayer } from "@/lib/localRoster";
+import {
+  customPlayerModelNeedsDefinition,
+  isCustomRosterPlayerModel,
+  playerModelAttributeIssue,
+  resizeCustomRosterPlayerModel,
+  rosterPlayerModelAttributesLocked,
+} from "@/lib/newRosterSetup";
 import {
   cloneRosterPlayerModel,
   createPresetDraft,
@@ -95,12 +102,26 @@ function PresetEditor({
   }, [initialPreset, model, open]);
 
   const chartData = useMemo(() => presetChartData(model, draft), [draft, model]);
+  const presetValidationKey = useMemo<TranslationKey | "">(() => {
+    const name = draft.name.trim().toLocaleLowerCase();
+    if (!name) return "roster.playerModel.presetNameRequired";
+    const duplicate = model.presets.some((presetItem) =>
+      presetItem.id !== initialPreset?.id
+      && presetItem.name.trim().toLocaleLowerCase() === name,
+    );
+    if (duplicate) return "roster.playerModel.presetNameDuplicate";
+    const values = model.attributes.map((attribute) => draft.offsets[attribute.slot]);
+    const average = values.reduce((sum, value) => sum + value, 0) / Math.max(1, values.length);
+    const hasShape = values.some((value) => Math.abs(value - average) >= 0.5);
+    return hasShape ? "" : "roster.playerModel.presetShapeRequired";
+  }, [draft, initialPreset?.id, model]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         onOpenAutoFocus={(event) => event.preventDefault()}
         className="stripes-type-ui max-h-[92dvh] max-w-2xl overflow-y-auto rounded-3xl p-0"
+        data-testid="preset-editor"
       >
         <div className="border-b border-border px-5 py-4">
           <DialogTitle className="text-xl font-black tracking-tight">
@@ -122,6 +143,8 @@ function PresetEditor({
                 onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value.slice(0, 40) }))}
                 className="mt-1 h-11 rounded-2xl font-black"
                 maxLength={40}
+                placeholder={translate("roster.playerModel.presetNamePlaceholder")}
+                data-testid="preset-name"
               />
             </div>
 
@@ -215,6 +238,12 @@ function PresetEditor({
           </div>
         </div>
 
+        {presetValidationKey ? (
+          <div className="mx-4 mb-1 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-bold leading-snug text-amber-900 sm:mx-5">
+            {translate(presetValidationKey)}
+          </div>
+        ) : null}
+
         <div className="sticky bottom-0 flex justify-end gap-2 border-t border-border bg-background/95 px-4 py-3 backdrop-blur sm:px-5">
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="rounded-2xl font-black">
             {translate("common.cancel")}
@@ -222,11 +251,13 @@ function PresetEditor({
           <Button
             type="button"
             onClick={() => {
-              if (!draft.name.trim()) return;
+              if (presetValidationKey) return;
               onSave({ ...draft, name: draft.name.trim(), description: draft.description.trim() });
               onOpenChange(false);
             }}
+            disabled={Boolean(presetValidationKey)}
             className="rounded-2xl font-black"
+            data-testid="save-preset"
           >
             <Save className="mr-2 h-4 w-4" />
             {translate("common.save")}
@@ -248,6 +279,7 @@ export function PlayerModelSettings({
   onSavePackToGoogleDrive,
   creationMode = false,
   sharedRoster = false,
+  initialSection = "presets",
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -259,6 +291,7 @@ export function PlayerModelSettings({
   onSavePackToGoogleDrive?: (fileName: string, jsonText: string) => Promise<void>;
   creationMode?: boolean;
   sharedRoster?: boolean;
+  initialSection?: "attributes" | "presets";
 }) {
   const [draft, setDraft] = useState(() => cloneRosterPlayerModel(model));
   const [section, setSection] = useState<"attributes" | "presets">("presets");
@@ -271,7 +304,9 @@ export function PlayerModelSettings({
   const [resetPlayersOnSave, setResetPlayersOnSave] = useState(false);
   const [savingToDrive, setSavingToDrive] = useState(false);
   const importInputRef = useRef<HTMLInputElement | null>(null);
-  const attributesLocked = !creationMode && players.length > 0;
+  const attributesLocked = !creationMode && rosterPlayerModelAttributesLocked(players, sharedRoster);
+  const attributeIssue = playerModelAttributeIssue(draft);
+  const needsAttributeDefinition = customPlayerModelNeedsDefinition(draft);
 
   useEffect(() => {
     if (!open) return;
@@ -281,8 +316,10 @@ export function PlayerModelSettings({
     setResetPlayersOnSave(false);
     setPendingReplacementPack(null);
     setPendingDeletePreset(null);
-    setSection("presets");
-  }, [model, open]);
+    setPresetEditorOpen(false);
+    setEditingPreset(null);
+    setSection(initialSection);
+  }, [initialSection, model, open]);
 
   const allSelected = draft.presets.length > 0 && selectedIds.length === draft.presets.length;
 
@@ -305,6 +342,11 @@ export function PlayerModelSettings({
         if (attributeIndex !== index) return attribute;
         const nextValue = value.slice(0, field === "label" ? 36 : 160);
         if (field !== "label") return { ...attribute, description: nextValue };
+        if (attribute.id.startsWith("custom-attribute-")) {
+          // Keep the portable stable ID while the organizer gives a custom
+          // attribute its human meaning during setup.
+          return { ...attribute, label: nextValue };
+        }
         const baseId = playerAttributeIdFromLabel(nextValue, `attribute-${index + 1}`);
         const usedIds = new Set(current.attributes.filter((_, otherIndex) => otherIndex !== index).map((item) => item.id));
         let id = baseId;
@@ -326,7 +368,9 @@ export function PlayerModelSettings({
 
   const changeProfileSize = (profileSize: 3 | 6) => {
     if (attributesLocked) return;
-    const nextBase = resizeRosterPlayerModel(draft, profileSize);
+    const nextBase = isCustomRosterPlayerModel(draft)
+      ? resizeCustomRosterPlayerModel(draft, profileSize)
+      : resizeRosterPlayerModel(draft, profileSize);
     setDraft(nextBase);
     setSelectedIds([]);
   };
@@ -392,6 +436,7 @@ export function PlayerModelSettings({
         <DialogContent
           onOpenAutoFocus={(event) => event.preventDefault()}
           className="stripes-type-ui max-h-[94dvh] max-w-3xl overflow-y-auto rounded-3xl p-0"
+          data-testid="player-model-settings"
         >
           <div className="border-b border-border px-5 py-4">
             <DialogTitle className="text-xl font-black tracking-tight">
@@ -459,6 +504,7 @@ export function PlayerModelSettings({
                         disabled={attributesLocked}
                         className="mt-2 h-10 rounded-xl font-black"
                         maxLength={36}
+                        data-testid={`player-model-attribute-${index + 1}`}
                       />
                       <textarea
                         value={attribute.description}
@@ -470,6 +516,13 @@ export function PlayerModelSettings({
                     </div>
                   ))}
                 </div>
+                {attributeIssue ? (
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-bold leading-snug text-amber-900">
+                    {translate(attributeIssue === "missing"
+                      ? "roster.playerModel.attributeLabelsRequired"
+                      : "roster.playerModel.attributeLabelsUnique")}
+                  </div>
+                ) : null}
               </div>
             ) : (
               <div className="space-y-4">
@@ -482,16 +535,24 @@ export function PlayerModelSettings({
                   </div>
                   <Button
                     type="button"
+                    disabled={needsAttributeDefinition}
                     onClick={() => {
                       setEditingPreset(null);
                       setPresetEditorOpen(true);
                     }}
                     className="h-10 rounded-2xl font-black"
+                    title={needsAttributeDefinition ? translate("roster.playerModel.defineAttributesBeforePreset") : undefined}
                   >
                     <Plus className="mr-2 h-4 w-4" />
                     {translate("roster.playerModel.createPreset")}
                   </Button>
                 </div>
+
+                {needsAttributeDefinition ? (
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-bold leading-snug text-amber-900">
+                    {translate("roster.playerModel.defineAttributesBeforePreset")}
+                  </div>
+                ) : null}
 
                 <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-muted/20 p-2.5">
                   <button
@@ -621,12 +682,15 @@ export function PlayerModelSettings({
             <Button
               type="button"
               onClick={() => {
+                if (attributeIssue) return;
                 const next = normalizeRosterPlayerModel(draft);
                 if (resetPlayersOnSave) onResetPlayers?.(resetPlayerRatingsForModel(players));
                 onSave(next);
                 onOpenChange(false);
               }}
+              disabled={Boolean(attributeIssue)}
               className="rounded-2xl font-black"
+              data-testid="save-player-model"
             >
               <Save className="mr-2 h-4 w-4" />
               {translate("common.save")}

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Trans } from "react-i18next";
 import type { RoomPlayer } from "@/lib/localRoster";
 import { calculateOverall, normalizePlayer } from "@/lib/localRoster";
+import { customPlayerModelNeedsDefinition } from "@/lib/newRosterSetup";
 import {
   BALANCED_PLAYER_STYLE,
   profileFromAveragedAttributes,
@@ -801,6 +802,13 @@ function PlayerRadar({
   compact?: boolean;
 }) {
   const model = normalizeRosterPlayerModel(playerModel);
+  if (customPlayerModelNeedsDefinition(model)) {
+    return (
+      <div className={`${compact ? "h-36" : "h-52"} flex w-full items-center justify-center rounded-xl border border-dashed border-border bg-muted/25 px-4 text-center text-[11px] font-semibold leading-snug text-muted-foreground`}>
+        {translate("roster.playerModel.ovrOnlyCustomRating")}
+      </div>
+    );
+  }
   const data = model.attributes.map((attribute) => ({
     stat: attribute.label,
     value: player[attribute.slot],
@@ -1035,6 +1043,8 @@ function ProfileDialog({
   onTutorialSaved?: () => void;
 }) {
   const safePlayerModel = useMemo(() => normalizeRosterPlayerModel(playerModel), [playerModel]);
+  const detailedPlayerModelReady = !customPlayerModelNeedsDefinition(safePlayerModel);
+  const hasPresetLibrary = detailedPlayerModelReady && safePlayerModel.presets.length > 0;
   const initialDraft = () => isSharedRoster ? sharedDraftFromPlayerAndRating(player, clubMyRating) : normalizePlayer(player);
   const [draft, setDraft] = useState<RoomPlayer>(initialDraft);
   const [open, setOpen] = useState(false);
@@ -1328,28 +1338,38 @@ function ProfileDialog({
                       />
                     </div>
 
-                    <div className="space-y-2 rounded-2xl border border-violet-100 bg-violet-50/80 px-3 py-2">
-                      <div>
-                        <Label className="text-[10px] uppercase font-black tracking-wide text-violet-700">{translate("roster.labels.whatStandsOut")}</Label>
-                        <div className="mt-0.5 text-[10px] font-semibold leading-snug text-violet-700/75">{translate("roster.playerPresets.help")}</div>
+                    {hasPresetLibrary ? (
+                      <div className="space-y-2 rounded-2xl border border-violet-100 bg-violet-50/80 px-3 py-2">
+                        <div>
+                          <Label className="text-[10px] uppercase font-black tracking-wide text-violet-700">{translate("roster.labels.whatStandsOut")}</Label>
+                          <div className="mt-0.5 text-[10px] font-semibold leading-snug text-violet-700/75">{translate("roster.playerPresets.help")}</div>
+                        </div>
+                        <RosterPlayerPresetPicker
+                          model={safePlayerModel}
+                          selectedIds={selectedProfilePresetIds}
+                          onToggle={toggleProfilePreset}
+                          disabled={sharedProfileSaving}
+                        />
                       </div>
-                      <RosterPlayerPresetPicker
-                        model={safePlayerModel}
-                        selectedIds={selectedProfilePresetIds}
-                        onToggle={toggleProfilePreset}
-                        disabled={sharedProfileSaving}
-                      />
-                    </div>
+                    ) : null}
 
-                    <PlayerRadar player={{ ...draft, skill: sharedOverall, teamPlay: 2 }} playerModel={playerModel} />
+                    {detailedPlayerModelReady ? (
+                      <>
+                        <PlayerRadar player={{ ...draft, skill: sharedOverall, teamPlay: 2 }} playerModel={playerModel} />
+                        <div className="grid grid-cols-2 gap-2">
+                          {safePlayerModel.attributes.map((attribute) => (
+                            <StatControl key={attribute.id} label={attribute.label} value={draft[attribute.slot]} onChange={value => updateDraft({ [attribute.slot]: value, teamPlay: 2, overallIndependent: true, profileFineTuned: true } as Partial<RoomPlayer>)} />
+                          ))}
+                        </div>
+                      </>
+                    ) : (
+                      <div className="rounded-2xl border border-violet-100 bg-violet-50/80 px-3 py-2 text-[10px] font-semibold leading-snug text-violet-700/75">
+                        {translate("roster.playerModel.ovrOnlyCustomRating")}
+                      </div>
+                    )}
 
-                    <div className="grid grid-cols-2 gap-2">
-                      {normalizeRosterPlayerModel(playerModel).attributes.map((attribute) => (
-                        <StatControl key={attribute.id} label={attribute.label} value={draft[attribute.slot]} onChange={value => updateDraft({ [attribute.slot]: value, teamPlay: 2, overallIndependent: true, profileFineTuned: true } as Partial<RoomPlayer>)} />
-                      ))}
-                      <TogglePill active={!!draft.isGoalkeeper} onClick={() => updateDraft({ isGoalkeeper: !draft.isGoalkeeper, teamPlay: 2 })} activeClassName="border-amber-300 bg-amber-100 text-amber-900 shadow-sm">
-                        {translate("roster.abilities.goalkeeper.badge")}</TogglePill>
-                    </div>
+                    <TogglePill active={!!draft.isGoalkeeper} onClick={() => updateDraft({ isGoalkeeper: !draft.isGoalkeeper, teamPlay: 2 })} activeClassName="border-amber-300 bg-amber-100 text-amber-900 shadow-sm">
+                      {translate("roster.abilities.goalkeeper.badge")}</TogglePill>
 
                     {sharedProfileError && (
                       <div className="rounded-2xl border border-rose-100 bg-rose-50 px-3 py-2 text-[11px] font-bold leading-snug text-rose-700">
@@ -1391,33 +1411,41 @@ function ProfileDialog({
             </div>
           </div>
 
-          <div className="space-y-2 rounded-2xl border border-primary/15 bg-primary/5 p-3">
-            <div>
-              <Label className="text-[10px] uppercase font-black tracking-wide text-primary">{translate("roster.labels.whatStandsOut")}</Label>
-              <div className="mt-0.5 text-[10px] font-semibold leading-snug text-muted-foreground">{translate("roster.playerPresets.help")}</div>
+          {hasPresetLibrary ? (
+            <div className="space-y-2 rounded-2xl border border-primary/15 bg-primary/5 p-3">
+              <div>
+                <Label className="text-[10px] uppercase font-black tracking-wide text-primary">{translate("roster.labels.whatStandsOut")}</Label>
+                <div className="mt-0.5 text-[10px] font-semibold leading-snug text-muted-foreground">{translate("roster.playerPresets.help")}</div>
+              </div>
+              <RosterPlayerPresetPicker
+                model={safePlayerModel}
+                selectedIds={selectedProfilePresetIds}
+                onToggle={toggleProfilePreset}
+                disabled={sharedProfileSaving}
+              />
             </div>
-            <RosterPlayerPresetPicker
-              model={safePlayerModel}
-              selectedIds={selectedProfilePresetIds}
-              onToggle={toggleProfilePreset}
-              disabled={sharedProfileSaving}
-            />
-          </div>
+          ) : null}
 
-          <button
-            type="button"
-            onClick={() => {
-              setAdvancedOpen(prev => !prev);
-              if (!advancedOpen) onTutorialAdvancedOpened?.();
-            }}
-            className={`flex h-10 items-center justify-between rounded-2xl border border-border bg-background px-3 text-left text-xs font-black tracking-wide text-foreground ${tutorialHighlightAdvanced ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
-            data-testid={`button-toggle-edit-advanced-${player.id}`}
-          >
-            <span>{translate("roster.messages.advancedEdit")}</span>
-            <span className="text-muted-foreground">{advancedOpen ? "▲" : "▼"}</span>
-          </button>
+          {detailedPlayerModelReady ? (
+            <button
+              type="button"
+              onClick={() => {
+                setAdvancedOpen(prev => !prev);
+                if (!advancedOpen) onTutorialAdvancedOpened?.();
+              }}
+              className={`flex h-10 items-center justify-between rounded-2xl border border-border bg-background px-3 text-left text-xs font-black tracking-wide text-foreground ${tutorialHighlightAdvanced ? "fairteams-tutorial-pulse relative z-[82]" : ""}`}
+              data-testid={`button-toggle-edit-advanced-${player.id}`}
+            >
+              <span>{translate("roster.messages.advancedEdit")}</span>
+              <span className="text-muted-foreground">{advancedOpen ? "▲" : "▼"}</span>
+            </button>
+          ) : (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-[10px] font-semibold leading-snug text-slate-500">
+              {translate("roster.playerModel.ovrOnlyCustomRating")}
+            </div>
+          )}
 
-          {advancedOpen && (
+          {detailedPlayerModelReady && advancedOpen && (
             <div className="rounded-2xl border border-primary/15 bg-primary/5 p-3 space-y-3">
               <div className="flex flex-wrap items-start gap-3">
                 <div className="relative shrink-0 pt-5">
@@ -1761,6 +1789,8 @@ export function PlayersTab({
   const addPhotoGalleryInput = useRef<HTMLInputElement | null>(null);
   const [addDetails, setAddDetails] = useState<AddPlayerDetails>(() => createDefaultAddPlayerDetails(5));
   const safeRosterPlayerModel = useMemo(() => normalizeRosterPlayerModel(playerModel), [playerModel]);
+  const detailedPlayerModelReady = !customPlayerModelNeedsDefinition(safeRosterPlayerModel);
+  const hasPresetLibrary = detailedPlayerModelReady && safeRosterPlayerModel.presets.length > 0;
   const addOverall = roundSkillStep(skillLevel);
   const addSkillExplanation = skillLevelExplanation(skillLevel);
   const updateAddDetails = (data: Partial<AddPlayerDetails>) => setAddDetails(prev => ({ ...prev, ...data }));
@@ -2640,18 +2670,20 @@ export function PlayersTab({
                       className="fairteams-slider w-full"
                       style={{ "--slider-fill": `${((skillLevel - 1) / 9) * 100}%` } as React.CSSProperties}
                     />
-                    <div className="space-y-2">
-                      <div>
-                        <Label className="text-[10px] uppercase font-black tracking-wide text-violet-700">{translate("roster.labels.whatStandsOut")}</Label>
-                        <div className="mt-0.5 text-[10px] font-semibold leading-snug text-violet-700/75">{translate("roster.playerPresets.help")}</div>
+                    {hasPresetLibrary ? (
+                      <div className="space-y-2">
+                        <div>
+                          <Label className="text-[10px] uppercase font-black tracking-wide text-violet-700">{translate("roster.labels.whatStandsOut")}</Label>
+                          <div className="mt-0.5 text-[10px] font-semibold leading-snug text-violet-700/75">{translate("roster.playerPresets.help")}</div>
+                        </div>
+                        <RosterPlayerPresetPicker
+                          model={safeRosterPlayerModel}
+                          selectedIds={addPresetIds}
+                          onToggle={toggleAddPreset}
+                        />
+                        {addPresetError ? <div className="text-[10px] font-bold text-rose-600">{addPresetError}</div> : null}
                       </div>
-                      <RosterPlayerPresetPicker
-                        model={safeRosterPlayerModel}
-                        selectedIds={addPresetIds}
-                        onToggle={toggleAddPreset}
-                      />
-                      {addPresetError ? <div className="text-[10px] font-bold text-rose-600">{addPresetError}</div> : null}
-                    </div>
+                    ) : null}
                   </div>
                 </div>
               )}
@@ -2734,18 +2766,20 @@ export function PlayersTab({
                 <div className="rounded-xl border border-primary/10 bg-background/70 px-3 py-2 text-[11px] font-semibold leading-snug text-muted-foreground">
                   {addSkillExplanation}
                 </div>
-                <div className="space-y-2 rounded-2xl border border-primary/10 bg-background/70 px-3 py-2">
-                  <div>
-                    <Label className="text-[10px] uppercase font-black tracking-wide text-primary">{translate("roster.labels.whatStandsOut")}</Label>
-                    <div className="mt-0.5 text-[10px] font-semibold leading-snug text-muted-foreground">{translate("roster.playerPresets.help")}</div>
+                {hasPresetLibrary ? (
+                  <div className="space-y-2 rounded-2xl border border-primary/10 bg-background/70 px-3 py-2">
+                    <div>
+                      <Label className="text-[10px] uppercase font-black tracking-wide text-primary">{translate("roster.labels.whatStandsOut")}</Label>
+                      <div className="mt-0.5 text-[10px] font-semibold leading-snug text-muted-foreground">{translate("roster.playerPresets.help")}</div>
+                    </div>
+                    <RosterPlayerPresetPicker
+                      model={safeRosterPlayerModel}
+                      selectedIds={addPresetIds}
+                      onToggle={toggleAddPreset}
+                    />
+                    {addPresetError ? <div className="text-[10px] font-bold text-rose-600">{addPresetError}</div> : null}
                   </div>
-                  <RosterPlayerPresetPicker
-                    model={safeRosterPlayerModel}
-                    selectedIds={addPresetIds}
-                    onToggle={toggleAddPreset}
-                  />
-                  {addPresetError ? <div className="text-[10px] font-bold text-rose-600">{addPresetError}</div> : null}
-                </div>
+                ) : null}
               </div>
 
               <div className="rounded-2xl border border-border/70 bg-muted/25 p-2.5 text-[11px] font-semibold text-muted-foreground leading-snug">
@@ -2756,17 +2790,23 @@ export function PlayersTab({
                 )}
               </div>
 
-              <button
-                type="button"
-                onClick={() => setAddAdvancedOpen(prev => !prev)}
-                className="flex h-10 items-center justify-between rounded-2xl border border-border bg-background px-3 text-left text-xs font-black tracking-wide text-foreground"
-                data-testid="button-toggle-add-advanced"
-              >
-                <span>{translate("roster.messages.advancedEdit")}</span>
-                <span className="text-muted-foreground">{addAdvancedOpen ? "▲" : "▼"}</span>
-              </button>
+              {detailedPlayerModelReady ? (
+                <button
+                  type="button"
+                  onClick={() => setAddAdvancedOpen(prev => !prev)}
+                  className="flex h-10 items-center justify-between rounded-2xl border border-border bg-background px-3 text-left text-xs font-black tracking-wide text-foreground"
+                  data-testid="button-toggle-add-advanced"
+                >
+                  <span>{translate("roster.messages.advancedEdit")}</span>
+                  <span className="text-muted-foreground">{addAdvancedOpen ? "▲" : "▼"}</span>
+                </button>
+              ) : (
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-[10px] font-semibold leading-snug text-slate-500">
+                  {translate("roster.playerModel.ovrOnlyCustomRating")}
+                </div>
+              )}
 
-              {addAdvancedOpen && (
+              {detailedPlayerModelReady && addAdvancedOpen && (
                 <div className="rounded-2xl border border-primary/15 bg-primary/5 p-3 space-y-3">
                   <div className="flex flex-wrap items-start gap-3">
                     <div className="relative shrink-0 pt-5">

@@ -153,6 +153,35 @@ Desktop uses the same OVR, preset, and Advanced Edit concepts with
 pointer/keyboard-friendly controls. It must not require simulated phone
 swiping.
 
+## B.1 custom roster setup under test
+
+The next prototype consolidates new-roster creation into one dedicated setup
+surface. The previous inline name field plus separate Player Model button made
+custom setup easy to miss and encouraged users to create the roster before
+understanding the model choice.
+
+The contained setup now offers three explicit starting points:
+
+- **Football** — the Stripes six-attribute model and starter preset library;
+- **Custom sport or game** — an OVR-ready three-attribute model with no presets;
+- **Use a preset pack** — imports a self-contained attribute model and selected
+  presets before creating the roster.
+
+OVR-only remains complete in every mode. A custom roster may be created before
+its placeholder attributes are renamed, but the interface clearly explains that
+meaningful attributes are required before Advanced Edit or presets become
+useful. Until then, batch rating, add-player and edit-player surfaces stay
+OVR-only instead of exposing meaningless Attribute 1/2/3 controls. Local
+OVR-only players do not prematurely lock attribute editing; attributes lock only
+after a player receives a model-bound preset or fine-tuned profile. Shared
+rosters remain conservative because private organizer profiles may already exist
+outside the canonical player payload.
+
+The setup remains one contained modal rather than a wizard. The user can name
+the roster, choose a starting model, review the model summary, open the dedicated
+Player Model editor when desired, and create the roster. Preset creation now
+validates a recognizable unique name and a non-flat profile shape.
+
 ## Dedicated Player Model settings
 
 The experiment adds a separate Player Model modal rather than requiring a fake
@@ -282,6 +311,14 @@ The experiment also adds focused tests for:
 - Test a new custom three-attribute roster.
 - Test an incompatible pack against a local roster using disposable data only.
 
+- Open Create roster from Settings and confirm the dedicated setup is obvious.
+- Create a Football roster without opening Player Model settings.
+- Create a Custom sport/game roster with OVR-only, then rename its attributes.
+- Add OVR-only players and confirm the local attribute model remains editable.
+- Apply a preset or fine-tune one player and confirm attribute meanings then lock.
+- Import a preset pack during roster creation and confirm its model summary before Create.
+- Try creating a flat or duplicate-name preset and confirm the editor explains why it cannot save.
+
 ## Decision record
 
 After testing, classify each item as **Keep**, **Change**, or **Reject**:
@@ -299,6 +336,10 @@ After testing, classify each item as **Keep**, **Change**, or **Reject**:
 | Default preset vocabulary | Pending A.2 | |
 | Dedicated preset editor | Pending A.2 | |
 | 3/6 custom attribute creation | Pending A.2 | |
+| Dedicated new-roster setup | Pending B.1 | |
+| Football / Custom / Pack starting choices | Pending B.1 | |
+| OVR-only custom roster before attribute definition | Pending B.1 | |
+| Attribute locking only after model-bound local ratings | Pending B.1 | |
 | Pack export/import | Pending A.2 | |
 | Google Drive pack save | Pending A.2 | |
 

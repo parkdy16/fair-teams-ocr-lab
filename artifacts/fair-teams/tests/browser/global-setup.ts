@@ -36,6 +36,7 @@ export default async function globalSetup(_config: FullConfig) {
   try {
     const server = await createServer({
       configFile: "./vite.config.ts",
+      configLoader: "runner",
       logLevel: "warn",
       server: {
         host: "127.0.0.1",

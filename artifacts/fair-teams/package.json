@@ -12,7 +12,10 @@
     "test:core-regression": "node scripts/core-regression.mjs",
     "test:browser-smoke": "playwright test --config playwright.config.ts",
     "typecheck:live": "tsc -p tsconfig.live.json --noEmit",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test:ux-audit": "playwright test --config playwright.ux-audit.config.ts",
+    "audit:ux": "node scripts/run-ux-audit.mjs",
+    "audit:ux:gallery": "node scripts/build-ux-audit-gallery.mjs"
   },
   "devDependencies": {
     "@hookform/resolvers": "^3.10.0",
